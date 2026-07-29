@@ -946,6 +946,11 @@ private:
     // window dies before the flush; the flush skips those entries.
     // PendingFrameGeometry moved to effect_state.h.
     QHash<QString, PendingFrameGeometry> m_pendingFrameGeometry;
+    /// Last caption pushed via the caption-only metadata refresh, per window.
+    /// Skips content-identical pushes (spurious captionChanged emissions).
+    /// Raw-pointer-keyed; erased in the windowDeleted cleanup with its
+    /// siblings.
+    QHash<KWin::EffectWindow*, QString> m_lastPushedCaption;
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 

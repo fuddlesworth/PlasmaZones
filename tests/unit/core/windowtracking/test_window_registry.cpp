@@ -281,6 +281,33 @@ private Q_SLOTS:
         QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("later|reseed-instance")), freshCanonical);
     }
 
+    void clear_nestedClearAndReentrantUpsert_leavesRegistryEmpty()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("n1"), make(QStringLiteral("appA")));
+        reg.upsert(QStringLiteral("n2"), make(QStringLiteral("appB")));
+        reg.upsert(QStringLiteral("n3"), make(QStringLiteral("appC")));
+        bool nested = false;
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
+            // First disappearance: a subscriber both re-upserts the dying
+            // instance AND triggers a nested bulk clear while two records
+            // remain. Neither may leave residue — the clear supersedes the
+            // re-entrant upsert (it is dropped, not replayed).
+            if (!nested) {
+                nested = true;
+                reg.upsert(removedId, make(QStringLiteral("resurrected")));
+                reg.clear();
+            }
+        });
+
+        reg.clear();
+
+        QCOMPARE(reg.size(), 0);
+        QVERIFY(!reg.contains(QStringLiteral("n1")));
+        QVERIFY(!reg.contains(QStringLiteral("n2")));
+        QVERIFY(!reg.contains(QStringLiteral("n3")));
+    }
+
     void remove_reentrantCrossRemoval_removesBoth()
     {
         WindowRegistry reg;

@@ -236,9 +236,21 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // marshalling the ~20-entry a{sv} each frame. The daemon preserves the
         // existing extended fields when none are sent.
         auto pushCaptionOnly = [this, safeW]() {
-            if (safeW && !safeW->isDeleted()) {
-                pushWindowMetadata(safeW, /*includeExtended=*/false);
+            if (!safeW || safeW->isDeleted()) {
+                return;
             }
+            // Skip content-identical pushes: KWin can emit captionChanged
+            // without a net caption change, and the marshal (plus the
+            // daemon-side upsert) should not ride those. captionNormal
+            // derives from the caption, so an unchanged caption implies an
+            // unchanged push.
+            const QString caption = safeW->caption();
+            QString& last = m_lastPushedCaption[safeW.data()];
+            if (last == caption) {
+                return;
+            }
+            last = caption;
+            pushWindowMetadata(safeW, /*includeExtended=*/false);
         };
         // Class / desktop-file mutations invalidate the animation rule
         // evaluator's per-window match cache. The cache is keyed on the
@@ -603,6 +615,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // the timer-driven teardown of the first racing the install of the
     // second. Track the last fully-maximized state per window and only
     // fire on actual edge transitions.
+    // Seed from the LIVE maximize mode: a window already fully maximized when
+    // the effect (re)loads has no entry, so its first RESTORE compared
+    // false==false, read as a no-edge, and played no morph.
+    if (KWin::Window* kwSeed = w->window()) {
+        m_shaderManager.m_lastFullyMaximized.insert(w, kwSeed->maximizeMode() == KWin::MaximizeFull);
+    }
     connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this,
             [this](KWin::EffectWindow* window, bool horizontal, bool vertical) {
                 if (!window) {
@@ -763,14 +781,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 }
             });
 
-    // Refresh the daemon's registry metadata on every minimize edge, and
-    // BEFORE the handler connections below so the push is enqueued on the bus
-    // ahead of any float traffic from the same edge. The daemon's mode-swap
-    // seed/restore decisions consult WindowMetadata::isMinimized, which can
-    // otherwise remain at its previous snapshot until an unrelated refresh. A stale value lets a
-    // mode-swap seed tile a window that is minimized right now (the per-slot
-    // floating check cannot cover this: it resolves via the screen's CURRENT
-    // mode, which flips mid-toggle).
+    // Refresh the daemon's registry metadata on every minimize edge, connected
+    // BEFORE the handler connections below. For SNAP the ordering matters on
+    // the bus: the handler's float commit rides the same edge, and the push
+    // must land first so the daemon's suspension classification reads fresh
+    // minimize state. The AUTOTILE handler's float commit is debounced
+    // (kMinimizeFloatDebounceMs), so for it the ordering guarantee comes from
+    // that delay, not from connection order. The daemon's mode-swap
+    // seed/restore decisions consult WindowMetadata::isMinimized, which would
+    // otherwise remain at its previous snapshot until an unrelated refresh —
+    // a stale value lets a mode-swap seed tile a window that is minimized
+    // right now (the per-slot floating check cannot cover this: it resolves
+    // via the screen's CURRENT mode, which flips mid-toggle).
     // Liveness-guarded but deliberately NOT gated on shouldHandleWindow /
     // isTileableWindow: the open-time push in slotWindowAdded registers EVERY
     // window, and the daemon's rule predicates (IsMinimized) evaluate against

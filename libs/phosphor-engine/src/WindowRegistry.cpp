@@ -88,9 +88,12 @@ void WindowRegistry::remove(const QString& instanceId)
             m_canonicalByInstance.insert(instanceId, canonical);
         }
     }
-    if (hasPendingUpsert) {
+    if (hasPendingUpsert && m_clearing == 0) {
         upsert(instanceId, pendingMetadata);
     }
+    // While clear() drives this removal, a re-entrant upsert is dropped: the
+    // bulk reset supersedes it, and replaying would let records survive the
+    // clear.
 }
 
 std::optional<WindowMetadata> WindowRegistry::metadata(const QString& instanceId) const
@@ -145,11 +148,6 @@ bool WindowRegistry::contains(const QString& instanceId) const
     return m_records.contains(instanceId);
 }
 
-QStringList WindowRegistry::allInstances() const
-{
-    return m_records.keys();
-}
-
 int WindowRegistry::size() const
 {
     return m_records.size();
@@ -163,12 +161,17 @@ void WindowRegistry::clear()
     QSet<QString> ids(m_records.keyBegin(), m_records.keyEnd());
     ids.unite(QSet<QString>(m_canonicalByInstance.keyBegin(), m_canonicalByInstance.keyEnd()));
     QPointer<WindowRegistry> guard(this);
+    // No scope guard for the counter: a subscriber may destroy the registry
+    // mid-loop, and a guard running against the freed object would be UB —
+    // decrement manually on the surviving path only.
+    ++m_clearing;
     for (const QString& id : ids) {
         remove(id);
         if (!guard) {
             return;
         }
     }
+    --m_clearing;
 }
 
 QString WindowRegistry::canonicalizeWindowId(const QString& rawWindowId)

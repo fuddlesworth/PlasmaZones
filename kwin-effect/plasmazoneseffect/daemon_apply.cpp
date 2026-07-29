@@ -528,39 +528,50 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // loses that edge and leaves KWin restoring whichever geometry was last
         // applied by the old mode. Genuine visible unfloats still clear both
         // handlers below.
+        // Exact resolve, and hoist the LIVE id: the handler maps are keyed by
+        // the effect-side ids they claimed with, so after a uuid drift a
+        // daemon-id query would miss the live window's entries and the
+        // visible unfloat would never drop them.
         bool stillMinimized = false;
-        if (KWin::EffectWindow* live = findWindowById(windowId)) {
-            stillMinimized = live->isMinimized()
-                && ::PhosphorIdentity::WindowId::extractInstanceId(getWindowId(live))
-                    == ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
+        QString liveWindowId = windowId;
+        KWin::EffectWindow* liveForOwner = nullptr;
+        if (KWin::EffectWindow* live = findWindowByIdExact(windowId)) {
+            stillMinimized = live->isMinimized();
+            liveWindowId = getWindowId(live);
+            liveForOwner = live;
+        } else if (findWindowById(windowId)) {
+            // A same-app window exists but the exact instance is not
+            // resolvable (drifted or ambiguous id). Default to PRESERVING
+            // ownership: wrongly dropping a still-minimized window's marker
+            // strands its unminimize, while wrongly keeping it is healed by
+            // the next authoritative edge.
+            stillMinimized = true;
         }
-        const bool recoveryPending = m_autotileHandler->hasPendingUnminimizeUnfloat(windowId)
-            || m_snapHandler->hasPendingUnminimizeUnfloat(windowId) || m_autotileHandler->hasUnfloatInFlight(windowId)
-            || m_snapHandler->hasUnfloatInFlight(windowId);
+        const bool recoveryPending = m_autotileHandler->hasPendingUnminimizeUnfloat(liveWindowId)
+            || m_snapHandler->hasPendingUnminimizeUnfloat(liveWindowId)
+            || m_autotileHandler->hasUnfloatInFlight(liveWindowId) || m_snapHandler->hasUnfloatInFlight(liveWindowId);
         if (stillMinimized || recoveryPending) {
-            qCDebug(lcEffect) << "Preserving minimize-float ownership across non-terminal unfloat:" << windowId;
+            qCDebug(lcEffect) << "Preserving minimize-float ownership across non-terminal unfloat:" << liveWindowId;
             // Single-owner repair: preservation must never leave the marker in
             // BOTH engines (a missed cross-mode adoption hop can). Resolve a
             // dual hold to the window's current screen mode — the same rule
             // every adoption site applies.
-            if (m_autotileHandler->isMinimizeFloated(windowId) && m_snapHandler->isMinimizeFloated(windowId)) {
+            if (m_autotileHandler->isMinimizeFloated(liveWindowId) && m_snapHandler->isMinimizeFloated(liveWindowId)) {
                 QString ownerScreen = screenId;
-                if (ownerScreen.isEmpty()) {
-                    if (KWin::EffectWindow* live = findWindowById(windowId)) {
-                        ownerScreen = getWindowScreenId(live);
-                    }
+                if (ownerScreen.isEmpty() && liveForOwner) {
+                    ownerScreen = getWindowScreenId(liveForOwner);
                 }
-                qCWarning(lcEffect) << "Minimize-float marker held by BOTH engines for" << windowId
+                qCWarning(lcEffect) << "Minimize-float marker held by BOTH engines for" << liveWindowId
                                     << "— resolving to owner of screen" << ownerScreen;
                 if (m_autotileHandler->isAutotileScreen(ownerScreen)) {
-                    m_snapHandler->removeMinimizeFloated(windowId);
+                    m_snapHandler->removeMinimizeFloated(liveWindowId);
                 } else {
-                    m_autotileHandler->removeMinimizeFloated(windowId);
+                    m_autotileHandler->removeMinimizeFloated(liveWindowId);
                 }
             }
         } else {
-            m_autotileHandler->removeMinimizeFloated(windowId);
-            m_snapHandler->removeMinimizeFloated(windowId);
+            m_autotileHandler->removeMinimizeFloated(liveWindowId);
+            m_snapHandler->removeMinimizeFloated(liveWindowId);
         }
     } else {
         // Backstop: a window that becomes floating is no longer snap-managed.
@@ -714,14 +725,17 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         const qint64 nowMs = ShaderInternal::shaderClockNowMs();
         const MinimizeShaderStamp stamp = m_minimizeShaderStamp.take(w);
         const bool spuriousPair = stamp.timeMs > 0 && nowMs - stamp.timeMs < kSpuriousMinimizePairMs;
-        if (spuriousPair) {
-            // Only the exact leg we stamped is ours to drop — the
-            // generation check keeps a superseding leg (or anything else
-            // live on the window) on its own teardown.
-            if (const auto* st = m_shaderManager.findTransition(w);
-                st && st->reverse && st->generation == stamp.generation) {
-                endShaderTransition(w);
-            }
+        // Only the exact leg we stamped is ours to drop — the generation
+        // check keeps a superseding leg (or anything else live on the
+        // window) on its own teardown. Liveness is part of the SUPPRESSION
+        // decision, not just the teardown: when our stamped leg is no
+        // longer live, the earlier shape skipped BOTH the teardown and the
+        // forward leg, so a fast genuine minimize/unminimize cycle got no
+        // unminimize animation at all.
+        const auto* st = m_shaderManager.findTransition(w);
+        const bool stampedLegLive = st && st->reverse && st->generation == stamp.generation;
+        if (spuriousPair && stampedLegLive) {
+            endShaderTransition(w);
         } else {
             tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
                                    /*reverse=*/false);
