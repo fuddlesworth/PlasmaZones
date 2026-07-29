@@ -51,8 +51,9 @@ namespace {
 /// every variant misses. @p tryOne must return a @c std::optional; an engaged
 /// optional holding a "settled" value (e.g. a non-null-but-empty Layout*) stops
 /// the chain, exactly as the inline retries did. Centralizes the rewrite shared
-/// by layoutForScreen / assignmentIdForScreen / assignmentEntryForScreen /
-/// hasMatchingAssignmentRule so the four cannot drift.
+/// by layoutForScreen / storedAssignmentIdForScreen (which assignmentIdForScreen
+/// delegates to) / assignmentEntryForScreen / hasMatchingAssignmentRule so the
+/// four callers cannot drift.
 template<typename TryFn>
 auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> decltype(tryOne(screenId))
 {
@@ -376,20 +377,12 @@ bool LayoutRegistry::hasExplicitAssignment(const QString& screenId, int virtualD
 QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtualDesktop,
                                               const QString& activity) const
 {
-    // Shared cascade with layoutForScreen, but accepts any entry whose
-    // activeLayoutId() is non-empty (incl. Autotile entries). Connector /
-    // virtual-screen fallback applies here too.
-    auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<QString> {
-        const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
-        if (!entry) {
-            return std::nullopt;
-        }
-        const QString id = entry->activeLayoutId();
-        return id.isEmpty() ? std::nullopt : std::optional<QString>(id);
-    };
-
-    if (const auto result = resolveWithScreenFallback(screenId, tryResolve)) {
-        return *result;
+    // The stored cascade walk lives in storedAssignmentIdForScreen — this
+    // method is that walk plus the level-1 default tail, and delegating keeps
+    // the two from ever resolving the cascade differently.
+    const QString stored = storedAssignmentIdForScreen(screenId, virtualDesktop, activity);
+    if (!stored.isEmpty()) {
+        return stored;
     }
 
     // No stored entry in the cascade — fall through to the level-1 global
@@ -402,10 +395,12 @@ QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtu
 QString LayoutRegistry::storedAssignmentIdForScreen(const QString& screenId, int virtualDesktop,
                                                     const QString& activity) const
 {
-    // Same cascade as assignmentIdForScreen, but a miss stays a miss: no
-    // level-1 default synthesis. Distinguishes "this context has its own
-    // assignment (exact or rule-based)" from "the resolver would hand out
-    // the registry-wide default".
+    // Shared cascade with layoutForScreen, accepting any entry whose
+    // activeLayoutId() is non-empty (incl. Autotile entries), but a miss
+    // stays a miss: no level-1 default synthesis. Distinguishes "this
+    // context has its own assignment (exact or rule-based)" from "the
+    // resolver would hand out the registry-wide default". Connector /
+    // virtual-screen fallback applies here too.
     auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<QString> {
         const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
         if (!entry) {

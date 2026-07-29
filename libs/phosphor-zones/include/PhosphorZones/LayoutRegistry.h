@@ -528,7 +528,8 @@ public:
     /// @ref setDefaultAutotileAlgorithmProvider). Empty when every
     /// cascade level misses AND both providers return empty. Callers
     /// that need to distinguish "stored" from "synthesized fallback"
-    /// must pair this with @ref hasExplicitAssignment.
+    /// should use @ref storedAssignmentIdForScreen, which walks the same
+    /// cascade but reports a miss as empty instead of synthesizing.
     Q_INVOKABLE QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                               const QString& activity = QString()) const override;
 
