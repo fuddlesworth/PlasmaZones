@@ -71,6 +71,15 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         onComplete();
                     return;
                 }
+                if (reply.argumentAt<4>() && (!window || window->isDeleted())) {
+                    // The daemon DID resolve/commit — the window just died in
+                    // flight. This is not a restore miss: onMiss/fallback
+                    // would drop restart-candidate state a same-app reopen
+                    // may still need. Nothing to apply; just complete.
+                    if (onComplete)
+                        onComplete();
+                    return;
+                }
                 if (reply.argumentAt<4>() && window && !window->isDeleted()) {
                     QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(),
                               reply.argumentAt<3>());
@@ -299,8 +308,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // normally.
     const ShaderTransition* const inFlight = m_shaderManager.findTransition(window);
     const bool openAnimationInFlight = inFlight && inFlight->addedGrabHeld;
+    // Caller-owned memoisation slot: when the gate builds the WindowQuery for
+    // its rule probes, the resolver pass below reuses it instead of walking
+    // the ~30 accessors a second time per animated apply.
+    std::optional<PhosphorRules::WindowQuery> sharedQuery;
     if (!skipAnimation && !allowDuringDrag && !openAnimationInFlight && m_windowAnimator->isEnabled()
-        && shouldAnimateWindow(window)) {
+        && shouldAnimateWindow(window, &sharedQuery)) {
         const QRectF targetFrame(geo);
 
         // Bail before any work when the in-flight animation already
@@ -331,11 +344,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // not re-apply the cascade — once an animation is in flight, it
         // stays on the curve that started it for visual continuity.
         //
-        // Build the full per-window query once and reuse for the shader
-        // resolver call below — matches the shape `shouldAnimateWindow`
-        // uses for its rule-override gate, so a rule that gates the
-        // animation also resolves its curve / timing / shader slots.
-        const PhosphorRules::WindowQuery query = ruleQuery(window);
+        // Reuse the gate's query when it built one (rules present); build
+        // only when the gate's fast paths never needed it — matches the shape
+        // `shouldAnimateWindow` uses for its rule-override gate, so a rule
+        // that gates the animation also resolves its curve / timing / shader
+        // slots.
+        const PhosphorRules::WindowQuery query = sharedQuery ? *sharedQuery : ruleQuery(window);
         const QString windowId = getWindowId(window);
         const auto& baseProfile = m_windowAnimator->profile();
         // Resolve the fully-cascaded motion profile for this event (curve +
@@ -683,7 +697,10 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // Do NOT call handleDragToFloat here: the mid-drag schedule would
         // race against the zone snap at drop, making the window jump after
         // the user lets go. onWindowClosed alone clears the tracking state.
-        if (dragW) {
+        // Guarded on the ID, not dragW: the call is id-keyed bookkeeping that
+        // never derefs the window, and a died-mid-drag pointer must not skip
+        // the tracking cleanup for a still-valid id.
+        if (!windowId.isEmpty()) {
             m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
         }
         m_dragBypassedForAutotile = false;

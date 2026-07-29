@@ -19,7 +19,7 @@
  * OutCubic fallback instead of the configured `osd.show` /
  * `popup.zoneSelector.show` / etc.
  *
- * The previous safety net was a single Q_ASSERT_X in
+ * The previous safety net was a single Q_ASSERT_X in the (since removed)
  * createZoneSelectorWindow: debug-only, and only covered ZoneSelector.
  * Production now constructs every per-instance role via
  * `PhosphorRoles::makePerInstanceRole(base, id, gen)` so the prefix-match is
@@ -219,8 +219,9 @@ private Q_SLOTS:
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.show"));
     }
 
-    /// Regression: ZoneSelector. The Q_ASSERT_X in createZoneSelectorWindow
-    /// only catches divergence in debug builds; this test catches it in
+    /// Regression: ZoneSelector. The old Q_ASSERT_X (in the since-removed
+    /// createZoneSelectorWindow) only caught divergence in debug builds;
+    /// this test catches it in
     /// release too. Pre-fix the daemon used "plasmazones-selector-..."
     /// which did NOT prefix-match "plasmazones-zone-selector".
     ///

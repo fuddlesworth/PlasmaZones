@@ -151,8 +151,10 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // Restore pre-autotile geometry from the effect's local cache.
             // Scan all screen buckets (all-bucket reader policy — a VS
             // config change can re-key the window's screen without moving
-            // its geometry bucket).
-            KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
+            // its geometry bucket). Exact resolve, matching the tile lambda's
+            // deliberate policy: a fuzzy hit would teleport a same-app
+            // SIBLING onto this window's restored rect.
+            KWin::EffectWindow* floatWin = m_effect->findWindowByIdExact(windowId);
             if (floatWin) {
                 if (const QRectF savedGeo = findPreAutotileGeometry(windowId); savedGeo.isValid()) {
                     // Daemon-driven apply: the restored rect may lie in a
@@ -351,7 +353,8 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         genByScreen.insert(it.key(), ++m_autotileStaggerGenByScreen[it.key()]);
     }
 
-    auto onComplete = [this, newTiledByScreen, savedGlobalStack, overlapStackByScreen, gen, genByScreen]() {
+    const bool hasApplies = !toApply.isEmpty();
+    auto onComplete = [this, newTiledByScreen, savedGlobalStack, overlapStackByScreen, gen, genByScreen, hasApplies]() {
         if (m_autotileStaggerGeneration != gen) {
             return;
         }
@@ -418,8 +421,13 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 }
             }
         }
+        // A batch with NO tile applies (every request resolved away or the
+        // batch was floats-only) still owes the untile cleanup above, but
+        // must not churn the whole stacking order or spend the one-shot
+        // saved-order/pending-focus state — nothing moved, so there is no
+        // z-order to repair.
         auto* ws = KWin::Workspace::self();
-        if (ws) {
+        if (ws && hasApplies) {
             // Membership index for the overlap restack: window -> the screen
             // whose ordered group it belongs to. Resolved at completion time
             // because QPointers may have gone null since the batch was built.
@@ -519,7 +527,9 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     continue;
                 }
                 for (const QString& windowId : savedOrder) {
-                    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+                    // Exact: a fuzzy same-app hit would raise a SIBLING into
+                    // this window's saved z-position.
+                    KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
                     if (w && !w->isDeleted()) {
                         KWin::Window* kw = w->window();
                         if (kw) {
@@ -531,7 +541,9 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             }
 
             if (!m_pendingAutotileFocusWindowId.isEmpty()) {
-                KWin::EffectWindow* focusWin = m_effect->findWindowById(m_pendingAutotileFocusWindowId);
+                // Exact for the same sibling-raise reason as the saved-order
+                // loop above.
+                KWin::EffectWindow* focusWin = m_effect->findWindowByIdExact(m_pendingAutotileFocusWindowId);
                 m_pendingAutotileFocusWindowId.clear();
                 if (focusWin) {
                     KWin::Window* kw = focusWin->window();

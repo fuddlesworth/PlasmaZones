@@ -411,7 +411,13 @@ private:
      * window with no rule-matchable attributes at all falls through
      * to the filter.
      */
-    bool shouldAnimateWindow(KWin::EffectWindow* w) const;
+    /// @p sharedQuery (optional): a caller-owned memoisation slot. When the
+    /// gate has to build the per-window WindowQuery (~30 KWin accessors), it
+    /// stores it there so the caller's own resolver pass can reuse it instead
+    /// of building a second one — the drag chokepoint pays this per animated
+    /// apply. The slot is left disengaged when no rules forced a build.
+    bool shouldAnimateWindow(KWin::EffectWindow* w,
+                             std::optional<PhosphorRules::WindowQuery>* sharedQuery = nullptr) const;
 
     /**
      * @brief Per-window gate for the border / decoration pass.

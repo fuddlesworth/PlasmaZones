@@ -203,6 +203,13 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
     return true;
 }
 
+// TRACKER CONTRACT for this file: every float/unfloat/handoff entry point
+// derefs m_windowTracker WITHOUT a null guard. The daemon always constructs
+// the engine with a live WindowTrackingService, and the reduced test wirings
+// that pass a null tracker (screen-mode routing, exclude rules) never call
+// into these paths. applyGeometryForFloat below is the one deliberate
+// exception — it is reachable from D-Bus relays in reduced wirings, so it
+// keeps its guard.
 bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& screenId)
 {
     if (!m_windowTracker) {
@@ -434,6 +441,17 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
                 // passes wasFloating==false, so there is no floating flag to
                 // clear in THIS branch; other handoffReceive callers land in
                 // the tail below.
+                // The cross-desktop callers' wasFloating==false invariant,
+                // enforced rather than comment-only: debug asserts, release
+                // clears the flag so a violating caller cannot leave a
+                // floating bit dangling behind the direct slot assignment.
+                Q_ASSERT(!ctx.wasFloating);
+                if (Q_UNLIKELY(ctx.wasFloating)) {
+                    qCWarning(PhosphorSnapEngine::lcSnapEngine)
+                        << "handoffReceive: cross-desktop handoff with wasFloating=true for" << ctx.windowId
+                        << "— clearing the float before the slot assignment";
+                    m_windowTracker->setWindowFloating(ctx.windowId, false);
+                }
                 SnapState* targetState = stateForWindowOnScreen(ctx.windowId, ctx.toScreenId);
                 if (ctx.sourceZoneIds.size() > 1) {
                     targetState->assignWindowToZones(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, ctx.toDesktop);

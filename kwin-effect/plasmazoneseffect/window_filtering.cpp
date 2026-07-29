@@ -354,7 +354,8 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     return true;
 }
 
-bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
+bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
+                                            std::optional<PhosphorRules::WindowQuery>* sharedQuery) const
 {
     if (!w) {
         return false;
@@ -403,10 +404,13 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // two pointer reads (query never built).
     std::optional<PhosphorRules::WindowQuery> cachedQuery;
     auto query = [&]() -> const PhosphorRules::WindowQuery& {
-        if (!cachedQuery) {
-            cachedQuery = ruleQuery(w);
+        // Prefer the caller's memoisation slot (see the header doc) so the
+        // build survives this call for the caller's own resolver pass.
+        std::optional<PhosphorRules::WindowQuery>& slot = sharedQuery ? *sharedQuery : cachedQuery;
+        if (!slot) {
+            slot = ruleQuery(w);
         }
-        return *cachedQuery;
+        return *slot;
     };
 
     // Structural type exclusions (notification / OSD and the transient /

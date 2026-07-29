@@ -815,7 +815,6 @@ private:
     QString m_lastNavigationScreenId;
     QElapsedTimer m_lastNavigationTime;
 
-    void createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
     void destroyZoneSelectorWindow(const QString& screenId);
     void updateZoneSelectorWindow(const QString& screenId);
     void showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked);
