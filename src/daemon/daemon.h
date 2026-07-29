@@ -857,7 +857,7 @@ private:
     /// so a restart would stack duplicate handlers. We disconnect these exact
     /// handles on re-entry rather than the (sender, signal, receiver) triple:
     /// other call sites install their OWN handlers on the same signals — e.g.
-    /// initLayoutAndSettingsWiring() connects layoutAssigned from the ctor — and
+    /// initLayoutAndSettingsWiring() connects layoutAssigned from init() — and
     /// a triple-wide disconnect would silently delete those too. Qt::UniqueConnection
     /// is not an option here: it does not apply to lambda/functor connections.
     QList<QMetaObject::Connection> m_restartScopedConnections;
@@ -867,6 +867,14 @@ private:
     /// AFTER initializeAutotile() — sharing one list would drop these handles
     /// the moment after they were installed.
     QList<QMetaObject::Connection> m_autotileShortcutConnections;
+    /// Handles for every connection installed by initLayoutAndSettingsWiring().
+    /// The senders (m_settings, m_layoutManager, the three value-member
+    /// timers) all survive stop(), and init() CAN re-run (stop() -> init() ->
+    /// start()), so a bare re-wire would stack duplicate handlers — double
+    /// mode-transition passes and double gap resnaps per settings save. Exact
+    /// handles, not (sender, signal, receiver) triples, for the same reason
+    /// as m_restartScopedConnections.
+    QList<QMetaObject::Connection> m_layoutSettingsWiringConnections;
 
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;

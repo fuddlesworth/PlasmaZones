@@ -510,12 +510,35 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
     // inverted toggle behavior when a floating window is drag-snapped.
     // Uses full windowId for per-instance tracking (appId fallback in isWindowFloating).
     qCInfo(lcEffect) << "Floating state changed for" << windowId << "- isFloating:" << isFloating;
-    m_navigationHandler->setWindowFloating(windowId, isFloating);
+    // Re-key to the window's LIVE id up front, mirroring slotWindowStateChanged
+    // and slotApplyGeometryRequested: every effect-side cache below
+    // (FloatingCache, drag-float skip set, snap tracking, rule-cache
+    // invalidation) is keyed by the id the effect claimed with, so after a
+    // cross-session uuid drift the daemon-supplied id would write entries the
+    // rule matcher never reads. Preserve the daemon id when the exact instance
+    // is unresolvable (ambiguous fuzzy hit) — same policy as the minimize
+    // handlers below.
+    bool stillMinimized = false;
+    QString liveWindowId = windowId;
+    KWin::EffectWindow* liveForOwner = nullptr;
+    if (KWin::EffectWindow* live = findWindowByIdExact(windowId)) {
+        stillMinimized = live->isMinimized();
+        liveWindowId = getWindowId(live);
+        liveForOwner = live;
+    } else if (findWindowById(windowId)) {
+        // A same-app window exists but the exact instance is not
+        // resolvable (drifted or ambiguous id). Default to PRESERVING
+        // ownership: wrongly dropping a still-minimized window's marker
+        // strands its unminimize, while wrongly keeping it is healed by
+        // the next authoritative edge.
+        stillMinimized = true;
+    }
+    m_navigationHandler->setWindowFloating(liveWindowId, isFloating);
     // When a window is unfloated (tiled/snapped), clear the drag-float skip flag.
     // Without this, a subsequent float toggle's geometry restore would be skipped
     // because m_dragActivation.floatedWindowIds still has the entry from the original drag.
     if (!isFloating) {
-        m_dragActivation.floatedWindowIds.remove(windowId);
+        m_dragActivation.floatedWindowIds.remove(liveWindowId);
         // A visible external unfloat normally moots any deferred recovery in
         // either engine. The daemon signal has no request generation, though,
         // so an older hidden-unfloat echo can arrive after the window becomes
@@ -528,25 +551,9 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // loses that edge and leaves KWin restoring whichever geometry was last
         // applied by the old mode. Genuine visible unfloats still clear both
         // handlers below.
-        // Exact resolve, and hoist the LIVE id: the handler maps are keyed by
-        // the effect-side ids they claimed with, so after a uuid drift a
-        // daemon-id query would miss the live window's entries and the
-        // visible unfloat would never drop them.
-        bool stillMinimized = false;
-        QString liveWindowId = windowId;
-        KWin::EffectWindow* liveForOwner = nullptr;
-        if (KWin::EffectWindow* live = findWindowByIdExact(windowId)) {
-            stillMinimized = live->isMinimized();
-            liveWindowId = getWindowId(live);
-            liveForOwner = live;
-        } else if (findWindowById(windowId)) {
-            // A same-app window exists but the exact instance is not
-            // resolvable (drifted or ambiguous id). Default to PRESERVING
-            // ownership: wrongly dropping a still-minimized window's marker
-            // strands its unminimize, while wrongly keeping it is healed by
-            // the next authoritative edge.
-            stillMinimized = true;
-        }
+        // liveWindowId / stillMinimized were resolved at the top of the
+        // function (the handler maps are keyed by the effect-side ids they
+        // claimed with).
         const bool recoveryPending = m_autotileHandler->hasPendingUnminimizeUnfloat(liveWindowId)
             || m_snapHandler->hasPendingUnminimizeUnfloat(liveWindowId)
             || m_autotileHandler->hasUnfloatInFlight(liveWindowId) || m_snapHandler->hasUnfloatInFlight(liveWindowId);
@@ -582,7 +589,7 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // clearWindowSnapped also drops the ZoneCache entry (the IsSnapped /
         // Zone rule-fact source), covering float paths that don't emit
         // windowStateChanged with an empty zone.
-        m_snapHandler->clearWindowSnapped(windowId);
+        m_snapHandler->clearWindowSnapped(liveWindowId);
 
         // Invalidate any stale instant-restore entry for this app. The snap
         // restore cache (SnapHandler) is a single-shot latency cache populated at
@@ -595,7 +602,7 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // snapped but untracked. Dropping the entry makes the reopen take the
         // authoritative daemon path so the window stays floating. Keyed by
         // appId to survive the window's identity change across close/reopen.
-        m_snapHandler->invalidateRestore(::PhosphorIdentity::WindowId::extractAppId(windowId));
+        m_snapHandler->invalidateRestore(::PhosphorIdentity::WindowId::extractAppId(liveWindowId));
     }
     // The change-gated write above (setWindowFloating, plus the zone-cache
     // clear that now runs inside clearWindowSnapped on the floating branch)
@@ -610,7 +617,7 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
     // unconditionally; invalidateRuleCacheForStateChange coalesces to a single flush
     // per event-loop turn, so the redundant call when a write did flip the cache is
     // cheap. Mirrors the drag-end paths, which invalidate directly and unconditionally.
-    invalidateRuleCacheForStateChange(windowId);
+    invalidateRuleCacheForStateChange(liveWindowId);
 }
 
 void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state)

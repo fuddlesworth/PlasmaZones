@@ -111,6 +111,17 @@ namespace PlasmaZones {
 
 void Daemon::initLayoutAndSettingsWiring()
 {
+    // Every sender wired below (m_settings, m_layoutManager, the value-member
+    // timers) survives stop(), and init() can re-run — drop the handles we
+    // installed last time so a stop() -> init() -> start() cycle cannot stack
+    // duplicate handlers (double mode-transition + double gap resnap per
+    // save). Exact handles, not (sender, signal, receiver) sweeps: other call
+    // sites (connectLayoutSignals, overlayservice) own handlers on the same
+    // signals.
+    for (const QMetaObject::Connection& c : std::as_const(m_layoutSettingsWiringConnections)) {
+        disconnect(c);
+    }
+    m_layoutSettingsWiringConnections.clear();
     // Wire the level-1 (global) cascade tier as two pass-through
     // providers — snap default layout id and autotile default algorithm
     // id — symmetric in shape and each gated on its own enabled flag.
@@ -241,49 +252,51 @@ void Daemon::initLayoutAndSettingsWiring()
     // Connect layout changes to zone detector and overlay service
     // activeLayoutChanged fires when the global active layout changes; layoutAssigned
     // fires for per-screen assignments. We handle both but avoid redundant recalculations.
-    connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
-            [this](PhosphorZones::Layout* layout) {
-                if (layout) {
-                    // Recalculate zone geometries asynchronously using primary screen geometry.
-                    // Active layout is global; recalculating per-screen overwrites each
-                    // iteration (last-wins bug). The overlay computes per-screen geometry
-                    // on the fly via GeometryUtils::getZoneGeometryWithGaps(m_screenManager.get(), ).
-                    QScreen* primary = Utils::primaryScreen();
-                    if (primary) {
-                        QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(primary);
-                        m_layoutComputeService->requestRecalculate(
-                            layout, screenId,
-                            GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
+    m_layoutSettingsWiringConnections.append(
+        connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
+                [this](PhosphorZones::Layout* layout) {
+                    if (layout) {
+                        // Recalculate zone geometries asynchronously using primary screen geometry.
+                        // Active layout is global; recalculating per-screen overwrites each
+                        // iteration (last-wins bug). The overlay computes per-screen geometry
+                        // on the fly via GeometryUtils::getZoneGeometryWithGaps(m_screenManager.get(), ).
+                        QScreen* primary = Utils::primaryScreen();
+                        if (primary) {
+                            QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(primary);
+                            m_layoutComputeService->requestRecalculate(
+                                layout, screenId,
+                                GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
+                        }
                     }
-                }
-                m_zoneDetector->setLayout(layout);
-                m_overlayService->updateLayout(layout);
-            });
+                    m_zoneDetector->setLayout(layout);
+                    m_overlayService->updateLayout(layout);
+                }));
 
     // Connect per-screen layout assignments
     // Only update if this is a DIFFERENT layout than the active one
     // (to avoid double-processing when both signals fire for the same layout)
-    connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
-            [this](const QString& screenId, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
-                if (!layout) {
-                    return;
-                }
-                // Skip if this layout is already the active layout
-                // (activeLayoutChanged handler already processed it for all screens)
-                if (layout == m_layoutManager->activeLayout()) {
-                    return;
-                }
-                // This is a screen-specific layout different from the active one
-                // Only recalculate for the specific screen
-                const PhosphorScreens::PhysicalScreen screen = m_screenManager->screenByName(screenId);
-                if (screen.isValid() && screen.qscreen) {
-                    m_layoutComputeService->requestRecalculate(
-                        layout, screenId,
-                        GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screen.qscreen));
-                }
-                // Note: We don't change zone detector or overlay here since
-                // they work with the active layout, not per-screen layouts
-            });
+    m_layoutSettingsWiringConnections.append(
+        connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
+                [this](const QString& screenId, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
+                    if (!layout) {
+                        return;
+                    }
+                    // Skip if this layout is already the active layout
+                    // (activeLayoutChanged handler already processed it for all screens)
+                    if (layout == m_layoutManager->activeLayout()) {
+                        return;
+                    }
+                    // This is a screen-specific layout different from the active one
+                    // Only recalculate for the specific screen
+                    const PhosphorScreens::PhysicalScreen screen = m_screenManager->screenByName(screenId);
+                    if (screen.isValid() && screen.qscreen) {
+                        m_layoutComputeService->requestRecalculate(
+                            layout, screenId,
+                            GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screen.qscreen));
+                    }
+                    // Note: We don't change zone detector or overlay here since
+                    // they work with the active layout, not per-screen layouts
+                }));
 
     // Connect settings changes to overlay service and autotile engine.
     // This is the SINGLE comprehensive handler for batch config reloads (Settings::load()).
@@ -293,14 +306,21 @@ void Daemon::initLayoutAndSettingsWiring()
     m_prevAutotileEnabled = m_settings->autotileEnabled();
     m_previewNotifyTimer.setSingleShot(true);
     m_previewNotifyTimer.setInterval(100);
-    connect(&m_previewNotifyTimer, &QTimer::timeout, this, [this]() {
+    m_layoutSettingsWiringConnections.append(connect(&m_previewNotifyTimer, &QTimer::timeout, this, [this]() {
         if (m_algorithmRegistry && m_algorithmRegistry->previewParams() != m_preRetilePreviewParams
             && m_layoutAdaptor) {
             m_layoutAdaptor->notifyLayoutListChanged();
         }
-    });
+    }));
 
-    connect(m_settings.get(), &Settings::settingsChanged, this, [this]() {
+    // m_settings is ctor-owned and SURVIVES a stop() -> init() cycle, and
+    // stop()'s per-sender sweep deliberately excludes it — so re-wiring here
+    // would stack a second settingsChanged handler and run the whole
+    // mode-transition block twice per save (double resnap, double OSD arm,
+    // second pass against already-cleared pending restores). Sever every
+    // settingsChanged connection targeting the daemon first; they are all
+    // (re)established via the handle list dropped at the top of this function.
+    m_layoutSettingsWiringConnections.append(connect(m_settings.get(), &Settings::settingsChanged, this, [this]() {
         m_overlayService->updateSettings(m_settings.get());
 
         // Detect state transitions before syncing
@@ -398,7 +418,7 @@ void Daemon::initLayoutAndSettingsWiring()
         // Resnap/retile/OSD is triggered separately by applyAssignmentChanges()
         // after the KCM's batch save completes — NOT here in the settings handler.
         syncModeFromAssignments();
-    });
+    }));
 
     // Resnap currently-snapped windows when a snapping gap/padding setting
     // changes (global or per-screen) so the new spacing is visible immediately
@@ -413,30 +433,38 @@ void Daemon::initLayoutAndSettingsWiring()
     // Re-armed by armResnapOsdSuppression on every arm.
     m_suppressResnapOsdWatchdog.setSingleShot(true);
     m_suppressResnapOsdWatchdog.setInterval(2000);
-    connect(&m_suppressResnapOsdWatchdog, &QTimer::timeout, this, [this]() {
+    m_layoutSettingsWiringConnections.append(connect(&m_suppressResnapOsdWatchdog, &QTimer::timeout, this, [this]() {
         m_suppressResnapOsd = 0;
-    });
+    }));
 
     m_gapResnapTimer.setSingleShot(true);
     m_gapResnapTimer.setInterval(100);
-    connect(&m_gapResnapTimer, &QTimer::timeout, this, [this]() {
+    m_layoutSettingsWiringConnections.append(connect(&m_gapResnapTimer, &QTimer::timeout, this, [this]() {
         if (!m_snapAdaptor) {
             return;
         }
         armResnapOsdSuppression(1); // settings-driven reflow, not user navigation
         m_snapAdaptor->resnapCurrentAssignments();
-    });
+    }));
     const auto scheduleGapResnap = [this]() {
         m_gapResnapTimer.start();
     };
-    connect(m_settings.get(), &Settings::innerGapChanged, this, scheduleGapResnap);
-    connect(m_settings.get(), &Settings::outerGapChanged, this, scheduleGapResnap);
-    connect(m_settings.get(), &Settings::usePerSideOuterGapChanged, this, scheduleGapResnap);
-    connect(m_settings.get(), &Settings::outerGapTopChanged, this, scheduleGapResnap);
-    connect(m_settings.get(), &Settings::outerGapBottomChanged, this, scheduleGapResnap);
-    connect(m_settings.get(), &Settings::outerGapLeftChanged, this, scheduleGapResnap);
-    connect(m_settings.get(), &Settings::outerGapRightChanged, this, scheduleGapResnap);
-    connect(m_settings.get(), &Settings::perScreenSnappingSettingsChanged, this, scheduleGapResnap);
+    m_layoutSettingsWiringConnections.append(
+        connect(m_settings.get(), &Settings::innerGapChanged, this, scheduleGapResnap));
+    m_layoutSettingsWiringConnections.append(
+        connect(m_settings.get(), &Settings::outerGapChanged, this, scheduleGapResnap));
+    m_layoutSettingsWiringConnections.append(
+        connect(m_settings.get(), &Settings::usePerSideOuterGapChanged, this, scheduleGapResnap));
+    m_layoutSettingsWiringConnections.append(
+        connect(m_settings.get(), &Settings::outerGapTopChanged, this, scheduleGapResnap));
+    m_layoutSettingsWiringConnections.append(
+        connect(m_settings.get(), &Settings::outerGapBottomChanged, this, scheduleGapResnap));
+    m_layoutSettingsWiringConnections.append(
+        connect(m_settings.get(), &Settings::outerGapLeftChanged, this, scheduleGapResnap));
+    m_layoutSettingsWiringConnections.append(
+        connect(m_settings.get(), &Settings::outerGapRightChanged, this, scheduleGapResnap));
+    m_layoutSettingsWiringConnections.append(
+        connect(m_settings.get(), &Settings::perScreenSnappingSettingsChanged, this, scheduleGapResnap));
 }
 
 } // namespace PlasmaZones

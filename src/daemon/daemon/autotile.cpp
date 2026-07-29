@@ -163,8 +163,13 @@ void Daemon::updateAutotileScreens()
             // Resolve per-context tiling-parameter RULES up front — the effective
             // overflow behavior gates the algorithm-default MaxWindows injection
             // below (an Unlimited context must not receive a finite injected cap).
-            const int ctxDesktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
-            const QString ctxActivity = m_layoutManager->currentActivity();
+            // Same context sources as the disable/assignment checks in the first
+            // loop (VirtualDesktopManager + ActivityManager, not the registry's
+            // push-updated mirror): mixing sources inside one pass would let a
+            // mirror lag resolve a SetMaxWindows/SetSplitRatio rule against a
+            // different context than the assignment it layers onto.
+            const int ctxDesktop = currentDesktopForScreen(screenId);
+            const QString& ctxActivity = activity;
             const PhosphorZones::ContextTilingParams tilingParams =
                 m_layoutManager->resolveContextTilingParams(screenId, ctxDesktop, ctxActivity);
             // Effective overflow mirrors effectiveOverflowBehavior's cascade: a

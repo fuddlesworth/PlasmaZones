@@ -167,13 +167,17 @@ void Daemon::connectScreenSignals()
                     m_layoutManager->clearCurrentVirtualDesktopForScreen(removedScreenId);
                 }
 
-                // The snap engine's per-(screen,desktop,activity) stores are created
-                // lazily on placement, not from an autotile-screens set, so the removed
-                // output's stores must be pruned explicitly here (autotile self-prunes
-                // via updateAutotileScreens). Matches every virtual sub-screen of the
-                // removed physical id.
+                // Both engines' per-(screen,desktop,activity) stores must be
+                // pruned explicitly here; each matches every virtual sub-screen
+                // of the removed physical id. Autotile's updateAutotileScreens
+                // self-prune covers only the CURRENT (desktop, activity)
+                // context — the removed monitor's other contexts' TilingStates
+                // would otherwise leak for the session.
                 if (m_snapEngine) {
                     m_snapEngine->pruneStatesForRemovedScreen(removedScreenId);
+                }
+                if (m_autotileEngine) {
+                    m_autotileEngine->pruneStatesForRemovedScreen(removedScreenId);
                 }
 
                 // Invalidate cached EDID serial so a different monitor on this connector is detected

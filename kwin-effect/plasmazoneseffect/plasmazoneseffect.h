@@ -378,6 +378,11 @@ private:
      *                     true return. @see shouldHandleWindow.
      */
     bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+    // Cached user-Exclude-rule verdict shared by shouldHandleWindow and
+    // shouldAnimateWindow. Fast-paths on an empty exclusion slice; otherwise
+    // resolves through the exclusion evaluator's per-window cache (same
+    // freshness contract as the animation verdicts — see the implementation).
+    bool isExcludedBySnappingRule(KWin::EffectWindow* w) const;
 
     /// Classify a window's structural kind for the snap-restore consume gate.
     PhosphorEngine::WindowKind classifyWindowKind(KWin::EffectWindow* w) const;

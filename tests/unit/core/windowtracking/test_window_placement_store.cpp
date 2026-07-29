@@ -870,11 +870,16 @@ private Q_SLOTS:
                                        WindowPlacement::stateFloating(), WindowPlacement::snapEngineId()));
         }
         QJsonObject serialized = store.serialize();
-        // Splice extra entries into the persisted bucket beyond the cap.
+        // Splice extra entries into the persisted bucket beyond the cap, each
+        // with a DISTINCT windowId: same-id copies would take record()'s
+        // sameWindowInstance merge branch on replay and never append, so the
+        // cap (evictForCapacity on the replay path) would pass vacuously.
         QJsonArray bucket = serialized.value(QStringLiteral("dolphin")).toArray();
         const QJsonObject younger = bucket.last().toObject();
         for (int i = 0; i < 4; ++i) {
-            bucket.append(younger);
+            QJsonObject extra = younger;
+            extra.insert(QStringLiteral("windowId"), QStringLiteral("dolphin|extra%1").arg(i));
+            bucket.append(extra);
         }
         serialized.insert(QStringLiteral("dolphin"), bucket);
 

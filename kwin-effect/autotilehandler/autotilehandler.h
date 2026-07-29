@@ -110,7 +110,8 @@ public:
     void cleanupAutotileTracking(const QString& windowId, const QString& screenId);
     /// Drop @p windowId from the minimize-float set and cancel EITHER
     /// deferred edge — the minimize debounce and the unminimize commit —
-    /// mirroring SnapHandler::removeMinimizeFloated exactly. Returns true if
+    /// mirroring SnapHandler::removeMinimizeFloated, plus the untiled-marker
+    /// drop (snap has no untiled-marker counterpart). Returns true if
     /// the window was tracked. Callers: close cleanup, the effect's
     /// authoritative visible unfloat (slotWindowFloatingChanged, including
     /// its dual-hold repair), and the cross-mode adoption hops (snap's
@@ -126,10 +127,14 @@ public:
     }
 
     /// Whether this handler currently owns @p windowId's minimize-float
-    /// marker (mirrors SnapHandler::isMinimizeFloated).
+    /// marker (mirrors SnapHandler::isMinimizeFloated). Includes the
+    /// in-flight unfloat interval: dispatchUnminimizeUnfloat moves the id
+    /// from the marker set into m_unfloatInFlight, and during that window
+    /// the handler still owns the float — the dual-hold repair and the
+    /// capture guards must not treat it as unowned.
     bool isMinimizeFloated(const QString& windowId) const
     {
-        return m_minimizeFloatedWindows.contains(windowId);
+        return m_minimizeFloatedWindows.contains(windowId) || m_unfloatInFlight.contains(windowId);
     }
 
     /// Take ownership of a minimize-float relinquished by the snap handler

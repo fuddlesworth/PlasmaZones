@@ -605,16 +605,10 @@ void Daemon::initEnginesAndWiring()
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines).
-    // stop() → init() re-entry: the previous cycle's adaptors survive stop()
-    // (it only detaches / clears their engine borrows), so construct-over
-    // would accumulate one QObject child per cycle, each still holding
-    // cleared borrows and its D-Bus registration. Delete the old ones first.
-    delete m_controlAdaptor;
-    m_controlAdaptor = nullptr;
-    delete m_snapAdaptor;
-    m_snapAdaptor = nullptr;
-    delete m_autotileAdaptor;
-    m_autotileAdaptor = nullptr;
+    // stop() → init() re-entry: the previous cycle's WHOLE adaptor set
+    // (engine and core) is deleted in one dependency-ordered preamble at the
+    // top of initCoreAdaptors(), which init() always runs immediately before
+    // this function — so these members are null here on a re-cycle.
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
@@ -633,6 +627,13 @@ void Daemon::initEnginesAndWiring()
     // save completes (all setAssignmentEntry + notifyReload finished), so all
     // assignments and settings are fully committed. Separated from settingsChanged
     // handler to avoid feedback loops with autotile/snapping transitions.
+    //
+    // Disconnect-first: m_layoutAdaptor is created in initCoreAdaptors and,
+    // unlike the three engine adaptors deleted above, survives a
+    // stop() -> init() cycle — a bare connect would stack a second handler
+    // (double resnap + double OSD pass per KCM apply). Same rationale as the
+    // rulesChanged sweep earlier in this function.
+    disconnect(m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this, nullptr);
     connect(
         m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this,
         [this](const QStringList& changedScreenIdsList) {
@@ -808,6 +809,11 @@ bool Daemon::registerDBusService()
                      << "path=" << PhosphorProtocol::Service::ObjectPath;
 
     // Connect overlay adaptor signals to daemon overlay control
+    // Disconnect-first on both: the two adaptors are created in
+    // initCoreAdaptors and survive a stop() -> init() cycle, so bare
+    // connects here would stack duplicate show/hide + updateGeometries
+    // handlers per cycle (same rationale as the rulesChanged sweep).
+    disconnect(m_overlayAdaptor, &OverlayAdaptor::overlayVisibilityChanged, this, nullptr);
     connect(m_overlayAdaptor, &OverlayAdaptor::overlayVisibilityChanged, this, [this](bool visible) {
         if (visible) {
             showOverlay();
@@ -817,6 +823,7 @@ bool Daemon::registerDBusService()
     });
 
     // Connect zone detection to overlay updates
+    disconnect(m_zoneDetectionAdaptor, &ZoneDetectionAdaptor::zoneDetected, this, nullptr);
     connect(m_zoneDetectionAdaptor, &ZoneDetectionAdaptor::zoneDetected, this,
             [this](const QString& zoneId, const PhosphorProtocol::ZoneGeometryRect& geometry) {
                 Q_UNUSED(zoneId)

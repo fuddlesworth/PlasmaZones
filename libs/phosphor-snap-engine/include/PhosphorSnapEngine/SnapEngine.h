@@ -957,7 +957,10 @@ private:
     // removed — all snap commits now route through commitSnapImpl.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    bool unfloatToZone(const QString& windowId, const QString& screenId);
+    /// @p allowRuleTarget gates the SnapToZone-rule tier: true for user float
+    /// toggles (rule stays authoritative), false for suspension (minimize)
+    /// unfloats, which must restore the pre-float zone.
+    bool unfloatToZone(const QString& windowId, const QString& screenId, bool allowRuleTarget = true);
     bool applyGeometryForFloat(const QString& windowId, const QString& screenId);
     /// Float-path wrapper around applyGeometryForFloat that suppresses the
     /// geometry apply for minimize-suspension floats (registry reports the

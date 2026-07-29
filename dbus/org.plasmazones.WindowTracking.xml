@@ -148,7 +148,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getFloatingWindows">
-            <annotation name="org.gtk.GDBus.DocString" value="Return all window IDs that are floating."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return the window IDs that are floating, excluding suspension (minimize-as-float) entries: a minimized window's float is daemon-side occupancy bookkeeping, and the effect's own minimize-float claim paths own it. Consumers re-seeding float state from this list therefore never adopt a suspension float."/>
             <arg name="windowIds" type="as" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Floating window IDs."/>
             </arg>
@@ -384,7 +384,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="PhosphorProtocol::WindowType underlying value; out-of-range values are clamped to Unknown."/>
             </arg>
             <arg name="extended" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Extended window-property snapshot (state flags, geometry, accessory flags, captionNormal, multi-desktop span list) keyed by PhosphorProtocol::Service::WindowMetadataKey. A key is present only when the value is known, so absent keys leave the derived window-rule field disengaged. Lets the daemon's Float/RestorePosition resolvers match the same KWin-property fields the effect path resolves live."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Extended window-property snapshot (state flags, geometry, accessory flags, captionNormal, multi-desktop span list) keyed by PhosphorProtocol::Service::WindowMetadataKey. A key is present only when the value is known, so absent keys leave the derived window-rule field disengaged. Caption-only refresh protocol: an EMPTY map, or a map whose sole key is CaptionNormal, carries the daemon's existing extended snapshot forward (updating only the caption when supplied) rather than clearing it — a sender meaning 'nothing is known' must not use those shapes. Lets the daemon's Float/RestorePosition resolvers match the same KWin-property fields the effect path resolves live."/>
             </arg>
         </method>
         <method name="windowClosed">

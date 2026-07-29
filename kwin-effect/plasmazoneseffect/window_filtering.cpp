@@ -342,16 +342,38 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     // must filter for drag operations and lifecycle reporting).
     // `m_snappingExclusionRuleSet` mirrors the Exclude-shaped slice of the
     // unified Rule store, refreshed on every rulesChanged via
-    // loadRuleAnimationsFromDbus (see shader_config_dbus.cpp). The
-    // `!isEmpty()` fast path keeps a no-exclusions user at two pointer
-    // reads — same cost as the prior list-derived check.
-    if (!m_snappingExclusionRuleSet.isEmpty()) {
-        if (m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded()) {
-            return rejectedBecause(rejectReason, "user exclusion rule match");
-        }
+    // loadRuleAnimationsFromDbus (see shader_config_dbus.cpp).
+    if (isExcludedBySnappingRule(w)) {
+        return rejectedBecause(rejectReason, "user exclusion rule match");
     }
 
     return true;
+}
+
+bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w) const
+{
+    // The `isEmpty()` fast path keeps a no-exclusions user at two pointer
+    // reads — same cost as the prior list-derived check.
+    if (m_snappingExclusionRuleSet.isEmpty()) {
+        return false;
+    }
+    // Per-window verdict cache, mirroring resolveRuleActions: the hot callers
+    // (buildWindowMap per batch, hasOtherWindowOfClassWithDifferentPid's
+    // stacking-order sweep per open) would otherwise pay a full ~30-accessor
+    // ruleQuery build per window per consult — O(N^2) query builds across a
+    // login burst. Freshness matches the animation verdicts: the cache is
+    // revision-keyed for rule edits and cleared by the same placement /
+    // class-swap invalidation paths (flushPendingRuleInvalidations,
+    // invalidateAllRuleCaches, the metadataChanged lambda).
+    const QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded();
+    }
+    if (std::optional<PhosphorRules::ResolvedActions> cached =
+            m_snappingExclusionEvaluator.resolveCachedIfPresent(windowId)) {
+        return cached->isExcluded();
+    }
+    return m_snappingExclusionEvaluator.resolveCached(windowId, ruleQuery(w)).isExcluded();
 }
 
 bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
@@ -559,12 +581,9 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
     // shouldHandleWindow gates on, so a window the user excluded from
     // management is not decorated either (preserves prior behavior, since the
     // decoration path used to run through shouldHandleWindow). No dedicated
-    // decoration rule slice, so no new rule action. The `!isEmpty()` fast path
-    // keeps a no-exclusions user at two pointer reads.
-    if (!m_snappingExclusionRuleSet.isEmpty()) {
-        if (m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded()) {
-            return false;
-        }
+    // decoration rule slice, so no new rule action.
+    if (isExcludedBySnappingRule(w)) {
+        return false;
     }
 
     // Transient-window filter — dialogs / popups / tooltips / dropdowns /

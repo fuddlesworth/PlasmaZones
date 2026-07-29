@@ -269,7 +269,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // desktops / activities / role changes don't feed the
         // WindowClass matcher so they don't need the cache drop.
         auto invalidateRuleCache = [this, safeW]() {
-            m_shaderManager.animationRuleEvaluator().clearCache();
+            // Gate each clear on its own rule set, mirroring the sibling
+            // invalidation in slotWindowActivated: the no-rules case pays
+            // nothing on a class swap.
+            if (!m_shaderManager.animationRuleSet().isEmpty()) {
+                m_shaderManager.animationRuleEvaluator().clearCache();
+            }
+            // The exclusion verdict cache keys on the same frozen id and the
+            // WindowClass matcher — a class swap can flip an Exclude verdict.
+            if (!m_snappingExclusionRuleSet.isEmpty()) {
+                m_snappingExclusionEvaluator.clearCache();
+            }
             // The cache drop alone revives nothing: appearance slots (opacity,
             // tint, border colour) bake into the decoration at
             // updateWindowDecoration time, and the stacking layer is

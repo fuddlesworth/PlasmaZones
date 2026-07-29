@@ -107,7 +107,10 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
         // and must not teleport the hidden frame (see the helper's comment).
         applyFloatGeometryUnlessMinimized(windowId, screenId);
     } else {
-        if (!unfloatToZone(windowId, screenId)) {
+        // Suspension (minimize-as-float) unfloats restore the pre-float zone,
+        // never a SnapToZone rule target — see unfloatToZone's gate.
+        const bool suspension = m_windowTracker && m_windowTracker->isSuspensionFloat(windowId);
+        if (!unfloatToZone(windowId, screenId, /*allowRuleTarget=*/!suspension)) {
             // No pre-float zone to restore to — keep the window floating rather than
             // leaving it in a limbo state (not floating, not snapped to any zone).
             qCDebug(PhosphorSnapEngine::lcSnapEngine)
@@ -121,13 +124,17 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
 // Private helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
+bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId, bool allowRuleTarget)
 {
     // Highest-priority un-float target: a matched SnapToZone rule. Toggling a
     // window out of float lands it in the rule's zones, not a stale pre-float
     // zone, so the rule stays authoritative for both open and Meta+F. Falls
     // through to the pre-float / fallback zone when no rule matches.
-    {
+    // Gated on @p allowRuleTarget: a SUSPENSION (minimize) unfloat is not a
+    // user float toggle — the round trip exists to put the window back where
+    // it was, and letting the rule tier win would yank a manually re-snapped
+    // window back to the rule's zone on every minimize/unminimize.
+    if (allowRuleTarget) {
         const PhosphorEngine::SnapResult ruleSnap =
             calculateSnapToPlacementRule(windowId, screenId, /*isSticky=*/false);
         if (ruleSnap.shouldSnap && !ruleSnap.zoneIds.isEmpty()) {
@@ -422,6 +429,19 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::handoffReceive:" << ctx.windowId << "to" << ctx.toScreenId
                                              << "from" << ctx.fromEngineId << "wasFloating=" << ctx.wasFloating;
 
+    // Re-home FIRST, on every path: a window already tracked here under a
+    // different (screen, desktop, activity) key keeps its old owning SnapState
+    // otherwise — stateForWindowOnScreen deliberately does not re-home, and the
+    // zone-resolved branches below place through it — so
+    // pruneStatesForRemovedScreen / pruneStatesForDesktop on the SOURCE context
+    // would silently drop a snap that now lives on the destination. A
+    // documented no-op when the key is unchanged or the window is being
+    // adopted fresh from another engine (untracked here). This also moves the
+    // per-window state (floating bit, live screen rewritten to the
+    // destination) so screenForTrackedWindow reflects the new monitor (#724);
+    // the pre-float zone rides along UNCHANGED (behaviour A).
+    migrateWindowToScreen(ctx.windowId, ctx.toScreenId);
+
     if (!ctx.sourceZoneIds.isEmpty()) {
         QRect zoneGeo = m_windowTracker->resolveZoneGeometry(ctx.sourceZoneIds, ctx.toScreenId);
         if (zoneGeo.isValid()) {
@@ -484,16 +504,9 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     }
 
     const int currentDesktop = ctx.toDesktop > 0 ? ctx.toDesktop : currentVirtualDesktopForScreen(ctx.toScreenId);
-    // Re-home the window onto the destination monitor's per-key store when it is
-    // already tracked here (same-engine cross-screen float drift). This moves its
-    // per-window state (including the floating bit and the live screen, rewritten to
-    // the destination) so screenForTrackedWindow reflects the new monitor (#724). The
-    // pre-float zone rides along UNCHANGED (behaviour A): an unfloat on any monitor
-    // restores the home zone, and cross-monitor restore is allowed (there is no
-    // refusal guard). A no-op when the window is being
-    // adopted fresh from another engine (untracked here); stateForWindowOnScreen then
-    // registers it under the destination key below.
-    migrateWindowToScreen(ctx.windowId, ctx.toScreenId);
+    // Re-homing already happened at the top of the function (it must cover the
+    // zone-resolved branches too); an unfloat on any monitor restores the home
+    // zone, and cross-monitor restore is allowed (there is no refusal guard).
     if (!ctx.wasFloating) {
         // Explicit cross-mode MOVE of a MANAGED window whose source zones did
         // not resolve on this screen (foreign zone ids after a layout change).

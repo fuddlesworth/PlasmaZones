@@ -168,8 +168,11 @@ void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     // is the TILE rect. The UNTILED subset is carved out — those windows'
     // rects belong to the PRIOR mode, and the snap-owned guard above already
     // rejects zone rects, so a surviving untiled rect is a genuine free
-    // position worth capturing.
-    if (m_minimizeFloatedWindows.contains(windowId) && !m_untiledMinimizeFloats.contains(windowId)) {
+    // position worth capturing. isMinimizeFloated (not the raw marker set):
+    // a window mid-unfloat sits in m_unfloatInFlight instead, and its frame
+    // is still the tile rect until the restore lands — capturing during that
+    // interval is the same poison.
+    if (isMinimizeFloated(windowId) && !m_untiledMinimizeFloats.contains(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for own minimize-float (frame is tile rect)" << windowId
                           << "on" << screenId;
         return;

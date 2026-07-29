@@ -922,6 +922,17 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
 
 void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
 {
+    // Fail CLOSED on an empty alive set, agreeing with both callees
+    // (pruneStaleAssignments and pruneStaleInstances refuse it with a
+    // warning): the effect's one-shot alive report at daemon-ready can fire
+    // before session-restored apps have mapped, and wiping the shadow stores
+    // (m_frameGeometry, m_broadcastFloating) on that empty report would
+    // silence refreshOpenWindowPlacements and drop the close-path capture
+    // fallback until the effect re-pushes.
+    if (aliveWindowIds.isEmpty()) {
+        qCWarning(lcDbusWindow) << "pruneStaleWindows: refusing empty alive set — nothing pruned";
+        return;
+    }
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
     QSet<QString> aliveInstances;
     aliveInstances.reserve(aliveWindowIds.size());

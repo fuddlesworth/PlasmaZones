@@ -399,7 +399,11 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
         } else {
             QSet<QString> windowsOnRemovedScreens;
             for (KWin::EffectWindow* w : windows) {
-                if (w && removed.contains(m_effect->getWindowScreenId(w))) {
+                // isDeleted: close-grabbed dying windows linger in the
+                // stacking order — getWindowId on them would re-pollute the
+                // scrubbed id caches (same hazard as the batch loop in
+                // wiring.cpp).
+                if (w && !w->isDeleted() && removed.contains(m_effect->getWindowScreenId(w))) {
                     // Only restore borders for windows on the CURRENT desktop
                     // AND activity. Windows in other contexts may still be
                     // autotiled and must keep their borderless state —
@@ -534,8 +538,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                              << "autotile screens:" << m_autotileScreens;
             for (const QString& screenId : added) {
                 for (KWin::EffectWindow* w : windows) {
-                    if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop() && w->isOnCurrentActivity()
-                        && m_effect->getWindowScreenId(w) == screenId) {
+                    if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
+                        && w->isOnCurrentActivity() && m_effect->getWindowScreenId(w) == screenId) {
                         const QString windowId = m_effect->getWindowId(w);
                         if (m_savedNotifiedForDesktopReturn.contains(windowId)
                             || m_notifiedWindows.contains(windowId)) {
@@ -560,8 +564,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // must remain in the set for when their screen returns.
             for (const QString& screenId : added) {
                 for (KWin::EffectWindow* w : windows) {
-                    if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop() && w->isOnCurrentActivity()
-                        && m_effect->getWindowScreenId(w) == screenId) {
+                    if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
+                        && w->isOnCurrentActivity() && m_effect->getWindowScreenId(w) == screenId) {
                         m_savedNotifiedForDesktopReturn.remove(m_effect->getWindowId(w));
                     }
                 }
@@ -578,8 +582,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // notifyWindowAdded is idempotent (checks m_notifiedWindows).
             for (const QString& screenId : m_autotileScreens) {
                 for (KWin::EffectWindow* w : windows) {
-                    if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()
-                        || w->isMinimized()) {
+                    if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
+                        || !w->isOnCurrentActivity() || w->isMinimized()) {
                         continue;
                     }
                     if (m_effect->getWindowScreenId(w) != screenId) {
@@ -636,7 +640,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // explains why an overflow float must not clobber a correct
             // existing entry).
             for (KWin::EffectWindow* w : windows) {
-                if (!w || !m_effect->shouldHandleWindow(w)) {
+                if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w)) {
                     continue;
                 }
                 if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
@@ -675,7 +679,10 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             QList<KWin::EffectWindow*> batchWindows;
             batchWindows.reserve(windows.size());
             for (KWin::EffectWindow* window : windows) {
-                if (window && !completedDeferredRoutes.contains(m_effect->getWindowId(window))) {
+                // isDeleted mirrors the batch loop in wiring.cpp — a dying
+                // window's getWindowId would re-pollute the scrubbed caches.
+                if (window && !window->isDeleted()
+                    && !completedDeferredRoutes.contains(m_effect->getWindowId(window))) {
                     batchWindows.append(window);
                 }
             }

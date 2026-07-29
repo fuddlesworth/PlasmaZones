@@ -22,6 +22,7 @@
 #include "placementlogging.h"
 #include <QScreen>
 #include <QUuid>
+#include <algorithm>
 #include <climits>
 
 namespace PhosphorPlacement {

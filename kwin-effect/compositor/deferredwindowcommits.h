@@ -50,11 +50,12 @@ public:
         return m_pending.contains(windowId);
     }
 
-    /// Schedule @p fire to run after @p intervalMs, replacing nothing —
-    /// callers gate on contains() when an existing pending commit should
-    /// win. The pending entry is consumed (erased, timer released) before
-    /// @p fire runs, so every early-return inside the callback leaves no
-    /// bookkeeping behind.
+    /// Schedule @p fire to run after @p intervalMs, superseding any pending
+    /// commit for the same @p windowId (cancelled structurally at the top of
+    /// the body — callers that want an existing commit to win must gate on
+    /// contains() BEFORE calling). The pending entry is consumed (erased,
+    /// timer released) before @p fire runs, so every early-return inside the
+    /// callback leaves no bookkeeping behind.
     void schedule(const QString& windowId, int intervalMs, std::function<void()> fire)
     {
         // Supersede any pending entry FIRST: a bare insert would orphan the

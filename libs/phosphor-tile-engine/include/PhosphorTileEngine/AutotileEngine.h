@@ -349,6 +349,18 @@ public:
     void pruneStatesForActivities(const QStringList& validActivities) override;
 
     /**
+     * @brief Prune PhosphorTiles::TilingState entries for a permanently removed monitor
+     *
+     * Removes every state whose key.screenId belongs to the removed physical
+     * monitor (including its virtual sub-screens), plus their tuned-flag /
+     * script-stash / scheduling / context residue. updateAutotileScreens only
+     * tears down the CURRENT (desktop, activity) context, so without this the
+     * removed monitor's other contexts' states leak for the session. Mirrors
+     * SnapEngine::pruneStatesForRemovedScreen.
+     */
+    void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
+
+    /**
      * @brief Get the current virtual desktop tracked by the engine
      */
     int currentDesktop() const noexcept

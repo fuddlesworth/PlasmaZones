@@ -471,8 +471,16 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // snap destination) nobody ever unfloats the window and it stays
     // floating until the next mode toggle. Reachable in bulk on monitor
     // hotplug and VS reconfigure.
-    const bool ownedMinimizeFloat = m_minimizeFloatedWindows.contains(windowId);
+    // isMinimizeFloated covers the in-flight unfloat interval too — a window
+    // crossing screens mid-unfloat is still owned, and letting the cleanup
+    // below drop it without re-establishing the claim strands it floating.
+    const bool ownedMinimizeFloat = isMinimizeFloated(windowId);
     const bool wasUntiledMinimizeFloat = m_untiledMinimizeFloats.contains(windowId);
+    // Snapshot the retry budget too: cleanupAutotileTracking erases it, and
+    // the header documents that the budget must survive the ownership hop
+    // (a persistently-refused unfloat must not reset to a fresh budget on
+    // every cross-screen bounce).
+    const int savedUnfloatBudget = unfloatRetryBudgetUsed(windowId);
 
     // Remove from old screen's autotile state
     onWindowClosed(windowId, oldScreenId);
@@ -483,13 +491,20 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             if (wasUntiledMinimizeFloat) {
                 m_untiledMinimizeFloats.insert(windowId);
             }
+            seedUnfloatRetryBudget(windowId, savedUnfloatBudget);
             qCInfo(lcEffect) << "Autotile: minimize-float ownership carried across screens:" << windowId << "->"
                              << newScreenId;
         } else if (SnapHandler* snap = m_effect->snapHandler()) {
             // Snap destination: hand the record over so the unminimize edge
             // on that screen finds an owner (mirrors the deferred-commit
-            // transfer in the unfloat grace path).
+            // transfer in the unfloat grace path). The untiled marker is
+            // deliberately NOT carried: snap has no untiled fast path, so an
+            // adopted window whose rect belongs to the prior mode takes
+            // snap's normal deferred grace and may visibly hop once at the
+            // unminimize — accepted over teaching snap a second commit path
+            // for this rare cross-screen-while-minimized case.
             snap->adoptMinimizeFloated(windowId);
+            snap->seedUnfloatRetryBudget(windowId, savedUnfloatBudget);
             qCInfo(lcEffect) << "Autotile: minimize-float ownership handed to snap on screen change:" << windowId
                              << "->" << newScreenId;
         }

@@ -120,7 +120,8 @@ void Daemon::connectLayoutSignals()
     // handler below runs twice. Drop exactly the handles WE installed last
     // time: a (sender, signal, receiver) disconnect would also delete other
     // call sites' handlers on the same signals (initLayoutAndSettingsWiring()
-    // connects layoutAssigned from the ctor, and that never re-runs), and
+    // connects layoutAssigned from init(), which CAN re-run and drops its own
+    // tracked handles the same way), and
     // Qt::UniqueConnection does not apply to lambda/functor connections.
     // start() calls this one FIRST (lifecycle.cpp), so the clear lives here
     // and connectOverlaySignals() only appends.
