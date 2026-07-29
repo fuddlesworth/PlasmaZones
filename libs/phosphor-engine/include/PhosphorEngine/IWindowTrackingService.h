@@ -162,6 +162,15 @@ public:
     /// leaving its engine slots intact. For the drag-out / layout-change consume
     /// paths that restore the float-back once and must not re-apply it.
     virtual void clearFreeGeometry(const QString& windowId) = 0;
+    /// Screen-scoped consume-once variant: clears only @p screenId's
+    /// remembered float-back, preserving other monitors' entries. Default
+    /// falls back to the all-screens form for implementations without
+    /// per-screen granularity.
+    virtual void clearFreeGeometry(const QString& windowId, const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+        clearFreeGeometry(windowId);
+    }
     virtual QRect zoneGeometry(const QString& zoneId, const QString& screenId = QString()) const = 0;
     virtual QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const = 0;
     virtual QString resolveEffectiveScreenId(const QString& screenId) const = 0;

@@ -368,6 +368,7 @@ public:
     /// Clear a window's shared free/float geometry from the record. See
     /// IWindowTrackingService::clearFreeGeometry.
     void clearFreeGeometry(const QString& windowId) override;
+    void clearFreeGeometry(const QString& windowId, const QString& screenId) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State

@@ -109,9 +109,12 @@ public:
     bool clear(const QString& windowId);
 
     /// Clear ONLY the shared free/float geometry for the same live instance, leaving the
-    /// engine slots and context intact. Returns true if anything was cleared. Used by
-    /// the drag-out / layout-change paths that consume the float-back once.
+    /// engine slots and context intact. Returns true if anything was cleared. The
+    /// all-screens form is for wholesale invalidation (virtual-screen remap); the
+    /// screen-scoped overload is for consume-once paths (drag-out, drop-snap), which
+    /// must not destroy the float-back remembered for other monitors.
     bool clearFreeGeometry(const QString& windowId);
+    bool clearFreeGeometry(const QString& windowId, const QString& screenId);
 
     /// Apply an in-place mutation to every record; @p fn returns true when it changed
     /// the record. Returns the number changed. For bulk rewrites that keep the appId
@@ -134,6 +137,10 @@ public:
     int size() const;
 
 private:
+    /// Capacity eviction preferring contentless residue over restorable
+    /// placements — see the implementation comment.
+    static void evictForCapacity(QList<WindowPlacement>& bucket);
+
     /// appId → FIFO list of records (preserves multi-instance + close/reopen order).
     QHash<QString, QList<WindowPlacement>> m_byApp;
     quint64 m_sequence = 0;

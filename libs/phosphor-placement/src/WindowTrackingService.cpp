@@ -577,6 +577,20 @@ void WindowTrackingService::clearFreeGeometry(const QString& windowId)
     }
 }
 
+void WindowTrackingService::clearFreeGeometry(const QString& windowId, const QString& screenId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    if (screenId.isEmpty()) {
+        clearFreeGeometry(windowId);
+        return;
+    }
+    if (m_placementStore.clearFreeGeometry(windowId, screenId)) {
+        markDirty(DirtyWindowPlacements);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Floating Window State
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -8,6 +8,7 @@
 #include <QLatin1Char>
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 namespace PhosphorEngine {
@@ -93,9 +94,7 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
                 m_byApp.erase(it); // iterator consumed — do not ++it
             }
             QList<WindowPlacement>& dst = m_byApp[merged.appId];
-            while (dst.size() >= MaxPerApp) {
-                dst.removeFirst();
-            }
+            evictForCapacity(dst);
             dst.append(merged);
             return true;
         }
@@ -108,11 +107,28 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
     // No existing record for this window — append a fresh one.
     incoming.sequence = ++m_sequence;
     QList<WindowPlacement>& bucket = m_byApp[incoming.appId];
-    while (bucket.size() >= MaxPerApp) {
-        bucket.removeFirst();
-    }
+    evictForCapacity(bucket);
     bucket.append(incoming);
     return true;
+}
+
+void WindowPlacementStore::evictForCapacity(QList<WindowPlacement>& bucket)
+{
+    // Evict contentless residue FIRST (oldest such entry), and only fall back
+    // to the positionally-oldest record when everything is restorable — a
+    // bare floating slot with no geometry must never push a real snapped or
+    // tiled placement out of the FIFO (WindowPlacement::hasRestorableContent
+    // documents this exact starvation hazard).
+    while (bucket.size() >= MaxPerApp) {
+        int victim = -1;
+        for (int i = 0; i < bucket.size(); ++i) {
+            if (!bucket.at(i).hasRestorableContent()) {
+                victim = i;
+                break;
+            }
+        }
+        bucket.removeAt(victim >= 0 ? victim : 0);
+    }
 }
 
 namespace {
@@ -122,8 +138,12 @@ namespace {
 /// placement and is never a collapse candidate.
 bool isPureFloatRecord(const WindowPlacement& p)
 {
+    // A slot-LESS record with remembered free geometry (the shape
+    // recordFreeGeometry produces) is the purest float duplicate there is —
+    // exactly what the collapse exists to converge. Only an empty record with
+    // neither slots nor geometry is excluded (nothing to keep or prune).
     if (p.engines.isEmpty()) {
-        return false;
+        return !p.freeGeometryByScreen.isEmpty();
     }
     for (auto it = p.engines.constBegin(); it != p.engines.constEnd(); ++it) {
         if (it.value().state == WindowPlacement::stateSnapped() || it.value().state == WindowPlacement::stateTiled()) {
@@ -147,7 +167,11 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
 
     const auto findKeep = [&]() -> int {
         for (int i = 0; i < bucket.size(); ++i) {
-            if (bucket.at(i).windowId == keepWindowId) {
+            // Instance match, not exact-id: every other lookup in this file
+            // matches through sameWindowInstance so a live window whose appId
+            // prefix drifted still resolves — an exact compare here silently
+            // no-ops the collapse for exactly the renamed-window case.
+            if (sameWindowInstance(bucket.at(i).windowId, keepWindowId)) {
                 return i;
             }
         }
@@ -362,17 +386,42 @@ bool WindowPlacementStore::clearFreeGeometry(const QString& windowId)
     if (windowId.isEmpty()) {
         return false;
     }
-    // A live instance is unique across buckets (record() enforces this), so the first
-    // match is the only match — return as soon as it's cleared.
+    // Sweep ALL buckets rather than returning on the first hit: record()
+    // enforces instance uniqueness only for ids sameWindowInstance can relate,
+    // and two bare-id entries under different buckets fall outside that
+    // guarantee — an early return would leave the second one holding stale
+    // geometry.
+    bool cleared = false;
     for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
         for (WindowPlacement& p : it.value()) {
             if (sameWindowInstance(p.windowId, windowId) && !p.freeGeometryByScreen.isEmpty()) {
                 p.freeGeometryByScreen.clear();
-                return true;
+                cleared = true;
             }
         }
     }
-    return false;
+    return cleared;
+}
+
+bool WindowPlacementStore::clearFreeGeometry(const QString& windowId, const QString& screenId)
+{
+    if (windowId.isEmpty() || screenId.isEmpty()) {
+        return false;
+    }
+    // Screen-scoped consume: the drag-out/drop paths consume exactly one
+    // screen's float-back, and wiping the whole map would destroy the
+    // window's remembered free position on every OTHER monitor — the
+    // distinct-monitor float memory collapsePureFloatSiblings deliberately
+    // preserves.
+    bool cleared = false;
+    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
+        for (WindowPlacement& p : it.value()) {
+            if (sameWindowInstance(p.windowId, windowId) && p.freeGeometryByScreen.remove(screenId) > 0) {
+                cleared = true;
+            }
+        }
+    }
+    return cleared;
 }
 
 int WindowPlacementStore::transform(const std::function<bool(WindowPlacement&)>& fn)
@@ -475,14 +524,42 @@ void WindowPlacementStore::deserialize(const QJsonObject& obj)
         }
     }
 
+    // Persisted ARRAY positions, first occurrence per instance: record()'s
+    // in-place merge keeps a record's bucket POSITION while restamping its
+    // sequence, so position order and sequence order legitimately diverge —
+    // replaying by sequence alone would reorder buckets across a reload,
+    // flipping take()'s oldest-first head and the eviction order the header
+    // documents as FIFO.
+    QHash<QString, int> firstPersistedPos;
+    for (int i = 0; i < loaded.size(); ++i) {
+        const QString instance = PhosphorIdentity::WindowId::extractInstanceId(loaded.at(i).windowId);
+        if (!firstPersistedPos.contains(instance)) {
+            firstPersistedPos.insert(instance, i);
+        }
+    }
+
     // Replay oldest to newest through record() so persisted duplicates from an
-    // appId-prefix mutation are merged into one live-instance record. This also
-    // applies the normal per-app cap in the same direction as runtime inserts.
+    // appId-prefix mutation are merged into one live-instance record (sequence
+    // decides MERGE precedence only). This also applies the normal per-app cap
+    // in the same direction as runtime inserts.
     std::stable_sort(loaded.begin(), loaded.end(), [](const WindowPlacement& lhs, const WindowPlacement& rhs) {
         return lhs.sequence < rhs.sequence;
     });
     for (WindowPlacement& placement : loaded) {
         record(std::move(placement));
+    }
+
+    // Restore each bucket to its persisted array order (merged duplicates sit
+    // at their earliest persisted position — FIFO semantics).
+    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
+        std::stable_sort(
+            it->begin(), it->end(), [&firstPersistedPos](const WindowPlacement& a, const WindowPlacement& b) {
+                const int pa = firstPersistedPos.value(PhosphorIdentity::WindowId::extractInstanceId(a.windowId),
+                                                       std::numeric_limits<int>::max());
+                const int pb = firstPersistedPos.value(PhosphorIdentity::WindowId::extractInstanceId(b.windowId),
+                                                       std::numeric_limits<int>::max());
+                return pa < pb;
+            });
     }
 }
 

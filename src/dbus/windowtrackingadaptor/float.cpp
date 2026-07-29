@@ -33,6 +33,16 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     QString screenId = m_service->screenForWindow(windowId, m_lastActiveScreenId);
     qCInfo(lcDbusWindow) << "Drag-out unsnap (no activation trigger) for" << windowId << "screen:" << screenId;
 
+    // Latch the pre-snap float-back BEFORE the float write: setWindowFloating
+    // synchronously runs a placement capture that records the LIVE dragged
+    // frame (zone dimensions) into the same per-screen free-geometry map this
+    // read consumes — reading afterwards would "restore" the zone size and
+    // destroy the genuine pre-snap size in the process.
+    std::optional<QRect> preSnapGeo;
+    if (shouldRestoreSizeOnUnsnap(windowId)) {
+        preSnapGeo = m_service->validatedUnmanagedGeometry(windowId, screenId);
+    }
+
     // Delegate unsnap-for-float to the service directly (the SnapAdaptor
     // method windowUnsnappedForFloat does the same thing, but this path
     // doesn't need the SnapAdaptor detour for a WTS-level operation).
@@ -42,15 +52,18 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     // Restore pre-snap size (not position — window stays where the user dropped it).
     // This mirrors the activated-drag path in WindowDragAdaptor::dragStopped. A
     // matched SetRestoreSizeOnUnsnap rule overrides the global setting per window.
-    if (shouldRestoreSizeOnUnsnap(windowId)) {
-        auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
-        if (geo) {
-            Q_EMIT applyGeometryRequested(windowId, 0, 0, geo->width(), geo->height(), QString(), screenId, true);
-            // Single float-back store: clear the record's shared free geometry now
-            // that we've consumed it for this drag-out restore.
-            m_service->clearFreeGeometry(windowId);
-            qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
-        }
+    // Dimension guard mirrors the drop.cpp twin: a degenerate stored rect
+    // produces a RestoreSize outcome that validates to "requires non-zero
+    // size" and is dropped effect-side — don't claim success for it.
+    if (preSnapGeo && preSnapGeo->width() > 0 && preSnapGeo->height() > 0) {
+        Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapGeo->width(), preSnapGeo->height(), QString(), screenId,
+                                      true);
+        // Consume-once, per screen: only this screen's float-back was used;
+        // other monitors' remembered positions stay intact.
+        m_service->clearFreeGeometry(windowId, screenId);
+        qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << preSnapGeo->width() << "x" << preSnapGeo->height();
+    } else if (preSnapGeo) {
+        qCInfo(lcDbusWindow) << "Drag-out unsnap: degenerate stored size for" << windowId << "— skipping restore";
     }
 }
 
