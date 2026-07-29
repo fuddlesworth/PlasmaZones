@@ -57,7 +57,13 @@ ComboBox {
         Qt.callLater(_recalcLongestWidth);
         _syncStoredValue();
     }
-    onModelChanged: Qt.callLater(_recalcLongestWidth)
+    // Sync here as well as on countChanged: a model replaced by another of the
+    // SAME length never fires countChanged, and the old index would then map
+    // through the previous model's ordering.
+    onModelChanged: {
+        Qt.callLater(_recalcLongestWidth);
+        _syncStoredValue();
+    }
     Component.onCompleted: {
         _recalcLongestWidth();
         _syncStoredValue();
