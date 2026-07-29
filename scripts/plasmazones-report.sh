@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-# These defaults mirror src/core/supportreport.cpp — keep in sync.
+# These defaults mirror src/core/platform/supportreport.cpp — keep in sync.
 SINCE_MINUTES=30       # DefaultSinceMinutes
 MAX_SINCE_MINUTES=120  # MaxSinceMinutes
 MAX_LOG_LINES=2000     # MaxLogLines
@@ -301,7 +301,7 @@ if command -v journalctl &>/dev/null; then
 
     # Truncate to the most recent MaxLogLines (the entries around a failure),
     # then redact via temp file to avoid SIGPIPE. tail keeps the newest lines,
-    # matching SupportReport::capLogLines() in src/core/supportreport.cpp.
+    # matching capLogLines() in src/core/platform/supportreport.cpp.
     if [[ -n "${JOURNAL:-}" ]]; then
         printf '%s\n' "$JOURNAL" > "$STAGING/journal.raw"
         tail -n "$MAX_LOG_LINES" "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"
