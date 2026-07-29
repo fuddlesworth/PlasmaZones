@@ -289,6 +289,14 @@ public Q_SLOTS:
 
     // Window state change handlers (connected per-window in setupWindowConnections)
     void slotWindowMinimizedChanged(KWin::EffectWindow* w);
+    /// Cross-mode transfer entry point over slotWindowMinimizedChanged.
+    /// Returns false when the ENTRY GATES would refuse the window
+    /// (unhandleable / not on an autotile screen) WITHOUT forwarding the
+    /// edge; true after forwarding. SnapHandler's became-autotile hand-offs
+    /// must use this instead of the raw slot: a silently refused transfer
+    /// left ownership with the sender while the edge was already spent, so
+    /// the suspension stranded until the next minimize cycle.
+    bool offerMinimizeEdge(KWin::EffectWindow* w);
     void slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool horizontal, bool vertical);
     void slotWindowFullScreenChanged(KWin::EffectWindow* w);
     void slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry);

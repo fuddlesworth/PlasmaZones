@@ -34,7 +34,16 @@ LayoutComputeService::LayoutComputeService(QObject* parent)
 LayoutComputeService::~LayoutComputeService()
 {
     m_thread->quit();
-    m_thread->wait(5000);
+    if (!m_thread->wait(5000)) {
+        // A wedged worker (runaway compute) must not let the parented QThread
+        // be destroyed while still running — Qt aborts the whole process on
+        // that. The worker only writes its own local result state, so a
+        // forced stop at teardown cannot corrupt anything the surviving
+        // process still reads.
+        qCWarning(lcLayoutLib) << "LayoutComputeService: worker thread did not quit within 5s — terminating";
+        m_thread->terminate();
+        m_thread->wait();
+    }
 }
 
 void LayoutComputeService::setLayoutManager(LayoutRegistry* manager)

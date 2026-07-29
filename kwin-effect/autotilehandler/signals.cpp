@@ -192,8 +192,11 @@ void AutotileHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
             return;
         }
         if (!m_autotileScreens.contains(screenId)) {
-            if (SnapHandler* snap = m_effect->snapHandler()) {
-                snap->handleMinimizeChanged(safeWindow.data(), windowId, screenId, false);
+            SnapHandler* snap = m_effect->snapHandler();
+            if (!snap || !snap->offerMinimizeEdge(safeWindow.data(), windowId, screenId)) {
+                // Refused (screen flipped again mid-transfer) — ownership
+                // stayed here, so re-arm rather than spending the edge.
+                scheduleUnminimizeUnfloatRetry(windowId);
             }
             return;
         }
@@ -891,6 +894,19 @@ void AutotileHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, cons
     }
 }
 
+bool AutotileHandler::offerMinimizeEdge(KWin::EffectWindow* w)
+{
+    // Mirror of slotWindowMinimizedChanged's entry gates. See the header doc:
+    // a transfer the gates would refuse must be reported to the sender, not
+    // silently dropped.
+    if (!w || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)
+        || !m_autotileScreens.contains(m_effect->getWindowScreenId(w))) {
+        return false;
+    }
+    slotWindowMinimizedChanged(w);
+    return true;
+}
+
 void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 {
     if (!w || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)) {
@@ -1058,10 +1074,12 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         }
         return;
     }
-    // A commit is already scheduled for this window — nothing new to do.
-    if (m_pendingUnminimizeUnfloat.contains(windowId)) {
-        return;
-    }
+    // Supersede any surviving pending entry rather than skipping the edge:
+    // the shared queue also carries RETRY timers (the twin of snap's
+    // scheduleUnminimizeUnfloatRetry), and a genuine unminimize must never be
+    // swallowed by whichever stale timer slipped through — the fresh edge is
+    // the authoritative signal, so the grace re-arms from it.
+    cancelPendingUnminimizeUnfloat(windowId);
     // No pre-autotile geometry capture here: a minimize-floated window cannot
     // move while minimized, so its frame is always the tiled rect — recording
     // it would poison the local float-back cache for windows with no prior
@@ -1108,9 +1126,12 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
             // snap now instead of retaining ownership for an edge that will
             // never be emitted again.
             SnapHandler* snap = m_effect->snapHandler();
-            if (snap) {
-                qCInfo(lcEffect) << "Autotile: deferred unfloat screen became snap, transferring:" << windowId;
-                snap->handleMinimizeChanged(fw, windowId, currentScreenId, false);
+            qCInfo(lcEffect) << "Autotile: deferred unfloat screen became snap, transferring:" << windowId;
+            if (!snap || !snap->offerMinimizeEdge(fw, windowId, currentScreenId)) {
+                // Refused (screen flipped again mid-transfer) — ownership
+                // stayed here, so re-arm rather than spending the edge.
+                qCInfo(lcEffect) << "Autotile: snap refused transferred edge, re-arming retry:" << windowId;
+                scheduleUnminimizeUnfloatRetry(windowId);
             }
             return;
         }

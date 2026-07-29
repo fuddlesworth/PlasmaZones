@@ -183,6 +183,13 @@ public:
     /// against the stale frame and then hop. See m_pendingUnminimizeUnfloat.
     void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                bool minimized);
+    /// Cross-mode transfer entry point over handleMinimizeChanged's
+    /// unminimize path (mirror of AutotileHandler::offerMinimizeEdge).
+    /// Returns false when the entry gate would refuse the window (the screen
+    /// moved back under autotile) WITHOUT forwarding; true after forwarding.
+    /// AutotileHandler's became-snap hand-offs must use this so a refused
+    /// transfer re-arms on the sender instead of stranding the suspension.
+    bool offerMinimizeEdge(KWin::EffectWindow* window, const QString& windowId, const QString& screenId);
     void retryVisibleMinimizeFloats();
 
     /// Whether snap owns a temporary minimize-float for @p windowId.

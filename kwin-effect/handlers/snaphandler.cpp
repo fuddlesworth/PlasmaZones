@@ -364,6 +364,18 @@ void SnapHandler::callCancelSnap()
                                                 QStringLiteral("cancelSnap"));
 }
 
+bool SnapHandler::offerMinimizeEdge(KWin::EffectWindow* window, const QString& windowId, const QString& screenId)
+{
+    // Mirror of handleMinimizeChanged's unminimize entry gate. See the
+    // header doc: a transfer the gate would refuse must be reported to the
+    // sender, not silently dropped.
+    if (m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+        return false;
+    }
+    handleMinimizeChanged(window, windowId, screenId, /*minimized=*/false);
+    return true;
+}
+
 void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                         bool minimized)
 {
@@ -486,10 +498,13 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 return;
             }
         }
-        // A commit is already scheduled for this window — nothing new to do.
-        if (m_pendingUnminimizeUnfloat.contains(windowId)) {
-            return;
-        }
+        // Supersede any surviving pending entry rather than skipping the
+        // edge: the shared queue also carries RETRY timers
+        // (scheduleUnminimizeUnfloatRetry), and while the minimize edge
+        // cancels entries on its own path, a genuine unminimize must never be
+        // swallowed by whichever stale timer slipped through — the fresh edge
+        // is the authoritative signal, so the grace re-arms from it.
+        cancelPendingUnminimizeUnfloat(windowId);
         // Defer the whole unfloat commit (restore-net queries included) past
         // KWin's unminimize animation, mirroring AutotileHandler's deferred
         // unfloat and for the same reason: the unfloat re-snaps the window,
@@ -529,7 +544,14 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 // commit to the handler that owns the screen now; its adoption
                 // path removes our marker and tiles immediately.
                 qCInfo(lcEffect) << "Snap: deferred unfloat screen became autotile, transferring:" << windowId;
-                m_effect->autotileHandler()->slotWindowMinimizedChanged(fw);
+                if (!m_effect->autotileHandler()->offerMinimizeEdge(fw)) {
+                    // Receiver's entry gates refused (window became
+                    // unhandleable or the screen set moved again). The edge
+                    // is spent, so re-arm from our side — ownership stayed
+                    // here.
+                    qCInfo(lcEffect) << "Snap: autotile refused transferred edge, re-arming retry:" << windowId;
+                    scheduleUnminimizeUnfloatRetry(windowId);
+                }
                 return;
             }
             if (!m_minimizeFloatedWindows.contains(windowId)) {
@@ -710,7 +732,11 @@ void SnapHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
             return;
         }
         if (m_effect->autotileHandler()->isAutotileScreen(screenId)) {
-            m_effect->autotileHandler()->slotWindowMinimizedChanged(safeWindow.data());
+            if (!m_effect->autotileHandler()->offerMinimizeEdge(safeWindow.data())) {
+                // Same re-arm contract as the deferred-commit transfer above.
+                qCInfo(lcEffect) << "Snap: autotile refused retry transfer, re-arming:" << windowId;
+                scheduleUnminimizeUnfloatRetry(windowId);
+            }
             return;
         }
         commitUnminimizeUnfloat(safeWindow.data(), windowId, screenId);

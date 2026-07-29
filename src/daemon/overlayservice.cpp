@@ -127,6 +127,12 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
     // wrong rather than silently falling back to library defaults.
     Q_ASSERT_X(profileRegistry, "OverlayService::OverlayService",
                "profileRegistry must not be null: composition root must own and inject the registry");
+    if (Q_UNLIKELY(!profileRegistry)) {
+        // Release-build twin of the assert above: SurfaceAnimator binds the
+        // registry by reference below, so continuing would be an immediate
+        // null deref anyway — fail with a diagnosable message instead.
+        qFatal("OverlayService: profileRegistry must not be null (composition root wiring error)");
+    }
 
     // Construct ShellHost BEFORE setupSurfaceAnimator: the latter
     // calls applyShaderProfilesToAnimator which routes per-role
@@ -564,8 +570,14 @@ bool OverlayService::isSnappingContextDisabled(const QString& screenId) const
     if (!m_contextResolver || screenId.isEmpty()) {
         return false;
     }
-    const auto handle =
+    PhosphorContext::ContextHandle handle =
         m_contextResolver->handleForPersisted(screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
+    // Query the SNAPPING axis explicitly, as the name promises. The overlay
+    // is snapping-mode UI, and the callers this consolidated previously
+    // composed their disable checks with Mode::Snapping; letting the mode
+    // provider stamp the screen's CURRENT mode would flip the check to the
+    // autotile axis on a tiling screen.
+    handle.mode = PhosphorZones::AssignmentEntry::Snapping;
     return m_contextResolver->isDisabled(handle);
 }
 
