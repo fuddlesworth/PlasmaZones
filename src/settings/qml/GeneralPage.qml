@@ -58,14 +58,9 @@ SettingsFlickable {
                     description: i18n("Graphics API used for overlay rendering")
                     searchAnchor: "renderingBackend"
 
-                    ComboBox {
+                    WideComboBox {
                         id: renderingBackendCombo
 
-                        // currentIndex is a binding and stays one. appSettings
-                        // .renderingBackend has a NOTIFY, so the binding already
-                        // re-evaluates on every change; a Connections handler
-                        // assigning currentIndex would sever it on its first run
-                        // and then be the only thing keeping the combo in sync.
                         enabled: !settingsController.daemonRunning
                         Accessible.name: i18n("Rendering backend")
                         // One list of {text, value} pairs rather than two
@@ -73,7 +68,7 @@ SettingsFlickable {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Rendering", "Backend")
-                        currentIndex: Math.max(0, indexOfValue(appSettings.renderingBackend))
+                        storedValue: appSettings.renderingBackend
                         onActivated: appSettings.renderingBackend = currentValue
                     }
                 }
@@ -360,9 +355,7 @@ SettingsFlickable {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Shaders.Audio", "ChannelMode")
-                        // A binding, not a JS assignment: see
-                        // renderingBackendCombo above.
-                        currentIndex: Math.max(0, indexOfValue(appSettings.audioChannelMode))
+                        storedValue: appSettings.audioChannelMode
                         onActivated: appSettings.audioChannelMode = currentValue
                     }
                 }
@@ -423,9 +416,7 @@ SettingsFlickable {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Shaders.Audio", "InputMethod")
-                        // A binding, not a JS assignment: see
-                        // renderingBackendCombo above.
-                        currentIndex: Math.max(0, indexOfValue(appSettings.audioInputMethod))
+                        storedValue: appSettings.audioInputMethod
                         onActivated: appSettings.audioInputMethod = currentValue
                     }
                 }
