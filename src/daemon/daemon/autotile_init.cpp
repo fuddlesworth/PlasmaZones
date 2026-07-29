@@ -15,6 +15,7 @@
 #include "daemon/overlayservice.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
