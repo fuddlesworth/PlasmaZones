@@ -295,6 +295,9 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         // already-notified bail and silently never announces it.
         if (resetNotified) {
             m_notifiedWindows.remove(windowId);
+            // Its screen record travels with it — leaving it behind orphans a
+            // stale screen association the next notify would read.
+            m_notifiedWindowScreens.remove(windowId);
         }
 
         bool minimizedOnly = false;

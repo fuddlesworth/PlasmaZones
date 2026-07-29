@@ -574,6 +574,15 @@ public:
     PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 
     /**
+     * @brief Drop every per-screen SCHEDULING entry for @p screenId: pending
+     * retiles, retile retry state, and the deferred post-retile focus.
+     * Shared by the toggle-off removal loop and the orphaned-virtual-screen
+     * teardown — a stale entry keyed to a vs:N id would fire against the
+     * RECREATED id of a later re-subdivision.
+     */
+    void clearScreenScheduling(const QString& screenId);
+
+    /**
      * @brief Purge @p windowId from every pending initial order, with full
      * bookkeeping: empty orders drop their generation/strict entries, and
      * surviving orders are re-checked for resolution. The single purge used

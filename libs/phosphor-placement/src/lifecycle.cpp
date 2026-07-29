@@ -544,7 +544,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
     // Check virtual screens first (covers both virtual and non-subdivided physical screens).
     // Use area-overlap semantics (not center-point containment) so windows on virtual
     // screen boundaries are handled consistently with the physical-screen fallback path.
-    auto* mgr = m_screenManager;
+    PhosphorScreens::ScreenManager* mgr = m_screenManager;
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();
         for (const QString& id : ids) {
@@ -573,7 +573,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
 {
     // Try virtual/effective screens first via PhosphorScreens::ScreenManager
-    auto* mgr = m_screenManager;
+    PhosphorScreens::ScreenManager* mgr = m_screenManager;
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();
         const QPoint center = geometry.center();
@@ -653,7 +653,7 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
         return screenId;
     }
 
-    auto* smgr = m_screenManager;
+    PhosphorScreens::ScreenManager* smgr = m_screenManager;
     if (!smgr) {
         return screenId;
     }

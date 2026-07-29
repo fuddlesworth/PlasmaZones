@@ -289,6 +289,11 @@ void AutotileEngine::connectSignals()
                         });
                     for (const QString& sid : std::as_const(orphanedVsIds)) {
                         m_overflow.takeForScreen(sid);
+                        // Same per-screen scheduling cleanup the toggle-off
+                        // path runs — a stale deferred focus/retile keyed to
+                        // this vs:N id would fire against the RECREATED id of
+                        // a later re-subdivision.
+                        clearScreenScheduling(sid);
                     }
                     // Drop stashed bags for every orphaned VS id. Driven off the
                     // same predicate the removal used rather than off

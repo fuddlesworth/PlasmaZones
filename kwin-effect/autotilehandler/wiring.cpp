@@ -109,6 +109,12 @@ void AutotileHandler::loadSettings()
                 if (reply.isValid()) {
                     QStringList screens = reply.value().variant().toStringList();
                     const QSet<QString> added(screens.begin(), screens.end());
+                    // Wholesale replacement is safe HERE because the previous
+                    // session's set was cleared at daemon loss
+                    // (clearTiledTracking) — there is no live removed-screen
+                    // delta to tear down at bringup; runtime screen-set
+                    // changes go through slotScreensChanged, which handles
+                    // removals.
                     m_autotileScreens = added;
                     qCInfo(lcEffect) << "Loaded autotile screens:" << m_autotileScreens;
                     const QSet<QString> completedDeferredRoutes = completeDeferredWindowRoutes();

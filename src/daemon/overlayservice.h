@@ -594,9 +594,11 @@ private:
     /// True when the snapping overlay must NOT show on @p screenId for the current
     /// desktop/activity: either the context is on a disable list, OR its default
     /// layout assignment is suppressed (the global "don't assign by default"
-    /// setting, or a per-context rule) and nothing is explicitly assigned. Folds
-    /// the two gates so every overlay / selector activation site treats a
-    /// suppressed context exactly like a disabled one.
+    /// setting, or a per-context rule) and nothing is explicitly assigned.
+    /// Consumed by the OVERLAY activation sites; the zone SELECTOR is
+    /// deliberately disabled-list-only (isSnappingContextDisabled) — a
+    /// suppressed-default context still allows an explicit drag to pick a
+    /// zone, so the selector must keep showing there.
     bool isSnappingContextInactive(const QString& screenId) const;
     bool isSnappingContextDisabled(const QString& screenId) const;
 

@@ -142,6 +142,18 @@ void AutotileEngine::clearCurrentDesktopForScreen(const QString& screenId)
     m_context.clearCurrentDesktopForScreen(screenId);
 }
 
+void AutotileEngine::clearScreenScheduling(const QString& screenId)
+{
+    m_pendingRetileScreens.remove(screenId);
+    m_retileRetryScreens.remove(screenId);
+    m_retileRetryCount.remove(screenId);
+    // A deferred focus request stranded by a no-op retile must not survive
+    // the screen's removal: if the same screenId reconnects (re-subdivision
+    // recreates vs:N ids), its first applyTiling would consume the stale
+    // entry and activate a window from the previous session of that screen.
+    m_pendingFocusByScreen.remove(screenId);
+}
+
 void AutotileEngine::setCurrentActivity(const QString& activity)
 {
     // The established-flag (owned by the tracker, not a bare empty-string
@@ -584,13 +596,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         }
     }
     for (const QString& screenId : removed) {
-        m_retileRetryScreens.remove(screenId);
-        m_retileRetryCount.remove(screenId);
-        // A deferred focus request stranded by a no-op retile must not
-        // survive the screen's removal: if the same screenId reconnects,
-        // its first applyTiling would consume the stale entry and activate
-        // a window from the previous session of that screen.
-        m_pendingFocusByScreen.remove(screenId);
+        clearScreenScheduling(screenId);
     }
 
     const bool nowEnabled = !m_autotileScreens.isEmpty();

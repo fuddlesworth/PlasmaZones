@@ -191,6 +191,13 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
             // through to insertPosition so the user's "After existing" /
             // "After focused" / "As main window" setting wins for new
             // arrivals.
+            // NOTE: the advisory (non-strict) branch below is currently
+            // unreachable by construction — setInitialWindowOrder is the sole
+            // pending-order producer and always marks its screen strict, and
+            // the strict flag's lifetime is lockstep with the order's. The
+            // branch is retained as the documented CONTRACT for any future
+            // producer of advisory (hint-only) orders; do not delete it as
+            // dead code without also collapsing that contract.
             const bool strict = m_strictInitialOrderScreens.contains(screenId) || exactWindowIdMatch;
             if (strict || insertAt >= state->windowCount()) {
                 state->addWindow(windowId, insertAt);

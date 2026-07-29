@@ -16,6 +16,8 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorContext/DisabledReason.h>
 
+#include <optional>
+
 namespace PlasmaZones {
 
 inline DisabledReason toDaemonDisabledReason(PhosphorContext::DisabledReason reason)
@@ -39,16 +41,19 @@ inline DisabledReason toDaemonDisabledReason(PhosphorContext::DisabledReason rea
  *
  * When the KWin effect sends a physical screen ID (e.g., during daemon reconnect
  * before virtual screen configs are loaded), the daemon must resolve it to the
- * correct virtual screen.  Uses the focused window's geometry center as the
- * position hint (QCursor::pos() is unreliable on Wayland for background daemons).
- * Falls back to vs:0 (leftmost) if no better hint is available.
+ * correct virtual screen. Resolution cascade: the focused window's
+ * daemon-tracked screen assignment, then the effect-reported active screen,
+ * then the optional cursor-position hint, then vs:0 (leftmost).
  *
  * @p mgr is the injected ScreenManager (required — pass null only in tests
  * that don't exercise VS resolution; null is treated as "no subdivision").
+ * @p cursorPos optional cursor hint; disengaged by default. No production
+ * caller currently supplies one — the parameter is kept for shortcut paths
+ * that have an effect-reported cursor and no focused window.
  */
 inline QString resolveVirtualScreenId(PhosphorScreens::ScreenManager* mgr, const QString& physicalId,
                                       const WindowTrackingAdaptor* trackingAdaptor,
-                                      const QPoint& cursorPos = QPoint(-1, -1))
+                                      const std::optional<QPoint>& cursorPos = std::nullopt)
 {
     if (!mgr || !mgr->hasVirtualScreens(physicalId)) {
         return physicalId;
@@ -79,9 +84,12 @@ inline QString resolveVirtualScreenId(PhosphorScreens::ScreenManager* mgr, const
     }
 
     // Cursor position hint: when a keyboard shortcut fires with no focused window,
-    // the cursor position (from the effect) can resolve the correct virtual screen.
-    if (cursorPos.x() >= 0) {
-        const QString vsAtCursor = mgr->effectiveScreenAt(cursorPos);
+    // the cursor position (from the effect) can resolve the correct virtual
+    // screen. std::optional, not a negative-coord sentinel — multi-monitor
+    // layouts legitimately have negative coordinates, so (-1,-1) was a valid
+    // position masquerading as "absent".
+    if (cursorPos.has_value()) {
+        const QString vsAtCursor = mgr->effectiveScreenAt(*cursorPos);
         if (PhosphorIdentity::VirtualScreenId::isVirtual(vsAtCursor)
             && PhosphorIdentity::VirtualScreenId::extractPhysicalId(vsAtCursor) == physicalId) {
             return vsAtCursor;

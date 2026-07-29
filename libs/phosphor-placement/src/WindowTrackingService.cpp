@@ -30,14 +30,16 @@ WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layo
                                              QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
-    , m_zoneDetector(zoneDetector)
     , m_geometryResolver(geometryResolver)
     , m_config(config)
     , m_virtualDesktopManager(vdm)
     , m_screenManager(screenManager)
 {
     Q_ASSERT(layoutManager);
+    // The detector parameter is a wiring sanity check only — zone resolution
+    // moved into the engines, so the service keeps no member for it.
     Q_ASSERT(zoneDetector);
+    Q_UNUSED(zoneDetector)
 
     // No save timer here: the service is an in-memory state manager whose
     // persistence is driven by the WindowTrackingAdaptor's dirty-mask
@@ -344,7 +346,7 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
     //    — the virtual screens have different geometry bounds, so coordinates are wrong.
     if (!savedScreen.isEmpty() && !currentScreenName.isEmpty()
         && !PhosphorScreens::ScreenIdentity::screensMatch(savedScreen, currentScreenName)) {
-        auto* mgr = m_screenManager;
+        PhosphorScreens::ScreenManager* mgr = m_screenManager;
         QRect available;
         bool haveTarget = false;
         if (mgr) {

@@ -559,7 +559,12 @@ private Q_SLOTS:
 
         QCOMPARE(store.size(), 6); // 5 keepers + the moved record (no duplication)
         QVERIFY(!store.contains(QString(), QStringLiteral("renamefrom"))); // old bucket erased
-        QVERIFY(store.contains(QStringLiteral("w|1"), QStringLiteral("renameto")));
+        // peekExact + appId compare, not the two-arg contains (which passes
+        // on ANY record in the bucket and so cannot pin the central claim:
+        // that THIS record moved into the renamed bucket).
+        const auto moved = store.peekExact(QStringLiteral("w|1"));
+        QVERIFY(moved.has_value());
+        QCOMPARE(moved->appId, QStringLiteral("renameto"));
         for (int i = 0; i < 5; ++i) {
             QVERIFY(store.contains(QStringLiteral("keep%1|keep-instance-%1").arg(i))); // unrelated records intact
         }

@@ -96,6 +96,11 @@ public:
                                  bool resetNotified = false, bool enteringAutotile = false);
 
     /// Remove a window from this handler's autotile tracking and notify the daemon.
+    /// INTENT NOTE: an earlier m_pendingCloses guard (deduping a close racing
+    /// its own re-announce) was deliberately deleted — window ids are
+    /// uuid-based, so a closed id can never be re-announced, and the
+    /// regression the guard defended against is unreachable. Do not
+    /// reintroduce it as "missing hardening".
     void onWindowClosed(const QString& windowId, const QString& screenId);
     /// Tear down all effect-side autotile tracking for @p windowId (shared +
     /// KWin-specific state, incl. the pending cross-screen-restore connection)

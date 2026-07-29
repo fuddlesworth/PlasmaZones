@@ -118,7 +118,12 @@ private Q_SLOTS:
 
         QVERIFY(!m_service->isWindowSnapped(windowId));
         QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().zoneIds.first(), m_zoneIds[0]);
+        // Guard both derefs: a bare .first() on an empty queue/list is UB, not
+        // a test failure.
+        const auto queue = m_service->pendingRestoreQueues().value(appId);
+        QVERIFY(!queue.isEmpty());
+        QVERIFY(!queue.first().zoneIds.isEmpty());
+        QCOMPARE(queue.first().zoneIds.first(), m_zoneIds[0]);
     }
 
     void testWindowClosed_floatingWindowNotPersisted()
@@ -154,9 +159,11 @@ private Q_SLOTS:
 
         m_service->windowClosed(windowId);
 
-        // Float state and pre-float zones should be fully cleared on close
+        // Float state and pre-float zones should be fully cleared on close —
+        // BOTH keys: the windowId-keyed runtime entry and the appId alias.
         QVERIFY(!m_service->isWindowFloating(windowId));
         QVERIFY(!m_service->isWindowFloating(appId));
+        QVERIFY(m_service->preFloatZone(windowId).isEmpty());
         QVERIFY(m_service->preFloatZone(appId).isEmpty());
     }
 

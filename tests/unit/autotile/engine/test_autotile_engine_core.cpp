@@ -527,8 +527,13 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QVERIFY(!engine.isEnabled());
 
+        // The no-op claim needs an observable: no placement change may be
+        // published from retiles of a disabled engine.
+        QSignalSpy placementChanged(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.retile();
         engine.retile(QStringLiteral("SomeScreen"));
+        QCoreApplication::processEvents();
+        QCOMPARE(placementChanged.size(), 0);
     }
 
     // =========================================================================

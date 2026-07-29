@@ -122,8 +122,11 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
     }
     // Only take effect when the screen's PhosphorTiles::TilingState is empty (no prior windows —
     // including floating — from session restore). Uses windowCount() instead of
-    // tiledWindows() to also detect floating-only states.
-    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
+    // tiledWindows() to also detect floating-only states. NON-CREATING lookup:
+    // this is a read-only emptiness probe, and the creating
+    // tilingStateForScreen would leave a persistent empty TilingState behind
+    // for a screen whose windows never arrive.
+    PhosphorTiles::TilingState* state = m_states.stateForKey(currentKeyForScreen(screenId));
     if (state && state->windowCount() > 0) {
         qCDebug(PhosphorTileEngine::lcTileEngine) << "setInitialWindowOrder: screen" << screenId << "already has"
                                                   << state->windowCount() << "windows, ignoring pre-seeded order";

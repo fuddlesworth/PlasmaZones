@@ -851,7 +851,12 @@ Q_SIGNALS:
      * @param windowId Window whose state changed
      * @param state PhosphorProtocol::WindowStateEntry with windowId, zoneId, screenId,
      *        isFloating, changeType, zoneIds (multi-zone spans), isSticky;
-     *        changeType: "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
+     *        changeType: "snapped", "unsnapped", "floated", "unfloated", "screen_changed".
+     *        BEST-EFFORT fields: the float-toggle and screen-changed emitters
+     *        deliberately send empty zoneIds and isSticky=false rather than
+     *        re-querying — subscribers needing those must pull them
+     *        (getMultiZoneForWindow / sticky query) instead of trusting this
+     *        stream's snapshot.
      */
     void windowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state);
 

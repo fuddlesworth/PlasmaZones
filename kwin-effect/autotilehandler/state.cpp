@@ -92,6 +92,12 @@ void AutotileHandler::clearTiledTracking()
     // DecorationManager's job — teardown callers pair this with
     // DecorationManager::restoreAll().
     m_border.tiledWindowsByScreen.clear();
+    // The screen set belongs to the daemon session that published it. Both
+    // callers (daemon loss, effect teardown) mean that session is gone —
+    // keeping the set let stale membership answer isAutotileScreen until the
+    // next bringup reply, and left the bringup's fresh-set replacement with
+    // no removed-screen delta to act on.
+    m_autotileScreens.clear();
 }
 
 void AutotileHandler::setFocusFollowsMouse(bool enabled)

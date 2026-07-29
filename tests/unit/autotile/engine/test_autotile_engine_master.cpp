@@ -455,8 +455,11 @@ private Q_SLOTS:
         overrides[QStringLiteral("SplitRatio")] = 0.5;
         engine.applyPerScreenConfig(screen1, overrides);
 
+        // The per-screen override push is the load-bearing setup — no manual
+        // setSplitRatio duplicate beside it (the old double write hid which
+        // of the two the assertions depended on); assert the push landed.
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen1);
-        state->setSplitRatio(0.5);
+        QCOMPARE(state->splitRatio(), 0.5);
         const qreal globalBefore = engine.config()->splitRatio;
 
         engine.windowFocused(QStringLiteral("win1"), screen1);
@@ -486,8 +489,11 @@ private Q_SLOTS:
         overrides[QStringLiteral("SplitRatio")] = 0.5;
         engine.applyPerScreenConfig(screen1, overrides);
 
+        // The per-screen override push is the load-bearing setup — no manual
+        // setSplitRatio duplicate beside it (the old double write hid which
+        // of the two the assertions depended on); assert the push landed.
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen1);
-        state->setSplitRatio(0.5);
+        QCOMPARE(state->splitRatio(), 0.5);
         const qreal globalBefore = engine.config()->splitRatio;
 
         engine.windowFocused(QStringLiteral("win1"), screen1);

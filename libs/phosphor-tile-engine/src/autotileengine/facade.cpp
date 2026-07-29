@@ -53,6 +53,13 @@ void AutotileEngine::setWindowRegistry(QObject* registry)
 {
     m_windowRegistry = dynamic_cast<PhosphorEngine::IWindowRegistry*>(registry);
     if (!m_windowRegistry) {
+        if (registry) {
+            // A non-null object of the wrong type is a WIRING BUG, not the
+            // legitimate registry-less test configuration — degrade loudly.
+            qCWarning(PhosphorTileEngine::lcTileEngine)
+                << "setWindowRegistry: object does not implement IWindowRegistry — registry-dependent"
+                << "behaviour (minimize deferral, appId resolution) disabled";
+        }
         return;
     }
     const QPointer<AutotileEngine> self(this);

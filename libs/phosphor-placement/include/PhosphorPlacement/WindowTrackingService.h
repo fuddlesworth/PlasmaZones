@@ -1085,16 +1085,18 @@ private:
 
     // Dependencies
     PhosphorZones::LayoutRegistry* m_layoutManager;
-    PhosphorZones::IZoneDetector* m_zoneDetector;
     SnapStateResolver m_snapResolver;
     PhosphorEngine::WindowPlacementStore m_placementStore;
     IGeometryResolver* m_geometryResolver;
     PlacementConfig m_config;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     // Shared registry for current-class queries and canonical key translation.
-    // Not owned. Null in unit tests.
-    PhosphorEngine::WindowRegistry* m_windowRegistry = nullptr;
-    PhosphorScreens::ScreenManager* m_screenManager = nullptr;
+    // Not owned. Null in unit tests. QPointer (not raw): both are Daemon
+    // children whose destruction order relative to this service is not
+    // contractual — a raw borrow dangled during Daemon child teardown, while
+    // the QPointer auto-nulls and every use site already null-guards.
+    QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
+    QPointer<PhosphorScreens::ScreenManager> m_screenManager;
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     AutotileModePredicate m_autotileModePredicate{};
     AutotileTiledPredicate m_autotileTiledPredicate{};
