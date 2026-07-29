@@ -319,11 +319,14 @@ private:
      * windowClassChanged / desktopFileNameChanged handlers for live updates.
      *
      * @param includeExtended When false, the extended-property snapshot (the
-     * trailing a{sv}: state flags, geometry, accessory flags, captionNormal) is
-     * NOT rebuilt or sent — the daemon preserves whatever it already has. Used by
+     * trailing a{sv}: state flags, geometry, accessory flags) is NOT rebuilt
+     * or sent — the daemon preserves whatever it already has. The one
+     * exception is captionNormal, which derives from the caption and is sent
+     * alone (the daemon treats a CaptionNormal-only map as a caption refresh,
+     * not a snapshot replace). Used by
      * the captionChanged handler: terminals/browsers rewrite their title every
-     * frame, and the rule-relevant extended fields don't change on a title tick,
-     * so rebuilding/marshalling a ~20-entry map per frame is pure waste. The
+     * frame, and the other rule-relevant extended fields don't change on a title
+     * tick, so rebuilding/marshalling a ~20-entry map per frame is pure waste. The
      * extended snapshot is captured at window-open and refreshed on identity
      * changes (class/desktop/activity), which is when it matters for the daemon's
      * open-path Float / RestorePosition resolvers.

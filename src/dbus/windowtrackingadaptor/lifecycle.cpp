@@ -253,9 +253,12 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
             // breaking float/free geometry restore on the next open. Skip it: any
             // existing record for this window keeps its last meaningful state (a genuine
             // float/free transition always captures a valid frame, so it is never
-            // contentless — only a frame-less capture lands here).
+            // contentless — only a frame-less capture lands here). CONTINUE, not
+            // return: a contentless capture has not "won" the first-non-null
+            // ordering, and the other engine may still hold a real slot (a
+            // tiled window whose mode-flip left the primary with residue).
             if (!p->hasRestorableContent()) {
-                return;
+                continue;
             }
             // Only mark dirty when the store actually changed. A content-identical
             // re-capture (the common case — refreshOpenWindowPlacements re-captures
@@ -619,16 +622,23 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     }
     meta.windowType = PhosphorProtocol::windowTypeFromInt(windowType);
 
-    // Extended window-property snapshot (the trailing a{sv}). An EMPTY map is a
-    // caption-only refresh (the effect skips the snapshot on chatty title ticks):
-    // carry forward the registry's existing extended fields so a per-frame title
-    // update does not wipe geometry/state. A non-empty map fully replaces them —
-    // each key present only when the effect could observe the value, so an absent
-    // key disengages the optional (and its derived WindowQuery field), mirroring the
-    // effect-side engage-only-when-known contract in window_query.cpp. Lenient
-    // QVariant conversions are the boundary policy here, matching the pid /
-    // windowType clamping above (a malformed caller cannot corrupt placement).
-    if (extended.isEmpty()) {
+    // Extended window-property snapshot (the trailing a{sv}). An EMPTY map — or
+    // one carrying ONLY CaptionNormal — is a caption-only refresh (the effect
+    // skips the snapshot on chatty title ticks but still sends captionNormal,
+    // which derives from the caption and would otherwise stay permanently stale
+    // on exactly that path): carry forward the registry's existing extended
+    // fields so a per-frame title update does not wipe geometry/state, then take
+    // the fresh captionNormal when present. Any other non-empty map fully
+    // replaces them — each key present only when the effect could observe the
+    // value, so an absent key disengages the optional (and its derived
+    // WindowQuery field), mirroring the effect-side engage-only-when-known
+    // contract in window_query.cpp. Lenient QVariant conversions are the
+    // boundary policy here, matching the pid / windowType clamping above (a
+    // malformed caller cannot corrupt placement).
+    namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
+    const bool captionOnlyRefresh =
+        extended.isEmpty() || (extended.size() == 1 && extended.contains(QString(Key::CaptionNormal)));
+    if (captionOnlyRefresh) {
         if (const std::optional<PhosphorEngine::WindowMetadata> existing = m_windowRegistry->metadata(instanceId)) {
             meta.isMinimized = existing->isMinimized;
             meta.isFullscreen = existing->isFullscreen;
@@ -654,8 +664,11 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             meta.captionNormal = existing->captionNormal;
             meta.virtualDesktops = existing->virtualDesktops;
         }
+        // Fresh captionNormal from the caption tick, when the effect sent one.
+        if (const auto it = extended.constFind(QString(Key::CaptionNormal)); it != extended.constEnd()) {
+            meta.captionNormal = it.value().toString();
+        }
     } else {
-        namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
         const auto optBool = [&extended](QLatin1String key) -> std::optional<bool> {
             const auto it = extended.constFind(QString(key));
             return it != extended.constEnd() ? std::optional<bool>(it.value().toBool()) : std::nullopt;

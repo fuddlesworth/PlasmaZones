@@ -152,6 +152,18 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
     // map stays empty and the daemon preserves the existing extended snapshot,
     // avoiding a per-frame query build + a{sv} marshal for chatty-title windows.
     QVariantMap extended;
+    if (!includeExtended && window) {
+        // captionNormal derives from the caption itself, so a caption tick
+        // changes it too — without this the daemon's CaptionNormal predicate
+        // matches a value frozen at the last full snapshot, permanently stale
+        // on exactly the chatty-title path. A single cheap direct read, no
+        // query walk; the daemon treats a CaptionNormal-only map as a caption
+        // refresh (carry-forward plus this field), not a snapshot replace.
+        const QString captionNormal = window->captionNormal();
+        if (!captionNormal.isEmpty()) {
+            extended.insert(PhosphorProtocol::Service::WindowMetadataKey::CaptionNormal, captionNormal);
+        }
+    }
     if (includeExtended) {
         PhosphorRules::WindowQuery props = ruleQueryFor(w, QString(), false, false, false, QString());
         // Report the window's OWN (pre-rule) keepAbove/keepBelow — the daemon

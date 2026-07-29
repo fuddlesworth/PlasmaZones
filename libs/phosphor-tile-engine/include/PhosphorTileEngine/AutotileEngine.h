@@ -1609,6 +1609,12 @@ private:
     // removeWindow() if a pre-seeded window closes before arriving.
     QHash<QString, QStringList> m_pendingInitialOrders;
     QHash<QString, uint64_t> m_pendingOrderGeneration;
+    /// Engine-wide monotonic source for m_pendingOrderGeneration values. Per-screen
+    /// counters restarted at 1 after their map entry was removed, so a stale
+    /// timeout from a previous order epoch could match a fresh order's
+    /// generation and reap it. Serials never repeat, so a stale timer can only
+    /// miss.
+    uint64_t m_pendingOrderSerial = 0;
     // Screens whose pendingInitialOrders entry is "strict" — saved order
     // wins even when arrival order differs. Set by setInitialWindowOrder
     // (mode transition: the daemon intentionally pre-computed an order from
