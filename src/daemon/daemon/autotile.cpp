@@ -28,6 +28,7 @@
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include "seedorderfilter.h"
 
 namespace PlasmaZones {
 
@@ -39,6 +40,12 @@ namespace {
 constexpr int DELAYED_PANEL_REQUERY_MS = 400;
 // Reapply requested on next event loop (0); daemon state is already updated when we start the timer.
 constexpr int REAPPLY_DELAY_MS = 0;
+// Watchdog for the geometry-recalc completion barrier: a screen removed
+// (hot-unplug, VS teardown) after its recalc was requested never delivers a
+// result, which would leave the barrier's pending set non-empty forever and
+// the overlay refresh lost. Generous relative to a worker-thread recalc
+// (single-digit ms per layout).
+constexpr int COMPUTE_BARRIER_TIMEOUT_MS = 3000;
 } // anonymous namespace
 
 bool Daemon::isAnyScreenAutotile() const
@@ -117,6 +124,12 @@ void Daemon::updateAutotileScreens()
     for (const QString& screenId : removedScreens) {
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
         const int desktop = currentDesktopForScreen(screenId);
+        // Stored unconditionally, INCLUDING an empty order: the capture is the
+        // authoritative "what was tiled at toggle-off", and an empty one must
+        // overwrite a stale non-empty entry from an earlier toggle so re-entry
+        // does not resurrect windows that have since closed or left the
+        // screen (seedAutotileOrderForScreen falls back to the zone-ordered
+        // list when the saved order is empty).
         QStringList order = m_autotileEngine->managedWindowOrder(screenId);
         m_lastAutotileOrders[TilingStateKey{screenId, desktop, activity}] = order;
     }
@@ -664,18 +677,6 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
         order = wts->buildZoneOrderedWindowList(screenId);
     }
     if (!order.isEmpty() && wts) {
-        // Order sources describe past arrangements (the tiled order captured
-        // at toggle-off, or zone assignments) and know nothing about what
-        // happened to those windows since. Two live checks before seeding:
-        //
-        // - Floating: a window floating NOW (e.g. floated by the snap handler
-        //   while the screen was in a manual mode) must not be seeded back as
-        //   tiled — the strict seed in setAutotileScreens only restores
-        //   floating from the AUTOTILE placement slot, so a float recorded by
-        //   another mode would be tiled over.
-        // Minimized windows remain in the order as placeholders. The engine's
-        // strict-seed path defers adding them until their windowOpened arrives,
-        // preserving position without making a hidden window occupy a tile.
         const PhosphorEngine::WindowRegistry* registry = wts->windowRegistry();
         if (!registry) {
             // Without the registry every minimized window reads as
@@ -686,22 +687,10 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
             qCWarning(lcDaemon) << "seedAutotileOrderForScreen: no window registry —"
                                 << "minimized windows cannot be filtered for" << screenId;
         }
-        order.removeIf([wts, registry](const QString& windowId) {
-            const bool minimized = registry && registry->isMinimized(windowId);
-            if (!minimized && wts->isWindowFloating(windowId)) {
-                return true;
-            }
-            // The mode flips before the second seed, so the live floating
-            // resolver then reads the empty autotile slot. The instance-exact durable
-            // snap slot preserves the source-mode user float across that flip.
-            const auto record = wts->placementStore().peekExact(windowId);
-            if (record
-                && record->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state
-                    == PhosphorEngine::WindowPlacement::stateFloating()) {
-                return true;
-            }
-            return false;
-        });
+        // Drop entries that must not be seeded as tiled (live user floats,
+        // durable snap-slot floats); minimized windows stay as positional
+        // placeholders. See filterAutotileSeedOrder's doc for the rationale.
+        filterAutotileSeedOrder(order, wts, registry);
     }
 
     if (!order.isEmpty()) {
@@ -769,6 +758,16 @@ void Daemon::processPendingGeometryUpdates()
     // screen. If another request supersedes ours, advance the expected generation
     // and wait for that result. A null result at the current generation is terminal
     // because it means the associated layout was destroyed.
+    //
+    // Keyed by screenId ALONE, deliberately. The service's generation counter is
+    // per screen and bumped by every request, so the result carrying the
+    // screen's current generation IS the newest request for that screen —
+    // whatever layout it computed. A competing same-screen request for a
+    // DIFFERENT layout only exists when the screen's displayed layout changed
+    // mid-flight (activeLayoutChanged / layoutAssigned), and then ITS result is
+    // exactly the geometry the overlay refresh needs; re-keying by
+    // (screen, layout) would instead strand the barrier waiting for a
+    // generation that can never arrive.
     auto conn = std::make_shared<QMetaObject::Connection>();
     *conn = connect(
         m_layoutComputeService.get(), &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration, this,
@@ -790,6 +789,23 @@ void Daemon::processPendingGeometryUpdates()
                 m_reapplyGeometriesTimer.start();
             }
         });
+    // Watchdog (see COMPUTE_BARRIER_TIMEOUT_MS): force-complete a barrier whose
+    // screen disappeared mid-flight so the overlay refresh still happens and
+    // the connection does not leak. A barrier that completed normally has an
+    // empty pending set and an already-disconnected conn — the timeout then
+    // no-ops.
+    QTimer::singleShot(COMPUTE_BARRIER_TIMEOUT_MS, this, [this, pending, conn]() {
+        if (pending->isEmpty()) {
+            return;
+        }
+        qCWarning(lcDaemon) << "Geometry recalc barrier timed out with screens still pending:" << pending->keys()
+                            << "— forcing overlay refresh";
+        pending->clear();
+        QObject::disconnect(*conn);
+        m_overlayService->updateGeometries();
+        m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
+        m_reapplyGeometriesTimer.start();
+    });
 
     // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
     // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.
