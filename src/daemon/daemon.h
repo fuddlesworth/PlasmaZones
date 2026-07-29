@@ -1,6 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): the Daemon class is the composition root
+// — every service, adaptor, engine, and timer member plus the phase-method
+// declarations their wiring documentation hangs off. The implementation is
+// already split across daemon/*.cpp by phase; splitting the class DECLARATION
+// would scatter the ownership/destruction-order contract the header's member
+// ordering encodes.
+
 #pragma once
 
 #include <QObject>
@@ -460,9 +467,13 @@ private:
     /**
      * @brief Pre-seed autotile engine with zone-ordered windows for one screen
      *
-     * Builds the zone-ordered window list from WTS and passes it to the autotile
-     * engine's setInitialWindowOrder(). Used by both per-screen toggle and global
-     * snapping→autotile transition.
+     * Prefers the SAVED order from the last mode toggle
+     * (m_lastAutotileOrders, deterministic re-entry) and only falls back to
+     * the zone-ordered window list from WTS. Live filters run before
+     * seeding (filterAutotileSeedOrder): user floats and durable snap-slot
+     * floats are dropped, minimized windows stay as positional placeholders.
+     * The result goes to the autotile engine's setInitialWindowOrder(). Used
+     * by both per-screen toggle and global snapping→autotile transition.
      *
      * @param screenId Screen identifier
      */

@@ -171,6 +171,11 @@ void Daemon::start()
     // Note what this does NOT fix: stop() also unregisters the D-Bus object and the service
     // name, and re-registering them lives in init(), not here. A restarted daemon therefore
     // has no bus presence, so nothing it publishes reaches the effect regardless. The
+    // same asymmetry covers the autotile shortcuts: their grabs survive stop()
+    // while their handler connections are severed and only initAutotile (an
+    // init() phase) rewires them — with no bus presence nothing they would
+    // trigger reaches anyone, so re-wiring them here would repair a limb of a
+    // cycle that is degraded by design. The
     // re-arm exists so the daemon's own state is consistent after the cycle (which the
     // repairs below also do), not because the cycle fully restores service.
     if (!m_idleService) {
@@ -663,6 +668,11 @@ void Daemon::stop()
         disconnect(conn);
     }
     m_perStartConnections.clear();
+
+    // Per-session change-gate state: a stale tiled-count entry would make the
+    // first placementChanged of the next init/start cycle read as "unchanged"
+    // and silently skip its save trigger.
+    m_lastTiledCountByScreen.clear();
 
     // Release the shortcut grabs and the Portal session with the connections:
     // registerShortcuts() on the next start() lazily recreates the registry

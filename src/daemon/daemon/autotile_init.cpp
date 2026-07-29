@@ -266,6 +266,12 @@ void Daemon::initializeAutotile()
                 // mode the user is actually trying to interact with.
                 // Note: intentionally shown regardless of showOsdOnLayoutSwitch — this is
                 // direct feedback to an explicit user action, not a passive layout-switch OSD.
+                // Fail closed on a missing resolver, matching the sibling
+                // gates (isFocusedContextGated and friends): a toggle during
+                // the teardown window must not act ungated.
+                if (!m_contextResolver) {
+                    return;
+                }
                 const auto currentMode = currentModeFor(screenId);
                 const DisabledReason why = toDaemonDisabledReason(
                     m_contextResolver->disabledReason(m_contextResolver->handleForMode(screenId, currentMode)));
@@ -310,10 +316,13 @@ void Daemon::initializeAutotile()
                 // orders are preserved — a replace would discard them.
                 if (wasAutotile) {
                     auto currentOrders = captureAutotileOrders();
-                    for (const QString& activeScreenId : m_autotileEngine->activeScreens()) {
-                        m_lastAutotileOrders.remove(
-                            TilingStateKey{activeScreenId, currentDesktopForScreen(activeScreenId), activity});
-                    }
+                    // Pre-clear ONLY the toggled screen's context: this is a
+                    // per-screen toggle, and dropping every active screen's
+                    // saved order wiped remembered orders for screens the
+                    // capture below may not cover (their live state can be
+                    // empty right now while their saved order is still the
+                    // re-entry seed).
+                    m_lastAutotileOrders.remove(TilingStateKey{screenId, desktop, activity});
                     for (auto it = currentOrders.constBegin(); it != currentOrders.constEnd(); ++it) {
                         m_lastAutotileOrders[it.key()] = it.value();
                     }

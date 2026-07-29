@@ -69,6 +69,14 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
         // Drop any in-flight debounced minimize→float commits — they must not
         // fire against a disabled engine.
         clearAllPendingMinimizeFloats();
+        // Cancel the ASYNC unfloat continuations too: clearing the in-flight
+        // map makes their generation checks miss, so a D-Bus reply landing
+        // after the disable cannot mutate ownership state against a torn-down
+        // engine. The minimize-float MARKERS deliberately survive — the snap
+        // handler adopts them when the screen's new mode fields the
+        // unminimize.
+        m_unfloatInFlight.clear();
+        m_unfloatRetryAttempts.clear();
         m_effect->updateAllDecorations();
     }
 }
@@ -470,7 +478,12 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // function entry; no stagger can have been scheduled since.)
             const auto pruneRemovedScreenEntries = [this, &removed](QHash<QString, QRect>& map) {
                 for (auto it = map.begin(); it != map.end();) {
-                    KWin::EffectWindow* mw = m_effect->findWindowById(it.key());
+                    // EXACT resolve: the entry is keyed to a specific
+                    // instance's id, and a fuzzy same-app hit would keep a
+                    // dead-keyed entry alive forever (its key never matches a
+                    // live window again, so the not-found prune is its only
+                    // exit).
+                    KWin::EffectWindow* mw = m_effect->findWindowByIdExact(it.key());
                     if (!mw) {
                         it = map.erase(it);
                         continue;
@@ -899,7 +912,7 @@ bool AutotileHandler::offerMinimizeEdge(KWin::EffectWindow* w)
     // Mirror of slotWindowMinimizedChanged's entry gates. See the header doc:
     // a transfer the gates would refuse must be reported to the sender, not
     // silently dropped.
-    if (!w || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)
+    if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)
         || !m_autotileScreens.contains(m_effect->getWindowScreenId(w))) {
         return false;
     }
@@ -909,7 +922,10 @@ bool AutotileHandler::offerMinimizeEdge(KWin::EffectWindow* w)
 
 void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 {
-    if (!w || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)) {
+    // isDeleted: the edge can race close teardown (Deleted shell), and
+    // proceeding would repollute the scrubbed id caches and arm a debounce
+    // for a corpse.
+    if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)) {
         return;
     }
     const QString windowId = m_effect->getWindowId(w);

@@ -103,14 +103,16 @@ public:
     /// daemon windowClosed call) and the cross-mode-move marker path (where the
     /// daemon already relinquished the window via handoffRelease).
     void cleanupAutotileTracking(const QString& windowId, const QString& screenId);
-    /// Drop @p windowId from the minimize-float set and cancel any deferred
-    /// unminimize→unfloat commit (mirrors SnapHandler::removeMinimizeFloated).
-    /// Returns true if the window was tracked. Called from the effect's
-    /// windowFloatingChanged handler: an authoritative external unfloat moots
-    /// the deferred commit — the daemon already unfloated the window, so a
-    /// later commit would re-send a redundant unfloat.
+    /// Drop @p windowId from the minimize-float set and cancel EITHER
+    /// deferred edge — the minimize debounce and the unminimize commit —
+    /// mirroring SnapHandler::removeMinimizeFloated exactly. Returns true if
+    /// the window was tracked. Callers: close cleanup, the effect's
+    /// authoritative visible unfloat (slotWindowFloatingChanged, including
+    /// its dual-hold repair), and the cross-mode adoption hops (snap's
+    /// adoption paths and countermand hand-offs).
     bool removeMinimizeFloated(const QString& windowId)
     {
+        cancelPendingMinimizeFloat(windowId);
         cancelPendingUnminimizeUnfloat(windowId);
         m_untiledMinimizeFloats.remove(windowId);
         m_unfloatRetryAttempts.remove(windowId);
@@ -355,9 +357,10 @@ private:
      * @brief Cancel a pending debounced minimize→float commit.
      *
      * No-op if no timer is pending for the window. Called from the
-     * unminimize path (to coalesce spurious cycles) and from onWindowClosed
-     * (so pending timers never fire against destroyed windows); bulk
-     * teardown goes through the helper's cancelAll in
+     * unminimize path (to coalesce spurious cycles), from
+     * removeMinimizeFloated, and from cleanupAutotileTracking's per-window
+     * teardown (so pending timers never fire against destroyed windows);
+     * bulk teardown goes through the helper's cancelAll in
      * clearAllPendingMinimizeFloats instead.
      */
     void cancelPendingMinimizeFloat(const QString& windowId);
