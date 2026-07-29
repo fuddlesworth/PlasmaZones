@@ -92,7 +92,7 @@ Item {
                     valueRole: "value"
                     // Value-keyed rather than index-keyed: the stored enum no
                     // longer has to match this list's ordering.
-                    currentIndex: Math.max(0, indexOfValue(osdRoot.appSettings.osdStyle))
+                    storedValue: osdRoot.appSettings.osdStyle
                     model: settingsController.valueOptions("Snapping.Effects", "OsdStyle")
                     onActivated: osdRoot.appSettings.osdStyle = currentValue
                 }
@@ -108,7 +108,7 @@ Item {
                     Accessible.name: i18n("Overlay style")
                     textRole: "text"
                     valueRole: "value"
-                    currentIndex: Math.max(0, indexOfValue(osdRoot.appSettings.overlayDisplayMode))
+                    storedValue: osdRoot.appSettings.overlayDisplayMode
                     model: settingsController.valueOptions("Snapping.Effects", "OverlayDisplayMode")
                     onActivated: osdRoot.appSettings.overlayDisplayMode = currentValue
                 }

@@ -141,7 +141,7 @@ SettingsCard {
                 textRole: "text"
                 valueRole: "value"
                 model: settingsController.valueOptions("Snapping.Behavior.WindowHandling", "StickyWindowHandling")
-                currentIndex: Math.max(0, indexOfValue(appSettings.snappingStickyWindowHandling))
+                storedValue: appSettings.snappingStickyWindowHandling
                 onActivated: appSettings.snappingStickyWindowHandling = currentValue
             }
         }
