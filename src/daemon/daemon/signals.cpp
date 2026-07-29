@@ -523,7 +523,7 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
             // needed to restore the snap zone when the window returns to vs:0.
             const QString preFloatScreen = wts->preFloatScreen(windowId);
             if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
-                wts->clearPreFloatZoneForWindow(windowId);
+                wts->clearPreFloatZone(windowId);
             }
         } else {
             // The window's snap-mode float (if any) already lives in its placement
@@ -593,7 +593,7 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
         // zone-restore on return to the snap VS still works.
         const QString preFloatScreen = wts->preFloatScreen(windowId);
         if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
-            wts->clearPreFloatZoneForWindow(windowId);
+            wts->clearPreFloatZone(windowId);
         }
     } else {
         // Snap-mode float persists in the placement record's snap slot (single
@@ -635,7 +635,7 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
         // Same cross-VS preservation logic as the single-window handler
         const QString preFloatScreen = wts->preFloatScreen(windowId);
         if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
-            wts->clearPreFloatZoneForWindow(windowId);
+            wts->clearPreFloatZone(windowId);
         }
     }
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !windowIds.isEmpty()) {

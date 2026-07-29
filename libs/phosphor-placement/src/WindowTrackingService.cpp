@@ -362,7 +362,11 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
             haveTarget = true;
             available = target->availableGeometry();
         }
-        if (haveTarget) {
+        // A resolved target with an EMPTY available rect (mid-hotplug, a VS
+        // whose geometry has not landed yet) must not produce a degenerate 0x0
+        // "success" — fall through to the generic on-screen validation below,
+        // same as when the target cannot be resolved at all.
+        if (haveTarget && available.isValid()) {
             // Clamp size to fit within the target screen (the window may have been
             // larger than the target VS when captured on a wider screen/physical monitor).
             int w = qMin(geo.width(), available.width());
@@ -397,8 +401,17 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     // The non-exact default is DELIBERATE cross-instance float-back sharing
     // (free positions only, never zone/tile slots — those reads are exact-only
     // via peekExact); callers with a per-window contract pass exactOnly.
+    // Accept only records that can actually answer: peek's same-instance branch
+    // honours the predicate too, so a window whose OWN record is free-geometry-less
+    // (a bare engine-slot partial) falls through to the appId bucket instead of
+    // shadowing a sibling's usable float-back — the cross-instance sharing the
+    // non-exact default documents. exactOnly passes an empty appId, so for those
+    // callers the predicate only turns a contentless own-record hit into the
+    // same nullopt it produced before.
     const QString appId = exactOnly ? QString() : currentAppIdFor(windowId);
-    const auto rec = m_placementStore.peek(windowId, appId);
+    const auto rec = m_placementStore.peek(windowId, appId, [](const PhosphorEngine::WindowPlacement& p) {
+        return p.anyFreeGeometry().isValid();
+    });
     if (!rec) {
         return std::nullopt;
     }
@@ -406,10 +419,11 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     if (exact.isValid()) {
         return validateGeometryForScreen(exact, screenId, screenId);
     }
-    for (auto it = rec->freeGeometryByScreen.constBegin(); it != rec->freeGeometryByScreen.constEnd(); ++it) {
-        if (it.value().isValid()) {
-            return validateGeometryForScreen(it.value(), it.key(), screenId);
-        }
+    // Deterministic cross-screen fallback (shared with anyFreeGeometry()) — a
+    // raw QHash walk here picked a different float-back screen run to run.
+    const QString fallbackScreen = rec->anyFreeGeometryScreenId();
+    if (!fallbackScreen.isEmpty()) {
+        return validateGeometryForScreen(rec->freeGeometryFor(fallbackScreen), fallbackScreen, screenId);
     }
     return std::nullopt;
 }
@@ -543,6 +557,23 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
         p.activity = existing->activity;
         p.kind = existing->kind;
         p.engines = existing->engines;
+        // The merge adopts THIS close's screenId as the managed context, but a
+        // managed slot inherited from a DIFFERENT screen references that
+        // screen's zones/tile order — restoring it under the new screenId
+        // would land the window in another screen's zone ids. Downgrade
+        // mismatched managed slots to plain floating (the state the window
+        // actually closed in); same-screen slots pass through untouched.
+        if (!existing->screenId.isEmpty()
+            && !PhosphorScreens::ScreenIdentity::screensMatch(existing->screenId, screenId)) {
+            for (auto it = p.engines.begin(); it != p.engines.end(); ++it) {
+                if (it->state == PhosphorEngine::WindowPlacement::stateSnapped()
+                    || it->state == PhosphorEngine::WindowPlacement::stateTiled()) {
+                    it->state = PhosphorEngine::WindowPlacement::stateFloating();
+                    it->zoneIds.clear();
+                    it->order = -1;
+                }
+            }
+        }
     }
     if (p.engines.isEmpty()) {
         // No prior record, or a geometry-only record with no engine slot (the
@@ -793,19 +824,11 @@ QString WindowTrackingService::preFloatScreen(const QString& windowId) const
     });
 }
 
-void WindowTrackingService::clearPreFloatZoneForWindow(const QString& windowId)
+void WindowTrackingService::clearPreFloatZone(const QString& windowId)
 {
     if (windowId.isEmpty()) {
         return;
     }
-    // Clear from whichever store holds the entry (owning store for the live id).
-    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        state->clearPreFloatZone(windowId);
-    }
-}
-
-void WindowTrackingService::clearPreFloatZone(const QString& windowId)
-{
     const QString appId = currentAppIdFor(windowId);
     // Remove by full window ID (runtime entries) and by app ID (session-restored
     // entries) across every store — the alias may live in the window's owning store.

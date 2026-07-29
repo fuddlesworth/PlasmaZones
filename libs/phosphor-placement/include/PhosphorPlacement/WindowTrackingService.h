@@ -469,15 +469,15 @@ public:
 
     /**
      * @brief Clear pre-float zone after restore (both windowId and appId keys)
+     *
+     * Always clears the appId alias alongside the windowId key: the pre-float
+     * readers fall back to the alias, so a windowId-only clear (the former
+     * clearPreFloatZoneForWindow) still resolved the stale zone for the very
+     * window it targeted. The alias is a single last-writer slot per app, so
+     * "protecting sibling data" by keeping it only preserved whichever
+     * instance unsnapped last.
      */
     void clearPreFloatZone(const QString& windowId) override;
-
-    /**
-     * @brief Clear pre-float zone for a specific window only (not appId)
-     *
-     * Used by autotile float sync to avoid destroying sibling instances' data.
-     */
-    void clearPreFloatZoneForWindow(const QString& windowId);
 
     /**
      * @brief Clear floating state when snapping a floating window
