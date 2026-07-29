@@ -399,6 +399,28 @@ QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtu
     return def.activeLayoutId();
 }
 
+QString LayoutRegistry::storedAssignmentIdForScreen(const QString& screenId, int virtualDesktop,
+                                                    const QString& activity) const
+{
+    // Same cascade as assignmentIdForScreen, but a miss stays a miss: no
+    // level-1 default synthesis. Distinguishes "this context has its own
+    // assignment (exact or rule-based)" from "the resolver would hand out
+    // the registry-wide default".
+    auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<QString> {
+        const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
+        if (!entry) {
+            return std::nullopt;
+        }
+        const QString id = entry->activeLayoutId();
+        return id.isEmpty() ? std::nullopt : std::optional<QString>(id);
+    };
+
+    if (const auto result = resolveWithScreenFallback(screenId, tryResolve)) {
+        return *result;
+    }
+    return QString();
+}
+
 AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId, int virtualDesktop,
                                                          const QString& activity) const
 {

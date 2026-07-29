@@ -532,6 +532,18 @@ public:
     Q_INVOKABLE QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                               const QString& activity = QString()) const override;
 
+    /// Like @ref assignmentIdForScreen, but WITHOUT the level-1 global
+    /// default fallback: resolves the same per-context cascade (including
+    /// the connector-name / virtual-screen retries) and returns empty on a
+    /// cascade miss instead of synthesizing an id from the default
+    /// providers. Answers "does this context have a layout of its OWN" —
+    /// a rule-based assignment counts, the registry-wide default does not.
+    /// The editor's screen switcher uses this to offer a fresh layout for
+    /// a screen that has never been assigned one, rather than opening the
+    /// default layout for in-place editing (discussion #858).
+    Q_INVOKABLE QString storedAssignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
+                                                    const QString& activity = QString()) const;
+
     /// Full entry for a (screen, desktop, activity) context. Shares
     /// the per-context cascade with @ref layoutForScreen up through
     /// level-2 (per-screen base entry), but the two diverge at level-1

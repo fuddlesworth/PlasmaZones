@@ -191,6 +191,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Layout UUID or empty string."/>
             </arg>
         </method>
+        <method name="getAssignedLayoutForScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Get the layout assigned to a screen through the assignment cascade (resolves with current virtual desktop and activity context). Unlike getLayoutForScreen, returns an empty string when the screen has no assignment of its own instead of falling back to the global default layout."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt;, or empty string when unassigned."/>
+            </arg>
+        </method>
         <method name="assignLayoutToScreen">
             <annotation name="org.gtk.GDBus.DocString" value="Assign a layout to a screen for all virtual desktops."/>
             <arg name="screenId" type="s" direction="in">
