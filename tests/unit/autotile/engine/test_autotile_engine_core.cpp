@@ -398,10 +398,9 @@ private Q_SLOTS:
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("TestScreen"));
 
         QCOMPARE(state->splitRatio(), 0.7);
-
-        state->addWindow(QStringLiteral("win1"));
-        state->addWindow(QStringLiteral("win2"));
-        state->setMasterCount(2);
+        // Inherited by the state factory from the engine config — no local
+        // setMasterCount here (the previous version wrote 2 and then asserted
+        // 2, which could never fail and proved nothing about inheritance).
         QCOMPARE(state->masterCount(), 2);
     }
 

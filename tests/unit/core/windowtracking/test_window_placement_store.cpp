@@ -18,7 +18,7 @@ namespace {
 // capture orchestrator would supply. record() merges these into the one record
 // per window.
 WindowPlacement make(const QString& windowId, const QString& appId, const QString& state, const QString& engine,
-                     const QString& screen = QStringLiteral("DP-1"))
+                     const QString& screen = QStringLiteral("DP-1"), const QRect& rect = QRect(10, 20, 300, 400))
 {
     WindowPlacement p;
     p.windowId = windowId;
@@ -33,7 +33,7 @@ WindowPlacement make(const QString& windowId, const QString& appId, const QStrin
     }
     p.engines.insert(engine, slot);
     if (state == WindowPlacement::stateFree() || state == WindowPlacement::stateFloating()) {
-        p.freeGeometryByScreen.insert(screen, QRect(10, 20, 300, 400));
+        p.freeGeometryByScreen.insert(screen, rect);
     }
     return p;
 }
@@ -732,22 +732,28 @@ private Q_SLOTS:
         // DIFFERENT monitor the kept record lacks. That position must not be lost
         // — the kept record absorbs it before the duplicate is removed.
         WindowPlacementStore store;
+        // DISTINCT rects per (record, screen) so fill-missing is
+        // distinguishable from overwrite-all: the kept record's own S1 spot
+        // must survive, and only the missing S2 spot is absorbed.
+        const QRect sibS1(50, 60, 700, 500);
+        const QRect sibS2(1970, 80, 640, 480);
+        const QRect keepS1(110, 120, 800, 600);
         // Sibling floated on S1 then S2 — its single record accumulates both.
         store.record(make(QStringLiteral("dolphin|sib"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
-                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1"), sibS1));
         store.record(make(QStringLiteral("dolphin|sib"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
-                          WindowPlacement::snapEngineId(), QStringLiteral("S2")));
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2"), sibS2));
         // Kept record floated only on S1.
         store.record(make(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
-                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1"), keepS1));
 
         QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
 
         QVERIFY(!store.contains(QStringLiteral("dolphin|sib"))); // S1-sharing duplicate pruned
         const auto kept = store.peek(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"));
         QVERIFY(kept.has_value());
-        QVERIFY(kept->freeGeometryFor(QStringLiteral("S1")).isValid());
-        QVERIFY(kept->freeGeometryFor(QStringLiteral("S2")).isValid()); // absorbed from the pruned sibling
+        QCOMPARE(kept->freeGeometryFor(QStringLiteral("S1")), keepS1); // own spot kept, NOT overwritten
+        QCOMPARE(kept->freeGeometryFor(QStringLiteral("S2")), sibS2); // missing spot absorbed
     }
 
     void testCollapse_transitiveCollapseIsOrderIndependent()
@@ -759,14 +765,21 @@ private Q_SLOTS:
         // absorbing the bridge's S2 and prunes the leaf too. Whole connected set
         // collapses into keep regardless of FIFO order.
         WindowPlacementStore store;
+        // Distinct rects so absorb provenance is assertable (see the
+        // absorb test above): keep's own S1 survives, and S2 comes from the
+        // BRIDGE (absorbed first); the leaf's S2 is never absorbed over it.
+        const QRect bridgeS1(30, 40, 500, 400);
+        const QRect bridgeS2(2000, 50, 600, 450);
+        const QRect leafS2(2200, 90, 640, 480);
+        const QRect keepS1(130, 140, 820, 620);
         store.record(make(QStringLiteral("dolphin|bridge"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
-                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1"), bridgeS1));
         store.record(make(QStringLiteral("dolphin|bridge"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
-                          WindowPlacement::snapEngineId(), QStringLiteral("S2"))); // bridge now S1+S2
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2"), bridgeS2)); // bridge now S1+S2
         store.record(make(QStringLiteral("dolphin|leaf"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
-                          WindowPlacement::snapEngineId(), QStringLiteral("S2"))); // newer than bridge
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2"), leafS2)); // newer than bridge
         store.record(make(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
-                          WindowPlacement::snapEngineId(), QStringLiteral("S1"))); // newest
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1"), keepS1)); // newest
 
         QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
 
@@ -775,8 +788,62 @@ private Q_SLOTS:
         QVERIFY(!store.contains(QStringLiteral("dolphin|leaf"))); // connected via absorbed S2 → pruned
         const auto kept = store.peek(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"));
         QVERIFY(kept.has_value());
-        QVERIFY(kept->freeGeometryFor(QStringLiteral("S1")).isValid());
-        QVERIFY(kept->freeGeometryFor(QStringLiteral("S2")).isValid());
+        QCOMPARE(kept->freeGeometryFor(QStringLiteral("S1")), keepS1);
+        QCOMPARE(kept->freeGeometryFor(QStringLiteral("S2")), bridgeS2);
+    }
+
+    void testCollapse_prefixMutationStillFindsKeptRecord()
+    {
+        // The kept record is addressed with a MUTATED appId prefix (a window
+        // that renamed its class mid-session closes under the new composite).
+        // findKeep matches by instance, so the collapse must still resolve the
+        // stored record and prune the same-screen duplicate — an exact-id
+        // compare would silently no-op for exactly this renamed-window case.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("dolphin|old-uuid"), QStringLiteral("dolphin"),
+                          WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        store.record(make(QStringLiteral("dolphin|kept-uuid"), QStringLiteral("dolphin"),
+                          WindowPlacement::stateFloating(), WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+
+        QVERIFY(
+            store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("org.kde.dolphin|kept-uuid")));
+
+        QVERIFY(store.contains(QStringLiteral("dolphin|kept-uuid")));
+        QVERIFY(!store.contains(QStringLiteral("dolphin|old-uuid")));
+    }
+
+    void testDeserialize_preservesAppIdFifoOrder()
+    {
+        // The per-app bucket is a FIFO: take() consumes oldest-first so
+        // multi-instance apps distribute records deterministically. That
+        // ordering must survive a serialize → deserialize round trip — a
+        // bucket rebuilt in a different order silently rotates which reopened
+        // instance receives which placement.
+        WindowPlacementStore store;
+        const QRect r1(10, 10, 300, 200);
+        const QRect r2(20, 20, 310, 210);
+        const QRect r3(30, 30, 320, 220);
+        store.record(make(QStringLiteral("dolphin|u1"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1"), r1));
+        store.record(make(QStringLiteral("dolphin|u2"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2"), r2));
+        store.record(make(QStringLiteral("dolphin|u3"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1"), r3));
+
+        WindowPlacementStore reloaded;
+        reloaded.deserialize(store.serialize());
+
+        // Consume via the appId FIFO with fresh (unmatched) uuids so only the
+        // bucket order decides: oldest first, in the original record order.
+        const auto first = reloaded.take(QStringLiteral("dolphin|new1"), QStringLiteral("dolphin"));
+        QVERIFY(first.has_value());
+        QCOMPARE(first->windowId, QStringLiteral("dolphin|u1"));
+        const auto second = reloaded.take(QStringLiteral("dolphin|new2"), QStringLiteral("dolphin"));
+        QVERIFY(second.has_value());
+        QCOMPARE(second->windowId, QStringLiteral("dolphin|u2"));
+        const auto third = reloaded.take(QStringLiteral("dolphin|new3"), QStringLiteral("dolphin"));
+        QVERIFY(third.has_value());
+        QCOMPARE(third->windowId, QStringLiteral("dolphin|u3"));
     }
 };
 

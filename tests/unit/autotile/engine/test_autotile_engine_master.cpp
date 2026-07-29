@@ -204,12 +204,19 @@ private Q_SLOTS:
         engine.windowFocused(QStringLiteral("win1"), screen1);
         engine.increaseMasterRatio(0.1); // tunes the current desktop's state
 
+        const qreal tunedRatio = engine.tilingStateForScreen(screen1)->splitRatio();
+        QVERIFY(!qFuzzyCompare(1.0 + tunedRatio, 1.0 + engine.config()->splitRatio)); // genuinely tuned
         engine.pruneStatesForDesktop(engine.currentDesktop());
 
-        // A fresh state on the same screen is created cleanly after the prune.
+        // A fresh state on the same screen is created cleanly after the prune
+        // (tilingStateForScreen creates lazily, so the non-null check alone
+        // could never fail — the discriminating assertion is that the tuned
+        // per-desktop ratio did NOT survive the prune into the fresh state).
         engine.windowOpened(QStringLiteral("win3"), screen1, 0, 0);
         QCoreApplication::processEvents();
-        QVERIFY(engine.tilingStateForScreen(screen1) != nullptr);
+        PhosphorTiles::TilingState* fresh = engine.tilingStateForScreen(screen1);
+        QVERIFY(fresh != nullptr);
+        QVERIFY(!qFuzzyCompare(1.0 + fresh->splitRatio(), 1.0 + tunedRatio));
     }
 
     // =========================================================================
@@ -585,6 +592,9 @@ private Q_SLOTS:
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QVERIFY(doc.isArray());
         const QJsonArray arr = doc.array();
+        // Non-empty first: an empty array would make the omits-flag loop
+        // vacuously pass without exercising the serializer at all.
+        QCOMPARE(arr.size(), 2);
         for (const QJsonValue& val : arr) {
             QVERIFY(!val.toObject().contains(QLatin1String("monocle")));
         }
@@ -772,15 +782,19 @@ private Q_SLOTS:
         QVERIFY(state->tiledWindows().isEmpty());
         QCOMPARE(state->windowCount(), 1);
 
-        QStringList preSeeded = {QStringLiteral("win-A")};
+        // The seed must be IGNORED (the state already holds a window, floating
+        // included). Use a REORDERING seed so the outcome is distinguishable:
+        // with the seed ignored, arrival order wins (win-B first); had the
+        // guard failed and the strict seed applied, win-A would have been
+        // forced ahead of win-B and the compare below would fail.
+        QStringList preSeeded = {QStringLiteral("win-A"), QStringLiteral("win-B")};
         engine.setInitialWindowOrder(screenName, preSeeded);
 
+        engine.windowOpened(QStringLiteral("win-B"), screenName);
         engine.windowOpened(QStringLiteral("win-A"), screenName);
         QCoreApplication::processEvents();
 
-        QStringList tiledWindows = state->tiledWindows();
-        QCOMPARE(tiledWindows.size(), 1);
-        QCOMPARE(tiledWindows.at(0), QStringLiteral("win-A"));
+        QCOMPARE(state->tiledWindows(), (QStringList{QStringLiteral("win-B"), QStringLiteral("win-A")}));
     }
 };
 

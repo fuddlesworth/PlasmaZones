@@ -234,6 +234,19 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         auto rec = m_windowTracker->placementStore().take(windowId, appId, [&](const WindowPlacement& p) {
             const PhosphorEngine::EngineSlot s = p.slotFor(engineId());
             if (s.state == WindowPlacement::stateFloating()) {
+                // A geometry-less floating record (the order-only slot the
+                // capture writes to preserve float intent through an
+                // immediate minimize/teardown) is meaningful for the SAME
+                // instance — restore floating in place — but consumed by a
+                // FIFO sibling it floats a fresh window at its spawn rect
+                // for no user-visible reason while burning a slot a real
+                // placement may need. Same-instance restores stay
+                // unconditional; FIFO consumption requires a real float-back.
+                const bool sameInstance = ::PhosphorIdentity::WindowId::extractInstanceId(p.windowId)
+                    == ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
+                if (!sameInstance && !p.anyFreeGeometry().isValid()) {
+                    return false;
+                }
                 return p.screenId.isEmpty() || p.screenId == screenId;
             }
             if (s.state == WindowPlacement::stateTiled()) {
