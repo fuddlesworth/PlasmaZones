@@ -32,7 +32,10 @@ void AutotileHandler::unmaximizeMonocleWindow(const QString& windowId)
     if (!m_monocleMaximizedWindows.remove(windowId)) {
         return;
     }
-    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+    // EXACT resolve: a stale monocle entry whose window is gone must restore
+    // nothing — the fuzzy appId fallback would un-maximize an unrelated
+    // same-app sibling under suppression, invisibly.
+    KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
     if (!w) {
         return;
     }
@@ -40,9 +43,19 @@ void AutotileHandler::unmaximizeMonocleWindow(const QString& windowId)
     if (!kw) {
         return;
     }
+    // maximize() emits windowFrameGeometryChanged SYNCHRONOUSLY, and the
+    // restore rect can sit in a different virtual-screen region of the same
+    // monitor. Without the geometry-apply gate that edge takes the
+    // VS-crossing path (handleWindowOutputChanged -> windowClosed +
+    // notifyWindowAdded) and tears down whatever float/tile transition the
+    // caller is mid-way through. Save/restore rather than set/clear so the
+    // guard nests inside already-guarded callers.
+    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+    m_effect->m_daemonGate.inGeometryApply = true;
     ++m_suppressMaximizeChanged;
     kw->maximize(KWin::MaximizeRestore);
     --m_suppressMaximizeChanged;
+    m_effect->m_daemonGate.inGeometryApply = prevInApply;
 }
 
 void AutotileHandler::restoreAllMonocleMaximized()
@@ -50,9 +63,18 @@ void AutotileHandler::restoreAllMonocleMaximized()
     if (m_monocleMaximizedWindows.isEmpty()) {
         return;
     }
+    // Snapshot and clear FIRST: maximize() can synchronously re-enter
+    // cleanupClosedWindowState (via the VS-crossing / output-changed path),
+    // which mutates m_monocleMaximizedWindows — iterating the live set here
+    // is iterator invalidation in a compositor loop.
+    const QStringList ids = m_monocleMaximizedWindows.values();
+    m_monocleMaximizedWindows.clear();
+    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+    m_effect->m_daemonGate.inGeometryApply = true;
     ++m_suppressMaximizeChanged;
-    for (const QString& wid : std::as_const(m_monocleMaximizedWindows)) {
-        KWin::EffectWindow* w = m_effect->findWindowById(wid);
+    for (const QString& wid : ids) {
+        // EXACT resolve — same sibling hazard as unmaximizeMonocleWindow.
+        KWin::EffectWindow* w = m_effect->findWindowByIdExact(wid);
         if (w) {
             KWin::Window* kw = w->window();
             if (kw) {
@@ -61,7 +83,7 @@ void AutotileHandler::restoreAllMonocleMaximized()
         }
     }
     --m_suppressMaximizeChanged;
-    m_monocleMaximizedWindows.clear();
+    m_effect->m_daemonGate.inGeometryApply = prevInApply;
 }
 
 void AutotileHandler::clearTiledTracking()

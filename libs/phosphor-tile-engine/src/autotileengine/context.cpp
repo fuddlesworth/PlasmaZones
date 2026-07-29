@@ -377,13 +377,26 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // pendingInitialOrders for insertWindow() to consult on arrival.
         if (m_pendingInitialOrders.contains(screenId) && m_strictInitialOrderScreens.contains(screenId)) {
             const QStringList order = m_pendingInitialOrders.value(screenId);
-            const auto* registry = dynamic_cast<const PhosphorEngine::WindowRegistry*>(m_windowRegistry);
+            if (!m_windowRegistry) {
+                // Without a registry the seed cannot distinguish minimized
+                // windows and will tile every seeded entry — visible in
+                // production as a hidden window holding a layout slot. Warn
+                // loudly; headless/test engines legitimately run without one.
+                qCWarning(PhosphorTileEngine::lcTileEngine)
+                    << "setAutotileScreens: strict seed for" << screenId
+                    << "has no window registry — minimized windows cannot be deferred";
+            }
             bool hasDeferredMinimizedWindow = false;
             PhosphorTiles::TilingState* ts = tilingStateForScreen(screenId);
             if (ts) {
                 const TilingStateKey stateKey = currentKeyForScreen(screenId);
                 for (const QString& windowId : order) {
-                    if (registry && registry->isMinimized(windowId)) {
+                    // Defer on engaged-true AND on unknown (record missing):
+                    // a window the registry cannot vouch for must not claim a
+                    // tile — the deferral self-heals when the effect's
+                    // windowOpened re-announce (sent only for visible
+                    // windows) consumes the pending slot at its seeded index.
+                    if (m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(true)) {
                         hasDeferredMinimizedWindow = true;
                         continue;
                     }

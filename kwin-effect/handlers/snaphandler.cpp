@@ -430,10 +430,16 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             if (autotile && autotile->removeMinimizeFloated(windowId)) {
                 m_minimizeFloatedWindows.insert(windowId);
                 // The window still carries its autotile rect, not its snap-zone
-                // rect. Do not leave that wrong frame visible for the normal
-                // animation grace: commit at the unminimize edge so KWin starts
-                // the restore against the saved snap placement.
+                // rect. Committing at the edge dispatches the unfloat
+                // immediately, but the daemon's resnap geometry only lands
+                // after a D-Bus round trip — KWin would play the whole
+                // restore against the stale autotile frame and then hop.
+                // Withhold the first frames instead: the suppression releases
+                // the moment the resnap moves the frame, or at its own 250 ms
+                // deadline if no reposition arrives, so the window appears
+                // once, at its snap placement.
                 qCInfo(lcEffect) << "Snap: adopted autotile-mode minimize-float, unfloating immediately:" << windowId;
+                m_effect->beginRestoreSuppression(window);
                 commitUnminimizeUnfloat(window, windowId, screenId);
                 return;
             } else {

@@ -209,7 +209,12 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFlo
 
     // Only notify autotile daemon for windows on autotile screens
     if (m_autotileScreens.contains(screenId)) {
-        knownFreeFloating = knownFreeFloating || m_pendingFreshWindows.remove(windowId);
+        // Consume the spawn-provenance marker UNCONDITIONALLY — a short-circuit
+        // (|| with remove second) would leave the entry behind whenever the
+        // caller already passed true, and a later RE-ADD that deliberately
+        // passes false would then flip to true off the stale entry.
+        const bool wasFresh = m_pendingFreshWindows.remove(windowId) > 0;
+        knownFreeFloating = knownFreeFloating || wasFresh;
         m_notifiedWindows.insert(windowId);
         m_notifiedWindowScreens[windowId] = screenId;
         // Save pre-autotile geometry BEFORE the daemon tiles the window.
@@ -667,9 +672,27 @@ QSet<QString> AutotileHandler::completeDeferredWindowRoutes()
         }
         const QString windowId = m_effect->getWindowId(window);
         routedWindowIds.insert(windowId);
+        // The pending-fresh entry was keyed by the id at defer time; if the
+        // live id diverged, the old key would leak forever (the tail prune
+        // below only drops dead/off-screen windows, and this window is
+        // neither).
+        if (windowId != it.key()) {
+            m_pendingFreshWindows.remove(it.key());
+        }
         const QString screenId = m_effect->getWindowScreenId(window);
         if (m_autotileScreens.contains(screenId)) {
             if (window->isMinimized()) {
+                // A window that minimized while the screen query was pending
+                // is excluded from the follow-up batch (it is in
+                // routedWindowIds), so nothing else will claim it — claim it
+                // here, release the first-frame suppression (a minimized
+                // window paints nothing, and leaving the suppression armed
+                // stalls its eventual restore for the 250 ms deadline), and
+                // drop the spawn-provenance marker so a later re-add cannot
+                // inherit knownFreeFloating=true from a stale entry.
+                claimAlreadyMinimizedAsFloated(window, windowId, m_autotileScreens, /*enteringAutotile=*/true);
+                m_pendingFreshWindows.remove(windowId);
+                m_effect->endRestoreSuppression(window);
                 continue;
             }
             if (it->canSnapRestore) {
@@ -709,7 +732,11 @@ QSet<QString> AutotileHandler::completeDeferredWindowRoutes()
 
     const auto pendingIds = m_pendingFreshWindows.values();
     for (const QString& windowId : pendingIds) {
-        KWin::EffectWindow* window = m_effect->findWindowById(windowId);
+        // EXACT resolve: the entry is keyed to a specific instance's id, so a
+        // fuzzy hit on a same-app sibling must not keep a dead entry alive —
+        // a retained stale entry later flips knownFreeFloating to true and
+        // poisons the free-geometry capture.
+        KWin::EffectWindow* window = m_effect->findWindowByIdExact(windowId);
         if (!window || window->isDeleted() || !m_autotileScreens.contains(m_effect->getWindowScreenId(window))) {
             m_pendingFreshWindows.remove(windowId);
         }

@@ -169,9 +169,12 @@ public:
     /// shader event.
     /// The normal same-mode unfloat is deferred by an Effect::animationTime-
     /// scaled grace so the re-snap's geometry apply cannot land mid-flight and
-    /// cancel KWin's own unminimize animation (discussion #816). A float adopted
-    /// across a mode boundary commits immediately because its current geometry
-    /// belongs to the other mode; see m_pendingUnminimizeUnfloat.
+    /// cancel KWin's own unminimize animation (discussion #816). A float
+    /// adopted across a mode boundary dispatches immediately AND withholds the
+    /// first frames via restore suppression: its current geometry belongs to
+    /// the other mode, and the resnap that corrects it only lands after a
+    /// D-Bus round trip — without the suppression KWin would play the restore
+    /// against the stale frame and then hop. See m_pendingUnminimizeUnfloat.
     void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                bool minimized);
     void retryVisibleMinimizeFloats();

@@ -134,10 +134,13 @@ void AutotileEngine::schedulePendingOrderTimeout(const QString& screenId, uint64
         if (m_pendingOrderGeneration.value(screenId) != generation) {
             return;
         }
-        if (const auto* registry = dynamic_cast<const PhosphorEngine::WindowRegistry*>(m_windowRegistry)) {
+        if (m_windowRegistry) {
             const QStringList pending = m_pendingInitialOrders.value(screenId);
             for (const QString& windowId : pending) {
-                if (registry->isMinimized(windowId)) {
+                // value_or(true): unknown state defers like minimized, matching
+                // the strict-seed deferral so the timeout cannot reap a
+                // placeholder the seed deliberately retained.
+                if (m_windowRegistry->minimizedState(windowId).value_or(true)) {
                     // A minimized live window can remain hidden indefinitely. Keep
                     // its positional placeholder, but re-arm cleanup so a later
                     // metadata change or missed close cannot leak the order forever.

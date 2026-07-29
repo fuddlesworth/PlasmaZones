@@ -724,6 +724,13 @@ private Q_SLOTS:
         PhosphorEngine::WindowRegistry registry;
         PhosphorEngine::WindowMetadata metadata;
         metadata.appId = QStringLiteral("app");
+        // Every live window carries a registry record in production (metadata
+        // is pushed at window-open); the strict seed defers windows the
+        // registry cannot vouch for, so the visible windows need engaged
+        // not-minimized records here or they would be deferred too.
+        metadata.isMinimized = false;
+        registry.upsert(QStringLiteral("first"), metadata);
+        registry.upsert(QStringLiteral("third"), metadata);
         metadata.isMinimized = true;
         registry.upsert(QStringLiteral("hidden"), metadata);
 

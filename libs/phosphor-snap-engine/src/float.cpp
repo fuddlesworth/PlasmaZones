@@ -27,6 +27,11 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
     const bool currentlySnapped = state && state->isWindowSnapped(windowId);
 
     if (!currentlyFloating && !currentlySnapped) {
+        // Report instead of absorbing the press silently: every other
+        // navigation shortcut produces feedback, and a silent shortcut reads
+        // as broken (mirrors the autotile facade's not_managed report).
+        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("not_managed"), QString(), QString(),
+                                  screenId);
         return;
     }
 
@@ -42,10 +47,29 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
         m_windowTracker->unsnapForFloat(windowId);
         m_windowTracker->setWindowFloating(windowId, true);
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
-        applyGeometryForFloat(windowId, screenId);
+        applyFloatGeometryUnlessMinimized(windowId, screenId);
         Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("floated"), QString(), QString(),
                                   screenId);
     }
+}
+
+void SnapEngine::applyFloatGeometryUnlessMinimized(const QString& windowId, const QString& screenId)
+{
+    // A minimize-suspension float must NOT move the frame: the window is
+    // hidden, and applying the remembered float-back rect here would park it
+    // at a stale position that KWin then restores to on unminimize, before
+    // the unfloat re-snaps it (the "wrong geometry first, then resnaps"
+    // defect). The autotile engine documents and guards the identical hazard
+    // in float_handoff.cpp; this is the snap-side twin. The guard fires only
+    // on ENGAGED true: the effect pushes fresh metadata on the minimize edge
+    // BEFORE any float traffic from that edge (same ordered D-Bus stream), so
+    // a genuine minimize-float always arrives with the state engaged, while
+    // an unknown reading means a visible-window float whose float-back
+    // reposition must not be dropped.
+    if (m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
+        return;
+    }
+    applyGeometryForFloat(windowId, screenId);
 }
 
 void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const QString& callerScreenId)
@@ -79,7 +103,9 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
         m_windowTracker->unsnapForFloat(windowId);
         m_windowTracker->setWindowFloating(windowId, true);
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
-        applyGeometryForFloat(windowId, screenId);
+        // Guarded: the minimize path reaches here via setWindowFloatingForScreen
+        // and must not teleport the hidden frame (see the helper's comment).
+        applyFloatGeometryUnlessMinimized(windowId, screenId);
     } else {
         if (!unfloatToZone(windowId, screenId)) {
             // No pre-float zone to restore to — keep the window floating rather than

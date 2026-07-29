@@ -137,9 +137,17 @@ QString WindowRegistry::appIdFor(const QString& instanceId) const
 
 bool WindowRegistry::isMinimized(const QString& windowId) const
 {
+    return minimizedState(windowId).value_or(false);
+}
+
+std::optional<bool> WindowRegistry::minimizedState(const QString& windowId) const
+{
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
     const auto it = m_records.constFind(instanceId);
-    return it != m_records.constEnd() && it->isMinimized.value_or(false);
+    if (it == m_records.constEnd()) {
+        return std::nullopt;
+    }
+    return it->isMinimized;
 }
 
 QStringList WindowRegistry::instancesWithAppId(const QString& appId) const

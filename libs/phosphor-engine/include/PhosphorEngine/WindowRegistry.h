@@ -141,9 +141,16 @@ public:
     };
     std::optional<WindowContext> windowContext(const QString& instanceId) const;
     Q_INVOKABLE QString appIdFor(const QString& instanceId) const override;
-    /// Live compositor minimize state. Accepts either a bare instance id or a
-    /// composite appId|instanceId window id.
+    /// Live compositor minimize state, collapsed to a bool: unknown reads as
+    /// false. Prefer minimizedState() wherever "unknown" must not be treated
+    /// as "not minimized" (seeding, capture guards). Accepts either a bare
+    /// instance id or a composite appId|instanceId window id.
     bool isMinimized(const QString& windowId) const;
+    /// Tri-state minimize state (IWindowRegistry contract): engaged when a
+    /// record exists AND the compositor reported the field; nullopt when the
+    /// window is unknown or the field was never delivered. Accepts either a
+    /// bare instance id or a composite appId|instanceId window id.
+    std::optional<bool> minimizedState(const QString& windowId) const override;
     QStringList instancesWithAppId(const QString& appId) const;
     bool contains(const QString& instanceId) const;
     QStringList allInstances() const;

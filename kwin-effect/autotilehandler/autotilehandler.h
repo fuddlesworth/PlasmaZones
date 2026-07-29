@@ -342,7 +342,11 @@ private:
     /// Move active minimize ownership into the asynchronous unfloat interval.
     /// Returns whether the daemon request may be dispatched.
     bool beginUnminimizeUnfloat(const QString& windowId);
-    void dispatchUnminimizeUnfloat(const QString& windowId, const QString& screenId);
+    /// Returns whether the daemon unfloat was actually dispatched. False
+    /// (window not ours, or daemon unregistered) means the daemon still
+    /// considers the window floating — callers must not announce it as
+    /// tileable via notifyWindowAdded on that branch.
+    bool dispatchUnminimizeUnfloat(const QString& windowId, const QString& screenId);
     void scheduleUnminimizeUnfloatRetry(const QString& windowId);
     QSet<QString> completeDeferredWindowRoutes();
 

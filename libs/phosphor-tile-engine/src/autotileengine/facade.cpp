@@ -317,11 +317,12 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     if (!state) {
         return std::nullopt;
     }
-    // Keep the canonicalization interface ABI-stable: live minimize metadata
-    // is an additive capability of the concrete production registry, not a new
-    // virtual in IWindowRegistry's exported vtable.
-    const auto* registry = dynamic_cast<const PhosphorEngine::WindowRegistry*>(m_windowRegistry);
-    const bool minimized = registry && registry->isMinimized(wid);
+    // Live minimize state via the IWindowRegistry contract (defaulted virtual
+    // reporting unknown), so no per-window RTTI on the capture sweeps. The
+    // preserve branch fires only on ENGAGED true — the capture must not
+    // preserve-and-freeze a visible window's slot just because its record is
+    // missing.
+    const bool minimized = m_windowRegistry && m_windowRegistry->minimizedState(wid).value_or(false);
     if (minimized && m_windowTracker) {
         const auto existing = m_windowTracker->placementStore().peekExact(wid);
         if (existing && !existing->slotFor(engineId()).isEmpty()) {

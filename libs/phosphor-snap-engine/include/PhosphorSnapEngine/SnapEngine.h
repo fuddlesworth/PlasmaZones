@@ -959,6 +959,11 @@ private:
 
     bool unfloatToZone(const QString& windowId, const QString& screenId);
     bool applyGeometryForFloat(const QString& windowId, const QString& screenId);
+    /// Float-path wrapper around applyGeometryForFloat that suppresses the
+    /// geometry apply for minimize-suspension floats (registry reports the
+    /// window minimized): a hidden window's frame must stay put so the
+    /// unminimize restore lands where the window really was.
+    void applyFloatGeometryUnlessMinimized(const QString& windowId, const QString& screenId);
 
     /// Lazy-constructs m_targetResolver on first call. Returns nullptr if
     /// the service or layout manager is missing (unit tests with stub
