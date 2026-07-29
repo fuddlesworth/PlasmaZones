@@ -429,9 +429,11 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
                 // snap-state resolver (Daemon wires setSnapStateResolver()), so zoneForWindow et al.
                 // see this assignment; the snap chrome is applied below via the
                 // non-empty-zoneId applyGeometryRequested (→ markWindowSnapped); and
-                // persistence flows through the placement-store record. The only
-                // caller, handleCrossModeMove, always passes wasFloating==false, so
-                // there is no floating flag to clear.
+                // persistence flows through the placement-store record. Every
+                // caller that sets toDesktop (the cross-desktop move paths)
+                // passes wasFloating==false, so there is no floating flag to
+                // clear in THIS branch; other handoffReceive callers land in
+                // the tail below.
                 SnapState* targetState = stateForWindowOnScreen(ctx.windowId, ctx.toScreenId);
                 if (ctx.sourceZoneIds.size() > 1) {
                     targetState->assignWindowToZones(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, ctx.toDesktop);
@@ -474,6 +476,18 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     // adopted fresh from another engine (untracked here); stateForWindowOnScreen then
     // registers it under the destination key below.
     migrateWindowToScreen(ctx.windowId, ctx.toScreenId);
+    if (!ctx.wasFloating) {
+        // Explicit cross-mode MOVE of a MANAGED window whose source zones did
+        // not resolve on this screen (foreign zone ids after a layout change).
+        // Floating it here converted the user's move into a float toggle. It
+        // arrives as a plain FREE window instead — snapping's default for
+        // unmanaged windows — keeping its live frame. Broadcast not-floating
+        // so subscribers that last heard the source mode's state converge
+        // (the adaptor's last-broadcast gate dedups when they already agree).
+        m_windowTracker->setWindowFloating(ctx.windowId, false);
+        Q_EMIT windowFloatingChanged(ctx.windowId, false, ctx.toScreenId);
+        return;
+    }
     stateForWindowOnScreen(ctx.windowId, ctx.toScreenId)
         ->setFloatingOnScreen(ctx.windowId, ctx.toScreenId, currentDesktop);
     m_windowTracker->setWindowFloating(ctx.windowId, true);

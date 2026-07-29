@@ -239,14 +239,38 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     if (!allowDuringDrag && (window->isUserMove() || window->isUserResize())) {
         qCDebug(lcEffect) << "Window in user move/resize, deferring geometry via windowFinishUserMovedResized";
         QPointer<KWin::EffectWindow> safeWindow = window;
+        // Snapshot the batch-supersession context at defer time: the fire can
+        // land arbitrarily later (the user keeps dragging), and replaying the
+        // old rect after a NEWER per-screen batch repositioned things would
+        // clobber it — or, after the drag crossed screens, teleport the
+        // window back to the old screen's rect.
+        const QString deferScreen = getWindowScreenId(window);
+        const uint64_t deferGen = m_daemonGate.batchGenByScreen.value(deferScreen);
         auto conn = std::make_shared<QMetaObject::Connection>();
-        *conn = connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
-                        [this, safeWindow, geo, skipAnimation, profilePath, conn](KWin::EffectWindow*) {
-                            disconnect(*conn);
-                            if (safeWindow && !safeWindow->isDeleted() && !safeWindow->isFullScreen()) {
-                                applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath);
-                            }
-                        });
+        *conn = connect(
+            window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
+            [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, deferGen](KWin::EffectWindow*) {
+                disconnect(*conn);
+                if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
+                    return;
+                }
+                const QString nowScreen = getWindowScreenId(safeWindow.data());
+                if (nowScreen != deferScreen || m_daemonGate.batchGenByScreen.value(deferScreen) != deferGen) {
+                    qCDebug(lcEffect) << "Deferred geometry superseded (screen or batch changed), dropping:"
+                                      << getWindowId(safeWindow.data());
+                    return;
+                }
+                // Re-assert the self-caused-frame-change guard the
+                // original (batch) apply held — without it the
+                // synchronous frame change from this moveResize
+                // reads as an external move and can report a
+                // phantom cross-VS unsnap.
+                m_daemonGate.inGeometryApply = true;
+                const auto guard = qScopeGuard([this] {
+                    m_daemonGate.inGeometryApply = false;
+                });
+                applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath);
+            });
         return;
     }
 

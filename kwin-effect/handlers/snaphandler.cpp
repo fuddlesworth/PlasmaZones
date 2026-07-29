@@ -258,6 +258,18 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
         return;
     }
 
+    // Mirror of the autotile capture's snap-owned guard
+    // (saveAndRecordPreAutotileGeometry): a window the AUTOTILE side owns —
+    // actively tiled, or held as an autotile minimize-float — is sitting on
+    // its TILE rect, never a free-floating position. Capturing it here would
+    // poison the shared float-back with the tile rect (the reverse of the
+    // per-mode leak that guard closes).
+    if (AutotileHandler* autotile = m_effect->autotileHandler();
+        autotile && (autotile->isTiledWindow(windowId) || autotile->isMinimizeFloated(windowId))) {
+        qCDebug(lcEffect) << "Skipped pre-snap geometry for autotile-owned window (frame is tile rect)" << windowId;
+        return;
+    }
+
     // Use virtual-screen-aware ID — getWindowScreenId() falls back to the physical
     // ID when virtual screen defs haven't loaded yet, so it is safe to call
     // unconditionally. Using it here ensures the stored screen ID always matches

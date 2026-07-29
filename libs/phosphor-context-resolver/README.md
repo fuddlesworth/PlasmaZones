@@ -8,10 +8,8 @@
 > daemon's navigation/start/osd paths and the three D-Bus adaptors
 > (SnapAdaptor, WindowDragAdaptor, WindowTrackingAdaptor) with one
 > resolver call. The KWin effect does not consume this library
-> (effect-side state has no disable/lock cascade). OverlayService is the
-> remaining unmigrated consumer in the daemon, still on the legacy
-> inline `isContextDisabled(...)` cascade. See the `src/daemon/daemon.h`
-> `contextResolver()` docstring.
+> (effect-side state has no disable/lock cascade). Every daemon
+> consumer, OverlayService included, now goes through the resolver.
 
 ## Responsibility
 

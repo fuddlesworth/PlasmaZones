@@ -266,6 +266,14 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         if (!e.window) {
             continue;
         }
+        // Re-key to the RESOLVED window's live id. The disambiguation above
+        // can match a candidate whose uuid differs from the daemon-supplied
+        // entry id (stale across a KWin restart), and every write this batch
+        // performs — tiled tracking, the Wayland centering cache, the
+        // pre-autotile capture — must key on the live id the readers use, or
+        // the tiling goes untracked and the stale-keyed entries are never
+        // reclaimed.
+        e.windowId = m_effect->getWindowId(e.window);
         // Key on the daemon's TARGET screen (from the tile request), NOT the
         // window's current physical screen. On a cross-output move the moved
         // window has not physically relocated when this batch is built, so
@@ -499,6 +507,13 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // mode toggles.
             for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
                 const QString& screenId = it.key();
+                // Per-screen supersession guard, same as the raise loops
+                // above: a stale batch must neither replay a z-order over the
+                // newer batch's result nor CONSUME the saved order the newer
+                // batch's own restore still needs.
+                if (m_autotileStaggerGenByScreen.value(screenId) != genByScreen.value(screenId)) {
+                    continue;
+                }
                 const QStringList savedOrder = m_savedAutotileStackingOrder.value(screenId);
                 if (savedOrder.isEmpty()) {
                     continue;

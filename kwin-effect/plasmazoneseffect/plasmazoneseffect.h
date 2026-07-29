@@ -315,8 +315,12 @@ private:
      * @brief Push current metadata for a window to the daemon's WindowRegistry.
      *
      * Safe to call unconditionally on every observation — the daemon de-dupes.
-     * Called from slotWindowAdded for initial registration, and from
-     * windowClassChanged / desktopFileNameChanged handlers for live updates.
+     * Called from slotWindowAdded for initial registration; from the
+     * windowClassChanged / desktopFileNameChanged / desktops- and
+     * activities-changed handlers for identity/context updates; from the
+     * minimizedChanged handler (full snapshot — the daemon's mode-swap seed
+     * and capture guards consult the registry's LIVE isMinimized); and from
+     * the captionChanged handler (caption-only, includeExtended=false).
      *
      * @param includeExtended When false, the extended-property snapshot (the
      * trailing a{sv}: state flags, geometry, accessory flags) is NOT rebuilt

@@ -291,12 +291,11 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     //   - Autotile dest: adopt via the handoff (release source, receive with
     //     wasFloating=false tiles the arrival and announces it on the
     //     passive sync channel); the trailing relay dedups against that.
-    //   - Snap dest: NO adoption. Snap's handoffReceive floats an arrival
-    //     with no sourceZoneIds unconditionally (ignoring wasFloating) and
-    //     emits floating=true, and the setWindowFloat(false) below fails
-    //     open when no rule/pre-float zone resolves ("keeping floating") —
-    //     together that strands the snap store floating against a false
-    //     broadcast. Instead just release the source's bit and broadcast
+    //   - Snap dest: NO adoption. A handoffReceive here would add nothing:
+    //     with no sourceZoneIds and wasFloating=false its tail lands the
+    //     window as a plain free window, and the setWindowFloat(false) below
+    //     fails open when no rule/pre-float zone resolves ("keeping
+    //     floating"). Instead just release the source's bit and broadcast
     //     the unfloat; the setWindowFloat below still gives snap its
     //     rule/pre-float re-snap chance, and a window it cannot re-snap
     //     stays a free (unmanaged) window, which is what unfloating a

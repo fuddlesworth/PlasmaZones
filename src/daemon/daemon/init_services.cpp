@@ -322,8 +322,15 @@ void Daemon::initLayoutAndSettingsWiring()
 
         // Capture autotile window order BEFORE any mode switch destroys PhosphorTiles::TilingState.
         // Saved for deterministic re-seeding when autotile is re-enabled.
+        // MERGE, not replace: the capture only sees live states (the current
+        // context's screens), and a wholesale replace discarded the saved
+        // orders of every other desktop/activity — same merge the per-screen
+        // toggle path performs.
         if (autotileToggled && !autotileNow) {
-            m_lastAutotileOrders = captureAutotileOrders();
+            const auto captured = captureAutotileOrders();
+            for (auto it = captured.constBegin(); it != captured.constEnd(); ++it) {
+                m_lastAutotileOrders.insert(it.key(), it.value());
+            }
         }
 
         // Handle autotile feature gate toggle

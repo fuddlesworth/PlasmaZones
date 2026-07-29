@@ -405,22 +405,27 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
     bool manualActive = false;
 
     if (m_settings->autotileEnabled() && m_layoutManager && m_screenManager) {
-        const int desktop = currentDesktopForScreen(focusedScreenId);
         const QString activity = currentActivity();
 
         if (!focusedScreenId.isEmpty()) {
             // Per-screen filter: only check the focused screen's mode
-            const QString assignmentId = m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
+            const QString assignmentId = m_layoutManager->assignmentIdForScreen(
+                focusedScreenId, currentDesktopForScreen(focusedScreenId), activity);
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
             } else {
                 manualActive = true;
             }
         } else {
-            // Global filter: union of all effective screens (includes virtual screens)
+            // Global filter: union of all effective screens (includes virtual
+            // screens). Each screen resolves its OWN desktop (#648 per-output
+            // virtual desktops) — a desktop hoisted from the empty focused id
+            // is the global current desktop and misresolves per-output
+            // screens showing a different one.
             const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
             for (const QString& screenId : effectiveIds) {
-                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+                const QString assignmentId =
+                    m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
                 if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                     autotileActive = true;
                 } else {
