@@ -118,7 +118,12 @@ void AutotileHandler::loadSettings()
                         QList<KWin::EffectWindow*> batchWindows;
                         batchWindows.reserve(windows.size());
                         for (KWin::EffectWindow* window : windows) {
-                            if (window && !completedDeferredRoutes.contains(m_effect->getWindowId(window))) {
+                            // isDeleted: close-grabbed dying windows linger in
+                            // the stacking order — getWindowId on them would
+                            // re-pollute the scrubbed id caches before the
+                            // batch's own guards run.
+                            if (window && !window->isDeleted()
+                                && !completedDeferredRoutes.contains(m_effect->getWindowId(window))) {
                                 batchWindows.append(window);
                             }
                         }

@@ -262,38 +262,55 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     };
     QVector<PendingApply> pending;
 
-    for (const auto& entry : geometries) {
-        if (entry.windowId.isEmpty() || entry.width <= 0 || entry.height <= 0) {
-            continue;
-        }
-
-        // Exact match first, appId fallback for single-instance apps
-        KWin::EffectWindow* window = windowMap.value(entry.windowId);
-        if (!window) {
-            QString appId = ::PhosphorIdentity::WindowId::extractAppId(entry.windowId);
-            KWin::EffectWindow* candidate = nullptr;
-            int matchCount = 0;
-            for (auto it = windowMap.constBegin(); it != windowMap.constEnd(); ++it) {
-                if (::PhosphorIdentity::WindowId::extractAppId(it.key()) == appId) {
-                    candidate = it.value();
-                    if (++matchCount > 1)
-                        break;
-                }
-            }
-            if (matchCount == 1) {
-                window = candidate;
-            }
-        }
-
-        if (!window) {
-            continue;
-        }
-
+    // Two-pass resolution with a claim set. Exact uuid matches claim their
+    // window first; the appId fallback then resolves only entries whose
+    // window no exact entry claimed, and skips already-claimed windows.
+    // Without the claim set, a batch carrying BOTH a stale-uuid entry and
+    // the live-uuid entry for the same app resolved both onto the one live
+    // window — a double apply where the losing entry's (often empty)
+    // screenId then wiped the snap tracking the winner just marked.
+    QSet<KWin::EffectWindow*> claimedWindows;
+    QVector<const PhosphorProtocol::WindowGeometryEntry*> needFallback;
+    const auto appendPending = [&pending, &claimedWindows](const auto& entry, KWin::EffectWindow* window) {
+        claimedWindows.insert(window);
         PendingApply p;
         p.window = QPointer<KWin::EffectWindow>(window);
         p.geometry = entry.toRect();
         p.screenId = entry.screenId;
         pending.append(p);
+    };
+    for (const auto& entry : geometries) {
+        if (entry.windowId.isEmpty() || entry.width <= 0 || entry.height <= 0) {
+            continue;
+        }
+        if (KWin::EffectWindow* window = windowMap.value(entry.windowId)) {
+            appendPending(entry, window);
+        } else {
+            needFallback.append(&entry);
+        }
+    }
+    for (const auto* entryPtr : needFallback) {
+        const auto& entry = *entryPtr;
+        // appId fallback for single-instance apps (uuid drift across a KWin
+        // restart), counting only UNCLAIMED windows so a stale sibling entry
+        // can neither double-apply onto a claimed window nor trip the
+        // ambiguity bail against it.
+        const QString appId = ::PhosphorIdentity::WindowId::extractAppId(entry.windowId);
+        KWin::EffectWindow* candidate = nullptr;
+        int matchCount = 0;
+        for (auto it = windowMap.constBegin(); it != windowMap.constEnd(); ++it) {
+            if (claimedWindows.contains(it.value())) {
+                continue;
+            }
+            if (::PhosphorIdentity::WindowId::extractAppId(it.key()) == appId) {
+                candidate = it.value();
+                if (++matchCount > 1)
+                    break;
+            }
+        }
+        if (matchCount == 1) {
+            appendPending(entry, candidate);
+        }
     }
 
     if (pending.isEmpty()) {
@@ -488,7 +505,6 @@ void PlasmaZonesEffect::slotRaiseWindowsRequested(const QStringList& windowIds)
 
 void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId)
 {
-    Q_UNUSED(screenId)
     // Update local floating cache when daemon notifies us of state changes
     // This keeps the effect's cache in sync with the daemon, preventing
     // inverted toggle behavior when a floating window is drag-snapped.
@@ -523,6 +539,25 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
             || m_snapHandler->hasUnfloatInFlight(windowId);
         if (stillMinimized || recoveryPending) {
             qCDebug(lcEffect) << "Preserving minimize-float ownership across non-terminal unfloat:" << windowId;
+            // Single-owner repair: preservation must never leave the marker in
+            // BOTH engines (a missed cross-mode adoption hop can). Resolve a
+            // dual hold to the window's current screen mode — the same rule
+            // every adoption site applies.
+            if (m_autotileHandler->isMinimizeFloated(windowId) && m_snapHandler->isMinimizeFloated(windowId)) {
+                QString ownerScreen = screenId;
+                if (ownerScreen.isEmpty()) {
+                    if (KWin::EffectWindow* live = findWindowById(windowId)) {
+                        ownerScreen = getWindowScreenId(live);
+                    }
+                }
+                qCWarning(lcEffect) << "Minimize-float marker held by BOTH engines for" << windowId
+                                    << "— resolving to owner of screen" << ownerScreen;
+                if (m_autotileHandler->isAutotileScreen(ownerScreen)) {
+                    m_snapHandler->removeMinimizeFloated(windowId);
+                } else {
+                    m_autotileHandler->removeMinimizeFloated(windowId);
+                }
+            }
         } else {
             m_autotileHandler->removeMinimizeFloated(windowId);
             m_snapHandler->removeMinimizeFloated(windowId);

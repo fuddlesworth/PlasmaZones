@@ -771,8 +771,21 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // mode-swap seed tile a window that is minimized right now (the per-slot
     // floating check cannot cover this: it resolves via the screen's CURRENT
     // mode, which flips mid-toggle).
-    connect(w, &KWin::EffectWindow::minimizedChanged, this, [this, w]() {
-        pushWindowMetadata(w);
+    // Liveness-guarded but deliberately NOT gated on shouldHandleWindow /
+    // isTileableWindow: the open-time push in slotWindowAdded registers EVERY
+    // window, and the daemon's rule predicates (IsMinimized) evaluate against
+    // that registry metadata for every window too — a tileable-only gate here
+    // would leave non-tileable windows' minimize state permanently stale.
+    // Spurious minimize pairs cost only the marshal: the registry upsert
+    // de-dupes content-identical pushes.
+    connect(w, &KWin::EffectWindow::minimizedChanged, this, [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
+        // The minimize edge can race close teardown (the EffectWindow
+        // outlives the client as a Deleted shell); pushing metadata for it
+        // would resurrect a registry record the close path just removed.
+        if (!safeW || safeW->isDeleted()) {
+            return;
+        }
+        pushWindowMetadata(safeW.data());
     });
 
     // Autotile: track minimize/unminimize to remove/re-add windows from tiling

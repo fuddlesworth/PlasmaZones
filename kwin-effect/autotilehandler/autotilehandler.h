@@ -118,6 +118,13 @@ public:
         return m_unfloatInFlight.remove(windowId) > 0 || owned;
     }
 
+    /// Whether this handler currently owns @p windowId's minimize-float
+    /// marker (mirrors SnapHandler::isMinimizeFloated).
+    bool isMinimizeFloated(const QString& windowId) const
+    {
+        return m_minimizeFloatedWindows.contains(windowId);
+    }
+
     /// Take ownership of a minimize-float relinquished by the snap handler
     /// (cross-mode countermand / hand-off on a screen autotile now owns).
     /// @p untiled marks the window's rect as belonging to the prior mode so
