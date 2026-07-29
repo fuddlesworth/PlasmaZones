@@ -43,7 +43,8 @@
 
 namespace PlasmaZones {
 
-void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, const QString& authoritativeScreen)
+void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, const QString& authoritativeScreen,
+                                                   bool fromStateChange)
 {
     if (windowId.isEmpty() || !m_service) {
         return;
@@ -55,28 +56,72 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // close, or mode-transition captures. A genuinely user-floated window was
     // already captured when it floated, so preserving its prior record is also
     // correct while it is minimized.
-    if (m_windowRegistry && m_windowRegistry->isMinimized(windowId) && authoritativeScreen.isEmpty()) {
-        qCDebug(lcDbusWindow) << "Skipping placement capture for minimized window" << windowId;
-        return;
+    //
+    // Tri-state, not the collapsed bool: a REGISTERED window whose minimize
+    // state was never delivered cannot be proven visible, so it takes the
+    // guard too (capturing it would risk persisting the suspension float).
+    // An UNREGISTERED window (no record at all — already pruned, or a
+    // registry-less test service) keeps the plain capture path.
+    //
+    // An authoritative ENGINE STATE CHANGE bypasses the guard entirely: the
+    // engine then reports the freshly committed state (a resnap sweep can
+    // legitimately re-zone a minimized window), which is exactly what the
+    // record should hold. See the fromStateChange doc on the declaration.
+    bool treatAsMinimized = false;
+    if (m_windowRegistry) {
+        const std::optional<bool> minimized = m_windowRegistry->minimizedState(windowId);
+        treatAsMinimized =
+            minimized.value_or(m_windowRegistry->contains(PhosphorIdentity::WindowId::extractInstanceId(windowId)));
     }
-    if (m_windowRegistry && m_windowRegistry->isMinimized(windowId)) {
-        std::optional<PhosphorEngine::WindowPlacement> preserved = m_service->placementStore().peekExact(windowId);
-        if (!preserved && m_autotileEngine) {
-            preserved = m_autotileEngine->capturePlacement(windowId);
+    if (treatAsMinimized && !fromStateChange) {
+        if (authoritativeScreen.isEmpty()) {
+            qCDebug(lcDbusWindow) << "Skipping placement capture for minimized window" << windowId;
+            return;
         }
+        // NOTE: AutotileEngine::capturePlacement has its own minimize-preserve
+        // branch (facade.cpp) for engine-internal sweeps that never pass
+        // through this adaptor; the two deliberately coexist. No engine
+        // fallback here: when the store has nothing to preserve, the engines
+        // can only report the generic live capture — a bare suspension float,
+        // the very record this branch exists to keep out of the store.
+        std::optional<PhosphorEngine::WindowPlacement> preserved = m_service->placementStore().peekExact(windowId);
         if (!preserved) {
             return;
         }
 
         preserved->windowId = shadowWindowId(windowId);
         preserved->appId = m_service->currentAppIdFor(windowId);
+        // What is preserved is the PLACEMENT (engine slots + free geometry).
+        // The CONTEXT is deliberately refreshed: authoritativeScreen is where
+        // the window actually closed, and windowContext() is the window's OWN
+        // desktop/activity from its live registry metadata (kept current by
+        // the effect's desktopsChanged/activitiesChanged pushes) — a window
+        // moved to another desktop while minimized must reopen there, not on
+        // the desktop frozen into a pre-minimize record.
         preserved->screenId = authoritativeScreen;
         const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
         if (const auto context = m_windowRegistry->windowContext(instanceId)) {
             preserved->virtualDesktop = context->virtualDesktop;
             preserved->activity = context->activity;
         }
+        // A pure-float record carries no engine slot, and record()'s merge
+        // only adopts context alongside engine slots — synthesize a floating
+        // slot (recordFloatingClose's convention) so the close screen lands.
+        if (preserved->engines.isEmpty() && !preserved->freeGeometryByScreen.isEmpty()) {
+            PhosphorEngine::EngineSlot slot;
+            slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+            preserved->engines.insert(QString(PhosphorEngine::WindowPlacement::snapEngineId()), slot);
+        }
+        // Contentless residue must never enter the appId FIFO (mirrors the
+        // primary capture path's gate): it would starve and evict real
+        // placements.
+        if (!preserved->hasRestorableContent()) {
+            return;
+        }
         const bool recorded = m_service->placementStore().record(*preserved);
+        // Close-path-only prune (this branch requires a non-empty
+        // authoritativeScreen above, which only the close path supplies) —
+        // live captures must never prune siblings.
         const bool collapsed =
             m_service->placementStore().collapsePureFloatSiblings(preserved->appId, preserved->windowId);
         if (recorded || collapsed) {

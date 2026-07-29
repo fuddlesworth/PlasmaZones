@@ -512,9 +512,14 @@ private:
      * `SnapEngine::emitBatchedResnap` — one batched signal per autotile
      * toggle instead of per-window D-Bus chatter. Zone-snapped windows are
      * already handled by `SnapAdaptor::resnapCurrentAssignments`.
+     *
+     * @param onlyScreenId When non-empty, restrict to that screen's saved
+     *        orders — the per-screen toggle must not emit restores for
+     *        windows still tiled on other screens.
      */
     QVector<ZoneAssignmentEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
-                                                             const QString& activity = QString());
+                                                             const QString& activity = QString(),
+                                                             const QString& onlyScreenId = QString());
 
     /** @brief Show layout OSD deferred (avoids blocking on first-time QML compilation) */
     void showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId);

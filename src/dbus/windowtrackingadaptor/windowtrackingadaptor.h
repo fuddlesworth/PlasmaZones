@@ -649,7 +649,14 @@ public:
     /// calls return nullopt and the live screen would otherwise be lost. In that
     /// case the float-back is recorded on @p authoritativeScreen via
     /// WindowTrackingService::recordFloatingClose.
-    void captureWindowPlacement(const QString& windowId, const QString& authoritativeScreen = QString());
+    /// @param fromStateChange Pass true when the capture is triggered by an
+    ///        authoritative engine state change (snap commit/uncommit relay):
+    ///        such a capture must run even for a minimized window, because the
+    ///        engine now reports the NEW committed state, not the transient
+    ///        minimize-suspension float the minimize guard exists to keep out
+    ///        of the store.
+    void captureWindowPlacement(const QString& windowId, const QString& authoritativeScreen = QString(),
+                                bool fromStateChange = false);
 
     /// Re-capture every open floating window's live geometry into the unified
     /// store at save time (no per-move hook fires for drags). Called before the

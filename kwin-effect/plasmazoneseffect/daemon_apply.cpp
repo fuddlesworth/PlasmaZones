@@ -377,8 +377,18 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             const auto guard = qScopeGuard([this] {
                 m_daemonGate.inGeometryApply = false;
             });
-            applyWindowGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
-                                /*skipAnimation=*/false, batchProfilePath);
+            // Minimized guard for float/restore entries (empty screenId), the
+            // batch twin of slotApplyGeometryRequested's check: applying the
+            // pre-tile geometry while minimized would poison what KWin
+            // restores to on unminimize, causing a visible flash of the
+            // pre-snap geometry before the unfloat re-snaps to the zone. The
+            // snap-tracking bookkeeping below still runs — the entry
+            // genuinely un-snaps the window regardless of visibility.
+            const bool skipMinimizedRestore = p.screenId.isEmpty() && p.window->isMinimized();
+            if (!skipMinimizedRestore) {
+                applyWindowGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
+                                    /*skipAnimation=*/false, batchProfilePath);
+            }
             // Snapping owns its border set (mirrors autotile). The daemon
             // supplies a non-empty authoritative screenId only for real
             // placements; an EMPTY screenId marks a float/restore entry

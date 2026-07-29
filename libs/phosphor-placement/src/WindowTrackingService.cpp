@@ -425,9 +425,25 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
     // free frame, and "autotile mode + not floating" cannot tell that apart from a
     // tiled window. The effect's saveAndRecordPreAutotileGeometry guards the tiled
     // case at capture time instead.)
-    if (isWindowSnapped(windowId) && !isWindowFloating(windowId)) {
+    // The float bit here must be the SNAP ENGINE'S OWN, not the mode-routed
+    // isWindowFloating(): the resolver answers via the screen's CURRENT mode,
+    // so on an autotile-mode screen a still-snapped window would read its
+    // float bit from the autotile engine (true when untracked), the AND would
+    // fail, and the zone rect would be written as the float-back — the guard
+    // failing open on exactly the mode-swap path it protects.
+    const PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId);
+    const bool snapFloating = snapState && snapState->isFloating(windowId);
+    if (isWindowSnapped(windowId) && !snapFloating) {
         qCDebug(lcPlacement) << "recordFreeGeometry: refusing snapped frame for" << windowId
                              << "— float-back stays frozen while it occupies a zone";
+        return;
+    }
+    // A minimized window's frame is never a genuine free position: it is
+    // whatever rect the window held when it was hidden (typically a zone or
+    // tile rect on managed screens). Engaged-true only — the minimize edge
+    // pushes fresh metadata before any capture traffic it triggers.
+    if (m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
+        qCDebug(lcPlacement) << "recordFreeGeometry: refusing minimized frame for" << windowId;
         return;
     }
     // Same invariant for the tiled case: an actively-tiled window's frame IS
@@ -479,6 +495,23 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     if (isWindowAutotileTiled(windowId)) {
         return;
     }
+    // Same snapped-frame guard as recordFreeGeometry (mode-independent snap
+    // float bit): a window closing while it actually occupies a zone must not
+    // write the zone rect into the shared free geometry.
+    {
+        const PhosphorSnapEngine::SnapState* snapState = snapForWindow(windowId);
+        const bool snapFloating = snapState && snapState->isFloating(windowId);
+        if (isWindowSnapped(windowId) && !snapFloating) {
+            qCDebug(lcPlacement) << "recordFloatingClose: refusing snapped frame for" << windowId;
+            return;
+        }
+    }
+    // And the minimized guard: a minimized close's frame is the hidden rect,
+    // not a free position.
+    if (m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
+        qCDebug(lcPlacement) << "recordFloatingClose: refusing minimized frame for" << windowId;
+        return;
+    }
     const QString appId = currentAppIdFor(windowId);
     if (appId.isEmpty()) {
         return;
@@ -504,8 +537,9 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
         p.engines = existing->engines;
     }
     if (p.engines.isEmpty()) {
-        // No prior record (first close after a cross-screen drag): synthesize a
-        // floating slot so the merge still adopts the screen. A floated restore
+        // No prior record, or a geometry-only record with no engine slot (the
+        // shape recordFreeGeometry produces): synthesize a floating slot so
+        // the merge still adopts the screen. A floated restore
         // keys off screenId + freeGeometryByScreen, not the slot's engine id, so
         // the slot id is not load-bearing here.
         PhosphorEngine::EngineSlot slot;

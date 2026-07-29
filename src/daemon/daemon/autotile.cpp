@@ -544,7 +544,7 @@ QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
 }
 
 QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
-                                                                 const QString& activity)
+                                                                 const QString& activity, const QString& onlyScreenId)
 {
     QVector<ZoneAssignmentEntry> entries;
     if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
@@ -558,13 +558,29 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
         if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
             continue;
         }
+        // Scope to the toggled screen when the caller says so. The per-screen
+        // mode toggle merges captured orders for EVERY active autotile screen
+        // into m_lastAutotileOrders, and two screens routinely share a
+        // (desktop, activity) pair — without this filter the toggle emits
+        // pre-tile restores for windows still happily tiled on OTHER screens
+        // and teleports them to their old float positions.
+        if (!onlyScreenId.isEmpty() && it.key().screenId != onlyScreenId) {
+            continue;
+        }
         const QString& screenId = it.key().screenId;
         for (const QString& windowId : it.value()) {
             if (excludeWindows.contains(windowId))
                 continue;
             if (wts->isWindowSnapped(windowId))
                 continue;
-            if (wts->isWindowFloating(windowId))
+            // Minimize exception, mirroring the seed/order-resnap filters: a
+            // minimized window reads as floating (suspension float) but must
+            // keep its restore entry — the effect skips the geometry apply
+            // for minimized windows and keeps only the bookkeeping, and the
+            // unminimize path re-resolves placement.
+            const bool minimized =
+                wts->windowRegistry() && wts->windowRegistry()->minimizedState(windowId).value_or(false);
+            if (wts->isWindowFloating(windowId) && !minimized)
                 continue;
             // Strict per-instance lookup — no appId fallback. A window that was
             // only ever auto-tiled (never explicitly snapped, never explicitly
@@ -599,6 +615,13 @@ void Daemon::presaveSnapFloats(const QString& screenId)
     // Runs while the screen is still in snapping mode, so captureWindowPlacement
     // routes to the snap engine and records the snap slot (= floating) plus the
     // shared free geometry from the live frame.
+    //
+    // MINIMIZED floating windows are a deliberate no-op inside
+    // captureWindowPlacement (its minimize guard): their record still holds
+    // the PRE-minimize state, which is exactly what the return path restores
+    // — windowsReleased's snapSnapped branch qualifies minimized windows via
+    // the registry, so a snapped-then-minimized window resnaps to its zone
+    // rather than needing a suspension-float slot written here.
     //
     // Reachable from `Settings::settingsChanged` (init_services.cpp) before the
     // engines exist — any synchronous re-entry into settingsChanged during the
@@ -654,6 +677,15 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
         // strict-seed path defers adding them until their windowOpened arrives,
         // preserving position without making a hidden window occupy a tile.
         const PhosphorEngine::WindowRegistry* registry = wts->windowRegistry();
+        if (!registry) {
+            // Without the registry every minimized window reads as
+            // not-minimized here AND the engine's own strict-seed deferral
+            // loses its second line of defence — the fail-open that seeds a
+            // hidden window into a tile. Loud, because in production the
+            // registry is always wired.
+            qCWarning(lcDaemon) << "seedAutotileOrderForScreen: no window registry —"
+                                << "minimized windows cannot be filtered for" << screenId;
+        }
         order.removeIf([wts, registry](const QString& windowId) {
             const bool minimized = registry && registry->isMinimized(windowId);
             if (!minimized && wts->isWindowFloating(windowId)) {
