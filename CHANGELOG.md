@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The support report script no longer needs Perl's JSON::PP module**: some distros package Perl core modules separately, so `plasmazones-report` failed with a module error and wrongly reported that the daemon was not running. The script now does all of its text processing with python3 ([#861](https://github.com/fuddlesworth/PlasmaZones/pull/861)).
+
 ## [3.3.1] - 2026-07-27
 
 ### Changed

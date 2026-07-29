@@ -119,9 +119,14 @@ QString DBusLayoutService::getLayoutIdForScreen(const QString& screenName)
         return QString();
     }
 
-    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("getLayoutForScreen"), {screenName});
+    // getAssignedLayoutForScreen, NOT getLayoutForScreen: the latter falls
+    // back to the registry-wide default layout for an unassigned screen, so
+    // switching the editor to that screen would open the default layout for
+    // in-place editing and a save would overwrite it (discussion #858). An
+    // empty reply here routes the caller to createNewLayout() instead.
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("getAssignedLayoutForScreen"), {screenName});
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-        qCWarning(lcDbus) << "getLayoutForScreen: failed, screen=" << screenName << errorMessage(reply);
+        qCWarning(lcDbus) << "getAssignedLayoutForScreen: failed, screen=" << screenName << errorMessage(reply);
         return QString();
     }
     return reply.arguments().constFirst().toString();

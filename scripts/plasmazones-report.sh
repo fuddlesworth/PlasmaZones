@@ -13,11 +13,14 @@
 # data/) so that triagers can inspect exact JSON without re-serialization
 # artefacts.
 #
-# Requires: plasmazonesd running, busctl (or qdbus6/qdbus), perl (with JSON::PP for busctl)
+# Requires: plasmazonesd running, busctl (or qdbus6/qdbus), python3 (stdlib
+# only). python3 replaced perl here: the old busctl path needed JSON::PP,
+# which is a Perl core module upstream but ships as a separate, not always
+# installed package on several distros ("Can't locate JSON/PP.pm in @INC").
 
 set -euo pipefail
 
-# These defaults mirror src/core/supportreport.cpp — keep in sync.
+# These defaults mirror src/core/platform/supportreport.cpp — keep in sync.
 SINCE_MINUTES=30       # DefaultSinceMinutes
 MAX_SINCE_MINUTES=120  # MaxSinceMinutes
 MAX_LOG_LINES=2000     # MaxLogLines
@@ -75,6 +78,15 @@ fi
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR=$(cd "$OUTPUT_DIR" && pwd)
 
+# python3 is required for JSON parsing and home-path redaction. Check up
+# front with a clear error: a missing interpreter failing mid-pipeline
+# would surface as the misleading "Could not connect to PlasmaZones
+# daemon." message (the exact failure mode the JSON::PP removal fixed).
+if ! command -v python3 &>/dev/null; then
+    echo "Error: python3 is required but was not found in PATH." >&2
+    exit 1
+fi
+
 # ─── D-Bus call ───────────────────────────────────────────────────────────────
 
 call_dbus() {
@@ -88,7 +100,7 @@ call_dbus() {
         local raw
         if raw=$(busctl --user --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null); then
             # Parse busctl JSON output: {"type":"s","data":["..."]}
-            perl -MJSON::PP -e 'print decode_json(do{local $/;<STDIN>})->{data}[0]' <<< "$raw"
+            python3 -c 'import json, sys; sys.stdout.write(json.load(sys.stdin)["data"][0])' <<< "$raw"
         else
             raw=$(busctl --user call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>&1) || {
                 echo "Error: D-Bus call failed: $raw" >&2
@@ -97,7 +109,13 @@ call_dbus() {
             # busctl plain output: 's "content..."' — extract and unescape C escapes.
             # Best-effort: busctl's plain format is not formally specified, so complex
             # embedded strings (e.g., literal backslash-n) may not round-trip perfectly.
-            perl -e '$_=do{local $/;<STDIN>}; s/^s "//; s/"\s*$//; s/\\n/\n/g; s/\\t/\t/g; s/\\"/"/g; s/\\\\/\\/g; print' <<< "$raw"
+            python3 -c '
+import re, sys
+s = sys.stdin.read()
+s = re.sub(r"^s \"", "", s)
+s = re.sub(r"\"\s*$", "", s)
+s = s.replace("\\n", "\n").replace("\\t", "\t").replace("\\\"", "\"").replace("\\\\", "\\")
+sys.stdout.write(s)' <<< "$raw"
         fi
     elif command -v qdbus6 &>/dev/null; then
         # Fallback only — see the busctl rationale above re: the Qt 6.11+ crash.
@@ -141,10 +159,27 @@ elif [[ "$HOME" = "/" ]]; then
 fi
 redact_home() {
     if [[ -n "${HOME:-}" ]] && [[ "$HOME" != "/" ]]; then
-        # Pass HOME via environment to avoid shell quoting issues (e.g., HOME containing
-        # single quotes). Perl reads $ENV{HOME} directly, and \Q..\E quotes it as literal.
-        # Handles both file arguments and piped stdin (perl reads stdin when no files given).
-        HOME="$HOME" perl -pe 's/\Q$ENV{HOME}\E(?=[\/\s]|$)/~/g' -- "$@"
+        # Pass HOME via environment to avoid shell quoting issues (e.g., HOME
+        # containing quotes); re.escape quotes it as a literal. Byte-oriented
+        # (environb, "rb", buffer) so a non-UTF-8 HOME or stray bytes in a
+        # journal line pass through unmangled. Processes line by line like
+        # the old perl -pe, so large inputs are never held fully in memory;
+        # $ in the lookahead matches at each (chomped or final) line end.
+        # Handles both file arguments and piped stdin (no files given).
+        HOME="$HOME" python3 -c '
+import os, re, sys
+pat = re.compile(re.escape(os.environb[b"HOME"]) + rb"(?=[/\s]|$)", re.M)
+out = sys.stdout.buffer
+def redact(stream):
+    for line in stream:
+        out.write(pat.sub(b"~", line))
+files = sys.argv[1:]
+if files:
+    for f in files:
+        with open(f, "rb") as fh:
+            redact(fh)
+else:
+    redact(sys.stdin.buffer)' "$@"
     elif [[ $# -gt 0 ]]; then
         cat "$@"
     else
@@ -266,7 +301,7 @@ if command -v journalctl &>/dev/null; then
 
     # Truncate to the most recent MaxLogLines (the entries around a failure),
     # then redact via temp file to avoid SIGPIPE. tail keeps the newest lines,
-    # matching SupportReport::capLogLines() in src/core/supportreport.cpp.
+    # matching capLogLines() in src/core/platform/supportreport.cpp.
     if [[ -n "${JOURNAL:-}" ]]; then
         printf '%s\n' "$JOURNAL" > "$STAGING/journal.raw"
         tail -n "$MAX_LOG_LINES" "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"

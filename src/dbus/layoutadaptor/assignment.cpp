@@ -61,6 +61,21 @@ QString LayoutAdaptor::getLayoutForScreen(const QString& screenId)
     return layout ? layout->id().toString() : QString();
 }
 
+QString LayoutAdaptor::getAssignedLayoutForScreen(const QString& screenId)
+{
+    QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
+    // Same context resolution as getLayoutForScreen: the queried screen's own
+    // desktop plus the current activity.
+    int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(resolvedId) : 0;
+    QString activity = m_activityManager ? m_activityManager->currentActivity() : QString();
+
+    // Cascade only — empty means the screen has no assignment of its own and
+    // the caller must NOT be handed the registry-wide default (the editor
+    // would otherwise open the default layout for in-place editing and a
+    // save would overwrite it; discussion #858).
+    return m_layoutManager->storedAssignmentIdForScreen(resolvedId, desktop, activity);
+}
+
 void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString& layoutId)
 {
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("assign layout"))) {
