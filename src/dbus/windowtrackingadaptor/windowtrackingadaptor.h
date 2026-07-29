@@ -1,6 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): this header exceeds the 1150-line ceiling
+// because it declares BOTH the D-Bus wire surface (slots whose signatures are
+// pinned by the interface XML) and the in-process orchestration API the daemon
+// wires. Splitting would sever the wire methods from the state they document
+// against; the cost of the split outweighs the ceiling here.
+
 #pragma once
 
 #include "plasmazones_export.h"
@@ -453,8 +459,13 @@ public Q_SLOTS:
     QStringList getWindowsInZone(const QString& zoneId);
     QStringList getSnappedWindows();
 
-    /// Remove zone/screen/desktop assignments for windows not in the alive set.
-    /// Called by the KWin effect after daemon ready to clean up stale KConfig entries
+    /// Remove per-window state for windows not in the alive set: zone/screen/
+    /// desktop assignments, the sticky map and legacy float set, both engines'
+    /// tracking (via their pruneStaleWindows overrides — TilingState/SnapState
+    /// membership, pending orders, min-size and last-rect caches), the
+    /// registry's metadata + canonical entries, and the adaptor's own
+    /// frame-geometry/broadcast shadow maps.
+    /// Called by the KWin effect after daemon ready to clean up stale entries
     /// from windows that no longer exist (closed between save and daemon restart).
     void pruneStaleWindows(const QStringList& aliveWindowIds);
 
@@ -669,10 +680,12 @@ public:
     void captureWindowPlacement(const QString& windowId, const QString& authoritativeScreen = QString(),
                                 bool fromStateChange = false);
 
-    /// Re-capture every open floating window's live geometry into the unified
-    /// store at save time (no per-move hook fires for drags). Called before the
-    /// dirty snapshot in saveState so a dragged floated window persists its
-    /// current position across a daemon restart.
+    /// Re-capture EVERY open window's live placement into the unified store
+    /// at save time — engine-agnostic, not floating-only: floated windows
+    /// contribute their live geometry (no per-move hook fires for drags),
+    /// snapped/tiled windows their current slot state. Called before the
+    /// dirty snapshot in saveState so open-window state survives a daemon
+    /// restart.
     void refreshOpenWindowPlacements();
 
     /**
@@ -948,8 +961,16 @@ Q_SIGNALS:
 public Q_SLOTS:
     /**
      * @brief Set a window's floating state explicitly (directional, not toggle).
-     * Routes to autotile engine for autotile screens, handles snap mode locally.
-     * Used by minimize/unminimize, drag-to-float, and monocle unmaximize handlers.
+     *
+     * Routes by the (validated/recovered) screen's mode to a DEST engine, with
+     * the other engine as SOURCE. A window the destination does not yet track
+     * goes through the cross-engine handoff contract first: floats adopt
+     * unconditionally (releasing a tracked source); an unfloat whose float bit
+     * lives in the source is adopted by an autotile destination (tiling the
+     * arrival) or, for a snap destination, released from the source with a
+     * not-floating broadcast. The suspension-float classification is stamped
+     * before routing. Used by minimize/unminimize, drag-to-float, and monocle
+     * unmaximize handlers.
      */
     void setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating);
 

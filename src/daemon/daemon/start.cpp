@@ -392,10 +392,13 @@ void Daemon::connectDesktopActivity()
             pruneContextMapsForActivities(validSet);
         });
 
-        // Set initial activity on components that maintain their own copy
+        // Set initial activity on components that maintain their own copy.
+        // Layout registry FIRST: the overlay's setter runs a refresh pass
+        // that resolves assignments through the registry, so updating the
+        // overlay first would render one pass against the old activity.
         const QString initialActivity = m_activityManager->currentActivity();
-        m_overlayService->setCurrentActivity(initialActivity);
         m_layoutManager->setCurrentActivity(initialActivity);
+        m_overlayService->setCurrentActivity(initialActivity);
         if (m_autotileEngine) {
             m_autotileEngine->setCurrentActivity(initialActivity);
         }
@@ -406,8 +409,10 @@ void Daemon::connectDesktopActivity()
         // Connect activity changes: update all components
         connect(m_activityManager.get(), &PhosphorWorkspaces::ActivityManager::currentActivityChanged, this,
                 [this](const QString& activityId) {
-                    m_overlayService->setCurrentActivity(activityId);
+                    // Registry before overlay — see the initial-activity note
+                    // above (the overlay's refresh resolves via the registry).
                     m_layoutManager->setCurrentActivity(activityId);
+                    m_overlayService->setCurrentActivity(activityId);
                     if (m_unifiedLayoutController) {
                         m_unifiedLayoutController->setCurrentActivity(activityId);
                     }

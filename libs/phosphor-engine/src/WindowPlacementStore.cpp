@@ -14,6 +14,12 @@
 namespace PhosphorEngine {
 
 namespace {
+// Instance-identity match for STORE keys. Contract note: ids without a '|'
+// separator only match EXACTLY here — unlike the registry's
+// extractInstanceId, which treats a bare string AS the instance id. The store
+// is only ever keyed with full appId|uuid composites (capture and restore
+// both build them), so a bare id reaching this predicate is foreign input
+// that must not fuzzy-match a composite's uuid component.
 bool sameWindowInstance(const QString& lhs, const QString& rhs)
 {
     if (lhs == rhs) {

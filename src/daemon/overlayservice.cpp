@@ -308,9 +308,6 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
                            << "shader-timer restart on resume will not run";
     }
 
-    // Reset shader error state on construction (fresh start after reboot)
-    m_pendingShaderError.clear();
-
     m_audioProvider = std::make_unique<PhosphorAudio::CavaSpectrumProvider>();
     connect(m_audioProvider.get(), &PhosphorAudio::IAudioSpectrumProvider::spectrumUpdated, this,
             &OverlayService::onAudioSpectrumUpdated);
@@ -567,7 +564,13 @@ void OverlayService::setContextResolver(PhosphorContext::IContextResolver* resol
 
 bool OverlayService::isSnappingContextDisabled(const QString& screenId) const
 {
-    if (!m_contextResolver || screenId.isEmpty()) {
+    // Fail CLOSED on a null resolver, mirroring Daemon::isFocusedContextGated:
+    // the resolver is only null before wiring or during teardown, and showing
+    // overlay UI in either window is worse than briefly suppressing it.
+    if (!m_contextResolver) {
+        return true;
+    }
+    if (screenId.isEmpty()) {
         return false;
     }
     PhosphorContext::ContextHandle handle =
@@ -723,9 +726,9 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     // Both buildLayoutsList (populates the popup) and visibleLayoutCount
     // (used by isNearTriggerEdge to size the keep-visible bar) go through
     // here so the trigger geometry matches the rendered popup row count.
-    // If the resolver ever skips setting one of the fields, the struct's
-    // in-class defaults (both true) supply a safe "show everything"
-    // fallback rather than UB.
+    // The brace-init seeds BOTH fields from the settings-backed member
+    // toggles (so the struct's in-class defaults never apply here); the
+    // resolution below only narrows them per screen.
     LayoutIncludeFlags flags{m_includeManualLayouts, m_includeAutotileLayouts};
     if (!m_layoutManager) {
         return flags;
@@ -813,9 +816,9 @@ void OverlayService::onPrepareForSleep(bool goingToSleep)
 
 void OverlayService::onShaderError(const QString& errorLog)
 {
+    // Log-only by design: no error latch — shaders retry on the next show
+    // (fix bugs, don't mask them).
     qCWarning(lcOverlay) << "Shader error during overlay:" << errorLog;
-    m_pendingShaderError = errorLog;
-    // Don't set m_shaderErrorPending - retry shaders on next show (fix bugs, don't mask)
 }
 
 } // namespace PlasmaZones

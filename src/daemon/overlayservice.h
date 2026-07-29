@@ -1117,7 +1117,6 @@ private:
 
     // Shader state
     bool m_zoneDataDirty = true;
-    QString m_pendingShaderError;
 
     // Scope generation delegated to m_surfaceManager->nextScopeGeneration().
 

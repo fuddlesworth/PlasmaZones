@@ -341,9 +341,13 @@ private Q_SLOTS:
         const QString canonical = QStringLiteral("app|reentrant-instance");
         reg.upsert(instanceId, make(QStringLiteral("app")));
         reg.canonicalizeWindowId(canonical);
+        // No QCOMPARE inside the lambda: a failing compare there returns from
+        // the LAMBDA, not the test — capture and assert after.
+        QString observedRemovedId;
+        QString observedCanonical;
         connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
-            QCOMPARE(removedId, instanceId);
-            QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|reentrant-instance")), canonical);
+            observedRemovedId = removedId;
+            observedCanonical = reg.canonicalizeForLookup(QStringLiteral("renamed|reentrant-instance"));
             reg.remove(instanceId);
             reg.clear();
         });
@@ -352,6 +356,8 @@ private Q_SLOTS:
         reg.remove(instanceId);
 
         QCOMPARE(disappeared.size(), 1);
+        QCOMPARE(observedRemovedId, instanceId);
+        QCOMPARE(observedCanonical, canonical);
         QVERIFY(!reg.contains(instanceId));
         QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|reentrant-instance")),
                  QStringLiteral("renamed|reentrant-instance"));
@@ -363,22 +369,28 @@ private Q_SLOTS:
         const QString instanceId = QStringLiteral("reinserted-instance");
         reg.upsert(instanceId, make(QStringLiteral("old-app")));
         bool reinserted = false;
+        // Event ACCUMULATOR (id-carrying), not a bare count: two
+        // disappearances of the wrong ids would satisfy a count-only pin.
+        QStringList events;
         connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
+            events.append(QStringLiteral("disappeared:") + removedId);
             if (!reinserted) {
                 reinserted = true;
                 reg.upsert(removedId, make(QStringLiteral("new-app")));
             }
         });
         connect(&reg, &WindowRegistry::windowAppeared, &reg, [&](const QString& appearedId) {
+            events.append(QStringLiteral("appeared:") + appearedId);
             if (reinserted) {
                 reg.remove(appearedId);
             }
         });
-        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
 
         reg.remove(instanceId);
 
-        QCOMPARE(disappeared.size(), 2);
+        QCOMPARE(events,
+                 (QStringList{QStringLiteral("disappeared:") + instanceId, QStringLiteral("appeared:") + instanceId,
+                              QStringLiteral("disappeared:") + instanceId}));
         QVERIFY(!reg.contains(instanceId));
         QVERIFY(reg.instancesWithAppId(QStringLiteral("new-app")).isEmpty());
     }
@@ -473,19 +485,37 @@ private Q_SLOTS:
             [](WindowMetadata& m) {
                 m.windowType = PhosphorProtocol::WindowType::Dialog;
             },
+            // Extended-field representatives, one per shape: the span list,
+            // an optional<int>, and an optional<bool> — pins that the widened
+            // operator== covers the extended block, not just the wide scalars.
+            [](WindowMetadata& m) {
+                m.virtualDesktops = QList<int>{1, 2};
+            },
+            [](WindowMetadata& m) {
+                m.width = 1280;
+            },
+            [](WindowMetadata& m) {
+                m.isMinimized = true;
+            },
         };
 
-        for (const auto& mutate : mutators) {
+        // Accumulate failures instead of QCOMPARE-ing inside the loop: an
+        // in-loop abort hides which LATER mutators also regressed.
+        QStringList failures;
+        for (int i = 0; i < mutators.size(); ++i) {
             WindowRegistry reg;
             reg.upsert(QStringLiteral("u1"), base);
             QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
 
             WindowMetadata next = base;
-            mutate(next);
+            mutators.at(i)(next);
             reg.upsert(QStringLiteral("u1"), next);
 
-            QCOMPARE(changed.size(), 1);
+            if (changed.size() != 1) {
+                failures.append(QStringLiteral("mutator %1 emitted %2 (expected 1)").arg(i).arg(changed.size()));
+            }
         }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
     }
 
     // ────────────────────────────────────────────────────────────────────

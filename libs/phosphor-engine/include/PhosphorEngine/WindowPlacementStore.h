@@ -141,11 +141,14 @@ private:
     /// placements — see the implementation comment.
     static void evictForCapacity(QList<WindowPlacement>& bucket);
 
+public:
+    /// Per-app record cap (public so tests can pin the eviction contract).
+    static constexpr int MaxPerApp = 16;
+
+private:
     /// appId → FIFO list of records (preserves multi-instance + close/reopen order).
     QHash<QString, QList<WindowPlacement>> m_byApp;
     quint64 m_sequence = 0;
-
-    static constexpr int MaxPerApp = 16;
 };
 
 } // namespace PhosphorEngine

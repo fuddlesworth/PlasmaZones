@@ -812,6 +812,57 @@ private Q_SLOTS:
         QVERIFY(!store.contains(QStringLiteral("dolphin|old-uuid")));
     }
 
+    void testDeserialize_overCapBucketIsCappedByReplay()
+    {
+        // The per-app cap moved out of deserialize into record()'s replay
+        // path; a persisted bucket exceeding MaxPerApp (hand-edited file, or
+        // a cap lowered between versions) must still come back capped.
+        WindowPlacementStore store;
+        for (int i = 0; i < WindowPlacementStore::MaxPerApp; ++i) {
+            store.record(make(QStringLiteral("dolphin|u%1").arg(i), QStringLiteral("dolphin"),
+                              WindowPlacement::stateFloating(), WindowPlacement::snapEngineId()));
+        }
+        QJsonObject serialized = store.serialize();
+        // Splice extra entries into the persisted bucket beyond the cap.
+        QJsonArray bucket = serialized.value(QStringLiteral("dolphin")).toArray();
+        const QJsonObject younger = bucket.last().toObject();
+        for (int i = 0; i < 4; ++i) {
+            bucket.append(younger);
+        }
+        serialized.insert(QStringLiteral("dolphin"), bucket);
+
+        WindowPlacementStore reloaded;
+        reloaded.deserialize(serialized);
+        QCOMPARE(reloaded.size(), WindowPlacementStore::MaxPerApp);
+    }
+
+    void testRecord_renameIntoFullBucket_evictsAndAppendsNewest()
+    {
+        // A mid-session appId rename moves the record into the new bucket;
+        // when that bucket is already at capacity the OLDEST entry is evicted
+        // and the moved record lands NEWEST in the FIFO.
+        WindowPlacementStore store;
+        for (int i = 0; i < WindowPlacementStore::MaxPerApp; ++i) {
+            store.record(make(QStringLiteral("newapp|f%1").arg(i), QStringLiteral("newapp"),
+                              WindowPlacement::stateFloating(), WindowPlacement::snapEngineId()));
+        }
+        store.record(make(QStringLiteral("oldapp|renamer"), QStringLiteral("oldapp"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId()));
+
+        // Rename: same instance re-recorded under the full bucket's appId.
+        QVERIFY(store.record(make(QStringLiteral("newapp|renamer"), QStringLiteral("newapp"),
+                                  WindowPlacement::stateFloating(), WindowPlacement::snapEngineId())));
+
+        QCOMPARE(store.size(), WindowPlacementStore::MaxPerApp);
+        QVERIFY(!store.contains(QStringLiteral("newapp|f0"))); // oldest evicted
+        QVERIFY(store.contains(QStringLiteral("newapp|renamer")));
+        // FIFO position: the moved record is NEWEST, so the appId-FIFO
+        // fallback hands out a surviving older sibling first.
+        const auto oldest = store.take(QStringLiteral("newapp|fresh-uuid"), QStringLiteral("newapp"));
+        QVERIFY(oldest.has_value());
+        QCOMPARE(oldest->windowId, QStringLiteral("newapp|f1"));
+    }
+
     void testDeserialize_preservesAppIdFifoOrder()
     {
         // The per-app bucket is a FIFO: take() consumes oldest-first so
