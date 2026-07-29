@@ -100,6 +100,12 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     if (!validateWindowId(windowId, QStringLiteral("set float state"))) {
         return;
     }
+    // Suspension classification — see WindowTrackingService::isSuspensionFloat.
+    if (floating && m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
+        m_service->markSuspensionFloat(windowId);
+    } else if (!floating) {
+        m_service->clearSuspensionFloat(windowId);
+    }
     m_service->setWindowFloating(windowId, floating);
     // Gate the signal emissions on a real change in what we last BROADCAST, not
     // on a re-query of the service's float state. Under the per-engine float
@@ -208,6 +214,17 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
 
     qCInfo(lcDbusWindow) << "setWindowFloatingForScreen: windowId=" << windowId << "floating=" << floating
                          << "screen=" << effectiveScreenId;
+
+    // Classify BEFORE routing so any capture the write triggers synchronously
+    // already sees the suspension bit (minimize state is fresh here — the
+    // effect pushes metadata ahead of float traffic on the same edge).
+    if (m_service) {
+        if (floating && m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
+            m_service->markSuspensionFloat(windowId);
+        } else if (!floating) {
+            m_service->clearSuspensionFloat(windowId);
+        }
+    }
 
     // Route to the correct engine based on screen mode. Both directions go
     // through the explicit cross-engine handoff contract when the window

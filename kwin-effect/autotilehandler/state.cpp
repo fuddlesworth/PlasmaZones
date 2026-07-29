@@ -209,7 +209,7 @@ void AutotileHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const Q
         // switch, a re-tile (re-notified), the screen re-entering
         // autotile, a snap commit, a float toggle, or the user actively
         // moving/resizing it.
-        if (!safeW->isOnCurrentDesktop() || m_notifiedWindows.contains(windowId)
+        if (!safeW->isOnCurrentDesktop() || !safeW->isOnCurrentActivity() || m_notifiedWindows.contains(windowId)
             || m_autotileScreens.contains(m_effect->getWindowScreenId(safeW))
             || m_effect->isWindowMarkedSnapped(windowId) || m_effect->isWindowFloating(windowId) || safeW->isUserMove()
             || safeW->isUserResize()) {

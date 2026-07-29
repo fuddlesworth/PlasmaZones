@@ -89,6 +89,16 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual bool isWindowFloating(const QString& windowId) const = 0;
+    /// Whether the window's float is a MINIMIZE SUSPENSION rather than
+    /// placement intent. Outlives the live minimize bit through the
+    /// unminimize animation grace so capture paths can keep preserving the
+    /// pre-minimize record. Default false for implementations that do not
+    /// track the classification.
+    virtual bool isSuspensionFloat(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
     virtual void setWindowFloating(const QString& windowId, bool floating) = 0;
     virtual void unsnapForFloat(const QString& windowId) = 0;
     virtual bool clearFloatingForSnap(const QString& windowId) = 0;

@@ -169,6 +169,31 @@ QStringList AutotileEngine::tiledWindowOrder(const QString& screenId) const
     return state->tiledWindows();
 }
 
+QStringList AutotileEngine::capturedWindowOrder(const QString& screenId) const
+{
+    const TilingStateKey key = currentKeyForScreen(screenId);
+    PhosphorTiles::TilingState* state = m_states.stateForKey(key);
+    if (!state) {
+        return {};
+    }
+    // Full order minus GENUINE floats: a floating window whose registry
+    // state says minimized is a suspension float and keeps its position in
+    // the captured order (see managedWindowOrder's doc).
+    QStringList order;
+    const QStringList full = state->windowOrder();
+    order.reserve(full.size());
+    for (const QString& windowId : full) {
+        if (state->isFloating(windowId)) {
+            const bool minimized = m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false);
+            if (!minimized) {
+                continue;
+            }
+        }
+        order.append(windowId);
+    }
+    return order;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings synchronization
 // ═══════════════════════════════════════════════════════════════════════════════

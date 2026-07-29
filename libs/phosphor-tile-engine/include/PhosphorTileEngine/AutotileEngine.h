@@ -202,10 +202,18 @@ public:
     {
         setAutotileScreens(screens);
     }
+    /// Capture-on-leave order: the tiled order PLUS minimize-floated windows
+    /// at their windowOrder positions. A minimize-float is a suspension, not
+    /// intent — dropping it here (as a bare tiledWindows() read would) makes
+    /// the window's position vanish from the saved order, so a
+    /// tiled→minimize→mode-round-trip loses its slot even though the seed
+    /// filter deliberately keeps minimized windows as placeholders. Genuine
+    /// (non-minimized) floats stay excluded.
     QStringList managedWindowOrder(const QString& screenId) const override
     {
-        return tiledWindowOrder(screenId);
+        return capturedWindowOrder(screenId);
     }
+    QStringList capturedWindowOrder(const QString& screenId) const;
     bool isModeSpecificFloated(const QString& windowId) const override
     {
         return isAutotileFloated(windowId);

@@ -774,7 +774,14 @@ private Q_SLOTS:
         QVERIFY(minimizedCapture);
         QCOMPARE(minimizedCapture->slotFor(engine.engineId()).state,
                  QString(PhosphorEngine::WindowPlacement::stateTiled()));
-        QCOMPARE(minimizedCapture->slotFor(engine.engineId()).order, 0);
+        // The DURABLE order survives: the live windowOrder position of a
+        // minimize-floated window is the suspension artifact (handoff insert
+        // index), so the preserve branch must keep the stored slot's order
+        // (7, from the recorded baseline) rather than refreshing from it.
+        QCOMPARE(minimizedCapture->slotFor(engine.engineId()).order, before->slotFor(engine.engineId()).order);
+        // Context comes from the live TilingStateKey by design (the engine's
+        // current screen/desktop/activity for the window), matching what the
+        // visible capture reported.
         QCOMPARE(minimizedCapture->screenId, tiledPlacement->screenId);
         QCOMPARE(minimizedCapture->virtualDesktop, tiledPlacement->virtualDesktop);
         QCOMPARE(minimizedCapture->activity, tiledPlacement->activity);

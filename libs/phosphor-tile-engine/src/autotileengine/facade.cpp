@@ -322,7 +322,12 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     // preserve branch fires only on ENGAGED true — the capture must not
     // preserve-and-freeze a visible window's slot just because its record is
     // missing.
-    const bool minimized = m_windowRegistry && m_windowRegistry->minimizedState(wid).value_or(false);
+    // isSuspensionFloat covers the unminimize grace: the live minimize bit
+    // flips false at the edge while the window is still suspension-floated
+    // until the deferred unfloat commits, and a capture in that window must
+    // still preserve rather than record the float.
+    const bool minimized = (m_windowRegistry && m_windowRegistry->minimizedState(wid).value_or(false))
+        || (m_windowTracker && m_windowTracker->isSuspensionFloat(wid));
     if (minimized && m_windowTracker) {
         const auto existing = m_windowTracker->placementStore().peekExact(wid);
         if (existing && !existing->slotFor(engineId()).isEmpty()) {
@@ -331,8 +336,18 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
             // its order and context from the retained live TilingState so a
             // recent swap or migration is not reverted by a stale store entry.
             PhosphorEngine::EngineSlot slot = existing->slotFor(engineId());
-            if (slot.state == WindowPlacement::stateTiled()) {
-                slot.order = state->windowOrder().indexOf(wid);
+            // Refresh the order ONLY when the live state still contains the
+            // window as a non-floating member: a minimize-floated window's
+            // position in windowOrder() is the artifact of the suspension
+            // (handoffReceive inserts at the insert-position index), not the
+            // pre-minimize position this branch exists to preserve. And never
+            // write indexOf's -1 over a valid persisted order — a keyed-but-
+            // unmembered window (mid-migration) must keep its stored slot.
+            if (slot.state == WindowPlacement::stateTiled() && !state->isFloating(wid)) {
+                const int liveIdx = state->windowOrder().indexOf(wid);
+                if (liveIdx >= 0) {
+                    slot.order = liveIdx;
+                }
             }
             WindowPlacement preserved;
             preserved.windowId = wid;
@@ -371,8 +386,14 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     if (minimized) {
         // No prior autotile slot exists yet. The temporary minimize float was
         // entered before the first persistence sweep, so reconstruct the
-        // durable pre-minimize state from the retained window order.
-        slot.state = WindowPlacement::stateTiled();
+        // durable pre-minimize state from the retained window order. The
+        // explicit user-float MARKER survives the suspension (only the float
+        // shortcut paths set it), so an explicitly floated window keeps its
+        // float intent instead of being flattened to tiled; a drag-float
+        // minimized before any sweep is indistinguishable here and
+        // reconstructs as tiled (accepted residual).
+        slot.state =
+            isAutotileFloated(wid) ? QString(WindowPlacement::stateFloating()) : QString(WindowPlacement::stateTiled());
         slot.order = state->windowOrder().indexOf(wid);
     } else if (state->isFloating(wid) && !m_overflow.isOverflow(wid)) {
         slot.state = WindowPlacement::stateFloating();

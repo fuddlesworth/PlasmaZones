@@ -581,6 +581,21 @@ void WindowTrackingService::clearFreeGeometry(const QString& windowId)
 // Floating Window State
 // ═══════════════════════════════════════════════════════════════════════════════
 
+bool WindowTrackingService::isSuspensionFloat(const QString& windowId) const
+{
+    return m_suspensionFloats.contains(canonicalizeForLookup(windowId));
+}
+
+void WindowTrackingService::markSuspensionFloat(const QString& windowId)
+{
+    m_suspensionFloats.insert(canonicalizeForLookup(windowId));
+}
+
+void WindowTrackingService::clearSuspensionFloat(const QString& windowId)
+{
+    m_suspensionFloats.remove(canonicalizeForLookup(windowId));
+}
+
 bool WindowTrackingService::isWindowFloating(const QString& windowId) const
 {
     // Per-engine answer: when the daemon has wired the resolver, the float bit

@@ -73,6 +73,11 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         treatAsMinimized =
             minimized.value_or(m_windowRegistry->contains(PhosphorIdentity::WindowId::extractInstanceId(windowId)));
     }
+    // The suspension-float classification outlives the live minimize bit: on
+    // the unminimize edge isMinimized flips false immediately while the
+    // unfloat only commits after the animation grace, and a capture landing
+    // inside that window must still take the preserve path.
+    treatAsMinimized = treatAsMinimized || m_service->isSuspensionFloat(windowId);
     if (treatAsMinimized && !fromStateChange) {
         if (authoritativeScreen.isEmpty()) {
             qCDebug(lcDbusWindow) << "Skipping placement capture for minimized window" << windowId;
@@ -542,6 +547,8 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     m_frameGeometry.remove(shadowId);
     // Drop the last-broadcast floating state for this window.
     m_broadcastFloating.remove(shadowId);
+    // Session-transient suspension-float classification dies with the window.
+    m_service->clearSuspensionFloat(windowId);
 
     m_service->windowClosed(windowId, kind);
 

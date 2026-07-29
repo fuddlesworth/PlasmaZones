@@ -232,7 +232,13 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 // stacking order — getWindowScreenId/getWindowId on them
                 // would re-pollute the scrubbed id caches.
                 if (w && !w->isDeleted() && removed.contains(m_effect->getWindowScreenId(w))) {
-                    if (!w->isOnCurrentDesktop()) {
+                    // Activity axis too: an ACTIVITY switch arrives here with
+                    // isDesktopSwitch=true as well (the engine ORs both into
+                    // the switch flag), and a window of the left activity is
+                    // still on the current desktop — it must be demoted the
+                    // same way, or pass 2 un-tiles it below (#808, activity
+                    // variant).
+                    if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
                         const QString wid = m_effect->getWindowId(w);
                         if (m_notifiedWindows.remove(wid)) {
                             m_notifiedWindowScreens.remove(wid);
@@ -255,7 +261,10 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             for (KWin::EffectWindow* w : windows) {
                 // isDeleted: a window mid-close must not be churned through
                 // the per-window restore steps (same cache hygiene as pass 1).
-                if (!w || w->isDeleted() || !w->isOnCurrentDesktop()) {
+                // Activity term matches pass 1: a left-activity window is
+                // still tiled in that activity's live session and must not be
+                // restored/teleported here.
+                if (!w || w->isDeleted() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
                     continue;
                 }
                 const QString screenId = m_effect->getWindowScreenId(w);
@@ -271,7 +280,11 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 // that session. The only sanctioned restore for these windows
                 // is the genuine-toggle path below (full disable arrives with
                 // isDesktopSwitch=false and an empty set).
-                if (w->isOnAllDesktops() || w->desktops().size() > 1) {
+                // Activities carry the same hazard: empty activities() means
+                // all-activities, and a multi-activity window may be tiled in
+                // another activity's live session.
+                if (w->isOnAllDesktops() || w->desktops().size() > 1 || w->activities().isEmpty()
+                    || w->activities().size() > 1) {
                     continue;
                 }
                 const QString windowId = m_effect->getWindowId(w);
@@ -376,11 +389,12 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             QSet<QString> windowsOnRemovedScreens;
             for (KWin::EffectWindow* w : windows) {
                 if (w && removed.contains(m_effect->getWindowScreenId(w))) {
-                    // Only restore borders for windows on the CURRENT desktop.
-                    // Windows on other desktops may still be autotiled and must keep
-                    // their borderless state — restoring them here would leak title bars
-                    // into other desktops' autotile sessions.
-                    if (!w->isOnCurrentDesktop()) {
+                    // Only restore borders for windows on the CURRENT desktop
+                    // AND activity. Windows in other contexts may still be
+                    // autotiled and must keep their borderless state —
+                    // restoring them here would leak title bars into those
+                    // contexts' autotile sessions.
+                    if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
                         continue;
                     }
                     // Skip sticky (all-desktops) and multi-desktop windows when
@@ -415,8 +429,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             for (const QString& screenId : removed) {
                 QStringList autotileOrder;
                 for (KWin::EffectWindow* w : windows) {
-                    if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
-                        && m_effect->getWindowScreenId(w) == screenId) {
+                    if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
+                        && w->isOnCurrentActivity() && m_effect->getWindowScreenId(w) == screenId) {
                         autotileOrder.append(m_effect->getWindowId(w));
                     }
                 }
@@ -428,7 +442,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // Unmaximize monocle windows on removed screens so they return to
             // normal geometry when resnapped or restored.
             for (KWin::EffectWindow* w : windows) {
-                if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()) {
+                if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
+                    || !w->isOnCurrentActivity()) {
                     continue;
                 }
                 const QString screenId = m_effect->getWindowScreenId(w);

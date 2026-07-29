@@ -407,6 +407,22 @@ public:
     bool isWindowFloating(const QString& windowId) const override;
 
     /**
+     * @brief Suspension-float classification (minimize-floats).
+     *
+     * A float applied while the compositor reported the window MINIMIZED is a
+     * suspension, not placement intent, and the classification must OUTLIVE
+     * the live minimize bit: on the unminimize edge the effect's metadata push
+     * flips isMinimized to false immediately, while the unfloat only commits
+     * after the animation grace — a placement capture landing inside that
+     * window would otherwise persist the suspension float as a genuine user
+     * float. Marked by the adaptor at the float WRITE (where minimize state is
+     * still fresh), cleared on unfloat and on windowClosed.
+     */
+    bool isSuspensionFloat(const QString& windowId) const override;
+    void markSuspensionFloat(const QString& windowId);
+    void clearSuspensionFloat(const QString& windowId);
+
+    /**
      * @brief Set window floating state
      *
      * Routes to the engine owning the window's current screen mode via the
@@ -1090,6 +1106,11 @@ private:
     // m_engineFloatResolver / m_engineFloatWriter and this set is never read or
     // written by isWindowFloating / setWindowFloating.
     QSet<QString> m_floatingWindows;
+
+    // Suspension-float classification — see isSuspensionFloat(). Canonical-
+    // keyed. Session-transient (never persisted): a restart's restored floats
+    // are re-classified when their windows re-report minimize state.
+    QSet<QString> m_suspensionFloats;
 
     // Daemon-injected per-engine float reader/writer/lister. See setEngineFloatResolver.
     EngineFloatResolver m_engineFloatResolver{};
