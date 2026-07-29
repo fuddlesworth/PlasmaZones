@@ -566,10 +566,10 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
     if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
         return entries;
     }
+    // No null-check on service(): the adaptor constructs and owns its service
+    // (never null once the adaptor exists) — the sibling callers in this file
+    // rely on the same invariant.
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-    if (!wts) {
-        return entries;
-    }
     for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
         if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
             continue;

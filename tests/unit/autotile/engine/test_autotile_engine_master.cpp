@@ -98,6 +98,7 @@ private Q_SLOTS:
 
         const qreal initial1 = state1->splitRatio();
         const qreal initial2 = state2->splitRatio();
+        const qreal globalBefore = engine.config()->splitRatio;
 
         // Use windowFocused to properly set m_activeScreen on the engine
         engine.windowFocused(QStringLiteral("win1"), screen1);
@@ -107,6 +108,9 @@ private Q_SLOTS:
         // Only the focused screen's ratio should change
         QVERIFY(qFuzzyCompare(state1->splitRatio(), initial1 - 0.1));
         QVERIFY(qFuzzyCompare(state2->splitRatio(), initial2));
+        // Same no-bleed contract as the increase twin: the per-desktop tweak
+        // must not land in the global config.
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, globalBefore));
     }
 
     // =========================================================================
@@ -161,12 +165,15 @@ private Q_SLOTS:
         PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
         state1->setMasterCount(2);
         state2->setMasterCount(2);
+        const int globalBefore = engine.config()->masterCount;
 
         engine.windowFocused(QStringLiteral("win1"), screen1);
         engine.decreaseMasterCount();
 
         QCOMPARE(state1->masterCount(), 1);
         QCOMPARE(state2->masterCount(), 2);
+        // Same no-bleed contract as the increase twin.
+        QCOMPARE(engine.config()->masterCount, globalBefore);
     }
 
     void testDecreaseMasterCount_doesNotGoBelowOne()

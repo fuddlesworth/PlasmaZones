@@ -310,7 +310,9 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // record the float-back there so the next open restores to the right monitor.
     // Scoped to the engine-miss path so a normally-tracked close (an engine captured
     // above and returned) is never second-guessed.
-    if (!authoritativeScreen.isEmpty() && m_service && !m_service->isWindowAutotileTiled(windowId)) {
+    // No m_service re-check: the entry guard at the top of this function
+    // already established it.
+    if (!authoritativeScreen.isEmpty() && !m_service->isWindowAutotileTiled(windowId)) {
         const QRect frame = m_frameGeometry.value(shadowWindowId(windowId));
         // Same tile-rect poison guard as the primary capture path (see the
         // helper doc): a window tiled by autotile, handed off, and closed
@@ -790,8 +792,10 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
     if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         auto* mgr = m_service->screenManager();
         if (mgr && mgr->hasVirtualScreens(screenId)) {
-            // Use focused window's tracked screen as hint
-            if (m_service && !m_lastActiveWindowId.isEmpty()) {
+            // Use focused window's tracked screen as hint. No m_service
+            // guard: the deref above already relies on it (ctor-owned,
+            // never null).
+            if (!m_lastActiveWindowId.isEmpty()) {
                 const QString trackedScreen = m_service->screenForWindow(m_lastActiveWindowId);
                 if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
                     && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen) == screenId) {
@@ -985,7 +989,8 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     }
     const int totalPruned = persistedPruned + frameGeoPruned;
     if (totalPruned > 0) {
-        qCInfo(lcDbusWindow) << "Pruned" << totalPruned << "stale window assignments (not in KWin)";
+        qCInfo(lcDbusWindow) << "Pruned" << persistedPruned << "stale persisted assignments and" << frameGeoPruned
+                             << "shadow entries (not in KWin)";
     }
     // Only schedule a save when something PERSISTED was pruned. Frame-
     // geometry is the compositor-layer shadow store (not on disk), so a

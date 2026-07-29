@@ -508,7 +508,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
 
     // Only prune states for the CURRENT desktop/activity. States belonging to
     // other desktops are preserved so desktop switching is a fast state swap
-    // (no window release/re-add). windowsReleasedFromTiling MUST NOT fire
+    // (no window release/re-add). windowsReleased MUST NOT fire
     // for desktop/activity transitions — only for true autotile disable.
     QStringList releasedWindows;
     QSet<QString> placementChangedScreens;
@@ -545,7 +545,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             m_userTunedMasterCount.remove(key);
         });
     // Clean up reverse-map entries for released windows BEFORE emitting the
-    // signal. Signal handlers (signals.cpp windowsReleasedFromTiling) check zone
+    // signal. Signal handlers (the daemon's windowsReleased lambda) check zone
     // assignments and floating state — stale mappings would cause them to see
     // phantom candidates.
     for (const QString& windowId : std::as_const(releasedWindows)) {
@@ -611,6 +611,10 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         Q_EMIT enabledChanged(nowEnabled);
     }
 
+    // DELIBERATE ORDER: autotileScreensChanged first, placementChanged after.
+    // The screens signal drives the effect's mode-transition pass; the
+    // placement signals only schedule the daemon's debounced save, which must
+    // snapshot state AFTER the transition's releases are all in place.
     Q_EMIT autotileScreensChanged(QStringList(m_autotileScreens.begin(), m_autotileScreens.end()), wasDesktopSwitch);
     for (const QString& screenId : std::as_const(placementChangedScreens)) {
         Q_EMIT placementChanged(screenId);

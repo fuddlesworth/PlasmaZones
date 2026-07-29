@@ -44,6 +44,10 @@ private:
     void publishResult(const QString& screenId, const QUuid& layoutId, Layout* layout, uint64_t generation);
 
     QHash<QUuid, QPointer<Layout>> m_trackedLayouts;
+    /// Per-screen request generation. Never pruned — entries are one integer
+    /// per screenId ever requested, bounded by session screen/VS churn, and
+    /// pruning would reset a returning screen's counter under any in-flight
+    /// stale result.
     QHash<QString, uint64_t> m_screenGeneration;
     QPointer<LayoutRegistry> m_layoutManager;
     QThread* m_thread = nullptr;

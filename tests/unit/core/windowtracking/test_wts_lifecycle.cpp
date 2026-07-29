@@ -23,24 +23,18 @@
 #include <QTest>
 #include <QString>
 #include <QStringList>
-#include <QHash>
 #include <QRect>
-#include <QSet>
-#include <QUuid>
 #include <QSignalSpy>
-#include <QRectF>
 #include <memory>
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
-#include "config/configbackends.h"
 #include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "core/utils/utils.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 
@@ -495,6 +489,10 @@ private Q_SLOTS:
 
     void testRecordFreeGeometry_prefixMutationStillHonorsFirstCapture()
     {
+        // An appId-prefix mutation must not defeat first-capture-wins: the
+        // renamed window still owns its earlier record via the instance suffix,
+        // so a non-overwrite capture keeps the FIRST geometry (and an explicit
+        // overwrite still replaces it under the new id).
         const QString oldId = QStringLiteral("oldclass|renamed-instance");
         const QString newId = QStringLiteral("newclass|renamed-instance");
         const QString screen = QStringLiteral("DP-1");
@@ -549,6 +547,9 @@ private Q_SLOTS:
 
     void testRecordFloatingClose_prefixMutationKeepsOwnEngineSlots()
     {
+        // Closing floating after an appId-prefix mutation must merge into the
+        // window's OWN prior record (matched by instance suffix), preserving its
+        // other engine slots rather than synthesizing a fresh floating-only record.
         const QString oldId = QStringLiteral("oldclass|closing-instance");
         const QString newId = QStringLiteral("newclass|closing-instance");
         PhosphorEngine::WindowPlacement existing;

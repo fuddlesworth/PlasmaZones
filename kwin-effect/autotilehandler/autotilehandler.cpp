@@ -752,7 +752,9 @@ QSet<QString> AutotileHandler::completeDeferredWindowRoutes()
                 // stalls its eventual restore for the 250 ms deadline), and
                 // drop the spawn-provenance marker so a later re-add cannot
                 // inherit knownFreeFloating=true from a stale entry.
-                claimAlreadyMinimizedAsFloated(window, windowId, m_autotileScreens, /*enteringAutotile=*/true);
+                // Empty filter: passing m_autotileScreens duplicated the
+                // claim's own internal autotile-screen gate verbatim.
+                claimAlreadyMinimizedAsFloated(window, windowId, {}, /*enteringAutotile=*/true);
                 m_pendingFreshWindows.remove(windowId);
                 m_effect->endRestoreSuppression(window);
                 continue;
@@ -886,7 +888,8 @@ void AutotileHandler::onDaemonReady()
     // strictly sound — a signal lost pre-AddMatch implies the Get (served
     // after the change) already returns the new set.
     connectSignals();
-    m_initialScreenQueryPending = false;
+    // No m_initialScreenQueryPending write here: loadSettings() below arms it
+    // for its query and the reply clears it — a false store first was dead.
     loadSettings();
     m_notifiedWindows.clear();
     m_notifiedWindowScreens.clear();

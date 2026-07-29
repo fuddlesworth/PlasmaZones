@@ -345,8 +345,12 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 // rule (checked first) or a manual lock on either mode.
                 if (m_settings && m_layoutManager) {
                     int curDesktop = currentVirtualDesktopForScreen(cursorScreenId);
-                    QString curActivity = m_layoutManager->currentActivity();
-                    bool locked = isAnyModeLocked(m_settings, m_layoutManager, cursorScreenId, curDesktop, curActivity);
+                    // m_currentActivity, not m_layoutManager->currentActivity():
+                    // every other context resolve in this class reads the mirror,
+                    // and mixing sources lets the lock hit-test transiently
+                    // disagree with the cards drawn from the mirror.
+                    bool locked =
+                        isAnyModeLocked(m_settings, m_layoutManager, cursorScreenId, curDesktop, m_currentActivity);
                     if (locked) {
                         // Only allow zone selection from the active layout
                         PhosphorZones::Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(cursorScreenId);

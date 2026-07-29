@@ -414,7 +414,7 @@ private:
     // Installing the morph then would tween between two same-size rects
     // while the real resize lands as a raw snap mid-animation. Instead the
     // state edge arms this entry and the size-delivering
-    // windowFrameGeometryChanged completes the install (window_lifecycle.cpp),
+    // windowFrameGeometryChanged completes the install (window_connections.cpp),
     // so the animation starts exactly when the window visibly changes size.
     // Erased on completion, on windowDeleted, and on a stale-deadline check
     // at consumption time.

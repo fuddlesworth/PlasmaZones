@@ -474,7 +474,10 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     if (groupRaised.contains(wPtr.data())) {
                         continue;
                     }
-                    const auto& group = overlapStackByScreen[memberIt.value()];
+                    // constFind, not operator[]: on a const QHash the
+                    // subscript returns BY VALUE, deep-copying the group per
+                    // member visit (O(members²) across the loop).
+                    const auto& group = *overlapStackByScreen.constFind(memberIt.value());
                     for (const auto& gPtr : group) {
                         if (gPtr && !gPtr->isDeleted()) {
                             if (KWin::Window* gkw = gPtr->window()) {

@@ -3,9 +3,10 @@
 
 #pragma once
 
-// Inline helpers shared across daemon TU files (daemon_start.cpp,
-// daemon_signals.cpp, daemon_navigation.cpp).  Defined inline to
-// avoid ODR issues in both unity and normal builds.
+// Inline helpers shared across the daemon TU files in this directory
+// (start.cpp, signals.cpp, navigation.cpp, osd.cpp, lifecycle.cpp, the
+// init_*.cpp trio, autotile_init.cpp).  Defined inline to avoid ODR
+// issues in both unity and normal builds.
 
 #include <QScreen>
 #include "core/platform/logging.h"
@@ -156,10 +157,16 @@ inline QString resolveShortcutScreenId(PhosphorScreens::ScreenManager* mgr,
  *
  * Falls back to focused-window screen, then primary screen.
  *
- * @p mgr is unused today (lastCursorScreenName is already virtual-screen
- * resolved at the WindowTrackingAdaptor source). Kept in the signature so
- * the call site mirrors @ref resolveShortcutScreenId and so a future
- * resolution policy that needs ScreenManager has a place to land.
+ * @p mgr is unused today: WindowTrackingAdaptor::cursorScreenChanged resolves
+ * m_lastCursorScreenId to a virtual ID at the source whenever the physical
+ * screen is split, so a physical ID from lastCursorScreenName means the
+ * screen has no virtual split and IS the effective ID — no further mapping
+ * needed. (resolveShortcutScreenId still re-resolves its inputs because its
+ * primary source, lastActiveScreenName, arrives from the effect and may be a
+ * raw physical ID on a split screen; the two helpers' assumptions differ
+ * because their sources do, not because either is wrong.) Kept in the
+ * signature so the call site mirrors @ref resolveShortcutScreenId and so a
+ * future resolution policy that needs ScreenManager has a place to land.
  */
 inline QString resolveCursorScreenId(PhosphorScreens::ScreenManager* /*mgr*/,
                                      const WindowTrackingAdaptor* trackingAdaptor)

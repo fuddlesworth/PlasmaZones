@@ -155,6 +155,11 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     if (layoutIt == m_trackedLayouts.constEnd() || layoutIt->isNull()) {
         qCDebug(lcLayoutLib) << "LayoutComputeService: dropping result for destroyed layout"
                              << result.layoutId.toString();
+        if (layoutIt != m_trackedLayouts.constEnd()) {
+            // Reap the nulled QPointer so destroyed-without-layoutRemoved
+            // layouts don't accumulate tombstones for the session.
+            m_trackedLayouts.remove(result.layoutId);
+        }
         publishResult(result.screenId, result.layoutId, nullptr, result.generation);
         return;
     }

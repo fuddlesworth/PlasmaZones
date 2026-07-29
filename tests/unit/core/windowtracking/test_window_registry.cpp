@@ -15,6 +15,12 @@
  *  - instancesWithAppId reverse index stays in sync across mutations and removes
  *  - remove emits windowDisappeared
  *  - clear emits windowDisappeared for every tracked id
+ *  - canonical retirement: remove/clear emit before retiring the canonical
+ *    record, and a subscriber-reseeded canonical survives the removal
+ *  - re-entrancy: nested clear/remove/upsert from signal receivers (including
+ *    receiver-deletes-registry) leave the registry consistent and emit once
+ *  - isMinimized resolves composite windowIds to the instance record
+ *  - pruneStaleInstances sweeps absent records and orphaned canonicals
  */
 
 #include <PhosphorEngine/WindowRegistry.h>
@@ -27,6 +33,8 @@
 using PhosphorEngine::WindowMetadata;
 using PhosphorEngine::WindowRegistry;
 
+// QSignalSpy stores signal arguments as QVariants, so the record type carried
+// by metadataChanged must be metatype-registered for the spies below.
 Q_DECLARE_METATYPE(PhosphorEngine::WindowMetadata)
 
 namespace {

@@ -222,10 +222,6 @@ public:
 
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
     bool isAutotileScreen(const QString& screenId) const;
-    const QSet<QString>& autotileScreens() const
-    {
-        return m_autotileScreens;
-    }
 
     /// Check if a window is tracked by the autotile handler (in m_notifiedWindows).
     bool isTrackedWindow(const QString& windowId) const

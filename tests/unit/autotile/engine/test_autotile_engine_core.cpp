@@ -24,8 +24,6 @@
 
 #include "helpers/ScriptedAlgoTestSetup.h"
 
-#include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QUuid>
 

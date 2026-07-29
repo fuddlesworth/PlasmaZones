@@ -1136,7 +1136,7 @@ private:
     // assignment cascade.
     QHash<QString, int> m_lastTiledCountByScreen;
 
-    // Snap-float restore entries collected during windowsReleasedFromTiling.
+    // Snap-float restore entries collected by the windowsReleased handler.
     // Consumed by the toggle handler to batch geometry restores into the resnap signal.
     QVector<ZoneAssignmentEntry> m_pendingSnapFloatRestores;
 

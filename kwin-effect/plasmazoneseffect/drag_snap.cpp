@@ -434,9 +434,9 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // uses `evaluator.resolveCached(windowId, query)`). When a rule
             // set is configured, the sister `resolveEventMotionProfile`
             // call above already warmed the per-window cache slot for this
-            // query, so this cached read is a hit. (With an empty rule set
-            // that resolver never touches the evaluator, but then there is
-            // no priority-order walk to pay for either.) The earlier shape
+            // query, so this cached read is a hit. (An empty rule set still
+            // goes through resolveCached, but its walk over zero rules is
+            // trivially cheap and the cache slot dedups it.) The earlier shape
             // called a standalone uncached shader-profile resolver here, which
             // paid an extra priority-order walk per snap on every
             // non-empty rule set — same regression the shim was

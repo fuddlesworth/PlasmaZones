@@ -423,9 +423,10 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 // record snap has no release path for on this screen. The
                 // untiled marker routes the eventual unminimize through the
                 // immediate-commit path — the rect belongs to the other mode.
-                if (AutotileHandler* autotile = m_effect->autotileHandler()) {
-                    autotile->adoptMinimizeFloated(windowId, /*untiled=*/true);
-                }
+                // Unguarded like this function's other autotileHandler()
+                // derefs: m_autotileHandler is declared before m_snapHandler
+                // on the effect, so it outlives every SnapHandler call.
+                m_effect->autotileHandler()->adoptMinimizeFloated(windowId, /*untiled=*/true);
             } else {
                 m_minimizeFloatedWindows.insert(windowId);
             }
@@ -604,7 +605,7 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
     // cycle it is absent from getSnappedWindows too — but it IS in the
     // daemon's floating set, and the unfloat below re-snaps it. Only a
     // window in NEITHER set is orphaned. Both queries are dispatched HERE,
-    // before the unfloat fireAndForget below enters the same D-Bus send
+    // before the unfloat call (asyncCall + watcher) below enters the same D-Bus send
     // queue, so the daemon answers them against the pre-unfloat state.
     //
     // The restore-on-orphan is deliberately scoped to an owned or adopted

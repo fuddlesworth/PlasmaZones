@@ -9,8 +9,6 @@
 #include <QTest>
 #include <QSignalSpy>
 #include <QJsonObject>
-#include <QJsonArray>
-#include <QJsonDocument>
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutComputeService.h>

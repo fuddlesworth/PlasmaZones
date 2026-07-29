@@ -1,31 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorTileEngine/AutotileEngine.h>
-#include "engine_internal.h"
-#include "tileenginelogging.h"
-
-#include <PhosphorEngine/PerScreenKeys.h>
-#include <PhosphorEngine/WindowRegistry.h>
-#include <PhosphorGeometry/GeometryUtils.h>
-#include <PhosphorIdentity/WindowId.h>
-#include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorScreens/VirtualScreen.h>
-#include <PhosphorTileEngine/AutotileConfig.h>
-#include <PhosphorTileEngine/NavigationController.h>
-#include <PhosphorTileEngine/PerScreenConfigResolver.h>
-#include <PhosphorTiles/AlgorithmPreviewParams.h>
-#include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/AutotileConstants.h>
-#include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include <PhosphorTiles/SplitTree.h>
-#include <PhosphorTiles/TilingAlgorithm.h>
-#include <PhosphorTiles/TilingState.h>
-#include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorZones/Zone.h>
-
+// Qt headers
+#include <algorithm>
+#include <cmath>
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -35,8 +13,30 @@
 #include <QTimer>
 #include <QVarLengthArray>
 
-#include <algorithm>
-#include <cmath>
+// Project headers
+#include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorGeometry/GeometryUtils.h>
+#include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorTileEngine/NavigationController.h>
+#include <PhosphorTileEngine/PerScreenConfigResolver.h>
+#include <PhosphorTiles/AlgorithmPreviewParams.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/SplitTree.h>
+#include <PhosphorEngine/PerScreenKeys.h>
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include "tileenginelogging.h"
+#include <PhosphorIdentity/WindowId.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorZones/Zone.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+#include "engine_internal.h"
 
 namespace PhosphorTileEngine {
 
@@ -337,12 +337,12 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
         || (m_windowTracker && m_windowTracker->isSuspensionFloat(wid));
     if (minimized && m_windowTracker) {
         const auto existing = m_windowTracker->placementStore().peekExact(wid);
-        if (existing && !existing->slotFor(engineId()).isEmpty()) {
+        PhosphorEngine::EngineSlot slot = existing ? existing->slotFor(engineId()) : PhosphorEngine::EngineSlot{};
+        if (existing && !slot.isEmpty()) {
             // A minimized window is temporarily represented as floating so it
             // leaves tiledWindows(). Preserve the durable state, but refresh
             // its order and context from the retained live TilingState so a
             // recent swap or migration is not reverted by a stale store entry.
-            PhosphorEngine::EngineSlot slot = existing->slotFor(engineId());
             // Refresh the order ONLY when the live state still contains the
             // window as a non-floating member: a minimize-floated window's
             // position in windowOrder() is the artifact of the suspension

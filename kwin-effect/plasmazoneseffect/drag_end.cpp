@@ -292,8 +292,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         m_snapAssistHandler->showContinuationIfNeeded(snappedScreenId);
                     };
                     tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("snapToEmptyZone"),
-                                     {windowId, outcome.targetScreenId, sticky}, safeWindow, windowId, true, nullptr,
-                                     onSnapSuccess);
+                                     {windowId, outcome.targetScreenId, sticky}, safeWindow, windowId,
+                                     /*storePreSnap=*/true, /*fallback=*/nullptr, onSnapSuccess);
                 }
 
                 // Snap Assist: show the window picker if the daemon requested

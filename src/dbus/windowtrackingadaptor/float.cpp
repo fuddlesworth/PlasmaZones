@@ -209,6 +209,11 @@ bool WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, 
     // doc: every emission channel must keep m_broadcastFloating equal to what
     // subscribers last heard, or the gate turns from a dedup into a
     // suppressor of genuine changes. setWindowFloating delegates here too.
+    // DELIBERATE divergence: the dedup keys on the CANONICAL (shadow) id so a
+    // class-mutated window dedups as one window, while the signal carries the
+    // CALLER'S raw id — subscribers resolve raw ids through their own
+    // canonicalization, and rewriting the id here would desync them from the
+    // other per-window signals on the same edge.
     const QString shadowId = shadowWindowId(windowId);
     // Absent entry NEVER counts as a match. The map is populated only by this
     // relay, so after a daemon restart it is empty while WTS has restored

@@ -67,23 +67,29 @@ void Daemon::showOverlay()
     }
     // Per-screen autotile exclusion is handled by OverlayService::initializeOverlay()
     // via m_excludedScreens (set in updateAutotileScreens)
-    m_overlayService->show();
+    if (m_overlayService) {
+        m_overlayService->show();
+    }
 }
 
 void Daemon::hideOverlay()
 {
     clearHighlight();
-    m_overlayService->hide();
+    if (m_overlayService) {
+        m_overlayService->hide();
+    }
 }
 
 bool Daemon::isOverlayVisible() const
 {
-    return m_overlayService->isVisible();
+    return m_overlayService && m_overlayService->isVisible();
 }
 
 void Daemon::clearHighlight()
 {
-    m_zoneDetector->clearHighlights();
+    if (m_zoneDetector) {
+        m_zoneDetector->clearHighlights();
+    }
 }
 
 void Daemon::armResnapOsdSuppression(int count)

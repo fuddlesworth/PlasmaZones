@@ -383,6 +383,9 @@ private Q_SLOTS:
 
     void testMinimizedCloseRebindsChangedAppPrefixWithoutLosingPlacement()
     {
+        // A minimized window closing under a MUTATED appId prefix must re-key its
+        // durable record to the current windowId instead of stranding it under
+        // the old prefix (where a reopen under the new class could never find it).
         PhosphorScreens::FakeScreenProvider fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
         PhosphorScreens::ScreenManager screenMgr(

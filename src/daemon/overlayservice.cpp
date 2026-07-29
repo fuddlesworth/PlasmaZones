@@ -664,16 +664,17 @@ void OverlayService::hideDisabledAndRefresh()
     // is how a layout gets assigned, so suppress must not hide it); the snap
     // overlay is additionally gated by suppress / autotile mode via
     // isSnappingContextInactive.
-    if (m_settings) {
-        const QStringList screenIds = m_screenStates.keys();
-        for (const QString& screenId : screenIds) {
-            const bool disabled = isSnappingContextDisabled(screenId);
-            if (disabled) {
-                destroyZoneSelectorWindow(screenId);
-            }
-            if (m_visible && isSnappingContextInactive(screenId)) {
-                dismissOverlayWindow(screenId);
-            }
+    // No m_settings gate here: neither context predicate reads settings (both
+    // fail closed on their own null members), and skipping the destroy loop on
+    // a null settings pointer would leave stale selector/overlay slots up.
+    const QStringList screenIds = m_screenStates.keys();
+    for (const QString& screenId : screenIds) {
+        const bool disabled = isSnappingContextDisabled(screenId);
+        if (disabled) {
+            destroyZoneSelectorWindow(screenId);
+        }
+        if (m_visible && isSnappingContextInactive(screenId)) {
+            dismissOverlayWindow(screenId);
         }
     }
 

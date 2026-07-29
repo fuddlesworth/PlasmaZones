@@ -66,6 +66,11 @@ QRect AutotileEngine::lastManagedRect(const QString& rawWindowId) const
 
 int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
+    // The returned count tallies ENTRY removals, not distinct windows: one dead
+    // window present in the base store, the float set, engine tracking, and a
+    // pending order contributes up to four. Callers only log it as sweep
+    // activity, so the overlap is deliberate; don't repurpose it as a window
+    // count.
     int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
     for (auto it = m_autotileFloatedWindows.begin(); it != m_autotileFloatedWindows.end();) {
         if (!aliveWindowIds.contains(*it)) {

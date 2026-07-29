@@ -57,6 +57,12 @@ public:
     /// bookkeeping behind.
     void schedule(const QString& windowId, int intervalMs, std::function<void()> fire)
     {
+        // Supersede any pending entry FIRST: a bare insert would orphan the
+        // old entry's still-running timer, whose firing lambda would then
+        // consume (and delete) the NEW entry and run the stale callback in
+        // its place. Callers currently gate with contains()/cancel at every
+        // site; this makes the contract structural instead of by convention.
+        cancel(windowId);
         auto* timer = new QTimer(m_owner);
         timer->setSingleShot(true);
         timer->setInterval(intervalMs);

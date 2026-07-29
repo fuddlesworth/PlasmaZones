@@ -25,6 +25,12 @@ namespace PlasmaZones {
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
+// A pending maximize morph whose size-landing commit arrives later than this
+// is considered stale (state flipped but the commit never came, e.g. an
+// occluded client under the lock screen) — the morph is skipped so a much
+// later unrelated resize cannot fire a bogus maximize animation.
+constexpr qint64 kPendingMaximizeMorphDeadlineMs = 1000;
+
 // Maximize-morph landing discriminator: has the frame SIZE actually moved
 // away from the departure rect? A maximize/restore always changes the frame
 // size, while a position-only change can apply early server-side, so the
@@ -727,7 +733,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     const auto pending = pendingIt.value();
                     if (maximizeSizeLanded(safeW->frameGeometry(), pending.departureFrame)) {
                         m_shaderManager.m_pendingMaximizeMorph.remove(safeW.data());
-                        constexpr qint64 kPendingMaximizeMorphDeadlineMs = 1000;
+                        // The deadline SKIPS the morph for a stale entry; the
+                        // entry itself is consumed either way by the remove
+                        // above (only a size-landing geometry change reaches
+                        // this branch, so a never-landing entry lives until
+                        // the windowDeleted cleanup — bounded, and cheaper
+                        // than a timer per entry).
                         const bool stale =
                             ShaderInternal::shaderClockNowMs() - pending.armedAtMs > kPendingMaximizeMorphDeadlineMs;
                         // Same interactive guard as the arming site: a drag
@@ -738,9 +749,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         }
                     }
                 }
-                // Body 1 — suppression release
+                // Body 1 — suppression release. Integer-aligned compare:
+                // fractional-scale outputs leave sub-pixel residue in
+                // frameGeometry(), and a bit-exact inequality released the
+                // suppression on jitter that moved nothing.
                 if (auto it = m_restoreSuppress.find(safeW.data()); it != m_restoreSuppress.end()
-                    && it->targetGeometry.isValid() && safeW->frameGeometry() != it->spawnGeometry) {
+                    && it->targetGeometry.isValid() && safeW->frameGeometry().toRect() != it->spawnGeometry.toRect()) {
                     endRestoreSuppression(safeW.data());
                 }
                 // Body 2 — debounced daemon shadow. Per tick this stashes the

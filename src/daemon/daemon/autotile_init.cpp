@@ -266,10 +266,11 @@ void Daemon::initializeAutotile()
                 // mode the user is actually trying to interact with.
                 // Note: intentionally shown regardless of showOsdOnLayoutSwitch — this is
                 // direct feedback to an explicit user action, not a passive layout-switch OSD.
-                // Fail closed on a missing resolver, matching the sibling
-                // gates (isFocusedContextGated and friends): a toggle during
-                // the teardown window must not act ungated.
-                if (!m_contextResolver) {
+                // Fail closed on a missing resolver or engine, matching the
+                // sibling gates (isFocusedContextGated and friends): a toggle
+                // during the teardown window must not act ungated (the
+                // wasAutotile branch below derefs the engine).
+                if (!m_contextResolver || !m_autotileEngine) {
                     return;
                 }
                 const auto currentMode = currentModeFor(screenId);

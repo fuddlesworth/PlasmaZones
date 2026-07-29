@@ -4,7 +4,12 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <QLoggingCategory>
 #include <QPointer>
+
+namespace {
+Q_LOGGING_CATEGORY(lcWindowRegistry, "org.phosphor.engine.windowregistry")
+} // namespace
 
 namespace PhosphorEngine {
 
@@ -18,7 +23,7 @@ WindowRegistry::~WindowRegistry() = default;
 void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& metadata)
 {
     if (instanceId.isEmpty()) {
-        qWarning("WindowRegistry::upsert: rejecting empty instance id");
+        qCWarning(lcWindowRegistry, "WindowRegistry::upsert: rejecting empty instance id");
         return;
     }
 
@@ -158,6 +163,9 @@ void WindowRegistry::clear()
     if (m_records.isEmpty() && m_canonicalByInstance.isEmpty()) {
         return;
     }
+    // Emission ORDER across the set is unspecified (QSet iteration) — every
+    // subscriber handles windowDisappeared per-window with no cross-window
+    // ordering assumption, so imposing one would buy nothing.
     QSet<QString> ids(m_records.keyBegin(), m_records.keyEnd());
     ids.unite(QSet<QString>(m_canonicalByInstance.keyBegin(), m_canonicalByInstance.keyEnd()));
     QPointer<WindowRegistry> guard(this);
@@ -207,8 +215,9 @@ int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)
     // session-restored apps have mapped their windows, and treating that as
     // "all dead" destroys the whole registry. Fail closed.
     if (aliveInstanceIds.isEmpty() && !(m_records.isEmpty() && m_canonicalByInstance.isEmpty())) {
-        qWarning("WindowRegistry::pruneStaleInstances: refusing empty alive set with %d records tracked",
-                 int(m_records.size()));
+        qCWarning(lcWindowRegistry,
+                  "WindowRegistry::pruneStaleInstances: refusing empty alive set with %d records tracked",
+                  int(m_records.size()));
         return 0;
     }
     // Union of both maps' keys — a window may carry a canonical entry without
@@ -230,6 +239,9 @@ int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)
     // Count actual removals, not intent: a windowDisappeared subscriber can
     // re-upsert an instance (leaving it present) or destroy the registry
     // mid-sweep, and the return value is documented as "count removed".
+    // Mid-sweep destruction returns the PARTIAL count of the removals whose
+    // post-checks completed — the final in-flight removal is deliberately
+    // uncounted (its post-check would read the freed object).
     int removed = 0;
     for (const QString& instanceId : std::as_const(stale)) {
         remove(instanceId);

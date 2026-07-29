@@ -954,7 +954,7 @@ private:
     // resize) the per-tick gate was an uncached rule resolve plus a full
     // ruleQuery build, hundreds of times per second (discussion #816). The
     // decoration resync deliberately stays PER TICK in the stash lambda (see
-    // window_lifecycle.cpp): it is cheap, and deferring it let a re-decorated
+    // window_connections.cpp): it is cheap, and deferring it let a re-decorated
     // title bar flash for the throttle window. QPointer auto-nulls if the
     // window dies before the flush; the flush skips those entries.
     // PendingFrameGeometry moved to effect_state.h.
@@ -1840,7 +1840,7 @@ private:
     // either directly from the maximize state edge (geometry already landed)
     // or deferred to the size-delivering windowFrameGeometryChanged when the
     // state signal outran the client's commit. Implementation in
-    // window_lifecycle.cpp beside its two call sites.
+    // window_connections.cpp beside its two call sites.
     void beginMaximizeShaderMorph(KWin::EffectWindow* window, const QRectF& departureFrame);
     /// Evict least-recently-used cached textures back under the soft bound, never
     /// touching one a live transition still points at. @p pending is the transition
