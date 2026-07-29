@@ -68,6 +68,18 @@ void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QSt
     }
 }
 
+void AutotileEngine::notifyAlgorithmWindowAdded(PhosphorTiles::TilingState* state, const QString& screenId,
+                                                const QString& windowId)
+{
+    PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(screenId);
+    if (algo && algo->supportsLifecycleHooks() && state) {
+        const int idx = state->tiledWindows().indexOf(windowId);
+        if (idx >= 0) {
+            algo->onWindowAdded(state, idx);
+        }
+    }
+}
+
 bool AutotileEngine::insertShouldFloat(const QString& windowId) const
 {
     // A window ARRIVING from another state was already managed, so the open-time
@@ -126,6 +138,14 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         // prevents multi-instance apps from all matching the first entry.
         if (desiredPos < 0 && hasStableAppId) {
             for (int i = 0; i < pendingOrder.size(); ++i) {
+                // An entry whose saved id the registry still vouches for is a
+                // LIVE window (typically a minimized placeholder deferred by
+                // the strict seed) that will claim its own slot on arrival —
+                // an unrelated same-app sibling must not consume it and
+                // overwrite its id (which would strand the real window).
+                if (m_windowRegistry && m_windowRegistry->minimizedState(pendingOrder.at(i)).has_value()) {
+                    continue;
+                }
                 // Compare using currentAppIdFor so both sides resolve to the
                 // latest class — an entry saved before a rename still matches.
                 if (currentAppIdFor(pendingOrder.at(i)) == appId && !state->containsWindow(pendingOrder.at(i))) {
@@ -171,6 +191,13 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
             // through to insertPosition so the user's "After existing" /
             // "After focused" / "As main window" setting wins for new
             // arrivals.
+            // NOTE: the advisory (non-strict) branch below is currently
+            // unreachable by construction — setInitialWindowOrder is the sole
+            // pending-order producer and always marks its screen strict, and
+            // the strict flag's lifetime is lockstep with the order's. The
+            // branch is retained as the documented CONTRACT for any future
+            // producer of advisory (hint-only) orders; do not delete it as
+            // dead code without also collapsing that contract.
             const bool strict = m_strictInitialOrderScreens.contains(screenId) || exactWindowIdMatch;
             if (strict || insertAt >= state->windowCount()) {
                 state->addWindow(windowId, insertAt);
@@ -214,6 +241,19 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         auto rec = m_windowTracker->placementStore().take(windowId, appId, [&](const WindowPlacement& p) {
             const PhosphorEngine::EngineSlot s = p.slotFor(engineId());
             if (s.state == WindowPlacement::stateFloating()) {
+                // A geometry-less floating record (the order-only slot the
+                // capture writes to preserve float intent through an
+                // immediate minimize/teardown) is meaningful for the SAME
+                // instance — restore floating in place — but consumed by a
+                // FIFO sibling it floats a fresh window at its spawn rect
+                // for no user-visible reason while burning a slot a real
+                // placement may need. Same-instance restores stay
+                // unconditional; FIFO consumption requires a real float-back.
+                const bool sameInstance = ::PhosphorIdentity::WindowId::extractInstanceId(p.windowId)
+                    == ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
+                if (!sameInstance && !p.anyFreeGeometry().isValid()) {
+                    return false;
+                }
                 return p.screenId.isEmpty() || p.screenId == screenId;
             }
             if (s.state == WindowPlacement::stateTiled()) {
@@ -319,10 +359,46 @@ void AutotileEngine::insertWindowByConfigOrder(PhosphorTiles::TilingState* state
     }
 }
 
+void AutotileEngine::purgeFromPendingOrders(const QString& windowId)
+{
+    QStringList survivingScreens;
+    for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end();) {
+        pit.value().removeAll(windowId);
+        if (pit.value().isEmpty()) {
+            m_pendingOrderGeneration.remove(pit.key());
+            m_strictInitialOrderScreens.remove(pit.key());
+            pit = m_pendingInitialOrders.erase(pit);
+        } else {
+            survivingScreens.append(pit.key());
+            ++pit;
+        }
+    }
+    // Resolution re-check AFTER the walk: cleanupPendingOrderIfResolved can
+    // erase OTHER map entries, and erasing anything but the iterator's own
+    // element mid-iteration relies on undocumented QHash rehash behaviour.
+    for (const QString& screen : std::as_const(survivingScreens)) {
+        cleanupPendingOrderIfResolved(screen);
+    }
+}
+
 void AutotileEngine::removeWindow(const QString& windowId)
 {
     m_windowMinSizes.remove(windowId);
     m_overflow.clearOverflow(windowId);
+
+    // Purge a closed window from pending initial orders even when it was a
+    // minimized placeholder and therefore never received an engine key.
+    purgeFromPendingOrders(windowId);
+    // A pending post-retile focus for a window that just closed must not
+    // survive to activate a dead id on its screen's next retile.
+    for (auto fit = m_pendingFocusByScreen.begin(); fit != m_pendingFocusByScreen.end();) {
+        if (fit.value() == windowId) {
+            fit = m_pendingFocusByScreen.erase(fit);
+        } else {
+            ++fit;
+        }
+    }
+
     const TilingStateKey key = m_states.takeWindow(windowId);
     if (key.screenId.isEmpty()) {
         return;
@@ -336,22 +412,6 @@ void AutotileEngine::removeWindow(const QString& windowId)
         // removal runs, and by the save-time snapshot for still-open windows. The
         // reopen consumes that record in insertWindow().
         state->removeWindow(windowId);
-    }
-
-    // Purge closed window from pending initial orders.
-    // If a pre-seeded window closes before arriving at the autotile engine,
-    // the pending order would leak indefinitely without this cleanup.
-    for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end();) {
-        pit.value().removeAll(windowId);
-        if (pit.value().isEmpty()) {
-            m_pendingOrderGeneration.remove(pit.key());
-            m_strictInitialOrderScreens.remove(pit.key());
-            pit = m_pendingInitialOrders.erase(pit);
-        } else {
-            const QString screen = pit.key();
-            ++pit; // advance before potential erase by helper
-            cleanupPendingOrderIfResolved(screen);
-        }
     }
 }
 

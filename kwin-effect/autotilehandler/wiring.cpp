@@ -8,6 +8,7 @@
 
 #include "autotilehandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "handlers/snaphandler.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -83,35 +84,68 @@ void AutotileHandler::loadSettings()
                                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     msg << PhosphorProtocol::Service::Interface::Autotile << QStringLiteral("autotileScreens");
 
+    m_initialScreenQueryPending = true;
+    const quint64 queryGeneration = ++m_screenQueryGeneration;
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     const quint64 generationAtDispatch = m_screensSignalGeneration;
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, generationAtDispatch](QDBusPendingCallWatcher* w) {
+            [this, generationAtDispatch, queryGeneration](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
+                if (queryGeneration != m_screenQueryGeneration) {
+                    return;
+                }
+                m_initialScreenQueryPending = false;
                 // An autotileScreensChanged signal that landed while this query was
                 // in flight carried a NEWER set and already ran the full per-screen
                 // transition handling — the raw assignment below would clobber it
                 // with the older snapshot.
                 if (m_screensSignalGeneration != generationAtDispatch) {
                     qCDebug(lcEffect) << "Autotile screens: property reply superseded by a live signal, discarding";
+                    completeDeferredWindowRoutes();
                     return;
                 }
                 QDBusPendingReply<QDBusVariant> reply = *w;
                 if (reply.isValid()) {
                     QStringList screens = reply.value().variant().toStringList();
                     const QSet<QString> added(screens.begin(), screens.end());
+                    // Wholesale replacement is safe HERE because the previous
+                    // session's set was cleared at daemon loss
+                    // (clearTiledTracking) — there is no live removed-screen
+                    // delta to tear down at bringup; runtime screen-set
+                    // changes go through slotScreensChanged, which handles
+                    // removals.
                     m_autotileScreens = added;
                     qCInfo(lcEffect) << "Loaded autotile screens:" << m_autotileScreens;
+                    const QSet<QString> completedDeferredRoutes = completeDeferredWindowRoutes();
 
                     if (!added.isEmpty()) {
                         const auto windows = KWin::effects->stackingOrder();
+                        QList<KWin::EffectWindow*> batchWindows;
+                        batchWindows.reserve(windows.size());
+                        for (KWin::EffectWindow* window : windows) {
+                            // isDeleted: close-grabbed dying windows linger in
+                            // the stacking order — getWindowId on them would
+                            // re-pollute the scrubbed id caches before the
+                            // batch's own guards run.
+                            if (window && !window->isDeleted()
+                                && !completedDeferredRoutes.contains(m_effect->getWindowId(window))) {
+                                batchWindows.append(window);
+                            }
+                        }
                         // Batch-notify all windows on autotile screens in one D-Bus call
                         // instead of per-window windowOpened round-trips.
-                        notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true);
+                        notifyWindowsAddedBatch(batchWindows, added, /*resetNotified=*/true,
+                                                /*enteringAutotile=*/false);
                     }
                 } else {
                     qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";
+                    completeDeferredWindowRoutes();
+                }
+                // Guarded: m_snapHandler is declared after m_autotileHandler
+                // and destroyed first during effect teardown.
+                if (SnapHandler* snap = m_effect->snapHandler()) {
+                    snap->retryVisibleMinimizeFloats();
                 }
             });
 }

@@ -34,11 +34,31 @@ LayoutComputeService::LayoutComputeService(QObject* parent)
 LayoutComputeService::~LayoutComputeService()
 {
     m_thread->quit();
-    m_thread->wait(5000);
+    if (!m_thread->wait(5000)) {
+        // A wedged worker (runaway compute) must not let the parented QThread
+        // be destroyed while still running — Qt aborts the whole process on
+        // that. The worker only writes its own local result state, so a
+        // forced stop at teardown cannot corrupt anything the surviving
+        // process still reads.
+        qCWarning(lcLayoutLib) << "LayoutComputeService: worker thread did not quit within 5s — terminating";
+        m_thread->terminate();
+        m_thread->wait();
+        // The worker's deleteLater is posted into the terminated thread's
+        // event loop, which never runs again — reclaim it directly. Safe: the
+        // thread is fully stopped after wait(), so nothing races the delete.
+        delete m_worker;
+        m_worker = nullptr;
+    }
 }
 
 void LayoutComputeService::setLayoutManager(LayoutRegistry* manager)
 {
+    // Sever the previous manager's connection first: re-wiring would
+    // otherwise stack a second layoutRemoved handler, and setting null would
+    // leave the dead manager's connection live.
+    if (m_layoutManager) {
+        disconnect(m_layoutManager, nullptr, this, nullptr);
+    }
     m_layoutManager = manager;
     if (!manager) {
         return;
@@ -56,26 +76,48 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
         return false;
     }
 
-    if (screenGeometry == layout->lastRecalcGeometry()) {
+    // needsRecalc, not a bare rect comparison: a zone edit at unchanged
+    // screen geometry (m_zoneGeometryDirty) must take the worker path or the
+    // edited zones keep stale/absent absolute geometry.
+    if (!layout->needsRecalc(screenGeometry)) {
+        // NO generation bump for a no-op: bumping here would supersede an
+        // in-flight worker compute carrying a REAL geometry change — its
+        // result would be discarded as stale while this cached callback
+        // publishes a non-null layout for a generation whose geometry it
+        // never computed, satisfying the caller's barrier with nothing
+        // applied. Publishing under the current generation keeps both the
+        // barrier and any in-flight compute honest.
+        // Contract note: because the no-op path deliberately does NOT bump the
+        // generation, this queued publish can share a generation number with an
+        // in-flight worker compute (geometry flipped back to lastRecalcGeometry
+        // while the intermediate compute is still running) — two results at the
+        // same generation, the worker's second. Barriers must therefore settle
+        // on the LATEST result for a generation, not the first.
+        const uint64_t gen = m_screenGeneration.value(screenId);
         const QString sid = screenId;
         const QUuid lid = layout->id();
         QPointer<Layout> lp(layout);
         QMetaObject::invokeMethod(
             this,
-            [this, sid, lid, lp]() {
-                Q_EMIT geometriesComputed(sid, lid, lp.data());
+            [this, sid, lid, lp, gen]() {
+                const bool superseded = gen < m_screenGeneration.value(sid);
+                publishResult(sid, lid, superseded ? nullptr : lp.data(), gen);
             },
             Qt::QueuedConnection);
         return true;
     }
 
+    const uint64_t gen = ++m_screenGeneration[screenId];
     m_trackedLayouts[layout->id()] = layout;
-
-    uint64_t gen = ++m_screenGeneration[screenId];
 
     LayoutSnapshot snapshot = buildSnapshot(layout, screenId, screenGeometry);
     Q_EMIT requestCompute(snapshot, gen);
     return true;
+}
+
+uint64_t LayoutComputeService::currentGeneration(const QString& screenId) const
+{
+    return m_screenGeneration.value(screenId);
 }
 
 void LayoutComputeService::recalculateSync(Layout* layout, const QRectF& screenGeometry)
@@ -113,15 +155,10 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     if (genIt != m_screenGeneration.constEnd() && result.generation < *genIt) {
         qCDebug(lcLayoutLib) << "LayoutComputeService: discarding stale result for" << result.screenId
                              << "gen=" << result.generation << "current=" << *genIt;
-        // Emit so async barriers (e.g. Daemon::processPendingGeometryUpdates) still
-        // drain for this (screenId, layoutId) pair. Without this, a burst of
-        // panel/screen events that bumps the generation faster than worker results
-        // arrive leaves every superseded barrier waiting forever, and the
-        // reapply-geometries timer that follows the barrier never starts. Pass
-        // nullptr because the layout's zone geometries do NOT reflect this
-        // generation — consumers that need fresh state will see the next
-        // non-stale emit for the same (screenId, layoutId) pair.
-        Q_EMIT geometriesComputed(result.screenId, result.layoutId, nullptr);
+        // Emit a null layout so screen-scoped async barriers know this result
+        // was superseded and must wait for the newest generation. The current
+        // result may belong to a different layout after an assignment change.
+        publishResult(result.screenId, result.layoutId, nullptr, result.generation);
         return;
     }
 
@@ -129,14 +166,24 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     if (layoutIt == m_trackedLayouts.constEnd() || layoutIt->isNull()) {
         qCDebug(lcLayoutLib) << "LayoutComputeService: dropping result for destroyed layout"
                              << result.layoutId.toString();
-        Q_EMIT geometriesComputed(result.screenId, result.layoutId, nullptr);
+        if (layoutIt != m_trackedLayouts.constEnd()) {
+            // Reap the nulled QPointer so destroyed-without-layoutRemoved
+            // layouts don't accumulate tombstones for the session.
+            m_trackedLayouts.remove(result.layoutId);
+        }
+        publishResult(result.screenId, result.layoutId, nullptr, result.generation);
         return;
     }
     Layout* layout = layoutIt->data();
 
-    if (layout->lastRecalcGeometry() == result.screenGeometry) {
+    // needsRecalc, not a bare rect comparison: if zones were edited after the
+    // sync recalc stamped this rect, the worker's freshly computed geometries
+    // are exactly what the edited zones are missing — discarding them here
+    // would publish a non-null layout whose new zones have no absolute
+    // geometry.
+    if (!layout->needsRecalc(result.screenGeometry)) {
         qCDebug(lcLayoutLib) << "LayoutComputeService: sync path already applied for" << result.screenId;
-        Q_EMIT geometriesComputed(result.screenId, result.layoutId, layout);
+        publishResult(result.screenId, result.layoutId, layout, result.generation);
         return;
     }
 
@@ -147,10 +194,34 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
             zone->setGeometry(computed.absoluteGeometry);
         }
     }
-    layout->setLastRecalcGeometry(result.screenGeometry);
+    // Clear the zone-set dirty bit only when this result covered the layout's
+    // CURRENT zones. A zone edited mid-flight (snapshot taken before the
+    // edit) leaves the layout dirty so the next request recomputes it; the
+    // rect is still stamped either way, preserving the pre-existing
+    // rect-comparison behavior for that partial case.
+    bool coversCurrentZones = result.zones.size() == layout->zoneCount();
+    if (coversCurrentZones) {
+        for (const auto& computed : result.zones) {
+            if (!layout->zoneById(computed.zoneId)) {
+                coversCurrentZones = false;
+                break;
+            }
+        }
+    }
+    if (coversCurrentZones) {
+        layout->markRecalculated(result.screenGeometry);
+    } else {
+        layout->setLastRecalcGeometry(result.screenGeometry);
+    }
     layout->endBatchModify();
 
-    Q_EMIT geometriesComputed(result.screenId, result.layoutId, layout);
+    publishResult(result.screenId, result.layoutId, layout, result.generation);
+}
+
+void LayoutComputeService::publishResult(const QString& screenId, const QUuid& layoutId, Layout* layout,
+                                         uint64_t generation)
+{
+    Q_EMIT geometriesComputedForGeneration(screenId, layoutId, layout, generation);
 }
 
 void LayoutComputeService::onLayoutRemoved(const QUuid& layoutId)

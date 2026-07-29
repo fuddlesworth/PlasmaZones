@@ -30,8 +30,6 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/types/types.h"
 #include <PhosphorEngine/WindowRegistry.h>
-// Complete type required where ~WindowTrackingAdaptor destroys the
-// unique_ptr<RuleEvaluator> member (m_ruleEvaluator).
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <QJsonArray>
@@ -44,7 +42,7 @@ namespace PlasmaZones {
 
 QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
 {
-    return m_frameGeometry.value(windowId);
+    return m_frameGeometry.value(shadowWindowId(windowId));
 }
 
 QString WindowTrackingAdaptor::lastActiveScreenName() const

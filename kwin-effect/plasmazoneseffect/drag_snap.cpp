@@ -51,19 +51,31 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                                          QPointer<KWin::EffectWindow> window, const QString& windowId,
                                          bool storePreSnap, std::function<void()> fallback,
                                          std::function<void(const QString&, const QString&)> onSnapSuccess,
-                                         bool skipAnimation, std::function<void()> onComplete)
+                                         bool skipAnimation, std::function<void()> onComplete,
+                                         std::function<void()> onError)
 {
     QDBusPendingCall call = PhosphorProtocol::ClientHelpers::asyncCall(interface, method, args);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation,
-             onComplete](QDBusPendingCallWatcher* w) {
+            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation, onComplete,
+             onError](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
                 QDBusPendingReply<int, int, int, int, bool> reply = *w;
                 if (reply.isError()) {
                     qCDebug(lcEffect) << method << "error:" << reply.error().message();
-                    if (fallback)
+                    if (onError)
+                        onError();
+                    else if (fallback)
                         fallback();
+                    if (onComplete)
+                        onComplete();
+                    return;
+                }
+                if (reply.argumentAt<4>() && (!window || window->isDeleted())) {
+                    // The daemon DID resolve/commit — the window just died in
+                    // flight. This is not a restore miss: onMiss/fallback
+                    // would drop restart-candidate state a same-app reopen
+                    // may still need. Nothing to apply; just complete.
                     if (onComplete)
                         onComplete();
                     return;
@@ -236,14 +248,40 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     if (!allowDuringDrag && (window->isUserMove() || window->isUserResize())) {
         qCDebug(lcEffect) << "Window in user move/resize, deferring geometry via windowFinishUserMovedResized";
         QPointer<KWin::EffectWindow> safeWindow = window;
+        // Snapshot the batch-supersession context at defer time: the fire can
+        // land arbitrarily later (the user keeps dragging), and replaying the
+        // old rect after a NEWER per-screen batch repositioned things would
+        // clobber it — or, after the drag crossed screens, teleport the
+        // window back to the old screen's rect.
+        const QString deferScreen = getWindowScreenId(window);
+        const uint64_t deferGen = m_daemonGate.batchGenByScreen.value(deferScreen);
         auto conn = std::make_shared<QMetaObject::Connection>();
-        *conn = connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
-                        [this, safeWindow, geo, skipAnimation, profilePath, conn](KWin::EffectWindow*) {
-                            disconnect(*conn);
-                            if (safeWindow && !safeWindow->isDeleted() && !safeWindow->isFullScreen()) {
-                                applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath);
-                            }
-                        });
+        *conn = connect(
+            window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
+            [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, deferGen](KWin::EffectWindow*) {
+                disconnect(*conn);
+                if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
+                    return;
+                }
+                const QString nowScreen = getWindowScreenId(safeWindow.data());
+                if (nowScreen != deferScreen || m_daemonGate.batchGenByScreen.value(deferScreen) != deferGen) {
+                    qCDebug(lcEffect) << "Deferred geometry superseded (screen or batch changed), dropping:"
+                                      << getWindowId(safeWindow.data());
+                    return;
+                }
+                // Re-assert the self-caused-frame-change guard the
+                // original (batch) apply held — without it the
+                // synchronous frame change from this moveResize
+                // reads as an external move and can report a
+                // phantom cross-VS unsnap.
+                // Save/restore, not set/clear (nesting-safe).
+                const bool prevInApply = m_daemonGate.inGeometryApply;
+                m_daemonGate.inGeometryApply = true;
+                const auto guard = qScopeGuard([this, prevInApply] {
+                    m_daemonGate.inGeometryApply = prevInApply;
+                });
+                applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath);
+            });
         return;
     }
 
@@ -272,8 +310,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // normally.
     const ShaderTransition* const inFlight = m_shaderManager.findTransition(window);
     const bool openAnimationInFlight = inFlight && inFlight->addedGrabHeld;
+    // Caller-owned memoisation slot: when the gate builds the WindowQuery for
+    // its rule probes, the resolver pass below reuses it instead of walking
+    // the ~30 accessors a second time per animated apply.
+    std::optional<PhosphorRules::WindowQuery> sharedQuery;
     if (!skipAnimation && !allowDuringDrag && !openAnimationInFlight && m_windowAnimator->isEnabled()
-        && shouldAnimateWindow(window)) {
+        && shouldAnimateWindow(window, &sharedQuery)) {
         const QRectF targetFrame(geo);
 
         // Bail before any work when the in-flight animation already
@@ -304,11 +346,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // not re-apply the cascade — once an animation is in flight, it
         // stays on the curve that started it for visual continuity.
         //
-        // Build the full per-window query once and reuse for the shader
-        // resolver call below — matches the shape `shouldAnimateWindow`
-        // uses for its rule-override gate, so a rule that gates the
-        // animation also resolves its curve / timing / shader slots.
-        const PhosphorRules::WindowQuery query = ruleQuery(window);
+        // Reuse the gate's query when it built one (rules present); build
+        // only when the gate's fast paths never needed it — matches the shape
+        // `shouldAnimateWindow` uses for its rule-override gate, so a rule
+        // that gates the animation also resolves its curve / timing / shader
+        // slots.
+        const PhosphorRules::WindowQuery query = sharedQuery ? *sharedQuery : ruleQuery(window);
         const QString windowId = getWindowId(window);
         const auto& baseProfile = m_windowAnimator->profile();
         // Resolve the fully-cascaded motion profile for this event (curve +
@@ -393,9 +436,9 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // uses `evaluator.resolveCached(windowId, query)`). When a rule
             // set is configured, the sister `resolveEventMotionProfile`
             // call above already warmed the per-window cache slot for this
-            // query, so this cached read is a hit. (With an empty rule set
-            // that resolver never touches the evaluator, but then there is
-            // no priority-order walk to pay for either.) The earlier shape
+            // query, so this cached read is a hit. (An empty rule set still
+            // goes through resolveCached, but its walk over zero rules is
+            // trivially cheap and the cache slot dedups it.) The earlier shape
             // called a standalone uncached shader-profile resolver here, which
             // paid an extra priority-order walk per snap on every
             // non-empty rule set — same regression the shim was
@@ -627,8 +670,6 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
 
     m_currentDragPolicy = newPolicy;
 
-    KWin::EffectWindow* dragW = m_dragTracker->draggedWindow();
-
     if (newReason == PhosphorProtocol::DragBypassReason::AutotileScreen) {
         // Snap → autotile (or context-disabled → autotile). Cancel any
         // active snap overlay, enter bypass mode. Mirrors the old
@@ -656,7 +697,11 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // Do NOT call handleDragToFloat here: the mid-drag schedule would
         // race against the zone snap at drop, making the window jump after
         // the user lets go. onWindowClosed alone clears the tracking state.
-        if (dragW) {
+        // Guarded on the ID, not the dragged-window pointer: the call is
+        // id-keyed bookkeeping that never derefs the window, and a
+        // died-mid-drag pointer must not skip the tracking cleanup for a
+        // still-valid id.
+        if (!windowId.isEmpty()) {
             m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
         }
         m_dragBypassedForAutotile = false;

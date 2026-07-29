@@ -34,13 +34,11 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
-#include "config/configbackends.h"
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/Zone.h>
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
-#include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
@@ -58,7 +56,6 @@ private Q_SLOTS:
         m_parent = new QObject(nullptr);
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), m_parent);
         m_virtualDesktopManager = new PhosphorWorkspaces::VirtualDesktopManager(m_parent);
-        m_settings = new StubSettings(m_parent);
         m_zoneDetector = new StubZoneDetector(m_parent);
 
         m_layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"));
@@ -93,7 +90,6 @@ private Q_SLOTS:
         m_parent = nullptr;
         m_layoutManager = nullptr;
         m_virtualDesktopManager = nullptr;
-        m_settings = nullptr;
         m_zoneDetector = nullptr;
         m_layout = nullptr;
         m_service = nullptr;
@@ -253,7 +249,10 @@ private Q_SLOTS:
         m_service->assignWindowToZone(QStringLiteral("app|abc"), m_zone1Id, QStringLiteral("DP-1"), 1);
         m_service->clearDirty();
 
-        const int pruned = m_service->pruneStaleAssignments(QSet<QString>{});
+        // Non-empty alive set (an unrelated survivor): the empty set is a
+        // fail-closed no-op so a premature alive report cannot wipe every
+        // persisted assignment.
+        const int pruned = m_service->pruneStaleAssignments(QSet<QString>{QStringLiteral("other|zzz")});
         QVERIFY(pruned >= 1);
 
         const auto mask = m_service->peekDirty();
@@ -330,7 +329,6 @@ private:
     QObject* m_parent = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager = nullptr;
-    StubSettings* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     PhosphorZones::Layout* m_layout = nullptr;

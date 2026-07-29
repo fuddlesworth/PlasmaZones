@@ -9,8 +9,6 @@
 #include <QTest>
 #include <QSignalSpy>
 #include <QJsonObject>
-#include <QJsonArray>
-#include <QJsonDocument>
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutComputeService.h>
@@ -21,17 +19,6 @@ class TestLayoutZones : public QObject
     Q_OBJECT
 
 private:
-    PhosphorZones::Layout* createLayoutWithZones(int zoneCount, QObject* parent = nullptr)
-    {
-        auto* layout = new PhosphorZones::Layout(QStringLiteral("test"), parent);
-        for (int i = 0; i < zoneCount; ++i) {
-            auto* zone = new PhosphorZones::Zone();
-            zone->setRelativeGeometry(QRectF(qreal(i) / zoneCount, 0.0, 1.0 / zoneCount, 1.0));
-            layout->addZone(zone);
-        }
-        return layout;
-    }
-
     PhosphorZones::Zone* createZoneWithGeometry(const QRectF& geometry, QObject* parent = nullptr)
     {
         auto* zone = new PhosphorZones::Zone(parent);
@@ -300,6 +287,109 @@ private Q_SLOTS:
         PhosphorZones::LayoutComputeService::recalculateSync(&layout, newScreenGeom);
         QCOMPARE(layout.lastRecalcGeometry(), newScreenGeom);
         QCOMPARE(zone->geometry(), QRectF(0, 0, 2560, 1440));
+    }
+
+    void testLayout_asyncCachedResultReportsSupersession()
+    {
+        PhosphorZones::Layout layout(QStringLiteral("Async cache"));
+        auto* zone = new PhosphorZones::Zone();
+        zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
+        layout.addZone(zone);
+
+        PhosphorZones::LayoutComputeService service;
+        // geometriesComputedForGeneration is the single result signal (the
+        // old generation-less geometriesComputed had no production
+        // subscribers and was removed).
+        QSignalSpy computedForGeneration(&service,
+                                         &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration);
+        const QString screenId = QStringLiteral("DP-1");
+        const QRectF firstGeometry(0, 0, 1920, 1080);
+        const QRectF secondGeometry(0, 0, 2560, 1440);
+
+        QVERIFY(service.requestRecalculate(&layout, screenId, firstGeometry));
+        QTRY_COMPARE(computedForGeneration.size(), 1);
+        const qulonglong firstGeneration = computedForGeneration.first().at(3).toULongLong();
+        QCOMPARE(qulonglong(service.currentGeneration(screenId)), firstGeneration);
+        QCOMPARE(layout.lastRecalcGeometry(), firstGeometry);
+        computedForGeneration.clear();
+
+        // The cached completion is queued. A newer request made before that
+        // callback runs must turn the cached result into a superseded null
+        // notification, followed by the current applied result. The cached
+        // no-op deliberately does NOT consume a generation — bumping would
+        // supersede the in-flight real compute — so the observable contract
+        // is RELATIVE: the superseded emission carries a null layout and a
+        // generation strictly below the current one, and the applied
+        // emission carries the layout at exactly the current generation.
+        QVERIFY(service.requestRecalculate(&layout, screenId, firstGeometry));
+        QVERIFY(service.requestRecalculate(&layout, screenId, secondGeometry));
+        QTRY_VERIFY(computedForGeneration.size() >= 2);
+
+        const qulonglong finalGeneration = qulonglong(service.currentGeneration(screenId));
+        QVERIFY(finalGeneration > firstGeneration);
+        bool sawSupersededGeneration = false;
+        bool sawCurrentGeneration = false;
+        for (const QList<QVariant>& args : computedForGeneration) {
+            auto* reported = qvariant_cast<PhosphorZones::Layout*>(args.at(2));
+            const qulonglong generation = args.at(3).toULongLong();
+            sawSupersededGeneration |= reported == nullptr && generation < finalGeneration;
+            sawCurrentGeneration |= reported == &layout && generation == finalGeneration;
+        }
+        QVERIFY(sawSupersededGeneration);
+        QVERIFY(sawCurrentGeneration);
+        QCOMPARE(layout.lastRecalcGeometry(), secondGeometry);
+    }
+
+    // applyResult's destroyed-layout path: a result whose layout died while
+    // the worker computed must still publish (null layout, the REQUEST's
+    // generation) so screen-scoped barriers can complete instead of waiting
+    // forever. The delete happens before the event loop spins, so the queued
+    // worker result always lands after it — deterministic, not a race.
+    void testLayout_asyncResultForDestroyedLayoutPublishesNull()
+    {
+        auto* layout = new PhosphorZones::Layout(QStringLiteral("Doomed"));
+        auto* zone = new PhosphorZones::Zone();
+        zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
+        layout->addZone(zone);
+
+        PhosphorZones::LayoutComputeService service;
+        QSignalSpy computedForGeneration(&service,
+                                         &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration);
+        const QString screenId = QStringLiteral("DP-1");
+        QVERIFY(service.requestRecalculate(layout, screenId, QRectF(0, 0, 1920, 1080)));
+        const qulonglong gen = qulonglong(service.currentGeneration(screenId));
+        delete layout;
+
+        QTRY_COMPARE(computedForGeneration.size(), 1);
+        const QList<QVariant> args = computedForGeneration.first();
+        QCOMPARE(qvariant_cast<PhosphorZones::Layout*>(args.at(2)), static_cast<PhosphorZones::Layout*>(nullptr));
+        QCOMPARE(args.at(3).toULongLong(), gen);
+    }
+
+    // applyResult's sync-already-applied path: when a sync recalc stamped the
+    // same rect before the worker result lands, the result publishes the LIVE
+    // layout at the request's (still current) generation — a null or dropped
+    // emission here would stall the same barriers the destroyed path serves.
+    void testLayout_asyncResultAfterSyncApplyPublishesCurrentGeneration()
+    {
+        PhosphorZones::Layout layout(QStringLiteral("SyncFirst"));
+        auto* zone = new PhosphorZones::Zone();
+        zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
+        layout.addZone(zone);
+
+        PhosphorZones::LayoutComputeService service;
+        QSignalSpy computedForGeneration(&service,
+                                         &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration);
+        const QString screenId = QStringLiteral("DP-1");
+        const QRectF geom(0, 0, 1920, 1080);
+        QVERIFY(service.requestRecalculate(&layout, screenId, geom));
+        // Sync path wins the race before the worker's queued result lands.
+        PhosphorZones::LayoutComputeService::recalculateSync(&layout, geom);
+
+        QTRY_COMPARE(computedForGeneration.size(), 1);
+        const QList<QVariant> args = computedForGeneration.first();
+        QCOMPARE(qvariant_cast<PhosphorZones::Layout*>(args.at(2)), &layout);
+        QCOMPARE(args.at(3).toULongLong(), qulonglong(service.currentGeneration(screenId)));
     }
 };
 

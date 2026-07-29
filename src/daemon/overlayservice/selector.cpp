@@ -60,22 +60,32 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         return;
     }
 
-    m_zoneSelectorVisible = true;
-
     auto* mgr = m_screenManager;
     QScreen* targetScreen = nullptr;
     if (!targetScreenId.isEmpty()) {
         targetScreen = mgr ? mgr->physicalScreenFor(targetScreenId).qscreen
                            : PhosphorScreens::ScreenIdentity::findByIdOrName(targetScreenId);
+        if (!targetScreen && (!mgr || !mgr->effectiveScreenIds().contains(targetScreenId))) {
+            // An explicit target that resolves to NOTHING must not fall
+            // through to the every-screen path — a selector popping up on all
+            // monitors because one id went stale is worse than not showing.
+            qCWarning(lcOverlay) << "showZoneSelector: target screen unresolvable:" << targetScreenId;
+            return;
+        }
     }
 
     const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
 
-    auto showOnScreen = [this](const QString& screenId, QScreen* physScreen, const QRect& targetGeom) {
+    // Set the logical-visibility flag only if at least one screen actually
+    // shows; a flag flipped on with zero shells shown wedges the guard at
+    // function entry (every later show early-returns "already visible").
+    bool shownAny = false;
+    auto showOnScreen = [this, &shownAny](const QString& screenId, QScreen* physScreen, const QRect& targetGeom) {
         auto* state = ensurePassiveShellFor(screenId, physScreen);
         if (!state || !state->shell || !state->shell->shellSurface() || !state->zoneSelectorSlot()) {
             return;
         }
+        shownAny = true;
         state->zoneSelectorPhysScreen = physScreen;
         state->zoneSelectorGeometry = targetGeom;
         if (state->shell->shellWindow()) {
@@ -115,8 +125,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             if (!targetScreenId.isEmpty() && screenId != targetScreenId) {
                 continue;
             }
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
+            if (isSnappingContextDisabled(screenId)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -132,8 +141,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
+            if (isSnappingContextDisabled(screenId)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -146,6 +154,11 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         }
     }
 
+    if (!shownAny) {
+        qCWarning(lcOverlay) << "showZoneSelector: no screen could show the selector";
+        return;
+    }
+    m_zoneSelectorVisible = true;
     Q_EMIT zoneSelectorVisibilityChanged(true);
 }
 
@@ -332,8 +345,12 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 // rule (checked first) or a manual lock on either mode.
                 if (m_settings && m_layoutManager) {
                     int curDesktop = currentVirtualDesktopForScreen(cursorScreenId);
-                    QString curActivity = m_layoutManager->currentActivity();
-                    bool locked = isAnyModeLocked(m_settings, m_layoutManager, cursorScreenId, curDesktop, curActivity);
+                    // m_currentActivity, not m_layoutManager->currentActivity():
+                    // every other context resolve in this class reads the mirror,
+                    // and mixing sources lets the lock hit-test transiently
+                    // disagree with the cards drawn from the mirror.
+                    bool locked =
+                        isAnyModeLocked(m_settings, m_layoutManager, cursorScreenId, curDesktop, m_currentActivity);
                     if (locked) {
                         // Only allow zone selection from the active layout
                         PhosphorZones::Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(cursorScreenId);
@@ -439,61 +456,9 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     }
 }
 
-void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom)
-{
-    // Post-shell-migration: the per-VS PhosphorRoles::ZoneSelector wl_surface
-    // is replaced by an Item slot inside the per-screen passive shell.
-    // This function is now a thin alias for ensurePassiveShellFor +
-    // initial property push; the showZoneSelector show-loop already
-    // routes through showOnScreen which calls ensurePassiveShellFor.
-    if (!physScreen) {
-        qCWarning(lcOverlay) << "createZoneSelectorWindow: null physScreen for screen=" << screenId;
-        return;
-    }
-    auto* state = ensurePassiveShellFor(screenId, physScreen);
-    if (!state || !state->zoneSelectorSlot()) {
-        return;
-    }
-    state->zoneSelectorPhysScreen = physScreen;
-
-    const QRect screenGeom = geom.isValid() ? geom : physScreen->geometry();
-    state->zoneSelectorGeometry = screenGeom;
-
-    auto* slot = state->zoneSelectorSlot();
-    qreal aspectRatio =
-        (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-    aspectRatio = qBound(0.5, aspectRatio, 4.0);
-    writeQmlProperty(slot, QStringLiteral("screenAspectRatio"), aspectRatio);
-    writeQmlProperty(slot, QStringLiteral("screenWidth"), screenGeom.width());
-    if (m_settings) {
-        // Zone padding honors per-monitor gap RULES (context-rule override →
-        // global → default) via the layout registry's current context. The
-        // selector preview passes no layout, so the per-layout tier does not
-        // apply here; border width/radius layer the context overlay rule over
-        // the global config value, matching updateZoneSelectorWindow (every show
-        // path re-runs the update, so these seed values are consistent with it).
-        const PhosphorZones::ContextOverlayOverride overlayOverride =
-            overlayOverrideForScreen(m_layoutManager, screenId);
-        writeQmlProperty(
-            slot, QStringLiteral("zonePadding"),
-            GeometryUtils::getEffectiveInnerGap(
-                nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, m_settings, screenId)));
-        writeQmlProperty(slot, QStringLiteral("zoneBorderWidth"),
-                         overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
-        writeQmlProperty(slot, QStringLiteral("zoneBorderRadius"),
-                         overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
-    }
-    const ZoneSelectorConfig config =
-        m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();
-    writeQmlProperty(slot, QStringLiteral("selectorPosition"), config.position);
-    writeQmlProperty(slot, QStringLiteral("selectorLayoutMode"), config.layoutMode);
-    writeQmlProperty(slot, QStringLiteral("selectorGridColumns"), config.gridColumns);
-    writeQmlProperty(slot, QStringLiteral("previewWidth"), config.previewWidth);
-    writeQmlProperty(slot, QStringLiteral("previewHeight"), config.previewHeight);
-    writeQmlProperty(slot, QStringLiteral("previewLockAspect"), config.previewLockAspect);
-    // No signal wiring: the slot is input-transparent by design — hit-testing
-    // and commit both happen in C++ (updateSelectorPosition + drop.cpp).
-}
+// createZoneSelectorWindow was removed: after the shell migration it was a
+// caller-less thin alias for ensurePassiveShellFor + a property seed that
+// updateZoneSelectorWindow re-writes on every show path anyway.
 
 void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
 {

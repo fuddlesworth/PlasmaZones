@@ -23,24 +23,16 @@
 #include <QTest>
 #include <QString>
 #include <QStringList>
-#include <QHash>
 #include <QRect>
-#include <QSet>
-#include <QUuid>
 #include <QSignalSpy>
-#include <QRectF>
 #include <memory>
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorSnapEngine/SnapState.h>
-#include "config/configbackends.h"
-#include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "core/utils/utils.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 
@@ -118,7 +110,12 @@ private Q_SLOTS:
 
         QVERIFY(!m_service->isWindowSnapped(windowId));
         QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().zoneIds.first(), m_zoneIds[0]);
+        // Guard both derefs: a bare .first() on an empty queue/list is UB, not
+        // a test failure.
+        const auto queue = m_service->pendingRestoreQueues().value(appId);
+        QVERIFY(!queue.isEmpty());
+        QVERIFY(!queue.first().zoneIds.isEmpty());
+        QCOMPARE(queue.first().zoneIds.first(), m_zoneIds[0]);
     }
 
     void testWindowClosed_floatingWindowNotPersisted()
@@ -154,9 +151,11 @@ private Q_SLOTS:
 
         m_service->windowClosed(windowId);
 
-        // Float state and pre-float zones should be fully cleared on close
+        // Float state and pre-float zones should be fully cleared on close —
+        // BOTH keys: the windowId-keyed runtime entry and the appId alias.
         QVERIFY(!m_service->isWindowFloating(windowId));
         QVERIFY(!m_service->isWindowFloating(appId));
+        QVERIFY(m_service->preFloatZone(windowId).isEmpty());
         QVERIFY(m_service->preFloatZone(appId).isEmpty());
     }
 
@@ -486,6 +485,34 @@ private Q_SLOTS:
         QCOMPARE(rec->freeGeometryFor(screen), QRect(50, 60, 700, 500));
     }
 
+    void testRecordFreeGeometry_prefixMutationStillHonorsFirstCapture()
+    {
+        // An appId-prefix mutation must not defeat first-capture-wins: the
+        // renamed window still owns its earlier record via the instance suffix,
+        // so a non-overwrite capture keeps the FIRST geometry (and an explicit
+        // overwrite still replaces it under the new id).
+        const QString oldId = QStringLiteral("oldclass|renamed-instance");
+        const QString newId = QStringLiteral("newclass|renamed-instance");
+        const QString screen = QStringLiteral("DP-1");
+        const QRect firstGeometry(10, 20, 500, 400);
+
+        m_service->recordFreeGeometry(oldId, screen, firstGeometry, /*overwrite=*/false);
+        m_service->recordFreeGeometry(newId, screen, QRect(90, 80, 900, 700), /*overwrite=*/false);
+
+        auto rec = m_service->placementStore().peekExact(newId);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->freeGeometryFor(screen), firstGeometry);
+        QCOMPARE(m_service->placementStore().size(), 1);
+
+        const QRect replacement(30, 40, 600, 450);
+        m_service->recordFreeGeometry(newId, screen, replacement, /*overwrite=*/true);
+        rec = m_service->placementStore().peekExact(newId);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->windowId, newId);
+        QCOMPARE(rec->appId, QStringLiteral("newclass"));
+        QCOMPARE(rec->freeGeometryFor(screen), replacement);
+    }
+
     void testRecordFloatingClose_neverInheritsSiblingEngineSlots()
     {
         // A record-less window closing floating must take recordFloatingClose's
@@ -514,6 +541,37 @@ private Q_SLOTS:
         QVERIFY(sibRec.has_value());
         QCOMPARE(sibRec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
                  QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+    }
+
+    void testRecordFloatingClose_prefixMutationKeepsOwnEngineSlots()
+    {
+        // Closing floating after an appId-prefix mutation must merge into the
+        // window's OWN prior record (matched by instance suffix), preserving its
+        // other engine slots rather than synthesizing a fresh floating-only record.
+        const QString oldId = QStringLiteral("oldclass|closing-instance");
+        const QString newId = QStringLiteral("newclass|closing-instance");
+        PhosphorEngine::WindowPlacement existing;
+        existing.windowId = oldId;
+        existing.appId = QStringLiteral("oldclass");
+        existing.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot snap;
+        snap.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        snap.zoneIds = QStringList{m_zoneIds[0]};
+        existing.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
+        QVERIFY(m_service->placementStore().record(existing));
+
+        const QRect closeGeometry(70, 80, 700, 500);
+        m_service->recordFloatingClose(newId, QStringLiteral("DP-1"), closeGeometry);
+
+        QCOMPARE(m_service->placementStore().size(), 1);
+        const auto rec = m_service->placementStore().peekExact(newId);
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->windowId, newId);
+        QCOMPARE(rec->appId, QStringLiteral("newclass"));
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).zoneIds, QStringList{m_zoneIds[0]});
+        QCOMPARE(rec->freeGeometryFor(QStringLiteral("DP-1")), closeGeometry);
     }
 
     void testRecordedSnapZones_appIdFallbackAfterRelogin()
@@ -640,9 +698,14 @@ private Q_SLOTS:
 
     void testOnLayoutChanged_floatingWindowsExcludedFromResnap()
     {
-        QString windowId = QStringLiteral("app|12345");
-        m_service->assignWindowToZone(windowId, m_zoneIds[0], QString(), 0);
-        m_service->setWindowFloating(windowId, true);
+        const QString floatedId = QStringLiteral("app|12345");
+        // Non-floating CONTROL window: proves the resnap actually produced
+        // entries, so the exclusion loop below cannot pass vacuously on an
+        // empty list.
+        const QString snappedId = QStringLiteral("app|control");
+        m_service->assignWindowToZone(floatedId, m_zoneIds[0], QString(), 0);
+        m_service->assignWindowToZone(snappedId, m_zoneIds[1], QString(), 0);
+        m_service->setWindowFloating(floatedId, true);
 
         PhosphorZones::Layout* newLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
@@ -650,9 +713,8 @@ private Q_SLOTS:
         m_service->onLayoutChanged();
 
         QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
-        for (const ZoneAssignmentEntry& entry : resnap) {
-            QVERIFY(entry.windowId != windowId);
-        }
+        QCOMPARE(resnap.size(), 1);
+        QCOMPARE(resnap.first().windowId, snappedId);
     }
 
 private:

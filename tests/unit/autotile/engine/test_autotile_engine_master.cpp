@@ -5,13 +5,13 @@
 #include <QCoreApplication>
 #include <QSignalSpy>
 
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "helpers/AutotileFakes.h"
 #include "helpers/AutotileTestHelpers.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include "core/types/constants.h"
 
 #include "helpers/ScriptedAlgoTestSetup.h"
 
@@ -97,6 +97,7 @@ private Q_SLOTS:
 
         const qreal initial1 = state1->splitRatio();
         const qreal initial2 = state2->splitRatio();
+        const qreal globalBefore = engine.config()->splitRatio;
 
         // Use windowFocused to properly set m_activeScreen on the engine
         engine.windowFocused(QStringLiteral("win1"), screen1);
@@ -106,6 +107,9 @@ private Q_SLOTS:
         // Only the focused screen's ratio should change
         QVERIFY(qFuzzyCompare(state1->splitRatio(), initial1 - 0.1));
         QVERIFY(qFuzzyCompare(state2->splitRatio(), initial2));
+        // Same no-bleed contract as the increase twin: the per-desktop tweak
+        // must not land in the global config.
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, globalBefore));
     }
 
     // =========================================================================
@@ -160,12 +164,15 @@ private Q_SLOTS:
         PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
         state1->setMasterCount(2);
         state2->setMasterCount(2);
+        const int globalBefore = engine.config()->masterCount;
 
         engine.windowFocused(QStringLiteral("win1"), screen1);
         engine.decreaseMasterCount();
 
         QCOMPARE(state1->masterCount(), 1);
         QCOMPARE(state2->masterCount(), 2);
+        // Same no-bleed contract as the increase twin.
+        QCOMPARE(engine.config()->masterCount, globalBefore);
     }
 
     void testDecreaseMasterCount_doesNotGoBelowOne()
@@ -203,12 +210,19 @@ private Q_SLOTS:
         engine.windowFocused(QStringLiteral("win1"), screen1);
         engine.increaseMasterRatio(0.1); // tunes the current desktop's state
 
+        const qreal tunedRatio = engine.tilingStateForScreen(screen1)->splitRatio();
+        QVERIFY(!qFuzzyCompare(1.0 + tunedRatio, 1.0 + engine.config()->splitRatio)); // genuinely tuned
         engine.pruneStatesForDesktop(engine.currentDesktop());
 
-        // A fresh state on the same screen is created cleanly after the prune.
+        // A fresh state on the same screen is created cleanly after the prune
+        // (tilingStateForScreen creates lazily, so the non-null check alone
+        // could never fail — the discriminating assertion is that the tuned
+        // per-desktop ratio did NOT survive the prune into the fresh state).
         engine.windowOpened(QStringLiteral("win3"), screen1, 0, 0);
         QCoreApplication::processEvents();
-        QVERIFY(engine.tilingStateForScreen(screen1) != nullptr);
+        PhosphorTiles::TilingState* fresh = engine.tilingStateForScreen(screen1);
+        QVERIFY(fresh != nullptr);
+        QVERIFY(!qFuzzyCompare(1.0 + fresh->splitRatio(), 1.0 + tunedRatio));
     }
 
     // =========================================================================
@@ -447,8 +461,11 @@ private Q_SLOTS:
         overrides[QStringLiteral("SplitRatio")] = 0.5;
         engine.applyPerScreenConfig(screen1, overrides);
 
+        // The per-screen override push is the load-bearing setup — no manual
+        // setSplitRatio duplicate beside it (the old double write hid which
+        // of the two the assertions depended on); assert the push landed.
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen1);
-        state->setSplitRatio(0.5);
+        QCOMPARE(state->splitRatio(), 0.5);
         const qreal globalBefore = engine.config()->splitRatio;
 
         engine.windowFocused(QStringLiteral("win1"), screen1);
@@ -478,8 +495,11 @@ private Q_SLOTS:
         overrides[QStringLiteral("SplitRatio")] = 0.5;
         engine.applyPerScreenConfig(screen1, overrides);
 
+        // The per-screen override push is the load-bearing setup — no manual
+        // setSplitRatio duplicate beside it (the old double write hid which
+        // of the two the assertions depended on); assert the push landed.
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen1);
-        state->setSplitRatio(0.5);
+        QCOMPARE(state->splitRatio(), 0.5);
         const qreal globalBefore = engine.config()->splitRatio;
 
         engine.windowFocused(QStringLiteral("win1"), screen1);
@@ -584,6 +604,9 @@ private Q_SLOTS:
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QVERIFY(doc.isArray());
         const QJsonArray arr = doc.array();
+        // Non-empty first: an empty array would make the omits-flag loop
+        // vacuously pass without exercising the serializer at all.
+        QCOMPARE(arr.size(), 2);
         for (const QJsonValue& val : arr) {
             QVERIFY(!val.toObject().contains(QLatin1String("monocle")));
         }
@@ -714,6 +737,47 @@ private Q_SLOTS:
         QCOMPARE(tiledWindows.at(1), QStringLiteral("win-C"));
     }
 
+    void testRemoveWindow_cleansNeverInsertedMinimizedPlaceholder()
+    {
+        const QString screenName = QStringLiteral("DP-1");
+        const QString first = QStringLiteral("app|first");
+        const QString hidden = QStringLiteral("app|hidden");
+        const QString third = QStringLiteral("app|third");
+        PhosphorEngine::WindowRegistry registry;
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("app");
+        // Every live window carries a registry record in production (metadata
+        // is pushed at window-open); the strict seed defers windows the
+        // registry cannot vouch for, so the visible windows need engaged
+        // not-minimized records here or they would be deferred too.
+        metadata.isMinimized = false;
+        registry.upsert(QStringLiteral("first"), metadata);
+        registry.upsert(QStringLiteral("third"), metadata);
+        metadata.isMinimized = true;
+        registry.upsert(QStringLiteral("hidden"), metadata);
+
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setWindowRegistry(&registry);
+        engine.config()->insertPosition = AutotileConfig::InsertPosition::End;
+        engine.setInitialWindowOrder(screenName, {first, hidden, third});
+        engine.setAutotileScreens({screenName});
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state);
+        QCOMPARE(state->tiledWindows(), (QStringList{first, third}));
+        QVERIFY(!state->containsWindow(hidden));
+
+        // The placeholder has no engine key because it was deliberately not
+        // inserted. Closing it must still remove it from the pending order.
+        engine.windowClosed(hidden);
+        metadata.isMinimized = false;
+        registry.upsert(QStringLiteral("hidden"), metadata);
+        engine.windowOpened(hidden, screenName);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(state->tiledWindows(), (QStringList{first, third, hidden}));
+    }
+
     void testSetInitialWindowOrder_guardChecksAllWindows()
     {
         const QString screenName = QStringLiteral("DP-1");
@@ -730,15 +794,19 @@ private Q_SLOTS:
         QVERIFY(state->tiledWindows().isEmpty());
         QCOMPARE(state->windowCount(), 1);
 
-        QStringList preSeeded = {QStringLiteral("win-A")};
+        // The seed must be IGNORED (the state already holds a window, floating
+        // included). Use a REORDERING seed so the outcome is distinguishable:
+        // with the seed ignored, arrival order wins (win-B first); had the
+        // guard failed and the strict seed applied, win-A would have been
+        // forced ahead of win-B and the compare below would fail.
+        QStringList preSeeded = {QStringLiteral("win-A"), QStringLiteral("win-B")};
         engine.setInitialWindowOrder(screenName, preSeeded);
 
+        engine.windowOpened(QStringLiteral("win-B"), screenName);
         engine.windowOpened(QStringLiteral("win-A"), screenName);
         QCoreApplication::processEvents();
 
-        QStringList tiledWindows = state->tiledWindows();
-        QCOMPARE(tiledWindows.size(), 1);
-        QCOMPARE(tiledWindows.at(0), QStringLiteral("win-A"));
+        QCOMPARE(state->tiledWindows(), (QStringList{QStringLiteral("win-B"), QStringLiteral("win-A")}));
     }
 };
 

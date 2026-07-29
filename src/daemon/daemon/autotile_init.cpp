@@ -17,6 +17,7 @@
 
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -154,7 +155,7 @@ void Daemon::initializeAutotile()
                             // last left snapping. No parallel saved-float set. Float state is set
                             // immediately; geometry restore is deferred to the batched resnap
                             // signal to avoid individual D-Bus signals queuing behind the resnap.
-                            // Exact record only: this is a LIVE mid-session window (uuids stable),
+                            // Same-instance record only: this is a LIVE mid-session window (uuids stable),
                             // so a same-app sibling's record must not float/zone-restore it.
                             const auto rec = wts->placementStore().peekExact(windowId);
                             const PhosphorEngine::EngineSlot snapSlot = rec
@@ -169,17 +170,26 @@ void Daemon::initializeAutotile()
                             // float geometry on return to snapping (the "still floated" bug). Gated on
                             // wasAutotileFloated so order-driven (tiled, non-floated) windows — which the
                             // order-resnap path already handles — are not double-snapped here.
-                            const bool snapSnapped = wasAutotileFloated
+                            //
+                            // A MINIMIZED window qualifies too: its autotile representation is a
+                            // suspension float that never sets the mode-specific marker, so a
+                            // snap-SNAPPED window that was autotiled and then minimized would
+                            // otherwise take no restore branch at all and unminimize at a stale
+                            // rect before anything resnaps it.
+                            const bool wasMinimized = wts->windowRegistry()
+                                && wts->windowRegistry()->minimizedState(windowId).value_or(false);
+                            const bool snapSnapped = (wasAutotileFloated || wasMinimized)
                                 && snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()
                                 && !snapSlot.zoneIds.isEmpty();
                             if (snapFloat) {
                                 qCInfo(lcDaemon) << "windowsReleased: restoring snap-float for" << windowId;
                                 m_windowTrackingAdaptor->setWindowFloating(windowId, true);
                                 const QString screen = wts->screenForWindow(windowId);
-                                QRect g = rec->freeGeometryFor(screen.isEmpty() ? rec->screenId : screen);
-                                if (!g.isValid()) {
-                                    g = rec->anyFreeGeometry();
-                                }
+                                // Per-screen rect only. anyFreeGeometry() would return a rect
+                                // remembered for a DIFFERENT monitor and teleport the window
+                                // there on multi-monitor; with no rect for this screen the
+                                // window simply stays where it is.
+                                const QRect g = rec->freeGeometryFor(screen.isEmpty() ? rec->screenId : screen);
                                 if (g.isValid()) {
                                     ZoneAssignmentEntry entry;
                                     entry.windowId = windowId;
@@ -256,15 +266,16 @@ void Daemon::initializeAutotile()
                 // mode the user is actually trying to interact with.
                 // Note: intentionally shown regardless of showOsdOnLayoutSwitch — this is
                 // direct feedback to an explicit user action, not a passive layout-switch OSD.
+                // Fail closed on a missing resolver or engine, matching the
+                // sibling gates (isFocusedContextGated and friends): a toggle
+                // during the teardown window must not act ungated (the
+                // wasAutotile branch below derefs the engine).
+                if (!m_contextResolver || !m_autotileEngine) {
+                    return;
+                }
                 const auto currentMode = currentModeFor(screenId);
-                // Legacy direct settings check — kept inline because the OSD
-                // surface needs the rich PlasmaZones::DisabledReason enum
-                // (which carries axis info for the user-facing message);
-                // PhosphorContext::DisabledReason in the LGPL lib is a
-                // narrower projection. Migrating this site requires a richer
-                // resolver API and is tracked as a follow-up.
-                const DisabledReason why =
-                    contextDisabledReason(m_settings.get(), currentMode, screenId, desktop, activity);
+                const DisabledReason why = toDaemonDisabledReason(
+                    m_contextResolver->disabledReason(m_contextResolver->handleForMode(screenId, currentMode)));
                 if (why != DisabledReason::NotDisabled) {
                     showContextDisabledOsd(screenId, desktop, activity, why);
                     return;
@@ -306,6 +317,13 @@ void Daemon::initializeAutotile()
                 // orders are preserved — a replace would discard them.
                 if (wasAutotile) {
                     auto currentOrders = captureAutotileOrders();
+                    // Pre-clear ONLY the toggled screen's context: this is a
+                    // per-screen toggle, and dropping every active screen's
+                    // saved order wiped remembered orders for screens the
+                    // capture below may not cover (their live state can be
+                    // empty right now while their saved order is still the
+                    // re-entry seed).
+                    m_lastAutotileOrders.remove(TilingStateKey{screenId, desktop, activity});
                     for (auto it = currentOrders.constBegin(); it != currentOrders.constEnd(); ++it) {
                         m_lastAutotileOrders[it.key()] = it.value();
                     }
@@ -487,7 +505,13 @@ void Daemon::initializeAutotile()
                         // float-restore it instead of resnapping to its zone.
                         QStringList windowOrder;
                         for (const QString& windowId : fullOrder) {
-                            if (wts && wts->isWindowFloating(windowId)) {
+                            // Minimize exception, mirroring the seed filter: a minimized
+                            // window reads as floating (suspension float), but it must
+                            // still receive its resnap entry or it unminimizes at the
+                            // stale autotile rect before anything places it.
+                            const bool minimized = wts && wts->windowRegistry()
+                                && wts->windowRegistry()->minimizedState(windowId).value_or(false);
+                            if (wts && wts->isWindowFloating(windowId) && !minimized) {
                                 continue;
                             }
                             if (wts && wts->recordedSnapZones(windowId).isEmpty()) {
@@ -527,7 +551,7 @@ void Daemon::initializeAutotile()
                     allResnapEntries.append(m_pendingSnapFloatRestores);
                     m_pendingSnapFloatRestores.clear();
                     QVector<ZoneAssignmentEntry> restoreEntries =
-                        buildAutotileRestoreEntries(resnappedWindows, desktop, activity);
+                        buildAutotileRestoreEntries(resnappedWindows, desktop, activity, screenId);
                     allResnapEntries.append(restoreEntries);
 
                     // Emit ONE batched signal (suppresses one OSD regardless of screen count)

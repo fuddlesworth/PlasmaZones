@@ -1,5 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// FILE-SIZE EXCEPTION (sanctioned): AutotileEngine is one class — the tiling
+// engine's whole public and internal surface — and C++ cannot split a class
+// declaration across headers. The IMPLEMENTATION is already partitioned by
+// concern under src/autotileengine/; shrinking this header means extracting
+// collaborator classes (drag preview, script-state stash, per-screen config),
+// which is a deliberate refactor, not a mechanical file split. Same rationale
+// as plasmazoneseffect.h / daemon.h / windowtrackingadaptor.h.
 
 #pragma once
 
@@ -202,10 +210,18 @@ public:
     {
         setAutotileScreens(screens);
     }
+    /// Capture-on-leave order: the tiled order PLUS minimize-floated windows
+    /// at their windowOrder positions. A minimize-float is a suspension, not
+    /// intent — dropping it here (as a bare tiledWindows() read would) makes
+    /// the window's position vanish from the saved order, so a
+    /// tiled→minimize→mode-round-trip loses its slot even though the seed
+    /// filter deliberately keeps minimized windows as placeholders. Genuine
+    /// (non-minimized) floats stay excluded.
     QStringList managedWindowOrder(const QString& screenId) const override
     {
-        return tiledWindowOrder(screenId);
+        return capturedWindowOrder(screenId);
     }
+    QStringList capturedWindowOrder(const QString& screenId) const;
     bool isModeSpecificFloated(const QString& windowId) const override
     {
         return isAutotileFloated(windowId);
@@ -339,6 +355,18 @@ public:
      * Called when activities change so stale entries don't accumulate.
      */
     void pruneStatesForActivities(const QStringList& validActivities) override;
+
+    /**
+     * @brief Prune PhosphorTiles::TilingState entries for a permanently removed monitor
+     *
+     * Removes every state whose key.screenId belongs to the removed physical
+     * monitor (including its virtual sub-screens), plus their tuned-flag /
+     * script-stash / scheduling / context residue. updateAutotileScreens only
+     * tears down the CURRENT (desktop, activity) context, so without this the
+     * removed monitor's other contexts' states leak for the session. Mirrors
+     * SnapEngine::pruneStatesForRemovedScreen.
+     */
+    void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
 
     /**
      * @brief Get the current virtual desktop tracked by the engine
@@ -564,6 +592,36 @@ public:
     std::optional<int> savedMaxWindowsForAlgorithm(const QString& algorithmId) const override;
     QString effectiveAlgorithmId(const QString& screenId) const;
     PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
+
+    /**
+     * @brief Drop every per-screen SCHEDULING entry for @p screenId: pending
+     * retiles, retile retry state, and the deferred post-retile focus.
+     * Shared by the toggle-off removal loop and the orphaned-virtual-screen
+     * teardown — a stale entry keyed to a vs:N id would fire against the
+     * RECREATED id of a later re-subdivision.
+     */
+    void clearScreenScheduling(const QString& screenId);
+
+    /**
+     * @brief Purge @p windowId from every pending initial order, with full
+     * bookkeeping: empty orders drop their generation/strict entries, and
+     * surviving orders are re-checked for resolution. The single purge used
+     * by close, cap-rejection, and any other per-window drop — a bare
+     * removeAll leaves an empty order's timeout re-arm chain alive.
+     */
+    void purgeFromPendingOrders(const QString& windowId);
+
+    /**
+     * @brief Run the algorithm's onWindowAdded lifecycle hook for a just-inserted window
+     *
+     * Shared by every insert site (onWindowAdded, handoffReceive, the
+     * strict-initial-order seed in setAutotileScreens) so a memory algorithm's
+     * bookkeeping (e.g. dwindle-memory's split tree) sees every arrival.
+     * Floating arrivals are not in tiledWindows(), so indexOf misses and the
+     * hook is correctly skipped.
+     */
+    void notifyAlgorithmWindowAdded(PhosphorTiles::TilingState* state, const QString& screenId,
+                                    const QString& windowId);
 
     /**
      * @brief Request that a window is activated after the given screen's next applyTiling
@@ -1213,8 +1271,9 @@ private:
      *        desktop/activity context); the overflow bucket is keyed per
      *        screenId only, so the caller must drain once per screen AFTER
      *        all of that screen's states are captured.
+     * @return Whether the state released any managed windows.
      */
-    void releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
+    bool releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
                                        QStringList& releasedWindows, bool drainOverflow = true);
 
     /**
@@ -1338,6 +1397,7 @@ private:
      * @return true if the pending order was fully resolved and removed
      */
     bool cleanupPendingOrderIfResolved(const QString& screenId);
+    void schedulePendingOrderTimeout(const QString& screenId, uint64_t generation);
 
     /**
      * @brief Validate that a windowId is not empty, logging a warning if it is
@@ -1423,6 +1483,10 @@ private:
     /// layout boundary instead of crossing surfaces.
     PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
     PhosphorEngine::IWindowRegistry* m_windowRegistry = nullptr;
+    /// Handle for the algorithmRegistered → setAppIdResolver hook installed by
+    /// setWindowRegistry(). Stored so a re-wire replaces the hook instead of
+    /// stacking a duplicate (Qt::UniqueConnection does not apply to lambdas).
+    QMetaObject::Connection m_appIdResolverHook;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives engine
     std::unique_ptr<AutotileConfig> m_config;
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;
@@ -1583,15 +1647,28 @@ private:
 
     // Pre-seeded window order for snapping → autotile transitions.
     // Keyed by stable EDID-based screen ID (PhosphorScreens::ScreenIdentity::identifierFor).
-    // Consumed by insertWindow() as windows arrive; also cleaned up by
-    // removeWindow() if a pre-seeded window closes before arriving.
+    // Consumed by the strict seed in setAutotileScreens() (visible windows,
+    // eagerly) and by insertWindow() as remaining windows arrive; purged
+    // per-window via purgeFromPendingOrders (close, cap rejection), swept
+    // by pruneStaleWindows, and reaped by the pending-order timeout — which
+    // deliberately RETAINS an order holding live minimized placeholders, so
+    // those entries persist until the window opens or closes.
     QHash<QString, QStringList> m_pendingInitialOrders;
     QHash<QString, uint64_t> m_pendingOrderGeneration;
+    /// Engine-wide monotonic source for m_pendingOrderGeneration values. Per-screen
+    /// counters restarted at 1 after their map entry was removed, so a stale
+    /// timeout from a previous order epoch could match a fresh order's
+    /// generation and reap it. Serials never repeat, so a stale timer can only
+    /// miss.
+    uint64_t m_pendingOrderSerial = 0;
     // Screens whose pendingInitialOrders entry is "strict" — saved order
     // wins even when arrival order differs. Set by setInitialWindowOrder
     // (mode transition: the daemon intentionally pre-computed an order from
     // the previous mode's zones, and that order MUST be preserved).
-    // Cleared after the order is fully consumed. Entries seeded by
+    // Lifetime is TIED to the pending order's own: cleared wherever the
+    // order is removed (full consumption, per-window purge emptying it,
+    // stale-window sweep, timeout reap, screen teardown) — an order retained
+    // for a minimized placeholder keeps its strict flag with it. Entries seeded by
     // setInitialWindowOrder (mode transition) are the strict ones; advisory
     // entries reconstructed per-window from the placement store are NOT in this
     // set — for those the saved position is honored only when it appends at the

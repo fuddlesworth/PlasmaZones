@@ -89,6 +89,16 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual bool isWindowFloating(const QString& windowId) const = 0;
+    /// Whether the window's float is a MINIMIZE SUSPENSION rather than
+    /// placement intent. Outlives the live minimize bit through the
+    /// unminimize animation grace so capture paths can keep preserving the
+    /// pre-minimize record. Default false for implementations that do not
+    /// track the classification.
+    virtual bool isSuspensionFloat(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return false;
+    }
     virtual void setWindowFloating(const QString& windowId, bool floating) = 0;
     virtual void unsnapForFloat(const QString& windowId) = 0;
     virtual bool clearFloatingForSnap(const QString& windowId) = 0;
@@ -152,6 +162,15 @@ public:
     /// leaving its engine slots intact. For the drag-out / layout-change consume
     /// paths that restore the float-back once and must not re-apply it.
     virtual void clearFreeGeometry(const QString& windowId) = 0;
+    /// Screen-scoped consume-once variant: clears only @p screenId's
+    /// remembered float-back, preserving other monitors' entries. Default
+    /// falls back to the all-screens form for implementations without
+    /// per-screen granularity.
+    virtual void clearFreeGeometry(const QString& windowId, const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+        clearFreeGeometry(windowId);
+    }
     virtual QRect zoneGeometry(const QString& zoneId, const QString& screenId = QString()) const = 0;
     virtual QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const = 0;
     virtual QString resolveEffectiveScreenId(const QString& screenId) const = 0;

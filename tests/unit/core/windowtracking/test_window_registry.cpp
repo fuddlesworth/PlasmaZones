@@ -15,16 +15,28 @@
  *  - instancesWithAppId reverse index stays in sync across mutations and removes
  *  - remove emits windowDisappeared
  *  - clear emits windowDisappeared for every tracked id
+ *  - canonical retirement: remove/clear emit before retiring the canonical
+ *    record, and a subscriber-reseeded canonical survives the removal
+ *  - re-entrancy: nested clear/remove/upsert from signal receivers (including
+ *    receiver-deletes-registry) leave the registry consistent and emit once
+ *  - isMinimized resolves composite windowIds to the instance record
+ *  - pruneStaleInstances sweeps absent records and orphaned canonicals
  */
 
 #include <PhosphorEngine/WindowRegistry.h>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QTest>
 
+#include <algorithm>
 #include <functional>
 
 using PhosphorEngine::WindowMetadata;
 using PhosphorEngine::WindowRegistry;
+
+// QSignalSpy stores signal arguments as QVariants, so the record type carried
+// by metadataChanged must be metatype-registered for the spies below.
+Q_DECLARE_METATYPE(PhosphorEngine::WindowMetadata)
 
 namespace {
 WindowMetadata make(const QString& appId, const QString& desktopFile = {}, const QString& title = {})
@@ -42,6 +54,11 @@ class TestWindowRegistry : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void initTestCase()
+    {
+        qRegisterMetaType<PhosphorEngine::WindowMetadata>();
+    }
+
     // ────────────────────────────────────────────────────────────────────
     // upsert / lifecycle
     // ────────────────────────────────────────────────────────────────────
@@ -95,13 +112,29 @@ private Q_SLOTS:
     void appIdMutation_updatesRecord_emitsMetadataChangedOnly()
     {
         WindowRegistry reg;
-        reg.upsert(QStringLiteral("cef1ba31"), make(QStringLiteral("emby-beta")));
+        WindowMetadata oldValue =
+            make(QStringLiteral("emby-beta"), QStringLiteral("emby.desktop"), QStringLiteral("Library"));
+        oldValue.windowRole = QStringLiteral("browser");
+        oldValue.pid = 1001;
+        oldValue.virtualDesktop = 2;
+        oldValue.virtualDesktops = {2, 3};
+        oldValue.activity = QStringLiteral("activity-a");
+        oldValue.windowType = PhosphorProtocol::WindowType::Normal;
+        oldValue.isMinimized = false;
+        oldValue.width = 1280;
+        oldValue.height = 720;
+        reg.upsert(QStringLiteral("cef1ba31"), oldValue);
 
         QSignalSpy appeared(&reg, &WindowRegistry::windowAppeared);
         QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
         QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
 
-        reg.upsert(QStringLiteral("cef1ba31"), make(QStringLiteral("media.emby.client.beta")));
+        WindowMetadata newValue = oldValue;
+        newValue.appId = QStringLiteral("media.emby.client.beta");
+        newValue.title = QStringLiteral("Now Playing");
+        newValue.isMinimized = true;
+        newValue.width = 1920;
+        reg.upsert(QStringLiteral("cef1ba31"), newValue);
 
         QCOMPARE(appeared.size(), 0); // Same window — no appearance event
         QCOMPARE(disappeared.size(), 0); // Same window — no disappearance event
@@ -112,8 +145,8 @@ private Q_SLOTS:
         QCOMPARE(args.at(0).toString(), QStringLiteral("cef1ba31"));
         const auto oldMeta = args.at(1).value<WindowMetadata>();
         const auto newMeta = args.at(2).value<WindowMetadata>();
-        QCOMPARE(oldMeta.appId, QStringLiteral("emby-beta"));
-        QCOMPARE(newMeta.appId, QStringLiteral("media.emby.client.beta"));
+        QVERIFY(oldMeta == oldValue);
+        QVERIFY(newMeta == newValue);
 
         // Latest lookup reflects the new class.
         QCOMPARE(reg.appIdFor(QStringLiteral("cef1ba31")), QStringLiteral("media.emby.client.beta"));
@@ -197,13 +230,215 @@ private Q_SLOTS:
         WindowRegistry reg;
         reg.upsert(QStringLiteral("u1"), make(QStringLiteral("firefox")));
         reg.upsert(QStringLiteral("u2"), make(QStringLiteral("kate")));
+        reg.canonicalizeWindowId(QStringLiteral("ghost|canonical-only"));
         QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
 
         reg.clear();
 
-        QCOMPARE(disappeared.size(), 2);
+        QStringList ids;
+        for (const QList<QVariant>& args : disappeared) {
+            ids.append(args.at(0).toString());
+        }
+        ids.sort();
+        QCOMPARE(ids, (QStringList{QStringLiteral("canonical-only"), QStringLiteral("u1"), QStringLiteral("u2")}));
         QCOMPARE(reg.size(), 0);
         QVERIFY(reg.instancesWithAppId(QStringLiteral("firefox")).isEmpty());
+    }
+
+    void remove_canonicalOnly_emitsBeforeRetiringCanonical()
+    {
+        WindowRegistry reg;
+        const QString canonical = QStringLiteral("ghost|canonical-only");
+        reg.canonicalizeWindowId(canonical);
+        QString resolvedDuringSignal;
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString&) {
+            // The mapping must still resolve for synchronous subscribers.
+            resolvedDuringSignal = reg.canonicalizeForLookup(QStringLiteral("renamed|canonical-only"));
+        });
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        reg.remove(QStringLiteral("canonical-only"));
+
+        QCOMPARE(disappeared.size(), 1);
+        QCOMPARE(resolvedDuringSignal, canonical);
+        // Retired after the emit completes.
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|canonical-only")),
+                 QStringLiteral("renamed|canonical-only"));
+    }
+
+    void remove_subscriberReseededCanonical_survivesRemoval()
+    {
+        WindowRegistry reg;
+        const QString instanceId = QStringLiteral("reseed-instance");
+        const QString freshCanonical = QStringLiteral("fresh|reseed-instance");
+        // A record WITHOUT a canonical mapping: the effect's metadata push
+        // seeds the canonical, but a record can arrive through other
+        // notifications first.
+        reg.upsert(instanceId, make(QStringLiteral("old")));
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString&) {
+            // A re-announce racing the close seeds a fresh canonical for the
+            // same instance while the removal is in flight.
+            reg.canonicalizeWindowId(freshCanonical);
+        });
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        reg.remove(instanceId);
+
+        QCOMPARE(disappeared.size(), 1);
+        // The subscriber's fresh mapping must not be clobbered by the
+        // post-emit retirement of the pre-emit one.
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("later|reseed-instance")), freshCanonical);
+    }
+
+    void clear_nestedClearAndReentrantUpsert_leavesRegistryEmpty()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("n1"), make(QStringLiteral("appA")));
+        reg.upsert(QStringLiteral("n2"), make(QStringLiteral("appB")));
+        reg.upsert(QStringLiteral("n3"), make(QStringLiteral("appC")));
+        bool nested = false;
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
+            // First disappearance: a subscriber both re-upserts the dying
+            // instance AND triggers a nested bulk clear while two records
+            // remain. Neither may leave residue — the clear supersedes the
+            // re-entrant upsert (it is dropped, not replayed).
+            if (!nested) {
+                nested = true;
+                reg.upsert(removedId, make(QStringLiteral("resurrected")));
+                reg.clear();
+            }
+        });
+
+        reg.clear();
+
+        QCOMPARE(reg.size(), 0);
+        QVERIFY(!reg.contains(QStringLiteral("n1")));
+        QVERIFY(!reg.contains(QStringLiteral("n2")));
+        QVERIFY(!reg.contains(QStringLiteral("n3")));
+    }
+
+    void remove_reentrantCrossRemoval_removesBoth()
+    {
+        WindowRegistry reg;
+        const QString first = QStringLiteral("cross-a");
+        const QString second = QStringLiteral("cross-b");
+        reg.upsert(first, make(QStringLiteral("app")));
+        reg.upsert(second, make(QStringLiteral("app")));
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
+            if (removedId == first) {
+                // A subscriber tearing down a DIFFERENT window re-entrantly
+                // (grouped-close handlers do this) must not corrupt the
+                // outer removal's bookkeeping.
+                reg.remove(second);
+            }
+        });
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        reg.remove(first);
+
+        QCOMPARE(disappeared.size(), 2);
+        QVERIFY(!reg.contains(first));
+        QVERIFY(!reg.contains(second));
+        QCOMPARE(reg.size(), 0);
+        QVERIFY(reg.instancesWithAppId(QStringLiteral("app")).isEmpty());
+    }
+
+    void remove_reentrantRemoval_emitsOnce()
+    {
+        WindowRegistry reg;
+        const QString instanceId = QStringLiteral("reentrant-instance");
+        const QString canonical = QStringLiteral("app|reentrant-instance");
+        reg.upsert(instanceId, make(QStringLiteral("app")));
+        reg.canonicalizeWindowId(canonical);
+        // No QCOMPARE inside the lambda: a failing compare there returns from
+        // the LAMBDA, not the test — capture and assert after.
+        QString observedRemovedId;
+        QString observedCanonical;
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
+            observedRemovedId = removedId;
+            observedCanonical = reg.canonicalizeForLookup(QStringLiteral("renamed|reentrant-instance"));
+            reg.remove(instanceId);
+            reg.clear();
+        });
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        reg.remove(instanceId);
+
+        QCOMPARE(disappeared.size(), 1);
+        QCOMPARE(observedRemovedId, instanceId);
+        QCOMPARE(observedCanonical, canonical);
+        QVERIFY(!reg.contains(instanceId));
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|reentrant-instance")),
+                 QStringLiteral("renamed|reentrant-instance"));
+    }
+
+    void remove_reinsertedInstance_honorsNestedRemoval()
+    {
+        WindowRegistry reg;
+        const QString instanceId = QStringLiteral("reinserted-instance");
+        reg.upsert(instanceId, make(QStringLiteral("old-app")));
+        bool reinserted = false;
+        // Event ACCUMULATOR (id-carrying), not a bare count: two
+        // disappearances of the wrong ids would satisfy a count-only pin.
+        QStringList events;
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
+            events.append(QStringLiteral("disappeared:") + removedId);
+            if (!reinserted) {
+                reinserted = true;
+                reg.upsert(removedId, make(QStringLiteral("new-app")));
+            }
+        });
+        connect(&reg, &WindowRegistry::windowAppeared, &reg, [&](const QString& appearedId) {
+            events.append(QStringLiteral("appeared:") + appearedId);
+            if (reinserted) {
+                reg.remove(appearedId);
+            }
+        });
+
+        reg.remove(instanceId);
+
+        QCOMPARE(events,
+                 (QStringList{QStringLiteral("disappeared:") + instanceId, QStringLiteral("appeared:") + instanceId,
+                              QStringLiteral("disappeared:") + instanceId}));
+        QVERIFY(!reg.contains(instanceId));
+        QVERIFY(reg.instancesWithAppId(QStringLiteral("new-app")).isEmpty());
+    }
+
+    void remove_reentrantUpsertRunsAfterDisappearance()
+    {
+        WindowRegistry reg;
+        const QString instanceId = QStringLiteral("reappearing-instance");
+        reg.upsert(instanceId, make(QStringLiteral("old-app")));
+        QStringList events;
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& removedId) {
+            events.append(QStringLiteral("disappeared"));
+            reg.upsert(removedId, make(QStringLiteral("new-app")));
+        });
+        connect(&reg, &WindowRegistry::windowAppeared, &reg, [&](const QString&) {
+            events.append(QStringLiteral("appeared"));
+        });
+
+        reg.remove(instanceId);
+
+        QCOMPARE(events, (QStringList{QStringLiteral("disappeared"), QStringLiteral("appeared")}));
+        QVERIFY(reg.contains(instanceId));
+        QCOMPARE(reg.appIdFor(instanceId), QStringLiteral("new-app"));
+        QVERIFY(reg.instancesWithAppId(QStringLiteral("old-app")).isEmpty());
+        QCOMPARE(reg.instancesWithAppId(QStringLiteral("new-app")), QStringList{instanceId});
+    }
+
+    void clear_receiverMayDeleteRegistry()
+    {
+        QPointer<WindowRegistry> reg = new WindowRegistry;
+        reg->upsert(QStringLiteral("u1"), make(QStringLiteral("firefox")));
+        reg->upsert(QStringLiteral("u2"), make(QStringLiteral("kate")));
+        connect(reg.data(), &WindowRegistry::windowDisappeared, this, [&reg](const QString&) {
+            delete reg.data();
+        });
+
+        reg->clear();
+
+        QVERIFY(reg.isNull());
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -259,19 +494,37 @@ private Q_SLOTS:
             [](WindowMetadata& m) {
                 m.windowType = PhosphorProtocol::WindowType::Dialog;
             },
+            // Extended-field representatives, one per shape: the span list,
+            // an optional<int>, and an optional<bool> — pins that the widened
+            // operator== covers the extended block, not just the wide scalars.
+            [](WindowMetadata& m) {
+                m.virtualDesktops = QList<int>{1, 2};
+            },
+            [](WindowMetadata& m) {
+                m.width = 1280;
+            },
+            [](WindowMetadata& m) {
+                m.isMinimized = true;
+            },
         };
 
-        for (const auto& mutate : mutators) {
+        // Accumulate failures instead of QCOMPARE-ing inside the loop: an
+        // in-loop abort hides which LATER mutators also regressed.
+        QStringList failures;
+        for (int i = 0; i < mutators.size(); ++i) {
             WindowRegistry reg;
             reg.upsert(QStringLiteral("u1"), base);
             QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
 
             WindowMetadata next = base;
-            mutate(next);
+            mutators.at(i)(next);
             reg.upsert(QStringLiteral("u1"), next);
 
-            QCOMPARE(changed.size(), 1);
+            if (changed.size() != 1) {
+                failures.append(QStringLiteral("mutator %1 emitted %2 (expected 1)").arg(i).arg(changed.size()));
+            }
         }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -282,6 +535,34 @@ private Q_SLOTS:
     {
         WindowRegistry reg;
         QCOMPARE(reg.appIdFor(QStringLiteral("unknown")), QString());
+    }
+
+    void isMinimized_resolvesCompositeWindowId()
+    {
+        WindowRegistry reg;
+        WindowMetadata metadata = make(QStringLiteral("firefox"));
+        reg.upsert(QStringLiteral("uuid-1"), metadata);
+
+        QVERIFY(!reg.isMinimized(QStringLiteral("uuid-1")));
+        QVERIFY(!reg.isMinimized(QStringLiteral("firefox|uuid-1")));
+
+        QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
+        metadata.isMinimized = true;
+        reg.upsert(QStringLiteral("uuid-1"), metadata);
+
+        QVERIFY(reg.isMinimized(QStringLiteral("uuid-1")));
+        QVERIFY(reg.isMinimized(QStringLiteral("firefox|uuid-1")));
+        QCOMPARE(changed.size(), 1);
+
+        metadata.isMinimized = false;
+        reg.upsert(QStringLiteral("uuid-1"), metadata);
+        QVERIFY(!reg.isMinimized(QStringLiteral("uuid-1")));
+        QVERIFY(!reg.isMinimized(QStringLiteral("firefox|uuid-1")));
+        QCOMPARE(changed.size(), 2);
+
+        reg.upsert(QStringLiteral("uuid-1"), metadata);
+        QCOMPARE(changed.size(), 2);
+        QVERIFY(!reg.isMinimized(QStringLiteral("firefox|unknown")));
     }
 
     // ────────────────────────────────────────────────────────────────────
@@ -309,7 +590,12 @@ private Q_SLOTS:
         QVERIFY(!reg.contains(QStringLiteral("dead-2")));
         // windowDisappeared fired for each dead record so subscribers (e.g.
         // saved-autotile-order cleanup) drop their ghost state.
-        QCOMPARE(disappeared.size(), 2);
+        QStringList disappearedIds;
+        for (const QList<QVariant>& args : disappeared) {
+            disappearedIds.append(args.at(0).toString());
+        }
+        disappearedIds.sort();
+        QCOMPARE(disappearedIds, (QStringList{QStringLiteral("dead-1"), QStringLiteral("dead-2")}));
         // The dead window's canonical translation is gone — a re-observation
         // under a mutated appId no longer resolves to the stale canonical.
         QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("konsole-renamed|dead-1")),
@@ -339,24 +625,34 @@ private Q_SLOTS:
         // removed). The sweep must still drop the orphan canonical entry.
         WindowRegistry reg;
         reg.canonicalizeWindowId(QStringLiteral("ghost|orphan-1"));
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
 
         const int pruned = reg.pruneStaleInstances({QStringLiteral("alive-1")});
 
         QCOMPARE(pruned, 1);
+        QCOMPARE(disappeared.size(), 1);
+        QCOMPARE(disappeared.first().at(0).toString(), QStringLiteral("orphan-1"));
         QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("ghost-2|orphan-1")), QStringLiteral("ghost-2|orphan-1"));
+    }
+
+    void pruneStaleInstances_receiverMayDeleteRegistry()
+    {
+        QPointer<WindowRegistry> reg = new WindowRegistry;
+        reg->upsert(QStringLiteral("dead-1"), make(QStringLiteral("konsole")));
+        reg->upsert(QStringLiteral("dead-2"), make(QStringLiteral("dolphin")));
+        reg->upsert(QStringLiteral("alive-1"), make(QStringLiteral("kate")));
+        connect(reg.data(), &WindowRegistry::windowDisappeared, this, [&reg](const QString&) {
+            delete reg.data();
+        });
+
+        // Non-empty alive set: the empty set is a fail-closed no-op (a
+        // premature alive report must not wipe the registry), so the
+        // receiver-deletes-registry sweep needs a survivor.
+        reg->pruneStaleInstances({QStringLiteral("alive-1")});
+
+        QVERIFY(reg.isNull());
     }
 };
 
-// metadataChanged carries WindowMetadata by value in its signal payload;
-// QSignalSpy stores QVariants so the type must be registered to round-trip.
-Q_DECLARE_METATYPE(PhosphorEngine::WindowMetadata)
-
-int main(int argc, char** argv)
-{
-    qRegisterMetaType<PhosphorEngine::WindowMetadata>("PhosphorEngine::WindowMetadata");
-    QCoreApplication app(argc, argv);
-    TestWindowRegistry tc;
-    return QTest::qExec(&tc, argc, argv);
-}
-
+QTEST_MAIN(TestWindowRegistry)
 #include "test_window_registry.moc"

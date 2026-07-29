@@ -5,6 +5,7 @@
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
 
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -129,7 +130,15 @@ QString DBusLayoutService::getLayoutIdForScreen(const QString& screenName)
         qCWarning(lcDbus) << "getAssignedLayoutForScreen: failed, screen=" << screenName << errorMessage(reply);
         return QString();
     }
-    return reply.arguments().constFirst().toString();
+    const QString assignedId = reply.arguments().constFirst().toString();
+    // An autotile-assigned screen returns "autotile:<algorithmId>", which is
+    // not a loadable layout uuid — loadLayout would fail the parse and surface
+    // "That layout is no longer available." to the user. Treat it like an
+    // unassigned screen so the caller falls through to createNewLayout().
+    if (PhosphorLayout::LayoutId::isAutotile(assignedId)) {
+        return QString();
+    }
+    return assignedId;
 }
 
 void DBusLayoutService::assignLayoutToScreen(const QString& screenName, const QString& layoutId)

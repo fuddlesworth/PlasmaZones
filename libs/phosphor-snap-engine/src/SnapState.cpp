@@ -143,6 +143,13 @@ void SnapState::assignWindowToZones(const QString& rawWindowId, const QStringLis
     if (zoneChanged) {
         Q_EMIT windowAssigned(windowId, validZoneIds.first());
     }
+    if (wasFloating) {
+        // Snapping clears the float bit; the dedicated signal must fire like
+        // setFloating/setFloatingOnScreen do, or an exported-API subscriber
+        // tracking float state via floatingChanged misses every
+        // snap-clears-float transition.
+        Q_EMIT floatingChanged(windowId, false);
+    }
     if (zoneChanged || screenChanged || desktopChanged || wasFloating) {
         Q_EMIT stateChanged();
     }
@@ -353,7 +360,7 @@ QStringList SnapState::preFloatZones(const QString& rawWindowId) const
     return m_preFloatZoneAssignments.value(windowId);
 }
 
-void SnapState::clearPreFloatZone(const QString& rawWindowId)
+bool SnapState::clearPreFloatZone(const QString& rawWindowId)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
     // Emit only when an entry actually went away, matching this class's uniform
@@ -366,6 +373,7 @@ void SnapState::clearPreFloatZone(const QString& rawWindowId)
     if (removed > 0) {
         Q_EMIT stateChanged();
     }
+    return removed > 0;
 }
 
 void SnapState::addPreFloatZone(const QString& rawWindowId, const QStringList& zoneIds)

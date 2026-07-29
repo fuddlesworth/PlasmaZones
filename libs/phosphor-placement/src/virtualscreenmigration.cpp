@@ -22,6 +22,7 @@
 #include "placementlogging.h"
 #include <QScreen>
 #include <QUuid>
+#include <algorithm>
 #include <climits>
 
 namespace PhosphorPlacement {
@@ -537,7 +538,7 @@ bool WindowTrackingService::pruneMigratedWindows(const QStringList& windowsToRem
             lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, store);
         }
         clearFreeGeometry(wId); // drop the record's shared free geometry
-        clearPreFloatZoneForWindow(wId);
+        clearPreFloatZone(wId);
         // Canonical key, as windowClosed does: the sticky map is keyed on the
         // first-seen composite (issue #628), so a window that renamed itself
         // (Electron/CEF) would leak its entry if removed under the raw id.

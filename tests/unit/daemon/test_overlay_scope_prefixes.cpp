@@ -19,7 +19,7 @@
  * OutCubic fallback instead of the configured `osd.show` /
  * `popup.zoneSelector.show` / etc.
  *
- * The previous safety net was a single Q_ASSERT_X in
+ * The previous safety net was a single Q_ASSERT_X in the (since removed)
  * createZoneSelectorWindow: debug-only, and only covered ZoneSelector.
  * Production now constructs every per-instance role via
  * `PhosphorRoles::makePerInstanceRole(base, id, gen)` so the prefix-match is
@@ -34,6 +34,8 @@
  */
 
 #include <QTest>
+
+#include <memory>
 
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -219,8 +221,9 @@ private Q_SLOTS:
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("osd.show"));
     }
 
-    /// Regression: ZoneSelector. The Q_ASSERT_X in createZoneSelectorWindow
-    /// only catches divergence in debug builds; this test catches it in
+    /// Regression: ZoneSelector. The old Q_ASSERT_X (in the since-removed
+    /// createZoneSelectorWindow) only caught divergence in debug builds;
+    /// this test catches it in
     /// release too. Pre-fix the daemon used "plasmazones-selector-..."
     /// which did NOT prefix-match "plasmazones-zone-selector".
     ///
@@ -311,10 +314,10 @@ private Q_SLOTS:
     }
 
     /// Regression: the bare base role (no per-instance suffix) must
-    /// also resolve. The OSD creation path uses `withScopePrefix` to
-    /// derive a per-instance role, but a future refactor that registers
-    /// a base role directly (or a test that constructs one inline)
-    /// should still work.
+    /// also resolve. The OSD creation path derives a per-instance role
+    /// via `PhosphorRoles::makePerInstanceRole`, but a future refactor
+    /// that registers a base role directly (or a test that constructs
+    /// one inline) should still work.
     void exact_base_scope_resolves()
     {
         PhosphorAnimation::PhosphorProfileRegistry registry;

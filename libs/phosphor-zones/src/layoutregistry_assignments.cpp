@@ -209,6 +209,16 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
         // Shape 2: a window-property (or otherwise non-context) rule. Remove
         // only the SetSnappingLayout actions referencing the deleted layout;
         // every other action is preserved verbatim.
+        //
+        // A MIXED context rule (context-only match + assignment actions +
+        // some non-assignment action) lands here too — it fails
+        // isPureAssignmentRule but still carries a context whose observers
+        // must refresh, so record it in `affected` for the layoutAssigned
+        // emit below, exactly like the Shape-1 branch.
+        if (isContextAssignmentRule(rule)) {
+            const ContextDims dims = decodeDims(rule.match);
+            affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
+        }
         PWR::Rule trimmed = rule;
         trimmed.actions.erase(std::remove_if(trimmed.actions.begin(), trimmed.actions.end(),
                                              [&layoutId](const PWR::RuleAction& action) {

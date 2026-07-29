@@ -167,13 +167,17 @@ void Daemon::connectScreenSignals()
                     m_layoutManager->clearCurrentVirtualDesktopForScreen(removedScreenId);
                 }
 
-                // The snap engine's per-(screen,desktop,activity) stores are created
-                // lazily on placement, not from an autotile-screens set, so the removed
-                // output's stores must be pruned explicitly here (autotile self-prunes
-                // via updateAutotileScreens). Matches every virtual sub-screen of the
-                // removed physical id.
+                // Both engines' per-(screen,desktop,activity) stores must be
+                // pruned explicitly here; each matches every virtual sub-screen
+                // of the removed physical id. Autotile's updateAutotileScreens
+                // self-prune covers only the CURRENT (desktop, activity)
+                // context — the removed monitor's other contexts' TilingStates
+                // would otherwise leak for the session.
                 if (m_snapEngine) {
                     m_snapEngine->pruneStatesForRemovedScreen(removedScreenId);
+                }
+                if (m_autotileEngine) {
+                    m_autotileEngine->pruneStatesForRemovedScreen(removedScreenId);
                 }
 
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
@@ -258,7 +262,7 @@ void Daemon::connectDesktopActivity()
                 // [SEQ B] Pin screens where all autotiled windows are sticky BEFORE
                 // changing the desktop context, so currentKeyForScreen() still
                 // resolves existing TilingStates ("virtualdesktopsonlyonprimary").
-                if (m_autotileEngine && m_windowTrackingAdaptor) {
+                if (m_autotileEngine && m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
                     auto* service = m_windowTrackingAdaptor->service();
                     m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
                         return service->isWindowSticky(windowId);
@@ -392,10 +396,13 @@ void Daemon::connectDesktopActivity()
             pruneContextMapsForActivities(validSet);
         });
 
-        // Set initial activity on components that maintain their own copy
+        // Set initial activity on components that maintain their own copy.
+        // Layout registry FIRST: the overlay's setter runs a refresh pass
+        // that resolves assignments through the registry, so updating the
+        // overlay first would render one pass against the old activity.
         const QString initialActivity = m_activityManager->currentActivity();
-        m_overlayService->setCurrentActivity(initialActivity);
         m_layoutManager->setCurrentActivity(initialActivity);
+        m_overlayService->setCurrentActivity(initialActivity);
         if (m_autotileEngine) {
             m_autotileEngine->setCurrentActivity(initialActivity);
         }
@@ -406,8 +413,10 @@ void Daemon::connectDesktopActivity()
         // Connect activity changes: update all components
         connect(m_activityManager.get(), &PhosphorWorkspaces::ActivityManager::currentActivityChanged, this,
                 [this](const QString& activityId) {
-                    m_overlayService->setCurrentActivity(activityId);
+                    // Registry before overlay — see the initial-activity note
+                    // above (the overlay's refresh resolves via the registry).
                     m_layoutManager->setCurrentActivity(activityId);
+                    m_overlayService->setCurrentActivity(activityId);
                     if (m_unifiedLayoutController) {
                         m_unifiedLayoutController->setCurrentActivity(activityId);
                     }
@@ -417,7 +426,7 @@ void Daemon::connectDesktopActivity()
                         m_autotileEngine->cancelDragInsertPreview();
                     }
                     // Pin sticky screens before changing activity context
-                    if (m_autotileEngine && m_windowTrackingAdaptor) {
+                    if (m_autotileEngine && m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
                         auto* service = m_windowTrackingAdaptor->service();
                         m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
                             return service->isWindowSticky(windowId);
@@ -879,7 +888,10 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
 
 void Daemon::migrateStartupScreenAssignments()
 {
-    if (!m_windowTrackingAdaptor || !m_screenManager) {
+    // m_settings and service() are unguarded below by the same invariant the
+    // rest of the file relies on: both are ctor-owned / adaptor-constructed
+    // and never null while the adaptor exists (autotile.cpp documents it).
+    if (!m_windowTrackingAdaptor || !m_screenManager || !m_windowTrackingAdaptor->service()) {
         return;
     }
     const auto vsConfigs = m_settings->virtualScreenConfigs();

@@ -28,19 +28,26 @@ public:
     void setLayoutManager(LayoutRegistry* manager);
 
     bool requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry);
+    uint64_t currentGeneration(const QString& screenId) const;
 
     static void recalculateSync(Layout* layout, const QRectF& screenGeometry);
 
 Q_SIGNALS:
-    void geometriesComputed(const QString& screenId, const QUuid& layoutId, PhosphorZones::Layout* layout);
     void requestCompute(const PhosphorZones::LayoutSnapshot& snapshot, uint64_t generation);
+    void geometriesComputedForGeneration(const QString& screenId, const QUuid& layoutId, PhosphorZones::Layout* layout,
+                                         uint64_t generation);
 
 private:
     static LayoutSnapshot buildSnapshot(Layout* layout, const QString& screenId, const QRectF& screenGeometry);
     void applyResult(const LayoutComputeResult& result);
     void onLayoutRemoved(const QUuid& layoutId);
+    void publishResult(const QString& screenId, const QUuid& layoutId, Layout* layout, uint64_t generation);
 
     QHash<QUuid, QPointer<Layout>> m_trackedLayouts;
+    /// Per-screen request generation. Never pruned — entries are one integer
+    /// per screenId ever requested, bounded by session screen/VS churn, and
+    /// pruning would reset a returning screen's counter under any in-flight
+    /// stale result.
     QHash<QString, uint64_t> m_screenGeneration;
     QPointer<LayoutRegistry> m_layoutManager;
     QThread* m_thread = nullptr;

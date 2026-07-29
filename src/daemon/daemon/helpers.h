@@ -3,34 +3,58 @@
 
 #pragma once
 
-// Inline helpers shared across daemon TU files (daemon_start.cpp,
-// daemon_signals.cpp, daemon_navigation.cpp).  Defined inline to
-// avoid ODR issues in both unity and normal builds.
+// Inline helpers shared across the daemon TU files in this directory
+// (start.cpp, signals.cpp, navigation.cpp, osd.cpp, lifecycle.cpp, the
+// init_*.cpp trio, autotile_init.cpp).  Defined inline to avoid ODR
+// issues in both unity and normal builds.
 
 #include <QScreen>
 #include "core/platform/logging.h"
+#include "core/interfaces/settings_interfaces.h"
 #include "core/utils/utils.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorContext/DisabledReason.h>
+
+#include <optional>
 
 namespace PlasmaZones {
+
+inline DisabledReason toDaemonDisabledReason(PhosphorContext::DisabledReason reason)
+{
+    switch (reason) {
+    case PhosphorContext::DisabledReason::NotDisabled:
+        return DisabledReason::NotDisabled;
+    case PhosphorContext::DisabledReason::MonitorDisabled:
+        return DisabledReason::MonitorDisabled;
+    case PhosphorContext::DisabledReason::DesktopDisabled:
+        return DisabledReason::DesktopDisabled;
+    case PhosphorContext::DisabledReason::ActivityDisabled:
+        return DisabledReason::ActivityDisabled;
+    }
+    Q_UNREACHABLE();
+    return DisabledReason::NotDisabled;
+}
 
 /**
  * @brief Resolve a physical screen ID to a virtual screen ID if subdivisions exist.
  *
  * When the KWin effect sends a physical screen ID (e.g., during daemon reconnect
  * before virtual screen configs are loaded), the daemon must resolve it to the
- * correct virtual screen.  Uses the focused window's geometry center as the
- * position hint (QCursor::pos() is unreliable on Wayland for background daemons).
- * Falls back to vs:0 (leftmost) if no better hint is available.
+ * correct virtual screen. Resolution cascade: the focused window's
+ * daemon-tracked screen assignment, then the effect-reported active screen,
+ * then the optional cursor-position hint, then vs:0 (leftmost).
  *
  * @p mgr is the injected ScreenManager (required — pass null only in tests
  * that don't exercise VS resolution; null is treated as "no subdivision").
+ * @p cursorPos optional cursor hint; disengaged by default. No production
+ * caller currently supplies one — the parameter is kept for shortcut paths
+ * that have an effect-reported cursor and no focused window.
  */
 inline QString resolveVirtualScreenId(PhosphorScreens::ScreenManager* mgr, const QString& physicalId,
                                       const WindowTrackingAdaptor* trackingAdaptor,
-                                      const QPoint& cursorPos = QPoint(-1, -1))
+                                      const std::optional<QPoint>& cursorPos = std::nullopt)
 {
     if (!mgr || !mgr->hasVirtualScreens(physicalId)) {
         return physicalId;
@@ -61,9 +85,12 @@ inline QString resolveVirtualScreenId(PhosphorScreens::ScreenManager* mgr, const
     }
 
     // Cursor position hint: when a keyboard shortcut fires with no focused window,
-    // the cursor position (from the effect) can resolve the correct virtual screen.
-    if (cursorPos.x() >= 0) {
-        const QString vsAtCursor = mgr->effectiveScreenAt(cursorPos);
+    // the cursor position (from the effect) can resolve the correct virtual
+    // screen. std::optional, not a negative-coord sentinel — multi-monitor
+    // layouts legitimately have negative coordinates, so (-1,-1) was a valid
+    // position masquerading as "absent".
+    if (cursorPos.has_value()) {
+        const QString vsAtCursor = mgr->effectiveScreenAt(*cursorPos);
         if (PhosphorIdentity::VirtualScreenId::isVirtual(vsAtCursor)
             && PhosphorIdentity::VirtualScreenId::extractPhysicalId(vsAtCursor) == physicalId) {
             return vsAtCursor;
@@ -130,10 +157,16 @@ inline QString resolveShortcutScreenId(PhosphorScreens::ScreenManager* mgr,
  *
  * Falls back to focused-window screen, then primary screen.
  *
- * @p mgr is unused today (lastCursorScreenName is already virtual-screen
- * resolved at the WindowTrackingAdaptor source). Kept in the signature so
- * the call site mirrors @ref resolveShortcutScreenId and so a future
- * resolution policy that needs ScreenManager has a place to land.
+ * @p mgr is unused today: WindowTrackingAdaptor::cursorScreenChanged resolves
+ * m_lastCursorScreenId to a virtual ID at the source whenever the physical
+ * screen is split, so a physical ID from lastCursorScreenName means the
+ * screen has no virtual split and IS the effective ID — no further mapping
+ * needed. (resolveShortcutScreenId still re-resolves its inputs because its
+ * primary source, lastActiveScreenName, arrives from the effect and may be a
+ * raw physical ID on a split screen; the two helpers' assumptions differ
+ * because their sources do, not because either is wrong.) Kept in the
+ * signature so the call site mirrors @ref resolveShortcutScreenId and so a
+ * future resolution policy that needs ScreenManager has a place to land.
  */
 inline QString resolveCursorScreenId(PhosphorScreens::ScreenManager* /*mgr*/,
                                      const WindowTrackingAdaptor* trackingAdaptor)

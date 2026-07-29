@@ -9,6 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Minimized windows stay out of tiling across a mode switch**: switching a screen between snapping and tiling no longer counts minimized windows in the tiled layout or moves them, and unminimizing restores each window to the place it had before it was minimized, on either engine and across restarts ([#859](https://github.com/fuddlesworth/PlasmaZones/pull/859)).
 - **The support report script no longer needs Perl's JSON::PP module**: some distros package Perl core modules separately, so `plasmazones-report` failed with a module error and wrongly reported that the daemon was not running. The script now does all of its text processing with python3 ([#861](https://github.com/fuddlesworth/PlasmaZones/pull/861)).
 
 ## [3.3.1] - 2026-07-27
@@ -1765,6 +1766,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.1...HEAD
 [3.3.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.0...v3.3.1
 [3.3.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.7...v3.3.0
 [3.2.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.6...v3.2.7

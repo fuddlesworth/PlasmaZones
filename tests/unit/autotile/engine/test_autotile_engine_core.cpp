@@ -8,6 +8,7 @@
 #include <memory>
 
 #include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -19,13 +20,11 @@
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include "core/types/constants.h"
 
 #include "helpers/ScriptedAlgoTestSetup.h"
 
-#include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
+#include <QUuid>
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
@@ -396,10 +395,9 @@ private Q_SLOTS:
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("TestScreen"));
 
         QCOMPARE(state->splitRatio(), 0.7);
-
-        state->addWindow(QStringLiteral("win1"));
-        state->addWindow(QStringLiteral("win2"));
-        state->setMasterCount(2);
+        // Inherited by the state factory from the engine config — no local
+        // setMasterCount here (the previous version wrote 2 and then asserted
+        // 2, which could never fail and proved nothing about inheritance).
         QCOMPARE(state->masterCount(), 2);
     }
 
@@ -526,8 +524,13 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QVERIFY(!engine.isEnabled());
 
+        // The no-op claim needs an observable: no placement change may be
+        // published from retiles of a disabled engine.
+        QSignalSpy placementChanged(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.retile();
         engine.retile(QStringLiteral("SomeScreen"));
+        QCoreApplication::processEvents();
+        QCOMPARE(placementChanged.size(), 0);
     }
 
     // =========================================================================
@@ -679,7 +682,7 @@ private Q_SLOTS:
     // Pending-order seed float restore: EXACT record only. Pending orders are
     // built from live-session ids, so a same-app SIBLING's floating record
     // must never float a record-less seeded window (relogin restores go
-    // through insertWindow's take(), not this path). The window's own exact
+    // through insertWindow's take(), not this path). The window's own instance-exact
     // floating record still restores its float.
     // =========================================================================
 
@@ -705,7 +708,7 @@ private Q_SLOTS:
         sib.engines.insert(engine.engineId(), floatSlot);
         QVERIFY(wts.placementStore().record(sib));
 
-        // The second seeded window's OWN exact floating record.
+        // The second seeded window's OWN instance-exact floating record.
         WindowPlacement own;
         own.windowId = QStringLiteral("app|own");
         own.appId = QStringLiteral("app");
@@ -721,7 +724,126 @@ private Q_SLOTS:
         QVERIFY2(!state->isFloating(QStringLiteral("app|fresh")),
                  "a same-app sibling's floating record must not float a record-less seeded window");
         QVERIFY2(state->isFloating(QStringLiteral("app|own")),
-                 "the window's own exact floating record still restores its float");
+                 "the window's own instance-exact floating record still restores its float");
+    }
+
+    void testMinimizedFloatDoesNotReplaceTiledPlacementOnTeardown()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PlasmaZones::StubZoneDetector zoneDetector;
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setWindowRegistry(&registry);
+
+        const QString screenId = QStringLiteral("DP-1");
+        const QString instanceId = QStringLiteral("minimized-instance");
+        const QString windowId = QStringLiteral("app|minimized-instance");
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("app");
+        metadata.isMinimized = false;
+        registry.upsert(instanceId, metadata);
+
+        engine.setAutotileScreens({screenId});
+        engine.windowOpened(windowId, screenId);
+        QCoreApplication::processEvents();
+
+        const auto tiledPlacement = engine.capturePlacement(windowId);
+        QVERIFY(tiledPlacement);
+        QCOMPARE(tiledPlacement->slotFor(engine.engineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateTiled()));
+        PhosphorEngine::WindowPlacement baseline = *tiledPlacement;
+        baseline.virtualDesktop = 3;
+        baseline.activity = QStringLiteral("activity-a");
+        baseline.engines[engine.engineId()].order = 7;
+        baseline.freeGeometryByScreen.insert(screenId, QRect(120, 90, 900, 700));
+        PhosphorEngine::EngineSlot snapSlot;
+        snapSlot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        snapSlot.zoneIds = {QUuid::createUuid().toString()};
+        baseline.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snapSlot);
+        QVERIFY(wts.placementStore().record(baseline));
+        const auto before = wts.placementStore().peekExact(windowId);
+        QVERIFY(before);
+
+        metadata.isMinimized = true;
+        registry.upsert(instanceId, metadata);
+        engine.setWindowFloat(windowId, true, screenId);
+        QVERIFY(engine.isWindowFloatingInAutotile(windowId));
+        const auto minimizedCapture = engine.capturePlacement(windowId);
+        QVERIFY(minimizedCapture);
+        QCOMPARE(minimizedCapture->slotFor(engine.engineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateTiled()));
+        // The DURABLE order survives: the live windowOrder position of a
+        // minimize-floated window is the suspension artifact (handoff insert
+        // index), so the preserve branch must keep the stored slot's order
+        // (7, from the recorded baseline) rather than refreshing from it.
+        QCOMPARE(minimizedCapture->slotFor(engine.engineId()).order, before->slotFor(engine.engineId()).order);
+        // Context comes from the live TilingStateKey by design (the engine's
+        // current screen/desktop/activity for the window), matching what the
+        // visible capture reported.
+        QCOMPARE(minimizedCapture->screenId, tiledPlacement->screenId);
+        QCOMPARE(minimizedCapture->virtualDesktop, tiledPlacement->virtualDesktop);
+        QCOMPARE(minimizedCapture->activity, tiledPlacement->activity);
+        QVERIFY(wts.placementStore().record(*minimizedCapture));
+        const auto normalizedBeforeTeardown = wts.placementStore().peekExact(windowId);
+        QVERIFY(normalizedBeforeTeardown);
+
+        // Screen teardown captures directly through AutotileEngine, bypassing
+        // WindowTrackingAdaptor. The minimized guard must still preserve the
+        // pre-minimize tiled slot rather than persisting the temporary float.
+        // placementChanged describes the live occupancy release even when the
+        // durable record is already content-identical.
+        QSignalSpy placementChanged(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+        engine.setAutotileScreens({});
+        QVERIFY(placementChanged.size() > 0);
+        const auto stored = wts.placementStore().peekExact(windowId);
+        QVERIFY(stored);
+        QVERIFY(stored->sameContentAs(*normalizedBeforeTeardown));
+        QCOMPARE(stored->sequence, normalizedBeforeTeardown->sequence);
+        QCOMPARE(stored->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()),
+                 before->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()));
+        QCOMPARE(stored->freeGeometryFor(screenId), before->freeGeometryFor(screenId));
+    }
+
+    void testMinimizedFirstCapturePersistsTiledPlacementOnTeardown()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PlasmaZones::StubZoneDetector zoneDetector;
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+        PhosphorEngine::WindowRegistry registry;
+        AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setWindowRegistry(&registry);
+
+        const QString screenId = QStringLiteral("DP-1");
+        const QString instanceId = QStringLiteral("first-capture-instance");
+        const QString windowId = QStringLiteral("app|first-capture-instance");
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("app");
+        metadata.isMinimized = false;
+        registry.upsert(instanceId, metadata);
+
+        engine.setAutotileScreens({screenId});
+        engine.windowOpened(windowId, screenId);
+        QCoreApplication::processEvents();
+        QVERIFY(!wts.placementStore().peekExact(windowId));
+
+        metadata.isMinimized = true;
+        registry.upsert(instanceId, metadata);
+        engine.setWindowFloat(windowId, true, screenId);
+        QVERIFY(engine.isWindowFloatingInAutotile(windowId));
+        QSignalSpy placementChanged(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+        engine.setAutotileScreens({});
+        QVERIFY(placementChanged.size() > 0);
+
+        const auto stored = wts.placementStore().peekExact(windowId);
+        QVERIFY(stored);
+        const PhosphorEngine::EngineSlot slot = stored->slotFor(engine.engineId());
+        QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateTiled()));
+        QCOMPARE(slot.order, 0);
     }
 };
 

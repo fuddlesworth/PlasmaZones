@@ -8,25 +8,12 @@
 
 #include <QTest>
 #include <QDir>
-#include <QFile>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QScopedPointer>
 #include <QUuid>
-#include "config/configbackends.h"
-#include "config/configdefaults.h"
-#include <memory>
-#include <vector>
 
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include <PhosphorRules/ContextRuleBridge.h>
-#include <PhosphorRules/RuleAction.h>
-#include <PhosphorRules/Rule.h>
-#include <PhosphorRules/RuleStore.h>
-#include "core/types/constants.h"
 #include "helpers/StubSettings.h"
 #include "LayoutManagerAssignmentFixture.h"
 

@@ -112,7 +112,10 @@ private Q_SLOTS:
         QCOMPARE(feedbackSpy.at(0).at(2).toString(), QStringLiteral("floated"));
     }
 
-    void testToggleWindowFloat_notSnappedNotFloating_noSignal()
+    // An untracked window must not flip float state, but the shortcut press
+    // is still REPORTED (not_managed) rather than silently absorbed — every
+    // navigation shortcut produces feedback, and a silent one reads as broken.
+    void testToggleWindowFloat_notSnappedNotFloating_reportsNotManaged()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
         m_wts->setSnapState(engine.snapState());
@@ -125,7 +128,9 @@ private Q_SLOTS:
         engine.toggleWindowFloat(windowId, screenName);
 
         QCOMPARE(floatSpy.count(), 0);
-        QCOMPARE(feedbackSpy.count(), 0);
+        QCOMPARE(feedbackSpy.count(), 1);
+        QCOMPARE(feedbackSpy.at(0).at(0).toBool(), false);
+        QCOMPARE(feedbackSpy.at(0).at(2).toString(), QStringLiteral("not_managed"));
     }
 
     void testSetWindowFloat_true_emitsFloatingChanged()

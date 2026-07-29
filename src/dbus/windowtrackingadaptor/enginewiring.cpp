@@ -215,7 +215,11 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // the window's actual state — including for daemon-restart-window-open.
         connect(snap, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this,
                 [this](const QString& windowId, const PhosphorProtocol::WindowStateEntry&) {
-                    captureWindowPlacement(windowId);
+                    // fromStateChange: a snap commit/uncommit is authoritative
+                    // even for a minimized window (resnap sweeps re-zone
+                    // minimized-but-assigned windows), so it must not be
+                    // silenced by the minimize capture guard.
+                    captureWindowPlacement(windowId, QString(), /*fromStateChange=*/true);
                 });
     } else if (snapEngine) {
         // Snap-mode window state signals are critical for WTS correctness.

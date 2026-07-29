@@ -4,6 +4,13 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <QLoggingCategory>
+#include <QPointer>
+
+namespace {
+Q_LOGGING_CATEGORY(lcWindowRegistry, "org.phosphor.engine.windowregistry")
+} // namespace
+
 namespace PhosphorEngine {
 
 WindowRegistry::WindowRegistry(QObject* parent)
@@ -16,7 +23,12 @@ WindowRegistry::~WindowRegistry() = default;
 void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& metadata)
 {
     if (instanceId.isEmpty()) {
-        qWarning("WindowRegistry::upsert: rejecting empty instance id");
+        qCWarning(lcWindowRegistry, "WindowRegistry::upsert: rejecting empty instance id");
+        return;
+    }
+
+    if (m_disappearingInstances.contains(instanceId)) {
+        m_pendingUpserts.insert(instanceId, metadata);
         return;
     }
 
@@ -43,13 +55,50 @@ void WindowRegistry::upsert(const QString& instanceId, const WindowMetadata& met
 
 void WindowRegistry::remove(const QString& instanceId)
 {
-    auto it = m_records.find(instanceId);
-    if (it == m_records.end()) {
+    if (m_disappearingInstances.contains(instanceId)) {
+        m_pendingUpserts.remove(instanceId);
         return;
     }
-    indexRemove(instanceId, it.value().appId);
-    m_records.erase(it);
+
+    auto it = m_records.find(instanceId);
+    const bool hasCanonical = m_canonicalByInstance.contains(instanceId);
+    if (it == m_records.end() && !hasCanonical) {
+        return;
+    }
+    if (it != m_records.end()) {
+        indexRemove(instanceId, it.value().appId);
+        m_records.erase(it);
+    }
+    // Emit while the canonical mapping is still available to synchronous
+    // subscribers, then retire it. Canonical-only instances still represent a
+    // lifecycle entry and therefore receive the same exactly-once signal.
+    const QString canonical = m_canonicalByInstance.value(instanceId);
+    m_disappearingInstances.insert(instanceId);
+    QPointer<WindowRegistry> guard(this);
     Q_EMIT windowDisappeared(instanceId);
+    if (!guard) {
+        return;
+    }
+    m_disappearingInstances.remove(instanceId);
+    const bool hasPendingUpsert = m_pendingUpserts.contains(instanceId);
+    const WindowMetadata pendingMetadata = m_pendingUpserts.take(instanceId);
+    // Retire the mapping only if it still is the pre-emit one: a synchronous
+    // subscriber may have re-seeded a FRESH canonical for this instance during
+    // the emit (a re-announce racing the close), and clobbering that with a
+    // blind remove would strip the next lifecycle's identity translation.
+    const QString postEmit = m_canonicalByInstance.value(instanceId);
+    if (postEmit == canonical) {
+        m_canonicalByInstance.remove(instanceId);
+        if (hasPendingUpsert && !canonical.isEmpty()) {
+            m_canonicalByInstance.insert(instanceId, canonical);
+        }
+    }
+    if (hasPendingUpsert && m_clearing == 0) {
+        upsert(instanceId, pendingMetadata);
+    }
+    // While clear() drives this removal, a re-entrant upsert is dropped: the
+    // bulk reset supersedes it, and replaying would let records survive the
+    // clear.
 }
 
 std::optional<WindowMetadata> WindowRegistry::metadata(const QString& instanceId) const
@@ -76,6 +125,21 @@ QString WindowRegistry::appIdFor(const QString& instanceId) const
     return it != m_records.constEnd() ? it.value().appId : QString();
 }
 
+bool WindowRegistry::isMinimized(const QString& windowId) const
+{
+    return minimizedState(windowId).value_or(false);
+}
+
+std::optional<bool> WindowRegistry::minimizedState(const QString& windowId) const
+{
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    const auto it = m_records.constFind(instanceId);
+    if (it == m_records.constEnd()) {
+        return std::nullopt;
+    }
+    return it->isMinimized;
+}
+
 QStringList WindowRegistry::instancesWithAppId(const QString& appId) const
 {
     if (appId.isEmpty()) {
@@ -89,11 +153,6 @@ bool WindowRegistry::contains(const QString& instanceId) const
     return m_records.contains(instanceId);
 }
 
-QStringList WindowRegistry::allInstances() const
-{
-    return m_records.keys();
-}
-
 int WindowRegistry::size() const
 {
     return m_records.size();
@@ -104,13 +163,23 @@ void WindowRegistry::clear()
     if (m_records.isEmpty() && m_canonicalByInstance.isEmpty()) {
         return;
     }
-    const QStringList ids = m_records.keys();
-    m_records.clear();
-    m_appIdIndex.clear();
-    m_canonicalByInstance.clear();
+    // Emission ORDER across the set is unspecified (QSet iteration) — every
+    // subscriber handles windowDisappeared per-window with no cross-window
+    // ordering assumption, so imposing one would buy nothing.
+    QSet<QString> ids(m_records.keyBegin(), m_records.keyEnd());
+    ids.unite(QSet<QString>(m_canonicalByInstance.keyBegin(), m_canonicalByInstance.keyEnd()));
+    QPointer<WindowRegistry> guard(this);
+    // No scope guard for the counter: a subscriber may destroy the registry
+    // mid-loop, and a guard running against the freed object would be UB —
+    // decrement manually on the surviving path only.
+    ++m_clearing;
     for (const QString& id : ids) {
-        Q_EMIT windowDisappeared(id);
+        remove(id);
+        if (!guard) {
+            return;
+        }
     }
+    --m_clearing;
 }
 
 QString WindowRegistry::canonicalizeWindowId(const QString& rawWindowId)
@@ -137,17 +206,20 @@ QString WindowRegistry::canonicalizeForLookup(const QString& rawWindowId) const
     return (it != m_canonicalByInstance.constEnd()) ? it.value() : rawWindowId;
 }
 
-void WindowRegistry::releaseCanonical(const QString& anyWindowId)
-{
-    if (anyWindowId.isEmpty()) {
-        return;
-    }
-    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(anyWindowId);
-    m_canonicalByInstance.remove(instanceId);
-}
-
 int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)
 {
+    // An EMPTY alive set means "wipe everything". The only legitimate empty
+    // case (user closed every window) is already covered by per-window
+    // remove() on windowClosed — while the illegitimate one is very real: the
+    // effect's one-shot alive report at daemon-ready fires before
+    // session-restored apps have mapped their windows, and treating that as
+    // "all dead" destroys the whole registry. Fail closed.
+    if (aliveInstanceIds.isEmpty() && !(m_records.isEmpty() && m_canonicalByInstance.isEmpty())) {
+        qCWarning(lcWindowRegistry,
+                  "WindowRegistry::pruneStaleInstances: refusing empty alive set with %d records tracked",
+                  int(m_records.size()));
+        return 0;
+    }
     // Union of both maps' keys — a window may carry a canonical entry without
     // a metadata record (or vice versa) depending on which signals it received
     // before dying. Collect first, then mutate (remove() invalidates iterators
@@ -163,11 +235,24 @@ int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)
             stale.insert(it.key());
         }
     }
+    QPointer<WindowRegistry> guard(this);
+    // Count actual removals, not intent: a windowDisappeared subscriber can
+    // re-upsert an instance (leaving it present) or destroy the registry
+    // mid-sweep, and the return value is documented as "count removed".
+    // Mid-sweep destruction returns the PARTIAL count of the removals whose
+    // post-checks completed — the final in-flight removal is deliberately
+    // uncounted (its post-check would read the freed object).
+    int removed = 0;
     for (const QString& instanceId : std::as_const(stale)) {
-        remove(instanceId); // fires windowDisappeared + drops m_records / appId index
-        m_canonicalByInstance.remove(instanceId);
+        remove(instanceId);
+        if (!guard) {
+            break;
+        }
+        if (!m_records.contains(instanceId) && !m_canonicalByInstance.contains(instanceId)) {
+            ++removed;
+        }
     }
-    return stale.size();
+    return removed;
 }
 
 void WindowRegistry::indexInsert(const QString& instanceId, const QString& appId)

@@ -33,6 +33,16 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     QString screenId = m_service->screenForWindow(windowId, m_lastActiveScreenId);
     qCInfo(lcDbusWindow) << "Drag-out unsnap (no activation trigger) for" << windowId << "screen:" << screenId;
 
+    // Latch the pre-snap float-back BEFORE the float write: setWindowFloating
+    // synchronously runs a placement capture that records the LIVE dragged
+    // frame (zone dimensions) into the same per-screen free-geometry map this
+    // read consumes — reading afterwards would "restore" the zone size and
+    // destroy the genuine pre-snap size in the process.
+    std::optional<QRect> preSnapGeo;
+    if (shouldRestoreSizeOnUnsnap(windowId)) {
+        preSnapGeo = m_service->validatedUnmanagedGeometry(windowId, screenId);
+    }
+
     // Delegate unsnap-for-float to the service directly (the SnapAdaptor
     // method windowUnsnappedForFloat does the same thing, but this path
     // doesn't need the SnapAdaptor detour for a WTS-level operation).
@@ -42,15 +52,18 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     // Restore pre-snap size (not position — window stays where the user dropped it).
     // This mirrors the activated-drag path in WindowDragAdaptor::dragStopped. A
     // matched SetRestoreSizeOnUnsnap rule overrides the global setting per window.
-    if (shouldRestoreSizeOnUnsnap(windowId)) {
-        auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
-        if (geo) {
-            Q_EMIT applyGeometryRequested(windowId, 0, 0, geo->width(), geo->height(), QString(), screenId, true);
-            // Single float-back store: clear the record's shared free geometry now
-            // that we've consumed it for this drag-out restore.
-            m_service->clearFreeGeometry(windowId);
-            qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
-        }
+    // Dimension guard mirrors the drop.cpp twin: a degenerate stored rect
+    // produces a RestoreSize outcome that validates to "requires non-zero
+    // size" and is dropped effect-side — don't claim success for it.
+    if (preSnapGeo && preSnapGeo->width() > 0 && preSnapGeo->height() > 0) {
+        Q_EMIT applyGeometryRequested(windowId, 0, 0, preSnapGeo->width(), preSnapGeo->height(), QString(), screenId,
+                                      true);
+        // Consume-once, per screen: only this screen's float-back was used;
+        // other monitors' remembered positions stay intact.
+        m_service->clearFreeGeometry(windowId, screenId);
+        qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << preSnapGeo->width() << "x" << preSnapGeo->height();
+    } else if (preSnapGeo) {
+        qCInfo(lcDbusWindow) << "Drag-out unsnap: degenerate stored size for" << windowId << "— skipping restore";
     }
 }
 
@@ -86,7 +99,16 @@ bool WindowTrackingAdaptor::isWindowFloating(const QString& windowId)
     if (windowId.isEmpty()) {
         return false;
     }
-    // Delegate to service
+    // KNOWN ASYMMETRY with setWindowFloatingForScreen: this query answers
+    // through the WTS resolver, which routes by the window's TRACKED screen's
+    // current mode, while the setter routes by the caller-supplied (effect's
+    // authoritative live) screen. Mid-mode-flip the two can briefly disagree —
+    // the query reads the slot of the mode the tracking still points at, one
+    // beat behind the screen set the setter targets. Accepted: every caller of
+    // this query wants the mode-lens answer (rule predicates, the effect's
+    // float cache), the flip converges within the same signal cascade, and a
+    // screen-scoped query would push the mode-resolution burden onto callers
+    // that don't have an authoritative screen to supply.
     return m_service->isWindowFloating(windowId);
 }
 
@@ -99,6 +121,12 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
 {
     if (!validateWindowId(windowId, QStringLiteral("set float state"))) {
         return;
+    }
+    // Suspension classification — see WindowTrackingService::isSuspensionFloat.
+    if (floating && m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
+        m_service->markSuspensionFloat(windowId);
+    } else if (!floating) {
+        m_service->clearSuspensionFloat(windowId);
     }
     m_service->setWindowFloating(windowId, floating);
     // Gate the signal emissions on a real change in what we last BROADCAST, not
@@ -139,8 +167,19 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
 
 QStringList WindowTrackingAdaptor::getFloatingWindows()
 {
-    // Delegate to service
-    return m_service->floatingWindows();
+    // USER floats only — suspension floats (minimize-as-float) are filtered
+    // out. The sole caller is the effect's daemon-bringup re-seed of its
+    // FloatingCache; seeding a minimize-float there makes the effect's
+    // restart claim sweep read it as a user float and skip adopting it into
+    // minimize-float ownership, leaving an unowned float that never re-tiles
+    // on unminimize. The effect's own claim paths (batch claim at daemon
+    // ready, claimAlreadyMinimizedAsFloated) are the owners of suspension
+    // floats and re-establish their state without this reply.
+    QStringList result = m_service->floatingWindows();
+    result.removeIf([this](const QString& windowId) {
+        return m_service->isSuspensionFloat(windowId);
+    });
+    return result;
 }
 
 bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const QString& screenId)
@@ -170,10 +209,25 @@ bool WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, 
     // doc: every emission channel must keep m_broadcastFloating equal to what
     // subscribers last heard, or the gate turns from a dedup into a
     // suppressor of genuine changes. setWindowFloating delegates here too.
-    if (m_broadcastFloating.value(windowId, false) == floating) {
+    // DELIBERATE divergence: the dedup keys on the CANONICAL (shadow) id so a
+    // class-mutated window dedups as one window, while the signal carries the
+    // CALLER'S raw id — subscribers resolve raw ids through their own
+    // canonicalization, and rewriting the id here would desync them from the
+    // other per-window signals on the same edge.
+    const QString shadowId = shadowWindowId(windowId);
+    // Absent entry NEVER counts as a match. The map is populated only by this
+    // relay, so after a daemon restart it is empty while WTS has restored
+    // floating windows and subscribers still believe "floating" — treating
+    // absent as false would swallow the first genuine unfloat entirely (no
+    // signal, and via setWindowFloating's early return no state-change
+    // emission or capture refresh either). The cost is one redundant
+    // broadcast per window on its first relay, which subscribers absorb
+    // idempotently.
+    const auto it = m_broadcastFloating.constFind(shadowId);
+    if (it != m_broadcastFloating.constEnd() && it.value() == floating) {
         return false;
     }
-    m_broadcastFloating[windowId] = floating;
+    m_broadcastFloating[shadowId] = floating;
     Q_EMIT windowFloatingChanged(windowId, floating, screenId);
     return true;
 }
@@ -183,21 +237,50 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     if (!validateWindowId(windowId, QStringLiteral("set float for screen"))) {
         return;
     }
+    // Boundary validation: an empty screenId makes isActiveOnScreen("") read
+    // false and silently routes an autotiled window's float traffic to the
+    // snap engine — a dead-end on the wrong slot. Recover via the window's
+    // tracked screen when possible; otherwise refuse loudly.
+    QString effectiveScreenId = screenId;
+    if (effectiveScreenId.isEmpty() && m_service) {
+        effectiveScreenId = m_service->screenForWindow(windowId);
+    }
+    if (effectiveScreenId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "setWindowFloatingForScreen: no screen for" << windowId << "— refusing";
+        return;
+    }
 
     qCInfo(lcDbusWindow) << "setWindowFloatingForScreen: windowId=" << windowId << "floating=" << floating
-                         << "screen=" << screenId;
+                         << "screen=" << effectiveScreenId;
+
+    // Classify BEFORE routing so any capture the write triggers synchronously
+    // already sees the suspension bit (minimize state is fresh here — the
+    // effect pushes metadata ahead of float traffic on the same edge).
+    if (m_service) {
+        if (floating && m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
+            m_service->markSuspensionFloat(windowId);
+        } else if (!floating) {
+            m_service->clearSuspensionFloat(windowId);
+        }
+    }
 
     // Route to the correct engine based on screen mode. Both directions go
     // through the explicit cross-engine handoff contract when the window
     // isn't yet tracked by the destination engine.
     PhosphorEngine::PlacementEngineBase* dest = nullptr;
     PhosphorEngine::PlacementEngineBase* source = nullptr;
-    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
+    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(effectiveScreenId)) {
         dest = m_autotileEngine.data();
         source = m_snapEngine.data();
     } else if (m_snapEngine) {
         dest = m_snapEngine.data();
         source = m_autotileEngine.data();
+    } else {
+        // Both engine QPointers null (late-shutdown D-Bus traffic): a silent
+        // no-op on a public entry point is undiagnosable — log like every
+        // other bail in this file.
+        qCWarning(lcDbusWindow) << "setWindowFloatingForScreen: no engine wired for" << effectiveScreenId;
+        return;
     }
 
     // Float: adopt an untracked window unconditionally (a brand-new floating
@@ -213,12 +296,11 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     //   - Autotile dest: adopt via the handoff (release source, receive with
     //     wasFloating=false tiles the arrival and announces it on the
     //     passive sync channel); the trailing relay dedups against that.
-    //   - Snap dest: NO adoption. Snap's handoffReceive floats an arrival
-    //     with no sourceZoneIds unconditionally (ignoring wasFloating) and
-    //     emits floating=true, and the setWindowFloat(false) below fails
-    //     open when no rule/pre-float zone resolves ("keeping floating") —
-    //     together that strands the snap store floating against a false
-    //     broadcast. Instead just release the source's bit and broadcast
+    //   - Snap dest: NO adoption. A handoffReceive here would add nothing:
+    //     with no sourceZoneIds and wasFloating=false its tail lands the
+    //     window as a plain free window, and the setWindowFloat(false) below
+    //     fails open when no rule/pre-float zone resolves ("keeping
+    //     floating"). Instead just release the source's bit and broadcast
     //     the unfloat; the setWindowFloat below still gives snap its
     //     rule/pre-float re-snap chance, and a window it cannot re-snap
     //     stays a free (unmanaged) window, which is what unfloating a
@@ -230,20 +312,28 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         if (floating || (sourceTracked && destIsAutotile)) {
             PhosphorEngine::IPlacementEngine::HandoffContext ctx;
             ctx.windowId = windowId;
-            ctx.toScreenId = screenId;
+            ctx.toScreenId = effectiveScreenId;
             ctx.wasFloating = floating;
             if (sourceTracked) {
                 ctx.fromEngineId = source->engineId();
-                ctx.sourceGeometry = m_frameGeometry.value(windowId);
                 source->handoffRelease(windowId);
             }
             dest->handoffReceive(ctx);
             if (!floating) {
-                relayWindowFloatingChanged(windowId, false, screenId);
+                relayWindowFloatingChanged(windowId, false, effectiveScreenId);
             }
         } else if (sourceTracked) {
             source->handoffRelease(windowId);
-            relayWindowFloatingChanged(windowId, false, screenId);
+            relayWindowFloatingChanged(windowId, false, effectiveScreenId);
+            recaptureAfterFloatWrite = true;
+        } else if (!floating) {
+            // Fourth case: unfloat with NEITHER engine tracking the window
+            // (its tracking was torn down while minimized/mode-flipped). The
+            // setWindowFloat below can fail open with no signal at all, which
+            // leaves the effect's float cache stuck at the last broadcast
+            // (typically true from a minimize-float) until a restart — so the
+            // not-floating edge must always reach subscribers.
+            relayWindowFloatingChanged(windowId, false, effectiveScreenId);
             recaptureAfterFloatWrite = true;
         }
     }
@@ -254,7 +344,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         // (possibly stale) tracked association. Without this, unfloating a window
         // that drifted to another monitor while floating non-deterministically
         // teleports it back to its source-monitor zone (Discussion #724).
-        dest->setWindowFloat(windowId, floating, screenId);
+        dest->setWindowFloat(windowId, floating, effectiveScreenId);
     }
     if (recaptureAfterFloatWrite) {
         // Snap-dest unfloat: re-anchor the live placement record after the

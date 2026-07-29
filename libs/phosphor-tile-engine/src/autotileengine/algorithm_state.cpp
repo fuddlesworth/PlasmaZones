@@ -31,6 +31,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "tileenginelogging.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -538,6 +539,61 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
     if (pruned > 0) {
         qCInfo(PhosphorTileEngine::lcTileEngine)
             << "Pruned" << pruned << "TilingStates for removed desktop" << removedDesktop;
+    }
+}
+
+void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
+{
+    if (physicalScreenId.isEmpty()) {
+        return;
+    }
+    // Match every virtual sub-screen of the removed physical monitor:
+    // samePhysical strips the "/vs:N" suffix before comparing.
+    const auto matches = [&physicalScreenId](const QString& screenId) {
+        return !screenId.isEmpty() && PhosphorIdentity::VirtualScreenId::samePhysical(screenId, physicalScreenId);
+    };
+    int pruned = 0;
+    QSet<QString> removedScreenIds;
+    m_states.removeStatesIf(
+        [&](const TilingStateKey& key, PhosphorTiles::TilingState*) {
+            return matches(key.screenId);
+        },
+        [&](const TilingStateKey& key, PhosphorTiles::TilingState* state) {
+            // Tuned flags go with the state, exactly as in the desktop /
+            // activity prunes — a reconnected monitor reusing this id must
+            // not inherit a stale "tuned" skip in propagateGlobal*.
+            m_userTunedSplitRatio.remove(key);
+            m_userTunedMasterCount.remove(key);
+            removedScreenIds.insert(key.screenId);
+            state->deleteLater();
+            ++pruned;
+        });
+    m_states.removeWindowsIf([&](const QString&, const TilingStateKey& key) {
+        return matches(key.screenId);
+    });
+    std::erase_if(m_scriptStateStash, [&](const auto& entry) {
+        return matches(entry.first.screenId);
+    });
+    // Per-screen scheduling can hold ids with no surviving state (a pending
+    // initial order for a context never materialised) — sweep by id, not just
+    // the removed states' keys.
+    for (const QString& sid : std::as_const(removedScreenIds)) {
+        clearScreenScheduling(sid);
+    }
+    const QStringList pendingOrderScreens = m_pendingInitialOrders.keys();
+    for (const QString& sid : pendingOrderScreens) {
+        if (matches(sid)) {
+            m_pendingInitialOrders.remove(sid);
+            m_pendingOrderGeneration.remove(sid);
+            m_strictInitialOrderScreens.remove(sid);
+            clearScreenScheduling(sid);
+        }
+    }
+    // Drop the per-output desktop entry / sticky pin for the dead screen ids.
+    m_context.removeScreensIf(matches);
+    if (pruned > 0) {
+        qCInfo(PhosphorTileEngine::lcTileEngine)
+            << "Pruned" << pruned << "TilingStates for removed screen" << physicalScreenId;
     }
 }
 

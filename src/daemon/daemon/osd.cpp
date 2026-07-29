@@ -67,23 +67,29 @@ void Daemon::showOverlay()
     }
     // Per-screen autotile exclusion is handled by OverlayService::initializeOverlay()
     // via m_excludedScreens (set in updateAutotileScreens)
-    m_overlayService->show();
+    if (m_overlayService) {
+        m_overlayService->show();
+    }
 }
 
 void Daemon::hideOverlay()
 {
     clearHighlight();
-    m_overlayService->hide();
+    if (m_overlayService) {
+        m_overlayService->hide();
+    }
 }
 
 bool Daemon::isOverlayVisible() const
 {
-    return m_overlayService->isVisible();
+    return m_overlayService && m_overlayService->isVisible();
 }
 
 void Daemon::clearHighlight()
 {
-    m_zoneDetector->clearHighlights();
+    if (m_zoneDetector) {
+        m_zoneDetector->clearHighlights();
+    }
 }
 
 void Daemon::armResnapOsdSuppression(int count)
@@ -405,22 +411,27 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
     bool manualActive = false;
 
     if (m_settings->autotileEnabled() && m_layoutManager && m_screenManager) {
-        const int desktop = currentDesktopForScreen(focusedScreenId);
         const QString activity = currentActivity();
 
         if (!focusedScreenId.isEmpty()) {
             // Per-screen filter: only check the focused screen's mode
-            const QString assignmentId = m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
+            const QString assignmentId = m_layoutManager->assignmentIdForScreen(
+                focusedScreenId, currentDesktopForScreen(focusedScreenId), activity);
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
             } else {
                 manualActive = true;
             }
         } else {
-            // Global filter: union of all effective screens (includes virtual screens)
+            // Global filter: union of all effective screens (includes virtual
+            // screens). Each screen resolves its OWN desktop (#648 per-output
+            // virtual desktops) — a desktop hoisted from the empty focused id
+            // is the global current desktop and misresolves per-output
+            // screens showing a different one.
             const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
             for (const QString& screenId : effectiveIds) {
-                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+                const QString assignmentId =
+                    m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
                 if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                     autotileActive = true;
                 } else {
@@ -470,9 +481,10 @@ void Daemon::syncModeFromAssignments()
                 }
             }
         }
-        // Per-output virtual desktops (#648): each screen resolves its own desktop.
-        const int desktop = currentDesktopForScreen(focusedScreenId);
         if (!focusedScreenId.isEmpty()) {
+            // Per-output virtual desktops (#648): each screen resolves its own
+            // desktop. Inside the guard — a lookup for an empty id is dead work.
+            const int desktop = currentDesktopForScreen(focusedScreenId);
             const QString focusedAssignmentId =
                 m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
             m_unifiedLayoutController->setCurrentScreenName(focusedScreenId);
@@ -566,9 +578,11 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
         }
         for (const QString& screenId : screenIds) {
             // Each screen reports against its OWN current virtual desktop
-            // (Plasma 6.7 per-output virtual desktops, #648).
-            const int desktop =
-                m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : currentDesktop();
+            // (Plasma 6.7 per-output virtual desktops, #648) — via the shared
+            // helper so the null-manager fallback cannot drift from every
+            // other resolution site (the open-coded form fell back to the
+            // global current desktop while the helper reports 0/unknown).
+            const int desktop = currentDesktopForScreen(screenId);
             // Route the disabled-context probe through the resolver so this
             // OSD pass uses the same single snapshot façade as every other
             // call site — the prior hand-stitched (modeFor → settings →
@@ -579,28 +593,8 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
             // reports against, while the screen's mode stays live.
             DisabledReason why = DisabledReason::NotDisabled;
             if (m_contextResolver) {
-                // Map PhosphorContext::DisabledReason → PlasmaZones::DisabledReason.
-                // The two enums are value-identical by intent (the LGPL lib's
-                // DisabledReason.h documents it mirrors the GPL daemon's),
-                // but the conversion is written as a switch so a future enum
-                // value added on one side surfaces here as a compile-time
-                // -Wswitch warning rather than a silent value coercion.
-                const auto reason = m_contextResolver->disabledReason(
-                    m_contextResolver->handleForPersisted(screenId, desktop, activity));
-                switch (reason) {
-                case PhosphorContext::DisabledReason::NotDisabled:
-                    why = DisabledReason::NotDisabled;
-                    break;
-                case PhosphorContext::DisabledReason::MonitorDisabled:
-                    why = DisabledReason::MonitorDisabled;
-                    break;
-                case PhosphorContext::DisabledReason::DesktopDisabled:
-                    why = DisabledReason::DesktopDisabled;
-                    break;
-                case PhosphorContext::DisabledReason::ActivityDisabled:
-                    why = DisabledReason::ActivityDisabled;
-                    break;
-                }
+                why = toDaemonDisabledReason(m_contextResolver->disabledReason(
+                    m_contextResolver->handleForPersisted(screenId, desktop, activity)));
             }
             if (why != DisabledReason::NotDisabled) {
                 showContextDisabledOsd(screenId, desktop, activity, why);

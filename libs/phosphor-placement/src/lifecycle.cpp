@@ -67,7 +67,9 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     // and not be auto-snapped when reopened.
     QStringList zoneIds = snapState ? snapState->zonesForWindow(windowId) : QStringList{};
     QString zoneId = zoneIds.isEmpty() ? QString() : zoneIds.first();
-    // Check floating with full windowId first, fallback to appId
+    // With the engine resolver wired (production) this is the engine's answer
+    // directly; the full-windowId-then-appId fallback applies only to the
+    // legacy unwired path inside isWindowFloating.
     bool isFloating = isWindowFloating(windowId);
     if (!zoneId.isEmpty() && !zoneId.startsWith(kZoneSelectorIdPrefix)
         && !isFloating
@@ -163,7 +165,7 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     // the window is reopened. Without this, closing a floated window and
     // reopening it would inherit the float state (via appId fallback), causing
     // a spurious "floated" OSD and preventing auto-snap.
-    m_floatingWindows.remove(windowId);
+    m_floatingWindows.remove(canonicalizeForLookup(windowId));
     if (appId != windowId) {
         m_floatingWindows.remove(appId);
     }
@@ -478,6 +480,15 @@ void WindowTrackingService::onLayoutChanged()
         unassignWindow(windowId);
     }
     for (auto it = toRewrite.constBegin(); it != toRewrite.constEnd(); ++it) {
+        // Skip floating windows: assignWindowToZones unconditionally strips
+        // the legacy float bit, and a floating-with-preserved-zone window must
+        // not lose it to a bookkeeping rewrite — matching the migration
+        // siblings in virtualscreenmigration.cpp, which skip floating windows
+        // in their prune passes. (Production float state lives in the engines;
+        // this protects the unwired/test fallback path.)
+        if (isWindowFloating(it.key())) {
+            continue;
+        }
         const RewriteTarget& target = it.value();
         assignWindowToZones(it.key(), target.zones, target.screenId, target.desktop);
     }
@@ -544,7 +555,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
     // Check virtual screens first (covers both virtual and non-subdivided physical screens).
     // Use area-overlap semantics (not center-point containment) so windows on virtual
     // screen boundaries are handled consistently with the physical-screen fallback path.
-    auto* mgr = m_screenManager;
+    PhosphorScreens::ScreenManager* mgr = m_screenManager;
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();
         for (const QString& id : ids) {
@@ -573,7 +584,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
 {
     // Try virtual/effective screens first via PhosphorScreens::ScreenManager
-    auto* mgr = m_screenManager;
+    PhosphorScreens::ScreenManager* mgr = m_screenManager;
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();
         const QPoint center = geometry.center();
@@ -653,7 +664,7 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
         return screenId;
     }
 
-    auto* smgr = m_screenManager;
+    PhosphorScreens::ScreenManager* smgr = m_screenManager;
     if (!smgr) {
         return screenId;
     }

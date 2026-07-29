@@ -66,6 +66,12 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
     // placement-state change, so drop it once so border / opacity rules re-resolve
     // against the new snapped / floating / zone state.
     m_shaderManager.animationRuleEvaluator().clearCache();
+    // The exclusion verdicts (isExcludedBySnappingRule) are cached the same way
+    // and an Exclude rule can scope on the same placement fields — keep them in
+    // lockstep.
+    if (!m_snappingExclusionRuleSet.isEmpty()) {
+        m_snappingExclusionEvaluator.clearCache();
+    }
     for (const QString& windowId : windowIds) {
         KWin::EffectWindow* w = findWindowById(windowId);
         if (!w) {
@@ -135,6 +141,10 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
     // (clearAllDecorations), and the daemon-ready re-seeds schedule a border sweep to
     // re-fold every window against the fresh placement.
     m_shaderManager.animationRuleEvaluator().clearCache();
+    // Exclusion verdicts share the placement-scoped staleness — same sweep.
+    if (!m_snappingExclusionRuleSet.isEmpty()) {
+        m_snappingExclusionEvaluator.clearCache();
+    }
     // Window-layer rules need the same placement-scoped re-resolve, but they
     // are EVENT-driven (during normal operation only reconcileRuleWindowLayer
     // writes keepAbove/keepBelow; restoreAllRuleWindowLayers is

@@ -141,6 +141,18 @@ void AutotileEngine::clearCurrentDesktopForScreen(const QString& screenId)
     m_context.clearCurrentDesktopForScreen(screenId);
 }
 
+void AutotileEngine::clearScreenScheduling(const QString& screenId)
+{
+    m_pendingRetileScreens.remove(screenId);
+    m_retileRetryScreens.remove(screenId);
+    m_retileRetryCount.remove(screenId);
+    // A deferred focus request stranded by a no-op retile must not survive
+    // the screen's removal: if the same screenId reconnects (re-subdivision
+    // recreates vs:N ids), its first applyTiling would consume the stale
+    // entry and activate a window from the previous session of that screen.
+    m_pendingFocusByScreen.remove(screenId);
+}
+
 void AutotileEngine::setCurrentActivity(const QString& activity)
 {
     // The established-flag (owned by the tracker, not a bare empty-string
@@ -375,14 +387,57 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // when the windows actually do open. Leave the advisory order in
         // pendingInitialOrders for insertWindow() to consult on arrival.
         if (m_pendingInitialOrders.contains(screenId) && m_strictInitialOrderScreens.contains(screenId)) {
-            const QStringList order = m_pendingInitialOrders.take(screenId);
-            m_pendingOrderGeneration.remove(screenId);
-            m_strictInitialOrderScreens.remove(screenId);
+            const QStringList order = m_pendingInitialOrders.value(screenId);
+            if (!m_windowRegistry) {
+                // Without a registry the seed cannot distinguish minimized
+                // windows and will tile every seeded entry — visible in
+                // production as a hidden window holding a layout slot. Warn
+                // loudly; headless/test engines legitimately run without one.
+                qCWarning(PhosphorTileEngine::lcTileEngine)
+                    << "setAutotileScreens: strict seed for" << screenId
+                    << "has no window registry — minimized windows cannot be deferred";
+            }
+            bool hasDeferredMinimizedWindow = false;
             PhosphorTiles::TilingState* ts = tilingStateForScreen(screenId);
             if (ts) {
                 const TilingStateKey stateKey = currentKeyForScreen(screenId);
+                QStringList notTileable;
                 for (const QString& windowId : order) {
+                    // Defer on engaged-true AND on unknown (record missing):
+                    // a window the registry cannot vouch for must not claim a
+                    // tile — the deferral self-heals when the effect's
+                    // windowOpened re-announce (sent only for visible
+                    // windows) consumes the pending slot at its seeded index.
+                    if (m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(true)) {
+                        hasDeferredMinimizedWindow = true;
+                        continue;
+                    }
+                    // Same admission gate windowOpened applies: a window the
+                    // daemon's order names but that must not tile (excluded
+                    // app, special window type) would otherwise be seeded
+                    // into the layout and — containsWindow short-circuiting
+                    // its later re-announce — could never self-heal. Dropped
+                    // from the pending order below so a retained order (a
+                    // deferred minimized sibling) cannot wedge on it.
+                    if (!shouldTileWindow(windowId)) {
+                        notTileable.append(windowId);
+                        continue;
+                    }
                     if (!ts->containsWindow(windowId)) {
+                        // Single-owner guard: a mode transition can seed a
+                        // window that another context's state still owns
+                        // (e.g. tracked on a different desktop by a
+                        // catch-scan race). Release the old owner first —
+                        // same primitive handoffReceive uses — or
+                        // setKeyForWindow below re-points the reverse map
+                        // and leaves a permanent ghost in the old state.
+                        const TilingStateKey oldKey = m_states.keyForWindow(windowId);
+                        if (!oldKey.screenId.isEmpty() && oldKey != stateKey) {
+                            handoffRelease(windowId);
+                            if (oldKey.screenId != screenId) {
+                                scheduleRetileForScreen(oldKey.screenId);
+                            }
+                        }
                         ts->addWindow(windowId);
                         // Register engine tracking immediately — without the
                         // key entry, a window closing before the effect's
@@ -394,7 +449,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         // of truth). Without this, windows added from pending orders lose
                         // their floating state because windowOpened's floating restore is
                         // skipped when the window already exists in the PhosphorTiles::TilingState.
-                        // Exact record only: pending orders are built from LIVE session
+                        // Same-instance record only: pending orders are built from LIVE session
                         // ids, so a same-app sibling's floating record must not float
                         // this window (relogin restores go through insertWindow's take()).
                         if (m_windowTracker) {
@@ -404,6 +459,19 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                                 ts->setFloating(windowId, true);
                             }
                         }
+                        // Same "Float this app" admission insertWindow applies
+                        // at line ~292: a float-ruled window seeded tiled would
+                        // hold a tile its open-time rule says it must not, and
+                        // the containsWindow short-circuit on its re-announce
+                        // means nothing later corrects it.
+                        if (!ts->isFloating(windowId) && insertShouldFloat(windowId)) {
+                            ts->setFloating(windowId, true);
+                        }
+                        // Same lifecycle hook every other insert site runs — a
+                        // memory algorithm (dwindle-memory's split tree) must
+                        // see seeded arrivals or its bookkeeping goes blind to
+                        // them.
+                        notifyAlgorithmWindowAdded(ts, screenId, windowId);
                         // Announce on the passive channel via the canonical
                         // insert-time sync (both directions: restored-floating
                         // OR seeded-tiled-over-a-stale-WTS-float-bit). The
@@ -416,6 +484,22 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         emitInsertFloatStateSync(windowId, screenId);
                     }
                 }
+                for (const QString& windowId : std::as_const(notTileable)) {
+                    m_pendingInitialOrders[screenId].removeAll(windowId);
+                }
+                if (!hasDeferredMinimizedWindow) {
+                    m_pendingInitialOrders.remove(screenId);
+                    m_pendingOrderGeneration.remove(screenId);
+                    m_strictInitialOrderScreens.remove(screenId);
+                }
+            } else {
+                // Null state — the screen is known to autotile but the state
+                // factory refused (virtual-screen teardown race). RETAIN the
+                // pending order rather than silently discarding the computed
+                // seed: insertWindow consumes it entry-by-entry when the
+                // effect's windowOpened announcements land.
+                qCWarning(PhosphorTileEngine::lcTileEngine) << "setAutotileScreens: no tiling state for" << screenId
+                                                            << "— strict seed retained for insert-time consumption";
             }
         }
         scheduleRetileForScreen(screenId);
@@ -423,9 +507,10 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
 
     // Only prune states for the CURRENT desktop/activity. States belonging to
     // other desktops are preserved so desktop switching is a fast state swap
-    // (no window release/re-add). windowsReleasedFromTiling MUST NOT fire
+    // (no window release/re-add). windowsReleased MUST NOT fire
     // for desktop/activity transitions — only for true autotile disable.
     QStringList releasedWindows;
+    QSet<QString> placementChangedScreens;
     // Only prune states that match the current desktop/activity AND whose screen
     // is no longer in the autotile set. States for other contexts are left
     // untouched here — by the time their desktop becomes current the screen is
@@ -445,19 +530,21 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             // toggle-off/on round trip keeps the user's manual tile adjustments
             // instead of laying out from scratch.
             stashScriptState(key, state);
-            releaseScreenStateForTeardown(key.screenId, state, releasedWindows);
+            if (releaseScreenStateForTeardown(key.screenId, state, releasedWindows)) {
+                placementChangedScreens.insert(key.screenId);
+            }
             // Toggle-off drops only the resolver's IN-MEMORY overrides (they are
             // re-derived from settings on re-enable); the persisted per-screen
             // settings deliberately survive — a user toggling autotile off must
-            // not lose their per-monitor configuration. Contrast with the
-            // orphaned-virtual-screen teardown, which purges both layers because
-            // a dead VS id is never reused.
+            // not lose their per-monitor configuration. The orphaned-virtual-
+            // screen teardown follows the same rule: vs:N ids are recreated by
+            // a later re-subdivision, so its persisted layer survives too.
             m_configResolver->removeOverridesForScreen(key.screenId);
             m_userTunedSplitRatio.remove(key);
             m_userTunedMasterCount.remove(key);
         });
     // Clean up reverse-map entries for released windows BEFORE emitting the
-    // signal. Signal handlers (signals.cpp windowsReleasedFromTiling) check zone
+    // signal. Signal handlers (the daemon's windowsReleased lambda) check zone
     // assignments and floating state — stale mappings would cause them to see
     // phantom candidates.
     for (const QString& windowId : std::as_const(releasedWindows)) {
@@ -508,13 +595,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         }
     }
     for (const QString& screenId : removed) {
-        m_retileRetryScreens.remove(screenId);
-        m_retileRetryCount.remove(screenId);
-        // A deferred focus request stranded by a no-op retile must not
-        // survive the screen's removal: if the same screenId reconnects,
-        // its first applyTiling would consume the stale entry and activate
-        // a window from the previous session of that screen.
-        m_pendingFocusByScreen.remove(screenId);
+        clearScreenScheduling(screenId);
     }
 
     const bool nowEnabled = !m_autotileScreens.isEmpty();
@@ -529,7 +610,14 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         Q_EMIT enabledChanged(nowEnabled);
     }
 
+    // DELIBERATE ORDER: autotileScreensChanged first, placementChanged after.
+    // The screens signal drives the effect's mode-transition pass; the
+    // placement signals only schedule the daemon's debounced save, which must
+    // snapshot state AFTER the transition's releases are all in place.
     Q_EMIT autotileScreensChanged(QStringList(m_autotileScreens.begin(), m_autotileScreens.end()), wasDesktopSwitch);
+    for (const QString& screenId : std::as_const(placementChangedScreens)) {
+        Q_EMIT placementChanged(screenId);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
