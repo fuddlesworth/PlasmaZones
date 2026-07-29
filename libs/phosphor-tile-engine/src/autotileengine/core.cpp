@@ -122,6 +122,28 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
+    // Pending initial orders: a minimized strict-order placeholder has no key
+    // entry, so the tracking sweep above cannot reach it — a dead placeholder
+    // would otherwise keep its pending order (and the timeout's re-arm chain)
+    // alive for the session. Same purge removeWindow applies on a signalled
+    // close, batched.
+    for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end();) {
+        QStringList& order = pit.value();
+        const int before = order.size();
+        order.removeIf([&aliveWindowIds](const QString& id) {
+            return !aliveWindowIds.contains(id);
+        });
+        pruned += before - order.size();
+        if (order.isEmpty()) {
+            m_pendingOrderGeneration.remove(pit.key());
+            m_strictInitialOrderScreens.remove(pit.key());
+            pit = m_pendingInitialOrders.erase(pit);
+        } else {
+            const QString screen = pit.key();
+            ++pit; // advance before potential erase by helper
+            cleanupPendingOrderIfResolved(screen);
+        }
+    }
     return pruned;
 }
 
@@ -138,12 +160,15 @@ void AutotileEngine::onWindowZoneChanged(const QString& rawWindowId, const QStri
     // and hand onWindowRemoved() an id no state tracks.
     const QString windowId = canonicalizeWindowId(rawWindowId);
     if (zoneId.isEmpty()) {
-        for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
-            if (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
-                || it.key().activity != m_context.currentActivity()) {
-                continue;
-            }
-            if (it.value() && it.value()->isFloating(windowId)) {
+        // Guard on the OWNING state's float bit, keyed through the reverse
+        // map — onWindowRemoved below acts on that same stored key, which can
+        // belong to another desktop/activity context. A current-context-only
+        // scan missed an off-context floating window, so a stray zone-clear
+        // untracked it.
+        const TilingStateKey key = m_states.keyForWindow(windowId);
+        if (!key.screenId.isEmpty()) {
+            const PhosphorTiles::TilingState* owner = m_states.stateForKey(key);
+            if (owner && owner->isFloating(windowId)) {
                 return;
             }
         }
@@ -231,11 +256,14 @@ void AutotileEngine::connectSignals()
                         [&](const TilingStateKey& key, PhosphorTiles::TilingState* state) {
                             const QString sid = key.screenId;
                             // This virtual screen no longer exists — release its
-                            // windows via the shared teardown body. Unlike the
-                            // toggle-off path, an orphaned VS id is never reused,
-                            // so BOTH override layers go: the resolver's
-                            // in-memory map here, the persisted settings below
-                            // (clearPerScreenAutotileSettings). drainOverflow is
+                            // windows via the shared teardown body. Only the
+                            // IN-MEMORY layers are dropped here; the persisted
+                            // per-screen settings survive, exactly as on the
+                            // toggle-off path, because vs:N ids ARE recreated —
+                            // a later re-subdivision of the same physical
+                            // screen mints vs:0, vs:1... again and the user's
+                            // per-monitor configuration must come back with
+                            // them. drainOverflow is
                             // deferred to the per-screen loop below: this loop
                             // visits EVERY desktop/activity context of the same
                             // VS id, and an in-helper drain on the first context
@@ -246,9 +274,10 @@ void AutotileEngine::connectSignals()
                                                               /*drainOverflow=*/false)) {
                                 placementChangedScreens.insert(sid);
                             }
-                            // forgetScreen, not removeOverridesForScreen: this id
-                            // is never reused, so remembering the algorithm it
-                            // was on would strand a string for the session.
+                            // forgetScreen, not removeOverridesForScreen: both
+                            // are in-memory, and the remembered "built under"
+                            // algorithm is re-derived from the persisted
+                            // settings if a re-subdivision recreates this id.
                             m_configResolver->forgetScreen(sid);
                             m_userTunedSplitRatio.remove(key);
                             m_userTunedMasterCount.remove(key);
@@ -261,9 +290,9 @@ void AutotileEngine::connectSignals()
                     // orphanedVsIds, because that set is built inside the removal
                     // callback and so only holds ids that still had a live state.
                     // A VS toggled off earlier has no state, would be missing from
-                    // it, and its bag is exactly the "sits in the stash forever"
-                    // case this exists to prevent: the id is gone for good and is
-                    // never reused, so nothing will ever harvest or match it again.
+                    // it, and its bag would otherwise sit in the stash until
+                    // shutdown. Session-scoped manual-adjustment state; if a
+                    // re-subdivision recreates the id, the layout starts fresh.
                     std::erase_if(m_scriptStateStash, [&](const auto& entry) {
                         const QString& sid = entry.first.screenId;
                         return PhosphorIdentity::VirtualScreenId::isVirtual(sid)
@@ -277,17 +306,14 @@ void AutotileEngine::connectSignals()
                         Q_EMIT windowsReleased(releasedWindows, orphanedVsIds);
                     }
 
-                    // Clean up per-screen autotile settings for removed virtual screens.
-                    // Orphaned AutotileScreen: groups would otherwise accumulate indefinitely
-                    // as virtual screen IDs are never reused after reconfiguration.
-                    if (!orphanedVsIds.isEmpty()) {
-                        const QSignalBlocker blocker(engineSettings());
-                        if (auto* s = autotileSettings()) {
-                            for (const QString& orphanId : orphanedVsIds)
-                                s->clearPerScreenAutotileSettings(orphanId);
-                        }
-                        Q_EMIT settingsPersistRequested();
-                    }
+                    // The PERSISTED per-screen autotile settings are deliberately
+                    // NOT cleared for orphaned virtual screens. vs:N ids are
+                    // index-based and recreated by a later re-subdivision of the
+                    // same physical screen, so purging here permanently deleted
+                    // the user's per-monitor configuration on a simple
+                    // remove-then-re-add round trip. The groups are bounded by
+                    // the largest subdivision count the user has ever configured,
+                    // not unbounded growth.
 
                     // Clean up per-screen desktop maps for removed virtual screens on this
                     // physical screen — BOTH the sticky-pin override and the per-output-VD

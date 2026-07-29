@@ -525,9 +525,9 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             // Toggle-off drops only the resolver's IN-MEMORY overrides (they are
             // re-derived from settings on re-enable); the persisted per-screen
             // settings deliberately survive — a user toggling autotile off must
-            // not lose their per-monitor configuration. Contrast with the
-            // orphaned-virtual-screen teardown, which purges both layers because
-            // a dead VS id is never reused.
+            // not lose their per-monitor configuration. The orphaned-virtual-
+            // screen teardown follows the same rule: vs:N ids are recreated by
+            // a later re-subdivision, so its persisted layer survives too.
             m_configResolver->removeOverridesForScreen(key.screenId);
             m_userTunedSplitRatio.remove(key);
             m_userTunedMasterCount.remove(key);

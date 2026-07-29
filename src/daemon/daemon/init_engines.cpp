@@ -137,25 +137,26 @@ void Daemon::initEnginesAndWiring()
     // held as the base PlacementEngineBase. Use the derived `autotileEngine`
     // pointer captured above — the std::move into m_autotileEngine transferred
     // ownership but not the pointee, so it still points at the live engine.
-    if (autotileEngine) {
-        autotileEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
-            if (!m_layoutManager || screenId.isEmpty()) {
-                return {};
-            }
-            // This is the autotile gap path, so resolve against the "tiling"
-            // placement mode — a per-mode `Mode Equals "tiling"` gap rule then
-            // applies here and a "snapping" one stays inert. The same
-            // GeometryUtils::contextGapOverrideMap shaping the snap provider uses
-            // below keeps the two paths byte-identical (PerScreenKeys form, with
-            // the per-side toggle gating the per-side entries). The config per-
-            // monitor gap is merged UNDER the rule override so a user gap rule
-            // still wins per slot.
-            return GeometryUtils::mergeConfigPerScreenGaps(
-                GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
-                    screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling"))),
-                m_settings.get(), screenId);
-        });
-    }
+    // CONTRACT: createEngines() above always constructs both engines and
+    // initCoreAdaptors() ran first, so autotileEngine / snapEngine and the
+    // adaptor members are non-null throughout this method — no per-use guards.
+    autotileEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
+        if (!m_layoutManager || screenId.isEmpty()) {
+            return {};
+        }
+        // This is the autotile gap path, so resolve against the "tiling"
+        // placement mode — a per-mode `Mode Equals "tiling"` gap rule then
+        // applies here and a "snapping" one stays inert. The same
+        // GeometryUtils::contextGapOverrideMap shaping the snap provider uses
+        // below keeps the two paths byte-identical (PerScreenKeys form, with
+        // the per-side toggle gating the per-side entries). The config per-
+        // monitor gap is merged UNDER the rule override so a user gap rule
+        // still wins per slot.
+        return GeometryUtils::mergeConfigPerScreenGaps(
+            GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling"))),
+            m_settings.get(), screenId);
+    });
 
     // Build the PhosphorContext::ContextResolver wiring NOW — after the
     // workspace managers, settings, and router exist; before any D-Bus
@@ -179,12 +180,8 @@ void Daemon::initEnginesAndWiring()
     // resolver only exists now. The setters mirror setAutotileEngine /
     // setShortcutRegistrar / setScreenModeRouter — same late-binding
     // pattern the daemon already uses for cross-cutting deps.
-    if (m_windowDragAdaptor) {
-        m_windowDragAdaptor->setContextResolver(m_contextResolver.get());
-    }
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setContextResolver(m_contextResolver.get());
-    }
+    m_windowDragAdaptor->setContextResolver(m_contextResolver.get());
+    m_windowTrackingAdaptor->setContextResolver(m_contextResolver.get());
     // m_snapAdaptor is constructed below at the engine-adaptor block; its
     // contextResolver wire lives there.
 
@@ -312,6 +309,13 @@ void Daemon::initEnginesAndWiring()
                 PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
         }
     };
+    // The rule store is constructed once in the Daemon ctor and SURVIVES a
+    // stop() → init() cycle, so re-wiring here would stack duplicates of the
+    // three rulesChanged subscriptions below (triple refilter/refresh/
+    // reconcile per edit after each cycle). Sever every rulesChanged
+    // connection targeting the daemon first; all of them are (re)established
+    // right here.
+    disconnect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, nullptr);
     connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this,
             [refilterExcludeRules](bool /*persisted*/) {
                 refilterExcludeRules();
@@ -600,7 +604,17 @@ void Daemon::initEnginesAndWiring()
         });
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
-    // connects signals in its constructor (unified pattern for both engines)
+    // connects signals in its constructor (unified pattern for both engines).
+    // stop() → init() re-entry: the previous cycle's adaptors survive stop()
+    // (it only detaches / clears their engine borrows), so construct-over
+    // would accumulate one QObject child per cycle, each still holding
+    // cleared borrows and its D-Bus registration. Delete the old ones first.
+    delete m_controlAdaptor;
+    m_controlAdaptor = nullptr;
+    delete m_snapAdaptor;
+    m_snapAdaptor = nullptr;
+    delete m_autotileAdaptor;
+    m_autotileAdaptor = nullptr;
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
