@@ -96,6 +96,13 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
 
         preserved->windowId = shadowWindowId(windowId);
         preserved->appId = m_service->currentAppIdFor(windowId);
+        if (preserved->appId.isEmpty()) {
+            // record() rejects an appId-less record, so the preserve would be
+            // a silent no-op — say so instead of vanishing.
+            qCDebug(lcDbusWindow) << "captureWindowPlacement: empty appId for minimized preserve of" << windowId
+                                  << "— skipping";
+            return;
+        }
         // What is preserved is the PLACEMENT (engine slots + free geometry).
         // The CONTEXT is deliberately refreshed: authoritativeScreen is where
         // the window actually closed, and windowContext() is the window's OWN
@@ -352,9 +359,13 @@ void WindowTrackingAdaptor::refreshOpenWindowPlacements()
     if (!m_service) {
         return;
     }
-    for (auto it = m_frameGeometry.constBegin(); it != m_frameGeometry.constEnd(); ++it) {
-        if (it.value().isValid()) {
-            captureWindowPlacement(it.key());
+    // Snapshot the keys before iterating: captureWindowPlacement fans out into
+    // engine code and signal handlers that can reach the m_frameGeometry
+    // writers, and mutating a QHash mid-iteration is undefined.
+    const QList<QString> windowIds = m_frameGeometry.keys();
+    for (const QString& windowId : windowIds) {
+        if (m_frameGeometry.value(windowId).isValid()) {
+            captureWindowPlacement(windowId);
         }
     }
 }
@@ -437,6 +448,11 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
             source->handoffRelease(windowId);
         }
         dest->handoffReceive(ctx);
+        // No windowStateChanged "screen_changed" entry here, unlike the
+        // snapped branch below: the receive path's windowFloatingChanged
+        // relay already carries the DESTINATION screen to subscribers, so a
+        // second push would be redundant; anything else about a floating
+        // window's screen is pull-resolved (screenForWindow) on demand.
         qCInfo(lcDbusWindow) << "windowScreenChanged: floating window" << windowId << "moved from" << trackedScreen
                              << "to" << newScreenId << "- handoff complete";
         return;
@@ -542,17 +558,35 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // orphaned the window from both engines' tracking by close time, both engine
     // capturePlacement calls miss/decline and the real screen would be lost —
     // captureWindowPlacement falls back to this screen to record the float-back.
-    captureWindowPlacement(windowId, screenId);
+    // Validate the effect-supplied close screen before it becomes the
+    // persisted record's managed context: a stale id (output unplugged
+    // mid-close) would poison the reopen screen. Fall back to resolving from
+    // the live frame's centre; an empty result makes the capture keep the
+    // record's prior screen, which is strictly better than adopting a dead
+    // one.
+    QString closeScreen = screenId;
+    if (!closeScreen.isEmpty() && m_service->screenManager()
+        && !m_service->screenManager()->physicalScreenFor(closeScreen).isValid()) {
+        const QRect closeFrame = m_frameGeometry.value(shadowWindowId(windowId));
+        closeScreen = closeFrame.isValid() ? Utils::effectiveScreenIdAt(m_service->screenManager(), closeFrame.center())
+                                           : QString();
+        qCDebug(lcDbusWindow) << "windowClosed: unknown close screen" << screenId << "for" << windowId
+                              << "— resolved to" << closeScreen;
+    }
+    captureWindowPlacement(windowId, closeScreen);
 
-    // Drop frame-geometry shadow entry for this window.
-    const QString shadowId = shadowWindowId(windowId);
-    m_frameGeometry.remove(shadowId);
-    // Drop the last-broadcast floating state for this window.
-    m_broadcastFloating.remove(shadowId);
     // Session-transient suspension-float classification dies with the window.
     m_service->clearSuspensionFloat(windowId);
 
     m_service->windowClosed(windowId, kind);
+
+    // Drop the shadow maps AFTER the service teardown: windowClosed's cascade
+    // can synchronously re-enter the float relay, and a relay landing between
+    // an earlier removal and the teardown would re-insert a zombie
+    // last-broadcast entry that outlives the window.
+    const QString shadowId = shadowWindowId(windowId);
+    m_frameGeometry.remove(shadowId);
+    m_broadcastFloating.remove(shadowId);
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
     // rely on other WTS state still being present during their cleanup. The
@@ -639,79 +673,90 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
         extended.isEmpty() || (extended.size() == 1 && extended.contains(QString(Key::CaptionNormal)));
     if (captionOnlyRefresh) {
         if (const std::optional<PhosphorEngine::WindowMetadata> existing = m_windowRegistry->metadata(instanceId)) {
-            meta.isMinimized = existing->isMinimized;
-            meta.isFullscreen = existing->isFullscreen;
-            meta.isSticky = existing->isSticky;
-            meta.isMaximized = existing->isMaximized;
-            meta.isFocused = existing->isFocused;
-            meta.isTransient = existing->isTransient;
-            meta.isNotification = existing->isNotification;
-            meta.keepAbove = existing->keepAbove;
-            meta.keepBelow = existing->keepBelow;
-            meta.skipTaskbar = existing->skipTaskbar;
-            meta.skipPager = existing->skipPager;
-            meta.skipSwitcher = existing->skipSwitcher;
-            meta.isModal = existing->isModal;
-            meta.hasDecoration = existing->hasDecoration;
-            meta.isResizable = existing->isResizable;
-            meta.isMovable = existing->isMovable;
-            meta.isMaximizable = existing->isMaximizable;
-            meta.width = existing->width;
-            meta.height = existing->height;
-            meta.positionX = existing->positionX;
-            meta.positionY = existing->positionY;
-            meta.captionNormal = existing->captionNormal;
-            meta.virtualDesktops = existing->virtualDesktops;
+            // Carry the WHOLE existing record forward, then re-apply the
+            // handful of fields THIS push is authoritative for (the plain
+            // D-Bus arguments parsed above). A hand-copied per-field
+            // carry-forward silently dropped every extended field later added
+            // to WindowMetadata.
+            const PhosphorEngine::WindowMetadata fresh = meta;
+            meta = *existing;
+            meta.appId = fresh.appId;
+            meta.desktopFile = fresh.desktopFile;
+            meta.title = fresh.title;
+            meta.windowRole = fresh.windowRole;
+            meta.pid = fresh.pid;
+            meta.virtualDesktop = fresh.virtualDesktop;
+            meta.activity = fresh.activity;
+            meta.windowType = fresh.windowType;
         }
         // Fresh captionNormal from the caption tick, when the effect sent one.
         if (const auto it = extended.constFind(QString(Key::CaptionNormal)); it != extended.constEnd()) {
             meta.captionNormal = it.value().toString();
         }
     } else {
-        const auto optBool = [&extended](QLatin1String key) -> std::optional<bool> {
-            const auto it = extended.constFind(QString(key));
-            return it != extended.constEnd() ? std::optional<bool>(it.value().toBool()) : std::nullopt;
-        };
-        const auto optInt = [&extended](QLatin1String key) -> std::optional<int> {
-            const auto it = extended.constFind(QString(key));
-            return it != extended.constEnd() ? std::optional<int>(it.value().toInt()) : std::nullopt;
-        };
-        const auto optString = [&extended](QLatin1String key) -> std::optional<QString> {
-            const auto it = extended.constFind(QString(key));
-            return it != extended.constEnd() ? std::optional<QString>(it.value().toString()) : std::nullopt;
-        };
-        meta.isMinimized = optBool(Key::IsMinimized);
-        meta.isFullscreen = optBool(Key::IsFullscreen);
-        meta.isSticky = optBool(Key::IsSticky);
-        meta.isMaximized = optBool(Key::IsMaximized);
-        meta.isFocused = optBool(Key::IsFocused);
-        meta.isTransient = optBool(Key::IsTransient);
-        meta.isNotification = optBool(Key::IsNotification);
-        meta.keepAbove = optBool(Key::KeepAbove);
-        meta.keepBelow = optBool(Key::KeepBelow);
-        meta.skipTaskbar = optBool(Key::SkipTaskbar);
-        meta.skipPager = optBool(Key::SkipPager);
-        meta.skipSwitcher = optBool(Key::SkipSwitcher);
-        meta.isModal = optBool(Key::IsModal);
-        meta.hasDecoration = optBool(Key::HasDecoration);
-        meta.isResizable = optBool(Key::IsResizable);
-        meta.isMovable = optBool(Key::IsMovable);
-        meta.isMaximizable = optBool(Key::IsMaximizable);
-        meta.width = optInt(Key::Width);
-        meta.height = optInt(Key::Height);
-        meta.positionX = optInt(Key::PositionX);
-        meta.positionY = optInt(Key::PositionY);
-        meta.captionNormal = optString(Key::CaptionNormal);
-        // Multi-desktop span list (absent for single-desktop / sticky windows,
-        // so an absent key correctly clears a previous span). Same lenient
-        // QVariant conversion policy as the fields above.
-        if (const auto it = extended.constFind(QString(Key::VirtualDesktops)); it != extended.constEnd()) {
-            const QVariantList list = it.value().toList();
-            meta.virtualDesktops.reserve(list.size());
-            for (const QVariant& v : list) {
-                const int d = v.toInt();
-                if (d > 0) {
-                    meta.virtualDesktops.append(d);
+        // Single pass over the map with allocation-free QString==QLatin1String
+        // comparisons. The previous per-key constFind lambdas converted every
+        // QLatin1String key to a temporary QString (~23 allocations per full
+        // push, and full pushes now also ride every minimize edge). Absent
+        // keys leave the optionals disengaged, same as before.
+        for (auto it = extended.constBegin(); it != extended.constEnd(); ++it) {
+            const QString& k = it.key();
+            const QVariant& v = it.value();
+            if (k == Key::IsMinimized) {
+                meta.isMinimized = v.toBool();
+            } else if (k == Key::IsFullscreen) {
+                meta.isFullscreen = v.toBool();
+            } else if (k == Key::IsSticky) {
+                meta.isSticky = v.toBool();
+            } else if (k == Key::IsMaximized) {
+                meta.isMaximized = v.toBool();
+            } else if (k == Key::IsFocused) {
+                meta.isFocused = v.toBool();
+            } else if (k == Key::IsTransient) {
+                meta.isTransient = v.toBool();
+            } else if (k == Key::IsNotification) {
+                meta.isNotification = v.toBool();
+            } else if (k == Key::KeepAbove) {
+                meta.keepAbove = v.toBool();
+            } else if (k == Key::KeepBelow) {
+                meta.keepBelow = v.toBool();
+            } else if (k == Key::SkipTaskbar) {
+                meta.skipTaskbar = v.toBool();
+            } else if (k == Key::SkipPager) {
+                meta.skipPager = v.toBool();
+            } else if (k == Key::SkipSwitcher) {
+                meta.skipSwitcher = v.toBool();
+            } else if (k == Key::IsModal) {
+                meta.isModal = v.toBool();
+            } else if (k == Key::HasDecoration) {
+                meta.hasDecoration = v.toBool();
+            } else if (k == Key::IsResizable) {
+                meta.isResizable = v.toBool();
+            } else if (k == Key::IsMovable) {
+                meta.isMovable = v.toBool();
+            } else if (k == Key::IsMaximizable) {
+                meta.isMaximizable = v.toBool();
+            } else if (k == Key::Width) {
+                meta.width = v.toInt();
+            } else if (k == Key::Height) {
+                meta.height = v.toInt();
+            } else if (k == Key::PositionX) {
+                meta.positionX = v.toInt();
+            } else if (k == Key::PositionY) {
+                meta.positionY = v.toInt();
+            } else if (k == Key::CaptionNormal) {
+                meta.captionNormal = v.toString();
+            } else if (k == Key::VirtualDesktops) {
+                // Multi-desktop span list (absent for single-desktop / sticky
+                // windows, so an absent key correctly clears a previous span).
+                // Same lenient QVariant conversion policy as the fields above.
+                const QVariantList list = v.toList();
+                meta.virtualDesktops.reserve(list.size());
+                for (const QVariant& d : list) {
+                    const int desktop = d.toInt();
+                    if (desktop > 0) {
+                        meta.virtualDesktops.append(desktop);
+                    }
                 }
             }
         }
