@@ -182,7 +182,6 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 ctx.toScreenId = releaseScreenId;
                 ctx.fromEngineId = sourceEngine->engineId();
                 ctx.dropPos = QPoint(cursorX, cursorY);
-                ctx.sourceGeometry = capturedOriginalGeometry;
                 ctx.wasFloating = m_windowTracking->service()->isWindowFloating(windowId);
                 if (capturedWasSnapped && !ctx.wasFloating && !capturedZoneId.isEmpty()) {
                     // sourceZoneIds is informational for receiving engines —

@@ -413,7 +413,6 @@ public:
                            ///< receiver places the window in the target desktop's
                            ///< state/layout, not the currently-visible one.
         QPoint dropPos; ///< cursor position at drop, or invalid for non-drag handoffs
-        QRect sourceGeometry; ///< window's frame at handoff time (for size preservation)
         QStringList sourceZoneIds; ///< zones the window held at source (empty if not snapped)
         bool wasFloating = false; ///< window was floating in source engine
         int insertIndex = -1; ///< autotile target: raw window-order index (position
@@ -431,7 +430,8 @@ public:
     /// - Decide placement (snap to zone / tile / float) using the context
     ///   and engine-local policy. Drag drops typically place at dropPos;
     ///   non-drag handoffs (cross-engine focus changes, programmatic moves)
-    ///   typically respect wasFloating + sourceGeometry.
+    ///   typically respect wasFloating (the window keeps its live frame, so
+    ///   no geometry is carried in the context).
     /// - Emit any `windowFloatingChanged` / placement signals their normal
     ///   placement paths emit, so downstream state stays consistent.
     ///

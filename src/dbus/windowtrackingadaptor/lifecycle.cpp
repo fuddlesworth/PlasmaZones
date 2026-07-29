@@ -433,7 +433,6 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         ctx.toScreenId = newScreenId;
         ctx.fromEngineId = source ? source->engineId() : QString();
         ctx.wasFloating = true;
-        ctx.sourceGeometry = m_frameGeometry.value(shadowWindowId(windowId));
         if (source && source != dest) {
             source->handoffRelease(windowId);
         }

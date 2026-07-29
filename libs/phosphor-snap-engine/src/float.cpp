@@ -205,62 +205,33 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
 
 bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& screenId)
 {
-    // Prefer the unified placement record's float-back geometry. It is the single
-    // source of truth: appId-keyed (survives the uuid change on logout/login),
-    // one-record-per-window, and — unlike the legacy m_unmanagedGeometries store —
-    // not silently dropped on load by the disabled-context gate when the user has
-    // toggled snapping off/on. The legacy store is consulted only as a fallback
-    // for windows with no record yet (pre-migration / first float of the session).
+    if (!m_windowTracker) {
+        return false;
+    }
+    // ONE resolver, shared with the WTA twin (WindowTrackingAdaptor::
+    // applyGeometryForFloat): validatedUnmanagedGeometry reads the unified
+    // placement record — this screen's remembered spot first, then the
+    // deterministic cross-screen fallback — and cross-screen-validates the
+    // rect. The previous open-coded peek here skipped that validation, so a
+    // rect captured on another monitor was applied with raw coordinates.
     //
-    // The appId-FIFO fallback here is DELIBERATE (unlike the exact-only pre-float
-    // zone read in resolveUnfloatGeometry): a record-less instance floating for
-    // the first time restores to where its app last floated — the cross-instance
-    // float-back share that collapsePureFloatSiblings manages. A shared free
-    // position is a sensible default; a shared ZONE assignment is not.
-    if (m_windowTracker) {
-        const QString appId = m_windowTracker->currentAppIdFor(windowId);
-        auto rec = m_windowTracker->placementStore().peek(windowId, appId);
-        if (rec) {
-            // The shared free/float geometry, per screen — never a zone/tile rect by
-            // construction. Prefer this screen's remembered spot, else any captured
-            // free spot.
-            QRect g = rec->freeGeometryFor(screenId);
-            if (!g.isValid()) {
-                g = rec->anyFreeGeometry();
-            }
-            if (g.isValid()) {
-                qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                    << "applyGeometryForFloat:" << windowId << "restoring to" << g << "(placement record)";
-                Q_EMIT applyGeometryRequested(windowId, g.x(), g.y(), g.width(), g.height(), QString(), screenId,
-                                              false);
-                return true;
-            }
-            // A record exists but the window has no genuine free geometry yet (it has
-            // only ever been snapped/tiled). Do NOT fall back to the legacy unmanaged
-            // store — that may still hold a stale zone rect, which is exactly the
-            // geometry leak this model removes. Leave the window where it is; the next
-            // move while floating captures a real free position into the record.
-            qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                << "applyGeometryForFloat:" << windowId << "no free geometry on record — leaving in place";
-            return false;
-        }
+    // The resolver's appId-FIFO fallback is DELIBERATE (unlike the exact-only
+    // pre-float zone read in resolveUnfloatGeometry): a record-less instance
+    // floating for the first time restores to where its app last floated — the
+    // cross-instance float-back share that collapsePureFloatSiblings manages.
+    // A shared free position is a sensible default; a shared ZONE assignment
+    // is not. A window with no free geometry on record anywhere simply stays
+    // where it is; the next move while floating captures a real free position.
+    const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
+    if (geo) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine)
+            << "applyGeometryForFloat:" << windowId << "restoring to" << *geo << "(placement record)";
+        Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,
+                                      false);
+        return true;
     }
-
-    // Legacy-store fallback (no placement record yet). Guard m_windowTracker:
-    // the placement-record block above is itself gated on a non-null tracker, so
-    // a null tracker falls straight here — deref it unconditionally and a
-    // headless-test engine (nullptr tracker) would crash.
-    if (m_windowTracker) {
-        auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
-        if (geo) {
-            qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                << "applyGeometryForFloat:" << windowId << "restoring to" << *geo << "(legacy unmanaged store)";
-            Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(),
-                                          screenId, false);
-            return true;
-        }
-    }
-    qCWarning(PhosphorSnapEngine::lcSnapEngine) << "applyGeometryForFloat:" << windowId << "no pre-tile geometry found";
+    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+        << "applyGeometryForFloat:" << windowId << "no free geometry on record — leaving in place";
     return false;
 }
 

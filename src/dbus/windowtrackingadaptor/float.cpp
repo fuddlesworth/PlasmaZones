@@ -99,7 +99,16 @@ bool WindowTrackingAdaptor::isWindowFloating(const QString& windowId)
     if (windowId.isEmpty()) {
         return false;
     }
-    // Delegate to service
+    // KNOWN ASYMMETRY with setWindowFloatingForScreen: this query answers
+    // through the WTS resolver, which routes by the window's TRACKED screen's
+    // current mode, while the setter routes by the caller-supplied (effect's
+    // authoritative live) screen. Mid-mode-flip the two can briefly disagree —
+    // the query reads the slot of the mode the tracking still points at, one
+    // beat behind the screen set the setter targets. Accepted: every caller of
+    // this query wants the mode-lens answer (rule predicates, the effect's
+    // float cache), the flip converges within the same signal cascade, and a
+    // screen-scoped query would push the mode-resolution burden onto callers
+    // that don't have an authoritative screen to supply.
     return m_service->isWindowFloating(windowId);
 }
 
@@ -158,8 +167,19 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
 
 QStringList WindowTrackingAdaptor::getFloatingWindows()
 {
-    // Delegate to service
-    return m_service->floatingWindows();
+    // USER floats only — suspension floats (minimize-as-float) are filtered
+    // out. The sole caller is the effect's daemon-bringup re-seed of its
+    // FloatingCache; seeding a minimize-float there makes the effect's
+    // restart claim sweep read it as a user float and skip adopting it into
+    // minimize-float ownership, leaving an unowned float that never re-tiles
+    // on unminimize. The effect's own claim paths (batch claim at daemon
+    // ready, claimAlreadyMinimizedAsFloated) are the owners of suspension
+    // floats and re-establish their state without this reply.
+    QStringList result = m_service->floatingWindows();
+    result.removeIf([this](const QString& windowId) {
+        return m_service->isSuspensionFloat(windowId);
+    });
+    return result;
 }
 
 bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const QString& screenId)
@@ -292,7 +312,6 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
             ctx.wasFloating = floating;
             if (sourceTracked) {
                 ctx.fromEngineId = source->engineId();
-                ctx.sourceGeometry = m_frameGeometry.value(shadowWindowId(windowId));
                 source->handoffRelease(windowId);
             }
             dest->handoffReceive(ctx);
