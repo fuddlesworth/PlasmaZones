@@ -352,21 +352,30 @@ void TilingHandler::updateScrollWheelShortcuts()
     // niri's default Mod+wheel bindings: wheel down / right focuses the
     // next column to the right, wheel up / left the previous one. The
     // horizontal pair covers tilted wheels and two-finger horizontal
-    // touchpad scrolls.
-    const auto add = [this](KWin::PointerAxisDirection axis, int delta, const char* name) {
+    // touchpad scrolls. Registered under BOTH Meta and Meta+Alt: KWin's
+    // zoom effect claims Meta+WheelUp/Down at compositor startup on
+    // default setups and KWin silently drops a duplicate axis
+    // registration, so plain Meta+wheel only wins where zoom is disabled
+    // or rebound — Meta+Alt+wheel matches the rest of the scrolling
+    // shortcut family and is conflict-free.
+    const auto add = [this](Qt::KeyboardModifiers mods, KWin::PointerAxisDirection axis, int delta, const char* name) {
         auto* action = new QAction(this);
         action->setObjectName(QLatin1String(name));
         connect(action, &QAction::triggered, this, [this, delta]() {
             wheelFocusColumn(delta);
         });
-        KWin::effects->registerAxisShortcut(Qt::MetaModifier, axis, action);
+        KWin::effects->registerAxisShortcut(mods, axis, action);
         m_scrollWheelActions.append(action);
     };
-    add(KWin::PointerAxisDown, 1, "plasmazones-scroll-focus-column-right");
-    add(KWin::PointerAxisUp, -1, "plasmazones-scroll-focus-column-left");
-    add(KWin::PointerAxisRight, 1, "plasmazones-scroll-focus-column-right-h");
-    add(KWin::PointerAxisLeft, -1, "plasmazones-scroll-focus-column-left-h");
-    qCInfo(lcEffect) << "Scroll wheel shortcuts registered (Meta+wheel focuses columns)";
+    for (const Qt::KeyboardModifiers mods :
+         {Qt::KeyboardModifiers(Qt::MetaModifier), Qt::MetaModifier | Qt::AltModifier}) {
+        const bool alt = mods.testFlag(Qt::AltModifier);
+        add(mods, KWin::PointerAxisDown, 1, alt ? "pz-scroll-column-right-alt" : "pz-scroll-column-right");
+        add(mods, KWin::PointerAxisUp, -1, alt ? "pz-scroll-column-left-alt" : "pz-scroll-column-left");
+        add(mods, KWin::PointerAxisRight, 1, alt ? "pz-scroll-column-right-h-alt" : "pz-scroll-column-right-h");
+        add(mods, KWin::PointerAxisLeft, -1, alt ? "pz-scroll-column-left-h-alt" : "pz-scroll-column-left-h");
+    }
+    qCInfo(lcEffect) << "Scroll wheel shortcuts registered (Meta+wheel and Meta+Alt+wheel focus columns)";
 }
 
 void TilingHandler::wheelFocusColumn(int delta)
@@ -389,6 +398,7 @@ void TilingHandler::wheelFocusColumn(int delta)
     if (!m_scrollingScreens.contains(screenId)) {
         return;
     }
+    qCDebug(lcEffect) << "Wheel focus column: delta" << delta << "on" << screenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
                                                    QStringLiteral("focusColumn"), {screenId, delta});
 }

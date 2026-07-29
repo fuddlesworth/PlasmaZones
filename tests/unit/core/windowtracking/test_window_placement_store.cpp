@@ -954,6 +954,52 @@ private Q_SLOTS:
         QVERIFY(third.has_value());
         QCOMPARE(third->windowId, QStringLiteral("dolphin|u3"));
     }
+
+    void testPendingCrossScreenSnapRestore_requiresDifferentScreen()
+    {
+        // The defer/claim reciprocity predicate is CROSS-SCREEN only. A
+        // snapped record whose recorded screen equals the opening screen
+        // must never defer, even when the record's own (desktop, activity)
+        // context still resolves to snapping mode — the regression was a
+        // window recorded snapped on desktop 1 opening into the same
+        // screen's desktop-2 scrolling context: scroll deferred, snap's
+        // reciprocal gate also stood down, and the window stranded
+        // unmanaged at its stale zone rect on top of the strip.
+        const auto alwaysSnapping = [](const QString&, int, const QString&) {
+            return true;
+        };
+        WindowPlacement p =
+            makePlacement(QStringLiteral("firefox|a"), QStringLiteral("firefox"), WindowPlacement::stateSnapped(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("DP-1"));
+        p.virtualDesktop = 1;
+
+        // Same screen: never a cross-screen restore, whatever the resolver says.
+        QVERIFY(!PhosphorEngine::pendingCrossScreenSnapRestore(p, QStringLiteral("DP-1"), alwaysSnapping));
+        // Unscreened record: nothing to restore across, same verdict.
+        WindowPlacement unscreened = p;
+        unscreened.screenId.clear();
+        QVERIFY(!PhosphorEngine::pendingCrossScreenSnapRestore(unscreened, QStringLiteral("DP-1"), alwaysSnapping));
+        // Genuinely different screen: defers when the recorded context is
+        // snapping, claims nothing when it is not.
+        QVERIFY(PhosphorEngine::pendingCrossScreenSnapRestore(p, QStringLiteral("DP-2"), alwaysSnapping));
+        QVERIFY(!PhosphorEngine::pendingCrossScreenSnapRestore(p, QStringLiteral("DP-2"),
+                                                               [](const QString&, int, const QString&) {
+                                                                   return false;
+                                                               }));
+        // The resolver runs against the RECORD's context, not the opener's.
+        bool sawRecordContext = false;
+        PhosphorEngine::pendingCrossScreenSnapRestore(
+            p, QStringLiteral("DP-2"), [&](const QString& screen, int desktop, const QString& activity) {
+                sawRecordContext = (screen == QStringLiteral("DP-1")) && desktop == 1 && activity.isEmpty();
+                return true;
+            });
+        QVERIFY(sawRecordContext);
+        // A non-snapped snap slot never defers.
+        WindowPlacement floating =
+            makePlacement(QStringLiteral("firefox|b"), QStringLiteral("firefox"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("DP-1"));
+        QVERIFY(!PhosphorEngine::pendingCrossScreenSnapRestore(floating, QStringLiteral("DP-2"), alwaysSnapping));
+    }
 };
 
 QTEST_MAIN(TestWindowPlacementStore)

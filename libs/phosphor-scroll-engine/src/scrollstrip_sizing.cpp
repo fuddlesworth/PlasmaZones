@@ -183,13 +183,9 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
 
 bool ScrollStrip::setActiveWindowHeight(const WindowHeight& height)
 {
-    // Lone tile: relayout unconditionally overrides its height with the
-    // full column height, so accepting the write would report success for
-    // a shortcut that provably does nothing (same guard reconcile uses).
-    const Column* col = activeColumn();
-    if (!col || col->tiles.size() <= 1) {
-        return false;
-    }
+    // Lone tiles included: relayout honors an explicit Fixed/Preset height
+    // for a solo tile (niri parity), so the write is meaningful at any
+    // stack size.
     Tile* tile = activeTileMutable();
     if (!tile || tile->height == height) {
         return false;
@@ -200,11 +196,7 @@ bool ScrollStrip::setActiveWindowHeight(const WindowHeight& height)
 
 bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params)
 {
-    // Lone tile: see setActiveWindowHeight.
-    const Column* colGuard = activeColumn();
-    if (!colGuard || colGuard->tiles.size() <= 1) {
-        return false;
-    }
+    // Lone tiles included: see setActiveWindowHeight.
     Tile* tile = activeTileMutable();
     if (!tile || params.presetWindowHeights.isEmpty() || (delta != -1 && delta != 1)) {
         return false;
@@ -234,11 +226,7 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
 
 bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params)
 {
-    // Lone tile: see setActiveWindowHeight.
-    const Column* colGuard = activeColumn();
-    if (!colGuard || colGuard->tiles.size() <= 1) {
-        return false;
-    }
+    // Lone tiles included: see setActiveWindowHeight.
     Tile* tile = activeTileMutable();
     if (!tile || qFuzzyIsNull(deltaPercent)) {
         return false;
@@ -264,7 +252,11 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
             }
         }
     }
-    const int target = qBound(1, currentPx + qRound(deltaPercent / 100.0 * workH), workH);
+    // Clamp to the tile's own floor as well (niri clamps against the client
+    // min size in the verb): without it a shrink below minHeight would
+    // "succeed" here while relayout re-clamps, so every further press
+    // reports success with nothing moving on screen.
+    const int target = qBound(qMax(1, tile->minHeight), currentPx + qRound(deltaPercent / 100.0 * workH), workH);
     if (target == currentPx) {
         return false;
     }
@@ -319,11 +311,11 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
             }
         }
     }
-    // Only meaningful for multi-tile columns: a lone tile always fills the
-    // column height, so recording it as Fixed would fight the work area.
     // Same guard as width: a purely horizontal resize must not convert the
-    // tile's height intent into Fixed pixels.
-    if (heightChanged && col.tiles.size() > 1) {
+    // tile's height intent into Fixed pixels. Lone tiles included — relayout
+    // honors a solo tile's Fixed height (niri parity), so an interactive
+    // vertical resize of a lone window sticks instead of snapping back.
+    if (heightChanged) {
         Tile& tile = col.tiles[col.indexOfWindow(windowId)];
         const WindowHeight ackedH = WindowHeight::makeFixed(ackedSize.height());
         if (!(tile.height == ackedH)) {

@@ -360,7 +360,7 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
         scheduleRetileForScreen(key.screenId);
         return;
     }
-    // The strip REFUSED the size (lone-tile height, no-op ack): the window
+    // The strip REFUSED the size (no-op ack): the window
     // is now displaced from the engine's rect, but m_lastAppliedRect still
     // holds it, so the emit-on-change gate would treat the corrective
     // relayout as "nothing moved" and never re-issue the rect. Drop the

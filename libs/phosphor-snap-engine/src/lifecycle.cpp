@@ -141,12 +141,26 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
 
     // A snapped record's RECORDED screen (its own screenId, or the opening screen
     // when unscreened) is what governs whether it may snap-restore — not the screen
-    // the window happens to open on. AutotileEngine::windowOpened runs the
-    // reciprocal gate through the SAME shared predicate
-    // (PhosphorEngine::pendingCrossScreenSnapRestore), so both engines compute an
-    // identical verdict from the same record fields. (No layout manager →
-    // permissive, matching the unit-test path.)
+    // the window happens to open on. Two DISTINCT questions share the mode lookup:
+    // the store branch's accept/prefer filter below asks only "is the recorded
+    // screen still snapping?" (same-screen restores included), while the ownership
+    // gate asks the stricter shared cross-screen predicate
+    // (PhosphorEngine::pendingCrossScreenSnapRestore) that the tiling engines'
+    // defer gates evaluate reciprocally — that one also requires the recorded
+    // screen to DIFFER from the opening one. Folding the two into one lambda is
+    // exactly the regression that broke same-screen snap restores when the
+    // cross-screen term was added. (No layout manager → permissive, matching the
+    // unit-test path.)
     const auto recordedSnapScreenIsSnapping = [&](const WindowPlacement& p) {
+        if (p.slotFor(WindowPlacement::snapEngineId()).state != WindowPlacement::stateSnapped()) {
+            return false;
+        }
+        const QString rec = p.screenId.isEmpty() ? screenId : p.screenId;
+        return !m_layoutManager
+            || m_layoutManager->modeForScreen(rec, p.virtualDesktop, p.activity)
+            == PhosphorZones::AssignmentEntry::Mode::Snapping;
+    };
+    const auto pendingCrossScreenRestore = [&](const WindowPlacement& p) {
         return PhosphorEngine::pendingCrossScreenSnapRestore(
             p, screenId, [&](const QString& rec, int desktop, const QString& activity) {
                 return !m_layoutManager
@@ -168,8 +182,10 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // defer on the SAVED screen, not the opening one). So defer ONLY when no such
     // cross-screen snap restore is pending; the store branch below then consumes the
     // snapped record and restores it to its recorded screen. A same-screen snapped
-    // record (recorded screen == this tiled screen) is NOT snapping, so the peek
-    // misses and we correctly defer, leaving the record for the owning engine.
+    // record (recorded screen == this tiled screen) is never cross-screen — the
+    // predicate bails on screen equality itself, WHATEVER the record's (desktop,
+    // activity) context resolves to — so the peek misses and we correctly defer,
+    // leaving the record for the owning engine.
     if (m_layoutManager
         && m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
             != PhosphorZones::AssignmentEntry::Mode::Snapping) {
@@ -177,7 +193,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         if (m_windowTracker) {
             const QString appId = m_windowTracker->currentAppIdFor(windowId);
             crossScreenSnapRestorePending =
-                m_windowTracker->placementStore().peek(windowId, appId, recordedSnapScreenIsSnapping).has_value();
+                m_windowTracker->placementStore().peek(windowId, appId, pendingCrossScreenRestore).has_value();
         }
         if (!crossScreenSnapRestorePending) {
             qCDebug(PhosphorSnapEngine::lcSnapEngine)

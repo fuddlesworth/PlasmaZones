@@ -54,10 +54,27 @@ QSize TilingHandler::declaredMinSize(KWin::EffectWindow* w)
     return QSize(minWidth, minHeight);
 }
 
+void TilingHandler::suppressFfmUntilCursorMoves()
+{
+    m_ffmSuppressPending = true;
+    m_ffmSuppressAnchor = KWin::effects->cursorPos();
+}
+
 void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
 {
     if (!m_focusFollowsMouse || m_managedScreens.isEmpty()) {
         return;
+    }
+
+    // Engine-driven strip movement pause (see the header doc): ignore
+    // incidental pointer jitter after the strip scrolled under a
+    // stationary cursor; a deliberate move past the radius resumes FFM.
+    if (m_ffmSuppressPending) {
+        constexpr qreal kFfmResumeRadiusPx = 32.0;
+        if ((pos - m_ffmSuppressAnchor).manhattanLength() < kFfmResumeRadiusPx) {
+            return;
+        }
+        m_ffmSuppressPending = false;
     }
 
     // Pause FFM entirely during show-desktop/peek. Peeked windows are hidden

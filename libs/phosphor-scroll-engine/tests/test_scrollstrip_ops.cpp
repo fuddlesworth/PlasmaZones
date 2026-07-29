@@ -61,7 +61,7 @@ private Q_SLOTS:
     void centeringPolicySurvivesCollapseAndConsume();
     void takeWindowLeavesFocusPolicyAlone();
     void onOverflowIgnoresShiftedPrevIdxOnRemoval();
-    void reconcileLoneTileNeverRecordsHeightIntent();
+    void reconcileLoneTileRecordsHeightIntent();
     void degenerateWorkAreaNeverAsserts();
     void monsterFixedSiblingLeavesAutoTilesVisible();
     void moveActiveColumnToTracksPreMaximizeSlot();
@@ -250,7 +250,7 @@ void TestScrollStripOps::windowHeights()
     const auto params = defaultParams();
     ScrollStrip strip;
     QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
-    // A lone tile fills the column height regardless of its intent.
+    // A lone tile with the default Auto intent fills the column height.
     QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("a")).height(), 800);
 
     QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
@@ -365,8 +365,8 @@ void TestScrollStripOps::reconcileAppResize()
     QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(640, 780)));
     const ResolvedStrip r = strip.relayout(params);
     QCOMPARE(rectOf(r, QStringLiteral("b")).width(), 640);
-    // Lone tile: height intent is NOT recorded (fills the column anyway).
-    QCOMPARE(rectOf(r, QStringLiteral("b")).height(), 800);
+    // Lone tile: the acked height is recorded and honored (niri parity).
+    QCOMPARE(rectOf(r, QStringLiteral("b")).height(), 780);
     QCOMPARE(rectOf(r, QStringLiteral("a")).width(), ScrollStrip::resolveColumnWidthPx(kHalf, params));
     // Same size again: no change reported.
     QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(640, 780)));
@@ -409,27 +409,31 @@ void TestScrollStripOps::reconcileGuardsAndEmptyAck()
     QVERIFY(!strip.reconcileWindowSize(QStringLiteral("nope"), QSize(100, 100)));
 }
 
-void TestScrollStripOps::reconcileLoneTileNeverRecordsHeightIntent()
+void TestScrollStripOps::reconcileLoneTileRecordsHeightIntent()
 {
-    // The lone-tile guard is invisible in resolved rects (a lone tile
-    // fills its column regardless), so pin the recorded INTENT: a
-    // height-changing ack on a single-tile column must leave the tile
-    // Auto — recording Fixed would fight the work area on the next
-    // resolution change and survive a later stack join.
+    // niri parity: a lone tile's height intent is honored by relayout, so
+    // an interactive vertical resize of a solo window must RECORD Fixed
+    // (previously refused, which snapped the window back) and the resolved
+    // rect must show the shorter tile with empty column space below it.
     const auto params = defaultParams();
     ScrollStrip strip;
     QVERIFY(strip.insertWindow(QStringLiteral("solo"), kHalf, ColumnDisplay::Normal, params));
-    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("solo"), QSize(600, 300), /*widthChanged=*/false,
-                                       /*heightChanged=*/true));
-    const Column& col = strip.columns().at(0);
-    QCOMPARE(col.tiles.at(0).height.kind, WindowHeight::Auto);
-    // The same ack on a two-tile column DOES record (control case, so a
-    // dropped `tiles.size() > 1` conjunct fails one of the two arms).
-    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("mate"), kHalf, ColumnDisplay::Normal, params));
-    QVERIFY(strip.focusWindow(QStringLiteral("solo"), params));
     QVERIFY(strip.reconcileWindowSize(QStringLiteral("solo"), QSize(600, 300), /*widthChanged=*/false,
                                       /*heightChanged=*/true));
-    QCOMPARE(strip.columns().at(0).tiles.at(0).height.kind, WindowHeight::Fixed);
+    const Column& col = strip.columns().at(0);
+    QCOMPARE(col.tiles.at(0).height.kind, WindowHeight::Fixed);
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("solo")).height(), 300);
+    // Reset returns the lone tile to Auto and the full column height.
+    QVERIFY(strip.resetActiveColumnHeights());
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("solo")).height(), 800);
+    // The height verbs work on a lone tile too (the old refusal spammed a
+    // failure OSD per press): shrink by 10% of the 800px work height.
+    QVERIFY(strip.adjustActiveWindowHeight(-10.0, params));
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("solo")).height(), 720);
+    // Preset cycle enters from the preset nearest the current 720px
+    // (2/3 of the gap-aware 810 span = 530).
+    QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("solo")).height(), 530);
 }
 
 void TestScrollStripOps::degenerateWorkAreaNeverAsserts()
@@ -464,9 +468,9 @@ void TestScrollStripOps::degenerateWorkAreaNeverAsserts()
     // resolves to zero width. Pin the ACTUAL contract rather than a rect
     // loop that never runs.
     QVERIFY(resolved.columns.isEmpty());
-    // Width adjuster refuses on the degenerate area. The HEIGHT adjuster
-    // needs a STACKED column or its lone-tile guard returns first and
-    // shadows the workH<=0 guard entirely.
+    // Width adjuster refuses on the degenerate area. The stacked column is
+    // historical (the height adjuster once refused lone tiles outright);
+    // kept so the fixture keeps exercising the workH<=0 guard on a stack.
     QVERIFY(strip.focusWindow(QStringLiteral("fx"), defaultParams()));
     QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("fx2"), kHalf, ColumnDisplay::Normal, defaultParams()));
     QVERIFY(!strip.adjustActiveColumnWidth(10.0, dead));

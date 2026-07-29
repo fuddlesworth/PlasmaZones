@@ -15,6 +15,7 @@
 #include <QRect>
 #include <QRectF>
 #include <QSet>
+#include <QPointF>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -555,6 +556,16 @@ private:
     void updateScrollWheelShortcuts();
     void wheelFocusColumn(int delta);
     QList<QAction*> m_scrollWheelActions;
+    /// Pause the effect's own focus-follows-mouse after an ENGINE-driven
+    /// strip movement on a scrolling screen (tile batch or activation).
+    /// Scrolling slides other columns under a stationary pointer, and the
+    /// next incidental cursor twitch would re-focus whatever landed there,
+    /// yanking focus straight off the column the user just navigated to.
+    /// Cleared once the cursor moves deliberately (beyond the radius) from
+    /// the position it held when the strip moved.
+    void suppressFfmUntilCursorMoves();
+    QPointF m_ffmSuppressAnchor;
+    bool m_ffmSuppressPending = false;
     /// Bumped on every managedScreensChanged signal. loadSettings' async
     /// Properties.Get reply captures the value at dispatch and discards
     /// itself if a signal landed in between — the signal carried a newer

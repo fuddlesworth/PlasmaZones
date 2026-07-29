@@ -281,9 +281,16 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                     break;
                 }
             }
-            // A single-tile column always fills the column height.
+            // A lone tile fills the column height on Auto intent only; an
+            // explicit Fixed/Preset height is honored (niri parity — a solo
+            // window can be shorter than the column, leaving empty space
+            // below it). The explicit heights were already resolved and
+            // clamped to the work area in the switch above, and the
+            // min-height clamp below still applies.
             if (n == 1) {
-                heights[0] = availH;
+                if (col.tiles.at(visible.at(0)).height.kind == WindowHeight::Auto) {
+                    heights[0] = availH;
+                }
             } else {
                 // Renormalize when the Fixed/Preset heights alone overflow
                 // the column: scale them down proportionally so the last

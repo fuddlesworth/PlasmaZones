@@ -74,6 +74,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         return;
     }
 
+    // A geometry batch on a scrolling screen slides columns under the
+    // stationary pointer; pause FFM until the cursor moves deliberately
+    // (see suppressFfmUntilCursorMoves) so the next pointer twitch cannot
+    // steal focus onto whatever landed under it.
+    for (const auto& req : validatedRequests) {
+        if (m_scrollingScreens.contains(req.screenId)) {
+            suppressFfmUntilCursorMoves();
+            break;
+        }
+    }
+
     // A tile / reflow / overflow-float changes each window's placement mode
     // (tiling ↔ floating) and tiled state, which are rule MATCH fields (Mode,
     // IsTiled). The effect's per-window rule match cache is keyed on
@@ -984,6 +995,13 @@ void TilingHandler::slotFocusWindowRequested(const QString& windowId)
         return;
     }
 
+    // Engine-driven activation on a scrolling screen usually means the
+    // strip just scrolled — pause FFM until the cursor moves deliberately,
+    // or a pointer twitch immediately re-focuses whatever column slid
+    // under it and undoes this activation.
+    if (m_scrollingScreens.contains(m_effect->getWindowScreenId(w))) {
+        suppressFfmUntilCursorMoves();
+    }
     m_pendingAutotileFocusWindowId = windowId;
     KWin::effects->activateWindow(w);
 }

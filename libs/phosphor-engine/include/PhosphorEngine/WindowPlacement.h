@@ -308,9 +308,16 @@ struct WindowPlacement
 };
 
 /// Shared cross-engine ownership predicate over a placement record: does this
-/// record carry a SNAPPED snap-slot whose RECORDED screen (its own screenId,
-/// falling back to @p openingScreenId when unscreened) is itself in snapping
-/// mode, resolved in the RECORD'S OWN (desktop, activity) context?
+/// record carry a SNAPPED snap-slot whose RECORDED screen is a DIFFERENT
+/// screen than the opening one, itself in snapping mode, resolved in the
+/// RECORD'S OWN (desktop, activity) context? A same-screen record (or one
+/// with no screen of its own) is never "cross-screen": the window is already
+/// where its snap slot lives, so the engine owning the OPENING context claims
+/// it and the snap slot merely lies dormant. Without the same-screen bail, a
+/// record whose (desktop, activity) context differs from the opening one —
+/// a sticky window, or a per-desktop mode split on one monitor — would defer
+/// here while snap's reciprocal gate also stands down, stranding the window
+/// unmanaged at its stale zone rect on top of the tiled layout.
 ///
 /// SnapEngine (resolveWindowRestore's recorded-screen gate) and AutotileEngine
 /// (windowOpened's snap-defer gate) are RECIPROCAL: when a session window
@@ -333,8 +340,10 @@ bool pendingCrossScreenSnapRestore(const WindowPlacement& p, const QString& open
     if (p.slotFor(WindowPlacement::snapEngineId()).state != WindowPlacement::stateSnapped()) {
         return false;
     }
-    const QString recordedScreen = p.screenId.isEmpty() ? openingScreenId : p.screenId;
-    return isSnappingMode(recordedScreen, p.virtualDesktop, p.activity);
+    if (p.screenId.isEmpty() || p.screenId == openingScreenId) {
+        return false; // same screen (or unscreened): the opening context's engine owns it
+    }
+    return isSnappingMode(p.screenId, p.virtualDesktop, p.activity);
 }
 
 } // namespace PhosphorEngine
