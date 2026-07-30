@@ -319,7 +319,14 @@ private Q_SLOTS:
                                PhosphorPlacement::WindowTrackingService::DirtyPreFloatScreens,
                                PhosphorPlacement::WindowTrackingService::DirtyUserSnapped,
                                PhosphorPlacement::WindowTrackingService::DirtyAutotileOrders,
-                               PhosphorPlacement::WindowTrackingService::DirtyAutotilePending}) {
+                               PhosphorPlacement::WindowTrackingService::DirtyAutotilePending,
+                               // The bit the header calls the sole per-window
+                               // restore state, and the only one gating the
+                               // placement-store save block. Its absence here
+                               // meant narrowing DirtyAll from 0xFFF to 0x7FF
+                               // still passed this test while every window's
+                               // restore state silently stopped persisting.
+                               PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements}) {
             QVERIFY2((mask & bit) != 0, "DirtyAll is missing a DirtyField bit — extend DirtyAll in the header");
         }
     }

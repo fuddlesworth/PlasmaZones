@@ -247,11 +247,21 @@ private Q_SLOTS:
     }
 
     // -------------------------------------------------------------------------
-    // Empty-pipeline safety: Daemon::stop() calls clearEngine(), which
-    // empties the lifecycle-engine list. A flush firing afterward must hit
-    // ensurePipeline()'s empty check (dropping the queue) instead of
-    // dereferencing anything — this test calls clearEngine() directly and
-    // pins exactly that.
+    // Empty-pipeline safety: Daemon::stop() calls clearEngine(), which empties
+    // the lifecycle-engine list. A flush firing afterward must not dereference
+    // anything.
+    //
+    // What this pins, precisely: clearEngine() DRAINS the pending-open queue
+    // itself, and a flush arriving afterwards is harmless. It does NOT pin
+    // ensurePipeline()'s empty check, even though the comment here used to claim
+    // it did — that claim was false in both directions. The count is already 0
+    // before emitPanelGeometryReady runs (clearEngine cleared it), so the
+    // closing QCOMPARE would pass with the empty check deleted outright; and the
+    // check cannot be reached with a non-empty queue at all, because
+    // windowOpened calls ensurePipeline BEFORE deferUntilPanelReady, so nothing
+    // can enqueue once the engine list is empty. ensurePipeline's empty branch
+    // on the flush path is therefore unreachable-by-construction defence, and
+    // the reachable contract is the drain plus crash-freedom.
     // -------------------------------------------------------------------------
     void testFlushWithClearedEngine_noCrash()
     {
@@ -265,9 +275,12 @@ private Q_SLOTS:
         adaptor.windowOpened(QStringLiteral("a|1"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 1);
 
+        // The drain is the load-bearing half: without it the queue would still
+        // hold an entry naming an engine that no longer exists.
         adaptor.clearEngine();
+        QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
 
-        // Should not crash — ensurePipeline() returns false, queue is cleared.
+        // And a late flush against the cleared adaptor must not crash.
         emitPanelGeometryReady(mgr);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
     }
