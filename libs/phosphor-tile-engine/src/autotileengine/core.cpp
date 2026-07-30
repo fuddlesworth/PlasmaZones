@@ -149,6 +149,16 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++pit;
         }
     }
+    // Pending FOCUS entries, for the same reason as the orders above: a window
+    // that lives only in a pending-focus entry has no tracking key, so the
+    // sweep never reaches it, and the dead id is later emitted as
+    // activateWindowRequested on that screen's next applyTiling.
+    m_pendingFocusByScreen.removeIf([&aliveWindowIds](const auto& entry) {
+        return !aliveWindowIds.contains(entry.value());
+    });
+    if (!m_pendingFocusReseedWindowId.isEmpty() && !aliveWindowIds.contains(m_pendingFocusReseedWindowId)) {
+        m_pendingFocusReseedWindowId.clear();
+    }
     // After the walk — see purgeFromPendingOrders for why the resolution
     // re-check must not erase other entries mid-iteration.
     for (const QString& screen : std::as_const(survivingOrderScreens)) {

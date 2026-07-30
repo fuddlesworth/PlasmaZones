@@ -288,6 +288,19 @@ void PerScreenConfigResolver::clearPerScreenConfig(const QString& screenId)
     // overrides (applyPerScreenConfig never stores an empty map).
     const QVariantMap previous = m_perScreenOverrides.take(screenId);
     if (previous.isEmpty()) {
+        // No live overrides — but a REMEMBERED algorithm id can still pin this
+        // screen. That happens when the overrides were dropped without a clear
+        // (autotile toggled off calls removeOverridesForScreen, which records
+        // the remembered id) and the pin was then removed before re-enable:
+        // the daemon's diff sees empty == empty and calls neither apply nor
+        // clear, so without this the screen's state bags keep the OLD
+        // algorithm's data while its effective algorithm is the global one,
+        // and screenFollowsGlobalAlgorithm answers false forever — making the
+        // screen invisible to every later applyGlobalAlgorithmChange.
+        if (m_rememberedAlgorithmId.contains(screenId)) {
+            wipeStateBagsOnEffectiveAlgorithmChange(screenId, rememberedAlgorithmId(screenId, previous),
+                                                    m_engine->m_algorithmId);
+        }
         return;
     }
     // Restore global defaults on PhosphorTiles::TilingState
@@ -570,13 +583,28 @@ std::optional<::PhosphorLayout::EdgeGaps> PerScreenConfigResolver::contextOuterG
     return PhosphorEngine::GapResolution::outerGapsFromOverrideMap(ctx, m_engine->config()->outerGap, clampGap);
 }
 
-int PerScreenConfigResolver::effectiveInnerGap(const QString& screenId) const
+int PerScreenConfigResolver::innerGapFromMap(const QString& screenId, const QVariantMap& ctx) const
 {
-    if (auto ctx = contextGapFromMap(contextGapMap(screenId), PerScreenKeys::InnerGap))
-        return *ctx;
+    if (auto c = contextGapFromMap(ctx, PerScreenKeys::InnerGap))
+        return *c;
     if (auto v = perScreenOverride(screenId, kInnerGap()))
         return clampGap(v->toInt());
     return m_engine->config()->innerGap;
+}
+
+int PerScreenConfigResolver::effectiveInnerGap(const QString& screenId) const
+{
+    return innerGapFromMap(screenId, contextGapMap(screenId));
+}
+
+PerScreenConfigResolver::EffectiveGaps PerScreenConfigResolver::effectiveGaps(const QString& screenId) const
+{
+    // ONE context resolve for both keys. The two public entry points each ran
+    // their own, so recalculateLayout — which needs both — drove the daemon's
+    // LayoutRegistry::resolveContextGaps twice per screen per retile, exactly
+    // what this header's own note tells callers of more than one key to avoid.
+    const QVariantMap ctx = contextGapMap(screenId);
+    return EffectiveGaps{innerGapFromMap(screenId, ctx), outerGapsFromMap(screenId, ctx)};
 }
 
 int PerScreenConfigResolver::outerGapBase(const QString& screenId, const QVariantMap& ctx) const
@@ -592,9 +620,14 @@ int PerScreenConfigResolver::outerGapBase(const QString& screenId, const QVarian
 {
     // Resolve the context layer ONCE: the provider runs a full
     // LayoutRegistry::resolveContextGaps on every call, and both the atomic
-    // context layer and the per-side base below consult it.
-    const QVariantMap ctx = contextGapMap(screenId);
+    // context layer and the per-side base below consult it. Callers needing
+    // the inner gap too should use effectiveGaps(), which shares one resolve.
+    return outerGapsFromMap(screenId, contextGapMap(screenId));
+}
 
+::PhosphorLayout::EdgeGaps PerScreenConfigResolver::outerGapsFromMap(const QString& screenId,
+                                                                     const QVariantMap& ctx) const
+{
     // Highest precedence: the per-context override, resolved as one atomic layer.
     if (auto ctxGaps = contextOuterGapsFromMap(ctx))
         return *ctxGaps;

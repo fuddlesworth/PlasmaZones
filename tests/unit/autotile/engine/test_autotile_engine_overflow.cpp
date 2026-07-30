@@ -254,16 +254,28 @@ private Q_SLOTS:
         state->setCalculatedZones(
             {QRect(0, 0, 250, 500), QRect(250, 0, 250, 500), QRect(500, 0, 250, 500), QRect(750, 0, 250, 500)});
 
-        QSignalSpy floatSpy(&engine, &AutotileEngine::windowFloatingChanged);
+        // Recovery rides the PASSIVE channel: it is engine-initiated (the cap
+        // freed a slot), not a user toggle, and the active signal's daemon
+        // handler unconditionally shows the navigation OSD — so the active
+        // channel popped a "Tiled" OSD the user never asked for. The passive
+        // handler still does the same WTS bookkeeping for an unfloat
+        // (setWindowFloating(false) + clearModeSpecificFloatMarker), and
+        // applyGeometryForFloat never ran for this direction anyway, so
+        // nothing but the OSD changes. The symmetric direction — overflow
+        // FLOATING — already used the batch channel.
+        QSignalSpy passiveSpy(&engine, &AutotileEngine::windowFloatingStateSynced);
+        QSignalSpy activeSpy(&engine, &AutotileEngine::windowFloatingChanged);
         engine.retile(screenName);
 
         int unfloatCount = 0;
-        for (int i = 0; i < floatSpy.count(); ++i) {
-            if (!floatSpy.at(i).at(1).toBool()) {
+        for (int i = 0; i < passiveSpy.count(); ++i) {
+            if (!passiveSpy.at(i).at(1).toBool()) {
                 ++unfloatCount;
             }
         }
         QCOMPARE(unfloatCount, 2);
+        // Positive control: no active emission, or the OSD would fire again.
+        QCOMPARE(activeSpy.count(), 0);
     }
 
     void testOverflow_userFloatClearsTracking()

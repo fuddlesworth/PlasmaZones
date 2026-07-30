@@ -67,10 +67,30 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     }
 
     if (!registry->hasAlgorithm(newId)) {
+        // Through the registry's OWN default resolution, not the static id:
+        // defaultAlgorithm() already models the case where the configured
+        // default is absent (a Luau script that failed to load) and falls back
+        // to the first registered algorithm. Assigning the static id blindly
+        // could leave m_algorithmId naming nothing, and then currentAlgorithm()
+        // and every effectiveAlgorithm() answer null — autotiling silently does
+        // nothing on every screen, with no user-visible error.
+        PhosphorTiles::TilingAlgorithm* fallback = registry->defaultAlgorithm();
+        if (!fallback) {
+            qCWarning(PhosphorTileEngine::lcTileEngine) << "AutotileEngine: unknown algorithm" << newId
+                                                        << "and the registry has no default — keeping" << m_algorithmId;
+            return;
+        }
         qCWarning(PhosphorTileEngine::lcTileEngine)
-            << "AutotileEngine: unknown algorithm" << newId << "- using default";
-        newId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
+            << "AutotileEngine: unknown algorithm" << newId << "- using" << fallback->registryId();
+        newId = fallback->registryId();
     }
+
+    // Set BEFORE the equality early-return. The ctor pre-seeds m_algorithmId
+    // with the static default, so for every user whose configured default is
+    // that same algorithm each setAlgorithm() call early-returned and the flag
+    // stayed false all session — and the first genuine switch away then skipped
+    // the save block below, silently losing that algorithm's live tuning.
+    m_algorithmEverSet = true;
 
     if (m_algorithmId == newId) {
         return;
@@ -113,11 +133,24 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // for the outgoing algorithm on a settings-driven switch, in favour of the
     // values the user explicitly saved.
     if (m_algorithmEverSet && oldAlgo && !m_refreshingFromSettings) {
-        auto& entry = m_config->savedAlgorithmSettings[m_algorithmId];
-        entry.splitRatio = m_config->splitRatio;
-        entry.masterCount = m_config->masterCount;
-        entry.maxWindows = m_config->maxWindows;
-        // customParams are not touched here — only splitRatio/masterCount/maxWindows are engine-managed
+        // Only stamp a slot when the live values actually DIFFER from the
+        // outgoing algorithm's own defaults. operator[] created one
+        // unconditionally, and a slot that merely echoes the defaults is
+        // persisted by writeBackTuning() and then shows up in the config
+        // profile diff as a change the user never made — exactly what the
+        // no-slot fallback in restorePerAlgoSettings below exists to avoid.
+        const bool differsFromDefaults = !qFuzzyCompare(m_config->splitRatio, oldAlgo->defaultSplitRatio())
+            || m_config->masterCount != PhosphorTiles::AutotileDefaults::DefaultMasterCount
+            || m_config->maxWindows != oldAlgo->defaultMaxWindows();
+        if (differsFromDefaults) {
+            auto& entry = m_config->savedAlgorithmSettings[m_algorithmId];
+            entry.splitRatio = m_config->splitRatio;
+            entry.masterCount = m_config->masterCount;
+            entry.maxWindows = m_config->maxWindows;
+            // customParams are not touched here — only splitRatio/masterCount/maxWindows are engine-managed
+        } else {
+            m_config->savedAlgorithmSettings.remove(m_algorithmId);
+        }
     }
 
     // Look up saved settings AFTER the save above — insertion may rehash the
@@ -507,6 +540,8 @@ QSet<int> AutotileEngine::desktopsWithActiveState() const
 void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
 {
     int pruned = 0;
+    QStringList releasedWindows;
+    QSet<QString> releasedScreens;
     m_states.removeStatesIf(
         [&](const TilingStateKey& key, PhosphorTiles::TilingState*) {
             return key.desktop == removedDesktop;
@@ -516,9 +551,19 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
             // number can't inherit a stale "tuned" skip in propagateGlobal*.
             m_userTunedSplitRatio.remove(key);
             m_userTunedMasterCount.remove(key);
-            state->deleteLater();
+            // Through the FULL teardown, not a bare deleteLater. A deleted
+            // desktop's windows are ALIVE (KWin relocates them), so skipping it
+            // lost each one's autotile slot snapshot into the unified record,
+            // leaked its m_windowMinSizes entry for the session, and emitted no
+            // windowsReleased — leaving the daemon's WTS and the effect's float
+            // cache holding entries for windows this engine no longer manages.
+            releaseScreenStateForTeardown(key.screenId, state, releasedWindows);
+            releasedScreens.insert(key.screenId);
             ++pruned;
         });
+    if (!releasedWindows.isEmpty()) {
+        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
+    }
     // Clean up reverse-map entries that reference the pruned desktop. Stale
     // entries would pollute backfillWindows() and could incorrectly match if
     // desktop numbers are reused.
@@ -649,6 +694,8 @@ void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities
 {
     const QSet<QString> valid(validActivities.begin(), validActivities.end());
     int pruned = 0;
+    QStringList releasedWindows;
+    QSet<QString> releasedScreens;
     m_states.removeStatesIf(
         [&](const TilingStateKey& key, PhosphorTiles::TilingState*) {
             return !key.activity.isEmpty() && !valid.contains(key.activity);
@@ -656,9 +703,16 @@ void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities
         [&](const TilingStateKey& key, PhosphorTiles::TilingState* state) {
             m_userTunedSplitRatio.remove(key);
             m_userTunedMasterCount.remove(key);
-            state->deleteLater();
+            // Full teardown, for the same reasons as the desktop prune above:
+            // record snapshot, min-size cleanup and a windowsReleased so the
+            // daemon and effect stop tracking windows this engine has dropped.
+            releaseScreenStateForTeardown(key.screenId, state, releasedWindows);
+            releasedScreens.insert(key.screenId);
             ++pruned;
         });
+    if (!releasedWindows.isEmpty()) {
+        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
+    }
     // Clean up reverse-map entries that reference pruned activities
     m_states.removeWindowsIf([&](const QString&, const TilingStateKey& key) {
         return !key.activity.isEmpty() && !valid.contains(key.activity);

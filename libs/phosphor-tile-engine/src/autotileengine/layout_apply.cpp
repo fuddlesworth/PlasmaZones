@@ -90,9 +90,13 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // Algorithms apply gaps directly using their topology knowledge, eliminating
     // the fragile post-processing step that previously guessed adjacency.
     const bool skipGaps = effectiveSmartGaps(screenId) && windowCount == 1;
-    const int innerGap = skipGaps ? 0 : effectiveInnerGap(screenId);
-    ::PhosphorLayout::EdgeGaps outerGaps =
-        skipGaps ? ::PhosphorLayout::EdgeGaps::uniform(0) : effectiveOuterGaps(screenId);
+    // One resolve for both keys: the two single-key accessors each run a full
+    // LayoutRegistry::resolveContextGaps through the provider, so calling them
+    // in sequence cost two per screen per retile.
+    const auto gaps = skipGaps ? PerScreenConfigResolver::EffectiveGaps{0, ::PhosphorLayout::EdgeGaps::uniform(0)}
+                               : m_configResolver->effectiveGaps(screenId);
+    const int innerGap = gaps.inner;
+    ::PhosphorLayout::EdgeGaps outerGaps = gaps.outer;
 
     // Canonical per-window minimum sizes (logical pixels — same units as zone/
     // screen geometry; do not divide by devicePixelRatio or we under-report).

@@ -131,6 +131,12 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
                 // a window snap now owns.
                 m_windowMinSizes.remove(windowId);
                 m_autotileFloatedWindows.remove(windowId);
+                // Pending seeds too, like every other drop path (cap rejection,
+                // close, handoffRelease). A strict pending order that still
+                // names this window keeps its timeout re-arming for the whole
+                // session, waiting on a window snap now owns — the strict seed
+                // skips minimized entries without removing them.
+                purgeFromPendingOrders(windowId);
                 return;
             }
         }
@@ -623,14 +629,15 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     // foreign code — matching insertShouldFloat, which short-circuits it for the
     // same reason.
     const bool ruleWillFloat = !isMigrationArrival && m_floatPredicate && m_floatPredicate(windowId);
-    // A window the state ALREADY holds is exempt from the cap: it consumes
-    // no new slot, and refusing its RE-ANNOUNCE broke every mode transition
-    // whose strict seed filled the state to exactly the cap — each of the
-    // effect's follow-up windowOpened calls hit tiledWindowCount >= maxWin,
-    // purged the seed order, and skipped the insert-time float/focus sync,
-    // leaving the adoption half-applied until the user forced a retile with
-    // a manual float toggle. insertWindow below no-ops safely on a
-    // contained window.
+    // A window the state ALREADY holds is exempt from the cap: it consumes no
+    // new slot, and refusing its RE-ANNOUNCE broke every mode transition whose
+    // strict seed filled the state to exactly the cap — each of the effect's
+    // follow-up windowOpened calls hit tiledWindowCount >= maxWin and PURGED
+    // the window from the seed order, so the order could never resolve and its
+    // timeout chain stayed armed for the session. (The insert-time float/focus
+    // sync is skipped either way: insertWindow returns false for a contained
+    // window, and seeded windows get that sync separately in the strict-seed
+    // path.) insertWindow below no-ops safely on a contained window.
     const bool alreadyHeld = state && state->containsWindow(windowId);
     if (state && !alreadyHeld && state->tiledWindowCount() >= maxWin && !ruleWillFloat && !isMigrationArrival) {
         qCDebug(PhosphorTileEngine::lcTileEngine)

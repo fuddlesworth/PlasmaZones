@@ -50,6 +50,12 @@ bool AutotileEngine::warnIfEmptyWindowId(const QString& windowId, const char* op
 
 void AutotileEngine::setWindowRegistry(QObject* registry)
 {
+    // Drop the previous registration hook up front. Both early returns below
+    // leave the engine WITHOUT a usable registry, so a hook installed by an
+    // earlier successful call must not keep installing appId resolvers on
+    // newly registered (hot-reloaded) algorithms — this is a re-wireable seam,
+    // and setWindowRegistry(nullptr) is the documented way to unwire it.
+    disconnect(m_appIdResolverHook);
     m_windowRegistry = dynamic_cast<PhosphorEngine::IWindowRegistry*>(registry);
     if (!m_windowRegistry) {
         if (registry) {

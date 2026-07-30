@@ -160,7 +160,16 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
 void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const QString& windowId,
                                         const QString& screenId)
 {
-    state->toggleFloating(windowId);
+    // Branch on the result, like every other mutation site in the engine.
+    // toggleFloating returns false for a window this state does not contain;
+    // both current callers validate membership first, so this is unreachable
+    // today — but ignoring it meant a future caller would emit "now tiled" for
+    // an unmanaged window and clear a legitimate snap float downstream.
+    if (!state->toggleFloating(windowId)) {
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "performToggleFloat: state does not contain" << windowId << "on screen" << screenId;
+        return;
+    }
     m_overflow.clearOverflow(windowId); // User explicitly toggled, no longer overflow
 
     const bool isNowFloating = state->isFloating(windowId);

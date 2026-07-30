@@ -180,6 +180,16 @@ public:
 
     int effectiveInnerGap(const QString& screenId) const;
     ::PhosphorLayout::EdgeGaps effectiveOuterGaps(const QString& screenId) const;
+    struct EffectiveGaps
+    {
+        int inner = 0;
+        ::PhosphorLayout::EdgeGaps outer;
+    };
+    /// Both gap keys from ONE context resolve. Prefer this over calling the two
+    /// accessors above in sequence: each of those runs a full
+    /// LayoutRegistry::resolveContextGaps through the context-gap provider, so
+    /// the pair costs two resolves per screen per retile.
+    EffectiveGaps effectiveGaps(const QString& screenId) const;
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
     int effectiveMaxWindows(const QString& screenId) const;
@@ -232,6 +242,12 @@ private:
     /// Clamped per-context override for a single gap key (InnerGap / OuterGap),
     /// or nullopt when @p ctx lacks the key.
     static std::optional<int> contextGapFromMap(const QVariantMap& ctx, QLatin1String key);
+
+    /// The full inner / outer resolution against an ALREADY-resolved context
+    /// map. The public accessors and effectiveGaps() are thin wrappers that
+    /// differ only in how many times they resolve that map.
+    int innerGapFromMap(const QString& screenId, const QVariantMap& ctx) const;
+    ::PhosphorLayout::EdgeGaps outerGapsFromMap(const QString& screenId, const QVariantMap& ctx) const;
 
     /// Per-context outer-gap override resolved as one atomic layer (per-side
     /// honoured only when UsePerSideOuterGap is set), mirroring the snapping
