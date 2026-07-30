@@ -162,6 +162,11 @@ void Daemon::handleFloat()
         }
         // Restart only on actual dispatch — see handleSpan.
         m_floatDebounce.restart();
+        // Dispatch log: performToggleFloat's "now floating" line is emitted
+        // for shortcut and engine paths alike, so without this line a user
+        // Meta+F is indistinguishable in the journal from an engine float.
+        qCInfo(lcDaemon) << "handleFloat: toggling float for focused window" << ctx.windowId << "screen"
+                         << ctx.screenId;
         nav->toggleFocusedFloat(ctx);
     }
 }

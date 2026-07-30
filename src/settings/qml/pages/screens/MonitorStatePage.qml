@@ -364,6 +364,30 @@ SettingsFlickable {
                 }
             ]
 
+            // Fetch the live strip for the current selection. The daemon's
+            // strip is briefly empty while a mode flip's re-announce batch is
+            // being adopted (the OSD defers around the same window); a one-shot
+            // read landing there returned [] and left the fallback sketch up
+            // for good. When the daemon says the screen IS scrolling but the
+            // strip came back empty, re-read once after a settle beat.
+            function refreshScrollingStrip() {
+                if (!screenState)
+                    return;
+                scrollingStripZones = settingsController.getScrollingStripPreview(screenState.screenId || "");
+                if (scrollingStripZones.length === 0 && (screenState.mode || 0) === 2)
+                    stripSettleRetry.restart();
+            }
+
+            Timer {
+                id: stripSettleRetry
+                interval: 400
+                repeat: false
+                onTriggered: {
+                    if (stateView.screenState)
+                        stateView.scrollingStripZones = settingsController.getScrollingStripPreview(stateView.screenState.screenId || "");
+                }
+            }
+
             Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.largeSpacing
             visible: screenState !== null
@@ -381,12 +405,12 @@ SettingsFlickable {
                 localLayoutTouched = false;
                 localAlgorithmTouched = false;
                 // Refresh the live strip preview with the selection context
-                // (cheap one-shot D-Bus read; [] when not scrolling). Keyed
-                // on the STATE's own screen id — before the user clicks a
-                // monitor, _selectedScreen is still empty while the shown
-                // state is the first reported one, and fetching with the
-                // empty id left the sketch up despite a live strip.
-                scrollingStripZones = settingsController.getScrollingStripPreview(screenState.screenId || "");
+                // (cheap D-Bus read; [] when not scrolling). Keyed on the
+                // STATE's own screen id — before the user clicks a monitor,
+                // _selectedScreen is still empty while the shown state is the
+                // first reported one, and fetching with the empty id left the
+                // sketch up despite a live strip.
+                refreshScrollingStrip();
                 var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
                 if (Object.keys(staged).length > 0) {
                     // A staged entry carries the WHOLE context rule, so every
@@ -467,8 +491,8 @@ SettingsFlickable {
                 // Re-read the live strip when the preview surfaces (a mode
                 // pick flips visibility without a screen-state change).
                 onVisibleChanged: {
-                    if (visible && stateView.screenState)
-                        stateView.scrollingStripZones = settingsController.getScrollingStripPreview(stateView.screenState.screenId || "");
+                    if (visible)
+                        stateView.refreshScrollingStrip();
                 }
                 // category 1 renders the "Dynamic" badge (a live strip
                 // snapshot is generated, not editable). Zone numbers are the
