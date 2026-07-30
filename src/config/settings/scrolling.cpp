@@ -11,10 +11,11 @@ namespace PlasmaZones {
 // ── Scrolling (PhosphorConfig::Store-backed) ────────────────────────────────
 // Scalars live in m_store under Scrolling; the schema validators own
 // the enum/list validation (validIntOr / canonicalProportionList). The width
-// value's REAL clamp is kind-aware and applied by the hand-written getter AND
-// setter below, because the schema's clampDouble alone spans both kinds'
-// ranges and so cannot reject a value that is out of range for the kind
-// actually in force.
+// value's REAL clamp is kind-aware, because the schema's clampDouble alone
+// spans both kinds' ranges and so cannot reject a value that is out of range
+// for the kind actually in force. Two places apply it: the hand-written value
+// setter below, and normalizeScrollingColumnWidthValue for anything that
+// reached the store without passing that setter.
 
 namespace {
 qreal clampColumnWidthForKind(qreal value, bool isFixed)
@@ -58,11 +59,9 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
     // when the stored value cannot belong to the kind being entered. Fixed
     // re-seeds below the pixel floor, Proportion above 1.0. A legitimate
     // value of either kind parked through a ClientDecides hop therefore
-    // survives the round trip. Setter-side only: a hand-edited config with an
-    // inconsistent pair (kind=Fixed, value=0.5) is left as-is until the
-    // next write and the engine renders a degenerate-but-clamped column
-    // (its own load applies qMax(1, …)) — the page rewrites the pair on
-    // first touch of either row.
+    // survives the round trip. A hand-edited config with an inconsistent pair
+    // (kind=Fixed, value=0.5) never reaches this setter at all; that case is
+    // caught once by normalizeScrollingColumnWidthValue at load.
     // The kind flip is announced FIRST: a QML handler keyed on the kind
     // NOTIFY must observe the new kind before (not after) the value
     // coercion and the engine refresh it triggers.
