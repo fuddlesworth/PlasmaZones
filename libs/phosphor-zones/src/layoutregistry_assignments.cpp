@@ -103,8 +103,26 @@ bool LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
                                                    entry.snappingLayout, entry.tilingAlgorithm, priority);
 
     if (existing == nullptr) {
-        m_ruleStore->addRule(rule);
-        return true;
+        // A rule may already hold this DETERMINISTIC id without being claimable
+        // as an assignment — removeAssignmentRule strips the slot actions and
+        // keeps the rule alive for whatever else it carried, and a user can
+        // hand-edit one the same way. addRule rejects the colliding id, and
+        // reporting that as success made the context permanently unassignable
+        // with no diagnostic. Update the existing rule in place instead,
+        // merging the new slot actions onto its surviving ones.
+        const std::optional<PWR::Rule> byId = m_ruleStore->ruleSet().ruleById(rule.id);
+        if (byId.has_value()) {
+            PWR::Rule merged = rule;
+            merged.name = byId->name;
+            merged.managed = byId->managed;
+            merged.enabled = byId->enabled;
+            carryOverNonAssignmentActions(merged, *byId);
+            if (merged == *byId) {
+                return false;
+            }
+            return m_ruleStore->updateRule(merged);
+        }
+        return m_ruleStore->addRule(rule);
     }
     rule.id = existing->id; // preserve the rule's identity across the update
     // makeAssignmentRule always stamps enabled = true; an upsert must not

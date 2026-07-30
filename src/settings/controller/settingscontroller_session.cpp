@@ -55,6 +55,31 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+/// Whether an imported settings blob is one this build can migrate FORWARD to
+/// the current schema.
+///
+/// The migration chain cannot answer this on its own: it reports success both
+/// for a blob already at the target and for one stamped ABOVE it (the loop
+/// breaks on `readVersion >= target` and an unchanged version returns true).
+/// A newer blob accepted as "migrated" then reads as every moved key absent,
+/// load() substitutes schema defaults, and the first Save stamps this version
+/// over the user's settings — with the import backup already removed.
+///
+/// An ABSENT version stamp is treated as upgradable: that is a pre-versioning
+/// (v1-era) config, exactly what the chain exists to lift.
+bool importedBlobIsUpgradable(const QJsonObject& root)
+{
+    const QJsonValue version = root.value(QLatin1String("_version"));
+    if (!version.isDouble()) {
+        return true;
+    }
+    return version.toInt() <= PlasmaZones::ConfigSchemaVersion;
+}
+
+} // namespace
+
 QStringList SettingsController::fontStylesForFamily(const QString& family) const
 {
     return QFontDatabase::styles(family);
@@ -690,7 +715,22 @@ bool SettingsController::importAllSettings(const QString& filePath)
                     // Says what failed, not what the restore below will do:
                     // that runs after this and can fail too.
                     Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not replace your settings with that file."));
-                } else if (!ConfigMigration::runMigrationChain(configPath)) {
+                } else if (!importedBlobIsUpgradable(importDoc.object())) {
+                    // A blob stamped NEWER than this build cannot be migrated
+                    // down, and runMigrationChain reports "success" for it
+                    // (readVersion >= target breaks the loop immediately and
+                    // newVersion == oldVersion returns true), so the chain
+                    // result alone cannot detect it. Without this check the
+                    // import is accepted, load() reads every moved key as
+                    // absent and takes schema defaults, and the first Save
+                    // stamps this version over them — with the backup already
+                    // removed.
+                    qCWarning(PlasmaZones::lcCore) << "Imported settings are from a newer schema:" << safeFilePath;
+                    Q_EMIT settingsTransferFailed(
+                        PhosphorI18n::tr("That settings file is from a newer version of this app."));
+                    ok = false;
+                } else if (!ConfigMigration::runMigrationChain(configPath)
+                           || !ConfigMigration::finalizeV4Conversion(configPath)) {
                     // An imported blob can be ANY older schema version — an
                     // export from an older install, or a restored backup. The
                     // INI branch already migrates; this one did not, and
@@ -700,6 +740,16 @@ bool SettingsController::importAllSettings(const QString& filePath)
                     // schema defaults, and the first Save purges the old
                     // groups and stamps the current version over them — the
                     // user's settings gone, with the backup already removed.
+                    //
+                    // finalizeV4Conversion is PAIRED with the chain, as at
+                    // every other call site: migrateV3ToV4 only STASHES the
+                    // exclusion / assignment / animation data under _v4* root
+                    // keys, and the finalize step is what turns those into
+                    // rules.json and quicklayouts.json and strips the scratch
+                    // keys. Running the chain alone on a v3-or-older import
+                    // stamps _version=5, leaves the stashes orphaned in
+                    // config.json, and silently drops every imported zone
+                    // assignment and exclusion.
                     qCWarning(PlasmaZones::lcCore) << "Imported settings could not be migrated:" << safeFilePath;
                     Q_EMIT settingsTransferFailed(
                         PhosphorI18n::tr("That settings file is from a version this app cannot upgrade."));

@@ -191,11 +191,18 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             // unstamped, and WindowQuery::valueForField returns an ENGAGED
             // empty string for it — which a positive leaf never matches but a
             // negated None{Mode Equals "tiling"} does.
+            // TiledWindowCount is deliberately NOT excluded here, unlike in the
+            // six sibling resolvers. This is the one resolver that STAMPS it
+            // (line above), so both polarities evaluate correctly and the
+            // algorithm-switch feature it exists for — `TiledWindowCount
+            // GreaterThan 1 → SetTilingAlgorithm bsp` — depends on rules
+            // referencing it winning a slot here. Excluding it would leave the
+            // provider, the cache key and the daemon's count-change re-resolve
+            // hooks all wired to nothing.
             const auto slotMatch = [&](bool (*carriesSlot)(const PWR::Rule&)) -> const PWR::Rule* {
                 return m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::Rule& rule) {
                     return carriesSlot(rule)
-                        && !rule.match.referencesAnyField(
-                            {PWR::Field::ActiveLayout, PWR::Field::Mode, PWR::Field::TiledWindowCount});
+                        && !rule.match.referencesAnyField({PWR::Field::ActiveLayout, PWR::Field::Mode});
                 });
             };
 
@@ -858,9 +865,18 @@ const PhosphorRules::Rule* LayoutRegistry::findExactContextRule(const QString& s
             // take its addRule branch, makeAssignmentRule would stamp this very
             // id, and RuleSet::addRule rejects a colliding id — so the
             // Monitors-page write silently no-ops and the context becomes
-            // unassignable until the user deletes the edited rule. Fall through
-            // to the shape scan instead, which claims the rule if it still
-            // fills any assignment slot at this exact context.
+            // unassignable until the user deletes the edited rule.
+            //
+            // Fall through to the SHAPE test, applied to THIS rule as well as
+            // the rest: a rule that lost only its SetEngineMode but kept a
+            // layout slot and the exact-context match is still the rule that
+            // assigns this context. A bare `continue` here skipped that test
+            // for the id rule itself, so the very rule most likely to be the
+            // right answer was the one rule excluded from consideration.
+            if (shapeMatch == nullptr && hasAnyAssignmentSlotAction(rule)
+                && matchIsExactContext(rule.match, screenId, virtualDesktop, activity)) {
+                shapeMatch = &rule;
+            }
             continue;
         }
         // Remember the first exact-context assignment rule we see — we only

@@ -16,6 +16,7 @@
 #include "core/interfaces/isettings.h"
 #include "core/platform/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -158,20 +159,27 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QSt
     if (!screenId.isEmpty()) {
         query->screenId = screenId;
         if (m_layoutManager) {
-            // The WINDOW's desktop, not the current one. buildRuleQueryForWindow
-            // has already stamped query->virtualDesktop from the registry, and
-            // under per-output virtual desktops (#648) a window opening on a
-            // non-current desktop resolves a different mode there. Reading the
-            // current desktop made a `Mode == "scrolling" AND VirtualDesktop
-            // == 3` rule answer against desktop 1's mode. Every sibling in
-            // this file passes the explicit desktop for the same reason.
-            const int desktop = query->virtualDesktop > 0 ? query->virtualDesktop : currentDesktopForScreen(screenId);
-            // And the window's own ACTIVITY, with the same fallback shape.
-            // Mode is keyed on the full (screen, desktop, activity) triple, so
-            // taking the window's desktop but the CURRENT activity answers for
-            // a context the window is not in — the identical defect on the
-            // other axis. buildRuleQueryForWindow stamps both from the registry.
-            const QString activity = query->activity.isEmpty() ? m_layoutManager->currentActivity() : query->activity;
+            // The WINDOW's context, resolved through WindowContext's OWN
+            // accessors rather than picked apart here. "Which context governs
+            // this window" has exactly one answer and it lives on
+            // WindowContext: effectiveDesktop resolves a window spanning
+            // SEVERAL desktops to the screen's current one when that is among
+            // them, and handles sticky. Neither is expressible from the query,
+            // because buildRuleQueryForWindow copies only the scalar
+            // `virtualDesktop` and never the span — so deriving it inline made
+            // the OPEN-time float verdict disagree with the daemon's LIVE float
+            // resolver for the very same window, which is a per-mode float
+            // invariant break. init_engines.cpp's resolver does exactly this.
+            int desktop = currentDesktopForScreen(screenId);
+            QString activity = m_layoutManager->currentActivity();
+            if (m_windowRegistry) {
+                const auto ctx =
+                    m_windowRegistry->windowContext(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+                if (ctx) {
+                    desktop = ctx->effectiveDesktop(desktop);
+                    activity = ctx->effectiveActivity(activity);
+                }
+            }
             switch (m_layoutManager->modeForScreen(screenId, desktop, activity)) {
             case PhosphorZones::AssignmentEntry::Snapping:
                 query->mode = QStringLiteral("snapping");
