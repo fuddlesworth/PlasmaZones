@@ -290,6 +290,21 @@ public:
         return m_scrollingScreens.contains(screenId) && m_managedScreens.contains(screenId);
     }
 
+    /// The set this discriminator actually answers over.
+    ///
+    /// Because the answer is an INTERSECTION, it can change when EITHER input
+    /// moves. setScrollingScreens invalidates the rule caches on its own
+    /// writes, but m_managedScreens is assigned raw by slotScreensChanged and
+    /// by loadSettings' reply, and those two arrive independently of the
+    /// scrolling-screens signal. Every writer of m_managedScreens must
+    /// therefore snapshot this before and compare after — otherwise a screen
+    /// that enters the union AFTER being marked scrolling leaves every
+    /// `Mode == "scrolling"` verdict memoised as non-matching for the session.
+    QSet<QString> scrollingScreenIntersection() const
+    {
+        return m_scrollingScreens & m_managedScreens;
+    }
+
     /// Check if a window is tracked by the autotile handler (in m_notifiedWindows).
     bool isTrackedWindow(const QString& windowId) const
     {

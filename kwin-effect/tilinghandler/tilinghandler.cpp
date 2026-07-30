@@ -62,7 +62,14 @@ void TilingHandler::suppressFfmUntilCursorMoves()
 
 void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
 {
+    // Both of the next two bails also DISARM the suppression latch. They sit
+    // above it, so a latch armed just before the last screen left the union
+    // (or just before a peek started) would otherwise survive with an anchor
+    // naming a pre-event cursor position, and swallow the first move within
+    // the resume radius once the condition cleared. Same reasoning as the
+    // clears in setFocusFollowsMouse(false) and onDaemonReady.
     if (!m_focusFollowsMouse || m_managedScreens.isEmpty()) {
+        m_ffmSuppressPending = false;
         return;
     }
 
@@ -73,6 +80,7 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
     // Peek is hover-driven, so without this bail it collapses on the very
     // first cursor move.
     if (PlasmaZonesEffect::isShowingDesktop()) {
+        m_ffmSuppressPending = false;
         return;
     }
 
@@ -203,7 +211,11 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
 QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
 {
     const QString tracked = m_notifiedWindowScreens.value(windowId);
-    if (tracked.isEmpty() || !m_scrollingScreens.contains(tracked)) {
+    // isScrollingScreen, not the raw m_scrollingScreens: the discriminator is
+    // the intersection with the managed union, and this helper feeds the paint
+    // clip and the input filter, so it must not answer over a wider set than
+    // everything else does.
+    if (tracked.isEmpty() || !isScrollingScreen(tracked)) {
         return QString();
     }
     if (!TilingStateHelpers::isTiledWindow(m_border, windowId)) {
@@ -331,18 +343,25 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         // notifyWindowAdded (unminimize, exit-fullscreen) hits the
         // already-notified bail and silently never announces it.
         if (resetNotified) {
-            const bool wasNotified = m_notifiedWindows.remove(windowId);
+            m_notifiedWindows.remove(windowId);
             // Its screen record travels with it — leaving it behind orphans a
             // stale screen association the next notify would read.
             m_notifiedWindowScreens.remove(windowId);
-            // A window on ANOTHER desktop or activity is ineligible below, so
-            // it would never re-announce and the drop above would be its
-            // silent, permanent detracking. Park it exactly where the
-            // desktop-switch demotion parks its own, so the desktop-return
-            // branch re-tracks it instead of re-notifying it as new.
-            if (wasNotified && (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity())) {
-                m_savedNotifiedForDesktopReturn.insert(windowId);
-            }
+            // Deliberately NOT parked in m_savedNotifiedForDesktopReturn.
+            // That set means one specific thing: "the desktop-switch demotion
+            // dropped this window locally, but the daemon STILL holds it in
+            // the other desktop's state, so re-track on return without
+            // re-notifying." Both batch callers that pass resetNotified are
+            // the opposite case — bring-up after a daemon restart, and the
+            // engine-flip re-announce, where the daemon has a fresh or
+            // torn-down engine holding nothing. Parking there made the
+            // desktop-return branch silently re-insert the window into
+            // m_notifiedWindows with no windowOpened, so the daemon never
+            // learned it existed and every later notifyWindowAdded hit the
+            // already-notified bail. The plain drop is correct here: the
+            // desktop-return path and the catch-scan both re-announce an
+            // untracked current-desktop window as new, which is exactly what
+            // a daemon that lost its state needs.
         }
 
         bool minimizedOnly = false;
@@ -1015,7 +1034,19 @@ void TilingHandler::onDaemonReady()
     // for its query and the reply clears it — a false store first was dead.
     loadSettings();
     m_notifiedWindows.clear();
-    m_notifiedWindowScreens.clear();
+    // m_notifiedWindowScreens is deliberately NOT cleared alongside it.
+    //
+    // It is the only window→screen map the scroll clip predicate can use, and
+    // loadSettings' two property replies race: whichever order they land in,
+    // clearing here left a window where hasScrollingScreens() is already true
+    // but no window has a tracked screen, so scrollClipGeometryFor returned an
+    // invalid rect for every strip column. For that gap — a D-Bus round trip,
+    // several frames — each edge column's overhang painted onto the adjacent
+    // monitor and the input filter let clicks land on the half about to become
+    // invisible. Holding the previous session's entries closes it: the
+    // re-announce batch overwrites every window it covers, and an entry it
+    // does not cover cannot leak a clip, because scrollTrackedScreenFor also
+    // requires live tiled membership, which only the new daemon can grant.
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreTileForDesktopMove.clear();
     // The FFM suppression latch belongs to the dead session too: its anchor

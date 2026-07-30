@@ -125,7 +125,16 @@ void TilingHandler::loadSettings()
                     // load-bearing, this handler must route through
                     // slotScreensChanged's removed/added diff instead.
                     const QSet<QString> published(screens.begin(), screens.end());
+                    // Same intersection hazard as slotScreensChanged: this
+                    // reply and the scrollingScreens reply race, so whichever
+                    // lands second changes the Mode discriminator without
+                    // going through setScrollingScreens' invalidation.
+                    const QSet<QString> scrollingBefore = scrollingScreenIntersection();
                     m_managedScreens = published;
+                    if (scrollingScreenIntersection() != scrollingBefore) {
+                        m_effect->invalidateAllRuleCaches();
+                        m_effect->scheduleBorderSweep();
+                    }
                     qCInfo(lcEffect) << "Loaded managed screens:" << m_managedScreens;
                     const QSet<QString> completedDeferredRoutes = completeDeferredWindowRoutes();
 

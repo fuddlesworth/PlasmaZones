@@ -40,14 +40,14 @@ void LayoutRegistry::clearAutotileAssignments()
     bool changed = false;
 
     for (PWR::Rule& rule : updated) {
-        // Only pure context-assignment rules are flipped. Two ways a rule can
-        // fail that, and BOTH must be checked because the rebuild below
-        // replaces rule.actions wholesale: a window-property rule that
-        // legitimately carries a SetEngineMode action (isContextAssignmentRule),
-        // and a context-shaped rule that carries SetEngineMode ALONGSIDE other
-        // actions such as SetOpacity or LockContext (isPureAssignmentRule).
-        // Checking only the first destroyed the extra actions of the second.
-        if (!isContextAssignmentRule(rule) || !isPureAssignmentRule(rule)) {
+        // Context-assignment rules only — a window-property rule that
+        // legitimately carries a SetEngineMode action is not an assignment.
+        // MIXED rules ARE flipped: a context assigned to autotile must be
+        // cleared whether or not the user also hung a SetOpacity on it, and
+        // gating them out left "clear all autotile assignments" silently
+        // leaving such a context on autotile. Their extra actions survive
+        // because the rebuild below carries them across.
+        if (!isContextAssignmentRule(rule)) {
             continue;
         }
         const AssignmentEntry entry = entryFromRuleMatchActions(rule);
@@ -55,9 +55,12 @@ void LayoutRegistry::clearAutotileAssignments()
             continue;
         }
         // Flip to Snapping — preserve both layout fields so re-enabling
-        // autotile can restore the previous algorithm.
+        // autotile can restore the previous algorithm, and carry over
+        // everything that is not an assignment slot.
+        const PWR::Rule previous = rule;
         rule.actions = PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(AssignmentEntry::Snapping),
                                                                      entry.snappingLayout, entry.tilingAlgorithm);
+        carryOverNonAssignmentActions(rule, previous);
         changed = true;
 
         // Recover the rule's own context for the layoutAssigned signal.

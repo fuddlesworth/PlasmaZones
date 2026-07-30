@@ -592,8 +592,11 @@ QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w) const
     // treated as dead overhang. The helper carries the two invariants this
     // needs: tiled membership (it IS a strip column) and connected-output
     // liveness. getWindowScreenId already routes through it.
-    const QString trackedScreen = m_tilingHandler->scrollTrackedScreenFor(getWindowId(w));
-    if (trackedScreen.isEmpty() || !m_navigationHandler || m_navigationHandler->isWindowFloating(getWindowId(w))) {
+    // Hoisted: this runs per window, per output, per frame, and getWindowId
+    // is a hash probe plus a string refcount each time.
+    const QString windowId = getWindowId(w);
+    const QString trackedScreen = m_tilingHandler->scrollTrackedScreenFor(windowId);
+    if (trackedScreen.isEmpty() || !m_navigationHandler || m_navigationHandler->isWindowFloating(windowId)) {
         return QRect();
     }
     const KWin::LogicalOutput* managedOutput = outputForScreenId(trackedScreen);

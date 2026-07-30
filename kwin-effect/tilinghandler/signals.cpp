@@ -387,7 +387,18 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         }
     }
 
+    // The Mode discriminator reads m_scrollingScreens INTERSECTED with the
+    // union, so moving the union can change it even though the scrolling set
+    // is untouched — and this assignment does not go through
+    // setScrollingScreens, which is where that invalidation normally lives.
+    // Without this, a screen marked scrolling before it joined the union kept
+    // every `Mode == "scrolling"` rule memoised as non-matching.
+    const QSet<QString> scrollingBefore = scrollingScreenIntersection();
     m_managedScreens = newScreens;
+    if (scrollingScreenIntersection() != scrollingBefore) {
+        m_effect->invalidateAllRuleCaches();
+        m_effect->scheduleBorderSweep();
+    }
     QSet<QString> completedDeferredRoutes;
     bool completedInitialQuery = false;
     if (m_initialScreenQueryPending) {
