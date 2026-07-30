@@ -51,6 +51,35 @@ private Q_SLOTS:
         QVERIFY(qFuzzyCompare(engine.config()->splitRatio, bspAlgo->defaultSplitRatio()));
     }
 
+    // A tuned value that the user RESETS to the algorithm's own default must
+    // stay reset across a switch away and back. The save gate is
+    // create-OR-update: it avoids MINTING a slot that merely echoes the
+    // defaults, but an EXISTING slot must still be refreshed — with the
+    // update half removed, the stale tuned value survives in the slot and
+    // restorePerAlgoSettings silently reverts the user's reset on the next
+    // switch back (the Max Windows silent no-op shape).
+    void testAlgorithmSwitch_resetToDefaultSticksAcrossRoundTrip()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAlgorithm(QLatin1String("master-stack"));
+
+        auto* msAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("master-stack"));
+        QVERIFY(msAlgo);
+
+        // Tune, switch away (stamps the slot), switch back (restores 0.7).
+        engine.config()->splitRatio = 0.7;
+        engine.setAlgorithm(QLatin1String("bsp"));
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.7));
+
+        // Reset to the algorithm's own default, then round-trip again.
+        engine.config()->splitRatio = msAlgo->defaultSplitRatio();
+        engine.setAlgorithm(QLatin1String("bsp"));
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        QVERIFY2(qFuzzyCompare(engine.config()->splitRatio, msAlgo->defaultSplitRatio()),
+                 "a reset-to-default must survive the round trip, not revert to the stale tuned value");
+    }
+
     void testAlgorithmSwitch_maxWindowsResetWhenUnchanged()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
