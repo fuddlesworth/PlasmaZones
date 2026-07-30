@@ -111,6 +111,15 @@ bool LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
     // silently re-enable a rule the user disabled. A disabled context
     // assignment is still an explicit assignment — preserve the flag.
     rule.enabled = existing->enabled;
+    // Preserve the user-facing identity too. makeAssignmentRule is handed an
+    // empty name, and the shape fallback in findExactContextRule claims
+    // user-authored pure assignment rules — which the rules editor lets the
+    // user name — so rebuilding without these blanked the name on the next
+    // Monitors-page write. It also broke the guard below: Rule::operator==
+    // compares name, so a named rule never compared equal and every
+    // identical re-apply still bumped the revision.
+    rule.name = existing->name;
+    rule.managed = existing->managed;
     // NO-OP GUARD. RuleSet::updateRule has no equality check of its own, so an
     // identical re-apply (the KCM's "apply all" over unchanged values) still
     // bumped the store's monotonic revision — which drops all five context

@@ -35,10 +35,14 @@ void LayoutRegistry::clearAutotileAssignments()
     bool changed = false;
 
     for (PWR::Rule& rule : updated) {
-        // Only pure context-assignment rules are flipped — a window-property
-        // rule that legitimately carries a SetEngineMode action must not be
-        // rebuilt (makeAssignmentActions would drop its other actions).
-        if (!isContextAssignmentRule(rule)) {
+        // Only pure context-assignment rules are flipped. Two ways a rule can
+        // fail that, and BOTH must be checked because the rebuild below
+        // replaces rule.actions wholesale: a window-property rule that
+        // legitimately carries a SetEngineMode action (isContextAssignmentRule),
+        // and a context-shaped rule that carries SetEngineMode ALONGSIDE other
+        // actions such as SetOpacity or LockContext (isPureAssignmentRule).
+        // Checking only the first destroyed the extra actions of the second.
+        if (!isContextAssignmentRule(rule) || !isPureAssignmentRule(rule)) {
             continue;
         }
         const AssignmentEntry entry = entryFromRuleMatchActions(rule);
@@ -369,15 +373,20 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     // applyBatchAssignments for the rationale).
     int seedPriority = nextAssignmentPriority(m_ruleStore->ruleSet().rules());
 
-    // Family drop, with the same two carve-outs applyBatchAssignments makes:
+    // Family drop, with the same three carve-outs applyBatchAssignments makes:
     // an index so a surviving layout-only snapshot rule is replaced in place
-    // rather than shadowed by a same-priority duplicate, and a record of the
-    // erased contexts so a drop without a rebuild still signals.
+    // rather than shadowed by a same-priority duplicate, a record of the
+    // erased contexts so a drop without a rebuild still signals, and the
+    // isPureAssignmentRule gate so a MIXED rule (context match + SetEngineMode
+    // + SetOpacity or LockContext) is left alone. Without that third gate the
+    // rebuild below emits only the three slot actions and the user's extra
+    // action is destroyed with no diagnostic.
     QList<PWR::Rule> kept;
     QHash<QUuid, int> keptIndexById;
     QSet<CombinedAssignmentKey> droppedKeys;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
-        if (hasEngineModeAction(rule) && PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)) {
+        if (hasEngineModeAction(rule) && PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)
+            && isPureAssignmentRule(rule)) {
             const ContextDims dims = decodeDims(rule.match);
             droppedKeys.insert(CombinedAssignmentKey{dims.screenId, dims.virtualDesktop, dims.activity});
             continue;

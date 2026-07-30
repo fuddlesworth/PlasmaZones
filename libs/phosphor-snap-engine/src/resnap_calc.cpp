@@ -165,10 +165,19 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
             if (zoneIds.isEmpty()) {
                 return;
             }
-            // Skip ALL floating windows. Floating state persists across mode
-            // toggles — if the user floated a window (in either mode), it stays
-            // floating and should not be resnapped to a zone.
-            if (m_windowTracker->isWindowFloating(windowId)) {
+            // Skip windows floating in SNAPPING mode, read from this engine's
+            // own store.
+            //
+            // NOT m_windowTracker->isWindowFloating: that is the mode-routed
+            // resolver, which dispatches on the window's screen's CURRENT mode
+            // and answers with the autotile or scroll engine's float bit for a
+            // screen still reported as tiling. This function IS the
+            // tiling-to-snapping toggle path, where that ordering is exactly
+            // what is in flux — so the routed read let a tiling-mode float
+            // verdict drop a window from the snap batch, leaving it unmanaged
+            // with no geometry applied. Float is per engine: a window floated
+            // in a tiling mode is not floating for snapping.
+            if (isFloating(windowId)) {
                 return;
             }
 
@@ -206,7 +215,9 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
     if (result.isEmpty() && totalAssignments > 0 && PhosphorSnapEngine::lcSnapEngine().isDebugEnabled()) {
         forEachSnapAssignment(
             [&](const QString& windowId, const QStringList& zoneIds, const QString& screen, int /*desktop*/) {
-                bool floating = m_windowTracker->isWindowFloating(windowId);
+                // Same engine-own read as the skip predicate above, so the
+                // diagnostic explains the decision that was actually taken.
+                bool floating = isFloating(windowId);
                 QRect geo = zoneIds.isEmpty() ? QRect() : m_windowTracker->resolveZoneGeometry(zoneIds, screen);
                 qCDebug(PhosphorSnapEngine::lcSnapEngine)
                     << "  skipped:" << windowId << "zones=" << zoneIds << "screen=" << screen << "floating=" << floating

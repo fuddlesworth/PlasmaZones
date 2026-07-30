@@ -250,8 +250,11 @@ void WindowTrackingService::onLayoutChanged()
 
         auto addToBuffer = [&](const QString& windowIdOrStableId, const QStringList& zoneIdList,
                                const QString& screenId, int vd) {
-            // Skip ALL floating windows. Floating persists across mode toggles —
-            // floating windows should stay at their current position, not be resnapped.
+            // Skip windows floating in their OWN mode. isWindowFloating here is
+            // the mode-routed resolver, which is the right call at this layer:
+            // phosphor-placement is engine-agnostic, so it asks whichever engine
+            // owns the window's screen. Float is per engine — a window floating
+            // in its own mode stays where it is rather than being resnapped.
             if (windowIdOrStableId.isEmpty() || isWindowFloating(windowIdOrStableId)) {
                 return;
             }

@@ -164,9 +164,11 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
         return SnapResult::noSnap();
     }
 
-    // Check if window was floating - floating windows should NOT be auto-snapped
-    // They should remain floating when reopened
-    if (m_windowTracker->isWindowFloating(windowId)) {
+    // A window floating in SNAPPING mode is not auto-snapped; it stays where
+    // it is. Read from this engine's own store, not the mode-routed resolver:
+    // snapadaptor calls this directly over D-Bus with no mode gate, so the
+    // routed read would let a tiling engine's float bit decide a snap.
+    if (isFloating(windowId)) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "snapToLastZone:" << windowId << "was floating, skipping";
         return SnapResult::noSnap();
     }
