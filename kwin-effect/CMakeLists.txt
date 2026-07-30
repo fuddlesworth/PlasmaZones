@@ -102,6 +102,7 @@ set(plasmazones_effect_SRCS
     transitions/desktoptransitionmanager.h
     tilinghandler/tilinghandler.cpp
     tilinghandler/tilinghandler.h
+    tilinghandler/minimizefloat.cpp
     tilinghandler/signals.cpp
     tilinghandler/state.cpp
     tilinghandler/tiling.cpp

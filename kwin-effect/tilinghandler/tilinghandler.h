@@ -279,9 +279,15 @@ public:
     /// engine-managed set the daemon publishes as managedScreens (which is
     /// the union of both tiling-family engines); tracked separately so
     /// window rule queries can stamp Mode "scrolling" instead of "tiling".
+    ///
+    /// Intersected with the union at READ time. The union and the
+    /// discriminator arrive as two independent signals with no ordering
+    /// guarantee, so between them m_scrollingScreens can transiently name a
+    /// screen the union has already dropped; answering true there stamped
+    /// Mode "scrolling" for an unmanaged screen and kept Meta+wheel consumed.
     bool isScrollingScreen(const QString& screenId) const
     {
-        return m_scrollingScreens.contains(screenId);
+        return m_scrollingScreens.contains(screenId) && m_managedScreens.contains(screenId);
     }
 
     /// Check if a window is tracked by the autotile handler (in m_notifiedWindows).
@@ -546,7 +552,14 @@ private:
     /// (see isScrollingScreen); all lifecycle gating keys on
     /// m_managedScreens, which carries the union.
     QSet<QString> m_scrollingScreens;
-    void setScrollingScreens(const QSet<QString>& newSet);
+    /// Authoritative write for the scrolling discriminator. A screen that
+    /// flips engine WITHIN the managed union transits no managedScreensChanged,
+    /// so this re-announces the flipped screens' windows to hand them to the
+    /// new engine. Pass @p announceFlipped false only for BRING-UP clears
+    /// (onDaemonReady), where the tracking maps are about to be reset and
+    /// loadSettings owns the re-announce — announcing there desyncs the
+    /// daemon's view from the effect's until that batch lands.
+    void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true);
     /// Meta+wheel axis shortcuts for column focus (niri's Mod+wheel).
     /// Registered while ANY screen runs the scrolling engine, unregistered
     /// (by destroying the QActions — KWin drops an axis shortcut with its
@@ -677,7 +690,7 @@ private:
     /// burst as its tile batch, and a blanket bump voided that batch after its
     /// first synchronous entry (screen sat half-tiled until a manual
     /// float/unfloat). Non-desktop invalidation is per-screen: removed screens
-    /// in slotScreensChanged, flipped screens in updateScrollingScreens.
+    /// in slotScreensChanged, flipped screens in setScrollingScreens.
     uint64_t m_tileStaggerGeneration = 0;
     /// Per-screen stagger generation. A retile bumps only its own screen(s), so a
     /// newer batch for the SAME screen supersedes an earlier one while a batch for

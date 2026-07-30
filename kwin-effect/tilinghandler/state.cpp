@@ -296,7 +296,7 @@ void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds)
     setScrollingScreens(QSet<QString>(screenIds.cbegin(), screenIds.cend()));
 }
 
-void TilingHandler::setScrollingScreens(const QSet<QString>& newSet)
+void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped)
 {
     // Any authoritative write voids in-flight property replies, identical
     // set or not — the writer is always newer than a reply dispatched
@@ -327,7 +327,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet)
     // slotScreensChanged only processes union membership changes).
     QSet<QString> flipped = (newSet - oldSet) + (oldSet - newSet);
     flipped &= m_managedScreens;
-    if (!flipped.isEmpty()) {
+    if (announceFlipped && !flipped.isEmpty()) {
         qCInfo(lcEffect) << "Scrolling flip within managed union — re-announcing windows on" << flipped;
         // A flipped screen's pending staggered applies were computed by the
         // OLD engine; void them per-screen before the re-announce drives the
@@ -338,7 +338,15 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet)
         for (const QString& screenId : std::as_const(flipped)) {
             ++m_tileStaggerGenByScreen[screenId];
         }
-        notifyWindowsAddedBatch(KWin::effects->stackingOrder(), flipped, /*resetNotified=*/true);
+        // enteringAutotile=true: the flag is a MODE-ENTRY discriminator, not an
+        // autotile-specific one. Left false, an already-minimized window on the
+        // flipped screen took claimAlreadyMinimizedAsFloated's early return and
+        // got neither the untiled-minimize marker nor the per-screen float
+        // re-assert, so on unminimize it sat at the PRIOR engine's rect for the
+        // animation grace and then visibly hopped into its new tile — the same
+        // class as the minimized-window-on-mode-swap regression.
+        notifyWindowsAddedBatch(KWin::effects->stackingOrder(), flipped, /*resetNotified=*/true,
+                                /*enteringAutotile=*/true);
     }
     updateScrollWheelShortcuts();
 }
@@ -352,8 +360,12 @@ void TilingHandler::updateScrollWheelShortcuts()
     if (!want) {
         // Destroying the QAction unregisters the axis shortcut (KWin's
         // shortcut manager tracks action lifetime), releasing Meta+wheel
-        // back to other consumers (e.g. the zoom effect).
-        qDeleteAll(m_scrollWheelActions);
+        // back to other consumers (e.g. the zoom effect). deleteLater rather
+        // than a manual delete: these are parented QObjects, and a delete
+        // here would run inside whatever emitted the mode change.
+        for (QAction* action : std::as_const(m_scrollWheelActions)) {
+            action->deleteLater();
+        }
         m_scrollWheelActions.clear();
         qCInfo(lcEffect) << "Scroll wheel shortcuts unregistered (no scrolling screens)";
         return;
@@ -367,9 +379,10 @@ void TilingHandler::updateScrollWheelShortcuts()
     // registration, so plain Meta+wheel only wins where zoom is disabled
     // or rebound — Meta+Alt+wheel matches the rest of the scrolling
     // shortcut family and is conflict-free.
-    const auto add = [this](Qt::KeyboardModifiers mods, KWin::PointerAxisDirection axis, int delta, const char* name) {
+    const auto add = [this](Qt::KeyboardModifiers mods, KWin::PointerAxisDirection axis, int delta,
+                            const QString& name) {
         auto* action = new QAction(this);
-        action->setObjectName(QLatin1String(name));
+        action->setObjectName(name);
         connect(action, &QAction::triggered, this, [this, delta]() {
             wheelFocusColumn(delta);
         });
@@ -379,10 +392,14 @@ void TilingHandler::updateScrollWheelShortcuts()
     for (const Qt::KeyboardModifiers mods :
          {Qt::KeyboardModifiers(Qt::MetaModifier), Qt::MetaModifier | Qt::AltModifier}) {
         const bool alt = mods.testFlag(Qt::AltModifier);
-        add(mods, KWin::PointerAxisDown, 1, alt ? "pz-scroll-column-right-alt" : "pz-scroll-column-right");
-        add(mods, KWin::PointerAxisUp, -1, alt ? "pz-scroll-column-left-alt" : "pz-scroll-column-left");
-        add(mods, KWin::PointerAxisRight, 1, alt ? "pz-scroll-column-right-h-alt" : "pz-scroll-column-right-h");
-        add(mods, KWin::PointerAxisLeft, -1, alt ? "pz-scroll-column-left-h-alt" : "pz-scroll-column-left-h");
+        add(mods, KWin::PointerAxisDown, 1,
+            alt ? QStringLiteral("pz-scroll-column-right-alt") : QStringLiteral("pz-scroll-column-right"));
+        add(mods, KWin::PointerAxisUp, -1,
+            alt ? QStringLiteral("pz-scroll-column-left-alt") : QStringLiteral("pz-scroll-column-left"));
+        add(mods, KWin::PointerAxisRight, 1,
+            alt ? QStringLiteral("pz-scroll-column-right-h-alt") : QStringLiteral("pz-scroll-column-right-h"));
+        add(mods, KWin::PointerAxisLeft, -1,
+            alt ? QStringLiteral("pz-scroll-column-left-h-alt") : QStringLiteral("pz-scroll-column-left-h"));
     }
     qCInfo(lcEffect) << "Scroll wheel shortcuts registered (Meta+wheel and Meta+Alt+wheel focus columns)";
 }
@@ -404,12 +421,16 @@ void TilingHandler::wheelFocusColumn(int delta)
         return;
     }
     const QString screenId = m_effect->resolveEffectiveScreenId(rounded, output);
-    if (!m_scrollingScreens.contains(screenId)) {
+    // isScrollingScreen, not the raw set: it intersects with the managed union,
+    // so a screen the union already dropped cannot still swallow the chord and
+    // forward a focusColumn the engine no longer owns.
+    if (!isScrollingScreen(screenId)) {
         return;
     }
     qCDebug(lcEffect) << "Wheel focus column: delta" << delta << "on" << screenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
-                                                   QStringLiteral("focusColumn"), {screenId, delta});
+                                                   QStringLiteral("focusColumn"), {screenId, delta},
+                                                   QStringLiteral("focusColumn"));
 }
 
 void TilingHandler::savePreTileForDesktopMove(const QString& windowId)

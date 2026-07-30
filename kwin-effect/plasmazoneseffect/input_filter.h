@@ -40,6 +40,15 @@ class PlasmaZonesEffect;
  * Uses KWin private API (input.h) — the same version-locked ABI contract the
  * effect already accepts for Window / Workspace / scene items. Deleting the
  * filter uninstalls it (InputEventFilter dtor contract).
+ *
+ * DOCUMENTED GAPS. Two input classes still reach the invisible surface:
+ *  - Pointer HOVER (enter/leave, focus-follows-mouse). KWin recomputes pointer
+ *    focus inside the device handler before filters run, so no filter can
+ *    intercept it. Cosmetic: no button, wheel or touch lands there.
+ *  - TABLET tool tip/axis events. The tablet hooks are deliberately not
+ *    overridden; a stylus is a pointing device the strip has no story for yet,
+ *    and guessing one here would be worse than the honest gap. Named so the
+ *    omission reads as a decision rather than an oversight.
  */
 class ScrollOverhangInputFilter : public KWin::InputEventFilter
 {
@@ -51,6 +60,7 @@ public:
     bool pointerAxis(KWin::PointerAxisEvent* event) override;
     bool touchDown(KWin::TouchDownEvent* event) override;
     bool touchUp(KWin::TouchUpEvent* event) override;
+    bool touchCancel() override;
 
 private:
     /// The straddler whose clipped-away overhang covers @p pos, or null when

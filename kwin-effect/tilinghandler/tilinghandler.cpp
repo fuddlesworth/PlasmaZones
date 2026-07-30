@@ -986,7 +986,16 @@ void TilingHandler::onDaemonReady()
     // m_managedScreens is deliberately NOT cleared here — it carries real
     // per-screen lifecycle state whose removal transitions run through
     // slotScreensChanged / the serviceUnregistered teardown.
-    setScrollingScreens({});
+    //
+    // announceFlipped=false: this is BRING-UP, not a live engine flip. With the
+    // dead session's set still in m_scrollingScreens and m_managedScreens not
+    // yet cleared, the flip path would fire a windowsOpenedBatch whose
+    // m_notifiedWindows inserts are wiped by the clears a few lines below —
+    // leaving the daemon tracking windows the effect considers untracked until
+    // loadSettings' own batch lands — and bump per-screen stagger generations
+    // that m_tileStaggerGenByScreen.clear() then discards. loadSettings owns
+    // the bring-up re-announce.
+    setScrollingScreens({}, /*announceFlipped=*/false);
     // Void the DEAD session's in-flight managedScreens property reply too:
     // loadSettings below re-queries, and a stale reply from the previous
     // daemon would otherwise pass its generation gate and reinstate a
