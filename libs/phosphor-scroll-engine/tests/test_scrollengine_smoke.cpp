@@ -6,6 +6,7 @@
 // tolerates a missing screen manager / tracking service; geometry emission
 // is covered by the strip-model tests, not here).
 
+#include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 
@@ -36,6 +37,7 @@ private Q_SLOTS:
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
     void seedAdoptionClampsViewToStripEnd();
+    void parkingAvoidsAdjacentOutputs();
     void operationScreenFallbackIsDeterministic();
     void minSizeSeedsAndCarries();
     void minSizeSurvivesFloatRoundTrip();
@@ -583,6 +585,39 @@ void TestScrollEngineSmoke::seedAdoptionClampsViewToStripEnd()
              QStringList({QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
     QCOMPARE(engine->lastManagedRect(QStringLiteral("app|c")).x(), 600);
     QCOMPARE(engine->lastManagedRect(QStringLiteral("app|b")).x(), 0);
+}
+
+void TestScrollEngineSmoke::parkingAvoidsAdjacentOutputs()
+{
+    // "Just outside the right edge" is only off-screen when nothing sits
+    // there: with a monitor to the right, a right-parked column lands
+    // visibly ON that monitor and KWin reassigns the window's output (the
+    // dolphin-on-the-second-monitor bug). With a right neighbour, the park
+    // must fall to the free LEFT side instead.
+    struct RightNeighbourResolver : PhosphorEngine::ICrossSurfaceResolver
+    {
+        QString neighborOutputInDirection(const QString&, const QString& direction) const override
+        {
+            return direction == QLatin1String("right") ? QStringLiteral("S2") : QString();
+        }
+        int neighborDesktopInDirection(int, const QString&) const override
+        {
+            return 0;
+        }
+    } resolver;
+
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCrossSurfaceResolver(&resolver);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    // View shows [b, c]; focusing the first column scrolls to [a, b] and c
+    // would naturally park off the RIGHT edge — occupied, so it parks left.
+    engine->focusColumnFirst(QStringLiteral("S1"));
+    const QRect parked = engine->lastManagedRect(QStringLiteral("app|c"));
+    QVERIFY2(parked.right() < 0, qPrintable(QStringLiteral("expected left park, got x=%1").arg(parked.x())));
+    engine->setCrossSurfaceResolver(nullptr);
 }
 
 void TestScrollEngineSmoke::operationScreenFallbackIsDeterministic()

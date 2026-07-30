@@ -142,9 +142,16 @@ public:
     /// the mode is selected but nothing is assigned, instead of silently showing
     /// no OSD.
     void showNotAssignedOsd(const QString& screenId);
-    /// Mode-switch OSD for a screen entering Scrolling (no layout entity to
-    /// preview; both styles show a text card).
+    /// Mode-switch OSD for a screen entering Scrolling. Preview style shows
+    /// the live strip (deferred one beat when the toggle races the strip
+    /// adoption); Text style shows a text card.
     void showScrollingModeOsd(const QString& screenId);
+    /// The preview card itself: live visible-tile rects, or the
+    /// representative endless-strip sketch when the strip is empty.
+    void showScrollingStripPreviewOsd(const QString& screenId);
+    /// How long a mode toggle's OSD waits for the effect's re-announce
+    /// batch to land in the scroll engine before rendering the card.
+    static constexpr int kScrollingOsdAdoptSettleMs = 300;
 
     // Shortcut cheatsheet overlay (impls in daemon/osd.cpp).
     /// Toggle the cheatsheet on the cursor's screen. Show path resolves the

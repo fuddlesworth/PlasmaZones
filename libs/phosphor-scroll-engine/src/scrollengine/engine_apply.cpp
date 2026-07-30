@@ -3,6 +3,7 @@
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
+#include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
@@ -174,6 +175,49 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         screenRect = params.workArea;
     }
 
+    // Park-side topology: "just outside the screen edge" is only off-screen
+    // when no OTHER output sits there — with a monitor to the right, a
+    // right-parked column lands visibly ON that monitor, KWin reassigns the
+    // window's output, and a later mode change keeps it stranded on the
+    // neighbour (the dolphin-on-DP-3 bug). Prefer the natural side (it is
+    // the believable enter/leave animation origin); when an output occupies
+    // it, fall to the opposite side, then below/above the screen. A screen
+    // boxed in on all four sides keeps the natural side — no off-screen
+    // spot exists, and the effect's tracked-screen override still routes
+    // the window correctly. No resolver (headless/tests) counts as free.
+    const auto sideFree = [this, &screenId](const char* direction) {
+        return !m_crossSurfaceResolver
+            || m_crossSurfaceResolver->neighborOutputInDirection(screenId, QLatin1String(direction)).isEmpty();
+    };
+    const bool leftFree = sideFree("left");
+    const bool rightFree = sideFree("right");
+    const bool downFree = sideFree("down");
+    const bool upFree = sideFree("up");
+    const auto parkLeft = [&](QRect& rect) {
+        rect.moveLeft(screenRect.left() - rect.width() - kParkMargin);
+    };
+    const auto parkRight = [&](QRect& rect) {
+        rect.moveLeft(screenRect.right() + 1 + kParkMargin);
+    };
+    const auto parkHorizontal = [&](QRect& rect, bool naturalLeft) {
+        // Natural side first, opposite side second, vertical third; a fully
+        // boxed-in screen keeps the natural side (least-bad; the effect's
+        // tracked-screen override still routes the window correctly).
+        if (naturalLeft ? leftFree : rightFree) {
+            naturalLeft ? parkLeft(rect) : parkRight(rect);
+        } else if (naturalLeft ? rightFree : leftFree) {
+            naturalLeft ? parkRight(rect) : parkLeft(rect);
+        } else if (downFree) {
+            // x stays strip-derived, so the horizontal origin of a later
+            // enter animation is still believable.
+            rect.moveTop(screenRect.bottom() + 1 + kParkMargin);
+        } else if (upFree) {
+            rect.moveTop(screenRect.top() - rect.height() - kParkMargin);
+        } else {
+            naturalLeft ? parkLeft(rect) : parkRight(rect);
+        }
+    };
+
     QJsonArray arr;
     bool anyRectMoved = false;
     for (const ResolvedColumn& column : resolved.columns) {
@@ -186,15 +230,11 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 // position, not a fixed right: a column parked off the left
                 // edge must keep its hidden tiles on the left or their
                 // enter/leave origin comes from the wrong side of the screen.
-                if (column.rect.right() < params.workArea.left()) {
-                    rect.moveLeft(screenRect.left() - rect.width() - kParkMargin);
-                } else {
-                    rect.moveLeft(screenRect.right() + 1 + kParkMargin);
-                }
+                parkHorizontal(rect, column.rect.right() < params.workArea.left());
             } else if (rect.right() < params.workArea.left()) {
-                rect.moveLeft(screenRect.left() - rect.width() - kParkMargin);
+                parkHorizontal(rect, true);
             } else if (rect.left() > params.workArea.right()) {
-                rect.moveLeft(screenRect.right() + 1 + kParkMargin);
+                parkHorizontal(rect, false);
             }
 
             QJsonObject obj;
