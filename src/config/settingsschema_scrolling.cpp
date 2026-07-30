@@ -28,10 +28,12 @@ using SchemaValidators::validIntOr;
 // enumerators are two spellings of one wire value. The schema below declares
 // the engine spelling; the D-Bus registry guards and the settings-layer
 // branches read the ConfigDefaults spelling. These asserts are what keeps the
-// pair from drifting — without them the coupling is convention only. (The
-// width KIND is deliberately absent: its config space {proportion, fixed,
-// clientDecides} does NOT map onto ColumnWidth::Kind, whose 2 is Preset, and
-// the engine translates it with explicit ifs.)
+// pair from drifting — without them the coupling is convention only.
+//
+// NOTE on the width KIND: it must never be cast to ColumnWidth::Kind, whose 2
+// is Preset. The enum the engine actually static_casts the config value into
+// is DefaultWidthKind, which IS an exact 1:1 match, so it gets the same
+// lockstep asserts as its siblings below.
 static_assert(ConfigDefaults::scrollingCenterFocusedColumnNever()
                   == static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never),
               "CenterFocusedColumn::Never wire value drifted from ConfigDefaults");
@@ -47,6 +49,15 @@ static_assert(ConfigDefaults::scrollingColumnDisplayNormal()
 static_assert(ConfigDefaults::scrollingColumnDisplayTabbed()
                   == static_cast<int>(PhosphorScrollEngine::ColumnDisplay::Tabbed),
               "ColumnDisplay::Tabbed wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingWidthKindProportion()
+                  == static_cast<int>(PhosphorScrollEngine::DefaultWidthKind::Proportion),
+              "DefaultWidthKind::Proportion wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingWidthKindFixed()
+                  == static_cast<int>(PhosphorScrollEngine::DefaultWidthKind::Fixed),
+              "DefaultWidthKind::Fixed wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingWidthKindClientDecides()
+                  == static_cast<int>(PhosphorScrollEngine::DefaultWidthKind::ClientDecides),
+              "DefaultWidthKind::ClientDecides wire value drifted from ConfigDefaults");
 
 // ─── Scrolling (Scrolling) ───────────────────────────────────────────
 // The niri-style scrolling engine's knobs. The strip reuses the shared Gaps

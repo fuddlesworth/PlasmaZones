@@ -49,6 +49,12 @@ class PlasmaZonesEffect;
  *    overridden; a stylus is a pointing device the strip has no story for yet,
  *    and guessing one here would be worse than the honest gap. Named so the
  *    omission reads as a decision rather than an oversight.
+ *
+ * The press that retargets focus is CONSUMED, not replayed, so activating a
+ * control on the newly-focused window costs a second click. Replaying it would
+ * mean synthesising an event against a window whose surface never saw the
+ * press; the one-click cost is the deliberate trade. Named here for the same
+ * reason as the gaps above.
  */
 class ScrollOverhangInputFilter : public KWin::InputEventFilter
 {

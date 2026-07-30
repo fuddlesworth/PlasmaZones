@@ -700,6 +700,12 @@ private:
      *
      * Answers an invalid rect immediately when no screen is scrolling, so the
      * common case costs one bool on the per-window-per-output-per-frame path.
+     *
+     * SCOPE: the confinement is the PHYSICAL output's geometry, so a strip on a
+     * virtual sub-screen is not clipped at the sub-screen boundary. That is
+     * intended — the point is to keep a column off a NEIGHBOURING MONITOR, and
+     * both sub-screens render in the same output pass, so a same-monitor
+     * overhang is drawn and remains interactive either way.
      */
     QRect scrollClipGeometryFor(KWin::EffectWindow* w) const;
     TilingHandler* tilingHandler() const

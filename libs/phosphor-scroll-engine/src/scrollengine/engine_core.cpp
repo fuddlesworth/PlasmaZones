@@ -195,7 +195,21 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // no relayout will ever run for a departed screen to do it.
     m_pendingInitialOrder.remove(screenId);
     m_consumedInitialOrder.remove(screenId);
-    clearTabStripsForScreen(screenId);
+    // Latch and payload cleared inline (plain containers, safe), but the
+    // broadcast is DEFERRED: this function runs from inside
+    // PerScreenStates::removeStatesIf's iteration over m_states, and a
+    // consumer slot that touched the engine's state map synchronously would
+    // invalidate the live iterator. The other seven clearTabStripsForScreen
+    // call sites are outside any iteration and emit directly.
+    m_lastTabStripPayload.remove(screenId);
+    if (m_screensWithTabStrips.remove(screenId)) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, screenId]() {
+                Q_EMIT tabStripsChanged(screenId, QStringLiteral("[]"));
+            },
+            Qt::QueuedConnection);
+    }
     state->deleteLater();
 }
 
@@ -862,15 +876,12 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     };
     QStringList releasedWindows;
     QSet<QString> releasedScreens;
-    QStringList prunedWindows;
     m_states.removeStatesIf(
         [&matches](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return matches(key.screenId);
         },
-        [this, &releasedWindows, &releasedScreens, &prunedWindows](const PhosphorEngine::PlacementStateKey&,
-                                                                   ScrollState* state) {
+        [this, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
             releasedScreens.insert(state->screenId());
-            prunedWindows.append(state->managedWindows());
             // Removed screen: the per-screen rule overrides go with the state
             // too — this prune is their documented purger, and releaseScreenState
             // does not touch them because a mode exit must keep them.
@@ -924,8 +935,10 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     }
     // Only NOW may the per-window side maps go: the handler above has consumed
     // the float markers and the last-applied rects, and nothing else answers
-    // for a departed screen's windows.
-    for (const QString& windowId : std::as_const(prunedWindows)) {
+    // for a departed screen's windows. releasedWindows is the same list
+    // releaseScreenState built from each state's managedWindows, so there is
+    // no second collection to keep in step with it.
+    for (const QString& windowId : std::as_const(releasedWindows)) {
         m_lastAppliedRect.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
