@@ -439,6 +439,15 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                     }
                     return params;
                 });
+        } else if (scrollEngine) {
+            // A non-ScrollEngine in the scroll slot leaves m_cachedScrollEngine
+            // null, so the float predicate and the open-params resolver are
+            // silently skipped while all six generic signals stay wired —
+            // every scrolling Float rule and every open-behaviour rule becomes
+            // inert with nothing in the log to say why. The snap slot qFatals
+            // on the same mistake; this is at least loud.
+            qCWarning(lcDbusWindow) << "setEngines: the scroll slot holds a non-ScrollEngine — scrolling Float and "
+                                       "open-behaviour rules will not be applied";
         }
     }
 }

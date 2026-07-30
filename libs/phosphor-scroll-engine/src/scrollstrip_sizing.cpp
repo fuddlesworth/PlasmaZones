@@ -147,7 +147,11 @@ bool ScrollStrip::toggleMaximizeActiveColumn(const ScrollLayoutParams& params)
         // an earlier session, or another column's maximize discarded the
         // single stored slot): fall back to the default width so the toggle
         // can always un-maximize instead of dead-ending.
-        col->width = params.defaultColumnWidth;
+        //
+        // A user whose DEFAULT is itself full width would dead-end on that
+        // fallback, so take half the work area in that case. The point of the
+        // branch is that the toggle always does something.
+        col->width = (params.defaultColumnWidth == full) ? ColumnWidth::makeProportion(0.5) : params.defaultColumnWidth;
         return !(col->width == full);
     }
     m_preMaximizeWidth = col->width;

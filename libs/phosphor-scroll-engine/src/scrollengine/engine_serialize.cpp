@@ -273,6 +273,31 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
         if (stash.isEmpty()) {
             continue;
         }
+        // The focus is read from JSON before the tiles are filtered, and the
+        // cross-key duplicate claim above can drop the very tile it names. A
+        // stash whose focus belongs to no surviving tile never hands the focus
+        // over on restore, so the round trip silently re-anchors on whichever
+        // window arrives first — the regression the focus carry exists to fix.
+        // Fall back to the first surviving tile rather than leaving it dangling.
+        if (!stash.focusedWindowId.isEmpty()) {
+            bool focusSurvives = false;
+            for (const StashedColumn& col : std::as_const(stash.columns)) {
+                for (const StashedTile& tile : col.tiles) {
+                    if (tile.windowId == stash.focusedWindowId) {
+                        focusSurvives = true;
+                        break;
+                    }
+                }
+                if (focusSurvives) {
+                    break;
+                }
+            }
+            if (!focusSurvives) {
+                // Every surviving column has at least one tile (empty ones are
+                // dropped above), and stash.isEmpty() was just checked.
+                stash.focusedWindowId = stash.columns.first().tiles.first().windowId;
+            }
+        }
         m_stripStash.insert(key, stash);
         m_stripStashConsumed.remove(key);
         ++restored;

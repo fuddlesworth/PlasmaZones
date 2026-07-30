@@ -489,7 +489,10 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         }
         return false;
     }
-    if (inserted) {
+    {
+        // `inserted` is necessarily true here — the !inserted arm above
+        // returns — so no second guard.
+        //
         // Re-apply the min size the floated tile carried (the fresh-column
         // branches insert without it).
         if (restore.minWidth > 0 || restore.minHeight > 0) {

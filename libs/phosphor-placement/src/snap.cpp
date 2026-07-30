@@ -216,7 +216,12 @@ QList<PhosphorSnapEngine::SnapState*> WindowTrackingService::snapAllStates() con
 
 bool WindowTrackingService::hasSnapState() const
 {
-    return static_cast<bool>(m_snapResolver.globals);
+    // Resolve, don't just check the arm is installed. The globals lambda
+    // captures a QPointer, so it self-nulls when the engine dies while the
+    // arm stays callable — and every Q_ASSERT(hasSnapState()) then passed in
+    // debug while the paired release path took its null branch. The assert
+    // now asserts what the code below it actually needs.
+    return m_snapResolver.globals && m_snapResolver.globals() != nullptr;
 }
 
 } // namespace PhosphorPlacement

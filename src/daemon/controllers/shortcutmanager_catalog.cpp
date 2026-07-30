@@ -250,7 +250,17 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // nothing to explain why.
     const auto lastKeyOf = [](const QString& sequence) {
         const int split = sequence.lastIndexOf(QLatin1Char('+'));
-        return split < 0 ? sequence : sequence.mid(split + 1);
+        if (split < 0) {
+            return sequence;
+        }
+        // A sequence ENDING in '+' binds the plus key itself ("Meta+Alt++").
+        // Taking everything after the last '+' would yield an empty token,
+        // and the merged chip would then render as "Meta+Alt++ / " with the
+        // second key silently missing — a chip that lies about the binding.
+        if (split == sequence.size() - 1) {
+            return QStringLiteral("+");
+        }
+        return sequence.mid(split + 1);
     };
     // Both members' key tokens joined for the merged chip. The digit family
     // reads as a range and the directional one as a class name; a bare
