@@ -561,11 +561,14 @@ bool ScrollStrip::consumeWindowIntoColumn(const ScrollLayoutParams& params)
     // The neighbour is not fully minimized (guarded above), but its ACTIVE
     // tile still can be — taking that one would pull an invisible window into
     // this column and make it the active tile. Walk to the nearest visible
-    // tile instead; consumeOrExpel applies the same rule to its own moved tile.
+    // tile instead. Ties break DOWNWARD, matching setWindowMinimized's
+    // documented policy: the two are the same "nearest visible tile" question
+    // and must not answer it differently. (consumeOrExpel does NOT walk at
+    // all in this situation — it refuses outright.)
     if (source.tiles.at(takeIdx).minimized) {
         int visible = -1;
         for (int off = 1; off < source.tiles.size() && visible < 0; ++off) {
-            for (const int cand : {takeIdx - off, takeIdx + off}) {
+            for (const int cand : {takeIdx + off, takeIdx - off}) {
                 if (cand >= 0 && cand < source.tiles.size() && !source.tiles.at(cand).minimized) {
                     visible = cand;
                     break;

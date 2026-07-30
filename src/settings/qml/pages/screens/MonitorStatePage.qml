@@ -388,11 +388,24 @@ SettingsFlickable {
             function refreshScrollingStrip(allowRetry) {
                 if (!screenState)
                     return;
+                // The read is a BLOCKING D-Bus round trip, so it must not run
+                // for a page the user cannot see. The host keeps visited pages
+                // alive and merely hides them, and screenState changes on every
+                // hotplug / desktop / activity event, so without this a stack
+                // of cached Monitors pages would each block the GUI thread on
+                // events that change nothing they are showing. The thumbnail's
+                // onVisibleChanged and the live timer's running transition both
+                // re-read when the page comes back.
+                if (!stateView.visible)
+                    return;
                 scrollingStripZones = settingsController.getScrollingStripPreview(screenState.screenId || "");
-                // Skip the settle beat while the live poll below is running:
-                // it re-reads on its own, so the extra one-shot would just
-                // double the call rate for as long as the strip stays empty.
-                if (allowRetry !== false && scrollingStripZones.length === 0 && (screenState.mode || 0) === 2 && !stripLiveRefresh.running)
+                // The settle beat covers the case where the mode just flipped
+                // and the re-announce batch briefly reports an empty strip: a
+                // 400ms one-shot beats waiting out the 2s live beat. It cannot
+                // compound — the handler passes allowRetry=false, so a retry
+                // never arms another retry, and restart() on a one-shot Timer
+                // replaces any pending fire rather than stacking one.
+                if (allowRetry !== false && scrollingStripZones.length === 0 && (screenState.mode || 0) === 2)
                     stripSettleRetry.restart();
             }
 
@@ -413,7 +426,11 @@ SettingsFlickable {
                 id: stripLiveRefresh
                 interval: 2000
                 repeat: true
-                running: stateView.visible && stateView.screenState !== null && (stateView.screenState.mode || 0) === 2
+                // Gated on isScrolling, not just the daemon's mode: with the
+                // daemon scrolling and Snapping staged locally the preview
+                // thumbnail is hidden, and polling for something nobody is
+                // looking at is the one thing a blocking call must not do.
+                running: stateView.visible && stateView.isScrolling && stateView.screenState !== null && (stateView.screenState.mode || 0) === 2
                 onTriggered: stateView.refreshScrollingStrip()
             }
 

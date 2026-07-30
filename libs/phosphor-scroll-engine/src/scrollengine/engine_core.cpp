@@ -206,7 +206,19 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
         QMetaObject::invokeMethod(
             this,
             [this, screenId]() {
-                Q_EMIT tabStripsChanged(screenId, QStringLiteral("[]"));
+                // Re-checked at DELIVERY time. If the screen re-acquired a
+                // strip between the inline latch clear and this callback (it
+                // left scrolling and came back in the same daemon pass, then
+                // any synchronous applyLayout ran ahead of the event queue),
+                // applyLayout has already re-emitted the live payload and
+                // re-set the latch. Firing the stale "[]" last would then be
+                // final: m_lastTabStripPayload still holds the live payload,
+                // so applyLayout's emit-on-change gate suppresses every
+                // re-emit and the tab-strip indicator stays missing until the
+                // payload genuinely changes.
+                if (!m_screensWithTabStrips.contains(screenId)) {
+                    Q_EMIT tabStripsChanged(screenId, QStringLiteral("[]"));
+                }
             },
             Qt::QueuedConnection);
     }

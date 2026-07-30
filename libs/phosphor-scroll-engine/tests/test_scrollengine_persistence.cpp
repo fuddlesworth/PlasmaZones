@@ -9,6 +9,7 @@
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QtTest>
 
@@ -22,6 +23,7 @@ private Q_SLOTS:
     void modeRoundTripRestoresFocusAndAnchor();
     void serializedStripRestoreSurvivesIdDrift();
     void pruneSweepsStashedTilesForClosedWindows();
+    void pruneSpareStashStagedFromPersistence();
 
 private:
     /// Smoke-suite twin: geometry providers wired so the apply path
@@ -161,6 +163,68 @@ void TestScrollEnginePersistence::pruneSweepsStashedTilesForClosedWindows()
     QVERIFY(engine->isWindowTracked(QStringLiteral("app|a")));
     QVERIFY(engine->isWindowTracked(QStringLiteral("app|c")));
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|b")));
+}
+
+void TestScrollEnginePersistence::pruneSpareStashStagedFromPersistence()
+{
+    // The aliveness sweep above and the cross-session restore pull in exactly
+    // opposite directions, and the daemon runs them back to back at every
+    // login: init stages the persisted blob into the stash, then the effect's
+    // bringup fires pruneStaleWindows with the live window set.
+    //
+    // NO staged id can be in that set. The whole premise of the appId claim is
+    // that the instance half of a window id is regenerated each launch, which
+    // is why the restore matches on the app prefix. So a sweep that reads
+    // "absent from the alive set" as "closed" erases the entire snapshot on
+    // the first prune, and the tabbed columns, widths, focus and view anchor
+    // are gone. Only pruneSweepsStashedTilesForClosedWindows exercised the
+    // sweep, and it uses in-session ids, so it cannot see this at all.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("app|u2"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("other|u3"), QStringLiteral("S1"), 0, 0);
+    engine1->windowFocused(QStringLiteral("app|u1"), QStringLiteral("S1"));
+    engine1->consumeWindowIntoColumn(QStringLiteral("S1"));
+    engine1->toggleColumnTabbed(QStringLiteral("S1"));
+    const QJsonObject blob = engine1->serializeStripState();
+    QVERIFY(!blob.isEmpty());
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+
+    // The login-order prune, with THIS session's ids. None of them matches a
+    // staged tile, which is the normal and expected case.
+    engine2->pruneStaleWindows({QStringLiteral("app|n1"), QStringLiteral("app|n2"), QStringLiteral("other|n3")});
+
+    engine2->windowOpened(QStringLiteral("app|n1"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("app|n2"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("other|n3"), QStringLiteral("S1"), 0, 0);
+
+    auto* state = static_cast<ScrollState*>(engine2->stateForScreen(QStringLiteral("S1")));
+    QVERIFY(state);
+    QVERIFY2(state->strip().columns().size() == 2,
+             "the persisted structure must survive the bringup prune, not collapse to one column per window");
+    QVERIFY2(state->strip().columns().at(0).display == ColumnDisplay::Tabbed,
+             "the stashed tabbed column must still rebuild after the prune");
+    QCOMPARE(state->strip().columns().at(0).tiles.size(), 2);
+    QCOMPARE(engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("other|n3")), 1);
+
+    // The exemption is not permanent: once a tile has been claimed the entry
+    // is anchored in this session's id space, so a later prune sweeps it
+    // normally. Without the flag clear, a stash tile for a window that closes
+    // mid-session would become immortal again.
+    ScrollEngine* engine3 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine3->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine3->restoreStripState(blob);
+    engine3->windowOpened(QStringLiteral("app|m1"), QStringLiteral("S1"), 0, 0);
+    engine3->setActiveScreens({});
+    engine3->pruneStaleWindows({QStringLiteral("app|m1")});
+    const QByteArray swept = QJsonDocument(engine3->serializeStripState()).toJson();
+    QVERIFY2(!swept.contains("other|u3"),
+             "after a claim the entry is in this session's id space and the sweep must apply again");
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePersistence)

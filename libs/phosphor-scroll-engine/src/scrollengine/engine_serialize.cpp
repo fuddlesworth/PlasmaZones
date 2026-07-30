@@ -190,15 +190,39 @@ QJsonObject ScrollEngine::serializeStripState() const
         obj.insert(kViewAnchor(), stash.viewAnchor);
         return obj;
     };
-    // Stash entries first (mode-round-trip structure not yet re-adopted),
-    // live strips second so a live strip wins its key — it is strictly
-    // newer than any stash the same context might still hold.
-    for (auto it = m_stripStash.cbegin(); it != m_stripStash.cend(); ++it) {
-        if (!it.value().isEmpty()) {
-            out.insert(keyToString(it.key()), stashToJson(it.value()));
+    // Every window id that is LIVE on some strip right now. Writing the stash
+    // first and the live strips second makes a live strip win its own KEY, but
+    // a window that migrated screen or desktop after a mode exit is duplicated
+    // across two DIFFERENT keys, which is not a collision and so is not
+    // resolved by write order at all. restoreStripState's cross-key dedup then
+    // keeps whichever key it meets first — alphabetical by "screen|desktop|
+    // activity", not newest — so a stale stash tile could displace the
+    // authoritative live one and restore the window to its old screen's slot.
+    // Dropping the stale copy at WRITE time removes the ambiguity entirely.
+    const auto& states = m_states.states();
+    QSet<QString> liveWindowIds;
+    for (auto it = states.cbegin(); it != states.cend(); ++it) {
+        const StashedStrip live = buildStashFromState(it.value());
+        for (const StashedColumn& col : live.columns) {
+            for (const StashedTile& tile : col.tiles) {
+                liveWindowIds.insert(tile.windowId);
+            }
         }
     }
-    const auto& states = m_states.states();
+    // Stash entries first (mode-round-trip structure not yet re-adopted),
+    // live strips second so a live strip also wins its own key.
+    for (auto it = m_stripStash.cbegin(); it != m_stripStash.cend(); ++it) {
+        StashedStrip pruned = it.value();
+        for (auto colIt = pruned.columns.begin(); colIt != pruned.columns.end();) {
+            colIt->tiles.removeIf([&liveWindowIds](const StashedTile& tile) {
+                return liveWindowIds.contains(tile.windowId);
+            });
+            colIt = colIt->tiles.isEmpty() ? pruned.columns.erase(colIt) : std::next(colIt);
+        }
+        if (!pruned.isEmpty()) {
+            out.insert(keyToString(it.key()), stashToJson(pruned));
+        }
+    }
     for (auto it = states.cbegin(); it != states.cend(); ++it) {
         const StashedStrip live = buildStashFromState(it.value());
         if (!live.isEmpty()) {

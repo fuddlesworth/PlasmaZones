@@ -151,8 +151,19 @@ bool ScrollStrip::toggleMaximizeActiveColumn(const ScrollLayoutParams& params)
         // A user whose DEFAULT is itself full width would dead-end on that
         // fallback, so take half the work area in that case. The point of the
         // branch is that the toggle always does something.
-        col->width = (params.defaultColumnWidth == full) ? ColumnWidth::makeProportion(0.5) : params.defaultColumnWidth;
-        return !(col->width == full);
+        //
+        // Compared in RESOLVED PIXELS, not on the intent value. ColumnWidth's
+        // operator== compares kind first, so a default spelled Fixed(<work
+        // area width>) is not == Proportion(1.0) even though it renders
+        // identically: the old value compare took the "not full" arm, left
+        // the column visually unchanged, and then reported TRUE — a false
+        // success OSD on the exact dead-end this branch exists to remove.
+        const bool defaultIsFullWidth =
+            resolveColumnWidthPx(params.defaultColumnWidth, params) >= params.workArea.width();
+        col->width = defaultIsFullWidth ? ColumnWidth::makeProportion(0.5) : params.defaultColumnWidth;
+        // Unconditionally true: both arms leave the column narrower than the
+        // full width it had on entry, so the toggle always did something.
+        return true;
     }
     m_preMaximizeWidth = col->width;
     m_preMaximizeColumnIdx = m_activeColumnIdx;
