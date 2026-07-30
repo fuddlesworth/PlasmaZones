@@ -10,9 +10,11 @@
 #include "config/settings.h"
 #include "core/platform/logging.h"
 #include "core/types/constants.h"
+#include "core/resolve/screenmoderouter.h"
 #include "daemon/controllers/shortcutmanager.h"
 #include "daemon/controllers/unifiedlayoutcontroller.h"
 #include "daemon/overlayservice.h"
+#include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorContext/ContextResolver.h>
@@ -412,6 +414,29 @@ void Daemon::initializeAutotile()
                     // autotile→scrolling arm above does (the strip/stack owns
                     // placement, and the snap state stays in the unified record).
                     if (toSnapping) {
+                        // Buffer-based resnap into the restored snapping layout,
+                        // scoped to the toggled screen and current desktop. This
+                        // used to happen only as a side effect of the rulesChanged
+                        // reconcile re-entering the KCM apply path mid-toggle;
+                        // with that reconcile deferred and self-write-suppressed,
+                        // this branch must drive its own resnap or the released
+                        // strip windows keep their scroll geometry. Mirrors
+                        // resnapIfManualMode (navigation.cpp) including the
+                        // engine-managed exclude union and the OSD suppress arm.
+                        if (m_windowTrackingAdaptor && m_snapAdaptor) {
+                            QSet<QString> engineManagedScreens;
+                            if (m_screenModeRouter && m_screenManager) {
+                                const auto parts =
+                                    m_screenModeRouter->partitionByMode(m_screenManager->effectiveScreenIds());
+                                engineManagedScreens = QSet<QString>(parts.autotile.begin(), parts.autotile.end());
+                                engineManagedScreens.unite(
+                                    QSet<QString>(parts.scrolling.begin(), parts.scrolling.end()));
+                            }
+                            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(
+                                engineManagedScreens, {screenId}, currentDesktop());
+                            armResnapOsdSuppression(1);
+                            m_snapAdaptor->resnapToNewLayout();
+                        }
                         emitPendingSnapFloatRestoresForResnapBuffer();
                     } else {
                         m_pendingSnapFloatRestores.clear();
