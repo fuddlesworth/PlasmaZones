@@ -107,6 +107,49 @@ bool isPureAssignmentRule(const PWR::Rule& rule)
     return true;
 }
 
+bool hasAnyAssignmentSlotAction(const PWR::Rule& rule)
+{
+    // True when at least ONE action fills an assignment slot, regardless of
+    // what else the rule carries. isPureAssignmentRule is the stricter "and
+    // nothing else" form; this is the claim predicate, used where a MIXED
+    // rule is still legitimately the rule that assigns a context. Admits a
+    // layout-only rule (SetSnappingLayout with no SetEngineMode), which the
+    // batch rebuild relies on.
+    for (const PWR::RuleAction& action : rule.actions) {
+        if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)
+            || action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+            || action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void carryOverNonAssignmentActions(PWR::Rule& rebuilt, const PWR::Rule& existing)
+{
+    // makeAssignmentRule emits ONLY the three assignment slot actions, so a
+    // wholesale `rebuilt` would silently destroy anything else the rule
+    // carried. The Monitors page and the Rules editor address the same rule
+    // by its deterministic context id, so a user who adds SetOpacity (or
+    // LockContext, or an animation override) to a context assignment rule and
+    // later changes that context's layout would lose the extra action with no
+    // diagnostic.
+    //
+    // Purity gates elsewhere refuse to CLAIM a mixed rule, which protects the
+    // paths that can walk away. The rebuild paths cannot: the deterministic id
+    // means `rebuilt` collides with the mixed rule whether or not it was
+    // claimed, so the only safe rebuild is a merge. Slot actions come from
+    // `rebuilt` (they are what the caller is changing); everything else rides
+    // across in its original order.
+    for (const PWR::RuleAction& action : existing.actions) {
+        if (action.type != QLatin1String(PWR::ActionType::SetEngineMode)
+            && action.type != QLatin1String(PWR::ActionType::SetSnappingLayout)
+            && action.type != QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
+            rebuilt.actions.append(action);
+        }
+    }
+}
+
 bool matchIsExactContextBase(const PWR::MatchExpression& match)
 {
     return CRB::matchIsExactContextBase(match);

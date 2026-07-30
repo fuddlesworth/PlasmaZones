@@ -114,6 +114,22 @@ bool hasTilingAlgorithmAction(const PWR::Rule& rule);
 // through the assignment-rebuild path.
 bool isPureAssignmentRule(const PWR::Rule& rule);
 
+// True when @p rule fills at least ONE assignment slot, whatever else it
+// carries. The claim-side counterpart to isPureAssignmentRule's stricter
+// "and nothing else" test: a MIXED rule is still the rule that assigns its
+// context, and the rebuild paths preserve its other actions.
+bool hasAnyAssignmentSlotAction(const PWR::Rule& rule);
+
+// Append every action of @p existing that is NOT one of the three assignment
+// slots onto @p rebuilt. Every path that rebuilds an assignment rule through
+// makeAssignmentRule must call this: the rebuild carries the deterministic
+// context id, so it overwrites the stored rule whether or not a purity gate
+// let the caller CLAIM it, and makeAssignmentRule emits only the slot actions.
+// Without the carry-over, changing a context's layout silently destroys any
+// SetOpacity / LockContext / animation override the user attached to that same
+// context rule in the rules editor.
+void carryOverNonAssignmentActions(PWR::Rule& rebuilt, const PWR::Rule& existing);
+
 // Shape predicates for the per-screen-base / per-desktop / per-activity
 // context rule families — used by the batch setters to drop one family
 // before writing the new entries, and by the introspection helpers to keep

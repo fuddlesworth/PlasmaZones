@@ -953,13 +953,16 @@ private:
     /// @c layoutAssigned per stored screen. @p decode maps a hash key to its
     /// cascade context, @p valid rejects an ill-formed context for the
     /// family, @p familyMatches selects which existing rules to drop,
-    /// @p emitDesktop / @p emitActivity are the context the closing
-    /// @c layoutAssigned signal is computed under, and @p label names the
-    /// family in log output. Only ever instantiated from
-    /// layoutregistry_batch.cpp, where it is defined alongside its callers.
+    /// @p emitDesktop is the desktop the closing @c layoutAssigned signal is
+    /// computed under, and @p label names the family in log output. There is
+    /// no activity counterpart: the emit payload always resolves under the
+    /// CURRENT activity, because @c layoutAssigned carries no activity of its
+    /// own and its consumers read it as the screen's live layout. Only ever
+    /// instantiated from layoutregistry_batch.cpp, where it is defined
+    /// alongside its callers.
     template<typename KeyT, typename DecodeFn, typename ValidFn, typename FamilyFn>
     void applyBatchAssignments(const QHash<KeyT, QString>& assignments, DecodeFn decode, ValidFn valid,
-                               FamilyFn familyMatches, int emitDesktop, const QString& emitActivity, const char* label);
+                               FamilyFn familyMatches, int emitDesktop, const char* label);
 
     /// Drop @p layoutId from every assignment rule's @c SetSnappingLayout
     /// action when a snap layout is deleted. A rule that still carries

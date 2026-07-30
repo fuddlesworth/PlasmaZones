@@ -85,11 +85,17 @@ void LayoutRegistry::clearAutotileAssignments()
             // layoutAssigned(…, nullptr): the flip PRESERVED each rule's
             // snapping layout, so observers should receive the layout the
             // context now resolves to, not a null pointer that reads as
-            // "no layout here". Resolved under the rule's OWN activity, not a
-            // family-wide one, or the resolve cannot reach an activity-pinned
-            // rule at all.
+            // "no layout here". The DEDUPE key is the full ContextDims so an
+            // activity-pinned rule gets its own emit rather than collapsing
+            // into a sibling's, but the PAYLOAD resolves under the CURRENT
+            // activity. layoutAssigned carries only (screen, desktop, layout)
+            // and every consumer reads it as "this screen's layout now" —
+            // requestRecalculate recomputes zone geometry from it, the KCM
+            // renders it, the drag popup selects it. A rule pinned to a
+            // non-current activity changes nothing on screen, so resolving
+            // under its own activity would fan out a layout that is not live.
             emitLayoutAssigned(dims.screenId, dims.virtualDesktop,
-                               assignmentIdForScreen(dims.screenId, dims.virtualDesktop, dims.activity));
+                               assignmentIdForScreen(dims.screenId, dims.virtualDesktop, m_currentActivity));
         }
         qCInfo(lcZonesLib) << "Cleared all autotile assignments";
     }
@@ -116,15 +122,16 @@ struct BatchContext
 // @p decode maps a hash key to its cascade context; @p valid rejects an
 // ill-formed context (a desktop entry must pin desktop > 0, an activity
 // entry a non-empty activity, else a wrong-family base rule is built);
-// @p familyMatches selects which existing rules to drop; @p emitDesktop /
-// @p emitActivity are the context the closing layoutAssigned is computed
-// under (@p emitDesktop < 0 is the per-output-virtual-desktops sentinel, #648:
-// each screen's own current desktop is resolved at emit time; 0 = base/any);
-// @p label names the family in log output.
+// @p familyMatches selects which existing rules to drop; @p emitDesktop is
+// the desktop the closing layoutAssigned is computed under (@p emitDesktop < 0
+// is the per-output-virtual-desktops sentinel, #648: each screen's own current
+// desktop is resolved at emit time; 0 = base/any). There is no matching
+// activity parameter: the emit payload always resolves under m_currentActivity,
+// because layoutAssigned carries no activity and its consumers read it as the
+// screen's live layout. @p label names the family in log output.
 template<typename KeyT, typename DecodeFn, typename ValidFn, typename FamilyFn>
 void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignments, DecodeFn decode, ValidFn valid,
-                                           FamilyFn familyMatches, int emitDesktop, const QString& emitActivity,
-                                           const char* label)
+                                           FamilyFn familyMatches, int emitDesktop, const char* label)
 {
     // Step 1 — snapshot existing exact-context entries AND their `enabled`
     // flag for every incoming key. The flag survives the batch rebuild
@@ -138,6 +145,13 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         bool enabled = true;
         int priority = 0;
         QUuid id;
+        // Every action of the prior rule that is NOT an assignment slot.
+        // makeAssignmentRule emits only the three slot actions and the rebuilt
+        // rule carries the deterministic context id, so it lands on the stored
+        // rule whether or not the family drop spared it — a wholesale replace
+        // therefore destroys a mixed rule's extra actions even when the purity
+        // gate deliberately kept the rule. Carried back in at rebuild time.
+        QList<PWR::RuleAction> preservedActions;
     };
     QHash<KeyT, OldEntrySnapshot> oldEntries;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
@@ -150,8 +164,11 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
             continue;
         }
         if (const PWR::Rule* existing = findExactContextRule(ctx.screenId, ctx.virtualDesktop, ctx.activity)) {
-            oldEntries.insert(
-                it.key(), {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority, existing->id});
+            PWR::Rule carrier;
+            carryOverNonAssignmentActions(carrier, *existing);
+            oldEntries.insert(it.key(),
+                              {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority,
+                               existing->id, carrier.actions});
         }
     }
 
@@ -253,6 +270,12 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         if (hadOld && !oldSnapshot.id.isNull()) {
             rebuilt.id = oldSnapshot.id;
         }
+        // Merge, never replace. The purity gate on the family drop SPARES a
+        // mixed rule, but sparing it is not enough on its own: the rebuild
+        // carries the same deterministic id, so the kept-index write below
+        // would overwrite the spared rule wholesale and strip exactly the
+        // actions the gate meant to protect.
+        rebuilt.actions += oldSnapshot.preservedActions;
         if (const auto keptIt = keptIndexById.constFind(rebuilt.id); keptIt != keptIndexById.cend()) {
             kept[*keptIt] = rebuilt;
         } else {
@@ -279,15 +302,14 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     // already covers.
     emitContexts.unite(droppedContexts);
     for (const ContextDims& ctx : std::as_const(emitContexts)) {
-        // Resolved under the rule's OWN activity, not a family-wide one. The
-        // Activity batch passed an empty emitActivity, so for a rule pinning a
-        // non-empty activity the cascade query could never reach it and fell
-        // through to a wider Desktop/Monitor rule — observers got
-        // layoutAssigned(screen, desktop, wrongLayoutPtr). The Combined batch
-        // already fixed this shape per-key; this is the same fix generalised.
-        const QString activity = ctx.activity.isEmpty() ? emitActivity : ctx.activity;
+        // The DEDUPE key is the full ContextDims, so two rules differing only
+        // in activity each get an emit instead of collapsing into one. The
+        // PAYLOAD, though, resolves under the CURRENT activity: layoutAssigned
+        // carries no activity of its own and every consumer reads it as "this
+        // screen's layout now", so resolving under a rule's non-current
+        // activity would hand them a layout that is not on screen.
         emitLayoutAssigned(ctx.screenId, ctx.virtualDesktop,
-                           assignmentIdForScreen(ctx.screenId, ctx.virtualDesktop, activity));
+                           assignmentIdForScreen(ctx.screenId, ctx.virtualDesktop, m_currentActivity));
     }
     qCInfo(lcZonesLib) << "Batch set" << count << label << "assignments";
 }
@@ -303,7 +325,7 @@ void LayoutRegistry::setAllScreenAssignments(const QHash<QString, QString>& assi
             return !ctx.screenId.isEmpty();
         },
         matchIsExactContextBase,
-        /*emitDesktop=*/0, /*emitActivity=*/QString(), "screen");
+        /*emitDesktop=*/0, "screen");
 }
 
 void LayoutRegistry::setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments)
@@ -316,7 +338,7 @@ void LayoutRegistry::setAllDesktopAssignments(const QHash<QPair<QString, int>, Q
         [](const BatchContext& ctx) {
             return !ctx.screenId.isEmpty() && ctx.virtualDesktop >= 1;
         },
-        matchIsExactContextDesktop, /*emitDesktop=*/-1, m_currentActivity, "desktop");
+        matchIsExactContextDesktop, /*emitDesktop=*/-1, "desktop");
 }
 
 void LayoutRegistry::setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments)
@@ -334,8 +356,7 @@ void LayoutRegistry::setAllActivityAssignments(const QHash<QPair<QString, QStrin
         [](const BatchContext& ctx) {
             return !ctx.screenId.isEmpty() && !ctx.activity.isEmpty();
         },
-        PWR::ContextRuleBridge::matchIsExactContextActivityStrict, /*emitDesktop=*/0, /*emitActivity=*/QString(),
-        "activity");
+        PWR::ContextRuleBridge::matchIsExactContextActivityStrict, /*emitDesktop=*/0, "activity");
 }
 
 void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey, QString>& assignments)
@@ -353,6 +374,13 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         bool enabled = true;
         int priority = 0;
         QUuid id;
+        // Every action of the prior rule that is NOT an assignment slot.
+        // makeAssignmentRule emits only the three slot actions and the rebuilt
+        // rule carries the deterministic context id, so it lands on the stored
+        // rule whether or not the family drop spared it — a wholesale replace
+        // therefore destroys a mixed rule's extra actions even when the purity
+        // gate deliberately kept the rule. Carried back in at rebuild time.
+        QList<PWR::RuleAction> preservedActions;
     };
     QHash<CombinedAssignmentKey, OldEntrySnapshot> oldEntries;
     // Validity gate up front: a malformed key (zero desktop or empty
@@ -371,8 +399,11 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
             continue;
         }
         if (const PWR::Rule* existing = findExactContextRule(key.screenId, key.virtualDesktop, key.activity)) {
-            oldEntries.insert(
-                key, {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority, existing->id});
+            PWR::Rule carrier;
+            carryOverNonAssignmentActions(carrier, *existing);
+            oldEntries.insert(key,
+                              {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority,
+                               existing->id, carrier.actions});
         }
     }
 
@@ -439,6 +470,8 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         if (hadOld && !oldSnapshot.id.isNull()) {
             rebuilt.id = oldSnapshot.id;
         }
+        // Merge, never replace — identical reasoning to applyBatchAssignments.
+        rebuilt.actions += oldSnapshot.preservedActions;
         if (const auto keptIt = keptIndexById.constFind(rebuilt.id); keptIt != keptIndexById.cend()) {
             kept[*keptIt] = rebuilt;
         } else {
@@ -451,18 +484,16 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     }
 
     m_ruleStore->setAllRules(kept);
-    // Per-rule emit using the rule's own (screen, desktop, activity) — the
-    // earlier shape passed an empty activity to assignmentIdForScreen, which
-    // never resolved to the just-stored Combined rule (Combined rules pin a
-    // non-empty activity, so the empty-activity cascade query falls through
-    // to a wider Desktop/Monitor rule). Observers would receive
-    // layoutAssigned(screen, desktop, wrongLayoutPtr) for the just-stored
-    // Combined rule. The signal still only carries (screenId, desktop,
-    // layoutPtr), but the layoutPtr we resolve here is now the right one.
+    // One emit per touched (screen, desktop, activity) key, so a Combined rule
+    // is never collapsed into a sibling's emit. The PAYLOAD resolves under the
+    // CURRENT activity: layoutAssigned carries only (screenId, desktop,
+    // layoutPtr) and its consumers read that as the screen's live layout, so a
+    // Combined rule pinned to a non-current activity must not fan its layout
+    // out as though it were on screen.
     emittedKeys.unite(droppedKeys);
     for (const CombinedAssignmentKey& emitKey : std::as_const(emittedKeys)) {
         emitLayoutAssigned(emitKey.screenId, emitKey.virtualDesktop,
-                           assignmentIdForScreen(emitKey.screenId, emitKey.virtualDesktop, emitKey.activity));
+                           assignmentIdForScreen(emitKey.screenId, emitKey.virtualDesktop, m_currentActivity));
     }
     qCInfo(lcZonesLib) << "Batch set" << count << "combined assignments";
 }
@@ -472,12 +503,17 @@ QHash<CombinedAssignmentKey, QString> LayoutRegistry::combinedAssignments() cons
     QHash<CombinedAssignmentKey, QString> result;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         // Strict Combined-only classifier — Activity-only and Desktop-only
-        // rules stay in their own projections. The purity gate matches the
-        // family drop: the batch API must be blind to a MIXED rule in BOTH
-        // directions, or the round trip drops it on the read side and the
-        // rebuild appends a second pure rule at the same context.
-        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)
-            || !isPureAssignmentRule(rule)) {
+        // rules stay in their own projections.
+        //
+        // NO purity gate. A MIXED rule (context assignment plus, say,
+        // SetOpacity) still assigns a layout to this context, and these three
+        // projections are what the D-Bus assignment getters return to the
+        // settings UI — gating them made such a context render as unassigned
+        // while resolveAssignmentEntry, which is purity-blind, still resolved
+        // its layout. The gate was compensating for a destructive write path;
+        // the rebuild now merges non-assignment actions instead of replacing
+        // them, so the round trip is lossless and the read can be honest.
+        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)) {
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);
@@ -494,8 +530,8 @@ QHash<QPair<QString, int>, QString> LayoutRegistry::desktopAssignments() const
         // Use the same per-desktop family classifier the batch setter uses,
         // so a window-property rule carrying an engine-mode action plus an
         // incidental VirtualDesktop== predicate cannot leak in.
-        // Purity gate for the same round-trip reason as combinedAssignments.
-        if (!hasEngineModeAction(rule) || !matchIsExactContextDesktop(rule.match) || !isPureAssignmentRule(rule)) {
+        // No purity gate, for the same reason as combinedAssignments.
+        if (!hasEngineModeAction(rule) || !matchIsExactContextDesktop(rule.match)) {
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);
@@ -515,9 +551,8 @@ QHash<QPair<QString, QString>, QString> LayoutRegistry::activityAssignments() co
         // vice versa) keyed by the same pair, silently losing one of
         // the rules. Combined rules live outside this projection and
         // are only reachable through the rule editor.
-        // Purity gate for the same round-trip reason as combinedAssignments.
-        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextActivityStrict(rule.match)
-            || !isPureAssignmentRule(rule)) {
+        // No purity gate, for the same reason as combinedAssignments.
+        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextActivityStrict(rule.match)) {
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);

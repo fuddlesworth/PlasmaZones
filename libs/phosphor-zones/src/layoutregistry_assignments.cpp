@@ -120,6 +120,12 @@ bool LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
     // identical re-apply still bumped the revision.
     rule.name = existing->name;
     rule.managed = existing->managed;
+    // And every action that is not one of the three assignment slots. The
+    // deterministic context id means this rebuild lands on the stored rule
+    // regardless of any purity gate upstream, so a merge is the only
+    // non-destructive rebuild. Runs before the no-op guard so a rule whose
+    // extra actions are unchanged still compares equal.
+    carryOverNonAssignmentActions(rule, *existing);
     // NO-OP GUARD. RuleSet::updateRule has no equality check of its own, so an
     // identical re-apply (the KCM's "apply all" over unchanged values) still
     // bumped the store's monotonic revision — which drops all five context
@@ -291,11 +297,16 @@ void LayoutRegistry::assignLayout(const QString& screenId, int virtualDesktop, c
         }
         entry.mode = AssignmentEntry::Snapping;
         entry.snappingLayout = layout->id().toString();
-        // Emit only on a real write, mirroring the clearing arm below (which
-        // already skips when removeAssignmentRule found nothing).
-        if (!upsertAssignmentRule(screenId, virtualDesktop, activity, entry)) {
-            return;
-        }
+        // The return value is deliberately IGNORED. upsertAssignmentRule
+        // suppresses a redundant WRITE (no revision bump, no rules.json
+        // rewrite, no cache drop), which is the part that was violating
+        // emit-on-change. layoutAssigned is not a value-changed signal
+        // though: it is the sole trigger for updateEngineScreens() and
+        // updateLayoutFilter(), so an idempotent re-apply that a caller
+        // issues precisely to force a re-derive must still fan out. This is
+        // the shape that previously broke the scrolling→snapping restore
+        // when a "duplicate" pass was suppressed.
+        upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
         qCDebug(lcZonesLib) << "assignLayout: screen=" << screenId << "desktop=" << virtualDesktop
                             << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity)
                             << "layout=" << layout->name();
@@ -329,9 +340,11 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
             existing = entryFromRuleMatchActions(*rule);
         }
         const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, existing);
-        if (upsertAssignmentRule(screenId, virtualDesktop, activity, entry)) {
-            Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
-        }
+        // Emit unconditionally — see assignLayout: the write suppression is
+        // real, but layoutAssigned drives the engine-screen re-derive and an
+        // idempotent D-Bus assign must still reach it.
+        upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
+        Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
     } else {
         assignLayout(screenId, virtualDesktop, activity, layoutById(QUuid::fromString(layoutId)));
     }
@@ -342,10 +355,11 @@ void LayoutRegistry::setAssignmentEntryDirect(const QString& screenId, int virtu
 {
     // Store the entry — mode-only entries (empty snapping + empty tiling) are
     // valid when explicitly set by the KCM to preserve mode at a context
-    // level. An identical re-apply writes nothing and emits nothing.
-    if (!upsertAssignmentRule(screenId, virtualDesktop, activity, entry)) {
-        return;
-    }
+    // level. An identical re-apply writes nothing, but still emits: this is a
+    // D-Bus entry point and layoutAssigned is what re-derives the engine
+    // screens, so an idempotent call made to force that re-derive must reach
+    // it. See assignLayout for the full reasoning.
+    upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
 
     qCDebug(lcZonesLib) << "setAssignmentEntryDirect: screen=" << screenId << "desktop=" << virtualDesktop
                         << "activity=" << activity << "mode=" << entry.mode << "snapping=" << entry.snappingLayout
