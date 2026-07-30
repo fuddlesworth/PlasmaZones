@@ -272,32 +272,15 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 parkHorizontal(rect, true);
             } else if (rect.left() > params.workArea.right()) {
                 parkHorizontal(rect, false);
-            } else {
-                // Partially-visible edge column: commit only the on-screen
-                // part. The strip is a continuous coordinate space wider than
-                // the viewport, so a column straddling the work-area boundary
-                // resolves to a rect whose overhang lies beyond the screen
-                // edge — and on a multi-head layout that overhang is not empty
-                // space, it is the NEIGHBOURING output. Committing it whole
-                // bled the window onto the adjacent monitor (and let KWin
-                // reassign its output, which then strands it there).
-                //
-                // Only genuinely off-screen columns are parked, above; those
-                // keep their deliberate off-screen rect. This clip applies to
-                // the straddlers the park checks let through, and it is a
-                // no-op for a fully-visible tile.
-                //
-                // visibleTileRects already clips the same way for the overlay
-                // and zone previews, so this also stops the preview and the
-                // real geometry from disagreeing at the strip edges.
-                rect = rect.intersected(params.workArea);
-                if (rect.isEmpty()) {
-                    // Zero-overlap straddler (a boundary-exact rect the park
-                    // checks did not claim): nothing sensible to commit, and a
-                    // 0-width geometry would be rejected downstream anyway.
-                    continue;
-                }
             }
+            // A partially-visible edge column keeps its TRUE rect, overhang
+            // included. Clamping it to the work area here was tried and
+            // rejected: it resized the window instead of clipping its
+            // drawing. The overhang must not RENDER on the neighbouring
+            // output, but that is the compositor's job — the effect skips
+            // strip windows in foreign outputs' paint passes
+            // (paint_pipeline.cpp), so the window keeps its full size and
+            // its paint stops at the monitor boundary.
 
             QJsonObject obj;
             obj[QLatin1String("windowId")] = tile.windowId;

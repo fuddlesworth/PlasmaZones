@@ -51,7 +51,7 @@ private Q_SLOTS:
     void migrateOutAnnouncesDroppedFloat();
     void contextSwitchFlagRidesChangedScreenSets();
     void zoneNumbersAreViewportRelativeVisibleSlots();
-    void centeredColumnClipsNeighboursToTheWorkArea();
+    void centeredColumnKeepsNeighboursFullRects();
 
 private:
     // NOTE: windowOpened's cross-screen snap-restore defer gate
@@ -1082,19 +1082,18 @@ void TestScrollEngineSmoke::zoneNumbersAreViewportRelativeVisibleSlots()
     }
 }
 
-void TestScrollEngineSmoke::centeredColumnClipsNeighboursToTheWorkArea()
+void TestScrollEngineSmoke::centeredColumnKeepsNeighboursFullRects()
 {
     // Centering the active column pushes its neighbours PARTLY off both edges
-    // of the viewport. The strip is a continuous space wider than the screen,
-    // so those straddling columns resolve to rects that extend beyond the work
-    // area — and on a multi-head layout the space beyond the edge is the
-    // NEIGHBOURING output, not empty space. Committing them whole bled the
-    // windows onto the adjacent monitor.
+    // of the viewport. The engine must commit their TRUE rects, overhang
+    // included: clamping the geometry to the work area was tried and rejected
+    // (it resized the windows). The overhang is prevented from rendering on
+    // the neighbouring output by the compositor effect, which skips strip
+    // windows in foreign outputs' paint passes (paint_pipeline.cpp) — the
+    // window keeps its full size and its drawing stops at the monitor edge.
     //
-    // Only FULLY off-screen columns are parked; a straddler is not parked, so
-    // it must be clipped instead. Work area is 1200 wide with 600px columns:
-    // centering the middle one puts it at 300..900, leaving the outer two at
-    // -300..300 and 900..1500 — both across an edge.
+    // Work area is 1200 wide with 600px columns: centering the middle one
+    // puts it at 300..900, leaving the outer two at -300..300 and 900..1500.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
@@ -1104,28 +1103,17 @@ void TestScrollEngineSmoke::centeredColumnClipsNeighboursToTheWorkArea()
     engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
     engine->centerColumn(QStringLiteral("S1"));
 
-    const QRect workArea(0, 0, 1200, 800);
     const QRect left = engine->lastManagedRect(QStringLiteral("app|a"));
     const QRect middle = engine->lastManagedRect(QStringLiteral("app|b"));
     const QRect right = engine->lastManagedRect(QStringLiteral("app|c"));
 
-    // The centred column is fully on screen and untouched by the clip.
+    // The centred column is fully on screen.
     QCOMPARE(middle, QRect(300, 0, 600, 800));
 
-    // Neither neighbour may cross an edge. Before the fix `left` was
-    // (-300, 0, 600, 800) — 300px of it sitting on whatever output lies to the
-    // left — and `right` ran to x=1500 on the output to the right.
-    QVERIFY2(left.left() >= workArea.left(), "left neighbour must not cross the left screen edge");
-    QVERIFY2(right.right() <= workArea.right(), "right neighbour must not cross the right screen edge");
-    QCOMPARE(left, QRect(0, 0, 300, 800));
-    QCOMPARE(right, QRect(900, 0, 300, 800));
-
-    // Both are still genuinely on screen: the clip must not collapse a
-    // straddler to nothing, which would make this pass vacuously.
-    QVERIFY(!left.isEmpty());
-    QVERIFY(!right.isEmpty());
-    QVERIFY(workArea.contains(left));
-    QVERIFY(workArea.contains(right));
+    // The neighbours keep their FULL 600px width, straddling the edges. A
+    // clamped left of (0, 0, 300, 800) is exactly the rejected resize.
+    QCOMPARE(left, QRect(-300, 0, 600, 800));
+    QCOMPARE(right, QRect(900, 0, 600, 800));
 }
 
 // GUILESS (not APPLESS): a QCoreApplication provides the event

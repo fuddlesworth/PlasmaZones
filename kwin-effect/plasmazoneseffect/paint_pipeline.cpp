@@ -3,6 +3,8 @@
 
 #include "plasmazoneseffect.h"
 #include "compositor/compositorclock.h"
+#include "handlers/navigationhandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "shader_internal.h"
 #include "surface_fold.h"
 #include "shader_resolve.h"
@@ -570,6 +572,30 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                                     KWin::WindowPaintData& data)
 {
+    // Scrolling-strip boundary clip. A strip column legitimately straddles
+    // its screen's edge (centering the active column pushes both neighbours
+    // across it), and the engine commits the TRUE rect — clamping the window
+    // geometry instead was tried and rejected, the user wants the full-size
+    // window with its drawing cut at the monitor boundary. On the column's
+    // own output the render target already scissors at the edge; the only
+    // place the overhang becomes visible is the ADJACENT output's paint
+    // pass, so skip the window entirely in passes whose viewport doesn't
+    // touch its managed screen. User moves/resizes are exempt — a window
+    // dragged out of the strip must stay visible while it crosses outputs —
+    // and so are engine-floating windows (they are not strip columns).
+    if (w && !w->isDeleted() && !w->isUserMove() && !w->isUserResize()) {
+        const QString trackedScreen = m_trackedScreenPerWindow.value(w);
+        if (!trackedScreen.isEmpty() && m_tilingHandler && m_tilingHandler->isScrollingScreen(trackedScreen)
+            && m_navigationHandler && !m_navigationHandler->isWindowFloating(getWindowId(w))) {
+            if (const KWin::LogicalOutput* managedOutput = outputForScreenId(trackedScreen)) {
+                const QRect managedGeom = managedOutput->geometry();
+                if (managedGeom.isValid() && !viewport.renderRect().intersects(QRectF(managedGeom))) {
+                    return;
+                }
+            }
+        }
+    }
+
     // Read the cached per-frame clock pinned by prePaintScreen. Multiple
     // paintWindow calls within one compositor cycle (multi-output,
     // multi-pass, back-to-back paint cycles driven by our addRepaint)
