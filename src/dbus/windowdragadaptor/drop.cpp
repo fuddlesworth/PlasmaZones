@@ -269,7 +269,14 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // handle (empty screenId / desktop=0 / activity=""), which
         // short-circuits to "not disabled" and lets the snap path
         // proceed against stale defaults.
-        if (screen && !selectorScreenLocked && m_contextResolver && m_layoutManager
+        // useOverlayZone carries the engine-ownership verdict for the RELEASE
+        // screen (computed above). It gated only the hover-zone fallback, so a
+        // flick onto an engine-owned screen that released before any 30 Hz
+        // updateDragCursor tick flipped the policy still reached this branch with
+        // bypassReason None: endDrag delegated to dragStopped, which committed a
+        // snap, re-recorded the intent and could even reassign the active layout
+        // on a screen the autotile stack or the scrolling strip owns.
+        if (screen && useOverlayZone && !selectorScreenLocked && m_contextResolver && m_layoutManager
             && !m_contextResolver->isDisabled(selectorCtx)) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(selectorScreenId);
             if (zoneGeom.isValid()) {

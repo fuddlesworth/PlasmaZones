@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Pins the autotile seed-order filter (Daemon::seedAutotileOrderForScreen's
-// admission predicate, extracted as filterAutotileSeedOrder): minimized
+// admission predicate, extracted as filterEngineSeedOrder): minimized
 // windows stay as positional placeholders, live user floats and durable
 // snap-slot floats are dropped, plain tiled windows pass through.
 
@@ -42,8 +42,8 @@ private Q_SLOTS:
         auto* layoutManager =
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), m_parent);
         auto* virtualDesktopManager = new PhosphorWorkspaces::VirtualDesktopManager(m_parent);
-        m_service = new PhosphorPlacement::WindowTrackingService(
-            layoutManager, nullptr, virtualDesktopManager, nullptr, PhosphorPlacement::PlacementConfig{}, m_parent);
+        m_service = new PhosphorPlacement::WindowTrackingService(layoutManager, nullptr, virtualDesktopManager, nullptr,
+                                                                 PhosphorPlacement::PlacementConfig{}, m_parent);
         m_registry = new PhosphorEngine::WindowRegistry(m_parent);
     }
 
@@ -58,7 +58,7 @@ private Q_SLOTS:
     {
         m_registry->upsert(QStringLiteral("u1"), makeMeta(QStringLiteral("kate"), false));
         QStringList order{QStringLiteral("kate|u1")};
-        filterAutotileSeedOrder(order, m_service, m_registry);
+        filterEngineSeedOrder(order, m_service, m_registry);
         QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
     }
 
@@ -67,7 +67,7 @@ private Q_SLOTS:
         m_registry->upsert(QStringLiteral("u1"), makeMeta(QStringLiteral("kate"), false));
         m_service->setWindowFloating(QStringLiteral("kate|u1"), true);
         QStringList order{QStringLiteral("kate|u1")};
-        filterAutotileSeedOrder(order, m_service, m_registry);
+        filterEngineSeedOrder(order, m_service, m_registry);
         QVERIFY(order.isEmpty());
     }
 
@@ -79,7 +79,7 @@ private Q_SLOTS:
         m_registry->upsert(QStringLiteral("u1"), makeMeta(QStringLiteral("kate"), true));
         m_service->setWindowFloating(QStringLiteral("kate|u1"), true);
         QStringList order{QStringLiteral("kate|u1")};
-        filterAutotileSeedOrder(order, m_service, m_registry);
+        filterEngineSeedOrder(order, m_service, m_registry);
         QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
     }
 
@@ -100,7 +100,7 @@ private Q_SLOTS:
         QVERIFY(m_service->placementStore().record(p));
 
         QStringList order{QStringLiteral("kate|u1")};
-        filterAutotileSeedOrder(order, m_service, m_registry);
+        filterEngineSeedOrder(order, m_service, m_registry);
         QVERIFY(order.isEmpty());
     }
 
@@ -120,7 +120,7 @@ private Q_SLOTS:
         QVERIFY(m_service->placementStore().record(p));
 
         QStringList order{QStringLiteral("kate|u1")};
-        filterAutotileSeedOrder(order, m_service, m_registry);
+        filterEngineSeedOrder(order, m_service, m_registry);
         QVERIFY(order.isEmpty());
     }
 
@@ -130,7 +130,7 @@ private Q_SLOTS:
         // entry; the engine-side strict seed applies its own conservative
         // deferral for unknown windows.
         QStringList order{QStringLiteral("kate|ghost")};
-        filterAutotileSeedOrder(order, m_service, m_registry);
+        filterEngineSeedOrder(order, m_service, m_registry);
         QCOMPARE(order, QStringList{QStringLiteral("kate|ghost")});
     }
 
@@ -138,7 +138,7 @@ private Q_SLOTS:
     {
         m_service->setWindowFloating(QStringLiteral("kate|u1"), true);
         QStringList order{QStringLiteral("kate|u1")};
-        filterAutotileSeedOrder(order, m_service, nullptr);
+        filterEngineSeedOrder(order, m_service, nullptr);
         QVERIFY(order.isEmpty());
     }
 

@@ -630,10 +630,26 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // activates the window its current desktop is already updated, and
     // fire-and-forget calls share one ordered D-Bus connection, so reporting
     // here guarantees the daemon switches context first. reportScreenDesktop
-    // dedups, so outside a desktop switch this is a no-op. windowOutput
-    // resolves by window position (Discussion #724: w->screen() can disagree
-    // with the daemon on identical-model outputs).
-    if (KWin::LogicalOutput* output = windowOutput(w)) {
+    // dedups, so outside a desktop switch this is a no-op.
+    //
+    // Resolve the output from the id we ALREADY resolved above, not from the
+    // window's position. getWindowScreenId is engine-authoritative for a
+    // tiled window, and scrolling parks off-screen columns entirely outside
+    // their own screen rect, so a position-derived lookup returns the
+    // NEIGHBOURING output for a parked or hidden-tab scroll window — and
+    // activation routinely lands before the async geometry apply. Reporting
+    // that neighbour's desktop instead of the activated window's own screen
+    // silently reinstates the discussion-#728 leak for every scrolling screen.
+    // windowOutput stays the fallback for an unresolvable id (Discussion #724:
+    // w->screen() can disagree with the daemon on identical-model outputs, so
+    // the position lookup is still the better of the two remaining options),
+    // mirroring the id-first-then-centre order ruleQuery uses for
+    // screenOrientation.
+    KWin::LogicalOutput* activatedOutput = outputForScreenId(screenId);
+    if (!activatedOutput) {
+        activatedOutput = windowOutput(w);
+    }
+    if (KWin::LogicalOutput* output = activatedOutput) {
         if (auto* vd = KWin::effects->currentDesktop(output)) {
             reportScreenDesktop(outputScreenId(output), static_cast<int>(vd->x11DesktopNumber()));
         }

@@ -495,6 +495,25 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
         }
     }
 
+    // An engine-owned cursor screen gets no zone selector: the autotile stack
+    // or the scrolling strip owns placement there, so a manual drag-snap out of
+    // the selector would fight it. dragMoved reaches this on EVERY bypass drag
+    // (it sits outside prepareHandlerContext, which is where the other overlay
+    // paths are suppressed), so without this gate edge-hovering during a drag on
+    // a scrolling screen popped the selector on a screen the strip owns — and
+    // endDrag's non-snap exits do not tear the popup down, leaving it stranded
+    // with no further cursor ticks to hide it. Mirrors drop.cpp's useOverlayZone.
+    const bool engineOwnsSelectorScreen = (m_autotileEngine && m_autotileEngine->isActiveOnScreen(selectorScreenId))
+        || (m_scrollEngine && m_scrollEngine->isActiveOnScreen(selectorScreenId));
+    if (engineOwnsSelectorScreen) {
+        if (m_zoneSelectorShown) {
+            m_zoneSelectorShown = false;
+            m_zoneSelectorShownOn.clear();
+            m_overlayService->hideZoneSelector();
+        }
+        return;
+    }
+
     bool nearEdge = isNearTriggerEdge(screen, cursorX, cursorY, selectorScreenId);
 
     if (nearEdge && m_zoneSelectorShown && m_zoneSelectorShownOn != selectorScreenId) {

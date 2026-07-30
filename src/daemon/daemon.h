@@ -391,7 +391,7 @@ private:
      * Prefers the SAVED order from the last mode toggle
      * (m_lastEngineOrders, deterministic re-entry) and only falls back to
      * the zone-ordered window list from WTS. Live filters run before
-     * seeding (filterAutotileSeedOrder): user floats and durable snap-slot
+     * seeding (filterEngineSeedOrder): user floats and durable snap-slot
      * floats are dropped, minimized windows stay as positional placeholders.
      * The result goes to the autotile engine's setInitialWindowOrder(). Used
      * by both per-screen toggle and global snapping→autotile transition.

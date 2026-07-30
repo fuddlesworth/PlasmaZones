@@ -12,8 +12,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"
-#include "helpers.h"
+#include "seedorderfilter.h"
 
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
@@ -60,8 +63,22 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // refuse the screen's new mode and capture nothing.)
         const int desktop = currentDesktopForScreen(screenId);
         const auto it = m_lastEngineOrders.constFind(TilingStateKey{screenId, desktop, activity});
-        if (it != m_lastEngineOrders.constEnd()) {
-            m_scrollEngine->setInitialWindowOrder(screenId, it.value());
+        if (it == m_lastEngineOrders.constEnd()) {
+            continue;
+        }
+        QStringList order = it.value();
+        // Same admission rule as the autotile seed: a captured order describes
+        // a PAST arrangement and knows nothing about what happened to those
+        // windows since, so a window that is live-floating now, or whose
+        // durable record carries a floating snap slot, must not be seeded back
+        // as a managed column. Seeding the raw order put such a window into the
+        // strip as a managed window on every snap->scrolling transition.
+        if (PhosphorPlacement::WindowTrackingService* wts =
+                m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr) {
+            filterEngineSeedOrder(order, wts, wts->windowRegistry());
+        }
+        if (!order.isEmpty()) {
+            m_scrollEngine->setInitialWindowOrder(screenId, order);
         }
     }
 

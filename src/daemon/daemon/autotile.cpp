@@ -845,8 +845,8 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
         }
         // Drop entries that must not be seeded as tiled (live user floats,
         // durable snap-slot floats); minimized windows stay as positional
-        // placeholders. See filterAutotileSeedOrder's doc for the rationale.
-        filterAutotileSeedOrder(order, wts, registry);
+        // placeholders. See filterEngineSeedOrder's doc for the rationale.
+        filterEngineSeedOrder(order, wts, registry);
     }
 
     if (!order.isEmpty()) {

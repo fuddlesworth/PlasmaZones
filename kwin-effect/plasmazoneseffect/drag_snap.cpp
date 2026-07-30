@@ -687,7 +687,21 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         return;
     }
 
-    if (oldReason == PhosphorProtocol::DragBypassReason::AutotileScreen) {
+    // Gate on the effect's OWN latch, not merely on the daemon's previous
+    // reason. The drag-start fast path latches the bypass from the union
+    // isManagedScreen without consulting the context-disable lists, while the
+    // daemon checks ContextDisabled FIRST and so answers ContextDisabled (not
+    // AutotileScreen) for an engine-managed screen whose context is disabled.
+    // The beginDrag correction layer only clears the latch on a reply of None,
+    // so the drag can be underway latched-bypassed with a policy that was never
+    // AutotileScreen. Keying this transition on oldReason alone then let
+    // ContextDisabled -> None (and SnappingDisabled -> None) fall through to the
+    // no-op tail with the latch still set for the rest of the drag: the engine
+    // tracking drop never ran (the window kept its tile tracking and hidden
+    // title bar while it snapped), the keyboard was never grabbed, and the
+    // activation state was never reset. Scrolling widens the reachable surface
+    // because every scrolling screen is in the union the fast path latches on.
+    if (oldReason == PhosphorProtocol::DragBypassReason::AutotileScreen || m_dragBypassedForEngine) {
         // Autotile → snap (or autotile → context-disabled). Drop the
         // bypass flag and initialize snap-drag state as if the drag just
         // started on this snap screen. Remove the window from autotile
@@ -705,6 +719,11 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
             m_tilingHandler->onWindowClosed(windowId, m_dragBypassScreenId);
         }
         m_dragBypassedForEngine = false;
+        // Cleared with the flag, as the equivalent transition in
+        // lifecycle_wiring.cpp does: leaving a stale engine screen id behind
+        // meant it survived into any later re-bypass until the AutotileScreen
+        // branch above happened to overwrite it.
+        m_dragBypassScreenId.clear();
         m_dragActivation.detected = false;
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);
@@ -713,9 +732,9 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         return;
     }
 
-    // Other transitions (snap ↔ context_disabled / snapping_disabled):
-    // no compositor-level work needed. The daemon will return a NoOp at
-    // endDrag for disabled paths.
+    // Other transitions (snap ↔ context_disabled / snapping_disabled) with no
+    // bypass latch held: no compositor-level work needed. The daemon will
+    // return a NoOp at endDrag for disabled paths.
 }
 
 } // namespace PlasmaZones

@@ -413,7 +413,14 @@ void PlasmaZonesEffect::connectDragTracker()
                         // activation reset, keyboard grab), not just a flag
                         // clear — a half transition leaves Escape uncaught
                         // and the snap state uninitialised.
-                        if (safeW && !safeW->isDeleted()) {
+                        // Guarded on the ID, not the dragged-window pointer:
+                        // the call is id-keyed bookkeeping that never derefs
+                        // the window, and a window that died between drag
+                        // start and this reply must not skip the tracking
+                        // cleanup for a still-valid id. slotDragPolicyChanged's
+                        // equivalent transition guards the same way, and this
+                        // branch claims to run the same full transition.
+                        if (!capturedWindowId.isEmpty()) {
                             m_tilingHandler->onWindowClosed(capturedWindowId, m_dragBypassScreenId);
                         }
                         m_dragBypassedForEngine = false;
@@ -441,7 +448,18 @@ void PlasmaZonesEffect::connectDragTracker()
                 // the tile to stay visually in place while the daemon runs
                 // moveToTiledPosition on each cursor tick. The effect still
                 // flips into bypass state so snap-path logic is suppressed.
-                const bool reorderMode = m_cachedAutotileDragBehavior == EffectAutotileDragBehavior::Reorder;
+                //
+                // Scrolling screens are excluded: the setting is the AUTOTILE
+                // drag behaviour, and there is no drag-insert preview for the
+                // strip — the daemon's scroll branch unconditionally answers
+                // immediateFloatOnStart for a tracked window. Letting a global
+                // Reorder suppress the synchronous float on a scrolling screen
+                // only deferred it to the async beginDrag reply, so the user
+                // dragged a borderless strip-sized tile for the round trip,
+                // which is the exact deferred-visual defect this fast path
+                // exists to prevent.
+                const bool reorderMode = !m_tilingHandler->isScrollingScreen(startScreenId)
+                    && m_cachedAutotileDragBehavior == EffectAutotileDragBehavior::Reorder;
                 // If the window is currently autotile-tiled, restore its
                 // title bar and pre-autotile size NOW (synchronously, during
                 // the interactive move). This mirrors snap mode, where

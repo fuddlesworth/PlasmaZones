@@ -9,8 +9,8 @@
 
 namespace PlasmaZones {
 
-void filterAutotileSeedOrder(QStringList& order, PhosphorPlacement::WindowTrackingService* wts,
-                             const PhosphorEngine::WindowRegistry* registry)
+void filterEngineSeedOrder(QStringList& order, PhosphorPlacement::WindowTrackingService* wts,
+                           const PhosphorEngine::WindowRegistry* registry)
 {
     if (order.isEmpty() || !wts) {
         return;

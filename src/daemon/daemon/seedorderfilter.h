@@ -15,7 +15,12 @@ class WindowTrackingService;
 namespace PlasmaZones {
 
 /**
- * @brief Filter an autotile seed order's entries against live window state.
+ * @brief Filter a tiling-family seed order's entries against live window state.
+ *
+ * Shared by both placing engines: Daemon::seedAutotileOrderForScreen and
+ * Daemon::updateScrollingScreens seed from the same m_lastEngineOrders map and
+ * need the same admission rule, so a window that must not come back as a tile
+ * must not come back as a strip column either.
  *
  * Order sources describe past arrangements (the tiled order captured at
  * toggle-off, or zone assignments) and know nothing about what happened to
@@ -35,7 +40,7 @@ namespace PlasmaZones {
  * Extracted from Daemon::seedAutotileOrderForScreen so the predicate is unit
  * testable without a full daemon.
  */
-void filterAutotileSeedOrder(QStringList& order, PhosphorPlacement::WindowTrackingService* wts,
-                             const PhosphorEngine::WindowRegistry* registry);
+void filterEngineSeedOrder(QStringList& order, PhosphorPlacement::WindowTrackingService* wts,
+                           const PhosphorEngine::WindowRegistry* registry);
 
 } // namespace PlasmaZones
