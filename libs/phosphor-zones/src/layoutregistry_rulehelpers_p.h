@@ -41,7 +41,17 @@ struct ContextDims
     QString screenId;
     int virtualDesktop = 0;
     QString activity;
+
+    bool operator==(const ContextDims& other) const = default;
 };
+
+/// QSet/QHash key support — the batch driver dedupes emit contexts by the FULL
+/// triple, so two rules differing only in activity each get their own
+/// layoutAssigned resolved under their own activity.
+inline size_t qHash(const ContextDims& dims, size_t seed = 0) noexcept
+{
+    return qHashMulti(seed, dims.screenId, dims.virtualDesktop, dims.activity);
+}
 
 // Build the windowless context query for a (screen, desktop, activity) tuple.
 // No window attributes are set — window-property predicates evaluate false,

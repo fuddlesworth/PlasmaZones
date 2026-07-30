@@ -78,7 +78,7 @@ auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> declt
 
 } // namespace
 
-void LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity,
+bool LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity,
                                           const AssignmentEntry& entry)
 {
     // Pass the entry's mode through `modeToWireString` so a future Mode
@@ -104,14 +104,28 @@ void LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
 
     if (existing == nullptr) {
         m_ruleStore->addRule(rule);
-    } else {
-        rule.id = existing->id; // preserve the rule's identity across the update
-        // makeAssignmentRule always stamps enabled = true; an upsert must not
-        // silently re-enable a rule the user disabled. A disabled context
-        // assignment is still an explicit assignment — preserve the flag.
-        rule.enabled = existing->enabled;
-        m_ruleStore->updateRule(rule);
+        return true;
     }
+    rule.id = existing->id; // preserve the rule's identity across the update
+    // makeAssignmentRule always stamps enabled = true; an upsert must not
+    // silently re-enable a rule the user disabled. A disabled context
+    // assignment is still an explicit assignment — preserve the flag.
+    rule.enabled = existing->enabled;
+    // NO-OP GUARD. RuleSet::updateRule has no equality check of its own, so an
+    // identical re-apply (the KCM's "apply all" over unchanged values) still
+    // bumped the store's monotonic revision — which drops all five context
+    // caches, rewrites rules.json and fans out rulesChanged — and the callers
+    // then emitted layoutAssigned for a layout that did not change. Violates
+    // "only emit signals when the value actually changes".
+    //
+    // Scoped deliberately to the WRITE, not to any downstream apply pass:
+    // suppressing an apply is what previously broke the scrolling→snapping
+    // restore. A genuine change still writes and still emits.
+    if (rule == *existing) {
+        return false;
+    }
+    m_ruleStore->updateRule(rule);
+    return true;
 }
 
 bool LayoutRegistry::removeAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity)
@@ -268,7 +282,11 @@ void LayoutRegistry::assignLayout(const QString& screenId, int virtualDesktop, c
         }
         entry.mode = AssignmentEntry::Snapping;
         entry.snappingLayout = layout->id().toString();
-        upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
+        // Emit only on a real write, mirroring the clearing arm below (which
+        // already skips when removeAssignmentRule found nothing).
+        if (!upsertAssignmentRule(screenId, virtualDesktop, activity, entry)) {
+            return;
+        }
         qCDebug(lcZonesLib) << "assignLayout: screen=" << screenId << "desktop=" << virtualDesktop
                             << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity)
                             << "layout=" << layout->name();
@@ -302,8 +320,9 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
             existing = entryFromRuleMatchActions(*rule);
         }
         const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, existing);
-        upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
-        Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
+        if (upsertAssignmentRule(screenId, virtualDesktop, activity, entry)) {
+            Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
+        }
     } else {
         assignLayout(screenId, virtualDesktop, activity, layoutById(QUuid::fromString(layoutId)));
     }
@@ -312,10 +331,12 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
 void LayoutRegistry::setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
                                               const AssignmentEntry& entry)
 {
-    // Store the entry unconditionally — mode-only entries (empty snapping +
-    // empty tiling) are valid when explicitly set by the KCM to preserve
-    // mode at a context level.
-    upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
+    // Store the entry — mode-only entries (empty snapping + empty tiling) are
+    // valid when explicitly set by the KCM to preserve mode at a context
+    // level. An identical re-apply writes nothing and emits nothing.
+    if (!upsertAssignmentRule(screenId, virtualDesktop, activity, entry)) {
+        return;
+    }
 
     qCDebug(lcZonesLib) << "setAssignmentEntryDirect: screen=" << screenId << "desktop=" << virtualDesktop
                         << "activity=" << activity << "mode=" << entry.mode << "snapping=" << entry.snappingLayout

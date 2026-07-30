@@ -820,7 +820,10 @@ private:
      * applyQuickLayout and cycleLayoutImpl were open-coding before the
      * extraction.
      */
-    void applyLayoutToScreen(const QString& screenId, Layout* layout);
+    /// @return false when the write was REFUSED because the screen is in
+    /// scrolling mode (a manual Layout* means nothing there and must not flip
+    /// the engine); true when the assignment was applied.
+    bool applyLayoutToScreen(const QString& screenId, Layout* layout);
     /// One-time idempotent fold of the retired autotile-overrides.json into the
     /// unified layout-settings.json sidecar; deletes the legacy file when done.
     void migrateLegacyAutotileOverrides();
@@ -917,7 +920,14 @@ private:
 
     /// Upsert a context assignment rule: replace the exact-shape rule if one
     /// exists, else add a new one. Persists through the store.
-    void upsertAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity,
+    ///
+    /// @return true when the store was actually written. An update whose
+    /// rebuilt rule equals the stored one returns FALSE without writing —
+    /// RuleSet::updateRule has no equality check, so an identical re-apply
+    /// would otherwise bump the revision (dropping every context cache and
+    /// rewriting rules.json) and make the caller emit layoutAssigned for a
+    /// layout that did not change. Callers gate their emit on this.
+    bool upsertAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity,
                               const AssignmentEntry& entry);
 
     /// Remove the exact-shape context assignment rule for a tuple, if any.

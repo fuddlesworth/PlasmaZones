@@ -167,11 +167,20 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     // Contexts whose rules the family drop removed. Any that step 3 does not
     // rebuild still needs a layoutAssigned at step 4 — the erasure changed
     // what the context resolves to just as much as a rewrite does.
-    QSet<QPair<QString, int>> droppedContexts;
+    QSet<ContextDims> droppedContexts;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
-        if (hasEngineModeAction(rule) && familyMatches(rule.match)) {
+        // isPureAssignmentRule as well: a MIXED context rule (context-only
+        // match + SetEngineMode + a non-assignment action such as SetOpacity,
+        // LockContext or an animation override) satisfies the two family tests
+        // but is not this batch's to own. Dropping it deleted the rule
+        // outright when the incoming batch had no key for that context, and
+        // rebuilt it through makeAssignmentRule — which emits only the three
+        // slot actions — when it did, silently stripping the user's other
+        // actions. Both sibling paths (findExactContextRule's shape fallback
+        // and purgeSnappingLayoutFromAssignments) guard the same way.
+        if (hasEngineModeAction(rule) && familyMatches(rule.match) && isPureAssignmentRule(rule)) {
             const ContextDims dims = decodeDims(rule.match);
-            droppedContexts.insert(qMakePair(dims.screenId, dims.virtualDesktop));
+            droppedContexts.insert(dims);
             continue;
         }
         keptIndexById.insert(rule.id, kept.size());
@@ -180,7 +189,7 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
 
     // Step 3 — rebuild the family from the incoming assignments.
     int count = 0;
-    QSet<QString> storedScreens;
+    QSet<ContextDims> storedContexts;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const BatchContext ctx = decode(it.key());
         const QString& layoutId = it.value();
@@ -239,27 +248,35 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
             keptIndexById.insert(rebuilt.id, kept.size());
             kept.append(rebuilt);
         }
-        storedScreens.insert(ctx.screenId);
+        storedContexts.insert(ContextDims{ctx.screenId, ctx.virtualDesktop, ctx.activity});
         ++count;
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << logContext;
     }
 
     // Step 4 — one commit, then signal per affected (screen, desktop).
     m_ruleStore->setAllRules(kept);
-    QSet<QPair<QString, int>> emitContexts;
-    for (const QString& screenId : storedScreens) {
+    QSet<ContextDims> emitContexts;
+    for (const ContextDims& stored : std::as_const(storedContexts)) {
         // Per-output virtual desktops (#648): a desktop-family batch passes
         // emitDesktop < 0 so each screen refreshes against the desktop it is
         // actually showing, not a single global one. A concrete emitDesktop
         // (including 0 = base/any) is used verbatim.
-        const int ed = emitDesktop < 0 ? currentVirtualDesktopForScreen(screenId) : emitDesktop;
-        emitContexts.insert(qMakePair(screenId, ed));
+        const int ed = emitDesktop < 0 ? currentVirtualDesktopForScreen(stored.screenId) : emitDesktop;
+        emitContexts.insert(ContextDims{stored.screenId, ed, stored.activity});
     }
     // Union in the erased-only contexts; the set dedupes any that a rebuild
     // already covers.
     emitContexts.unite(droppedContexts);
-    for (const auto& [sid, desk] : std::as_const(emitContexts)) {
-        emitLayoutAssigned(sid, desk, assignmentIdForScreen(sid, desk, emitActivity));
+    for (const ContextDims& ctx : std::as_const(emitContexts)) {
+        // Resolved under the rule's OWN activity, not a family-wide one. The
+        // Activity batch passed an empty emitActivity, so for a rule pinning a
+        // non-empty activity the cascade query could never reach it and fell
+        // through to a wider Desktop/Monitor rule — observers got
+        // layoutAssigned(screen, desktop, wrongLayoutPtr). The Combined batch
+        // already fixed this shape per-key; this is the same fix generalised.
+        const QString activity = ctx.activity.isEmpty() ? emitActivity : ctx.activity;
+        emitLayoutAssigned(ctx.screenId, ctx.virtualDesktop,
+                           assignmentIdForScreen(ctx.screenId, ctx.virtualDesktop, activity));
     }
     qCInfo(lcZonesLib) << "Batch set" << count << label << "assignments";
 }

@@ -75,6 +75,12 @@ const QList<int>& RuleEvaluator::priorityOrder() const
 
 ResolvedActions RuleEvaluator::resolve(const WindowQuery& query) const
 {
+    return resolveFiltered(query, {});
+}
+
+ResolvedActions RuleEvaluator::resolveFiltered(const WindowQuery& query,
+                                               const std::function<bool(const Rule&)>& admit) const
+{
     ResolvedActions result;
 
     const QList<Rule>& rules = m_ruleSet.rules();
@@ -90,6 +96,9 @@ ResolvedActions RuleEvaluator::resolve(const WindowQuery& query) const
     for (int index : order) {
         const Rule& rule = rules.at(index);
         if (!rule.enabled) {
+            continue;
+        }
+        if (admit && !admit(rule)) {
             continue;
         }
         if (!rule.match.evaluate(query)) {

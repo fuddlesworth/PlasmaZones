@@ -18,6 +18,15 @@ namespace PhosphorZones {
 
 /**
  * @brief Key for layout assignment (screen + desktop + activity)
+ *
+ * RETAINED PUBLIC API with no in-tree consumer. The daemon now stores
+ * assignments as context RULES (ContextRuleBridge), and the v3 group format
+ * @c fromGroupName parses is drained by configmigration_v4finalize's own
+ * parser — so nothing in this repo constructs one. It stays exported because
+ * this is an installed LGPL library header whose whole point is third-party
+ * linkage: the (screen, desktop, activity) tuple is still the assignment
+ * identity, and removing an exported type is an ABI break for consumers we do
+ * not control. Deliberately kept, not overlooked.
  */
 struct LayoutAssignmentKey
 {
@@ -52,17 +61,19 @@ struct LayoutAssignmentKey
         if (remainder.isEmpty())
             return result;
 
-        int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
+        constexpr QLatin1String kActivityTag(":Activity:");
+        constexpr QLatin1String kDesktopTag(":Desktop:");
+        int actIdx = remainder.indexOf(kActivityTag);
         if (actIdx >= 0) {
-            const QString activity = remainder.mid(actIdx + 10);
+            const QString activity = remainder.mid(actIdx + kActivityTag.size());
             if (!activity.isEmpty())
                 result.activity = activity;
             remainder = remainder.left(actIdx);
         }
-        int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
+        int deskIdx = remainder.indexOf(kDesktopTag);
         if (deskIdx >= 0) {
             bool ok = false;
-            int desktop = remainder.mid(deskIdx + 9).toInt(&ok);
+            int desktop = remainder.mid(deskIdx + kDesktopTag.size()).toInt(&ok);
             if (ok && desktop > 0)
                 result.virtualDesktop = desktop;
             remainder = remainder.left(deskIdx);
@@ -93,8 +104,9 @@ struct AssignmentEntry
     /// STRINGS produced by `modeToWireString` ("snapping", "autotile",
     /// "scrolling") — `ContextRuleBridge::makeDisableRule` writes them
     /// and `disableRuleMode` reads them back. A consumer's legacy v3→v4
-    /// config migration does still read the int side via
-    /// `Display.<screen>:Mode`, so NEVER renumber existing values — a
+    /// config migration does still read the int side from the assignments
+    /// group (`Assignment:<screen>…`, key `Mode` — NOT the `Display.*`
+    /// per-mode disable-list group), so NEVER renumber existing values — a
     /// renumber would silently swap engines for v3 disable lists that
     /// haven't been migrated yet. Append new modes at the end.
     enum Mode {

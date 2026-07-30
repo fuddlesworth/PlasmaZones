@@ -73,7 +73,10 @@ void LayoutRegistry::initCommon()
 
 LayoutRegistry::~LayoutRegistry()
 {
-    qDeleteAll(m_layouts);
+    // No qDeleteAll: addLayout() parents every Layout to this registry, so
+    // ~QObject destroys them. The manual sweep was redundant and read against
+    // the parent-ownership rule the rest of this file follows (deleteLater
+    // everywhere else).
 }
 
 void LayoutRegistry::setDefaultLayoutIdProvider(std::function<QString()> provider)
@@ -344,11 +347,17 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // shared with applyQuickLayout. Cycling with an empty screenId
     // (uncommon but not invalid — happens when no focused screen is
     // known) just updates the global active layout.
-    applyLayoutToScreen(resolvedScreenId, newLayout);
+    // Report what was actually COMMITTED: applyLayoutToScreen refuses the
+    // write on a Scrolling-mode screen, and returning newLayout there claimed
+    // a switch that never happened. Both current callers discard the value,
+    // so this only makes the contract honest for the next one.
+    if (!applyLayoutToScreen(resolvedScreenId, newLayout)) {
+        return nullptr;
+    }
     return newLayout;
 }
 
-void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones::Layout* layout)
+bool LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones::Layout* layout)
 {
     // Per-screen assignment: write per-desktop assignment first so the
     // layoutAssigned handler recalculates zone geometry for this screen.
@@ -368,7 +377,7 @@ void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones:
         if (modeForScreen(screenId, desktop, m_currentActivity) == AssignmentEntry::Scrolling) {
             qCInfo(lcZonesLib) << "applyLayoutToScreen: screen" << screenId
                                << "is in scrolling mode — manual layouts do not apply";
-            return;
+            return false;
         }
         // Write per-desktop assignment with empty activity so it applies
         // regardless of which activity is active. Activity-specific
@@ -387,6 +396,7 @@ void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones:
         const QSignalBlocker blocker(this);
         setActiveLayout(layout);
     }
+    return true;
 }
 
 PhosphorZones::Layout* LayoutRegistry::layoutById(const QUuid& id) const
@@ -580,6 +590,11 @@ void LayoutRegistry::setActiveLayout(PhosphorZones::Layout* layout)
     } else if (m_activeLayout == layout) {
         qCInfo(lcZonesLib) << "setActiveLayout: SKIPPED (already active):"
                            << (layout ? layout->name() : QStringLiteral("null"));
+    } else {
+        // Non-null but absent from m_layouts. Every other rejection path here
+        // logs; this one returned in silence, so a caller passing a retired or
+        // foreign Layout* saw no signal and no explanation.
+        qCWarning(lcZonesLib) << "setActiveLayout: REFUSED (layout not owned by this registry):" << layout->name();
     }
 }
 
@@ -616,7 +631,7 @@ void LayoutRegistry::applyQuickLayout(AssignmentEntry::Mode mode, int number, co
     // Only manual (Snapping) slots can be applied here: an autotile slot
     // resolves to an algorithm ID with no Layout*, and switching algorithms
     // needs the autotile engine, which lives in the daemon. The daemon's
-    // shortcut handler applies autotile slots directly; see daemon/start.cpp.
+    // shortcut handler applies autotile slots directly; see daemon/shortcuts_wiring.cpp.
     auto layout = layoutForShortcut(mode, number);
     if (!layout) {
         qCInfo(lcZonesLib) << "Quick slot" << number << "is unset or not directly applicable — no-op";

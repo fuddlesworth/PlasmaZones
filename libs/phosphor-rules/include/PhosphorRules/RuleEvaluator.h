@@ -144,6 +144,16 @@ public:
     /// Resolve @p query against the bound rule set. Always recomputes.
     ResolvedActions resolve(const WindowQuery& query) const;
 
+    /// Resolve as above, but consider only rules @p admit accepts.
+    ///
+    /// For resolvers that leave a field UNSTAMPED: an absent field makes a
+    /// leaf false, so a positive predicate correctly never matches — but a
+    /// NEGATED one (`None{Field Equals X}`) matches precisely because the leaf
+    /// failed. A caller that cannot answer for a field must therefore exclude
+    /// rules referencing it structurally rather than rely on the empty-value
+    /// coincidence. An empty @p admit behaves exactly like resolve().
+    ResolvedActions resolveFiltered(const WindowQuery& query, const std::function<bool(const Rule&)>& admit) const;
+
     /// Resolve with a `(windowId, revision)` cache. @p windowId is the
     /// caller's stable per-window key (the `appId|instanceId` composite id).
     /// A cache entry from a stale revision is discarded on access. The cache

@@ -180,9 +180,16 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             // a wrong assignment. Dropping any ActiveLayout-referencing rule here keeps
             // ActiveLayout a strictly post-assignment field regardless of predicate
             // polarity, not merely by relying on the empty-value coincidence.
+            //
+            // Field::Mode is excluded for exactly the same reason: these
+            // resolvers are MODE-AGNOSTIC, so makeContextQuery leaves mode
+            // unstamped, and WindowQuery::valueForField returns an ENGAGED
+            // empty string for it — which a positive leaf never matches but a
+            // negated None{Mode Equals "tiling"} does.
             const auto slotMatch = [&](bool (*carriesSlot)(const PWR::Rule&)) -> const PWR::Rule* {
                 return m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::Rule& rule) {
-                    return carriesSlot(rule) && !rule.match.referencesAnyField({PWR::Field::ActiveLayout});
+                    return carriesSlot(rule)
+                        && !rule.match.referencesAnyField({PWR::Field::ActiveLayout, PWR::Field::Mode});
                 });
             };
 
@@ -392,9 +399,32 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
                                     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
                                     query.screenOrientation = orientationToken;
                                     query.activeLayout = activeLayoutId;
-                                    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
-                                    if (const auto action = resolved.slot(QString(PWR::ActionSlot::Locked))) {
-                                        return action->params.value(PWR::ActionParam::Value).toBool();
+                                    // Filtered highestPriorityMatch, not the unfiltered
+                                    // resolve(): this resolver is mode-agnostic, so mode is
+                                    // unstamped and reads back as an ENGAGED empty string —
+                                    // a negated None{Mode Equals "tiling"} on a LockContext
+                                    // rule would spuriously match and lock the context. Same
+                                    // structural exclusion the assignment and
+                                    // default-assignment resolvers apply.
+                                    const PWR::Rule* rule =
+                                        m_evaluator->highestPriorityMatch(query, [](const PWR::Rule& r) {
+                                            if (r.match.referencesAnyField({PWR::Field::Mode})) {
+                                                return false;
+                                            }
+                                            for (const PWR::RuleAction& action : r.actions) {
+                                                if (action.type == QLatin1String(PWR::ActionType::LockContext)) {
+                                                    return true;
+                                                }
+                                            }
+                                            return false;
+                                        });
+                                    if (!rule) {
+                                        return false;
+                                    }
+                                    for (const PWR::RuleAction& action : rule->actions) {
+                                        if (action.type == QLatin1String(PWR::ActionType::LockContext)) {
+                                            return action.params.value(PWR::ActionParam::Value).toBool();
+                                        }
                                     }
                                     return false;
                                 });
@@ -436,7 +466,7 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
             // the empty placeholder and wrongly force/suppress the default. Use a
             // filtered highestPriorityMatch rather than the unfiltered resolve().
             const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, [](const PWR::Rule& r) {
-                if (r.match.referencesAnyField({PWR::Field::ActiveLayout})) {
+                if (r.match.referencesAnyField({PWR::Field::ActiveLayout, PWR::Field::Mode})) {
                     return false;
                 }
                 for (const PWR::RuleAction& action : r.actions) {
@@ -497,7 +527,14 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
             query.screenOrientation = orientationToken;
             query.activeLayout = activeLayoutId;
-            const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+            // Mode-referencing rules are structurally excluded: this resolver
+            // is mode-agnostic, so mode is unstamped and a negated
+            // None{Mode Equals "tiling"} would spuriously match and apply an
+            // overlay override the user scoped to another mode. Same rule the
+            // assignment / default-assignment / lock resolvers enforce.
+            const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [](const PWR::Rule& r) {
+                return !r.match.referencesAnyField({PWR::Field::Mode});
+            });
 
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayShader))) {
                 const QString id = action->params.value(PWR::ActionParam::EffectId).toString();
