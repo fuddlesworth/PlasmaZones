@@ -85,7 +85,7 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId)
         obj[QLatin1String("y")] = r.y();
         obj[QLatin1String("width")] = r.width();
         obj[QLatin1String("height")] = r.height();
-        // 1-based strip column position — the scroll zone number.
+        // 1-based visible column slot — the scroll zone number.
         obj[QLatin1String("zoneNumber")] = (i < columnNumbers.size()) ? columnNumbers.at(i) : (i + 1);
         arr.append(obj);
     }

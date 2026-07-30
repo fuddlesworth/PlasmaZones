@@ -472,8 +472,8 @@ SettingsFlickable {
                 }
                 // category 1 renders the "Dynamic" badge (a live strip
                 // snapshot is generated, not editable). Zone numbers are the
-                // 1-based strip column positions the Snap-to-Zone digits
-                // target, so they show like the other modes' previews.
+                // 1-based VISIBLE column slots the Snap-to-Zone digits
+                // target, so they label exactly what is on screen.
                 layout: ({
                         "displayName": i18nc("tiling mode name", "Scrolling"),
                         "category": 1,

@@ -344,9 +344,10 @@ void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
         relGeo[QLatin1String("width")] = r.width();
         relGeo[QLatin1String("height")] = r.height();
         QVariantMap zoneMap;
-        // The scroll zone number is the tile's 1-based strip column
-        // position — the coordinate the Snap-to-Zone digits drive — so a
-        // partially-scrolled strip labels its columns 3,4 rather than 1,2.
+        // The scroll zone number is the tile's 1-based VISIBLE column slot
+        // (leftmost on-screen column is 1) — the same viewport-relative
+        // coordinate the Snap-to-Zone digits drive, so the card labels
+        // exactly what is on screen.
         zoneMap[QLatin1String("zoneNumber")] = (i < columnNumbers.size()) ? columnNumbers.at(i) : (i + 1);
         zoneMap[QLatin1String("relativeGeometry")] = relGeo;
         zoneMap[QLatin1String("id")] = QString::number(i);

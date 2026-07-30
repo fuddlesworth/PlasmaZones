@@ -633,7 +633,7 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
     return true;
 }
 
-int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& params)
+QVector<int> ScrollStrip::visibleColumnIndices(const ScrollLayoutParams& params) const
 {
     // Visible = the column's strip span intersects the viewport. Fully
     // minimized columns resolve to zero width and never qualify.
@@ -650,6 +650,12 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
             visible.append(i);
         }
     }
+    return visible;
+}
+
+int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& params)
+{
+    const QVector<int> visible = visibleColumnIndices(params);
     if (visible.size() < 2) {
         return 0;
     }

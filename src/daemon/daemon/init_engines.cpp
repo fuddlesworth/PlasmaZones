@@ -176,10 +176,12 @@ void Daemon::initEnginesAndWiring()
     });
 
     // Scroll "zone numbers" for the navigation OSD: a strip window's zone
-    // number is its 1-based column position, the same coordinate the
-    // Snap-to-Zone digits drive through moveFocusedToPosition. This keeps
-    // the "Zone %1" OSD copy meaningful on scrolling screens, which have
-    // no zone layout of their own.
+    // number is its 1-based VISIBLE column slot — the same viewport-
+    // relative coordinate the previews label and the Snap-to-Zone digits
+    // drive through moveFocusedToPosition. Off-screen windows get no
+    // entry, so the OSD falls back to direction-only copy for them. This
+    // keeps the "Zone %1" copy meaningful on scrolling screens, which
+    // have no zone layout of their own.
     m_overlayService->setScrollZonesProvider([this](const QString& screenId) -> QVariantList {
         const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
         if (!scroll || !scroll->isActiveOnScreen(screenId)) {
@@ -188,13 +190,13 @@ void Daemon::initEnginesAndWiring()
         QVariantList zones;
         const QStringList order = scroll->managedWindowOrder(screenId);
         for (const QString& windowId : order) {
-            const int column = scroll->columnIndexForWindow(screenId, windowId);
-            if (column < 0) {
+            const int slot = scroll->visibleColumnNumberForWindow(screenId, windowId);
+            if (slot < 1) {
                 continue;
             }
             QVariantMap zone;
             zone[QStringLiteral("id")] = windowId;
-            zone[QStringLiteral("zoneNumber")] = column + 1;
+            zone[QStringLiteral("zoneNumber")] = slot;
             zones.append(zone);
         }
         return zones;

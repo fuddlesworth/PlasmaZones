@@ -268,7 +268,15 @@ void ScrollEngine::moveFocusedToPosition(int position, const PhosphorEngine::Nav
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), ctx.windowId, QString(), screen);
         return;
     }
-    const int target = qBound(0, position - 1, state->strip().columnCount() - 1);
+    // Position N addresses the Nth VISIBLE column slot (the zone-number
+    // space the previews label): the strip may extend far off-screen, but
+    // the digits act on what the user can see.
+    const QVector<int> visible = state->strip().visibleColumnIndices(params);
+    if (visible.isEmpty()) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
+        return;
+    }
+    const int target = visible.at(qBound(0, position - 1, visible.size() - 1));
     const bool moved = state->strip().moveActiveColumnTo(target, params);
     if (moved) {
         applyLayout(screen, true);

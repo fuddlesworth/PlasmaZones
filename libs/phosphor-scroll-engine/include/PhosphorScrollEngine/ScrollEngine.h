@@ -199,9 +199,15 @@ public:
     /// actually looks like right now. Empty when the screen has no state
     /// or no visible tile.
     /// @p columnNumbers, when given, receives one entry per returned rect:
-    /// the tile's 1-based strip column position — the scroll "zone number"
-    /// the Snap-to-Zone digits target — so previews can label the columns.
+    /// the tile's 1-based VISIBLE column slot (leftmost on-screen column is
+    /// 1) — the scroll "zone number" the Snap-to-Zone digits target — so
+    /// previews label exactly what is on screen. Off-screen columns carry
+    /// no number by design.
     QVector<QRect> visibleTileRects(const QString& screenId, QVector<int>* columnNumbers = nullptr) const;
+    /// @p windowId's 1-based visible column slot on @p screenId's current
+    /// strip, or -1 when its column is off-screen or untracked (the
+    /// navigation OSD then shows direction-only copy).
+    int visibleColumnNumberForWindow(const QString& screenId, const QString& windowId) const;
     /// visibleTileRects normalized to the work area (0.0–1.0 per axis) —
     /// the shape zone previews consume. Same emptiness contract.
     QVector<QRectF> visibleTileRectsRelative(const QString& screenId, QVector<int>* columnNumbers = nullptr) const;

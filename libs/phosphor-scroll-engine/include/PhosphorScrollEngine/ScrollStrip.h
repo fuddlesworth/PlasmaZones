@@ -210,6 +210,11 @@ public:
     /// unchanged intent.
     bool setWindowHeightIntent(const QString& windowId, const WindowHeight& height);
 
+    /// Strip indices of the columns currently intersecting the viewport,
+    /// in strip order — the scroll "zone" space: visible columns are
+    /// numbered 1..k left to right, off-screen columns carry no number.
+    QVector<int> visibleColumnIndices(const ScrollLayoutParams& params) const;
+
     /// Rotate the window contents of the VISIBLE columns through their
     /// slots (clockwise = every stack shifts one slot right, the last
     /// visible wraps to the first). Widths and display stay with the SLOT,

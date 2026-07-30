@@ -63,6 +63,7 @@ private Q_SLOTS:
     void onOverflowIgnoresShiftedPrevIdxOnRemoval();
     void reconcileLoneTileRecordsHeightIntent();
     void rotateVisibleColumnsCyclesWindowsThroughSlots();
+    void visibleColumnIndicesTrackTheViewport();
     void degenerateWorkAreaNeverAsserts();
     void monsterFixedSiblingLeavesAutoTilesVisible();
     void moveActiveColumnToTracksPreMaximizeSlot();
@@ -408,6 +409,20 @@ void TestScrollStripOps::reconcileGuardsAndEmptyAck()
 
     // Unknown window: plain no-op.
     QVERIFY(!strip.reconcileWindowSize(QStringLiteral("nope"), QSize(100, 100)));
+}
+
+void TestScrollStripOps::visibleColumnIndicesTrackTheViewport()
+{
+    // The scroll zone-number space: visible columns are numbered 1..k left
+    // to right whatever their strip positions, so the numbers always
+    // describe what is on screen. a | b | c focused on c shows [b, c]:
+    // slots 1 and 2 are strip indices 1 and 2; focusing a scrolls to
+    // [a, b] and the same slots now name strip indices 0 and 1.
+    const auto params = defaultParams();
+    ScrollStrip strip = threeColumns(params);
+    QCOMPARE(strip.visibleColumnIndices(params), QVector<int>({1, 2}));
+    QVERIFY(strip.focusFirstColumn(params));
+    QCOMPARE(strip.visibleColumnIndices(params), QVector<int>({0, 1}));
 }
 
 void TestScrollStripOps::rotateVisibleColumnsCyclesWindowsThroughSlots()

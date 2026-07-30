@@ -102,6 +102,12 @@ QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId, QVector<i
     }
     const ResolvedStrip resolved = state->strip().relayout(params);
     QVector<QRect> out;
+    // Viewport-relative numbering: the leftmost VISIBLE column is 1,
+    // whatever its strip position — the numbers describe what is on
+    // screen (the user's chosen zone-number model; digits and the
+    // navigation OSD use the same space).
+    int ordinal = 0;
+    int lastColumnIndex = -1;
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.hidden) {
@@ -113,12 +119,34 @@ QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId, QVector<i
             if (!clipped.isEmpty()) {
                 out.append(clipped);
                 if (columnNumbers) {
-                    columnNumbers->append(column.columnIndex + 1);
+                    if (column.columnIndex != lastColumnIndex) {
+                        ++ordinal;
+                        lastColumnIndex = column.columnIndex;
+                    }
+                    columnNumbers->append(ordinal);
                 }
             }
         }
     }
     return out;
+}
+
+int ScrollEngine::visibleColumnNumberForWindow(const QString& screenId, const QString& windowId) const
+{
+    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+    if (!state) {
+        return -1;
+    }
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    if (!params.workArea.isValid()) {
+        return -1;
+    }
+    const int column = state->strip().columnOfWindow(canonicalizeForLookup(windowId));
+    if (column < 0) {
+        return -1;
+    }
+    const int pos = state->strip().visibleColumnIndices(params).indexOf(column);
+    return pos < 0 ? -1 : pos + 1;
 }
 
 QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId, QVector<int>* columnNumbers) const
