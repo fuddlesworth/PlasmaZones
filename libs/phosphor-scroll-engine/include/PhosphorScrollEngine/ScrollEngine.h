@@ -598,6 +598,22 @@ private:
         /// Cleared on the first successful consume, at which point the entry
         /// is anchored in THIS session's id space and the sweep is meaningful.
         bool stagedFromPersistence = false;
+        /// How many consecutive logins have staged this entry without a
+        /// SINGLE tile ever being claimed.
+        ///
+        /// The exemption above cannot be the whole story, because
+        /// pruneStaleWindows fires exactly ONCE per daemon session (the effect
+        /// sends it at bring-up and there is no periodic sweep). An entry
+        /// whose app never relaunches is therefore exempt at the only moment
+        /// the sweep runs, stays whole, is written back out, and is re-staged
+        /// and re-exempted at the next login — immortal, and eventually able
+        /// to hand an unrelated same-app window a long-dead tile's slot.
+        ///
+        /// So the exemption AGES OUT: serializeStripState writes this
+        /// incremented for an entry that is still unclaimed, and
+        /// restoreStripState refuses to stage one that has gone unclaimed for
+        /// kMaxUnclaimedSessions logins. A single claim resets it to zero.
+        int unclaimedSessions = 0;
 
         bool isEmpty() const
         {

@@ -216,15 +216,29 @@ void TestScrollEnginePersistence::pruneSpareStashStagedFromPersistence()
     // is anchored in this session's id space, so a later prune sweeps it
     // normally. Without the flag clear, a stash tile for a window that closes
     // mid-session would become immortal again.
+    //
+    // Asserted BEHAVIOURALLY, on the strip, with the screen still active.
+    // Reading serializeStripState here would prove nothing: taking the screen
+    // out of scrolling to expose the stash runs stashStripStructure, which
+    // REPLACES the entry wholesale from the live strip, so the staged tile is
+    // gone regardless of whether the flag was ever cleared.
     ScrollEngine* engine3 = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine3->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
     engine3->restoreStripState(blob);
+    // app|m1 claims app|u1's tile in the stashed tabbed column, which clears
+    // the persistence exemption for the whole entry.
     engine3->windowOpened(QStringLiteral("app|m1"), QStringLiteral("S1"), 0, 0);
-    engine3->setActiveScreens({});
+    // The prune now APPLIES: app|u2's tile names a window that is not alive,
+    // so it is swept out of the entry.
     engine3->pruneStaleWindows({QStringLiteral("app|m1")});
-    const QByteArray swept = QJsonDocument(engine3->serializeStripState()).toJson();
-    QVERIFY2(!swept.contains("other|u3"),
-             "after a claim the entry is in this session's id space and the sweep must apply again");
+    // With the sweep applied, app|n2 has no stashed slot left to claim and
+    // opens in its own column. With the exemption stuck, it claims app|u2's
+    // surviving slot and stacks into app|m1's column instead.
+    engine3->windowOpened(QStringLiteral("app|n2"), QStringLiteral("S1"), 0, 0);
+    const int m1Col = engine3->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|m1"));
+    const int n2Col = engine3->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|n2"));
+    QVERIFY2(m1Col != n2Col,
+             "after a claim the sweep must apply again, so the dead stashed tile cannot capture a later arrival");
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePersistence)

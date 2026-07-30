@@ -368,6 +368,11 @@ void ScrollEngine::cycleFocus(bool forward, const PhosphorEngine::NavigationCont
         idx = (idx + (forward ? 1 : -1) + order.size()) % order.size();
         if (!state->strip().isWindowMinimized(order.at(idx)) && state->strip().focusWindow(order.at(idx), params)) {
             applyLayout(screen, true);
+            // Focus and view anchor are persisted, and placementChanged is the
+            // only producer of DirtyScrollStrips — same reason as
+            // focusInDirection. This is the last focus-mutating verb; every
+            // other one already emits.
+            Q_EMIT placementChanged(screen);
             Q_EMIT navigationFeedback(true, action, QString(), active, order.at(idx), screen);
             return;
         }

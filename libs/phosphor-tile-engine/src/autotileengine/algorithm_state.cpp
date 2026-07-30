@@ -148,7 +148,14 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         const bool differsFromDefaults = !qFuzzyCompare(1.0 + m_config->splitRatio, 1.0 + oldAlgo->defaultSplitRatio())
             || m_config->masterCount != PhosphorTiles::AutotileDefaults::DefaultMasterCount
             || m_config->maxWindows != oldAlgo->defaultMaxWindows();
-        if (differsFromDefaults) {
+        // Create-OR-update, not write-only. The gate exists to avoid MINTING a
+        // slot that merely echoes the defaults, but an existing slot must
+        // still be refreshed: a user who tunes splitRatio, switches away and
+        // back, then resets it to the algorithm's default would otherwise
+        // leave the stale tuned value in the slot, and restorePerAlgoSettings
+        // hands it back on the next switch — the reset silently reverts. This
+        // is the shape of the Max Windows silent no-op.
+        if (differsFromDefaults || m_config->savedAlgorithmSettings.contains(m_algorithmId)) {
             auto& entry = m_config->savedAlgorithmSettings[m_algorithmId];
             entry.splitRatio = m_config->splitRatio;
             entry.masterCount = m_config->masterCount;
@@ -583,15 +590,18 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
             releasedScreens.insert(key.screenId);
             ++pruned;
         });
-    if (!releasedWindows.isEmpty()) {
-        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
-    }
-    // Clean up reverse-map entries that reference the pruned desktop. Stale
-    // entries would pollute backfillWindows() and could incorrectly match if
-    // desktop numbers are reused.
+    // Clean up reverse-map entries that reference the pruned desktop BEFORE
+    // emitting. Stale entries would pollute backfillWindows() and could
+    // incorrectly match if desktop numbers are reused — and the daemon's
+    // windowsReleased handler resolves each released window's screen and zone,
+    // so emitting first would let it see phantom candidates keyed to the
+    // desktop that just went away. Same ordering as pruneStatesForRemovedScreen.
     m_states.removeWindowsIf([&](const QString&, const TilingStateKey& key) {
         return key.desktop == removedDesktop;
     });
+    if (!releasedWindows.isEmpty()) {
+        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
+    }
     // Stashed bags for the dead desktop go with it. Desktop NUMBERS are reused
     // after a renumber, so leaving them would hand a recreated key someone
     // else's layout.
@@ -735,13 +745,16 @@ void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities
             releasedScreens.insert(key.screenId);
             ++pruned;
         });
-    if (!releasedWindows.isEmpty()) {
-        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
-    }
-    // Clean up reverse-map entries that reference pruned activities
+    // Reverse-map cleanup BEFORE the emit, same reason as the desktop prune
+    // above: the daemon's windowsReleased handler resolves each window's
+    // screen and zone, and a stale mapping to the pruned activity would hand
+    // it a phantom candidate.
     m_states.removeWindowsIf([&](const QString&, const TilingStateKey& key) {
         return !key.activity.isEmpty() && !valid.contains(key.activity);
     });
+    if (!releasedWindows.isEmpty()) {
+        Q_EMIT windowsReleased(releasedWindows, releasedScreens);
+    }
     std::erase_if(m_scriptStateStash, [&](const auto& entry) {
         return !entry.first.activity.isEmpty() && !valid.contains(entry.first.activity);
     });

@@ -34,6 +34,14 @@ inline QLatin1String kViewAnchor()
 {
     return QLatin1String("viewAnchor");
 }
+inline QLatin1String kUnclaimedSessions()
+{
+    return QLatin1String("unclaimedSessions");
+}
+/// Logins an entry may be staged without a single tile being claimed before it
+/// is dropped. Small on purpose: the entry only survives at all because its app
+/// might come back, and three cold starts is generous evidence that it will not.
+constexpr int kMaxUnclaimedSessions = 3;
 inline QLatin1String kTiles()
 {
     return QLatin1String("tiles");
@@ -188,6 +196,10 @@ QJsonObject ScrollEngine::serializeStripState() const
         obj.insert(kColumns(), columns);
         obj.insert(kFocused(), stash.focusedWindowId);
         obj.insert(kViewAnchor(), stash.viewAnchor);
+        // An entry still flagged staged-from-persistence has had NO tile
+        // claimed this session, so it ages by one. Any claim clears the flag,
+        // which resets the count to 0 and gives the entry a fresh lease.
+        obj.insert(kUnclaimedSessions(), stash.stagedFromPersistence ? stash.unclaimedSessions + 1 : 0);
         return obj;
     };
     // Every window id that is LIVE on some strip right now. Writing the stash
@@ -264,6 +276,20 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
         StashedStrip stash;
         stash.focusedWindowId = obj.value(kFocused()).toString();
         stash.viewAnchor = obj.value(kViewAnchor()).toInt(0);
+        // Absent key reads 0, so a blob written before this field existed gets
+        // a full fresh lease rather than being dropped on sight.
+        stash.unclaimedSessions = obj.value(kUnclaimedSessions()).toInt(0);
+        if (stash.unclaimedSessions >= kMaxUnclaimedSessions) {
+            // Staged this many logins with nothing ever claiming a tile. The
+            // app is not coming back, and the sweep cannot reach the entry
+            // (pruneStaleWindows fires once per session, at bring-up, while
+            // the entry is still exempt), so aging it out here is the only
+            // thing that stops it living forever and eventually handing an
+            // unrelated same-app window a long-dead tile's slot.
+            qCInfo(lcScrollEngine) << "restoreStripState: dropping strip snapshot for" << it.key() << "after"
+                                   << stash.unclaimedSessions << "sessions with no claimed tile";
+            continue;
+        }
         const QJsonArray columns = obj.value(kColumns()).toArray();
         for (const QJsonValue& colVal : columns) {
             if (!colVal.isObject()) {

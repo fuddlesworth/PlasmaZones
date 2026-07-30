@@ -80,7 +80,12 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
     // Peek is hover-driven, so without this bail it collapses on the very
     // first cursor move.
     if (PlasmaZonesEffect::isShowingDesktop()) {
-        m_ffmSuppressPending = false;
+        // The latch is deliberately LEFT ARMED here, unlike the bail above. A
+        // peek does not move or teleport the cursor, so the anchor is still
+        // exactly the strip-move position it was set to. Clearing it let an
+        // incidental twitch during the peek disarm the latch, and the first
+        // twitch after the peek ended then activated whatever column had slid
+        // under the pointer — the focus-yank the latch exists to prevent.
         return;
     }
 
@@ -211,11 +216,20 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
 QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
 {
     const QString tracked = m_notifiedWindowScreens.value(windowId);
-    // isScrollingScreen, not the raw m_scrollingScreens: the discriminator is
-    // the intersection with the managed union, and this helper feeds the paint
-    // clip and the input filter, so it must not answer over a wider set than
-    // everything else does.
-    if (tracked.isEmpty() || !isScrollingScreen(tracked)) {
+    // The RAW set here, deliberately, NOT the isScrollingScreen intersection.
+    //
+    // This helper has two consumers and both want the conservative answer:
+    // the paint clip / input filter, and getWindowScreenId's engine-authoritative
+    // screen override (a parked strip column's frame centre lies inside the
+    // NEIGHBOUR output, so positional fallback misattributes it). The union and
+    // the scrolling set arrive as two independent signals with no ordering
+    // guarantee, so intersecting made a screen leaving scrolling lose BOTH its
+    // clip and its screen override for the frames between them — parked columns
+    // painting in full on the neighbour AND being attributed to it. Answering
+    // over a screen the union has already dropped is harmless by comparison.
+    // The intersection belongs on the RULE and verb consumers, where a wider
+    // answer is the documented hazard.
+    if (tracked.isEmpty() || !m_scrollingScreens.contains(tracked)) {
         return QString();
     }
     if (!TilingStateHelpers::isTiledWindow(m_border, windowId)) {
@@ -1034,19 +1048,17 @@ void TilingHandler::onDaemonReady()
     // for its query and the reply clears it — a false store first was dead.
     loadSettings();
     m_notifiedWindows.clear();
-    // m_notifiedWindowScreens is deliberately NOT cleared alongside it.
+    // Cleared with m_notifiedWindows, as its lifetime partner.
     //
-    // It is the only window→screen map the scroll clip predicate can use, and
-    // loadSettings' two property replies race: whichever order they land in,
-    // clearing here left a window where hasScrollingScreens() is already true
-    // but no window has a tracked screen, so scrollClipGeometryFor returned an
-    // invalid rect for every strip column. For that gap — a D-Bus round trip,
-    // several frames — each edge column's overhang painted onto the adjacent
-    // monitor and the input filter let clicks land on the half about to become
-    // invisible. Holding the previous session's entries closes it: the
-    // re-announce batch overwrites every window it covers, and an entry it
-    // does not cover cannot leak a clip, because scrollTrackedScreenFor also
-    // requires live tiled membership, which only the new daemon can grant.
+    // Holding it across a restart was tried and is INERT: scrollTrackedScreenFor
+    // also requires live tiled membership, and the serviceUnregistered teardown
+    // runs clearTiledTracking() before this, so m_border is empty and every
+    // retained entry fails that gate anyway. It cannot arm the clip for a
+    // single frame. The clip genuinely re-arms when the new daemon's first tile
+    // batch calls markWindowTiled, and that ordering is already safe:
+    // notifyWindowsAddedBatch inserts BOTH maps synchronously before the D-Bus
+    // dispatch, and the daemon cannot tile a window it has not been told about.
+    m_notifiedWindowScreens.clear();
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreTileForDesktopMove.clear();
     // The FFM suppression latch belongs to the dead session too: its anchor

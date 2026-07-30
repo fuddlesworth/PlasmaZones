@@ -1046,8 +1046,11 @@ void WindowTrackingService::retagLastUsedZoneClass(const QString& newClass)
 
 const QSet<QString>& WindowTrackingService::userSnappedClasses() const
 {
-    Q_ASSERT(hasSnapState());
     static const QSet<QString> empty;
+    // The hold check runs BEFORE the state assert, not after: the hold is
+    // engaged exactly when no SnapState is wired, so asserting first would
+    // abort a debug build on the one path this arm exists to serve.
+    //
     // The HOLD wins while it is engaged. setUserSnappedClasses stashes the
     // disk-loaded classes when no SnapState is wired yet, and saveState
     // serialises UserSnappedClasses by iterating exactly this getter — so
@@ -1058,6 +1061,7 @@ const QSet<QString>& WindowTrackingService::userSnappedClasses() const
     if (m_pendingUserSnappedClasses) {
         return *m_pendingUserSnappedClasses;
     }
+    Q_ASSERT(hasSnapState());
     const PhosphorSnapEngine::SnapState* globals = snapGlobals();
     return globals ? globals->userSnappedClasses() : empty;
 }
