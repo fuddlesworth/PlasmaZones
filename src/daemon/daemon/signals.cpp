@@ -633,6 +633,45 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
     // a silent sync of engine↔WTS state, not a user-visible float action.
 }
 
+void Daemon::syncScrollFloatStatePassive(const QString& windowId, bool floating, const QString& screenId)
+{
+    // Scroll twin of syncAutotileFloatStatePassive; see the header for why the
+    // engine routes its own-initiative float transitions here instead of
+    // through windowFloatingChanged.
+    if (!m_scrollEngine || !m_windowTrackingAdaptor) {
+        return;
+    }
+    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    if (!wts) {
+        return;
+    }
+    // Cross-engine handoff, screen-agnostic for the same reason as the autotile
+    // twin: handoffRelease is a no-op when the engine does not track the window,
+    // and a stale same-screen-id comparison used to skip the cleanup.
+    if (m_snapEngine && m_snapEngine->isWindowTracked(windowId)) {
+        qCInfo(lcDaemon) << "Cross-engine handoff: releasing snap state for" << windowId << "(scrolling screen"
+                         << screenId << ")";
+        m_snapEngine->handoffRelease(windowId);
+    }
+    if (m_autotileEngine && m_autotileEngine->isWindowTracked(windowId)) {
+        qCInfo(lcDaemon) << "Cross-engine handoff: releasing autotile state for" << windowId << "(scrolling screen"
+                         << screenId << ")";
+        m_autotileEngine->handoffRelease(windowId);
+    }
+    if (floating) {
+        m_windowTrackingAdaptor->setWindowFloating(windowId, true);
+        m_scrollEngine->markModeSpecificFloated(windowId);
+        const QString preFloatScreen = wts->preFloatScreen(windowId);
+        if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
+            wts->clearPreFloatZone(windowId);
+        }
+    } else {
+        m_windowTrackingAdaptor->setWindowFloating(windowId, false);
+        m_scrollEngine->clearModeSpecificFloatMarker(windowId);
+    }
+    // Deliberately no applyGeometryForFloat and no navigation OSD.
+}
+
 void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QString& screenId)
 {
     // Symmetric null-guard with syncAutotileFloatState — shutdown-window

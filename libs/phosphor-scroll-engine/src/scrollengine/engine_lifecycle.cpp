@@ -36,7 +36,7 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // list never empties and the stale entry survives every later mode
         // transition.
         consumePendingInitialOrder(screenId, windowId);
-        Q_EMIT windowFloatingChanged(windowId, true, screenId);
+        Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
         return;
     }
 
@@ -53,7 +53,7 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 // this engine's own — marked like the rule-float exit above.
                 m_scrollFloatedWindows.insert(windowId);
                 consumePendingInitialOrder(screenId, windowId); // same rationale as the rule-float exit
-                Q_EMIT windowFloatingChanged(windowId, true, screenId);
+                Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
                 return;
             }
             if (slot.state == PhosphorEngine::WindowPlacement::stateTiled() && slot.order >= 0) {
@@ -228,7 +228,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
             // the window floats while insertOpenedWindow tiles it below,
             // and resolve the divergence as a float-back. A float RECORD
             // re-float re-announces true immediately afterwards.
-            Q_EMIT windowFloatingChanged(windowId, false, oldKey.screenId);
+            Q_EMIT windowFloatingStateSynced(windowId, false, oldKey.screenId);
         }
         scheduleRetileForScreen(oldKey.screenId);
         Q_EMIT placementChanged(oldKey.screenId);
@@ -239,8 +239,8 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         return;
     }
     // Track BEFORE inserting: insertOpenedWindow's oversized/rule-float
-    // paths emit windowFloatingChanged, and a synchronous query-back from a
-    // subscriber must already see the window as this engine's.
+    // paths emit windowFloatingStateSynced, and a synchronous query-back from
+    // a subscriber must already see the window as this engine's.
     m_states.setKeyForWindow(windowId, key);
     // Capture the pre-insert focus: with focus-new-windows OFF the
     // compositor keeps focus on the previous window, so the strip must not
@@ -523,7 +523,7 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
             // like unfloatWindowInternal/handoffRelease do.
             m_scrollFloatedWindows.remove(windowId);
             m_states.setKeyForWindow(windowId, currentKeyForScreen(targetScreen));
-            Q_EMIT windowFloatingChanged(windowId, false, targetScreen);
+            Q_EMIT windowFloatingStateSynced(windowId, false, targetScreen);
             applyLayout(targetScreen, false);
             Q_EMIT placementChanged(targetScreen);
         }
@@ -604,7 +604,7 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
             // dropped float bit leaves signal-driven subscribers believing
             // the window floats while the receive tiles it (the
             // wasFloating branch below re-announces true when it applies).
-            Q_EMIT windowFloatingChanged(windowId, false, staleKey.screenId);
+            Q_EMIT windowFloatingStateSynced(windowId, false, staleKey.screenId);
         }
         scheduleRetileForScreen(staleKey.screenId);
         Q_EMIT placementChanged(staleKey.screenId);
@@ -626,7 +626,7 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         // poisons the snap slot with the arrival frame.
         m_scrollFloatedWindows.insert(windowId);
         m_states.setKeyForWindow(windowId, key);
-        Q_EMIT windowFloatingChanged(windowId, true, ctx.toScreenId);
+        Q_EMIT windowFloatingStateSynced(windowId, true, ctx.toScreenId);
         // The screen's placement changed too (managed set grew), even
         // though no strip geometry moved.
         Q_EMIT placementChanged(ctx.toScreenId);

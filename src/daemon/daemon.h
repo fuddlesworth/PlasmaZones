@@ -1018,6 +1018,25 @@ private:
     void syncAutotileFloatStatePassive(const QString& windowId, bool floating, const QString& screenId);
 
     /**
+     * @brief Scroll twin of syncAutotileFloatStatePassive.
+     *
+     * Handler for ScrollEngine::windowFloatingStateSynced. The scroll engine
+     * emits that signal (rather than windowFloatingChanged) for every float
+     * transition it makes on its OWN initiative: the rule/oversize float at
+     * open, the record-restore float at open, the cross-context and stale-key
+     * migration drops, the unfloat-by-adoption, and the handoffReceive
+     * re-float. None of those is a user float action, so none may restore the
+     * stored free geometry (it would teleport a window that already has a
+     * valid position — discussion #271) or raise a navigation OSD.
+     *
+     * It also carries the cross-engine eviction the autotile twin performs:
+     * scroll adoption must release any stale snap or autotile tracking, or a
+     * window re-announced onto a scrolling screen leaves a permanent ghost in
+     * the engine that still tracks it.
+     */
+    void syncScrollFloatStatePassive(const QString& windowId, bool floating, const QString& screenId);
+
+    /**
      * @brief Batch-update daemon-side float state for overflow-floated windows
      *
      * Updates WTS state directly without emitting per-window D-Bus signals

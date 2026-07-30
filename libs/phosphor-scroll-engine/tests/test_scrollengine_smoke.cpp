@@ -239,9 +239,15 @@ void TestScrollEngineSmoke::handoffReceiveAdoptsFloatingWindow()
     // strip, and the float it carried becomes THIS engine's own — marked, so
     // the next mode transition does not capture it into the snap slot with
     // the arrival frame. The announcement is the effect's only input here.
+    //
+    // It rides windowFloatingStateSynced, not windowFloatingChanged: an arrival
+    // is not a user float action, so the daemon must not restore the stored free
+    // geometry over the drop position or raise a float OSD. Autotile's
+    // handoffReceive announces on the same passive signal.
     QObject owner;
     ScrollEngine* engine = makeEngine(&owner);
-    QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+    QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+    QSignalSpy activeFloatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
 
     PhosphorEngine::IPlacementEngine::HandoffContext ctx;
     ctx.windowId = QStringLiteral("app|h");
@@ -260,6 +266,9 @@ void TestScrollEngineSmoke::handoffReceiveAdoptsFloatingWindow()
     QCOMPARE(floatSpy.last().at(0).toString(), QStringLiteral("app|h"));
     QCOMPARE(floatSpy.last().at(1).toBool(), true);
     QCOMPARE(floatSpy.last().at(2).toString(), QStringLiteral("S2"));
+    // And NOT on the active signal, which would teleport the arrival to its
+    // stored free geometry.
+    QCOMPARE(activeFloatSpy.count(), 0);
 }
 
 void TestScrollEngineSmoke::lastManagedRectSurvivesClose()
@@ -911,21 +920,28 @@ void TestScrollEngineSmoke::floatedOpenConsumesSeed()
 
 void TestScrollEngineSmoke::migrateOutAnnouncesDroppedFloat()
 {
-    // Both migrate-out paths drop the float bit, and both must SAY so:
-    // windowFloatingChanged is the only thing signal-driven subscribers (the
-    // effect's FloatingCache) have, and a silent drop leaves them believing
-    // the window still floats while it is tiled on the new screen — which
-    // they later resolve as a float-back.
+    // Both migrate-out paths drop the float bit, and both must SAY so: a
+    // silent drop leaves signal-driven subscribers (the effect's FloatingCache)
+    // believing the window still floats while it is tiled on the new screen,
+    // which they later resolve as a float-back.
+    //
+    // The announcement rides windowFloatingStateSynced. A migration is the
+    // engine's own bookkeeping, not a user float action, so the daemon must
+    // mirror the state without restoring geometry or raising an OSD; only the
+    // explicit setWindowFloat below is an active transition.
     QObject owner;
     ScrollEngine* engine = makeEngine(&owner);
-    QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+    QSignalSpy floatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+    QSignalSpy activeFloatSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
 
     // windowOpened's context migration.
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     engine->setWindowFloat(QStringLiteral("app|a"), true, QStringLiteral("S1"));
-    QCOMPARE(floatSpy.count(), 1);
+    QCOMPARE(activeFloatSpy.count(), 1); // the user float is the ACTIVE arm
+    QCOMPARE(floatSpy.count(), 0);
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S2"), 0, 0);
-    QCOMPARE(floatSpy.count(), 2);
+    QCOMPARE(floatSpy.count(), 1);
+    QCOMPARE(activeFloatSpy.count(), 1); // the migration must not reach it
     QCOMPARE(floatSpy.last().at(0).toString(), QStringLiteral("app|a"));
     QCOMPARE(floatSpy.last().at(1).toBool(), false);
     QCOMPARE(floatSpy.last().at(2).toString(), QStringLiteral("S1")); // the screen it LEFT
