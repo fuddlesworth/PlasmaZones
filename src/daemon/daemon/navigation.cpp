@@ -491,11 +491,32 @@ void Daemon::emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntrie
     if (m_pendingSnapFloatRestores.isEmpty()) {
         return;
     }
+    // A snap-float restore is a SNAPPING-mode action. An entry whose screen
+    // currently resolves to a tiling-family mode is HELD, not emitted:
+    // replaying it would float the window out of the live autotile grid or
+    // scroll strip (observed as dolphin popping out of Aligned Grid seconds
+    // after a snapping→autotile toggle — the presave for the RETURN trip
+    // was drained into the mode it was saved against). Held entries stay
+    // pending for the eventual snapping consumer; the next presave
+    // overwrites them.
+    const auto snapOwnsEntryScreen = [this](const ZoneAssignmentEntry& e) {
+        if (e.targetScreenId.isEmpty()) {
+            return true; // unscreened: historical permissive path
+        }
+        // Router-backed (downgrades disabled modes to Snapping) — the same
+        // verdict every shortcut dispatch uses.
+        return currentModeFor(e.targetScreenId) == PhosphorZones::AssignmentEntry::Snapping;
+    };
     QVector<ZoneAssignmentEntry> floatEntries;
+    QVector<ZoneAssignmentEntry> heldFloatEntries;
     QVector<ZoneAssignmentEntry> zoneEntries;
     for (const ZoneAssignmentEntry& e : std::as_const(m_pendingSnapFloatRestores)) {
         if (e.targetZoneId == RestoreSentinel) {
-            floatEntries.append(e);
+            if (snapOwnsEntryScreen(e)) {
+                floatEntries.append(e);
+            } else {
+                heldFloatEntries.append(e);
+            }
         } else {
             zoneEntries.append(e);
         }
@@ -509,13 +530,15 @@ void Daemon::emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntrie
         // preClaimedZoneIds / the batched restore. Clearing it here was a
         // regression that left previously-floated-then-toggled windows
         // stranded off their zones.
-        m_pendingSnapFloatRestores = zoneEntries;
+        m_pendingSnapFloatRestores = zoneEntries + heldFloatEntries;
     } else {
         // Full consume: the caller is (or stands in for) the final
         // consumer on its path. Remaining zone entries are deliberately
         // handed to an in-flight resnapToNewLayout when one exists, else
         // dropped (a prune-origin batch's zones reference a dead screen).
-        m_pendingSnapFloatRestores.clear();
+        // Held floats survive even a full consume — their moment is the
+        // screen's return to snapping, which this caller is not.
+        m_pendingSnapFloatRestores = heldFloatEntries;
     }
     if (floatEntries.isEmpty()) {
         return;
