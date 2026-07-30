@@ -251,7 +251,8 @@ Window {
         // above the passive content types (main overlay z=0, zone
         // selector z=1) so a layout-OSD or nav-OSD reads cleanly over an
         // active zone overlay or drag-time selector. While a MODAL slot
-        // (snap-assist / layout picker, both z=2) is visible the OSD
+        // (snap-assist, layout picker, or the shortcut cheatsheet, all
+        // z=2) is visible the OSD
         // drops to 1.5 — still above the passive tiers, but below the
         // modal — so a concurrently-fired OSD card neither occludes
         // modal content for its ~1.5s display nor lets its

@@ -11,12 +11,12 @@
  * tabs (list of {title, active}). Updates are plain property writes; the
  * component is not re-instantiated per relayout.
  *
- * Overflow: a column narrower than its tab row left-anchors the row and
- * clips the TRAILING chips (no "+N" affordance) — a deliberate v1
- * trade-off for a passive indicator. Chips render in stacking order, so
- * an active tab late in the order can itself be clipped; the indicator
- * degrades to "there are tabs here" in that case. The strip carries no
- * accessible surface because it is click-through by design.
+ * Overflow: a column narrower than its tab row scrolls the row just far
+ * enough to keep the ACTIVE chip inside the pill and clips whichever
+ * chips fall outside, with no "+N" affordance. The highlight is what the
+ * indicator exists to show, so it is the one chip that always stays
+ * visible. The strip carries no accessible surface because it is
+ * click-through by design.
  */
 
 import QtQuick
@@ -72,17 +72,41 @@ Item {
             Row {
                 id: tabRow
 
+                // The active chip, or null before the Repeater has built its
+                // delegates. Used to keep the highlight on screen when the
+                // row overflows.
+                function activeChip() {
+                    for (var i = 0; i < children.length; i++) {
+                        if (children[i].active === true)
+                            return children[i];
+                    }
+                    return null;
+                }
+
                 // Centered while it fits, with whatever padding is left over
                 // splitting evenly — a cramped column simply centers in a
                 // thinner margin instead of shifting the row off-center.
-                // Once the row is wider than the pill it starts at the left
-                // edge: centering would clip BOTH ends, and this way a
-                // cramped column still shows a partial leading chip instead
-                // of an empty pill. Chips render in stacking order, so an
-                // active tab late in the order CAN be clipped (see the file
-                // doc's overflow paragraph).
+                // Once the row is wider than the pill it scrolls just far
+                // enough to keep the ACTIVE chip inside: centering would clip
+                // both ends, and left-anchoring clipped the highlight itself
+                // whenever the active tab sat late in the order, which left
+                // the indicator showing tabs with none of them marked.
                 anchors.verticalCenter: parent.verticalCenter
-                x: pill.width >= width ? (pill.width - width) / 2 : 0
+                x: {
+                    if (pill.width >= width)
+                        return (pill.width - width) / 2;
+                    var chip = activeChip();
+                    if (!chip)
+                        return 0;
+                    var shift = 0;
+                    if (chip.x + chip.width > pill.width)
+                        shift = pill.width - (chip.x + chip.width);
+                    // A chip wider than the pill cannot fit whole; show its
+                    // leading edge rather than scrolling past it.
+                    if (shift < -chip.x)
+                        shift = -chip.x;
+                    return shift;
+                }
                 spacing: Kirigami.Units.smallSpacing
 
                 Repeater {

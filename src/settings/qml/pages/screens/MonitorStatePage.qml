@@ -137,7 +137,7 @@ SettingsFlickable {
             settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, siblingSnapping, siblingTiling);
             return;
         }
-        if (stateView.localMode === 1) {
+        if (stateView.isTiling) {
             // An explicit "Default" pick clears the algorithm slot. Otherwise
             // stage the user's pick, else the currently-resolved algorithm.
             var algoId = stateView.localAlgorithmCleared ? "" : (stateView.localAlgorithmId || state.algorithmId || "");
@@ -374,7 +374,10 @@ SettingsFlickable {
                 if (!screenState)
                     return;
                 scrollingStripZones = settingsController.getScrollingStripPreview(screenState.screenId || "");
-                if (scrollingStripZones.length === 0 && (screenState.mode || 0) === 2)
+                // Skip the settle beat while the live poll below is running:
+                // it re-reads on its own, so the extra one-shot would just
+                // double the call rate for as long as the strip stays empty.
+                if (scrollingStripZones.length === 0 && (screenState.mode || 0) === 2 && !stripLiveRefresh.running)
                     stripSettleRetry.restart();
             }
 
@@ -382,10 +385,21 @@ SettingsFlickable {
                 id: stripSettleRetry
                 interval: 400
                 repeat: false
-                onTriggered: {
-                    if (stateView.screenState)
-                        stateView.scrollingStripZones = settingsController.getScrollingStripPreview(stateView.screenState.screenId || "");
-                }
+                onTriggered: stateView.refreshScrollingStrip()
+            }
+
+            // The strip is live state: the user can open a window, widen a
+            // column, or tab two together while this page is up, and the
+            // daemon publishes no per-strip-change signal to subscribe to.
+            // So the preview re-reads on a slow beat, and only while it is
+            // actually on screen showing a scrolling monitor. The read is a
+            // single cheap D-Bus call that returns [] for any other screen.
+            Timer {
+                id: stripLiveRefresh
+                interval: 2000
+                repeat: true
+                running: stateView.visible && stateView.screenState !== null && (stateView.screenState.mode || 0) === 2
+                onTriggered: stateView.refreshScrollingStrip()
             }
 
             Layout.alignment: Qt.AlignHCenter
@@ -411,7 +425,12 @@ SettingsFlickable {
                 // first reported one, and fetching with the empty id left the
                 // sketch up despite a live strip.
                 refreshScrollingStrip();
-                var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
+                // Keyed on the STATE's own screen id, for the same reason the
+                // strip refresh above is: before the user clicks a monitor,
+                // _selectedScreen is still empty while the state being shown
+                // is the first reported one, so reading the staged entry for
+                // the empty id would show the wrong monitor's pending edit.
+                var staged = settingsController.getStagedAssignment(screenState.screenId || "", desktop, activity);
                 if (Object.keys(staged).length > 0) {
                     // A staged entry carries the WHOLE context rule, so every
                     // slot in it is authoritative: a missing id is a pending

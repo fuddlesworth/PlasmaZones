@@ -906,7 +906,13 @@ PhosphorUi.SettingsAppWindow {
             // The inline enable toggles must stay with them.
             readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
             readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
-            readonly property bool isScrolling: entry && (entry.pageId === "scrolling" || entry.pageId === "scrolling-behavior")
+            // Scrolling differs from its two siblings: it has no SimpleOnly
+            // condensed page, so its leaf is visible in BOTH modes. Matching
+            // the leaf unconditionally put a second toggle for the same
+            // scrollingEnabled flag next to the parent row in advanced mode.
+            // The leaf only stands in for the parent when the tree is
+            // flattened, which is exactly when the parent row is not emitted.
+            readonly property bool isScrolling: entry && (entry.pageId === "scrolling" || (entry.pageId === "scrolling-behavior" && !settingsController.advancedMode))
             // The id whose dirty state this row REPRESENTS, which is not
             // always the id it renders. Simple mode condenses a whole subtree
             // down to one visible row, and that row's own dirty state covers
@@ -923,7 +929,11 @@ PhosphorUi.SettingsAppWindow {
             // subtitle that names one of exactly three features, so it must
             // stay bounded to the three ids those consumers handle.
             // dirtyScopeId is an unbounded walk result and could hop past them.
-            readonly property string sectionId: isSnapping ? "snapping" : (isTiling ? "tiling" : "scrolling")
+            // Spelled out rather than defaulting to "scrolling" in the else
+            // branch: the three flags are not exhaustive over every row, and
+            // an empty id is a visibly inert scope rather than a silent write
+            // to scrollingEnabled from a row that is none of the three.
+            readonly property string sectionId: isSnapping ? "snapping" : (isTiling ? "tiling" : (isScrolling ? "scrolling" : ""))
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0
@@ -1023,7 +1033,7 @@ PhosphorUi.SettingsAppWindow {
                         appSettings.snappingEnabled = newValue;
                     else if (trailingRow.isTiling)
                         appSettings.autotileEnabled = newValue;
-                    else
+                    else if (trailingRow.isScrolling)
                         appSettings.scrollingEnabled = newValue;
                     settingsController.endExternalEdit();
                 }
