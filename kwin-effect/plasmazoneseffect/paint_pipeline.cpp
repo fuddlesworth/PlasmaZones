@@ -583,9 +583,17 @@ QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w) const
     if (!w || w->isDeleted() || w->isUserMove() || w->isUserResize()) {
         return QRect();
     }
-    const QString trackedScreen = m_trackedScreenPerWindow.value(w);
-    if (trackedScreen.isEmpty() || !m_tilingHandler->isScrollingScreen(trackedScreen) || !m_navigationHandler
-        || m_navigationHandler->isWindowFloating(getWindowId(w))) {
+    // scrollTrackedScreenFor, NOT m_trackedScreenPerWindow. That map is
+    // populated for EVERY window setupWindowConnections runs on — dialogs,
+    // popups, excluded apps, keep-above overlays — so keying the clip on it
+    // clipped any window merely sitting on a scrolling screen. A modal
+    // straddling the boundary was then drawn only on the strip's output and,
+    // through the same predicate in the input filter, had its other half
+    // treated as dead overhang. The helper carries the two invariants this
+    // needs: tiled membership (it IS a strip column) and connected-output
+    // liveness. getWindowScreenId already routes through it.
+    const QString trackedScreen = m_tilingHandler->scrollTrackedScreenFor(getWindowId(w));
+    if (trackedScreen.isEmpty() || !m_navigationHandler || m_navigationHandler->isWindowFloating(getWindowId(w))) {
         return QRect();
     }
     const KWin::LogicalOutput* managedOutput = outputForScreenId(trackedScreen);

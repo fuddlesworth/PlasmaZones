@@ -311,6 +311,13 @@ void Daemon::connectShortcutSignals()
         m_perStartConnections.append(connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
             refreshCheatsheetIfVisible();
         }));
+        // Scrolling needs the same twin now that it is a first-class
+        // cheatsheet mode: the sheet filters its rows on the resolved mode,
+        // and disabling the master switch while it is open otherwise leaves
+        // the Scrolling group on screen for a mode that is no longer live.
+        m_perStartConnections.append(connect(m_settings.get(), &Settings::scrollingEnabledChanged, this, [this]() {
+            refreshCheatsheetIfVisible();
+        }));
     }
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
         // Release the shared Escape grab only when no other consumer (snap

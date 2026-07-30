@@ -1018,6 +1018,10 @@ void TilingHandler::onDaemonReady()
     m_notifiedWindowScreens.clear();
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreTileForDesktopMove.clear();
+    // The FFM suppression latch belongs to the dead session too: its anchor
+    // names a cursor position from before the restart, and leaving it armed
+    // swallows the first cursor move that lands within the resume radius.
+    m_ffmSuppressPending = false;
     // Centering state is per-retile transient: the restarted daemon has no
     // memory of the zones these entries point at, and a stale
     // m_centeredWaylandZones entry that happens to equal the first

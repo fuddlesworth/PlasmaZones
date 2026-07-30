@@ -183,7 +183,14 @@ void TilingHandler::loadSettings()
                     // same rule-cache invalidate + border sweep as a live
                     // signal, or a Mode "scrolling" rule verdict memoised
                     // before the reply landed would stick.
-                    setScrollingScreens(QSet<QString>(screens.cbegin(), screens.cend()));
+                    // announceFlipped=false: this is a BRING-UP load, which is
+                    // exactly the case the contract reserves it for. The
+                    // managed-screens reply owns the re-announce, and letting
+                    // this one flip too bumped the per-screen stagger epoch
+                    // mid-flight, voiding the tile batch the daemon had already
+                    // started delivering and leaving the screen half-tiled.
+                    setScrollingScreens(QSet<QString>(screens.cbegin(), screens.cend()),
+                                        /*announceFlipped=*/false);
                     qCInfo(lcEffect) << "Loaded scrolling screens:" << m_scrollingScreens;
                 } else {
                     // Without this trail, "Mode == scrolling rules never

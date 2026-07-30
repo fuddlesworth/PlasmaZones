@@ -75,7 +75,7 @@ private:
     /// Buttons whose PRESS this filter consumed — their releases are consumed
     /// too, even if the cursor has left the overhang, so the client never
     /// sees an unpaired release.
-    Qt::MouseButtons m_consumedButtons;
+    Qt::MouseButtons m_consumedButtons = Qt::NoButton;
     /// Touch ids whose DOWN this filter consumed, for the matching ups.
     QSet<qint32> m_consumedTouchIds;
 };

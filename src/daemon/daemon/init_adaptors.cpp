@@ -138,6 +138,13 @@ void Daemon::initCoreAdaptors()
     m_settingsAdaptor = nullptr;
     delete m_layoutAdaptor;
     m_layoutAdaptor = nullptr;
+    // DBusScreenAdaptor is in this set for the same reason as the Tiling and
+    // Scrolling pair above: it is a QDBusAbstractAdaptor child of the
+    // D-Bus-registered Daemon and is re-newed unconditionally below, so
+    // omitting it leaked the old one and left a second adaptor registered for
+    // an interface that already had one on this object.
+    delete m_screenAdaptor;
+    m_screenAdaptor = nullptr;
 
     // Initialize domain-specific D-Bus adaptors
     // Each adaptor has its own D-Bus interface
