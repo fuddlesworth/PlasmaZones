@@ -19,9 +19,10 @@ namespace PhosphorScrollEngine {
 /// (Qt-parent-owned), mirroring SnapState / TilingState.
 ///
 /// Floating windows are NOT in the strip — a float pulls the window out and
-/// its column closes up; an unfloat re-inserts it as a fresh column next to
-/// the focused one. The engine drives both transitions; this object only
-/// stores membership.
+/// its column closes up. An unfloat restores the remembered slot (stack
+/// anchor, column index, width and display), falling back to a fresh column
+/// next to the focused one only when none of that survives. The engine drives
+/// both transitions; this object only stores membership.
 class PHOSPHORSCROLLENGINE_EXPORT ScrollState : public QObject, public PhosphorEngine::IPlacementState
 {
     Q_OBJECT

@@ -170,9 +170,10 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     {Field::ScreenOrientation, QLatin1StringView("screenOrientation"), FieldType::String, FieldSource::Context},
     // [39] — The layout id currently resolved for the screen (snap UUID,
     // "autotile:<algo>", or the bare "scrolling:" sentinel). String-valued (Equals against the id) and Context-
-    // sourced. Populated only by the daemon-facing resolvers (gap / lock /
-    // overlay), NOT the assignment cascade — reading the active layout while
-    // resolving it would recurse. Empty (predicate false) where unpopulated.
+    // sourced. Populated by the five daemon-facing resolvers (gap, lock,
+    // overlay, tiling-params, scrolling-params), NOT the assignment cascade —
+    // reading the active layout while resolving it would recurse. Empty
+    // (predicate false) where unpopulated.
     {Field::ActiveLayout, QLatin1StringView("activeLayout"), FieldType::String, FieldSource::Context},
 };
 static_assert(sizeof(kFieldTable) / sizeof(kFieldTable[0]) == static_cast<unsigned>(FieldCount),

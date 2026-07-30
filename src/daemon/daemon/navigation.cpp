@@ -480,7 +480,8 @@ void Daemon::resnapIfManualMode()
     }
     // Co-locate the suppress pre-arm with the resnap call so a null
     // m_snapAdaptor doesn't leave the counter armed for the next
-    // unrelated navigationFeedback. Mirrors the daemon.cpp:1249 site.
+    // unrelated navigationFeedback. Mirrors the other armResnapOsdSuppression
+    // call sites (a line number into another TU rots on every file split).
     if (m_snapAdaptor) {
         armResnapOsdSuppression(1);
         m_snapAdaptor->resnapToNewLayout();

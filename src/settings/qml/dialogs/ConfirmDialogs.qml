@@ -146,8 +146,9 @@ Item {
                     // Discard the section's staged edits first, THEN flip the
                     // enable flag — otherwise the inline beginExternalEdit /
                     // endExternalEdit pair would surface the still-staged edits
-                    // alongside the disable. discardPage("snapping"/"tiling")
-                    // reverts every manifest-backed leaf under that mode back to
+                    // alongside the disable. discardPage("snapping" / "tiling"
+                    // / "scrolling") reverts every manifest-backed leaf under
+                    // that mode back to
                     // the committed baseline (the framework PageAdapter.discard()
                     // for these virtual parents is a no-op, so the old
                     // registry.controller(section).discard() call did nothing).

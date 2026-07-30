@@ -349,8 +349,8 @@ void Daemon::connectDesktopActivity()
                 // Desktop numbers are 1-based. Any state with desktop > newCount is
                 // stale. desktopsWithActiveState() returns the desktops currently
                 // holding state — filter for anything past the new count and prune,
-                // avoiding the arbitrary upper bound of the old newCount+20 sweep. Both
-                // per-monitor engines carry their own stores, so prune both.
+                // avoiding the arbitrary upper bound of the old newCount+20 sweep. All
+                // THREE engines carry their own stores, so prune each.
                 for (PhosphorEngine::PlacementEngineBase* engine :
                      {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
                     if (!engine) {
@@ -411,8 +411,8 @@ void Daemon::connectDesktopActivity()
                 }
             }
 
-            // Both per-monitor engines carry their own per-(screen,desktop,activity)
-            // stores, so prune removed activities from both.
+            // All three engines carry their own per-(screen,desktop,activity)
+            // stores, so prune removed activities from each.
             for (PhosphorEngine::PlacementEngineBase* engine :
                  {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
                 if (engine) {

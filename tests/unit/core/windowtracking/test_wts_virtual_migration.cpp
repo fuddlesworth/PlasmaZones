@@ -6,10 +6,19 @@
  * @brief Unit tests for WindowTrackingService virtual screen migration
  *
  * Tests cover:
- * 1. Migration from physical to virtual screen IDs
- * 2. Migration from virtual back to physical screen IDs
- * 3. Round-trip: physical -> virtual -> physical preserves assignments
- * 4. Migration with no windows on the target screen (no-op)
+ * 1. Migration from physical to virtual screen IDs, including the
+ *    geometry-routing happy path (headless, via FakeScreenProvider) and the
+ *    two guard clauses, each isolated so the conjunct it names is the
+ *    deciding one.
+ * 2. Migration from virtual back to physical screen IDs, including the
+ *    pre-float screen fold.
+ * 3. Round-trip: physical -> virtual -> physical preserves assignments.
+ * 4. No-op cases: no windows on the target screen, no virtual windows.
+ * 5. Re-assignment across a virtual-screen boundary leaves nothing behind on
+ *    the old sub-screen.
+ * 6. Removing all virtual screens reverts to physical, touching only the
+ *    target monitor.
+ * 7. physicalScreensWithStaleVirtualAssignments orphan discovery.
  */
 
 #include <QTest>
@@ -76,7 +85,6 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
-        m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_service->setSnapState(m_snapState);
@@ -98,8 +106,6 @@ private Q_SLOTS:
         m_snapState = nullptr;
         delete m_service;
         m_service = nullptr;
-        delete m_zoneDetector;
-        m_zoneDetector = nullptr;
         delete m_layoutManager;
         m_layoutManager = nullptr;
         m_testLayout = nullptr;
@@ -511,7 +517,6 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;
     PhosphorZones::Layout* m_testLayout = nullptr;

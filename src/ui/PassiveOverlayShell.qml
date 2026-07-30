@@ -705,7 +705,8 @@ Window {
         property bool fontStrikeout: false
 
         anchors.fill: parent
-        // Indicator tier: above the main overlay, below OSDs and modals.
+        // Indicator tier: above the main overlay, below the zone selector,
+        // the OSDs and the modals.
         z: 0.5
         opacity: 0
         visible: false

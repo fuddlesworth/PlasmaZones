@@ -139,7 +139,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // Cross-engine references — SnapEngine needs AutotileEngine for
     // isActiveOnScreen() routing and ZoneDetectionAdaptor for adjacency queries.
     // These are wired only when a live SnapEngine is supplied; a teardown call
-    // (nullptr, nullptr) has no SnapEngine to clear them on, so the stale borrows
+    // (nullptr, nullptr, nullptr) has no SnapEngine to clear them on, so the stale borrows
     // are released by the engines' own destruction (Daemon::stop resets both
     // engines immediately after this call), not here.
     // ═══════════════════════════════════════════════════════════════════════════

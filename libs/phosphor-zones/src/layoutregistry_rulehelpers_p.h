@@ -59,9 +59,11 @@ inline size_t qHash(const ContextDims& dims, size_t seed = 0) noexcept
 // @p mode is the placement-mode wire token ("snapping" / "tiling" /
 // "scrolling"); set by the mode-aware resolvers (gap cascade, and the
 // tiling/scrolling param resolvers, which stamp their own engine's token)
-// so a per-mode `Mode Equals "…"` rule resolves. Left empty for the
-// mode-agnostic resolvers (assignment / lock / overlay), where it stays a
-// non-match for any Mode leaf.
+// so a per-mode `Mode Equals "…"` rule resolves. Left empty for the four
+// mode-agnostic resolvers (assignment / lock / overlay / default-assignment),
+// which exclude Field::Mode STRUCTURALLY rather than relying on the empty
+// value to be a non-match — an unstamped mode reads back engaged-empty, which
+// a negated `None{Mode Equals …}` leaf matches.
 PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity,
                                   const QString& mode = QString());
 
@@ -123,14 +125,17 @@ bool matchIsExactContextBase(const PWR::MatchExpression& match);
 bool matchIsExactContextDesktop(const PWR::MatchExpression& match);
 bool matchIsExactContextActivity(const PWR::MatchExpression& match);
 
-// True if @p rule is a pure context-assignment rule for one of the cascade
-// families (per-screen-base / per-desktop / per-activity) — i.e. it carries a
-// SetEngineMode action AND its match is exactly a pinned context shape (not
-// the catch-all, not a window-property rule that happens to carry an
-// engine-mode action). The batch purge / clear loops gate on this so a
-// legitimate window-property rule carrying SetSnappingLayout / SetEngineMode
-// actions is never rebuilt — rebuilding force-injects SetEngineMode and
-// drops every other action, which would clobber a window-property rule.
+// True if @p rule is a context-shaped, engine-mode-carrying rule for one of
+// the cascade families (per-screen-base / per-desktop / per-activity) — i.e.
+// it carries a SetEngineMode action AND its match is exactly a pinned context
+// shape (not the catch-all, not a window-property rule that happens to carry
+// an engine-mode action).
+//
+// NOT a purity check, despite the family name: this says nothing about the
+// rule's OTHER actions. Any caller that REBUILDS rule.actions must gate on
+// isPureAssignmentRule as well, or a context rule carrying SetEngineMode
+// alongside SetOpacity or LockContext loses the extra action — rebuilding
+// force-injects the three slot actions and drops everything else.
 bool isContextAssignmentRule(const PWR::Rule& rule);
 
 // Build the AssignmentEntry encoded directly by a rule's action list (no
