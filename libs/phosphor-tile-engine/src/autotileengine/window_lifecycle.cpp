@@ -623,7 +623,16 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     // foreign code — matching insertShouldFloat, which short-circuits it for the
     // same reason.
     const bool ruleWillFloat = !isMigrationArrival && m_floatPredicate && m_floatPredicate(windowId);
-    if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat && !isMigrationArrival) {
+    // A window the state ALREADY holds is exempt from the cap: it consumes
+    // no new slot, and refusing its RE-ANNOUNCE broke every mode transition
+    // whose strict seed filled the state to exactly the cap — each of the
+    // effect's follow-up windowOpened calls hit tiledWindowCount >= maxWin,
+    // purged the seed order, and skipped the insert-time float/focus sync,
+    // leaving the adoption half-applied until the user forced a retile with
+    // a manual float toggle. insertWindow below no-ops safely on a
+    // contained window.
+    const bool alreadyHeld = state && state->containsWindow(windowId);
+    if (state && !alreadyHeld && state->tiledWindowCount() >= maxWin && !ruleWillFloat && !isMigrationArrival) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";
         // Purge this window from pending initial orders so the order doesn't
