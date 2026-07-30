@@ -2,7 +2,7 @@
     "releases": [
         {
             "version": "3.4.0",
-            "date": "2026-07-25",
+            "date": "2026-07-30",
             "highlights": [
                 "New: Scrolling mode, a third placement mode modeled on the niri compositor. Windows form columns on an endless horizontal strip and the screen scrolls along it, so opening a window never resizes the ones you have. Assign it to a screen from the Monitors page (#852)",
                 "New: scrolling columns cycle through width presets, maximize, or expand into the free space, and the windows in a column split its height or show one at a time as tabs. Consume and expel shortcuts move windows between columns, all on the Meta+Alt family (#852)",

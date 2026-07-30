@@ -218,11 +218,17 @@ def main():
                 lines[i] = opening
                 break
         else:
-            # No free line, so the first call is on line 1 or 2. Share line 1
-            # rather than shifting anything down: the include, the brace and,
-            # when the call is on line 1, its statement all fit there, so every
-            # call still lands on its own .qml line.
-            lines[0] = '#include "phosphor_i18n.h" ' + opening + (" " + lines[0] if first == 1 else "")
+            # No free line, so the first call is on line 1 or 2. Sharing line 1
+            # does NOT work: an #include directive owns its whole physical
+            # line, so the preprocessor swallows everything written after the
+            # header name and the opening brace disappeared, leaving the stub
+            # with an unbalanced closing brace. Give the include and the brace
+            # their own lines and reset the numbering with #line, so every call
+            # statement still reports its original .qml line.
+            body_lines = [""] * last
+            for line, stmts in body.items():
+                body_lines[line - 1] = " ".join(stmts)
+            lines = ['#include "phosphor_i18n.h"', opening, "#line 1"] + body_lines
         lines.append("}")
 
         os.makedirs(os.path.dirname(out_path), exist_ok=True)

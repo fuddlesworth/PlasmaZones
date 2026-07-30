@@ -3,11 +3,12 @@
 
 # PhosphorScrollEngine unit tests. Headless — pure strip-model logic, no QPA.
 #
-# No D-Bus isolation launcher on ANY of these targets, deliberately:
-# nothing in phosphor-scroll-engine or phosphor-engine touches the session
-# bus (the dbus-run-session TEST_LAUNCHER is scoped to tests/unit, whose
-# fixtures do). If a QDBus dependency ever reaches these targets, add the
-# launcher.
+# These route through phosphor_apply_test_isolation like every other
+# libs/phosphor-*/tests tree. Nothing here touches the session bus today, so
+# the dbus-run-session launcher is inert for now, but the helper also installs
+# the per-target XDG sandbox and the default 120s TIMEOUT — and the timeout is
+# the point: the persistence test drives serialize/deserialize loops, and a
+# hang in one would otherwise wedge the whole ctest run with no bound.
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
@@ -23,6 +24,7 @@ function(pse_add_test _name)
     )
     add_test(NAME ${_name} COMMAND ${_name})
     set_tests_properties(${_name} PROPERTIES LABELS "phosphorscrollengine")
+    phosphor_apply_test_isolation(${_name})
 endfunction()
 
 pse_add_test(test_scrollstrip_core test_scrollstrip_core.cpp)
