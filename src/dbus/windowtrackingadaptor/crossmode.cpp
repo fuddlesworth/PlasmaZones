@@ -167,7 +167,12 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         // AFTER the handoff: handoffReceive already pushed the destination's
         // tiles, so the effect's own notified-screen record names the
         // destination by now and cannot answer "where did it come from".
-        if (placedOnTarget && !sourceScreen.isEmpty() && targetScreenId != sourceScreen) {
+        // screensMatch, not a raw compare: connector-name / EDID-id spelling
+        // and the "/vs:" suffix make raw inequality unreliable, and a spurious
+        // one arms a one-shot for a move that never happens — which then
+        // swallows the window's next genuine outputChanged.
+        if (placedOnTarget && !sourceScreen.isEmpty()
+            && !PhosphorScreens::ScreenIdentity::screensMatch(targetScreenId, sourceScreen)) {
             Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, sourceScreen);
         }
     } else {
@@ -347,6 +352,9 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     // move-marker gates read these instead of asking isWindowTracked again:
     // the verdict is decided here, and re-deriving it left two sources of
     // truth for one fact.
+    // Only the PARTNER's verdict is usable as captured. The focused window's
+    // is re-read after both receives (see focusedStillOnTarget below), because
+    // the partner's re-home can evict it.
     bool focusedAdopted = false;
     bool partnerAdopted = false;
     // (Both placements: an autotile receiver's handoffReceive also announces
@@ -397,7 +405,13 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     // (re-homed into the source) while the partner's receive into the source
     // succeeded, nothing ever arrives on the target to close the partner's
     // vacated slot. Same autotile-only rule as above.
-    if (!targetScreenId.isEmpty() && targetEngine == m_autotileEngine.data() && !focusedAdopted) {
+    // focusedAdopted is RE-CHECKED here rather than trusted from the first
+    // receive: the partner's re-home (when ITS receive was refused) lands at
+    // the focused window's own landing coordinates, which for a snap target is
+    // the single zone F just took — so the re-home can evict F after it was
+    // adopted. Re-reading the engine is the only way to know that happened.
+    const bool focusedStillOnTarget = targetEngine->isWindowTracked(windowId);
+    if (!targetScreenId.isEmpty() && targetEngine == m_autotileEngine.data() && !focusedStillOnTarget) {
         targetEngine->retile(targetScreenId);
     }
 
@@ -408,11 +422,16 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     //    Both markers carry their source explicitly, same reason as the move
     //    path: the receives above already re-pointed the effect's
     //    notified-screen records at each window's destination.
-    if (targetScreenId != sourceScreen) {
-        if (focusedAdopted) {
+    //    focusedStillOnTarget, not focusedAdopted: arming the one-shot for a
+    //    window the target no longer holds would swallow that window's next
+    //    genuine outputChanged. screensMatch rather than a raw compare, for
+    //    the connector-name / EDID-id / "/vs:" spelling reasons guardedHandoff
+    //    documents — a spurious inequality here arms a move that never happens.
+    if (!PhosphorScreens::ScreenIdentity::screensMatch(targetScreenId, sourceScreen)) {
+        if (focusedStillOnTarget) {
             Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, sourceScreen);
         }
-        if (partnerAdopted) {
+        if (partnerAdopted && sourceEngine->isWindowTracked(partner)) {
             Q_EMIT windowOutputMoveExpected(partner, sourceScreen, targetScreenId);
         }
     }
