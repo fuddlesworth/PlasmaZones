@@ -6,11 +6,16 @@
 # These route through phosphor_apply_test_isolation like every other
 # libs/phosphor-*/tests tree. Nothing here touches the session bus today, so
 # the dbus-run-session launcher is inert for now, but the helper also installs
-# the per-target XDG sandbox and the default 120s TIMEOUT — and the timeout is
-# the point: the persistence test drives serialize/deserialize loops, and a
-# hang in one would otherwise wedge the whole ctest run with no bound.
+# the per-target XDG sandbox and the default 120s TIMEOUT. The timeout is the
+# point: a hung test with no bound wedges the whole ctest run, which is this
+# module's founding premise.
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
+
+# Every sibling tests tree includes this explicitly. Relying on an earlier
+# add_subdirectory having already defined the function would make this tree's
+# configure depend on the order of the libs block.
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 
 function(pse_add_test _name)
     add_executable(${_name} ${ARGN})

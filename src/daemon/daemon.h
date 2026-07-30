@@ -435,7 +435,7 @@ private:
     /// Shared windowsReleased handler for both tiling-family engines:
     /// restores snap float/zone state for windows returning to snapping and
     /// clears the releasing engine's mode-specific float markers. See the
-    /// definition in autotile.cpp.
+    /// definition in engine_release.cpp.
     void handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* releasingEngine, const QStringList& windowIds,
                                      const QSet<QString>& releasedScreenIds);
 

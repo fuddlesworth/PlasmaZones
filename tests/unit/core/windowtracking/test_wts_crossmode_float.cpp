@@ -251,16 +251,18 @@ private Q_SLOTS:
     // =====================================================================
     // Test 4: Per-engine float independence (root fix for the shared-bit defect)
     //
-    // A window floated in one mode must NOT be floating in either of the
-    // others. There are THREE placement engines now, and a two-engine bool
-    // could not tell "snap float does not reach autotile" apart from "snap
-    // float does not reach whichever engine is not snap" — a resolver that
-    // lumped the two tiling-family engines together would pass it. The
-    // harness wires only the SnapEngine, so the three authoritative float
-    // stores are modelled with in-test sets and WTS is driven through the
-    // injected resolver/writer exactly as the daemon does. This asserts the
-    // WTS contract: isWindowFloating / setWindowFloating route to the engine
-    // owning the window's CURRENT mode, with no shared bit.
+    // WHAT THIS PINS, precisely: that WindowTrackingService itself holds NO
+    // float bit of its own and answers purely by delegating to the injected
+    // resolver/writer. The three stores below are the TEST's, not the
+    // daemon's — this harness wires only a SnapEngine, so the daemon's real
+    // mode-routing resolver is not under test here and a bug in THAT would
+    // not fail this. What would fail it is any shared or cached bit inside
+    // WTS: the float-in-Snapping-then-read-in-Scrolling step reads back
+    // false only because the read reached the resolver.
+    //
+    // Modelled with three modes rather than two because a two-mode bool
+    // cannot distinguish "delegates per mode" from "delegates to one of two
+    // fixed stores", which is the shape the pre-per-engine model had.
     // =====================================================================
     void testPerEngineFloatIndependence()
     {

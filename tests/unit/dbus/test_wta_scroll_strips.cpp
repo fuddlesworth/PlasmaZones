@@ -152,6 +152,34 @@ private Q_SLOTS:
         QVERIFY(m_wta->loadedScrollStripState().isEmpty());
     }
 
+    // The real shutdown sequence: Daemon::stop() detaches the provider and
+    // THEN calls saveStateOnShutdown. An absent provider must leave the
+    // stored strips alone — treating it as an empty blob deleted the user's
+    // strip structure on every clean logout.
+    void testDetachedProviderDoesNotWipeStoredStrips()
+    {
+        makeAdaptor();
+        const QJsonObject blob = sampleStripBlob();
+        m_wta->setScrollStripStateProvider([blob]() {
+            return blob;
+        });
+        m_wta->service()->markDirty(WTS::DirtyScrollStrips);
+        m_wta->saveStateOnShutdown();
+        destroyAdaptor();
+
+        makeAdaptor();
+        QCOMPARE(m_wta->loadedScrollStripState(), blob); // positive control
+        // Detach exactly as stop() does, then take the shutdown save with the
+        // strips bit dirty — the shape a logout inside the save debounce has.
+        m_wta->setScrollStripStateProvider({});
+        m_wta->service()->markDirty(WTS::DirtyScrollStrips);
+        m_wta->saveStateOnShutdown();
+        destroyAdaptor();
+
+        makeAdaptor();
+        QCOMPARE(m_wta->loadedScrollStripState(), blob);
+    }
+
 private:
     void makeAdaptor()
     {

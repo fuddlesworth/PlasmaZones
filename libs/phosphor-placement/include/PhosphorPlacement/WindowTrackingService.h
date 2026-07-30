@@ -1,6 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): WindowTrackingService is the engine-
+// agnostic facade every placement engine and the daemon share, and this is an
+// INSTALLED public header — splitting the class is an API break for the
+// third-party consumers the LGPL boundary exists to serve. The implementation
+// is already split by concern across src/*.cpp (snap, resnap, navigation,
+// virtualscreenmigration, lifecycle), and the member ordering here encodes
+// which of those owns what. Same rationale as
+// PhosphorTileEngine/AutotileEngine.h.
+
 #pragma once
 
 #include <phosphorplacement_export.h>
@@ -1091,6 +1100,8 @@ private:
 
     /// Push a load that arrived before any SnapState was wired into the store
     /// once one exists. No-op when nothing is held. See setUserSnappedClasses.
+    /// A detach (`setSnapState(nullptr)`) DISCARDS the hold rather than
+    /// carrying it to the next store.
     void flushPendingUserSnappedClasses();
 
     // Dependencies

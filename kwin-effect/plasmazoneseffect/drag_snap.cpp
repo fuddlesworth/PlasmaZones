@@ -691,10 +691,10 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
     // reason. The drag-start fast path latches the bypass from the union
     // isManagedScreen without consulting the context-disable lists, while the
     // daemon checks ContextDisabled FIRST and so answers ContextDisabled (not
-    // AutotileScreen) for an engine-managed screen whose context is disabled.
+    // EngineOwnedScreen) for an engine-managed screen whose context is disabled.
     // The beginDrag correction layer only clears the latch on a reply of None,
     // so the drag can be underway latched-bypassed with a policy that was never
-    // AutotileScreen. Keying this transition on oldReason alone then let
+    // EngineOwnedScreen. Keying this transition on oldReason alone then let
     // ContextDisabled -> None (and SnappingDisabled -> None) fall through to the
     // no-op tail with the latch still set for the rest of the drag: the engine
     // tracking drop never ran (the window kept its tile tracking and hidden
@@ -721,7 +721,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         m_dragBypassedForEngine = false;
         // Cleared with the flag, as the equivalent transition in
         // lifecycle_wiring.cpp does: leaving a stale engine screen id behind
-        // meant it survived into any later re-bypass until the AutotileScreen
+        // meant it survived into any later re-bypass until the EngineOwnedScreen
         // branch above happened to overwrite it.
         m_dragBypassScreenId.clear();
         m_dragActivation.detected = false;

@@ -769,7 +769,9 @@ public:
     /// openTabbed / openColumnPlacement), returned as a loose map so the
     /// header stays free of scroll-engine types. Keys (present only when the
     /// slot matched): "widthFraction" (double), "tabbed" (bool), "consume"
-    /// (bool). Same resolveCached contract as shouldFloatByRule.
+    /// (bool). Resolves UNCACHED, unlike shouldFloatByRule: the query carries
+    /// ScreenId and Mode stamps the sibling resolvers never ask for, and the
+    /// evaluator cache is keyed on windowId alone. See rules.cpp.
     QVariantMap scrollOpenRuleParams(const QString& windowId, const QString& screenId);
 
     /// Resolve the open-placement directive for a window from its matched window

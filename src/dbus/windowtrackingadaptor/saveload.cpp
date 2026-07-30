@@ -195,11 +195,22 @@ void WindowTrackingAdaptor::saveState()
     // late-bound provider. Without it a login restore rebuilds every strip
     // as one default column per window (tabs, stacks, focus, anchor lost).
     if (dirty & D::DirtyScrollStrips) {
-        const QJsonObject strips = m_scrollStripStateProvider ? m_scrollStripStateProvider() : QJsonObject();
-        if (!strips.isEmpty()) {
-            tracking->writeJson(ConfigKeys::scrollStripsKey(), strips);
+        // An ABSENT provider means "I cannot answer", not "there is nothing".
+        // The shutdown teardown detaches the provider before the final
+        // saveStateOnShutdown, so treating absent as empty deleted the user's
+        // whole strip structure on every clean logout — columns, tabs, focus
+        // and anchor — and the next login rebuilt one default column per
+        // window. Only a LIVE provider returning an empty blob means the
+        // session genuinely ended with no strips.
+        if (!m_scrollStripStateProvider) {
+            qCDebug(lcDbusWindow) << "saveState: no scroll strip provider wired — leaving the stored strips alone";
         } else {
-            tracking->deleteKey(ConfigKeys::scrollStripsKey());
+            const QJsonObject strips = m_scrollStripStateProvider();
+            if (!strips.isEmpty()) {
+                tracking->writeJson(ConfigKeys::scrollStripsKey(), strips);
+            } else {
+                tracking->deleteKey(ConfigKeys::scrollStripsKey());
+            }
         }
     }
 

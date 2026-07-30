@@ -115,11 +115,18 @@ SettingsFlickable {
     // Uses setAssignmentEntry targeting the exact (screen, desktop, activity)
     // context from getScreenStates — most specific context wins.
     function _stageCurrentState() {
-        if (!_selectedScreen)
-            return;
-
         var state = stateView.screenState;
         if (!state)
+            return;
+
+        // Key the write off the STATE, exactly as the staged-entry read does.
+        // _selectedScreen is empty until the user picks a monitor, while the
+        // page already shows (and lets the user edit) the first reported
+        // state — bailing on the empty selection made every one of those edits
+        // a silent no-op. Deriving both keys from the same object makes the
+        // read and the write agree by construction.
+        var target = _selectedScreen || (state.screenId || "");
+        if (!target)
             return;
 
         var desktop = state.virtualDesktop || 0;
@@ -134,7 +141,7 @@ SettingsFlickable {
             // Scrolling has neither a zone layout nor a tiling algorithm of
             // its own: the entry carries the mode plus both preserved
             // sibling fields.
-            settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, siblingSnapping, siblingTiling);
+            settingsController.stageAssignmentEntry(target, desktop, activity, stateView.localMode, siblingSnapping, siblingTiling);
             return;
         }
         if (stateView.isTiling) {
@@ -152,7 +159,7 @@ SettingsFlickable {
                 // algorithm keeps FOLLOWING the global default (never frozen
                 // to today's value), and the combo honestly keeps showing
                 // "Default".
-                settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, siblingSnapping, "");
+                settingsController.stageAssignmentEntry(target, desktop, activity, stateView.localMode, siblingSnapping, "");
                 return;
             }
 
@@ -173,14 +180,14 @@ SettingsFlickable {
                 // the layout slot while keeping the mode pin and the
                 // sibling, and the daemon accepts a bare mode exactly as it
                 // does for Scrolling above.
-                settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, "", siblingTiling);
+                settingsController.stageAssignmentEntry(target, desktop, activity, stateView.localMode, "", siblingTiling);
                 return;
             }
 
             snapping = layoutId;
             tiling = siblingTiling;
         }
-        settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, snapping, tiling);
+        settingsController.stageAssignmentEntry(target, desktop, activity, stateView.localMode, snapping, tiling);
     }
 
     contentHeight: content.implicitHeight
@@ -370,14 +377,22 @@ SettingsFlickable {
             // read landing there returned [] and left the fallback sketch up
             // for good. When the daemon says the screen IS scrolling but the
             // strip came back empty, re-read once after a settle beat.
-            function refreshScrollingStrip() {
+            // allowRetry MUST be false when called FROM the settle timer. The
+            // retry is a one-shot settle beat, and a re-arm from inside its own
+            // handler is an unbounded loop: a scrolling screen with no windows
+            // legitimately reports an empty strip forever, and the page object
+            // outlives its visibility (the page host keeps visited pages alive
+            // and merely hides them), so nothing would ever stop it. That is a
+            // blocking D-Bus round trip every 400ms on a page nobody is looking
+            // at.
+            function refreshScrollingStrip(allowRetry) {
                 if (!screenState)
                     return;
                 scrollingStripZones = settingsController.getScrollingStripPreview(screenState.screenId || "");
                 // Skip the settle beat while the live poll below is running:
                 // it re-reads on its own, so the extra one-shot would just
                 // double the call rate for as long as the strip stays empty.
-                if (scrollingStripZones.length === 0 && (screenState.mode || 0) === 2 && !stripLiveRefresh.running)
+                if (allowRetry !== false && scrollingStripZones.length === 0 && (screenState.mode || 0) === 2 && !stripLiveRefresh.running)
                     stripSettleRetry.restart();
             }
 
@@ -385,7 +400,7 @@ SettingsFlickable {
                 id: stripSettleRetry
                 interval: 400
                 repeat: false
-                onTriggered: stateView.refreshScrollingStrip()
+                onTriggered: stateView.refreshScrollingStrip(false)
             }
 
             // The strip is live state: the user can open a window, widen a

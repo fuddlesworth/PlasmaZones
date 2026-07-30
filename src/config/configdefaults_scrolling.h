@@ -105,12 +105,14 @@ public:
     {
         return 1.0;
     }
-    /// Fixed-kind pixel floor. Enforced by the hand-written SETTER only —
-    /// the D-Bus registry routes through it, but store-level writers
-    /// (profile staging, config import, hand edits) see only the schema's
-    /// wider clampDouble. The QML SpinBox reads its bounds from here via
-    /// SettingsController::scrollingWidthConstants(). The engine's
-    /// qMax(1, …) keeps any bypass value renderable.
+    /// Fixed-kind pixel floor. Enforced in two places, because the shared
+    /// value key means the schema's clampDouble has to span both kinds and
+    /// cannot enforce either: the hand-written setter (which the D-Bus
+    /// registry routes through), and Settings::normalizeScrollingColumnWidthValue
+    /// at load, which catches a config import or a hand edit. Profile staging
+    /// bypasses both — see that function's own note. The QML SpinBox reads
+    /// its bounds from here via SettingsController::scrollingWidthConstants().
+    /// The engine's qMax(1, …) keeps any bypass value renderable.
     static constexpr qreal scrollingDefaultColumnWidthFixedMin()
     {
         return 100.0;

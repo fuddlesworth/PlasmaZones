@@ -106,27 +106,50 @@ private Q_SLOTS:
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
         m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
 
+        // Cross-check against the engine, so the payload is compared with an
+        // INDEPENDENT source rather than with itself. The adaptor falls back
+        // to `i + 1` when columnNumbers is shorter than rects, so asserting
+        // only "the ordinals ascend" would still pass if the engine regressed
+        // to supplying no column numbers at all.
+        QVector<int> engineColumns;
+        const QVector<QRectF> engineRects = m_engine->visibleTileRectsRelative(QStringLiteral("DP-1"), &engineColumns);
+        QCOMPARE(engineRects.size(), 2);
+        QCOMPARE(engineColumns.size(), engineRects.size());
+
         const QJsonDocument doc = QJsonDocument::fromJson(m_adaptor->visibleStripJson(QStringLiteral("DP-1")).toUtf8());
         QVERIFY(doc.isArray());
         const QJsonArray arr = doc.array();
-        QVERIFY(!arr.isEmpty());
+        QCOMPARE(arr.size(), engineRects.size());
 
-        int expectedOrdinal = 1;
-        for (const QJsonValue& value : arr) {
-            QVERIFY(value.isObject());
-            const QJsonObject obj = value.toObject();
+        // Failures accumulate rather than aborting on the first bad rect, so
+        // one failure does not hide the state of the others.
+        QStringList failures;
+        for (int i = 0; i < arr.size(); ++i) {
+            if (!arr.at(i).isObject()) {
+                failures.append(QStringLiteral("rect %1: not an object").arg(i));
+                continue;
+            }
+            const QJsonObject obj = arr.at(i).toObject();
             for (const QLatin1String key :
                  {QLatin1String("x"), QLatin1String("y"), QLatin1String("width"), QLatin1String("height")}) {
-                QVERIFY2(obj.contains(key), key.data());
+                if (!obj.contains(key)) {
+                    failures.append(QStringLiteral("rect %1: missing %2").arg(i).arg(QString(key)));
+                    continue;
+                }
                 const double v = obj.value(key).toDouble(-1.0);
-                QVERIFY(v >= 0.0 && v <= 1.0);
+                if (v < 0.0 || v > 1.0) {
+                    failures.append(QStringLiteral("rect %1: %2 = %3 outside 0..1").arg(i).arg(QString(key)).arg(v));
+                }
             }
-            QVERIFY(obj.contains(QLatin1String("zoneNumber")));
-            // Ordinals are the VISIBLE slot, so they run 1, 2, … in payload
-            // order regardless of how many columns are parked off screen.
-            QCOMPARE(obj.value(QLatin1String("zoneNumber")).toInt(), expectedOrdinal);
-            ++expectedOrdinal;
+            const int zoneNumber = obj.value(QLatin1String("zoneNumber")).toInt(-1);
+            if (zoneNumber != engineColumns.at(i)) {
+                failures.append(QStringLiteral("rect %1: zoneNumber %2 != engine %3")
+                                    .arg(i)
+                                    .arg(zoneNumber)
+                                    .arg(engineColumns.at(i)));
+            }
         }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
     }
 
     // focusColumn's own doc: gated on the engine owning the screen, because

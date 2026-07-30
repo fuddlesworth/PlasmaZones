@@ -492,6 +492,18 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                         // bucket for windows that had one; this protects the rest).
                         notifyWindowAdded(w, /*knownFreeFloating=*/false);
                     }
+                    // Whether this scan re-announced the window or found it
+                    // already tracked, it is now on the current desktop and
+                    // notified, so any parked desktop-return entry for it is
+                    // spent. Sweeping here (not only in the `added`-keyed loop
+                    // above) is what keeps a park from outliving its purpose:
+                    // the batch paths that park an off-desktop window are not
+                    // all desktop switches, and `added` is empty on an
+                    // identical-set switch, so this scan is the only place
+                    // some entries are ever reached. A surviving entry would
+                    // later make the re-track branch treat the window as
+                    // already known to the daemon and skip the notify.
+                    m_savedNotifiedForDesktopReturn.remove(windowId);
                 }
             }
 

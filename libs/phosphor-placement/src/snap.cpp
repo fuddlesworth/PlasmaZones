@@ -151,6 +151,10 @@ void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
 {
     if (!state) {
         m_snapResolver = SnapStateResolver{};
+        // A detach DISCARDS the hold. Keeping it would flush a set captured
+        // for the store that just went away into whatever store is wired
+        // next — visible in tests that reuse one service across cases.
+        m_pendingUserSnappedClasses.reset();
         return;
     }
     SnapStateResolver resolver;

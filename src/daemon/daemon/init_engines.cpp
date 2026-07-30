@@ -10,20 +10,17 @@
 #include <QStandardPaths>
 #include <QtConcurrent>
 #include <QScreen>
-#include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusObjectPath>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDBusError>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QPluginLoader>
 #include <QRegularExpression>
 #include <QSet>
-#include <QThread>
 #include <QTimer>
 #include <array>
 
@@ -65,7 +62,6 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
-#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorScreens/DBusScreenAdaptor.h>
 #include <PhosphorScreens/Swapper.h>
@@ -98,8 +94,6 @@
 #include "phosphor_i18n.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
-#include "dbus/overlayadaptor.h"
-#include "dbus/zonedetectionadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/autotileadaptor/autotileadaptor.h"

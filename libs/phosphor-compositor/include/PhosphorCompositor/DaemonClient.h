@@ -93,8 +93,13 @@ public:
     void pruneStaleWindows(const QStringList& liveWindowIds);
 
     // Daemon availability probe (async — emits daemonReady if responsive).
-    // Default from the shared constant, whose own doc names this call site as
-    // its reason for existing — a hardcoded literal here would drift from it.
+    // The default comes from the shared constant rather than a literal so the
+    // two cannot drift.
+    //
+    // NOTE: this entry point currently has NO caller in the repo. The
+    // compositor plugin reaches readiness through registerBridge instead.
+    // Kept as part of the library's public surface, but do not read the
+    // constant's own doc as evidence of a live probe site.
     void probeDaemonAvailable(int timeoutMs = PhosphorProtocol::Service::DaemonReadyProbeTimeoutMs);
 
 Q_SIGNALS:

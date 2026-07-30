@@ -18,12 +18,37 @@ namespace PlasmaZones {
 // reached the store without passing that setter.
 
 namespace {
+/// Clamp into the kind's range. What the SETTER applies: a user dragging a
+/// slider or typing in the SpinBox wants the nearest legal value, not a jump
+/// back to a default.
 qreal clampColumnWidthForKind(qreal value, bool isFixed)
 {
     return isFixed ? qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthFixedMin(), value,
                                    ConfigDefaults::scrollingDefaultColumnWidthFixedMax())
                    : qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value,
                                    ConfigDefaults::scrollingDefaultColumnWidthProportionMax());
+}
+
+/// Repair a value that cannot belong to @p isFixed at all, the way the KIND
+/// setter's arms do: re-seed rather than clamp.
+///
+/// Clamping is wrong for this case and quietly produces the exact failure the
+/// kind setter exists to avoid. A proportion of 0.5 left behind under Fixed
+/// clamps to the 100px floor; worse, a pixel count of 800 left behind under
+/// Proportion clamps to 1.0, which opens every column at 100% of the work
+/// area. The two repair paths have to agree, or the same broken pair heals
+/// differently depending on whether a kind flip or a config load found it.
+qreal reseedColumnWidthForKind(qreal value, bool isFixed)
+{
+    if (isFixed && value < ConfigDefaults::scrollingDefaultColumnWidthFixedMin()) {
+        return ConfigDefaults::scrollingDefaultColumnWidthFixedPx();
+    }
+    if (!isFixed && value > ConfigDefaults::scrollingDefaultColumnWidthProportionMax()) {
+        return ConfigDefaults::scrollingDefaultColumnWidthValue();
+    }
+    // In-kind but out of range (Fixed=50000, Proportion=0.001): a clamp is
+    // the right repair here, since the value is the right SORT of thing.
+    return clampColumnWidthForKind(value, isFixed);
 }
 } // namespace
 
@@ -100,15 +125,23 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
 
 P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, scrollingGroup, defaultColumnWidthValueKey, double)
 
-// Post-load normalization for the shared width VALUE key. The key serves both
-// kinds, so the schema's clampDouble has to span their union (0.05 proportion
-// up to 10000 px) and cannot reject a Fixed=5px that reached the store without
-// passing the setter below: profile staging, a config import, and a hand edit
-// all write the store directly. Settings::load calls this after the reparse so
-// a bypassed value is coerced once, before any consumer reads it. Read-time
-// coercion is deliberately NOT how this is done: the kind setter announces the
-// flip before coercing the value, and a clamping getter would report the new
-// kind's bounds against the old kind's value in that window.
+// Post-load repair for the shared width VALUE key. The key serves both kinds,
+// so the schema's clampDouble has to span their union (0.05 proportion up to
+// 10000 px) and cannot reject a Fixed=5px that reached the store without
+// passing the setter below.
+//
+// SCOPE: called from Settings::load only, so it catches whatever the reparse
+// brought in — a hand-edited config, a config import, the Discard reload.
+// Profile STAGING is NOT covered: applyConfigOverlayStaged writes the store
+// through importFromJson without a load(), so a profile carrying an
+// inconsistent pair stages it live. Fixing that means calling this from there
+// too; until then the honest statement is that staged profiles are not
+// normalized.
+//
+// Read-time coercion is deliberately NOT how this is done: the kind setter
+// announces the flip BEFORE coercing the value, and a clamping getter would
+// report the new kind's bounds against the old kind's value in that window,
+// breaking the emit ordering a test pins.
 void Settings::normalizeScrollingColumnWidthValue()
 {
     const int kind = scrollingDefaultColumnWidthKind();
@@ -119,14 +152,19 @@ void Settings::normalizeScrollingColumnWidthValue()
         return;
     }
     const qreal stored = scrollingDefaultColumnWidthValue();
-    const qreal coerced = clampColumnWidthForKind(stored, kind == ConfigDefaults::scrollingWidthKindFixed());
+    const qreal coerced = reseedColumnWidthForKind(stored, kind == ConfigDefaults::scrollingWidthKindFixed());
     if (qFuzzyCompare(1.0 + stored, 1.0 + coerced)) {
         return;
     }
     qCWarning(lcConfig) << "scrolling: stored column width" << stored << "is out of range for the current kind" << kind
-                        << "— coercing to" << coerced;
+                        << "— using" << coerced << "in memory; it reaches disk on the next save";
     m_store->write(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey(), coerced);
-    Q_EMIT scrollingDefaultColumnWidthValueChanged();
+    // NO Q_EMIT here. The sole caller is load(), which snapshots every
+    // Q_PROPERTY before the reparse and re-emits each changed NOTIFY after
+    // this returns. Emitting here would double-fire on a coercing load, and
+    // fire spuriously on a Discard reload where the in-memory value was
+    // already coerced (disk still holds the bad pair, so this coerces again,
+    // but the property never changed from any consumer's point of view).
 }
 
 // Hand-written value setter: kind-aware clamp (Proportion values live in
