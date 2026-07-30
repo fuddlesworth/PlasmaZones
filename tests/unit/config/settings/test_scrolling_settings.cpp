@@ -17,6 +17,9 @@
  * become the nearest enumerator) and the preset-list numeric canonicalizer.
  */
 
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QKeySequence>
 #include <QSignalSpy>
 #include <QTest>
@@ -404,6 +407,103 @@ private Q_SLOTS:
             }
         }
         QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QLatin1String("; "))));
+    }
+
+    // ── normalizeScrollingColumnWidthValue ──────────────────────────────
+    //
+    // The width VALUE and KIND are two independent keys, and the schema's
+    // clampDouble has to span BOTH kinds' ranges (0.05 proportion through
+    // 10000 px), so it cannot reject a pair that is individually legal and
+    // jointly nonsense. Three paths write the store without passing the
+    // kind-aware setter — hand edit, config import, profile staging — and the
+    // repair is a RE-SEED, not a clamp: clamping a Proportion-kind 800 down
+    // to 1.0 would open every column at 100% of the work area, and clamping a
+    // Fixed-kind 0.5 up to the 100px floor would silently invent a width the
+    // user never chose.
+
+    void widthValueNormalizesOnLoad_data()
+    {
+        QTest::addColumn<int>("kind");
+        QTest::addColumn<double>("stored");
+        QTest::addColumn<double>("expected");
+
+        // A proportion-magnitude value under Fixed cannot be a pixel count.
+        QTest::newRow("fixed-holding-a-proportion")
+            << ConfigDefaults::scrollingWidthKindFixed() << 0.5 << ConfigDefaults::scrollingDefaultColumnWidthFixedPx();
+        // A pixel-magnitude value under Proportion cannot be a fraction.
+        QTest::newRow("proportion-holding-pixels") << ConfigDefaults::scrollingWidthKindProportion() << 800.0
+                                                   << ConfigDefaults::scrollingDefaultColumnWidthValue();
+        // A legal pair is left completely alone, both ways round.
+        QTest::newRow("fixed-in-range") << ConfigDefaults::scrollingWidthKindFixed() << 640.0 << 640.0;
+        QTest::newRow("proportion-in-range") << ConfigDefaults::scrollingWidthKindProportion() << 0.25 << 0.25;
+        // ClientDecides ignores the value entirely, so nothing is repaired.
+        QTest::newRow("client-decides-untouched") << ConfigDefaults::scrollingWidthKindClientDecides() << 0.5 << 0.5;
+    }
+
+    void widthValueNormalizesOnLoad()
+    {
+        QFETCH(int, kind);
+        QFETCH(double, stored);
+        QFETCH(double, expected);
+
+        TestHelpers::IsolatedConfigGuard guard;
+        const QString configFile = guard.configPath() + QStringLiteral("/plasmazones/config.json");
+        {
+            // Materialise a real config file, then hand-edit the pair into it
+            // exactly as a user or a shared blob could. Going through the
+            // setters is impossible by construction: they are what maintains
+            // the invariant this repair exists to restore.
+            Settings seed;
+            seed.save();
+        }
+        QFile file(configFile);
+        QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(configFile));
+        QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+        file.close();
+        QVERIFY2(!root.isEmpty(), "seed Settings::save() wrote no config");
+
+        QJsonObject group = root.value(ConfigDefaults::scrollingGroup()).toObject();
+        group[ConfigDefaults::defaultColumnWidthKindKey()] = kind;
+        group[ConfigDefaults::defaultColumnWidthValueKey()] = stored;
+        root[ConfigDefaults::scrollingGroup()] = group;
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(QJsonDocument(root).toJson());
+        file.close();
+
+        Settings settings;
+        QCOMPARE(settings.scrollingDefaultColumnWidthKind(), kind);
+        QCOMPARE(settings.scrollingDefaultColumnWidthValue(), expected);
+
+        // Idempotent: a second load sees the already-repaired pair, so it must
+        // not write and must not re-announce. This is the Discard-reload case,
+        // where nothing about the user's view has changed.
+        QSignalSpy valueSpy(&settings, &Settings::scrollingDefaultColumnWidthValueChanged);
+        settings.load();
+        QCOMPARE(settings.scrollingDefaultColumnWidthValue(), expected);
+        QCOMPARE(valueSpy.count(), 0);
+    }
+
+    void widthValueNormalizesOnProfileStaging()
+    {
+        // applyConfigOverlayStaged writes through importFromJson with no
+        // load(), so it needs the repair independently. Without it the engine
+        // takes its Fixed branch on a proportion-magnitude value and computes
+        // qMax(1, qRound(0.5)) — a ONE PIXEL column — for the whole session,
+        // because nothing re-reads the config until the next restart.
+        TestHelpers::IsolatedConfigGuard guard;
+        Settings settings;
+        settings.setScrollingDefaultColumnWidthKind(ConfigDefaults::scrollingWidthKindProportion());
+        settings.setScrollingDefaultColumnWidthValue(0.5);
+
+        QJsonObject blob = settings.exportConfigToJson();
+        QJsonObject group = blob.value(ConfigDefaults::scrollingGroup()).toObject();
+        group[ConfigDefaults::defaultColumnWidthKindKey()] = ConfigDefaults::scrollingWidthKindFixed();
+        group[ConfigDefaults::defaultColumnWidthValueKey()] = 0.5;
+        blob[ConfigDefaults::scrollingGroup()] = group;
+
+        QVERIFY(settings.applyConfigOverlayStaged(blob));
+        QCOMPARE(settings.scrollingDefaultColumnWidthKind(), ConfigDefaults::scrollingWidthKindFixed());
+        QCOMPARE(settings.scrollingDefaultColumnWidthValue(), ConfigDefaults::scrollingDefaultColumnWidthFixedPx());
     }
 };
 

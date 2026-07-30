@@ -352,9 +352,12 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     // move-marker gates read these instead of asking isWindowTracked again:
     // the verdict is decided here, and re-deriving it left two sources of
     // truth for one fact.
-    // Only the PARTNER's verdict is usable as captured. The focused window's
-    // is re-read after both receives (see focusedStillOnTarget below), because
-    // the partner's re-home can evict it.
+    // Only the PARTNER's verdict is usable AS THE ADOPTION ANSWER. The focused
+    // window's is re-read after both receives (see focusedStillOnTarget
+    // below), because the partner's re-home can evict it. focusedAdopted is
+    // still needed though: paired with focusedStillOnTarget it is what
+    // DISTINGUISHES an eviction (adopted, then displaced, so nothing re-homed
+    // it) from a plain refusal (receiveVerified already re-homed it).
     bool focusedAdopted = false;
     bool partnerAdopted = false;
     // (Both placements: an autotile receiver's handoffReceive also announces
@@ -413,6 +416,31 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     const bool focusedStillOnTarget = targetEngine->isWindowTracked(windowId);
     if (!targetScreenId.isEmpty() && targetEngine == m_autotileEngine.data() && !focusedStillOnTarget) {
         targetEngine->retile(targetScreenId);
+    }
+    // Adopted, then EVICTED by the partner's re-home landing in the same slot.
+    // receiveVerified already returned true for F, so its own refusal path
+    // never ran and nothing has re-homed it — F is tracked by no engine at
+    // all, silently. Recover it the way receiveVerified would have: back into
+    // the source engine on the source screen, at its original slot (which is
+    // the one the partner was going to take).
+    if (focusedAdopted && !focusedStillOnTarget) {
+        qCWarning(lcDbusWindow) << "cross-mode swap:" << windowId << "was adopted by" << targetEngine->engineId()
+                                << "then evicted by the partner's re-home - re-homing into" << sourceEngine->engineId();
+        PhosphorEngine::IPlacementEngine::HandoffContext back;
+        back.windowId = windowId;
+        back.toScreenId = sourceScreen;
+        back.fromEngineId = targetEngine->engineId();
+        back.sourceZoneIds = partnerLandingZones;
+        back.insertIndex = partnerLandingIndex;
+        back.minSize = focusedMinSize;
+        back.wasFloating = false;
+        sourceEngine->handoffReceive(back);
+        if (!sourceEngine->isWindowTracked(windowId)) {
+            qCWarning(lcDbusWindow) << "cross-mode swap: eviction re-home REFUSED too -" << windowId
+                                    << "is tracked by no engine";
+        } else if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
+            sourceEngine->retile(sourceScreen);
+        }
     }
 
     // ── Arm the daemon-owned-move markers for the windows that were

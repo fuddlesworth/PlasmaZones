@@ -672,6 +672,15 @@ bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
         return false;
     }
 
+    // Same repair load() runs, for the same reason and with the same
+    // snapshot/re-emit contract: a shared or hand-edited profile blob can
+    // carry an inconsistent width pair (kind=Fixed with value 0.5), and the
+    // engine's Fixed branch would then compute qMax(1, qRound(0.5)) = ONE
+    // PIXEL for every new column, for the whole session — the repair would
+    // otherwise not land until the next restart or Discard. The normalizer
+    // does not emit on its own, so it composes here unchanged.
+    normalizeScrollingColumnWidthValue();
+
     const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
     if (anyChanged)
         Q_EMIT settingsChanged();

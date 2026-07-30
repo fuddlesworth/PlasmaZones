@@ -130,13 +130,12 @@ P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, scrollingGroup, defaultColu
 // 10000 px) and cannot reject a Fixed=5px that reached the store without
 // passing the setter below.
 //
-// SCOPE: called from Settings::load only, so it catches whatever the reparse
-// brought in — a hand-edited config, a config import, the Discard reload.
-// Profile STAGING is NOT covered: applyConfigOverlayStaged writes the store
-// through importFromJson without a load(), so a profile carrying an
-// inconsistent pair stages it live. Fixing that means calling this from there
-// too; until then the honest statement is that staged profiles are not
-// normalized.
+// SCOPE: called from Settings::load, so it catches whatever the reparse
+// brought in — a hand-edited config, a config import, the Discard reload —
+// and from applyConfigOverlayStaged, which writes the store through
+// importFromJson without a load(). Profile staging needs it just as much: a
+// shared blob carrying kind=Fixed with value 0.5 would otherwise make the
+// engine open every column ONE PIXEL wide for the whole session.
 //
 // Read-time coercion is deliberately NOT how this is done: the kind setter
 // announces the flip BEFORE coercing the value, and a clamping getter would

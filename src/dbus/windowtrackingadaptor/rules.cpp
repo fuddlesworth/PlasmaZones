@@ -146,7 +146,15 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QSt
     if (!screenId.isEmpty()) {
         query->screenId = screenId;
         if (m_layoutManager) {
-            switch (m_layoutManager->modeForScreen(screenId)) {
+            // The WINDOW's desktop, not the current one. buildRuleQueryForWindow
+            // has already stamped query->virtualDesktop from the registry, and
+            // under per-output virtual desktops (#648) a window opening on a
+            // non-current desktop resolves a different mode there. Reading the
+            // current desktop made a `Mode == "scrolling" AND VirtualDesktop
+            // == 3` rule answer against desktop 1's mode. Every sibling in
+            // this file passes the explicit desktop for the same reason.
+            const int desktop = query->virtualDesktop > 0 ? query->virtualDesktop : currentDesktopForScreen(screenId);
+            switch (m_layoutManager->modeForScreen(screenId, desktop, m_layoutManager->currentActivity())) {
             case PhosphorZones::AssignmentEntry::Snapping:
                 query->mode = QStringLiteral("snapping");
                 break;
