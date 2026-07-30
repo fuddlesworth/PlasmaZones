@@ -82,7 +82,7 @@ void AutotileEngine::notifyAlgorithmWindowAdded(PhosphorTiles::TilingState* stat
     }
 }
 
-bool AutotileEngine::insertShouldFloat(const QString& windowId) const
+bool AutotileEngine::insertShouldFloat(const QString& windowId, const QString& screenId) const
 {
     // A window ARRIVING from another state was already managed, so the open-time
     // "Float this app" rule has nothing to say about it — it carries the float
@@ -94,7 +94,7 @@ bool AutotileEngine::insertShouldFloat(const QString& windowId) const
         return m_migrationArrival->wasFloating;
     }
     // A genuine open consults the rule.
-    return m_floatPredicate && m_floatPredicate(windowId);
+    return m_floatPredicate && m_floatPredicate(windowId, screenId);
 }
 
 bool AutotileEngine::insertWindow(const QString& windowId, const QString& screenId)
@@ -331,7 +331,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // a manual float toggle. Guarded on not-already-floating so the
     // placement-record float-restore branch above is not re-applied. onWindowAdded
     // then emits windowFloatingStateSynced so the daemon mirrors the state.
-    if (!state->isFloating(windowId) && insertShouldFloat(windowId)) {
+    if (!state->isFloating(windowId) && insertShouldFloat(windowId, screenId)) {
         state->setFloating(windowId, true);
     }
 

@@ -23,7 +23,7 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // the rest).
     const bool oversized =
         params.workArea.isValid() && (minWidth > params.workArea.width() || minHeight > params.workArea.height());
-    const bool ruleFloated = m_floatPredicate && m_floatPredicate(windowId);
+    const bool ruleFloated = m_floatPredicate && m_floatPredicate(windowId, screenId);
     if (oversized || ruleFloated) {
         state->addFloating(windowId);
         // Engine-decided float, so it carries the mode marker like every

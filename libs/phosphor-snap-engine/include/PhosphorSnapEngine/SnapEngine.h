@@ -264,7 +264,10 @@ public:
      *        lifetime contract as setRestorePositionPredicate — clear with `{}`
      *        before destroying any state the closure captured.
      */
-    using FloatPredicate = std::function<bool(const QString& windowId)>;
+    /// Takes the OPENING SCREEN as well, so the resolver can stamp ScreenId
+    /// and derive Mode — without which a rule pairing either with Float is
+    /// silently inert.
+    using FloatPredicate = std::function<bool(const QString& windowId, const QString& screenId)>;
 
     void setFloatPredicate(FloatPredicate predicate)
     {

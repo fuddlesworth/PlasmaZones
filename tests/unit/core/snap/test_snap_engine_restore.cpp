@@ -372,7 +372,7 @@ private Q_SLOTS:
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
-        engine.setFloatPredicate([](const QString&) {
+        engine.setFloatPredicate([](const QString&, const QString&) {
             return true;
         });
 
@@ -403,7 +403,7 @@ private Q_SLOTS:
 
         // Predicate present but returns false — the gate must not fire. (No
         // predicate at all is the same: m_floatPredicate is empty.)
-        engine.setFloatPredicate([](const QString&) {
+        engine.setFloatPredicate([](const QString&, const QString&) {
             return false;
         });
 

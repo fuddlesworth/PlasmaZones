@@ -630,7 +630,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     // callback, so not running it keeps an arrival's marker window free of
     // foreign code — matching insertShouldFloat, which short-circuits it for the
     // same reason.
-    const bool ruleWillFloat = !isMigrationArrival && m_floatPredicate && m_floatPredicate(windowId);
+    const bool ruleWillFloat = !isMigrationArrival && m_floatPredicate && m_floatPredicate(windowId, screenId);
     // A window the state ALREADY holds is exempt from the cap: it consumes no
     // new slot, and refusing its RE-ANNOUNCE broke every mode transition whose
     // strict seed filled the state to exactly the cap — each of the effect's

@@ -473,7 +473,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         // hold a tile its open-time rule says it must not, and
                         // the containsWindow short-circuit on its re-announce
                         // means nothing later corrects it.
-                        if (!ts->isFloating(windowId) && insertShouldFloat(windowId)) {
+                        if (!ts->isFloating(windowId) && insertShouldFloat(windowId, screenId)) {
                             ts->setFloating(windowId, true);
                         }
                         // Same lifecycle hook every other insert site runs — a

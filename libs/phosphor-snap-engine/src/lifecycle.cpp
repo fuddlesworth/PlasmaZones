@@ -537,7 +537,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // that restore returns before reaching here), but before the auto-snap chain —
     // so a rule-floated window never auto-snaps to a zone.
     // Mirrors the no-match default-float terminal at the end of this function.
-    if (m_floatPredicate && m_floatPredicate(windowId)) {
+    if (m_floatPredicate && m_floatPredicate(windowId, screenId)) {
         stateForWindowOnScreen(windowId, screenId)
             ->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
         Q_EMIT windowFloatingChanged(windowId, true, screenId);

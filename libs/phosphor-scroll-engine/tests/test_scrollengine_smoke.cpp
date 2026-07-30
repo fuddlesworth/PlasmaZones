@@ -902,7 +902,7 @@ void TestScrollEngineSmoke::floatedOpenConsumesSeed()
     // the end would expose (a surviving seed puts it at column 0).
     QObject owner;
     ScrollEngine* engine = makeEngine(&owner);
-    engine->setFloatPredicate([](const QString& windowId) {
+    engine->setFloatPredicate([](const QString& windowId, const QString&) {
         return windowId == QStringLiteral("app|f");
     });
     engine->setInitialWindowOrder(QStringLiteral("S1"), {QStringLiteral("app|f")});

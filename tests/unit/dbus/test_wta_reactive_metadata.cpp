@@ -372,6 +372,59 @@ private Q_SLOTS:
     // matched Float slot, resolved through the same bare-instance-id extraction
     // as RestorePosition. An unmatched window — and the no-store case — is false.
     // ────────────────────────────────────────────────────────────────────
+    // A Float rule paired with a Mode condition fires only on a screen
+    // resolving to that mode. Before the float predicate carried the opening
+    // screen, shouldFloatByRule left WindowQuery::mode unstamped, so this
+    // pairing — which the rules editor offers — was silently inert: the rule
+    // never matched anywhere, with nothing in the log to say why.
+    void floatRule_modeConditionMatchesOnlyItsMode()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
+
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("float-dolphin-on-scrolling");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorRules::MatchExpression::makeAll(
+            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::AppId, PhosphorRules::Operator::Equals,
+                                                      QStringLiteral("org.kde.dolphin")),
+             PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::Mode, PhosphorRules::Operator::Equals,
+                                                      QStringLiteral("scrolling"))});
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Float);
+        rule.actions.append(action);
+        QVERIFY(store.addRule(rule));
+
+        m_wta->setRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+        });
+
+        const QString instance = QStringLiteral("dolphin-mode-float-1");
+        m_registry->upsert(instance, {QStringLiteral("org.kde.dolphin"), QString(), QString()});
+        const QString windowId =
+            PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), instance);
+
+        // Pin the screen to Scrolling: the derived Mode token matches.
+        const QString screenId = QStringLiteral("DP-1");
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        m_layoutManager->setAssignmentEntryDirect(screenId, 0, QString(), entry);
+        QVERIFY2(m_wta->shouldFloatByRule(windowId, screenId),
+                 "a Mode-paired Float rule must fire on a screen resolving to that mode");
+
+        // Same rule, same window, a screen in another mode: the Mode leaf is a
+        // non-match, so the rule stays inert. This is the discrimination the
+        // unstamped query could not make.
+        entry.mode = PhosphorZones::AssignmentEntry::Snapping;
+        m_layoutManager->setAssignmentEntryDirect(screenId, 0, QString(), entry);
+        QVERIFY2(!m_wta->shouldFloatByRule(windowId, screenId),
+                 "the same rule must stay inert on a screen in a different mode");
+    }
+
     void floatRule_floatsMatchedWindow_viaCompositeWindowId()
     {
         QTemporaryDir dir;
@@ -399,14 +452,16 @@ private Q_SLOTS:
         m_registry->upsert(dolphinInstance, {QStringLiteral("org.kde.dolphin"), QString(), QString()});
 
         QVERIFY2(m_wta->shouldFloatByRule(
-                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance)),
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance),
+                     QString()),
                  "a matched Float rule must open the window floating (resolved via the composite windowId)");
 
         // An unmatched window is never floated — Float has no global default.
         const QString konsoleInstance = QStringLiteral("konsole-float-1");
         m_registry->upsert(konsoleInstance, {QStringLiteral("org.kde.konsole"), QString(), QString()});
         QVERIFY2(!m_wta->shouldFloatByRule(
-                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.konsole"), konsoleInstance)),
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.konsole"), konsoleInstance),
+                     QString()),
                  "an unmatched window must not be floated (no global float-on-open default)");
     }
 
@@ -414,7 +469,8 @@ private Q_SLOTS:
     {
         m_wta->setRuleStore(nullptr);
         QVERIFY2(!m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(
-                     QStringLiteral("org.kde.dolphin"), QStringLiteral("any-uuid"))),
+                                               QStringLiteral("org.kde.dolphin"), QStringLiteral("any-uuid")),
+                                           QString()),
                  "with no rule store, no window is rule-floated");
     }
 
@@ -468,7 +524,7 @@ private Q_SLOTS:
         const auto floatVerdict = [&](const QString& instance, const QVariantMap& extended) {
             m_wta->setWindowMetadata(instance, appId, QString(), QString(), QString(), 0, 0, QString(), normalType,
                                      extended);
-            return m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, instance));
+            return m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, instance), QString());
         };
 
         // Modal + width 400 → both leaves match → float.
@@ -538,7 +594,7 @@ private Q_SLOTS:
         const auto floatVerdict = [&](const QString& instance, const QVariantMap& extended) {
             m_wta->setWindowMetadata(instance, appId, QString(), QString(), QString(), 0, 0, QString(), normalType,
                                      extended);
-            return m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, instance));
+            return m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, instance), QString());
         };
 
         // Movable + not maximizable → both leaves match → float.
@@ -620,7 +676,7 @@ private Q_SLOTS:
         m_wta->setWindowMetadata(instance, appId, QString(), QStringLiteral("Title v2 — chatty"), QString(), 0, 0,
                                  QString(), normalType, QVariantMap());
         QVERIFY2(
-            m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, instance)),
+            m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, instance), QString()),
             "a caption-only (empty a{sv}) push must preserve the prior IsModal snapshot, so the rule still matches");
 
         // Control: a window whose ONLY push was an empty map has nothing to
@@ -628,7 +684,7 @@ private Q_SLOTS:
         const QString bare = QStringLiteral("modal-merge-bare-1");
         m_wta->setWindowMetadata(bare, appId, QString(), QString(), QString(), 0, 0, QString(), normalType,
                                  QVariantMap());
-        QVERIFY2(!m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, bare)),
+        QVERIFY2(!m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, bare), QString()),
                  "with no prior snapshot, an empty-map push leaves IsModal absent → no float");
     }
 

@@ -126,28 +126,50 @@ bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
     return globalDefault;
 }
 
-bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
+bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QString& screenId)
 {
     // Float is purely rule-driven: there is no global "float on open" setting, so
     // absent a matching rule the answer is "do not float".
     if (!m_ruleStore) {
         return false;
     }
-    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
         return false;
+    }
+    // Pin the opening screen and the mode it resolves to. buildRuleQueryForWindow
+    // cannot know either, and without them a rule pairing ScreenId or Mode with
+    // Float never matches — a silent inertness, since the rules editor offers
+    // exactly that pairing. The mode token is the MATCH vocabulary
+    // ("snapping" / "tiling" / "scrolling"), not the SetEngineMode action
+    // vocabulary, which spells the middle one "autotile".
+    if (!screenId.isEmpty()) {
+        query->screenId = screenId;
+        if (m_layoutManager) {
+            switch (m_layoutManager->modeForScreen(screenId)) {
+            case PhosphorZones::AssignmentEntry::Snapping:
+                query->mode = QStringLiteral("snapping");
+                break;
+            case PhosphorZones::AssignmentEntry::Autotile:
+                query->mode = QStringLiteral("tiling");
+                break;
+            case PhosphorZones::AssignmentEntry::Scrolling:
+                query->mode = QStringLiteral("scrolling");
+                break;
+            }
+        }
     }
 
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    // resolveCached is keyed on (windowId, ruleSet revision); on a cache hit the
-    // freshly built `query` is ignored. That is safe because windowId is both
-    // lifetime-stable AND unique: a reopened window gets a fresh instanceId (new
-    // key → miss) and a mid-session appId rename changes the composite key too, so
-    // a cached verdict can never outlive the metadata it was built from. Both the
-    // float and restore predicates are open-path (resolved once per lifetime).
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    // UNCACHED, for the same reason scrollOpenRuleParams is: resolveCached is
+    // keyed on (windowId, ruleSet revision) ALONE, so on a hit the freshly
+    // built query is ignored — including the ScreenId and Mode stamped above.
+    // The first screen a window was asked about would then decide the verdict
+    // for its whole lifetime, and a Mode-paired rule would answer for the
+    // wrong mode. One resolve per open is the cost.
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolve(*query);
     // The Float action carries free-form params (no Value key), so the verdict is
     // the PRESENCE of the filled slot, not a bool payload.
     return resolved.slot(QString(PhosphorRules::ActionSlot::Float)).has_value();

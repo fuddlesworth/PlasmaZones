@@ -292,7 +292,12 @@ public:
     /// Predicate deciding whether an opening window should start FLOATING
     /// because a "Float this app" rule matched it. Daemon-injected, keyed by
     /// the live windowId. Clear with {} before destroying captured state.
-    using FloatPredicate = std::function<bool(const QString& windowId)>;
+    ///
+    /// Takes the OPENING SCREEN as well, for the same reason
+    /// OpenParamsResolver does: the resolver needs it to stamp ScreenId and to
+    /// derive Mode, without which a rule pairing either with Float is silently
+    /// inert even though the rules editor offers that pairing.
+    using FloatPredicate = std::function<bool(const QString& windowId, const QString& screenId)>;
     void setFloatPredicate(FloatPredicate predicate)
     {
         m_floatPredicate = std::move(predicate);

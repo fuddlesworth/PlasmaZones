@@ -211,8 +211,8 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // Open-floating gate (snap). A matched "Float this app" rule opens the
         // window floating instead of auto-snapping it. Purely rule-driven (no
         // global default), so the same resolver serves both engines.
-        snap->setFloatPredicate([this](const QString& windowId) -> bool {
-            return shouldFloatByRule(windowId);
+        snap->setFloatPredicate([this](const QString& windowId, const QString& screenId) -> bool {
+            return shouldFloatByRule(windowId, screenId);
         });
 
         // Open-placement resolver (snap). A matched "Snap this app to zone(s)"
@@ -294,8 +294,8 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
             });
             // Open-floating gate (autotile). Same rule-driven resolver as snap; the
             // window is inserted then marked floating so it stays managed.
-            m_cachedAutotileEngine->setFloatPredicate([this](const QString& windowId) -> bool {
-                return shouldFloatByRule(windowId);
+            m_cachedAutotileEngine->setFloatPredicate([this](const QString& windowId, const QString& screenId) -> bool {
+                return shouldFloatByRule(windowId, screenId);
             });
         }
     }
@@ -421,8 +421,8 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
             // sees the open. If scroll-specific restore semantics ever
             // diverge from the shared path, the hooks get added to
             // ScrollEngine first and wired here second.
-            scroll->setFloatPredicate([this](const QString& windowId) -> bool {
-                return shouldFloatByRule(windowId);
+            scroll->setFloatPredicate([this](const QString& windowId, const QString& screenId) -> bool {
+                return shouldFloatByRule(windowId, screenId);
             });
             scroll->setOpenParamsResolver(
                 [this](const QString& windowId, const QString& screenId) -> PhosphorScrollEngine::ScrollOpenParams {

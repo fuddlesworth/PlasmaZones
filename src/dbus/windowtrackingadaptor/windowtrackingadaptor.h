@@ -763,7 +763,10 @@ public:
     /// RestorePosition there is no global default — Float is purely rule-driven,
     /// so the answer is false unless a Float rule matches. The Float action's
     /// params are free-form, so the verdict is the presence of the filled slot.
-    bool shouldFloatByRule(const QString& windowId);
+    /// @p screenId is the OPENING screen; it stamps ScreenId and the derived
+    /// Mode onto the query, without which a rule pairing either with Float is
+    /// silently inert. Empty is tolerated (neither is stamped).
+    bool shouldFloatByRule(const QString& windowId, const QString& screenId);
 
     /// Per-window scrolling open-behaviour rule slots (openColumnWidth /
     /// openTabbed / openColumnPlacement), returned as a loose map so the

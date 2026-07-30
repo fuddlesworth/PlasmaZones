@@ -502,7 +502,10 @@ public:
      * UNSET (default) no window is rule-floated. Clear with `{}` before destroying
      * any state the closure captured.
      */
-    using FloatPredicate = std::function<bool(const QString& windowId)>;
+    /// Takes the OPENING SCREEN as well, so the resolver can stamp ScreenId
+    /// and derive Mode — without which a rule pairing either with Float is
+    /// silently inert.
+    using FloatPredicate = std::function<bool(const QString& windowId, const QString& screenId)>;
 
     void setFloatPredicate(FloatPredicate predicate)
     {
@@ -1519,7 +1522,7 @@ private:
 
     /// The float state @p windowId must be inserted with: the live state it
     /// carried across a migration, else the open-time "Float this app" rule.
-    bool insertShouldFloat(const QString& windowId) const;
+    bool insertShouldFloat(const QString& windowId, const QString& screenId) const;
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
