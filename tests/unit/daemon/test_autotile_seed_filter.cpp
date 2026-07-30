@@ -5,8 +5,9 @@
 // admission predicate, extracted as filterEngineSeedOrder): float is per
 // engine, so non-minimized windows always pass (a source-mode float must not
 // make the window untileable in the target engine); minimized windows stay as
-// positional placeholders EXCEPT user-floated-then-minimized ones (durable
-// floating snap slot), which are dropped so unminimize restores the float.
+// positional placeholders EXCEPT user-floated-then-minimized ones, which are
+// dropped so unminimize restores the float. That drop reads the durable slot
+// of the engine BEING SEEDED, never a fixed one — the same per-engine rule.
 
 #include <QObject>
 #include <QTest>

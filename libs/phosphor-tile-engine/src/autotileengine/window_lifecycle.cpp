@@ -410,7 +410,8 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
 }
 
 bool AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
-                                                   QStringList& releasedWindows, bool drainOverflow)
+                                                   QStringList& releasedWindows, bool drainOverflow,
+                                                   bool clearScreenOrderMaps)
 {
     // Snapshot each window's autotile slot into the unified record BEFORE the
     // PhosphorTiles::TilingState is torn down — the record is the SINGLE
@@ -477,9 +478,16 @@ bool AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, Phos
     for (const QString& windowId : floated) {
         m_windowMinSizes.remove(windowId);
     }
-    m_pendingInitialOrders.remove(screenId);
-    m_pendingOrderGeneration.remove(screenId);
-    m_strictInitialOrderScreens.remove(screenId);
+    // SCREEN-keyed, not context-keyed, so they only go when the whole screen
+    // does. A context-scoped prune on a surviving screen (removed desktop or
+    // activity) passes false: the seed order in flight belongs to the screen,
+    // and dropping it would leave a parallel mode transition inserting its
+    // windows in arbitrary order.
+    if (clearScreenOrderMaps) {
+        m_pendingInitialOrders.remove(screenId);
+        m_pendingOrderGeneration.remove(screenId);
+        m_strictInitialOrderScreens.remove(screenId);
+    }
     state->deleteLater();
     return releasedAny;
 }

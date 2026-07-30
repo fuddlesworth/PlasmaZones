@@ -1048,6 +1048,16 @@ const QSet<QString>& WindowTrackingService::userSnappedClasses() const
 {
     Q_ASSERT(hasSnapState());
     static const QSet<QString> empty;
+    // The HOLD wins while it is engaged. setUserSnappedClasses stashes the
+    // disk-loaded classes when no SnapState is wired yet, and saveState
+    // serialises UserSnappedClasses by iterating exactly this getter — so
+    // reading past the hold meant a save landing between the adaptor's
+    // loadState() and setSnapStateResolver() wrote the EMPTY set back over
+    // the user's auto-snap-by-class list. Reading it here closes the window
+    // the stash was added to close.
+    if (m_pendingUserSnappedClasses) {
+        return *m_pendingUserSnappedClasses;
+    }
     const PhosphorSnapEngine::SnapState* globals = snapGlobals();
     return globals ? globals->userSnappedClasses() : empty;
 }

@@ -141,7 +141,11 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         // persisted by writeBackTuning() and then shows up in the config
         // profile diff as a change the user never made — exactly what the
         // no-slot fallback in restorePerAlgoSettings below exists to avoid.
-        const bool differsFromDefaults = !qFuzzyCompare(m_config->splitRatio, oldAlgo->defaultSplitRatio())
+        // The offset form: qFuzzyCompare is documented as not working when
+        // either operand is 0.0, and an algorithm may legitimately default
+        // splitRatio to 0.0. Matches AutotileConfig::operator== and
+        // persistablePerAlgoSettings, which both use `1.0 + x`.
+        const bool differsFromDefaults = !qFuzzyCompare(1.0 + m_config->splitRatio, 1.0 + oldAlgo->defaultSplitRatio())
             || m_config->masterCount != PhosphorTiles::AutotileDefaults::DefaultMasterCount
             || m_config->maxWindows != oldAlgo->defaultMaxWindows();
         if (differsFromDefaults) {
@@ -150,9 +154,16 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
             entry.masterCount = m_config->masterCount;
             entry.maxWindows = m_config->maxWindows;
             // customParams are not touched here — only splitRatio/masterCount/maxWindows are engine-managed
-        } else {
-            m_config->savedAlgorithmSettings.remove(m_algorithmId);
         }
+        // Deliberately NO else-branch. Not stamping a defaults-echoing slot is
+        // the whole point of the gate; REMOVING an existing one would take
+        // customParams with it, which this function does not own and the engine
+        // reads back on every layout apply. A user who tuned only a custom
+        // param would lose it by switching algorithms. persistablePerAlgoSettings
+        // already drops genuinely-empty slots at persist time, and does so
+        // correctly (it requires customParams.isEmpty() first, and baselines
+        // maxWindows against the global override rather than the algorithm
+        // default — the discrepancy behind the Max Windows silent no-op).
     }
 
     // Look up saved settings AFTER the save above — insertion may rehash the
@@ -559,7 +570,16 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
             // leaked its m_windowMinSizes entry for the session, and emitted no
             // windowsReleased — leaving the daemon's WTS and the effect's float
             // cache holding entries for windows this engine no longer manages.
-            releaseScreenStateForTeardown(key.screenId, state, releasedWindows);
+            //
+            // Both scope flags are false: the SCREEN survives this prune, only
+            // one of its desktop contexts is going away. Draining the
+            // screen-keyed overflow bucket would strip the surviving contexts'
+            // overflow windows of their classification (capturePlacement then
+            // mis-reads them as user floats and they stick floating), and
+            // clearing the screen-keyed seed maps would destroy an in-flight
+            // strict order for the current desktop.
+            releaseScreenStateForTeardown(key.screenId, state, releasedWindows, /*drainOverflow=*/false,
+                                          /*clearScreenOrderMaps=*/false);
             releasedScreens.insert(key.screenId);
             ++pruned;
         });
@@ -708,7 +728,10 @@ void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities
             // Full teardown, for the same reasons as the desktop prune above:
             // record snapshot, min-size cleanup and a windowsReleased so the
             // daemon and effect stop tracking windows this engine has dropped.
-            releaseScreenStateForTeardown(key.screenId, state, releasedWindows);
+            // Both scope flags false for the same reason too — the screen
+            // survives, only this activity's contexts are going away.
+            releaseScreenStateForTeardown(key.screenId, state, releasedWindows, /*drainOverflow=*/false,
+                                          /*clearScreenOrderMaps=*/false);
             releasedScreens.insert(key.screenId);
             ++pruned;
         });

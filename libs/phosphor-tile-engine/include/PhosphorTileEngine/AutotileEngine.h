@@ -1278,11 +1278,25 @@ private:
      *        share one screenId (the orphaned-VS loop spans every
      *        desktop/activity context); the overflow bucket is keyed per
      *        screenId only, so the caller must drain once per screen AFTER
-     *        all of that screen's states are captured.
+     *        all of that screen's states are captured. Pass false ALSO when
+     *        the screen SURVIVES and only some of its contexts are going
+     *        away (the removed-desktop / removed-activity prunes): draining
+     *        there would strip the current desktop's overflow windows of
+     *        their overflow classification, and capturePlacement would later
+     *        mis-record them as USER floats, so they stick floating instead
+     *        of re-tiling.
+     * @param clearScreenOrderMaps Whether to drop the three SCREEN-keyed seed
+     *        bookkeeping maps (pending order, generation, strict flag). True
+     *        is right when the whole screen is going away. Pass false for a
+     *        context-scoped prune on a surviving screen, or deleting one
+     *        virtual desktop would destroy an in-flight strict seed order for
+     *        that screen on the CURRENT desktop and its windows would be
+     *        inserted in arbitrary order.
      * @return Whether the state released any managed windows.
      */
     bool releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
-                                       QStringList& releasedWindows, bool drainOverflow = true);
+                                       QStringList& releasedWindows, bool drainOverflow = true,
+                                       bool clearScreenOrderMaps = true);
 
     /**
      * @brief Shared key-migration body for focus-driven window moves.
