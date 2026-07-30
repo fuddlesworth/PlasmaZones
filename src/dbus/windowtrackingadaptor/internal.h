@@ -186,14 +186,18 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // (resolveCached is keyed on windowId and rule revision alone, so a hit
     // discards the freshly stamped query). Each is documented at its own site.
     //
-    // KNOWN GAP, stated so it is not mistaken for a deliberate design:
-    // applyOpenRoutingForTiling stamps ScreenId but NOT Mode, so a
+    // KNOWN GAP, stated so it is not mistaken for a deliberate design: every
+    // resolveCached-path resolver stamps ScreenId but NOT Mode. That is all
+    // FOUR of them — placementZonesByRule, applyOpenScreenRouting,
+    // applyOpenDesktopRouting and applyOpenRoutingForTiling — so a
     // user-authored rule pairing `Mode == "scrolling"` (or tiling/snapping)
-    // with RouteToScreen or RouteToDesktop is silently INERT on the open
-    // path, even though the rules editor offers exactly that pairing. The
-    // Float half of this gap is closed — shouldFloatByRule derives the mode
-    // from the window's own screen and desktop. Until the routing half
-    // follows, the failure is silent: the rule simply never fires.
+    // with SnapToZone, RouteToScreen or RouteToDesktop is silently INERT on
+    // the open path, even though the rules editor offers exactly that
+    // pairing. Only the two UNCACHED resolvers (shouldFloatByRule,
+    // scrollOpenRuleParams) derive the mode, from the window's own screen,
+    // desktop and activity. Closing the rest means giving them the same
+    // treatment, which also means giving up their cache. Until then the
+    // failure is silent: the rule simply never fires.
     //
     // ActiveLayout is populated only by the windowless context cascade (never
     // by either per-window query), so it is context-scoped in practice —

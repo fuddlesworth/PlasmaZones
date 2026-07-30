@@ -147,7 +147,11 @@ SettingsFlickable {
         if (stateView.isTiling) {
             // An explicit "Default" pick clears the algorithm slot. Otherwise
             // stage the user's pick, else the currently-resolved algorithm.
-            var algoId = stateView.localAlgorithmCleared ? "" : (stateView.localAlgorithmId || state.algorithmId || "");
+            // carrySibling's rule, for the same reason as the layout slot
+            // below: an untouched algorithm carries the resolved value only
+            // when the daemon marked it explicit, so a pure mode toggle cannot
+            // freeze the global default algorithm onto this screen.
+            var algoId = root.carrySibling(stateView.localAlgorithmCleared, stateView.localAlgorithmTouched, stateView.localAlgorithmId, state.algorithmIdExplicit, state.algorithmId);
             if (!algoId) {
                 // Nothing to pin — either the user picked "Default", or
                 // nothing resolved (fresh config, or the context suppresses
@@ -166,10 +170,14 @@ SettingsFlickable {
             tiling = "autotile:" + algoId;
             snapping = siblingSnapping;
         } else {
-            // An explicit "Default" pick clears the layout slot. The ||
-            // fallback serves the mode-toggle path, which stages the
-            // currently-resolved layout when the user has not picked one.
-            var layoutId = stateView.localLayoutCleared ? "" : (stateView.localLayoutId || state.layoutId || "");
+            // Same rule the SIBLING slot follows (see carrySibling): an
+            // untouched slot carries the daemon's resolved value only when the
+            // daemon marked it EXPLICIT. Falling back to state.layoutId
+            // unconditionally froze a cascade default into an explicit
+            // assignment — toggle Snapping to Scrolling and back, hit Apply,
+            // and the screen now pins today's global default and stops
+            // following it. The entered mode is not exempt from that rule.
+            var layoutId = root.carrySibling(stateView.localLayoutCleared, stateView.localLayoutTouched, stateView.localLayoutId, state.layoutIdExplicit, state.layoutId);
             if (!layoutId) {
                 // Nothing to pin — either the user picked "Default", or
                 // nothing resolved (the context suppresses the default

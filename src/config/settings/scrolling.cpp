@@ -158,9 +158,10 @@ void Settings::normalizeScrollingColumnWidthValue()
     qCWarning(lcConfig) << "scrolling: stored column width" << stored << "is out of range for the current kind" << kind
                         << "— using" << coerced << "in memory; it reaches disk on the next save";
     m_store->write(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey(), coerced);
-    // NO Q_EMIT here. The sole caller is load(), which snapshots every
-    // Q_PROPERTY before the reparse and re-emits each changed NOTIFY after
-    // this returns. Emitting here would double-fire on a coercing load, and
+    // NO Q_EMIT here. BOTH callers — load() and applyConfigOverlayStaged —
+    // snapshot every Q_PROPERTY before mutating the store and re-emit each
+    // changed NOTIFY after this returns. Emitting here would double-fire on
+    // a coercing load or a coercing staged apply, and
     // fire spuriously on a Discard reload where the in-memory value was
     // already coerced (disk still holds the bad pair, so this coerces again,
     // but the property never changed from any consumer's point of view).

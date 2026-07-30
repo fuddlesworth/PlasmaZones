@@ -840,20 +840,28 @@ const PhosphorRules::Rule* LayoutRegistry::findExactContextRule(const QString& s
     // something: an unclaimed mixed rule sent upsertAssignmentRule down the
     // addRule branch, leaving a duplicate at the same cascade band.
     //
-    // Gating the DETERMINISTIC-ID branch was never an option regardless —
-    // returning nullptr there would add a second rule carrying an id that
-    // is already in the set.
+    // The deterministic-id branch never returns nullptr either, for the same
+    // family of reason: a caller that gets nothing back takes the addRule
+    // path, and the rule it builds carries this exact id, which RuleSet
+    // rejects as a collision. A malformed id-carrying rule therefore falls
+    // THROUGH to the shape scan rather than short-circuiting the lookup.
     const QUuid candidateId = PWR::ContextRuleBridge::assignmentRuleIdFor(screenId, virtualDesktop, activity);
     const PWR::Rule* shapeMatch = nullptr;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         if (rule.id == candidateId) {
-            if (!hasEngineModeAction(rule) || !matchIsExactContext(rule.match, screenId, virtualDesktop, activity)) {
-                // Deterministic-id rule exists but its match shape was
-                // hand-edited away from the canonical form. Return
-                // nothing so callers don't act on a malformed rule.
-                return nullptr;
+            if (hasEngineModeAction(rule) && matchIsExactContext(rule.match, screenId, virtualDesktop, activity)) {
+                return &rule;
             }
-            return &rule;
+            // Deterministic-id rule exists but was hand-edited away from the
+            // canonical form (its SetEngineMode removed, or its match shape
+            // changed). Do NOT return nullptr: upsertAssignmentRule would then
+            // take its addRule branch, makeAssignmentRule would stamp this very
+            // id, and RuleSet::addRule rejects a colliding id — so the
+            // Monitors-page write silently no-ops and the context becomes
+            // unassignable until the user deletes the edited rule. Fall through
+            // to the shape scan instead, which claims the rule if it still
+            // fills any assignment slot at this exact context.
+            continue;
         }
         // Remember the first exact-context assignment rule we see — we only
         // return it if no deterministic-id rule exists in the set.
