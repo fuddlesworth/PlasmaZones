@@ -430,6 +430,11 @@ public:
     /// engine-mode gate. Returns an all-unset @ref ContextGapOverride when no
     /// matching rule fills a gap slot. Same owner-thread affinity as the rest
     /// of the registry.
+    /// An EMPTY @p mode is a supported caller shape meaning "mode-agnostic".
+    /// It is not the same as a mode that happens to be empty: the resolver
+    /// structurally excludes Field::Mode in that case, so neither a positive
+    /// `Mode Equals x` nor a negated `None{Mode Equals x}` rule participates.
+    /// Without that exclusion the negated form would match every context.
     ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
                                           const QString& mode = QString()) const override;
 

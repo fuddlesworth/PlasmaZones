@@ -29,9 +29,14 @@ void LayoutRegistry::clearAutotileAssignments()
     // Flip every Autotile assignment rule to Snapping (preserving both layout
     // fields) and drop autotile quick-layout slots.
     QList<PWR::Rule> updated = m_ruleStore->ruleSet().rules();
-    // Dedup (screenId, virtualDesktop) — see purgeSnappingLayoutFromAssignments
-    // above for the duplicate-emit hazard this guards against.
-    QSet<QPair<QString, int>> affected;
+    // Dedup on the FULL context dims, activity included — see
+    // purgeSnappingLayoutFromAssignments above for the duplicate-emit hazard
+    // this guards against. Dropping the activity (as this did) collapses two
+    // rules differing only in activity into one emit, and resolves the
+    // survivor under m_currentActivity, so an Activity- or Combined-pinned
+    // rule reports the layout of a wider Desktop/Monitor rule instead. The
+    // batch driver was fixed the same way.
+    QSet<ContextDims> affected;
     bool changed = false;
 
     for (PWR::Rule& rule : updated) {
@@ -55,9 +60,8 @@ void LayoutRegistry::clearAutotileAssignments()
                                                                      entry.snappingLayout, entry.tilingAlgorithm);
         changed = true;
 
-        // Recover (screen, desktop) for the layoutAssigned signal.
-        const ContextDims dims = decodeDims(rule.match);
-        affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
+        // Recover the rule's own context for the layoutAssigned signal.
+        affected.insert(decodeDims(rule.match));
     }
 
     // Drop autotile quick-layout slots — clearing autotile everywhere
@@ -74,15 +78,18 @@ void LayoutRegistry::clearAutotileAssignments()
     if (changed) {
         m_ruleStore->setAllRules(updated);
         writeQuickLayouts();
-        for (const auto& [sid, desk] : std::as_const(affected)) {
-            qCDebug(lcZonesLib) << "clearAutotileAssignments: flipped to Snapping for screen=" << sid
-                                << "desktop=" << desk;
+        for (const ContextDims& dims : std::as_const(affected)) {
+            qCDebug(lcZonesLib) << "clearAutotileAssignments: flipped to Snapping for screen=" << dims.screenId
+                                << "desktop=" << dims.virtualDesktop << "activity=" << dims.activity;
             // Route through emitLayoutAssigned rather than a bare
             // layoutAssigned(…, nullptr): the flip PRESERVED each rule's
             // snapping layout, so observers should receive the layout the
             // context now resolves to, not a null pointer that reads as
-            // "no layout here".
-            emitLayoutAssigned(sid, desk, assignmentIdForScreen(sid, desk, m_currentActivity));
+            // "no layout here". Resolved under the rule's OWN activity, not a
+            // family-wide one, or the resolve cannot reach an activity-pinned
+            // rule at all.
+            emitLayoutAssigned(dims.screenId, dims.virtualDesktop,
+                               assignmentIdForScreen(dims.screenId, dims.virtualDesktop, dims.activity));
         }
         qCInfo(lcZonesLib) << "Cleared all autotile assignments";
     }
@@ -465,8 +472,12 @@ QHash<CombinedAssignmentKey, QString> LayoutRegistry::combinedAssignments() cons
     QHash<CombinedAssignmentKey, QString> result;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         // Strict Combined-only classifier — Activity-only and Desktop-only
-        // rules stay in their own projections.
-        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)) {
+        // rules stay in their own projections. The purity gate matches the
+        // family drop: the batch API must be blind to a MIXED rule in BOTH
+        // directions, or the round trip drops it on the read side and the
+        // rebuild appends a second pure rule at the same context.
+        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)
+            || !isPureAssignmentRule(rule)) {
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);
@@ -483,7 +494,8 @@ QHash<QPair<QString, int>, QString> LayoutRegistry::desktopAssignments() const
         // Use the same per-desktop family classifier the batch setter uses,
         // so a window-property rule carrying an engine-mode action plus an
         // incidental VirtualDesktop== predicate cannot leak in.
-        if (!hasEngineModeAction(rule) || !matchIsExactContextDesktop(rule.match)) {
+        // Purity gate for the same round-trip reason as combinedAssignments.
+        if (!hasEngineModeAction(rule) || !matchIsExactContextDesktop(rule.match) || !isPureAssignmentRule(rule)) {
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);
@@ -503,7 +515,9 @@ QHash<QPair<QString, QString>, QString> LayoutRegistry::activityAssignments() co
         // vice versa) keyed by the same pair, silently losing one of
         // the rules. Combined rules live outside this projection and
         // are only reachable through the rule editor.
-        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextActivityStrict(rule.match)) {
+        // Purity gate for the same round-trip reason as combinedAssignments.
+        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextActivityStrict(rule.match)
+            || !isPureAssignmentRule(rule)) {
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);

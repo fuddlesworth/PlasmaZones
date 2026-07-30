@@ -916,6 +916,41 @@ private Q_SLOTS:
             f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString());
         QVERIFY(!none.innerGap.has_value());
 
+        // NEGATED Mode leaf, mode-agnostic caller. This is the polarity trap:
+        // an unstamped mode reads back as an ENGAGED empty string, so
+        // `None{Mode Equals "tiling"}` evaluates TRUE and the rule would fire
+        // on every context — silently overriding gaps for a caller that asked
+        // about no mode at all. The resolver excludes Field::Mode structurally
+        // for a mode-agnostic call, so the rule stays inert here while still
+        // firing for a caller that names a different mode.
+        PWR::RuleAction negatedGapAction;
+        negatedGapAction.type = QString(PWR::ActionType::SetInnerGap);
+        negatedGapAction.params.insert(QString(PWR::ActionParam::Value), 33);
+        PWR::Rule negatedGap;
+        negatedGap.id = QUuid::createUuid();
+        negatedGap.name = QStringLiteral("Not-tiling inner gap");
+        negatedGap.enabled = true;
+        negatedGap.priority = 500;
+        negatedGap.match = PWR::MatchExpression::makeNone(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("tiling"))});
+        negatedGap.actions = {negatedGapAction};
+        QVERIFY(f.store->setAllRules({negatedGap}));
+
+        const PhosphorZones::ContextGapOverride negatedAgnostic =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString());
+        QVERIFY2(!negatedAgnostic.innerGap.has_value(), "a negated Mode rule must not fire for a mode-agnostic caller");
+
+        // Positive control: the same rule DOES fire for a caller that names a
+        // mode other than the negated one, so the exclusion above is scoped to
+        // the agnostic call and has not simply disabled the rule.
+        const PhosphorZones::ContextGapOverride negatedSnapping =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("snapping"));
+        QVERIFY(negatedSnapping.innerGap.has_value());
+        QCOMPARE(*negatedSnapping.innerGap, 33);
+
+        // Restore the fixture's rule set for the arms below.
+        QVERIFY(f.store->setAllRules({tilingGap}));
+
         // Scrolling arm: a `Mode Equals "scrolling"` gap rule fires for the
         // scrolling asker and stays inert for tiling — the third engine's
         // gap provider resolves with the "scrolling" token.

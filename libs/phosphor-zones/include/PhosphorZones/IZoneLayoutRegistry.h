@@ -178,6 +178,8 @@ public:
     /// for the others. The snapping geometry path passes "snapping", the
     /// autotile path "tiling", the scroll engine's provider "scrolling".
     /// Left empty for a mode-agnostic caller (no Mode leaf then matches).
+    /// An EMPTY @p mode means "mode-agnostic" and excludes Field::Mode
+    /// structurally — see the LayoutRegistry override.
     virtual ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
                                                   const QString& mode = QString()) const
     {

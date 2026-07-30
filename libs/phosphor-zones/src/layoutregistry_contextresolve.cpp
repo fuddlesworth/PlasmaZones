@@ -304,11 +304,22 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
             // winningAction below). The catch-all baseline is excluded by the
             // per-slot "carries this slot, not the catch-all baseline" filter.
             const PWR::ActionRegistry& registry = PWR::ActionRegistry::instance();
-            const auto winningAction = [this, &query,
-                                        &registry](QLatin1StringView slot) -> std::optional<PWR::RuleAction> {
+            const auto winningAction = [this, &query, &registry,
+                                        &mode](QLatin1StringView slot) -> std::optional<PWR::RuleAction> {
                 const QString slotId = QString(slot);
-                const auto carries = [&registry, &slotId](const PWR::Rule& rule) {
+                // A mode-agnostic caller (empty @p mode) leaves WindowQuery::mode
+                // unstamped, and valueForField returns an ENGAGED empty string
+                // for it — which a positive `Mode Equals x` leaf never matches
+                // but a negated `None{Mode Equals x}` matches on EVERY context.
+                // So exclude Field::Mode structurally in that case, exactly as
+                // the four mode-agnostic resolvers do, rather than relying on
+                // the empty value to coincide with a non-match.
+                const bool modeAgnostic = mode.isEmpty();
+                const auto carries = [&registry, &slotId, modeAgnostic](const PWR::Rule& rule) {
                     if (rule.managed && rule.match.isCatchAll()) {
+                        return false;
+                    }
+                    if (modeAgnostic && rule.match.referencesAnyField({PWR::Field::Mode})) {
                         return false;
                     }
                     for (const PWR::RuleAction& a : rule.actions) {
