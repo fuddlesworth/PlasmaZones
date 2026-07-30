@@ -298,6 +298,10 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
                 stash.focusedWindowId = stash.columns.first().tiles.first().windowId;
             }
         }
+        // Mark the entry as staged-from-persistence so pruneStaleWindows'
+        // aliveness sweep leaves it alone until a tile is actually claimed.
+        // These ids are last session's; no live alive-set can contain them.
+        stash.stagedFromPersistence = true;
         m_stripStash.insert(key, stash);
         m_stripStashConsumed.remove(key);
         ++restored;

@@ -573,6 +573,22 @@ private:
         QVector<StashedColumn> columns;
         QString focusedWindowId;
         int viewAnchor = 0;
+        /// True while this entry was staged by restoreStripState from the
+        /// PERSISTED blob and has not yet had a single tile claimed.
+        ///
+        /// Such an entry names LAST session's window ids, which by design do
+        /// not appear in any live alive-set: the cross-session claim in
+        /// restoreFromStripStash matches on the appId prefix precisely because
+        /// the per-instance half of the id is regenerated every launch. The
+        /// aliveness sweep in pruneStaleWindows must therefore not read
+        /// "absent from the alive set" as "closed" here, or the very first
+        /// prune after login (the effect fires one at bringup, right after the
+        /// daemon stages this) would erase the whole snapshot and undo the
+        /// structure/focus/anchor restore.
+        ///
+        /// Cleared on the first successful consume, at which point the entry
+        /// is anchored in THIS session's id space and the sweep is meaningful.
+        bool stagedFromPersistence = false;
 
         bool isEmpty() const
         {

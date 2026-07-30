@@ -395,6 +395,13 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         state->strip().restoreViewAnchor(stashStrip.viewAnchor, params);
     }
     const int total = stashStrip.tileCount();
+    // The entry is now anchored in THIS session's id space, so the aliveness
+    // sweep in pruneStaleWindows becomes meaningful for it and the
+    // persistence exemption must lift. Written on the live map entry, not the
+    // `stashStrip` reference used above, which may name a copy.
+    if (auto stashIt = m_stripStash.find(key); stashIt != m_stripStash.end()) {
+        stashIt->stagedFromPersistence = false;
+    }
     QSet<QString>& consumed = m_stripStashConsumed[key];
     consumed.insert(windowId);
     if (consumed.size() >= total) {
@@ -641,8 +648,18 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     //
     // Fails closed on an empty alive set, like every other prune here: a
     // premature one-shot report at login must not wipe the stashes.
+    // An entry staged straight from the persisted blob is EXEMPT until its
+    // first tile is claimed. Its ids belong to last session, so no alive set
+    // can contain them and the sweep would read the entire snapshot as dead —
+    // wiping the structure/focus/anchor restore on the very first prune after
+    // login, since the effect fires one at bringup right after the daemon
+    // stages it. See StashedStrip::stagedFromPersistence.
     if (!aliveWindowIds.isEmpty()) {
         for (auto stashIt = m_stripStash.begin(); stashIt != m_stripStash.end();) {
+            if (stashIt->stagedFromPersistence) {
+                ++stashIt;
+                continue;
+            }
             for (auto colIt = stashIt->columns.begin(); colIt != stashIt->columns.end();) {
                 colIt->tiles.removeIf([&aliveWindowIds](const StashedTile& tile) {
                     return !aliveWindowIds.contains(tile.windowId);

@@ -87,7 +87,7 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
                                 << "refusing unfiltered seed for" << screenId;
             continue;
         }
-        filterEngineSeedOrder(order, wts, wts->windowRegistry());
+        filterEngineSeedOrder(order, wts, wts->windowRegistry(), PhosphorEngine::WindowPlacement::scrollingEngineId());
         if (!order.isEmpty()) {
             m_scrollEngine->setInitialWindowOrder(screenId, order);
         }

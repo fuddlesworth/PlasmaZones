@@ -37,14 +37,22 @@ namespace PlasmaZones {
  * Minimized windows are KEPT as positional placeholders — the engine's
  * strict-seed path defers adding them until their windowOpened arrives,
  * preserving position without a hidden window occupying a tile. The one DROP
- * is a user-floated-then-minimized window (instance-exact record with a
- * floating snap slot): a placeholder would tile it on unminimize instead of
- * restoring its float.
+ * is a user-floated-then-minimized window: a placeholder would tile it on
+ * unminimize instead of restoring its float.
+ *
+ * @p targetEngineId names the engine being seeded, and the minimized drop
+ * reads THAT engine's durable slot. This parameter is load-bearing, not
+ * cosmetic: reading a fixed slot here would re-break the per-engine float
+ * invariant the non-minimized arm above is careful to honour. Seeding the
+ * scroll engine while the window carries a floating SNAP slot must not drop
+ * it (it has no scrolling float verdict, so it belongs in the strip), and
+ * seeding after a scrolling float must not admit it just because its snap
+ * slot happens to be clean.
  *
  * Extracted from Daemon::seedAutotileOrderForScreen so the predicate is unit
  * testable without a full daemon.
  */
 void filterEngineSeedOrder(QStringList& order, PhosphorPlacement::WindowTrackingService* wts,
-                           const PhosphorEngine::WindowRegistry* registry);
+                           const PhosphorEngine::WindowRegistry* registry, const QString& targetEngineId);
 
 } // namespace PlasmaZones

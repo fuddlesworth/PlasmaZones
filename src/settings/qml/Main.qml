@@ -907,12 +907,17 @@ PhosphorUi.SettingsAppWindow {
             readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
             readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
             // Scrolling differs from its two siblings: it has no SimpleOnly
-            // condensed page, so its leaf is visible in BOTH modes. Matching
-            // the leaf unconditionally put a second toggle for the same
-            // scrollingEnabled flag next to the parent row in advanced mode.
-            // The leaf only stands in for the parent when the tree is
-            // flattened, which is exactly when the parent row is not emitted.
-            readonly property bool isScrolling: entry && (entry.pageId === "scrolling" || (entry.pageId === "scrolling-behavior" && !settingsController.advancedMode))
+            // condensed page, so its leaf is visible in BOTH modes. Both ids
+            // are matched unconditionally, and that cannot double-render the
+            // toggle: "scrolling" is a virtual parent (empty qmlSource,
+            // collapsible=false) whose ONLY navigable descendant is
+            // "scrolling-behavior", so the tree walk flattens it away and
+            // emits a single row carrying the LEAF's pageId with the parent's
+            // title. The bare "scrolling" arm therefore only ever fires if the
+            // page gains a second navigable child, at which point the parent
+            // becomes a real drill row one rail level above its children and
+            // the two still cannot appear together.
+            readonly property bool isScrolling: entry && (entry.pageId === "scrolling" || entry.pageId === "scrolling-behavior")
             // The id whose dirty state this row REPRESENTS, which is not
             // always the id it renders. Simple mode condenses a whole subtree
             // down to one visible row, and that row's own dirty state covers

@@ -328,6 +328,11 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
         if (key == currentKeyForScreen(key.screenId)) {
             applyLayout(key.screenId, false);
         }
+        // Focus and view anchor are persisted (serializeStripState), and
+        // placementChanged is the only thing that marks DirtyScrollStrips.
+        // Emitted for a background context too: the strip that changed is
+        // serialized whether or not it is the one on screen right now.
+        Q_EMIT placementChanged(key.screenId);
     }
 }
 

@@ -56,6 +56,14 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
         (h != 0) ? state->strip().focusAdjacentColumn(h, params) : (v != 0 && state->strip().focusAdjacentTile(v));
     if (moved) {
         applyLayout(screen, true);
+        // Focus is PERSISTED state: serializeStripState writes focusedWindow
+        // and viewAnchor, and the only thing that marks DirtyScrollStrips is
+        // the daemon's placementChanged connection. Without this emit a pure
+        // focus walk (which moves both the active column and the view anchor)
+        // never reaches the save, so the strip restores scrolled to whatever
+        // column was focused before the walk. The move/tab/width verbs all
+        // emit for the same reason.
+        Q_EMIT placementChanged(screen);
         // Success carries the direction as the reason — the navigation OSD
         // derives its arrow from it (autotile fills the same slot).
         Q_EMIT navigationFeedback(true, action, direction, ctx.windowId, state->strip().activeWindowId(), screen);

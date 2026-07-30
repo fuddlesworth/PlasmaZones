@@ -668,15 +668,12 @@ void Daemon::stop()
         // self-null when the engine is destroyed — there is no `this`/raw-pointer
         // capture to invalidate, unlike the float callbacks above.
     }
-    // The strip-state provider is cleared for a different reason than the
-    // float callbacks: it captures only a QPointer, so there is no dangling
-    // pointer — but once the scroll engine is destroyed it answers an EMPTY
-    // blob, and saveload turns an empty blob into deleteKey(scrollStrips).
-    // Any save that commits DirtyScrollStrips after this point would then
-    // WIPE the user's persisted strip structure rather than leave it.
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setScrollStripStateProvider({});
-    }
+    // NOTE: the strip-state provider is deliberately NOT cleared here with
+    // the float callbacks. It captures only a QPointer, so it cannot dangle,
+    // and clearing it early makes saveState SKIP the strips write entirely —
+    // so the final shutdown save (further down, before the engine is
+    // destroyed) would drop every strip mutation from the last debounce
+    // window. It is cleared immediately before m_scrollEngine.reset() instead.
     // The one remaining `this`-capturing closure on the overlay service. It
     // is safe today (the lambda re-resolves m_scrollEngine and null-checks
     // it), but leaving it installed breaks the grep-discoverable
@@ -924,6 +921,15 @@ void Daemon::stop()
     // above the running gate.
     m_snapEngine.reset();
     m_autotileEngine.reset();
+    // Drop the strip-state provider FIRST, and only now: once the engine is
+    // gone the closure answers an EMPTY blob, and saveload turns an empty
+    // blob into deleteKey(scrollStrips), so any later save would WIPE the
+    // user's persisted strip structure. Clearing it makes saveState skip the
+    // strips write instead, which is why it cannot happen any earlier — the
+    // shutdown save above still needs a live engine to answer.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setScrollStripStateProvider({});
+    }
     m_scrollEngine.reset();
 
     // All three engines borrowed m_crossSurfaceResolver (injected at construction).

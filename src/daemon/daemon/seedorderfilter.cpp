@@ -10,12 +10,12 @@
 namespace PlasmaZones {
 
 void filterEngineSeedOrder(QStringList& order, PhosphorPlacement::WindowTrackingService* wts,
-                           const PhosphorEngine::WindowRegistry* registry)
+                           const PhosphorEngine::WindowRegistry* registry, const QString& targetEngineId)
 {
     if (order.isEmpty() || !wts) {
         return;
     }
-    order.removeIf([wts, registry](const QString& windowId) {
+    order.removeIf([wts, registry, &targetEngineId](const QString& windowId) {
         // minimizedState().value_or(false), not isMinimized(): keeps this
         // filter's unknown-handling in lockstep with the resnap-order and
         // restore-entry filters (autotile.cpp / autotile_init.cpp), which the
@@ -36,13 +36,17 @@ void filterEngineSeedOrder(QStringList& order, PhosphorPlacement::WindowTracking
         }
         // Minimized entries stay as positional placeholders (the engine's
         // strict seed defers tiling them until their windowOpened arrives) —
-        // EXCEPT a user-floated-then-minimized window (durable floating snap
-        // slot): seeding it as a placeholder would tile it on unminimize
-        // instead of restoring its float.
+        // EXCEPT a user-floated-then-minimized window, which a placeholder
+        // would tile on unminimize instead of restoring its float.
+        //
+        // The slot read is the TARGET engine's, not a fixed one. Float is per
+        // engine, and this branch is the only place the filter consults a
+        // float verdict at all, so reading (say) the snap slot while seeding
+        // the strip would drop a window that has no scrolling float verdict —
+        // and would equally admit one that does. Same invariant the
+        // non-minimized arm above turns on, applied to the minimized case.
         const auto record = wts->placementStore().peekExact(windowId);
-        return record
-            && record->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state
-            == PhosphorEngine::WindowPlacement::stateFloating();
+        return record && record->slotFor(targetEngineId).state == PhosphorEngine::WindowPlacement::stateFloating();
     });
 }
 

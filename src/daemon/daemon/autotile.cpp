@@ -847,7 +847,7 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
         // float must not make the window untileable here). Minimized entries
         // stay as positional placeholders, except user-floated-then-minimized
         // ones. See filterEngineSeedOrder's doc for the rationale.
-        filterEngineSeedOrder(order, wts, registry);
+        filterEngineSeedOrder(order, wts, registry, PhosphorEngine::WindowPlacement::autotileEngineId());
     }
 
     if (!order.isEmpty()) {
