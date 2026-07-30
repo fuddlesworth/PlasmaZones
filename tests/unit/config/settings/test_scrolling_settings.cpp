@@ -436,15 +436,15 @@ private Q_SLOTS:
         // A legal pair is left completely alone, both ways round.
         QTest::newRow("fixed-in-range") << ConfigDefaults::scrollingWidthKindFixed() << 640.0 << 640.0;
         QTest::newRow("proportion-in-range") << ConfigDefaults::scrollingWidthKindProportion() << 0.25 << 0.25;
-        // IN-kind but out of RANGE clamps rather than re-seeding: the value is
-        // the right SORT of thing, just outside the bounds. Without these two
-        // the repair's clamp tail could be replaced by `return value;` and the
-        // suite would stay green, so a hand-edited Fixed=50000 would reach the
-        // engine unclamped.
-        QTest::newRow("fixed-above-max") << ConfigDefaults::scrollingWidthKindFixed() << 50000.0
-                                         << ConfigDefaults::scrollingDefaultColumnWidthFixedMax();
-        QTest::newRow("proportion-below-min") << ConfigDefaults::scrollingWidthKindProportion() << 0.001
-                                              << ConfigDefaults::scrollingDefaultColumnWidthValueMin();
+        // NO rows for "in-kind but out of RANGE". They would be vacuous: the
+        // schema's clampDouble(ValueMin, FixedMax) validator runs on the READ
+        // path as well as the write (PhosphorConfig::Schema), so a hand-edited
+        // Fixed=50000 is already 10000 by the time the getter returns it and
+        // the normalizer sees an in-range value. reseedColumnWidthForKind's
+        // clamp tail is therefore unreachable defence, not a live path, and a
+        // row asserting the clamped result would pass with the tail replaced
+        // by `return value;` — coverage the test does not have.
+        //
         // ClientDecides ignores the value entirely, so nothing is repaired.
         // The stored value is deliberately PIXEL-magnitude: with 0.5 this row
         // passed whether or not the early return existed, because the

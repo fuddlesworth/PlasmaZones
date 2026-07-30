@@ -68,10 +68,16 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     // and not be auto-snapped when reopened.
     QStringList zoneIds = snapState ? snapState->zonesForWindow(windowId) : QStringList{};
     QString zoneId = zoneIds.isEmpty() ? QString() : zoneIds.first();
-    // With the engine resolver wired (production) this is the engine's answer
-    // directly; the full-windowId-then-appId fallback applies only to the
-    // legacy unwired path inside isWindowFloating.
-    bool isFloating = isWindowFloating(windowId);
+    // SNAP's own float bit, not the mode-routed read. The candidate here is
+    // snap-owned by construction — it came from snapState->zonesForWindow —
+    // and the routed read dispatches on the screen's CURRENT mode. On a screen
+    // in Autotile the window's autotile float verdict would then decide
+    // whether its SNAPPING PendingRestore is written: float it with Meta+F in
+    // autotile, close it, and the snap restore is silently dropped even though
+    // its snapping-mode verdict was never "floating". Third instance of this
+    // family; the resnap pair was fixed the same way.
+    const PhosphorSnapEngine::SnapState* floatSource = snapForWindow(windowId);
+    bool isFloating = floatSource && floatSource->isFloating(windowId);
     if (!zoneId.isEmpty() && !zoneId.startsWith(kZoneSelectorIdPrefix)
         && !isFloating
         // A whitespace-only / whitespace-bearing appId is a corrupt window

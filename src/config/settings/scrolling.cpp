@@ -46,8 +46,16 @@ qreal reseedColumnWidthForKind(qreal value, bool isFixed)
     if (!isFixed && value > ConfigDefaults::scrollingDefaultColumnWidthProportionMax()) {
         return ConfigDefaults::scrollingDefaultColumnWidthValue();
     }
-    // In-kind but out of range (Fixed=50000, Proportion=0.001): a clamp is
-    // the right repair here, since the value is the right SORT of thing.
+    // In-kind but out of range: a clamp is the right repair, since the value
+    // is the right SORT of thing.
+    //
+    // UNREACHABLE in practice, and deliberately kept as defence rather than
+    // removed: the schema's clampDouble(ValueMin, FixedMax) validator runs on
+    // the READ path too, so both callers receive an already-bounded value and
+    // this tail is an identity. It only starts mattering if that clamp is
+    // widened for a future kind, or if a caller ever reads the raw backend.
+    // Not unit-testable through either caller for the same reason — see the
+    // note in test_scrolling_settings.cpp's data table.
     return clampColumnWidthForKind(value, isFixed);
 }
 } // namespace

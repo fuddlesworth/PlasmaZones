@@ -216,19 +216,13 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
 QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
 {
     const QString tracked = m_notifiedWindowScreens.value(windowId);
-    // The RAW set here, deliberately, NOT the isScrollingScreen intersection.
-    //
-    // This helper has two consumers and both want the conservative answer:
-    // the paint clip / input filter, and getWindowScreenId's engine-authoritative
-    // screen override (a parked strip column's frame centre lies inside the
-    // NEIGHBOUR output, so positional fallback misattributes it). The union and
-    // the scrolling set arrive as two independent signals with no ordering
-    // guarantee, so intersecting made a screen leaving scrolling lose BOTH its
-    // clip and its screen override for the frames between them — parked columns
-    // painting in full on the neighbour AND being attributed to it. Answering
-    // over a screen the union has already dropped is harmless by comparison.
-    // The intersection belongs on the RULE and verb consumers, where a wider
-    // answer is the documented hazard.
+    // The RAW set, deliberately, NOT the isScrollingScreen intersection. Both
+    // consumers want the conservative answer: the paint clip / input filter,
+    // and getWindowScreenId's engine-authoritative screen override (a parked
+    // column's frame centre lies inside the NEIGHBOUR output). The union and
+    // the scrolling set arrive on independent signals, so intersecting made a
+    // screen leaving scrolling lose clip AND override together for the frames
+    // between them. The intersection belongs on the rule and verb consumers.
     if (tracked.isEmpty() || !m_scrollingScreens.contains(tracked)) {
         return QString();
     }
@@ -361,32 +355,17 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
             // Its screen record travels with it — leaving it behind orphans a
             // stale screen association the next notify would read.
             m_notifiedWindowScreens.remove(windowId);
-            // Deliberately NOT parked in m_savedNotifiedForDesktopReturn.
-            // That set means one specific thing: "the desktop-switch demotion
-            // dropped this window locally, but the daemon STILL holds it in
-            // the other desktop's state, so re-track on return without
-            // re-notifying."
+            // Deliberately NOT parked in m_savedNotifiedForDesktopReturn, whose
+            // meaning is "the daemon STILL holds this window in the other
+            // desktop's state, so re-track on return without re-notifying".
             //
-            // The invariant that makes the plain drop safe across all THREE
-            // resetNotified callers: such a batch only ever sees a window that
-            // is either (a) on a daemon that lost it — bring-up after a
-            // restart (wiring.cpp) and the engine-flip re-announce (state.cpp),
-            // where a fresh or torn-down engine holds nothing — or (b) already
-            // parked by the desktop-switch demotion, which is the genuine user
-            // toggle branch (signals.cpp): for a screen to be in `added` it was
-            // outside the union, so any off-desktop window on it was demoted on
-            // the switch that left that desktop and is already absent from
-            // m_notifiedWindows, making this remove() a no-op that leaves its
-            // park intact. Neither case can lose the only record of a window.
-            //
-            // Parking regardless made the
-            // desktop-return branch silently re-insert the window into
-            // m_notifiedWindows with no windowOpened, so the daemon never
-            // learned it existed and every later notifyWindowAdded hit the
-            // already-notified bail. The plain drop is correct here: the
-            // desktop-return path and the catch-scan both re-announce an
-            // untracked current-desktop window as new, which is exactly what
-            // a daemon that lost its state needs.
+            // Safe for all three resetNotified callers by construction: that
+            // set is inserted at exactly one site (signals.cpp's desktop-switch
+            // demotion) and only inside `if (m_notifiedWindows.remove(...))`,
+            // so "parked" implies "already absent from m_notifiedWindows" and
+            // this remove() cannot disturb a park. Parking here instead made
+            // the desktop-return branch silently re-insert the window with no
+            // windowOpened, so a restarted daemon never learned it existed.
         }
 
         bool minimizedOnly = false;
