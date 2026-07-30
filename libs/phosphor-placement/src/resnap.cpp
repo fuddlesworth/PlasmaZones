@@ -61,7 +61,15 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // Per-window candidate processing, shared by the live and durable passes below.
     const auto addCandidate = [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                   int virtualDesktop) {
-        if (zoneIds.isEmpty() || isWindowFloating(windowId))
+        // SNAP's own float bit, not the mode-routed read. This candidate set is
+        // snap-owned by construction (live snap-store assignments plus durable
+        // records whose snap slot is stateSnapped), and the routed read
+        // dispatches on the window's screen's CURRENT mode — which on a screen
+        // mid-flip is the DESTINATION engine. Float is per engine, so a
+        // destination-engine float bit must not decide whether a snap-owned
+        // candidate participates. Same fix as resnap_calc.cpp's.
+        const PhosphorSnapEngine::SnapState* snap = snapForWindow(windowId);
+        if (zoneIds.isEmpty() || (snap && snap->isFloating(windowId)))
             return;
         if (screenId.isEmpty())
             return;
@@ -208,9 +216,18 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
                 return;
             }
             seenWindowIds.insert(windowId);
-            // Skip floating windows — they should not participate in zone-ordered
-            // transitions (the user's manual-mode float choice should be preserved).
-            if (isWindowFloating(windowId)) {
+            // Skip floating windows — the user's manual-mode float choice is
+            // preserved across the transition.
+            //
+            // SNAP's own bit, not the mode-routed read. This list is the
+            // snapping→tiling SEED source, and by the time it is built the
+            // screen's mode has already flipped to the DESTINATION engine, so
+            // the routed read would let the destination engine's own float bit
+            // decide what enters its own seed order — a transition-path read
+            // must be a SOURCE-mode read. The seed filter downstream applies
+            // the destination engine's per-engine rule separately.
+            const PhosphorSnapEngine::SnapState* snap = snapForWindow(windowId);
+            if (snap && snap->isFloating(windowId)) {
                 return;
             }
             if (zoneIds.isEmpty()) {

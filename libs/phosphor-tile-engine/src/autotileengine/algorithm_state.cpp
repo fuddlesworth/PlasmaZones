@@ -87,14 +87,22 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         newId = fallback->registryId();
     }
 
-    // Set BEFORE the equality early-return. The ctor pre-seeds m_algorithmId
-    // with the static default, so for every user whose configured default is
-    // that same algorithm each setAlgorithm() call early-returned and the flag
-    // stayed false all session — and the first genuine switch away then skipped
-    // the save block below, silently losing that algorithm's live tuning.
-    m_algorithmEverSet = true;
-
     if (m_algorithmId == newId) {
+        // Set HERE, on the equality path only — not before it. The ctor
+        // pre-seeds m_algorithmId with the static default, so for a user whose
+        // configured default is that same algorithm every setAlgorithm() call
+        // early-returned and the flag stayed false all session, and the first
+        // genuine switch away then skipped the save block below and lost that
+        // algorithm's live tuning. That is the case this set fixes.
+        //
+        // Setting it unconditionally ABOVE the return went too far: it made
+        // the `m_algorithmEverSet &&` term in the save block permanently true,
+        // killing the ctor-defaults protection the comment there describes. A
+        // genuine FIRST switch would then stamp a slot from never-initialised
+        // struct defaults (maxWindows 5 against the pre-seeded algorithm's 6)
+        // and writeBackTuning would persist it. The tail of this function sets
+        // the flag for every real switch, so those are covered anyway.
+        m_algorithmEverSet = true;
         return;
     }
 

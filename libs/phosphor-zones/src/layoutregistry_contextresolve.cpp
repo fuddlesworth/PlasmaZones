@@ -153,11 +153,16 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
         [&]() -> std::optional<RuleSlotResolution> {
             PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
             // The tiled count is supplied ONLY to the assignment resolver's
-            // query, because algorithm switching is its only intended use. The
-            // gap / lock / overlay / default-assignment resolvers build their own
-            // makeContextQuery() without it, so a Field::TiledWindowCount predicate
-            // on a rule carrying one of those actions stays inert (the field is
-            // absent there) by design.
+            // query, because algorithm switching is its only intended use.
+            //
+            // Every OTHER resolver therefore excludes Field::TiledWindowCount
+            // STRUCTURALLY rather than relying on the field being absent.
+            // "Absent means inert" is true for a positive leaf and FALSE for a
+            // negated one: an absent field evaluates its leaf false, and
+            // `None{}` matches when no child matched, so
+            // `None{TiledWindowCount Equals 0}` would fire on EVERY context —
+            // gapping, locking or restyling all of them. Same polarity trap as
+            // Mode and ActiveLayout, same structural fix.
             query.tiledWindowCount = tiledCount;
             // Orientation is layout-independent, so it is stamped on EVERY context
             // query (unlike tiledWindowCount / activeLayout) — an orientation rule
@@ -189,7 +194,8 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             const auto slotMatch = [&](bool (*carriesSlot)(const PWR::Rule&)) -> const PWR::Rule* {
                 return m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::Rule& rule) {
                     return carriesSlot(rule)
-                        && !rule.match.referencesAnyField({PWR::Field::ActiveLayout, PWR::Field::Mode});
+                        && !rule.match.referencesAnyField(
+                            {PWR::Field::ActiveLayout, PWR::Field::Mode, PWR::Field::TiledWindowCount});
                 });
             };
 
@@ -322,6 +328,13 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
                     if (modeAgnostic && rule.match.referencesAnyField({PWR::Field::Mode})) {
                         return false;
                     }
+                    // TiledWindowCount is never stamped on a gap query, and an
+                    // ABSENT field makes a leaf evaluate false — which makes
+                    // `None{TiledWindowCount Equals 0}` evaluate TRUE for every
+                    // context. Excluded structurally, exactly as Mode is.
+                    if (rule.match.referencesAnyField({PWR::Field::TiledWindowCount})) {
+                        return false;
+                    }
                     for (const PWR::RuleAction& a : rule.actions) {
                         if (registry.slotFor(a) == slotId) {
                             return true;
@@ -405,40 +418,45 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
     // Hot-path cache via the shared revision-invalidated memoizer: the lock
     // check runs per cursor-move while a selector is open and on every
     // layout-switch attempt.
-    return resolveCachedContext(m_contextLockCache, m_contextLockCacheRevision, screenId, virtualDesktop, activity,
-                                contextCacheKeyToken(QString(), activeLayoutId, orientationToken), [&]() -> bool {
-                                    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-                                    query.screenOrientation = orientationToken;
-                                    query.activeLayout = activeLayoutId;
-                                    // Filtered highestPriorityMatch, not the unfiltered
-                                    // resolve(): this resolver is mode-agnostic, so mode is
-                                    // unstamped and reads back as an ENGAGED empty string —
-                                    // a negated None{Mode Equals "tiling"} on a LockContext
-                                    // rule would spuriously match and lock the context. Same
-                                    // structural exclusion the assignment and
-                                    // default-assignment resolvers apply.
-                                    const PWR::Rule* rule =
-                                        m_evaluator->highestPriorityMatch(query, [](const PWR::Rule& r) {
-                                            if (r.match.referencesAnyField({PWR::Field::Mode})) {
-                                                return false;
-                                            }
-                                            for (const PWR::RuleAction& action : r.actions) {
-                                                if (action.type == QLatin1String(PWR::ActionType::LockContext)) {
-                                                    return true;
-                                                }
-                                            }
-                                            return false;
-                                        });
-                                    if (!rule) {
-                                        return false;
-                                    }
-                                    for (const PWR::RuleAction& action : rule->actions) {
-                                        if (action.type == QLatin1String(PWR::ActionType::LockContext)) {
-                                            return action.params.value(PWR::ActionParam::Value).toBool();
-                                        }
-                                    }
-                                    return false;
-                                });
+    return resolveCachedContext(
+        m_contextLockCache, m_contextLockCacheRevision, screenId, virtualDesktop, activity,
+        contextCacheKeyToken(QString(), activeLayoutId, orientationToken), [&]() -> bool {
+            PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            query.screenOrientation = orientationToken;
+            query.activeLayout = activeLayoutId;
+            // Filtered highestPriorityMatch, not the unfiltered
+            // resolve(): this resolver is mode-agnostic, so mode is
+            // unstamped and reads back as an ENGAGED empty string —
+            // a negated None{Mode Equals "tiling"} on a LockContext
+            // rule would spuriously match and lock the context. Same
+            // structural exclusion the assignment and
+            // default-assignment resolvers apply.
+            const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, [](const PWR::Rule& r) {
+                // TiledWindowCount excluded for the
+                // same negation-polarity reason as
+                // Mode: unstamped here, so a
+                // negated leaf on it matches every
+                // context and locks all of them.
+                if (r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})) {
+                    return false;
+                }
+                for (const PWR::RuleAction& action : r.actions) {
+                    if (action.type == QLatin1String(PWR::ActionType::LockContext)) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            if (!rule) {
+                return false;
+            }
+            for (const PWR::RuleAction& action : rule->actions) {
+                if (action.type == QLatin1String(PWR::ActionType::LockContext)) {
+                    return action.params.value(PWR::ActionParam::Value).toBool();
+                }
+            }
+            return false;
+        });
 }
 
 std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QString& screenId, int virtualDesktop,
@@ -477,7 +495,8 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
             // the empty placeholder and wrongly force/suppress the default. Use a
             // filtered highestPriorityMatch rather than the unfiltered resolve().
             const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, [](const PWR::Rule& r) {
-                if (r.match.referencesAnyField({PWR::Field::ActiveLayout, PWR::Field::Mode})) {
+                if (r.match.referencesAnyField(
+                        {PWR::Field::ActiveLayout, PWR::Field::Mode, PWR::Field::TiledWindowCount})) {
                     return false;
                 }
                 for (const PWR::RuleAction& action : r.actions) {
@@ -544,7 +563,10 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
             // overlay override the user scoped to another mode. Same rule the
             // assignment / default-assignment / lock resolvers enforce.
             const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [](const PWR::Rule& r) {
-                return !r.match.referencesAnyField({PWR::Field::Mode});
+                // TiledWindowCount joins Mode: neither is stamped on an overlay
+                // query, and an absent field makes a leaf false, so a negated
+                // leaf on it matches every context and restyles every screen.
+                return !r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount});
             });
 
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayShader))) {
@@ -633,7 +655,12 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     // Unfiltered resolve (no managed catch-all exclusion like
     // resolveContextGaps'): the baseline rule carries only gap/default
     // slots, never tiling params, so nothing to exclude here.
-    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+    const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [](const PWR::Rule& r) {
+        // TiledWindowCount is not stamped here either, and an absent field
+        // makes a leaf false, so a negated leaf on it would match every
+        // context. Mode IS stamped above, so only this one needs excluding.
+        return !r.match.referencesAnyField({PWR::Field::TiledWindowCount});
+    });
 
     ContextTilingParams params;
     // No defense-in-depth clamps here, unlike the scrolling resolver's
@@ -710,7 +737,12 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     query.activeLayout = assignmentIdForScreen(screenId, virtualDesktop, activity);
     // Unfiltered resolve: same baseline-slot rationale as the tiling-param
     // resolver above.
-    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+    const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [](const PWR::Rule& r) {
+        // TiledWindowCount is not stamped here, and an absent field makes a
+        // leaf false, so a negated leaf on it would match every context. Mode
+        // IS stamped above, so only this one needs excluding.
+        return !r.match.referencesAnyField({PWR::Field::TiledWindowCount});
+    });
 
     ContextScrollingParams params;
     if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollDefaultColumnWidth))) {

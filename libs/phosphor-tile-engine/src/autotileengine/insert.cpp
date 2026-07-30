@@ -65,9 +65,18 @@ void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QSt
     // the window to a cross-screen-adjusted rect and resizes it.
     if (state->isFloating(windowId)) {
         Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
-    } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
-        Q_EMIT windowFloatingStateSynced(windowId, false, screenId);
     }
+    // NO cross-engine else-arm. This used to broadcast not-floating whenever
+    // the ROUTED WindowTrackingService read disagreed, described as "clearing
+    // a stale snap-mode float". It cannot do that job any more: the routed
+    // read dispatches on the window's screen's current mode, which here IS
+    // autotile, so it returns this engine's own bit — which the branch above
+    // has already proven false. The arm is inert on the case it documents.
+    //
+    // Worse, on a screen mid-flip it returns a FOREIGN engine's bit, and an
+    // autotile insertion would then broadcast away a snapping-mode float
+    // verdict. Float is per engine, so this engine announces only what its own
+    // state says, and says nothing when its own state says not-floating.
 }
 
 void AutotileEngine::notifyAlgorithmWindowAdded(PhosphorTiles::TilingState* state, const QString& screenId,
