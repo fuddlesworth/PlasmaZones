@@ -797,27 +797,29 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     };
     QStringList releasedWindows;
     QSet<QString> releasedScreens;
+    QStringList prunedWindows;
     m_states.removeStatesIf(
         [&matches](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
             return matches(key.screenId);
         },
-        [this, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
-            // Removed screen: per-screen bookkeeping goes with the state —
-            // stale seeds must not replay if the connector id ever returns,
-            // and the tab-strip latch/overrides must not linger.
-            dropWindowBookkeeping(state);
-            // The windows are alive (only their output is gone); release
-            // them like the screens-set sweep does so the daemon's restore
-            // consumers hear about them (autotile parity).
-            releasedWindows.append(state->managedWindows());
+        [this, &releasedWindows, &releasedScreens, &prunedWindows](const PhosphorEngine::PlacementStateKey&,
+                                                                   ScrollState* state) {
             releasedScreens.insert(state->screenId());
-            m_pendingInitialOrder.remove(state->screenId());
-            m_consumedInitialOrder.remove(state->screenId());
-            // Through clearTabStripsForScreen so a still-listening overlay
-            // gets the "[]" broadcast (mirrors releaseScreenState).
-            clearTabStripsForScreen(state->screenId());
+            prunedWindows.append(state->managedWindows());
+            // Removed screen: the per-screen rule overrides go with the state
+            // too — this prune is their documented purger, and releaseScreenState
+            // does not touch them because a mode exit must keep them.
             m_perScreenOverrides.remove(state->screenId());
-            state->deleteLater();
+            // Through the FULL release, not a bare bookkeeping drop. The windows
+            // are alive (only their output is gone), so the daemon's
+            // windowsReleased handler below still reads each one's float marker
+            // and last-applied rect; dropping those first left every
+            // scroll-floated window without its snap-float clear and slot
+            // restore on an unplug, and skipped the placement-record snapshot
+            // that carries the scrolling slot across the release.
+            // AutotileEngine's twin routes this path through its full teardown
+            // for exactly these reasons.
+            releaseScreenState(state, releasedWindows);
         });
     m_states.removeWindowsIf([&matches](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId);
@@ -847,8 +849,21 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         }
     }
     m_context.removeScreensIf(matches);
+    // A dead screen id must not keep feeding the hint-less shortcut paths
+    // (autotile's twin clears the same way).
+    if (matches(m_activeScreen)) {
+        m_activeScreen.clear();
+    }
     if (!releasedWindows.isEmpty()) {
         Q_EMIT windowsReleased(releasedWindows, releasedScreens);
+    }
+    // Only NOW may the per-window side maps go: the handler above has consumed
+    // the float markers and the last-applied rects, and nothing else answers
+    // for a departed screen's windows.
+    for (const QString& windowId : std::as_const(prunedWindows)) {
+        m_lastAppliedRect.remove(windowId);
+        m_floatRestore.remove(windowId);
+        m_scrollFloatedWindows.remove(windowId);
     }
 }
 

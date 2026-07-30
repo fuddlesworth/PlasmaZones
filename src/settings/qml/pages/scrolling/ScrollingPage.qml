@@ -59,7 +59,7 @@ SettingsFlickable {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Scrolling", "CenterFocusedColumn")
-                        currentIndex: Math.max(0, indexOfValue(appSettings.scrollingCenterFocusedColumn))
+                        storedValue: appSettings.scrollingCenterFocusedColumn
                         onActivated: appSettings.scrollingCenterFocusedColumn = currentValue
                     }
                 }
@@ -104,7 +104,7 @@ SettingsFlickable {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Scrolling", "DefaultColumnWidthKind")
-                        currentIndex: Math.max(0, indexOfValue(appSettings.scrollingDefaultColumnWidthKind))
+                        storedValue: appSettings.scrollingDefaultColumnWidthKind
                         onActivated: appSettings.scrollingDefaultColumnWidthKind = currentValue
                     }
                 }
@@ -177,7 +177,7 @@ SettingsFlickable {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Scrolling", "DefaultColumnDisplay")
-                        currentIndex: Math.max(0, indexOfValue(appSettings.scrollingDefaultColumnDisplay))
+                        storedValue: appSettings.scrollingDefaultColumnDisplay
                         onActivated: appSettings.scrollingDefaultColumnDisplay = currentValue
                     }
                 }

@@ -186,6 +186,11 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // predicate bails on screen equality itself, WHATEVER the record's (desktop,
     // activity) context resolves to — so the peek misses and we correctly defer,
     // leaving the record for the owning engine.
+    // True when the gate below was bypassed: the opening screen belongs to a
+    // tiling engine and we are continuing ONLY because this window carries a
+    // cross-screen snapped record. Everything downstream must then stay scoped
+    // to that record — see the two uses below.
+    bool deferredByMode = false;
     if (m_layoutManager
         && m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
             != PhosphorZones::AssignmentEntry::Mode::Snapping) {
@@ -201,6 +206,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 << "— snap defers to the owning engine";
             return SnapResult::noSnap();
         }
+        deferredByMode = true;
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "resolveWindowRestore:" << windowId << "opens on non-snap-mode screen" << screenId
             << "but carries a cross-screen snap restore — not deferring";
@@ -215,7 +221,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // window's float-back geometry so a later Meta+F returns it to its remembered
     // free position rather than the zone rect. When the rule's own target context is
     // disabled, it does NOT win and we fall through to the normal store restore.
-    const SnapResult placementRuleResult = calculateSnapToPlacementRule(windowId, screenId, sticky);
+    // Suppressed under the cross-screen bypass: we are only here to land ONE
+    // remembered snapped record on its own (snapping) screen. A placement rule
+    // firing now would resolve against the tiled opening screen and snap the
+    // window there, overwriting the owning engine's slot. calculateSnapToPlacementRule
+    // validates its target's mode independently, so this is belt-and-braces for
+    // the case where the rule's target IS a snapping screen but the window is
+    // not the one the bypass was granted for.
+    const SnapResult placementRuleResult =
+        deferredByMode ? SnapResult::noSnap() : calculateSnapToPlacementRule(windowId, screenId, sticky);
     const bool placementRuleWins = placementRuleResult.shouldSnap
         && (!m_shouldRestorePredicate || m_shouldRestorePredicate(placementRuleResult.screenId));
 
@@ -269,6 +283,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // for autotile). A floated position is ALWAYS screen-local: it is
                 // eligible only when the window opens on its recorded monitor (the
                 // gate below). Float restore never MOVES a window across monitors.
+                // Under the cross-screen bypass the opening screen belongs to a
+                // tiling engine, so the ONLY record we may consume is the
+                // cross-screen snapped one that earned the bypass. Without this
+                // scope the floated branch below could accept a record recorded
+                // on this very tiled screen and write snap float state for a
+                // window the tiling engine owns.
+                if (deferredByMode) {
+                    return pendingCrossScreenRestore(p);
+                }
                 if (p.slotFor(engineId()).state == WindowPlacement::stateSnapped()) {
                     return recordedSnapScreenIsSnapping(p);
                 }

@@ -692,12 +692,16 @@ private:
      *
      * Valid only for a scroll-managed, non-floating window that is not in a
      * user move/resize: the managed output's geometry. paintWindow skips the
-     * window in paint passes whose viewport misses this rect, and the
-     * overhang input filter treats hits outside it as landing on the
-     * clipped-away (invisible) overhang. One predicate, two consumers — keep
-     * them in lockstep.
+     * window in OUTPUT paint passes whose viewport misses this rect (offscreen
+     * capture passes are exempt — their viewport is the window's own rect, so
+     * the test would blank a parked column's snapshot), and the overhang input
+     * filter treats hits outside it as landing on the clipped-away (invisible)
+     * overhang. One predicate, two consumers — keep them in lockstep.
+     *
+     * Answers an invalid rect immediately when no screen is scrolling, so the
+     * common case costs one bool on the per-window-per-output-per-frame path.
      */
-    QRect scrollClipGeometryFor(KWin::EffectWindow* w);
+    QRect scrollClipGeometryFor(KWin::EffectWindow* w) const;
     TilingHandler* tilingHandler() const
     {
         return m_tilingHandler.get();

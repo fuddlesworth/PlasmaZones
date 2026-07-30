@@ -402,11 +402,14 @@ private:
     /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
     /// screen that had a strip showing, no-op otherwise.
     void clearTabStripsForScreen(const QString& screenId);
-    /// Shared per-window side-map sweep for the PRUNE paths (desktop,
-    /// activity and removed-output teardown), which have no downstream
-    /// consumer of the float marker or the last-applied rect. The
-    /// mode-transition release path uses releaseScreenState instead; see the
-    /// contract there.
+    /// Shared per-window side-map sweep for the SILENT prune paths (desktop
+    /// and activity teardown), which emit no windowsReleased and so have no
+    /// downstream consumer of the float marker or the last-applied rect.
+    ///
+    /// The removed-output prune is NOT one of them: it releases live windows
+    /// and emits, so it goes through releaseScreenState and sweeps the side
+    /// maps only AFTER the emit. The mode-transition release path likewise
+    /// uses releaseScreenState; see the contract there.
     void dropWindowBookkeeping(const ScrollState* state);
     /// Consume @p windowId from a screen's mode-transition seed (marking it
     /// in m_consumedInitialOrder; the list itself keeps its positions) and

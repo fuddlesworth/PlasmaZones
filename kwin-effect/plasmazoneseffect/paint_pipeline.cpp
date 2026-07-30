@@ -568,8 +568,15 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     OffscreenEffect::prePaintWindow(view, w, data);
 }
 
-QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w)
+QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w) const
 {
+    // No scrolling screens means no straddlers can exist, so answer before
+    // paying for the hash lookups, the window-id copy and the O(outputs)
+    // scan in outputForScreenId. This runs per window, per output, per
+    // frame from paintWindow, so the common case must stay one bool.
+    if (!m_tilingHandler || !m_tilingHandler->hasScrollingScreens()) {
+        return QRect();
+    }
     // User moves/resizes are exempt — a window dragged out of the strip must
     // stay visible (and interactive) while it crosses outputs — and so are
     // engine-floating windows, which are not strip columns.
@@ -577,8 +584,8 @@ QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w)
         return QRect();
     }
     const QString trackedScreen = m_trackedScreenPerWindow.value(w);
-    if (trackedScreen.isEmpty() || !m_tilingHandler || !m_tilingHandler->isScrollingScreen(trackedScreen)
-        || !m_navigationHandler || m_navigationHandler->isWindowFloating(getWindowId(w))) {
+    if (trackedScreen.isEmpty() || !m_tilingHandler->isScrollingScreen(trackedScreen) || !m_navigationHandler
+        || m_navigationHandler->isWindowFloating(getWindowId(w))) {
         return QRect();
     }
     const KWin::LogicalOutput* managedOutput = outputForScreenId(trackedScreen);
@@ -603,9 +610,22 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // touch its managed screen. The predicate lives in scrollClipGeometryFor
     // and is shared with the overhang input filter, which keeps the same
     // invisible region from receiving pointer/touch input.
-    if (const QRect clip = scrollClipGeometryFor(w);
-        clip.isValid() && !viewport.renderRect().intersects(QRectF(clip))) {
-        return;
+    //
+    // OUTPUT PASSES ONLY. An offscreen capture (captureOldWindowSnapshot,
+    // captureWindowSurface) re-enters paintWindow with a viewport built from
+    // the WINDOW's own rect rather than an output's, so a column parked off
+    // its screen — the normal state for off-viewport columns and hidden tabs —
+    // would miss the clip rect, return here, and leave the FBO at its cleared
+    // transparent fill. Those snapshots latch (needsSnapshot / captureValid),
+    // so the blank would persist for the whole cross-fade. m_capturingSnapshot
+    // marks exactly that re-entrancy; the direct-capture path builds its
+    // viewport from the output geometry and pre-filters by intersection, so it
+    // needs no exemption.
+    if (!m_capturingSnapshot) {
+        if (const QRect clip = scrollClipGeometryFor(w);
+            clip.isValid() && !viewport.renderRect().intersects(QRectF(clip))) {
+            return;
+        }
     }
 
     // Read the cached per-frame clock pinned by prePaintScreen. Multiple
