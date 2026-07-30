@@ -141,7 +141,17 @@ bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
 
 void WindowTrackingService::setSnapStateResolver(SnapStateResolver resolver)
 {
+    const bool detaching = !resolver.globals;
     m_snapResolver = std::move(resolver);
+    if (detaching) {
+        // An EMPTY resolver is a detach, and a detach discards the hold for
+        // the same reason setSnapState(nullptr) does: keeping it would flush a
+        // set captured for the store that just went away into whatever store
+        // is wired next. The two detach paths are documented as equivalent, so
+        // they must actually behave that way.
+        m_pendingUserSnappedClasses.reset();
+        return;
+    }
     // A load that arrived before the resolver was wired parked its classes;
     // now that a store exists they can land. See setUserSnappedClasses.
     flushPendingUserSnappedClasses();

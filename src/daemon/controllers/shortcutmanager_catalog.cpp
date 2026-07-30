@@ -195,6 +195,29 @@ CatalogMeta catalogMetaForId(const QString& id)
     return {QT_TRANSLATE_NOOP("plasmazones", "Other"), 99, "all"};
 }
 
+/// The key token of a shortcut sequence: everything after the last '+'.
+///
+/// File-scope rather than a lambda because the cheatsheet family compression
+/// has a PRODUCER (which builds the merged chip's token list) and a CONSUMER
+/// (which matches a member's token against the family's expected one), and
+/// they must agree exactly. They did not: a sequence ENDING in '+' binds the
+/// plus key itself ("Meta+Alt++"), where a bare mid(split + 1) yields an EMPTY
+/// token. The producer special-cased it and the consumer did not, so the two
+/// could never match on such a binding and the family silently stopped
+/// compressing. No shipped default ends in '+', so it took a user rebind to
+/// reach — one definition removes the possibility entirely.
+QString lastKeyToken(const QString& sequence)
+{
+    const int split = sequence.lastIndexOf(QLatin1Char('+'));
+    if (split < 0) {
+        return sequence;
+    }
+    if (split == sequence.size() - 1) {
+        return QStringLiteral("+");
+    }
+    return sequence.mid(split + 1);
+}
+
 } // namespace
 
 QVariantList ShortcutManager::cheatsheetModel() const
@@ -249,18 +272,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // retuned, and the sheet would fall back to two near-identical rows with
     // nothing to explain why.
     const auto lastKeyOf = [](const QString& sequence) {
-        const int split = sequence.lastIndexOf(QLatin1Char('+'));
-        if (split < 0) {
-            return sequence;
-        }
-        // A sequence ENDING in '+' binds the plus key itself ("Meta+Alt++").
-        // Taking everything after the last '+' would yield an empty token,
-        // and the merged chip would then render as "Meta+Alt++ / " with the
-        // second key silently missing — a chip that lies about the binding.
-        if (split == sequence.size() - 1) {
-            return QStringLiteral("+");
-        }
-        return sequence.mid(split + 1);
+        return lastKeyToken(sequence);
     };
     // Both members' key tokens joined for the merged chip. The digit family
     // reads as a range and the directional one as a class name; a bare
@@ -385,7 +397,9 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
             }
             const QString seq = memberTriggers.first();
             const int split = seq.lastIndexOf(QLatin1Char('+'));
-            if (split <= 0 || seq.mid(split + 1) != family.expectedLastTokens[m]) {
+            // Through the shared tokenizer, so a '+'-terminated binding is
+            // read the same way the merged chip's producer reads it.
+            if (split <= 0 || lastKeyToken(seq) != family.expectedLastTokens[m]) {
                 compressible = false;
                 break;
             }

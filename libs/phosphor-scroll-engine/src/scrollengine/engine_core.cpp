@@ -646,9 +646,12 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 
     // The strip stash needs the same treatment, but keyed on ALIVENESS rather
     // than on `dead` — same reasoning as the m_lastAppliedRect sweep above.
-    // A stashed window is by definition NOT tracked (the mode exit released
-    // it), so it can never appear in `dead`, which is built from the live
-    // window keys. And the stash is keyed by CONTEXT, so the existing
+    // A stash tile is unreachable by the `dead` loop above, which only walks
+    // the seed lists. (Not because a stashed window is never tracked — one
+    // stashed for context K1 can be live and tracked in a different context
+    // K2, and would then appear in `dead`. That duplication is exactly what
+    // serializeStripState's live-wins filter exists for.) And the stash is
+    // keyed by CONTEXT, so the existing
     // sweepStripStash calls (desktop, activity and output prunes) never reach
     // a stash whose context is still perfectly live. Between the two, a window
     // that closes while its screen sits in another mode was reachable by

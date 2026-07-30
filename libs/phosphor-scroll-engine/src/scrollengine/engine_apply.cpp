@@ -126,8 +126,13 @@ QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId, QVector<i
             if (!clipped.isEmpty()) {
                 out.append(clipped);
                 if (columnNumbers) {
+                    // -1, matching visibleColumnNumberForWindow's "no number"
+                    // sentinel. 0 was outside the documented 1-based space and
+                    // disagreed with the sibling accessor. Unreachable in
+                    // practice: a non-empty clipped rect means the column
+                    // intersects the viewport, so it is in visibleColumns.
                     const int pos = visibleColumns.indexOf(column.columnIndex);
-                    columnNumbers->append(pos < 0 ? 0 : pos + 1);
+                    columnNumbers->append(pos < 0 ? -1 : pos + 1);
                 }
             }
         }

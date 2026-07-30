@@ -426,7 +426,10 @@ void Daemon::initializeAutotile()
                         // strip windows keep their scroll geometry. Mirrors
                         // resnapIfManualMode (navigation.cpp) including the
                         // engine-managed exclude union and the OSD suppress arm.
-                        if (m_windowTrackingAdaptor && m_snapAdaptor) {
+                        // service() is null-checked with the adaptor, not just
+                        // the adaptor: the body dereferences it, and every
+                        // other daemon site pairs the two.
+                        if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service() && m_snapAdaptor) {
                             QSet<QString> engineManagedScreens;
                             if (m_screenModeRouter && m_screenManager) {
                                 const auto parts =

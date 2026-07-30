@@ -439,7 +439,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                     }
                     return params;
                 });
-        } else if (scrollEngine) {
+            // Plain else: this whole block is already inside `if (scrollEngine)`,
+            // so re-testing it read as a second condition that could fail.
+        } else {
             // A non-ScrollEngine in the scroll slot leaves m_cachedScrollEngine
             // null, so the float predicate and the open-params resolver are
             // silently skipped while all six generic signals stay wired —

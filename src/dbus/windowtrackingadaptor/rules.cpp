@@ -55,11 +55,16 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    // Shares m_ruleEvaluator with shouldFloatByRule; resolveCached is keyed on
-    // (windowId, ruleSet revision) and ignores the query on a hit. Safe because both
-    // are open-path (resolved once per window lifetime — see shouldFloatByRule) and
-    // the effect pushes the window's full metadata before the engine's open-path
-    // resolve, so the first (and only) resolve for a window sees complete metadata.
+    // resolveCached is keyed on (windowId, ruleSet revision) and ignores the
+    // query on a hit. Safe HERE because this predicate stamps nothing beyond
+    // what buildRuleQueryForWindow produced — there is no per-call context to
+    // lose — and the effect pushes the window's full metadata before the
+    // engine's open-path resolve, so the first (and only) resolve for a window
+    // sees complete metadata. The cache is shared with shouldRestoreToZoneOnLogin
+    // and placementZonesByRule, which are cacheable for the same reason.
+    // shouldFloatByRule and scrollOpenRuleParams deliberately opted OUT: they
+    // stamp ScreenId and Mode per call, and a cache hit would silently discard
+    // both.
     const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestorePosition))) {

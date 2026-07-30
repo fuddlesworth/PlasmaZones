@@ -87,6 +87,14 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
                                 << "refusing unfiltered seed for" << screenId;
             continue;
         }
+        // Mirror the autotile twin's registry warning: without a registry the
+        // filter cannot read minimized state, so every entry reads as
+        // non-minimized and the user-floated-then-minimized drop silently
+        // stops firing. Degrading is correct, doing it quietly is not.
+        if (!wts->windowRegistry()) {
+            qCWarning(lcDaemon) << "updateScrollingScreens: no WindowRegistry —"
+                                << "the minimized seed filter degrades to pass-through for" << screenId;
+        }
         filterEngineSeedOrder(order, wts, wts->windowRegistry(), PhosphorEngine::WindowPlacement::scrollingEngineId());
         if (!order.isEmpty()) {
             m_scrollEngine->setInitialWindowOrder(screenId, order);

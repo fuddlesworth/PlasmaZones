@@ -344,27 +344,37 @@ void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     // matching WindowTrackingService::pruneMigratedWindows, the other bulk prune
     // of live windows' assignments. Two passes: unassignWindow resolves the
     // owning store through this engine's reverse map, which the removal clears.
-    if (m_windowTracker) {
-        QStringList assignedWindows;
-        // FLOATING windows on the removed output need the same treatment for
-        // the same reason: their float bit dies with the store, silently, so
-        // every consumer of the float state keeps believing they float on a
-        // monitor that no longer exists. Collected separately because they
-        // carry no zone assignment for unassignWindow to clear.
-        QStringList floatedWindows;
-        const auto& allStates = m_states.states();
-        for (auto it = allStates.constBegin(); it != allStates.constEnd(); ++it) {
-            if (it.value() && matches(it.key())) {
-                assignedWindows += it.value()->snappedWindows();
-                floatedWindows += it.value()->floatingWindows();
+    // FLOATING windows on the removed output need the same treatment for the
+    // same reason: their float bit dies with the store, silently, so every
+    // consumer of the float state keeps believing they float on a monitor
+    // that no longer exists. Collected separately because they carry no zone
+    // assignment for unassignWindow to clear — and OUTSIDE the m_windowTracker
+    // guard, because the emission does not use the tracker and a tracker-less
+    // engine's subscribers need the correction just as much.
+    //
+    // Each pair carries the STATE's own screenId, not physicalScreenId:
+    // `matches` deliberately spans a physical output's virtual sub-screens
+    // ("conn/vs:N"), so emitting the physical id would hand every subscriber
+    // that keys on screenId — the adaptor's float bookkeeping, the effect's
+    // per-screen float cache — a screen the window never floated on.
+    QList<QPair<QString, QString>> floatedWindows;
+    QStringList assignedWindows;
+    const auto& allStates = m_states.states();
+    for (auto it = allStates.constBegin(); it != allStates.constEnd(); ++it) {
+        if (it.value() && matches(it.key())) {
+            assignedWindows += it.value()->snappedWindows();
+            for (const QString& windowId : it.value()->floatingWindows()) {
+                floatedWindows.append({windowId, it.key().screenId});
             }
         }
+    }
+    if (m_windowTracker) {
         for (const QString& windowId : std::as_const(assignedWindows)) {
             m_windowTracker->unassignWindow(windowId);
         }
-        for (const QString& windowId : std::as_const(floatedWindows)) {
-            Q_EMIT windowFloatingChanged(windowId, false, physicalScreenId);
-        }
+    }
+    for (const auto& [windowId, stateScreenId] : std::as_const(floatedWindows)) {
+        Q_EMIT windowFloatingChanged(windowId, false, stateScreenId);
     }
     m_states.removeStatesIf(
         [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {

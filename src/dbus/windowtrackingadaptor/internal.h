@@ -178,23 +178,29 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // open-path Float / Restore / placement resolvers only. The effect's live
     // per-window query (ruleQueryFor) stamps ScreenId / Mode / ScreenOrientation, so
     // a rule pairing one of those with a window property resolves there but not on
-    // this path. Two callers here do know more and pin what they know on top of
-    // the query this builds: placementZonesByRule stamps ScreenId, and
-    // scrollOpenRuleParams stamps ScreenId plus Mode. Both are documented at
-    // their own call sites, including why the latter resolves uncached.
+    // this path. Callers that DO know more pin what they know on top of the
+    // query this builds. Stamping ScreenId: placementZonesByRule,
+    // applyOpenDesktopRouting, applyOpenScreenRouting, applyOpenRoutingForTiling.
+    // Stamping ScreenId AND the derived Mode: shouldFloatByRule and
+    // scrollOpenRuleParams, both of which resolve UNCACHED for that reason
+    // (resolveCached is keyed on windowId and rule revision alone, so a hit
+    // discards the freshly stamped query). Each is documented at its own site.
     //
-    // KNOWN GAP, stated so it is not mistaken for a deliberate design: the
-    // remaining open-path resolvers — shouldFloatByRule and
-    // applyOpenRoutingForTiling — do NOT stamp Mode, so a user-authored rule
-    // pairing `Mode == "scrolling"` (or tiling/snapping) with Float,
-    // RouteToScreen or RouteToDesktop is silently INERT on the open path,
-    // even though the rules editor offers exactly that pairing. Closing it
-    // means widening the engines' float-predicate seam to carry the screen
-    // the way OpenParamsResolver now does, so the resolver can derive the
-    // mode. Until then the failure is silent: the rule simply never fires. ActiveLayout is populated only by the
-    // windowless context cascade (never by either per-window query), so it is context-scoped in practice — which is the
-    // primary use of all four of these fields anyway. Extended properties — optional→optional copy preserves engagement
-    // exactly, so a field the effect could not observe stays disengaged and inert here too.
+    // KNOWN GAP, stated so it is not mistaken for a deliberate design:
+    // applyOpenRoutingForTiling stamps ScreenId but NOT Mode, so a
+    // user-authored rule pairing `Mode == "scrolling"` (or tiling/snapping)
+    // with RouteToScreen or RouteToDesktop is silently INERT on the open
+    // path, even though the rules editor offers exactly that pairing. The
+    // Float half of this gap is closed — shouldFloatByRule derives the mode
+    // from the window's own screen and desktop. Until the routing half
+    // follows, the failure is silent: the rule simply never fires.
+    //
+    // ActiveLayout is populated only by the windowless context cascade (never
+    // by either per-window query), so it is context-scoped in practice —
+    // which is the primary use of all four of these fields anyway. Extended
+    // properties: an optional→optional copy preserves engagement exactly, so
+    // a field the effect could not observe stays disengaged and inert here
+    // too.
     query.isMinimized = meta->isMinimized;
     query.isFullscreen = meta->isFullscreen;
     query.isSticky = meta->isSticky;

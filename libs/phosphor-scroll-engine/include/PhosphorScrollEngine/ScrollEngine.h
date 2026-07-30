@@ -394,8 +394,12 @@ private:
     QString resolveOperationScreen(const QString& screenId) const;
     /// Tear down one context state: appends its windows to
     /// @p releasedWindows, drops the per-window unfloat-slot memory and the
-    /// per-screen bookkeeping (pending seed, tab-strip latch — with the "[]"
-    /// clear broadcast), and deleteLater()s the state.
+    /// per-screen bookkeeping (pending seed, tab-strip latch), and
+    /// deleteLater()s the state. The latch and its payload are cleared
+    /// synchronously, but the "[]" clear BROADCAST is QUEUED: this runs from
+    /// inside the state map's own iteration, so a consumer touching engine
+    /// state would invalidate the live iterator. A caller must not assume the
+    /// clear has landed by the time this returns.
     ///
     /// It deliberately does NOT drop the mode-specific float markers or the
     /// last-applied rects. Both are INPUTS to the daemon's windowsReleased
@@ -550,7 +554,12 @@ private:
     /// stashed lists stay INTACT while they live (positions are counted
     /// against windows already present); consumption is tracked in
     /// m_stripStashConsumed and both entries drop once every stashed id is
-    /// consumed. Swept with the context on desktop/activity/output removal.
+    /// consumed. Swept with the context on desktop/activity/output removal,
+    /// and by pruneStaleWindows on ALIVENESS — which is the only sweep that
+    /// reaches a stash whose context is still live, i.e. a window that closed
+    /// while its screen sat in another mode. Entries staged from persistence
+    /// are exempt from the aliveness sweep until their first claim; see
+    /// StashedStrip::stagedFromPersistence.
     struct StashedTile
     {
         QString windowId;

@@ -284,7 +284,11 @@ public:
     /// discriminator arrive as two independent signals with no ordering
     /// guarantee, so between them m_scrollingScreens can transiently name a
     /// screen the union has already dropped; answering true there stamped
-    /// Mode "scrolling" for an unmanaged screen and kept Meta+wheel consumed.
+    /// Mode "scrolling" for an unmanaged screen and forwarded focusColumn to
+    /// an engine that no longer owns it. Note it does NOT un-consume
+    /// Meta+wheel: updateScrollWheelShortcuts keys registration on the RAW
+    /// m_scrollingScreens, so KWin still swallows the chord in that window;
+    /// the wheel handler simply no-ops instead of acting.
     bool isScrollingScreen(const QString& screenId) const
     {
         return m_scrollingScreens.contains(screenId) && m_managedScreens.contains(screenId);

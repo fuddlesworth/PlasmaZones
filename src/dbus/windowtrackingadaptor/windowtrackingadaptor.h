@@ -214,7 +214,11 @@ public:
      * saveState() calls it under DirtyScrollStrips to fetch
      * ScrollEngine::serializeStripState's blob at write time (the engine is
      * constructed after this adaptor, so the provider is late-bound like
-     * setEngines). Pass {} during shutdown teardown.
+     * setEngines). Pass {} during shutdown teardown, but only AFTER the final
+     * saveStateOnShutdown(): an absent provider makes saveState SKIP the
+     * strips write entirely (it cannot answer, so it leaves the stored blob
+     * alone rather than deleting it), so clearing early silently drops every
+     * strip mutation from the last debounce window.
      */
     void setScrollStripStateProvider(std::function<QJsonObject()> provider)
     {
@@ -772,9 +776,10 @@ public:
     /// openTabbed / openColumnPlacement), returned as a loose map so the
     /// header stays free of scroll-engine types. Keys (present only when the
     /// slot matched): "widthFraction" (double), "tabbed" (bool), "consume"
-    /// (bool). Resolves UNCACHED, unlike shouldFloatByRule: the query carries
-    /// ScreenId and Mode stamps the sibling resolvers never ask for, and the
-    /// evaluator cache is keyed on windowId alone. See rules.cpp.
+    /// (bool). Resolves UNCACHED, like shouldFloatByRule and unlike the
+    /// Restore predicates: the query carries ScreenId and Mode stamps, and the
+    /// evaluator cache is keyed on windowId and rule revision alone, so a hit
+    /// would silently discard both. See rules.cpp.
     QVariantMap scrollOpenRuleParams(const QString& windowId, const QString& screenId);
 
     /// Resolve the open-placement directive for a window from its matched window
@@ -1342,9 +1347,12 @@ private:
     QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
 
     // Unified window-rule store (daemon-owned, not owned here) + a lazily-built
-    // evaluator over its full rule set, shared by shouldRestoreFloatedPosition
-    // and shouldFloatByRule (resolveCached returns every matched slot, so one
-    // evaluator serves both per-window resolvers). The evaluator self-invalidates
+    // evaluator over its full rule set. One evaluator serves every per-window
+    // resolver: the cacheable ones (shouldRestoreFloatedPosition,
+    // shouldRestoreToZoneOnLogin, placementZonesByRule) share its resolveCached
+    // memo, and the ones that stamp per-call context (shouldFloatByRule,
+    // scrollOpenRuleParams) call resolve() on the same instance, which neither
+    // reads nor seeds that memo. The evaluator self-invalidates
     // on in-place rule edits via the set revision, so it is built once on first
     // use. Reset in setRuleStore only when the store pointer actually
     // changes (a same-store rebind keeps the evaluator).
