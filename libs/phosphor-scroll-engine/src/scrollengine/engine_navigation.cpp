@@ -203,9 +203,9 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     ColumnWidth partnerWidth = effectiveDefaultColumnWidth(screenId);
     ColumnDisplay partnerDisplay = effectiveDefaultColumnDisplay(screenId);
     if (!partner.isEmpty()) {
-        columnIdx = qMax(0, targetState->strip().columnOfWindow(partner));
-        partnerMinSize = targetState->strip().windowMinimumSize(partner);
         const int partnerColIdx = targetState->strip().columnOfWindow(partner);
+        columnIdx = qMax(0, partnerColIdx);
+        partnerMinSize = targetState->strip().windowMinimumSize(partner);
         if (partnerColIdx >= 0) {
             partnerWidth = targetState->strip().columns().at(partnerColIdx).width;
             partnerDisplay = targetState->strip().columns().at(partnerColIdx).display;

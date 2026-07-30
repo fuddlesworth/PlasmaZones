@@ -252,6 +252,10 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     QVector<StashedColumn>& stash = stashStrip.columns;
     int colIdx = -1;
     int tileIdx = -1;
+    /// Set when the tile at (colIdx, tileIdx) was matched by the cross-session
+    /// appId fallback rather than an exact id: holds the stashed id awaiting
+    /// the rename, which is committed only after a successful insert.
+    QString claimedCandidate;
     for (int i = 0; i < stash.size() && colIdx < 0; ++i) {
         const int j = [&]() {
             for (int t = 0; t < stash.at(i).tiles.size(); ++t) {
@@ -275,8 +279,8 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         // windows map one-to-one (a claimed tile is never re-claimed —
         // claiming rewrites its id to a live one, which later arrivals
         // cannot collide with).
-        const int sep = windowId.indexOf(QLatin1Char('|'));
-        const QString appPrefix = sep > 0 ? windowId.left(sep + 1) : QString();
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        const QString appPrefix = appId.isEmpty() ? QString() : appId + QLatin1Char('|');
         if (!appPrefix.isEmpty()) {
             const QSet<QString> consumed = m_stripStashConsumed.value(key);
             for (int i = 0; i < stash.size() && colIdx < 0; ++i) {
@@ -290,10 +294,14 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
                         || state->strip().containsWindow(candidate)) {
                         continue;
                     }
-                    stash[i].tiles[t].windowId = windowId;
-                    if (stashStrip.focusedWindowId == candidate) {
-                        stashStrip.focusedWindowId = windowId;
-                    }
+                    // STAGE the claim; do not commit it until the insert below
+                    // succeeds. Rewriting the tile id here and then returning
+                    // false left the rename standing, so containsWindow() was
+                    // permanently true for that tile: it could never be claimed
+                    // again, the stash entry never completed, and the stashed
+                    // focus had been reassigned to a window this restore never
+                    // placed.
+                    claimedCandidate = candidate;
                     colIdx = i;
                     tileIdx = t;
                     break;
@@ -304,6 +312,16 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     if (colIdx < 0) {
         return false;
     }
+    // Commit a staged cross-session claim only once the tile is really placed.
+    const auto commitClaim = [&]() {
+        if (claimedCandidate.isEmpty()) {
+            return;
+        }
+        stash[colIdx].tiles[tileIdx].windowId = windowId;
+        if (stashStrip.focusedWindowId == claimedCandidate) {
+            stashStrip.focusedWindowId = windowId;
+        }
+    };
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
     const StashedColumn& sc = stash.at(colIdx);
     bool inserted = false;
@@ -350,6 +368,7 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     if (!inserted) {
         return false;
     }
+    commitClaim();
     state->strip().setWindowHeightIntent(windowId, sc.tiles.at(tileIdx).height);
     // The stashed FOCUS follows its window, not the arrival order: without
     // this the first arrival kept the focus it won on the empty strip and
@@ -923,10 +942,11 @@ void ScrollEngine::refreshConfigFromSettings()
     } else {
         // KEEP IN SYNC: the 0.05 proportion floor mirrors
         // ConfigDefaults::scrollingDefaultColumnWidthValueMin and the
-        // rules-side kMinColumnWidthRatio. Neither is reachable from here:
-        // ConfigDefaults is app-side and kMinColumnWidthRatio is a private
-        // header of PhosphorRules, which this library does not link (the
-        // dependency runs the other way), so the bound is hand-mirrored.
+        // rules-side PhosphorRules::MinColumnWidthRatio. Neither is reachable
+        // from here — ConfigDefaults is app-side, and PhosphorRules is a
+        // library this one does not link (the dependency runs the other way,
+        // so the public RuleAction.h is out of reach too) — so the bound is
+        // hand-mirrored.
         m_defaultColumnWidth = ColumnWidth::makeProportion(qBound<qreal>(0.05, widthValue, 1.0));
     }
     const int display = settings->scrollingDefaultColumnDisplay();

@@ -106,8 +106,15 @@ QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId, QVector<i
     // whatever its strip position — the numbers describe what is on
     // screen (the user's chosen zone-number model; digits and the
     // navigation OSD use the same space).
-    int ordinal = 0;
-    int lastColumnIndex = -1;
+    //
+    // The ordinal comes from ScrollStrip::visibleColumnIndices, the SAME
+    // source visibleColumnNumberForWindow uses for the Snap-to-Zone digits.
+    // Deriving it here from a counter over clipped rects instead diverged
+    // whenever a column's tiles overflowed below the work area (the
+    // documented soft min-height overflow): that column contributed no
+    // clipped rect, so the preview label and the digit target disagreed
+    // about the same column.
+    const QVector<int> visibleColumns = state->strip().visibleColumnIndices(params);
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.hidden) {
@@ -119,11 +126,8 @@ QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId, QVector<i
             if (!clipped.isEmpty()) {
                 out.append(clipped);
                 if (columnNumbers) {
-                    if (column.columnIndex != lastColumnIndex) {
-                        ++ordinal;
-                        lastColumnIndex = column.columnIndex;
-                    }
-                    columnNumbers->append(ordinal);
+                    const int pos = visibleColumns.indexOf(column.columnIndex);
+                    columnNumbers->append(pos < 0 ? 0 : pos + 1);
                 }
             }
         }

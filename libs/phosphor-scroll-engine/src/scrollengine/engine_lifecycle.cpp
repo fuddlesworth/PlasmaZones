@@ -467,6 +467,19 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         inserted = state->strip().insertWindow(windowId, effectiveDefaultColumnWidth(screenId),
                                                effectiveDefaultColumnDisplay(screenId), params);
     }
+    if (!inserted) {
+        // Every insert refused (an empty id is the only way today). The float
+        // set was already given up above, so returning now would leave the
+        // window tracked but in NEITHER the strip nor the floating set — the
+        // inconsistency floatWindowInternal warns about. Put it back.
+        qCWarning(lcScrollEngine) << "unfloatWindowInternal: every insert refused for" << windowId
+                                  << "— restoring floating state";
+        state->addFloating(windowId);
+        if (hadSlot) {
+            m_floatRestore.insert(windowId, restore);
+        }
+        return false;
+    }
     if (inserted) {
         // Re-apply the min size the floated tile carried (the fresh-column
         // branches insert without it).

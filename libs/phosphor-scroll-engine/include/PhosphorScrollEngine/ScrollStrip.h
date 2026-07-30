@@ -188,15 +188,13 @@ public:
     bool adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Back to the even auto-split for EVERY tile in the active column.
     bool resetActiveColumnHeights();
-    /// Reconcile a column's stored intent to a size the client actually
-    /// acked (app-initiated resize): the owning column takes the acked width
-    /// as Fixed, the tile the acked height. Other columns untouched.
     /// Record the size a client/user resize actually settled on. The width
     /// becomes the column's Fixed intent only when @p widthChanged (the
     /// engine compares against the last applied rect) — a vertical-only
     /// resize must not pin a Proportion/Preset column to pixels. The height
-    /// becomes the tile's Fixed intent symmetrically: only when
-    /// @p heightChanged and the column has more than one tile.
+    /// becomes the tile's Fixed intent symmetrically, only when
+    /// @p heightChanged; a lone tile is included, because relayout honours a
+    /// solo tile's Fixed height (niri parity). Other columns are untouched.
     bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool widthChanged = true,
                              bool heightChanged = true);
 

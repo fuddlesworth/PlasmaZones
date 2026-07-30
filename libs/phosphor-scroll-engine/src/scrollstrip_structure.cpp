@@ -38,7 +38,20 @@ QString ScrollStrip::activeWindowId() const
     if (!col || col->activeTileIdx < 0 || col->activeTileIdx >= col->tiles.size()) {
         return {};
     }
-    return col->tiles.at(col->activeTileIdx).windowId;
+    // Never name a minimized tile. Relayout's tabbed branch falls back to the
+    // first VISIBLE tile when the stored index points at a minimized one, so
+    // returning the minimized id here let applyLayout(focusWindowAfter) ask
+    // the compositor to activate a window that was never laid out. Mirror the
+    // relayout fallback so the two notions of "active tile" cannot disagree.
+    if (!col->tiles.at(col->activeTileIdx).minimized) {
+        return col->tiles.at(col->activeTileIdx).windowId;
+    }
+    for (const Tile& tile : col->tiles) {
+        if (!tile.minimized) {
+            return tile.windowId;
+        }
+    }
+    return {};
 }
 
 int ScrollStrip::columnOfWindow(const QString& windowId) const
@@ -507,14 +520,26 @@ bool ScrollStrip::moveActiveColumnToLast(const ScrollLayoutParams& params)
 bool ScrollStrip::moveActiveTile(int delta)
 {
     Column* col = activeColumnMutable();
-    if (!col) {
+    if (!col || delta == 0) {
         return false;
     }
-    const int target = col->activeTileIdx + delta;
-    if (target < 0 || target >= col->tiles.size()) {
-        return false;
+    // Skip minimized slots the way focusAdjacentTile does. Relayout drops
+    // minimized tiles entirely, so swapping across one moved nothing on
+    // screen while the verb still reported success and fired a success OSD
+    // plus a placementChanged.
+    const int step = delta > 0 ? 1 : -1;
+    int target = col->activeTileIdx;
+    for (int remaining = qAbs(delta); remaining > 0; --remaining) {
+        int next = target + step;
+        while (next >= 0 && next < col->tiles.size() && col->tiles.at(next).minimized) {
+            next += step;
+        }
+        if (next < 0 || next >= col->tiles.size()) {
+            return false;
+        }
+        target = next;
     }
-    col->tiles.swapItemsAt(col->activeTileIdx, target);
+    col->tiles.move(col->activeTileIdx, target);
     col->activeTileIdx = target;
     return true;
 }
@@ -532,7 +557,26 @@ bool ScrollStrip::consumeWindowIntoColumn(const ScrollLayoutParams& params)
     }
     const int oldViewX = viewXFor(params);
     Column& source = m_columns[m_activeColumnIdx + 1];
-    const int takeIdx = qBound(0, source.activeTileIdx, source.tiles.size() - 1);
+    int takeIdx = qBound(0, source.activeTileIdx, source.tiles.size() - 1);
+    // The neighbour is not fully minimized (guarded above), but its ACTIVE
+    // tile still can be — taking that one would pull an invisible window into
+    // this column and make it the active tile. Walk to the nearest visible
+    // tile instead; consumeOrExpel applies the same rule to its own moved tile.
+    if (source.tiles.at(takeIdx).minimized) {
+        int visible = -1;
+        for (int off = 1; off < source.tiles.size() && visible < 0; ++off) {
+            for (const int cand : {takeIdx - off, takeIdx + off}) {
+                if (cand >= 0 && cand < source.tiles.size() && !source.tiles.at(cand).minimized) {
+                    visible = cand;
+                    break;
+                }
+            }
+        }
+        if (visible < 0) {
+            return false;
+        }
+        takeIdx = visible;
+    }
     const Tile taken = source.tiles.takeAt(takeIdx);
     if (source.activeTileIdx >= source.tiles.size()) {
         source.activeTileIdx = qMax(0, source.tiles.size() - 1);

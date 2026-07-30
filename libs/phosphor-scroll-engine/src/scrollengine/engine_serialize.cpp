@@ -91,13 +91,20 @@ QJsonObject widthToJson(const ColumnWidth& w)
 
 ColumnWidth widthFromJson(const QJsonObject& obj)
 {
+    // Persisted config is user-writable, so this is a system boundary: every
+    // numeric field is bounded to the range its producers already enforce
+    // (refreshConfigFromSettings, the open-rule override and
+    // effectiveDefaultColumnWidth all clamp proportion to [0.05, 1.0]).
+    // Unbounded, a hand-edited or corrupt value reaches proportionalPx, where
+    // qRound() of a huge double to int is undefined, and a zero or negative
+    // proportion pins the column at 1px for the rest of the session.
     ColumnWidth w;
     const int kind = obj.value(kKind()).toInt(static_cast<int>(ColumnWidth::Proportion));
     w.kind = (kind == ColumnWidth::Fixed || kind == ColumnWidth::Preset) ? static_cast<ColumnWidth::Kind>(kind)
                                                                          : ColumnWidth::Proportion;
-    w.proportion = obj.value(kProportion()).toDouble(0.5);
-    w.fixedPx = obj.value(kFixedPx()).toInt(0);
-    w.presetIdx = obj.value(kPresetIdx()).toInt(0);
+    w.proportion = qBound<qreal>(0.05, obj.value(kProportion()).toDouble(0.5), 1.0);
+    w.fixedPx = qMax(0, obj.value(kFixedPx()).toInt(0));
+    w.presetIdx = qMax(0, obj.value(kPresetIdx()).toInt(0));
     return w;
 }
 
@@ -117,9 +124,12 @@ WindowHeight heightFromJson(const QJsonObject& obj)
     const int kind = obj.value(kKind()).toInt(static_cast<int>(WindowHeight::Auto));
     h.kind = (kind == WindowHeight::Fixed || kind == WindowHeight::Preset) ? static_cast<WindowHeight::Kind>(kind)
                                                                            : WindowHeight::Auto;
-    h.weight = obj.value(kWeight()).toDouble(1.0);
-    h.fixedPx = obj.value(kFixedPx()).toInt(0);
-    h.presetIdx = obj.value(kPresetIdx()).toInt(0);
+    // Same boundary hardening as widthFromJson: a non-positive weight would
+    // divide the auto-height share by zero-or-negative, and a negative
+    // fixedPx/presetIdx indexes out of range.
+    h.weight = qBound<qreal>(0.01, obj.value(kWeight()).toDouble(1.0), 100.0);
+    h.fixedPx = qMax(0, obj.value(kFixedPx()).toInt(0));
+    h.presetIdx = qMax(0, obj.value(kPresetIdx()).toInt(0));
     return h;
 }
 
@@ -201,6 +211,16 @@ QJsonObject ScrollEngine::serializeStripState() const
 void ScrollEngine::restoreStripState(const QJsonObject& state)
 {
     int restored = 0;
+    // A window id may appear in exactly ONE staged tile, across every key.
+    // restoreFromStripStash completes an entry when the count of distinct
+    // consumed ids reaches its tile count, so a repeat inside one key makes
+    // that entry permanently unconsumable (it is then re-consulted on every
+    // later open of the context). A repeat ACROSS keys is not hypothetical —
+    // serializeStripState legitimately writes a live strip for one key beside
+    // an un-consumed stash for another that still lists the same window — and
+    // would let two contexts stage it, so whichever announces second splices
+    // it into a second strip.
+    QSet<QString> claimedWindowIds;
     for (auto it = state.constBegin(); it != state.constEnd(); ++it) {
         PhosphorEngine::PlacementStateKey key;
         if (!keyFromString(it.key(), &key) || !it.value().isObject()) {
@@ -241,7 +261,8 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
                 tile.windowId = tileObj.value(kWindowId()).toString();
                 tile.height = heightFromJson(tileObj.value(kHeight()).toObject());
                 tile.minimized = tileObj.value(kMinimized()).toBool(false);
-                if (!tile.windowId.isEmpty()) {
+                if (!tile.windowId.isEmpty() && !claimedWindowIds.contains(tile.windowId)) {
+                    claimedWindowIds.insert(tile.windowId);
                     col.tiles.append(tile);
                 }
             }
