@@ -160,6 +160,13 @@ SnapState::UnassignResult SnapState::unassignWindow(const QString& rawWindowId)
     return clearZoneAssignment(canonicalizeForLookup(rawWindowId), /*preserveScreenAndDesktop=*/false);
 }
 
+bool SnapState::clearScreenAndDesktop(const QString& rawWindowId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    const bool removed = m_windowScreenAssignments.remove(windowId) > 0;
+    return m_windowDesktopAssignments.remove(windowId) > 0 || removed;
+}
+
 SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& rawWindowId, bool preserveScreenAndDesktop)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);

@@ -22,6 +22,15 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     if (!m_globals) {
         return;
     }
+    // Guarded locally like m_globals, per the ctor contract: this is public
+    // API, and the clearFloatingForSnap deref below is unconditional, so a
+    // stub-dependency engine crashed here in release while the assert above
+    // only covered the other dependency.
+    Q_ASSERT(m_windowTracker);
+    if (!m_windowTracker) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitSnapImpl: no window tracker for" << windowId;
+        return;
+    }
     Q_ASSERT(!zoneIds.isEmpty());
     if (Q_UNLIKELY(zoneIds.isEmpty())) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitSnapImpl: empty zoneIds for" << windowId;

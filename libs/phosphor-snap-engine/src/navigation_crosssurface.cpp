@@ -71,8 +71,20 @@ bool SnapEngine::tryCrossModeOutput(const QString& windowId, const QString& dire
     // stack (or its strip); a swap trades it with the neighbour's entry-edge tile
     // (or column). The daemon's handlers pick the target engine off the same mode
     // read and already route Scrolling, so the emitted payloads are unchanged.
-    if (m_layoutManager->modeForScreen(neighbour, currentVirtualDesktopForScreen(neighbour), currentActivity())
-        == PhosphorZones::AssignmentEntry::Snapping) {
+    // Live resolver first, registry cascade as fallback — the same order
+    // ensureTargetResolver's neighbour-tiling provider uses. The live resolver
+    // carries the unclaimed-tiling downgrade to Snapping, so mid mode-toggle
+    // the two disagree: a neighbour the resolver already treats as snapping but
+    // the raw cascade still calls tiling turned this move into a silent
+    // boundary no-op instead of a handoff. (Safe HERE because the neighbour is
+    // read on its own current desktop; tryCrossDesktopMove must keep the
+    // cascade, since the live resolver is keyed on screenId alone and cannot
+    // answer for another desktop.)
+    const bool neighbourIsSnapping = m_liveModeResolver
+        ? m_liveModeResolver(neighbour) == PhosphorZones::AssignmentEntry::Snapping
+        : m_layoutManager->modeForScreen(neighbour, currentVirtualDesktopForScreen(neighbour), currentActivity())
+            == PhosphorZones::AssignmentEntry::Snapping;
+    if (neighbourIsSnapping) {
         return false;
     }
     if (swap) {

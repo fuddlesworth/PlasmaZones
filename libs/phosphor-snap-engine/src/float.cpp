@@ -545,9 +545,16 @@ void SnapEngine::handoffRelease(const QString& windowId)
     if (state->isFloating(windowId)) {
         state->setFloating(windowId, false);
     }
-    // The destination engine now owns the window. unassignWindow / setFloating
-    // above cleared its zone/screen/desktop and floating bit — but NOT the
-    // pre-float capture, which is deliberately PRESERVED (see
+    // Residence entries go unconditionally. unassignWindow clears them, but it
+    // only runs for a SNAPPED window; a window that was merely FLOATING kept
+    // the screen/desktop that setFloatingOnScreen wrote, and those survive
+    // forgetWindow. Reverse-map reads never saw them, but raw store scans do —
+    // windowsOnScreenAndDesktop feeds tryCrossDesktopFocus, so snap could
+    // offer and activate a window the destination engine now owns.
+    state->clearScreenAndDesktop(windowId);
+    // The destination engine now owns the window. The calls above cleared its
+    // zone, screen, desktop and floating bit — but NOT the pre-float capture,
+    // which is deliberately PRESERVED (see
     // testHandoffRelease_preservesPreFloatCapture): a future return handoff may
     // consult it for size restoration. Finally drop the reverse-map ownership
     // record so this engine no longer claims the window.

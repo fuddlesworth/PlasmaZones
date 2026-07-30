@@ -346,14 +346,24 @@ void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     // owning store through this engine's reverse map, which the removal clears.
     if (m_windowTracker) {
         QStringList assignedWindows;
+        // FLOATING windows on the removed output need the same treatment for
+        // the same reason: their float bit dies with the store, silently, so
+        // every consumer of the float state keeps believing they float on a
+        // monitor that no longer exists. Collected separately because they
+        // carry no zone assignment for unassignWindow to clear.
+        QStringList floatedWindows;
         const auto& allStates = m_states.states();
         for (auto it = allStates.constBegin(); it != allStates.constEnd(); ++it) {
             if (it.value() && matches(it.key())) {
                 assignedWindows += it.value()->snappedWindows();
+                floatedWindows += it.value()->floatingWindows();
             }
         }
         for (const QString& windowId : std::as_const(assignedWindows)) {
             m_windowTracker->unassignWindow(windowId);
+        }
+        for (const QString& windowId : std::as_const(floatedWindows)) {
+            Q_EMIT windowFloatingChanged(windowId, false, physicalScreenId);
         }
     }
     m_states.removeStatesIf(
@@ -424,6 +434,12 @@ void SnapEngine::setAutotileEngine(PhosphorEngine::IPlacementEngine* engine)
     auto* obj = dynamic_cast<QObject*>(engine);
     Q_ASSERT(!engine || obj);
     if (m_autotileEngineObj) {
+        // Same caveat setZoneAdjacencyResolver and setNavigationStateProvider
+        // carry: this severs EVERY destroyed-guard this engine holds on that
+        // sender, not just the one installed below. Correct only while no
+        // other member connects to the same object's destroyed signal — if one
+        // ever does, all three sites must move to context/handle-based
+        // disconnects together.
         disconnect(m_autotileEngineObj, &QObject::destroyed, this, nullptr);
     }
     m_autotileEngineObj = obj;

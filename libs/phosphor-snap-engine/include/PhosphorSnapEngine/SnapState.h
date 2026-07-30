@@ -78,6 +78,19 @@ public:
         bool lastUsedZoneCleared = false;
     };
     UnassignResult unassignWindow(const QString& windowId);
+    /// Drop ONLY the screen/desktop residence entries, leaving the zone
+    /// assignment, the floating bit and the pre-float capture untouched.
+    ///
+    /// For the cross-engine handoff of a window that was FLOATING but not
+    /// snapped: unassignWindow never runs for it (no zone assignment to
+    /// clear), so setFloatingOnScreen's residence writes survived in this
+    /// store. They are invisible to reverse-map reads but NOT to raw scans
+    /// like windowsOnScreenAndDesktop, which feeds cross-desktop focus — snap
+    /// could then offer and activate a window another engine now owns.
+    /// removeWindowData is the wrong primitive here: it also wipes the
+    /// pre-float capture that handoffRelease deliberately preserves.
+    /// @return true when an entry was removed.
+    bool clearScreenAndDesktop(const QString& windowId);
 
     QString zoneForWindow(const QString& windowId) const;
     QStringList zonesForWindow(const QString& windowId) const;

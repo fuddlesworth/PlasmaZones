@@ -79,11 +79,14 @@ public:
     /// Public for symmetry with AutotileEngine's analogous accessors and
     /// to keep the engine's "current context" surface coherent — the
     /// daemon uses `Daemon::currentDesktop()` / `Daemon::currentActivity()`
-    /// directly rather than going through the engine. The only current
-    /// in-tree caller of these two is `lifecycle.cpp` (snap-engine-
-    /// internal restore logic); kept public so a future adaptor that
-    /// wants the engine's own view (e.g. for a per-engine OSD) doesn't
-    /// have to wire its own VDM.
+    /// directly rather than going through the engine.
+    /// `currentActivity()` is used throughout the engine's own sources
+    /// (calculate, lifecycle, navigation_actions, navigation_crosssurface,
+    /// SnapEngine); the no-arg `currentVirtualDesktop()` has no in-tree
+    /// caller and survives only as the documented fallback of the
+    /// per-screen accessor below. Both stay public so a future adaptor that
+    /// wants the engine's own view (e.g. for a per-engine OSD) doesn't have
+    /// to wire its own VDM.
     int currentVirtualDesktop() const;
     /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
     /// desktops, #648), falling back to the global currentVirtualDesktop().
