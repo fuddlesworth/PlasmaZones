@@ -199,6 +199,13 @@ private Q_SLOTS:
 
     void testNormalSnapFloatUnfloatCyclePreservesState()
     {
+        // The zone-geometry assertions below need a real QScreen. Under the
+        // offscreen QPA the suite runs with there is always one, so this never
+        // fires — but without it a screenless environment would report the
+        // test as PASSED having asserted nothing, which is worse than skipped.
+        if (QGuiApplication::screens().isEmpty()) {
+            QSKIP("no QScreen available — this case needs real screen geometry");
+        }
         const QString windowId = QStringLiteral("dolphin|cccccccc-0000-0000-0000-000000000003");
         const QString screenId = QStringLiteral("DP-1");
 
@@ -359,6 +366,11 @@ private Q_SLOTS:
     // =====================================================================
     void testCrossMonitorFloatHandoffPreservesHomeZone()
     {
+        // See testNormalSnapFloatUnfloatCyclePreservesState for why this skips
+        // rather than silently asserting nothing.
+        if (QGuiApplication::screens().isEmpty()) {
+            QSKIP("no QScreen available — this case needs real screen geometry");
+        }
         const QString windowId = QStringLiteral("dolphin|eeeeeeee-0000-0000-0000-000000000005");
         const QString monitorA = QStringLiteral("DP-1");
         const QString monitorB = QStringLiteral("HDMI-1");
@@ -462,6 +474,10 @@ private Q_SLOTS:
     // =====================================================================
     void testUnfloatRestoresAcrossMonitorsToHomeZone()
     {
+        // See testNormalSnapFloatUnfloatCyclePreservesState.
+        if (QGuiApplication::screens().isEmpty()) {
+            QSKIP("no QScreen available — this case needs real screen geometry");
+        }
         const QString windowId = QStringLiteral("dolphin|ffffffff-0000-0000-0000-000000000006");
         const QString monitorA = QStringLiteral("DP-1");
         const QString monitorB = QStringLiteral("HDMI-1");
@@ -494,6 +510,10 @@ private Q_SLOTS:
     // =====================================================================
     void testUnfloatRestoresWithinSamePhysicalMonitorAcrossIdForms()
     {
+        // See testNormalSnapFloatUnfloatCyclePreservesState.
+        if (QGuiApplication::screens().isEmpty()) {
+            QSKIP("no QScreen available — this case needs real screen geometry");
+        }
         const QString windowId = QStringLiteral("dolphin|00000000-0000-0000-0000-000000000007");
         const QString virtualId = QStringLiteral("DP-1/vs:0");
         const QString physicalId = QStringLiteral("DP-1");

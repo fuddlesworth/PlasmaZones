@@ -93,9 +93,16 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
                 return;
         }
 
-        if (addedIds.contains(windowId))
+        // Dedup on the CANONICAL key. The live pass feeds this canonical store
+        // keys while the durable pass below feeds each record's own composite,
+        // and for a class-mutating window (its store key is the first-seen
+        // canonical, its record carries the current composite) those two
+        // spellings differ — so a raw compare missed the duplicate and the
+        // window contributed two resnap rows.
+        const QString dedupKey = canonicalizeForLookup(windowId);
+        if (addedIds.contains(dedupKey))
             return;
-        addedIds.insert(windowId);
+        addedIds.insert(dedupKey);
 
         // Look up the zone position from the global map
         const QString& primaryZoneId = zoneIds.first();
@@ -128,7 +135,8 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // per-mode snap border / title-bar appearance is never applied). Mirrors the
     // live-or-durable fallback in recordedSnapZones().
     for (const PhosphorEngine::WindowPlacement& rec : m_placementStore.records()) {
-        if (addedIds.contains(rec.windowId))
+        // Canonical, matching what addCandidate inserts — see its own note.
+        if (addedIds.contains(canonicalizeForLookup(rec.windowId)))
             continue;
         const PhosphorEngine::EngineSlot snapSlot = rec.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped())

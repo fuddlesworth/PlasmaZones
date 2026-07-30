@@ -372,9 +372,21 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // widths — they just shift). Width intent is only rewritten when the
     // WIDTH moved relative to the last applied rect — a vertical-only
     // resize must not pin a Proportion/Preset column to pixels.
+    //
+    // With NO last-applied rect there is no baseline to compare against, and
+    // treating that as "both changed" pinned BOTH intents to pixels — so a
+    // purely vertical resize arriving in the window between an adoption
+    // (handoffReceive, the setWindowFloat adoption branch, floatWindowInternal)
+    // and its scheduled applyLayout converted a Proportion column to Fixed,
+    // which is exactly what the widthChanged gate exists to prevent. Reconcile
+    // nothing in that case and let the pending relayout establish the baseline.
     const QRect lastApplied = m_lastAppliedRect.value(windowId);
-    const bool widthChanged = !lastApplied.isValid() || lastApplied.width() != newFrame.width();
-    const bool heightChanged = !lastApplied.isValid() || lastApplied.height() != newFrame.height();
+    if (!lastApplied.isValid()) {
+        scheduleRetileForScreen(key.screenId);
+        return;
+    }
+    const bool widthChanged = lastApplied.width() != newFrame.width();
+    const bool heightChanged = lastApplied.height() != newFrame.height();
     if (state->strip().reconcileWindowSize(windowId, newFrame.size(), widthChanged, heightChanged)) {
         scheduleRetileForScreen(key.screenId);
         return;
