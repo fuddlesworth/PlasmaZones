@@ -50,6 +50,7 @@ private Q_SLOTS:
     void floatedOpenConsumesSeed();
     void migrateOutAnnouncesDroppedFloat();
     void contextSwitchFlagRidesChangedScreenSets();
+    void zoneNumbersAreViewportRelativeVisibleSlots();
 
 private:
     // NOTE: windowOpened's cross-screen snap-restore defer gate
@@ -1004,6 +1005,80 @@ void TestScrollEngineSmoke::contextSwitchFlagRidesChangedScreenSets()
     QCOMPARE(screensSpy.last().at(1).toBool(), true);
     engine->setActiveScreens({QStringLiteral("S1")});
     QCOMPARE(screensSpy.count(), 4);
+}
+
+void TestScrollEngineSmoke::zoneNumbersAreViewportRelativeVisibleSlots()
+{
+    // Zone numbers are VIEWPORT-relative visible slots, not strip indices: the
+    // leftmost on-screen column is 1 regardless of how many columns are parked
+    // off-screen to its left, and a parked column has no number at all. This is
+    // the engine-side half of the numbering (visibleColumnNumberForWindow plus
+    // the ordinal walk that fills visibleTileRects' columnNumbers out-param);
+    // the strip primitive it rests on is pinned separately in the ops suite.
+    //
+    // Work area is 1200 wide and the default column is 600px (the proportion is
+    // gap-aware and no IScrollSettings is attached, so innerGap is 0), so
+    // exactly two columns fit and a third must be off-screen.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")).size(), 3);
+
+    // Exactly one of the three is parked, and the two on screen carry 1 and 2.
+    const int na = engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|a"));
+    const int nb = engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
+    const int nc = engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|c"));
+    QList<int> numbers{na, nb, nc};
+    QCOMPARE(numbers.count(-1), 1); // one parked
+    std::sort(numbers.begin(), numbers.end());
+    QCOMPARE(numbers, (QList<int>{-1, 1, 2})); // and the visible pair is 1-based
+
+    // The rect walk agrees with the per-window query: one rect per visible
+    // tile, numbered in the same left-to-right order starting at 1.
+    QVector<int> columnNumbers;
+    const QVector<QRect> rects = engine->visibleTileRects(QStringLiteral("S1"), &columnNumbers);
+    QCOMPARE(rects.size(), 2);
+    QCOMPARE(columnNumbers, (QVector<int>{1, 2}));
+
+    // An unknown window has no slot, and neither does a window on a screen the
+    // engine does not manage.
+    QCOMPARE(engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|nope")), -1);
+    QCOMPARE(engine->visibleColumnNumberForWindow(QStringLiteral("S9"), QStringLiteral("app|a")), -1);
+
+    // Stacking two windows into ONE column must not consume two numbers: the
+    // ordinal advances per COLUMN, so a stacked pair beside a single column
+    // yields {1, 1, 2} across three rects. This is the part a naive
+    // one-ordinal-per-rect walk gets wrong.
+    engine->consumeOrExpelWindow(-1, QStringLiteral("S1"));
+    QVector<int> stackedNumbers;
+    const QVector<QRect> stackedRects = engine->visibleTileRects(QStringLiteral("S1"), &stackedNumbers);
+    QCOMPARE(stackedRects.size(), stackedNumbers.size());
+    QVERIFY(!stackedNumbers.isEmpty());
+    // Numbers are non-decreasing, start at 1, and every step is 0 (same column)
+    // or exactly 1 (next column) — never a skip.
+    QCOMPARE(stackedNumbers.first(), 1);
+    for (int i = 1; i < stackedNumbers.size(); ++i) {
+        const int step = stackedNumbers.at(i) - stackedNumbers.at(i - 1);
+        QVERIFY2(step == 0 || step == 1, "column ordinals must not skip or go backwards");
+    }
+    // Three rects across two visible columns, and the stacked pair SHARES
+    // ordinal 2: {1, 2, 2}. A naive one-ordinal-per-rect walk would say
+    // {1, 2, 3} and hand the user a zone number no column has.
+    QCOMPARE(stackedRects.size(), 3);
+    QCOMPARE(stackedNumbers, (QVector<int>{1, 2, 2}));
+
+    // The normalized twin reports the same numbering (it delegates), and every
+    // rect is inside the unit square.
+    QVector<int> relativeNumbers;
+    const QVector<QRectF> relative = engine->visibleTileRectsRelative(QStringLiteral("S1"), &relativeNumbers);
+    QCOMPARE(relativeNumbers, stackedNumbers);
+    QCOMPARE(relative.size(), stackedRects.size());
+    for (const QRectF& r : relative) {
+        QVERIFY(r.left() >= 0.0 && r.top() >= 0.0);
+        QVERIFY(r.right() <= 1.0 + 1e-9 && r.bottom() <= 1.0 + 1e-9);
+    }
 }
 
 // GUILESS (not APPLESS): a QCoreApplication provides the event
