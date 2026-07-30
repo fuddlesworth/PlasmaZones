@@ -307,21 +307,9 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& rawAliveWi
     // and windowClosed, but a window that dies WITHOUT a close signal — the
     // case this backstop exists for — would leak its entry and hand a later
     // same-canonical window a stale suspension classification. The set is
-    // CANONICAL-keyed, so canonicalize the alive ids before comparing (a live
-    // class-renamed window's current composite differs from its canonical).
-    QSet<QString> canonicalAlive;
-    canonicalAlive.reserve(aliveWindowIds.size());
-    for (const QString& id : aliveWindowIds) {
-        canonicalAlive.insert(canonicalizeForLookup(id));
-    }
-    for (auto it = m_suspensionFloats.begin(); it != m_suspensionFloats.end();) {
-        if (!canonicalAlive.contains(*it)) {
-            it = m_suspensionFloats.erase(it);
-            ++wtsCleaned;
-        } else {
-            ++it;
-        }
-    }
+    // CANONICAL-keyed and aliveWindowIds was canonicalized above, so the shared
+    // removeSet comparison is already like-for-like.
+    removeSet(m_suspensionFloats);
 
     if (m_snapEngine) {
         wtsCleaned += m_snapEngine->pruneStaleWindows(aliveWindowIds);
@@ -1068,10 +1056,36 @@ void WindowTrackingService::setUserSnappedClasses(const QSet<QString>& classes)
 {
     PhosphorSnapEngine::SnapState* globals = snapGlobals();
     if (!globals) {
-        qCWarning(lcPlacement) << "setUserSnappedClasses: no SnapState — dropping" << classes.size() << "classes";
+        // STASH rather than drop. The adaptor's constructor calls loadState()
+        // — which lands here with the disk-loaded classes — before the daemon
+        // wires the snap-state resolver, and this is the only producer for
+        // this key. Dropping made recovery incidental (a second loadState via
+        // the autotile engine's persistence delegate happens to run after
+        // wiring); if that ordering ever changed, the classes were gone AND
+        // the next save wrote the emptied set back over them. Flushed from
+        // setSnapStateResolver / setSnapState.
+        qCDebug(lcPlacement) << "setUserSnappedClasses: no SnapState yet — holding" << classes.size()
+                             << "classes until one is wired";
+        m_pendingUserSnappedClasses = classes;
         return;
     }
+    m_pendingUserSnappedClasses.reset();
     globals->setUserSnappedClasses(classes);
+}
+
+void WindowTrackingService::flushPendingUserSnappedClasses()
+{
+    if (!m_pendingUserSnappedClasses) {
+        return;
+    }
+    PhosphorSnapEngine::SnapState* globals = snapGlobals();
+    if (!globals) {
+        return;
+    }
+    qCInfo(lcPlacement) << "Flushing" << m_pendingUserSnappedClasses->size()
+                        << "held user-snapped classes now that a SnapState is wired";
+    globals->setUserSnappedClasses(*m_pendingUserSnappedClasses);
+    m_pendingUserSnappedClasses.reset();
 }
 
 QRect WindowTrackingService::resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const

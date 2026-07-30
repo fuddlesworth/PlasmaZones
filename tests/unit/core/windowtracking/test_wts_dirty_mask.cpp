@@ -369,7 +369,13 @@ private Q_SLOTS:
                                // meant narrowing DirtyAll from 0xFFF to 0x7FF
                                // still passed this test while every window's
                                // restore state silently stopped persisting.
-                               PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements}) {
+                               PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements,
+                               // Same hole, reopened: this bit gates the
+                               // ScrollStrips save block, so narrowing DirtyAll
+                               // back to 0x0FFF passed while every scrolling
+                               // strip's structure stopped persisting across a
+                               // restart.
+                               PhosphorPlacement::WindowTrackingService::DirtyScrollStrips}) {
             QVERIFY2((mask & bit) != 0, "DirtyAll is missing a DirtyField bit — extend DirtyAll in the header");
         }
     }

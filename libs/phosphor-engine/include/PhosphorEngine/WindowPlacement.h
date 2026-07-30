@@ -184,6 +184,10 @@ struct WindowPlacement
     {
         return QLatin1String("autotile");
     }
+    static QLatin1String scrollingEngineId()
+    {
+        return QLatin1String("scrolling");
+    }
 
     /// Common state-token vocabulary. Engines may define more; these cover the
     /// built-in snap/autotile states.

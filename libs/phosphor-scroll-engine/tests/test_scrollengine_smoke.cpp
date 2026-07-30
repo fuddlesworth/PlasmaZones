@@ -190,14 +190,14 @@ void TestScrollEngineSmoke::capturePlacementReportsSlot()
     const auto placement = engine->capturePlacement(QStringLiteral("app|b"));
     QVERIFY(placement.has_value());
     QCOMPARE(placement->screenId, QStringLiteral("S1"));
-    const PhosphorEngine::EngineSlot slot = placement->slotFor(QStringLiteral("scrolling"));
+    const PhosphorEngine::EngineSlot slot = placement->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId());
     QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateTiled()));
     QCOMPARE(slot.order, 1);
 
     engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
     const auto floated = engine->capturePlacement(QStringLiteral("app|b"));
     QVERIFY(floated.has_value());
-    QCOMPARE(floated->slotFor(QStringLiteral("scrolling")).state,
+    QCOMPARE(floated->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId()).state,
              QString(PhosphorEngine::WindowPlacement::stateFloating()));
 
     QVERIFY(!engine->capturePlacement(QStringLiteral("app|nope")).has_value());
@@ -213,8 +213,8 @@ void TestScrollEngineSmoke::capturePlacementReportsSlot()
     const auto stackedA = engine->capturePlacement(QStringLiteral("app|a"));
     const auto stackedB = engine->capturePlacement(QStringLiteral("app|b"));
     QVERIFY(stackedA.has_value() && stackedB.has_value());
-    QCOMPARE(stackedA->slotFor(QStringLiteral("scrolling")).order, 0);
-    QCOMPARE(stackedB->slotFor(QStringLiteral("scrolling")).order, 0);
+    QCOMPARE(stackedA->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId()).order, 0);
+    QCOMPARE(stackedB->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId()).order, 0);
 }
 
 void TestScrollEngineSmoke::handoffReleaseIsTrackingOnly()

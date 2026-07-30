@@ -142,6 +142,9 @@ bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
 void WindowTrackingService::setSnapStateResolver(SnapStateResolver resolver)
 {
     m_snapResolver = std::move(resolver);
+    // A load that arrived before the resolver was wired parked its classes;
+    // now that a store exists they can land. See setUserSnappedClasses.
+    flushPendingUserSnappedClasses();
 }
 
 void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
@@ -168,6 +171,7 @@ void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
     };
     resolver.forgetWindow = [](const QString&) { };
     m_snapResolver = std::move(resolver);
+    flushPendingUserSnappedClasses();
 }
 
 void WindowTrackingService::setSnapEngine(PhosphorEngine::PlacementEngineBase* engine)

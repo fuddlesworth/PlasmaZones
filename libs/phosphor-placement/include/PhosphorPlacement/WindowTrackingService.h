@@ -845,6 +845,13 @@ public:
 
     /**
      * @brief Set user-snapped classes (loaded from KConfig by adaptor)
+     *
+     * FAILS SAFE, not lossy: called before a SnapState is wired (the adaptor's
+     * constructor loads state before the daemon installs the resolver), the
+     * classes are HELD and flushed by setSnapStateResolver / setSnapState.
+     * Dropping them made recovery depend on an incidental second load, and a
+     * save in between would have written the emptied set back over the user's
+     * auto-snap-by-class list.
      */
     void setUserSnappedClasses(const QSet<QString>& classes);
 
@@ -1082,9 +1089,16 @@ private:
     void forEachZoneAssignedWindow(const std::function<void(const QString& windowId, const QStringList& zoneIds,
                                                             const QString& screenId, int desktop)>& fn) const;
 
+    /// Push a load that arrived before any SnapState was wired into the store
+    /// once one exists. No-op when nothing is held. See setUserSnappedClasses.
+    void flushPendingUserSnappedClasses();
+
     // Dependencies
     PhosphorZones::LayoutRegistry* m_layoutManager;
     SnapStateResolver m_snapResolver;
+    /// User-snapped classes loaded before a SnapState existed, awaiting the
+    /// flush above. Engaged only across that startup window.
+    std::optional<QSet<QString>> m_pendingUserSnappedClasses;
     PhosphorEngine::WindowPlacementStore m_placementStore;
     IGeometryResolver* m_geometryResolver;
     PlacementConfig m_config;

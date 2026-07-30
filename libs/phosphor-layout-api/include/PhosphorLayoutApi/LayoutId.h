@@ -11,11 +11,14 @@ namespace PhosphorLayout {
 
 /// LayoutPreview::id namespace utilities.
 ///
-/// Manual zone layouts use UUID strings; autotile-algorithm previews use the
-/// prefixed form `"autotile:<algorithmId>"` so manual + autotile IDs share a
-/// single namespace at the consumer level. Everyone who needs to build / parse
-/// / classify a LayoutPreview id goes through the helpers here — no inline
-/// `"autotile:"` literals outside this namespace.
+/// There are three id forms sharing a single namespace at the consumer level.
+/// Manual zone layouts use UUID strings. Autotile-algorithm previews use the
+/// prefixed form `"autotile:<algorithmId>"`. Scrolling has no layout entity of
+/// its own, so it uses the bare payload-free sentinel `"scrolling:"` (see
+/// ScrollingId below for why it is compared exactly, not by prefix). Everyone
+/// who needs to build, parse, or classify a LayoutPreview id goes through the
+/// helpers here — no inline `"autotile:"` or `"scrolling:"` literals outside
+/// this namespace.
 ///
 /// Lives in phosphor-layout-api because both phosphor-zones and phosphor-tiles
 /// produce LayoutPreview values with these IDs, and every consumer of

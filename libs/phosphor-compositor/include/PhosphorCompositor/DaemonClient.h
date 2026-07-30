@@ -8,6 +8,7 @@
 #include <PhosphorCompositor/IDragHandler.h>
 #include <PhosphorCompositor/ILifecycleHandler.h>
 #include <PhosphorProtocol/DragTypes.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowTypes.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 
@@ -70,8 +71,10 @@ public:
     /// payload that fails its own validationError() is dropped with a
     /// warning rather than emitted. updateDragCursor is the fire-and-forget
     /// hot path; the caller throttles it (~30Hz) and only sends it when the
-    /// policy asked for streaming. @p modifiers / @p mouseButtons are the
-    /// compositor's live keyboard/button state, 0 when unknown.
+    /// policy asked for streaming. On updateDragCursor and endDrag,
+    /// @p modifiers / @p mouseButtons are the compositor's live
+    /// keyboard/button state, 0 when unknown; beginDrag takes only
+    /// @p mouseButtons.
     void beginDrag(const QString& windowId, const QRect& frameGeometry, const QString& startScreenId,
                    int mouseButtons = 0);
     void updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers = 0, int mouseButtons = 0);
@@ -89,8 +92,10 @@ public:
     void queryVirtualScreens(const QString& screenId);
     void pruneStaleWindows(const QStringList& liveWindowIds);
 
-    // Daemon availability probe (async — emits daemonReady if responsive)
-    void probeDaemonAvailable(int timeoutMs = 3000);
+    // Daemon availability probe (async — emits daemonReady if responsive).
+    // Default from the shared constant, whose own doc names this call site as
+    // its reason for existing — a hardcoded literal here would drift from it.
+    void probeDaemonAvailable(int timeoutMs = PhosphorProtocol::Service::DaemonReadyProbeTimeoutMs);
 
 Q_SIGNALS:
     void daemonReady();

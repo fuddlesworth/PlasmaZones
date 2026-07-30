@@ -9,6 +9,7 @@
 #include <PhosphorEngine/PerScreenStates.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/ScreenContextTracker.h>
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
@@ -221,7 +222,7 @@ public:
 
     QString engineId() const override
     {
-        return QStringLiteral("scrolling");
+        return PhosphorEngine::WindowPlacement::scrollingEngineId();
     }
     void handoffReceive(const HandoffContext& ctx) override;
     void handoffRelease(const QString& windowId) override;
