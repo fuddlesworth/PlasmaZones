@@ -446,6 +446,86 @@ private Q_SLOTS:
                  "the screen must genuinely resolve to snapping, not to an empty mode token");
     }
 
+    // The Mode token must resolve at the WINDOW's OWN context (its desktop
+    // and activity from the registry, via WindowContext's accessors), not at
+    // the screen's current one. Under per-output virtual desktops a window
+    // opening on a non-current desktop resolves a different mode there; with
+    // the derivation reverted to the current-context fallback, both arms
+    // below go inert (the fixture has no VDM, so the fallback desktop is 0
+    // and the base entries answer Snapping).
+    void floatRule_modeResolvesAtTheWindowsOwnContext()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
+
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("float-dolphin-on-scrolling");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorRules::MatchExpression::makeAll(
+            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::AppId, PhosphorRules::Operator::Equals,
+                                                      QStringLiteral("org.kde.dolphin")),
+             PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::Mode, PhosphorRules::Operator::Equals,
+                                                      QStringLiteral("scrolling"))});
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Float);
+        rule.actions.append(action);
+        QVERIFY(store.addRule(rule));
+        m_wta->setRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+        });
+
+        const QString screenId = QStringLiteral("DP-1");
+        // Base context is Snapping; ONLY desktop 3 is Scrolling.
+        PhosphorZones::AssignmentEntry base;
+        base.mode = PhosphorZones::AssignmentEntry::Snapping;
+        m_layoutManager->setAssignmentEntryDirect(screenId, 0, QString(), base);
+        PhosphorZones::AssignmentEntry scroll;
+        scroll.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        m_layoutManager->setAssignmentEntryDirect(screenId, 3, QString(), scroll);
+
+        // DESKTOP arm: the window lives on desktop 3.
+        PhosphorEngine::WindowMetadata onDesktop3;
+        onDesktop3.appId = QStringLiteral("org.kde.dolphin");
+        onDesktop3.virtualDesktop = 3;
+        const QString instance3 = QStringLiteral("dolphin-own-desktop");
+        m_registry->upsert(instance3, onDesktop3);
+        const QString window3 =
+            PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), instance3);
+        QVERIFY2(m_wta->shouldFloatByRule(window3, screenId),
+                 "the mode must resolve at the WINDOW's desktop (3, scrolling), not the current one (0, snapping)");
+
+        // ACTIVITY arm: base activity Snapping, "work" activity Scrolling,
+        // window registered on "work".
+        PhosphorZones::AssignmentEntry scrollActivity;
+        scrollActivity.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        m_layoutManager->setAssignmentEntryDirect(screenId, 0, QStringLiteral("work-uuid"), scrollActivity);
+        PhosphorEngine::WindowMetadata onWork;
+        onWork.appId = QStringLiteral("org.kde.dolphin");
+        onWork.activity = QStringLiteral("work-uuid");
+        const QString instanceW = QStringLiteral("dolphin-own-activity");
+        m_registry->upsert(instanceW, onWork);
+        const QString windowW =
+            PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), instanceW);
+        QVERIFY2(m_wta->shouldFloatByRule(windowW, screenId),
+                 "the mode must resolve at the WINDOW's activity, not the current one");
+
+        // NEGATIVE control: a window with NO own context falls back to the
+        // current context, which is Snapping — the rule stays inert, proving
+        // the two arms above passed because of the derivation.
+        PhosphorEngine::WindowMetadata plain;
+        plain.appId = QStringLiteral("org.kde.dolphin");
+        const QString instanceP = QStringLiteral("dolphin-no-context");
+        m_registry->upsert(instanceP, plain);
+        const QString windowP =
+            PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), instanceP);
+        QVERIFY2(!m_wta->shouldFloatByRule(windowP, screenId),
+                 "a window with no own context resolves the current (snapping) context and stays inert");
+    }
+
     void floatRule_floatsMatchedWindow_viaCompositeWindowId()
     {
         QTemporaryDir dir;
