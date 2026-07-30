@@ -21,6 +21,7 @@ class TestScrollEnginePersistence : public QObject
 private Q_SLOTS:
     void modeRoundTripRestoresFocusAndAnchor();
     void serializedStripRestoreSurvivesIdDrift();
+    void pruneSweepsStashedTilesForClosedWindows();
 
 private:
     /// Smoke-suite twin: geometry providers wired so the apply path
@@ -118,6 +119,48 @@ void TestScrollEnginePersistence::serializedStripRestoreSurvivesIdDrift()
     QCOMPARE(state->strip().columns().at(0).tiles.size(), 2);
     // The stashed focus (other|u3) followed its claimed successor.
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("other|n3"));
+}
+
+void TestScrollEnginePersistence::pruneSweepsStashedTilesForClosedWindows()
+{
+    // A stash is keyed by CONTEXT, and the existing sweeps only fire when the
+    // context itself dies (desktop, activity, output). A window that closes
+    // while the screen is in ANOTHER mode leaves its tile in a stash whose
+    // context is still perfectly live, so nothing ever reached it: the entry
+    // could never satisfy the all-consumed drop condition, survived into
+    // serializeStripState, and its appId claim could later hand an unrelated
+    // same-app window the dead tile's slot.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+
+    // Leave Scrolling: the teardown stashes all three tiles.
+    engine->setActiveScreens({});
+    const QByteArray stashed = QJsonDocument(engine->serializeStripState()).toJson();
+    QVERIFY2(stashed.contains("app|b"), "precondition: the stash holds all three tiles");
+
+    // One window closes while the screen is in another mode. The context is
+    // untouched, so the context-keyed sweeps cannot reach this stash and only
+    // pruneStaleWindows can.
+    engine->pruneStaleWindows({QStringLiteral("app|a"), QStringLiteral("app|c")});
+
+    // Asserted while the screen is STILL out of Scrolling, deliberately: once
+    // the context goes live again its strip wins the serialize key and would
+    // mask a surviving ghost in the stash underneath.
+    const QByteArray swept = QJsonDocument(engine->serializeStripState()).toJson();
+    QVERIFY2(!swept.contains("app|b"), "the closed window must not survive in the stash");
+    QVERIFY2(swept.contains("app|a") && swept.contains("app|c"), "the surviving tiles must be left alone by the sweep");
+
+    // And the pruned stash still restores the survivors on the way back.
+    engine->setActiveScreens({QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    QVERIFY(engine->isWindowTracked(QStringLiteral("app|a")));
+    QVERIFY(engine->isWindowTracked(QStringLiteral("app|c")));
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|b")));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePersistence)

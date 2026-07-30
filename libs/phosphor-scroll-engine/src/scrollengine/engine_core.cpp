@@ -610,6 +610,52 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             }
         }
     }
+
+    // The strip stash needs the same treatment, but keyed on ALIVENESS rather
+    // than on `dead` — same reasoning as the m_lastAppliedRect sweep above.
+    // A stashed window is by definition NOT tracked (the mode exit released
+    // it), so it can never appear in `dead`, which is built from the live
+    // window keys. And the stash is keyed by CONTEXT, so the existing
+    // sweepStripStash calls (desktop, activity and output prunes) never reach
+    // a stash whose context is still perfectly live. Between the two, a window
+    // that closes while its screen sits in another mode was reachable by
+    // nothing: its tile could never satisfy the all-consumed drop condition,
+    // so the entry was immortal — re-walked on every later open for that
+    // context, written out by serializeStripState, and, through the
+    // cross-session appId claim, able to hand an unrelated same-app window the
+    // dead tile's slot, width and display.
+    //
+    // Fails closed on an empty alive set, like every other prune here: a
+    // premature one-shot report at login must not wipe the stashes.
+    if (!aliveWindowIds.isEmpty()) {
+        for (auto stashIt = m_stripStash.begin(); stashIt != m_stripStash.end();) {
+            for (auto colIt = stashIt->columns.begin(); colIt != stashIt->columns.end();) {
+                colIt->tiles.removeIf([&aliveWindowIds](const StashedTile& tile) {
+                    return !aliveWindowIds.contains(tile.windowId);
+                });
+                colIt = colIt->tiles.isEmpty() ? stashIt->columns.erase(colIt) : std::next(colIt);
+            }
+            if (!stashIt->focusedWindowId.isEmpty() && !aliveWindowIds.contains(stashIt->focusedWindowId)) {
+                // The focus named a tile that is gone; drop it rather than
+                // leave the restore hunting for a window that never arrives.
+                stashIt->focusedWindowId.clear();
+            }
+            auto stashConsumedIt = m_stripStashConsumed.find(stashIt.key());
+            if (stashConsumedIt != m_stripStashConsumed.end()) {
+                stashConsumedIt->removeIf([&aliveWindowIds](const QString& consumed) {
+                    return !aliveWindowIds.contains(consumed);
+                });
+            }
+            const int remaining = stashIt->tileCount();
+            if (remaining == 0
+                || (stashConsumedIt != m_stripStashConsumed.end() && stashConsumedIt->size() >= remaining)) {
+                m_stripStashConsumed.remove(stashIt.key());
+                stashIt = m_stripStash.erase(stashIt);
+            } else {
+                ++stashIt;
+            }
+        }
+    }
     for (const QString& screenId : affectedScreens) {
         scheduleRetileForScreen(screenId);
     }

@@ -64,9 +64,18 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
 
     ColumnWidth width = effectiveDefaultColumnWidth(screenId);
     ColumnDisplay display = effectiveDefaultColumnDisplay(screenId);
-    if (m_defaultWidthClientDecides && m_windowTracker) {
-        // "Client decides": open at the client's own size when one is on
-        // record; the first client resize reconciles it afterwards.
+    // "Client decides" is the CONFIG default, so a per-screen rule override
+    // outranks it — the header documents these overrides as layering over the
+    // config defaults. Overwriting unconditionally meant a
+    // SetScrollDefaultColumnWidth rule pinned to a screen never took effect
+    // while the global kind was ClientDecides, with no diagnostic. (The
+    // per-WINDOW open rule below is applied after this block and wins over
+    // both, which is the intended precedence.)
+    const bool screenPinsWidth =
+        m_perScreenOverrides.value(screenId).contains(ScrollPerScreenKeys::defaultColumnWidth());
+    if (m_defaultWidthClientDecides && m_windowTracker && !screenPinsWidth) {
+        // Open at the client's own size when one is on record; the first
+        // client resize reconciles it afterwards.
         if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
             width = ColumnWidth::makeFixed(geo->width());
         }
