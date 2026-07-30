@@ -509,7 +509,7 @@ void TestScrollEngineSmoke::removedScreenReleasesWindows()
 {
     // The daemon-facing hand-back contract: shrinking the screen set
     // releases the leaving screen's windows in one windowsReleased with
-    // the screen named, and drops all engine bookkeeping for them.
+    // the screen named, and drops this engine's tracking for them.
     QObject owner;
     ScrollEngine* engine = makeEngine(&owner);
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S2"), 0, 0);
@@ -524,6 +524,16 @@ void TestScrollEngineSmoke::removedScreenReleasesWindows()
     QVERIFY(released.contains(QStringLiteral("app|b")));
     QVERIFY(releasedSpy.first().at(1).value<QSet<QString>>().contains(QStringLiteral("S2")));
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|a")));
+    // The mode-specific float marker must SURVIVE the release. The daemon's
+    // windowsReleased handler is its consumer: it reads isModeSpecificFloated
+    // to decide whether the window still needs its snap float cleared and its
+    // snap slot restored, and clears the marker itself per window. Clearing it
+    // here reported every scroll-floated window as not-floated, so the window
+    // stayed floated at its scroll-float geometry on the return to snapping.
+    // AutotileEngine documents the same contract in
+    // releaseScreenStateForTeardown.
+    QVERIFY(engine->isModeSpecificFloated(QStringLiteral("app|b")));
+    engine->clearModeSpecificFloatMarker(QStringLiteral("app|b"));
     QVERIFY(!engine->isModeSpecificFloated(QStringLiteral("app|b")));
 }
 

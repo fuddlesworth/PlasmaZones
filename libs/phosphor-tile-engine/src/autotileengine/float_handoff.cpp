@@ -355,6 +355,29 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     // entry would replay a possibly other-screen-capped value on re-entry
     // (same rationale as windowFocused's cross-screen clear).
     m_windowMinSizes.remove(canonical);
+    // The mode-transition float marker must not outlive this engine's
+    // tracking: the receiving engine owns the float bit from here. The
+    // autotile->snapping direction is covered by the daemon's clear on
+    // windowSnapStateChanged, but autotile->scrolling has no such clear, so a
+    // stale entry keeps isModeSpecificFloated answering true for a window
+    // this engine no longer manages — which makes presaveSnapFloats skip it
+    // and loses its snap float/zone on the next return to snapping.
+    // ScrollEngine::handoffRelease clears its twin for the same reason.
+    m_autotileFloatedWindows.remove(canonical);
+    // Overflow bookkeeping likewise: every other removal path clears it, and
+    // a live entry left behind makes capturePlacement's overflow-vs-user-float
+    // discriminator record a genuine later user float as tiled.
+    m_overflow.clearOverflow(canonical);
+    // A pending seed position or post-retile focus naming a window another
+    // engine now owns must not replay on this screen's next applyTiling.
+    purgeFromPendingOrders(canonical);
+    for (auto fit = m_pendingFocusByScreen.begin(); fit != m_pendingFocusByScreen.end();) {
+        if (fit.value() == canonical) {
+            fit = m_pendingFocusByScreen.erase(fit);
+        } else {
+            ++fit;
+        }
+    }
 }
 
 void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, const QString& callerScreenId)

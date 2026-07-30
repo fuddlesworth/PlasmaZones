@@ -492,14 +492,21 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     if (targetDesktop <= 0) {
         return false;
     }
-    // If the target desktop on this screen is a DIFFERENT mode (snap), autotile
-    // has no state there — defer to the daemon cross-mode handoff, which snaps
-    // the window into the equivalent zone on the target snap desktop. The daemon
-    // slot is a direct (synchronous) connection.
+    // If the target desktop on this screen is a DIFFERENT mode (snapping or
+    // scrolling), autotile has no state there — defer to the daemon cross-mode
+    // handoff, which snaps the window into the equivalent zone on a snap desktop
+    // or inserts it into the strip on a scrolling one. The daemon slot is a
+    // direct (synchronous) connection.
+    //
+    // The question is "is the target NOT autotile", not "is it snapping": a
+    // scrolling target desktop would otherwise fall into the same-mode branch
+    // below and get a bare compositor desktop move onto a scroll-owned desktop
+    // with no handoff, leaving the arrival to autotile's catch-scan. This is the
+    // mirror image of the snap engine's cross-desktop gate.
     if (m_engine->m_layoutManager
         && m_engine->m_layoutManager->modeForScreen(sourceScreenId, targetDesktop,
                                                     m_engine->m_context.currentActivity())
-            == PhosphorZones::AssignmentEntry::Snapping) {
+            != PhosphorZones::AssignmentEntry::Autotile) {
         // Only a MOVE reaches here (swap doesn't cross desktops), so this is
         // always the one-way cross-mode move into the equivalent snap zone.
         Q_EMIT m_engine->crossModeMoveRequested(focused, sourceScreenId, targetDesktop, direction);

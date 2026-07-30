@@ -369,14 +369,30 @@ private:
     /// @p screenId when it is a scrolling screen, else the active screen.
     QString resolveOperationScreen(const QString& screenId) const;
     /// Tear down one context state: appends its windows to
-    /// @p releasedWindows, drops all per-window and per-screen bookkeeping
-    /// (float markers, pending seed, tab-strip latch — with the "[]" clear
-    /// broadcast), and deleteLater()s the state.
+    /// @p releasedWindows, drops the per-window unfloat-slot memory and the
+    /// per-screen bookkeeping (pending seed, tab-strip latch — with the "[]"
+    /// clear broadcast), and deleteLater()s the state.
+    ///
+    /// It deliberately does NOT drop the mode-specific float markers or the
+    /// last-applied rects. Both are INPUTS to the daemon's windowsReleased
+    /// handler, which runs after this returns: it reads
+    /// isModeSpecificFloated() to decide whether a window still needs its
+    /// snap float cleared and its snap slot restored (and clears the marker
+    /// itself, per window), and the adaptor reads lastManagedRect() as the
+    /// float-back tile-rect poison guard. Clearing either here reports every
+    /// scroll-floated window as not-floated and the window stays floated at
+    /// its scroll-float geometry. The rects are reclaimed by
+    /// pruneStaleWindows instead. AutotileEngine documents the same contract
+    /// on releaseScreenStateForTeardown.
     void releaseScreenState(ScrollState* state, QStringList& releasedWindows);
     /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
     /// screen that had a strip showing, no-op otherwise.
     void clearTabStripsForScreen(const QString& screenId);
-    /// Shared per-window side-map sweep for every state-destruction path.
+    /// Shared per-window side-map sweep for the PRUNE paths (desktop,
+    /// activity and removed-output teardown), which have no downstream
+    /// consumer of the float marker or the last-applied rect. The
+    /// mode-transition release path uses releaseScreenState instead; see the
+    /// contract there.
     void dropWindowBookkeeping(const ScrollState* state);
     /// Consume @p windowId from a screen's mode-transition seed (marking it
     /// in m_consumedInitialOrder; the list itself keeps its positions) and

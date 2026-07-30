@@ -169,8 +169,27 @@ void ScrollEngine::setActiveScreenHint(const QString& screenId)
 void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedWindows)
 {
     const QString screenId = state->screenId();
-    dropWindowBookkeeping(state);
-    releasedWindows.append(state->managedWindows());
+    const QStringList windows = state->managedWindows();
+    // Snapshot each window's scrolling slot into the unified record BEFORE the
+    // state is torn down — the record is the single source of truth for
+    // cross-mode state, and stashStripStructure covers only the TILED
+    // structure, so without this a window floated in scrolling loses its
+    // floating slot across a mode round trip and comes back tiled with a stale
+    // slot.order. AutotileEngine::releaseScreenStateForTeardown does the same.
+    if (m_windowTracker) {
+        for (const QString& windowId : windows) {
+            if (auto record = capturePlacement(windowId)) {
+                m_windowTracker->placementStore().record(*record);
+            }
+        }
+    }
+    // Only the unfloat-slot memory dies here. The float markers and the
+    // last-applied rects are inputs to the daemon's windowsReleased handler,
+    // which has not run yet — see the contract on the declaration.
+    for (const QString& windowId : windows) {
+        m_floatRestore.remove(windowId);
+    }
+    releasedWindows.append(windows);
     // Per-screen bookkeeping dies with the state: a stale seed must not
     // replay on re-entry, and the tab-strip overlay must be told to clear —
     // no relayout will ever run for a departed screen to do it.

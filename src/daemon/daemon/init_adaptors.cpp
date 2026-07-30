@@ -75,6 +75,11 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/tilingadaptor/tilingadaptor.h"
+// Needed as COMPLETE types, not just forward declarations: the re-entry
+// preamble below deletes them, and deleting through an incomplete type calls
+// neither the destructor nor a class-specific operator delete.
+#include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/scrollingadaptor/scrollingadaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/shaderadaptor.h"
 #include "dbus/compositorbridgeadaptor.h"
@@ -104,6 +109,17 @@ void Daemon::initCoreAdaptors()
     m_snapAdaptor = nullptr;
     delete m_autotileAdaptor;
     m_autotileAdaptor = nullptr;
+    // TilingAdaptor and ScrollingAdaptor belong to this set too: both are
+    // QDBusAbstractAdaptor children of the D-Bus-registered Daemon object and
+    // both are unconditionally re-newed in initEnginesAndWiring, which
+    // documents these members as null on a re-cycle. Omitting them leaked the
+    // old pair AND left a second adaptor registered for an interface that
+    // already had one on the same object, which Qt refuses — taking down the
+    // whole Tiling/Scrolling wire surface after a daemon restart.
+    delete m_tilingAdaptor;
+    m_tilingAdaptor = nullptr;
+    delete m_scrollingAdaptor;
+    m_scrollingAdaptor = nullptr;
     delete m_windowDragAdaptor;
     m_windowDragAdaptor = nullptr;
     delete m_windowTrackingAdaptor;

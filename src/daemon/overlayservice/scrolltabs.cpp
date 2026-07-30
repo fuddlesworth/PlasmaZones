@@ -33,18 +33,30 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         // Hide-and-unload without creating a shell for a screen that never
         // showed strips.
         auto it = m_screenStates.find(screenId);
-        if (it == m_screenStates.end() || !it->scrollTabsSlot() || !it->scrollTabsSlot()->isVisible()) {
+        if (it == m_screenStates.end()) {
             return;
         }
-        // Generation-guard the animated hide: a non-empty update landing
-        // while this hide is in flight bumps the guard, and the completion
-        // below must then NOT tear down the slot it just repopulated —
-        // otherwise the indicator stays hidden until the next strip change
-        // (which a stable layout never produces). The show path below pairs
-        // with this by treating hide-in-flight as "not visible" so it
-        // re-runs beginShow (which animates the opacity back up and
-        // supersedes the hide track) instead of early-returning on a slot
-        // that is still visible but fading out.
+        QQuickItem* existingSlot = it->scrollTabsSlot();
+        if (!existingSlot || !existingSlot->isVisible()) {
+            return;
+        }
+        // A hide is already animating for this screen and its completion owns
+        // the teardown. Re-entering hideSlot would bump the guard, making the
+        // in-flight completion stale-return, and leave the teardown resting on
+        // the animator emitting a fresh completion for the re-entered hide.
+        if (m_scrollTabsHidePending.contains(screenId)) {
+            return;
+        }
+        // Generation-guard the animated hide. With animations ENABLED a
+        // superseding beginShow pre-cancels this track, and a cancel is not a
+        // completion, so the callback below never runs at all. The path the
+        // guard actually protects is SurfaceAnimator's animations-DISABLED
+        // branch, which salvages a superseded onComplete and fires it
+        // SYNCHRONOUSLY from inside the beginShow call on the show path — i.e.
+        // after that path has already written loaded=true and setVisible(true),
+        // which this callback would otherwise clobber. The show path pairs with
+        // the guard by treating hide-in-flight as "not visible" so it re-runs
+        // beginShow instead of early-returning on a slot that is fading out.
         const quint64 hideGeneration = ++m_scrollTabsHideGuard[screenId];
         m_scrollTabsHidePending.insert(screenId);
         m_shellHost->hideSlot(screenId, PhosphorSlotKeys::ScrollTabs(), [this, screenId, hideGeneration]() {
@@ -53,19 +65,19 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
             }
             m_scrollTabsHidePending.remove(screenId);
             auto stateIt = m_screenStates.find(screenId);
-            if (stateIt == m_screenStates.end() || !stateIt->scrollTabsSlot()) {
+            if (stateIt == m_screenStates.end()) {
                 return;
             }
-            stateIt->scrollTabsSlot()->setVisible(false);
-            writeQmlProperty(stateIt->scrollTabsSlot(), QStringLiteral("loaded"), false);
+            QQuickItem* slot = stateIt->scrollTabsSlot();
+            if (!slot) {
+                return;
+            }
+            slot->setVisible(false);
+            writeQmlProperty(slot, QStringLiteral("loaded"), false);
             syncPassiveShellSurfaceState(screenId);
         });
         return;
     }
-    // Any non-empty update invalidates a pending hide (see the guard above).
-    ++m_scrollTabsHideGuard[screenId];
-    const bool hideWasInFlight = m_scrollTabsHidePending.remove(screenId);
-
     QScreen* screen = resolveTargetScreen(m_screenManager, screenId);
     if (!screen) {
         return;
@@ -80,6 +92,18 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         qCWarning(lcOverlay) << "updateScrollTabStrips: no passive shell for screen=" << screenId;
         return;
     }
+
+    // Invalidate a pending hide only once this update is committed to running
+    // the show choreography below. Bumping the guard BEFORE the two bails above
+    // was unrecoverable: the in-flight hide's completion would stale-return
+    // while nothing re-showed the slot, so the animator drove opacity to 0 and
+    // left the slot visible+loaded at opacity 0 permanently — and because
+    // anyVisible stayed true the wl_surface never unmapped, while every later
+    // non-empty update hit the still-visible early return below. Nothing
+    // between the bump's old position and here mutates slot state, so deferring
+    // it is safe.
+    ++m_scrollTabsHideGuard[screenId];
+    const bool hideWasInFlight = m_scrollTabsHidePending.remove(screenId);
 
     // The strip rects arrive in absolute compositor coordinates; the shell
     // window is positioned at the screen origin, so shift into window
@@ -98,9 +122,6 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     auto* shellWindow = state->shell->shellWindow();
 
     writeQmlProperty(slot, QStringLiteral("strips"), shifted);
-    // Same user-font pipeline as every other overlay slot (OSD, cheatsheet,
-    // picker): the pills must honour the overlay font family and size scale.
-    writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     if (slot->isVisible() && !hideWasInFlight) {
         return; // live model update — no show choreography needed
@@ -109,6 +130,13 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     // animating toward 0). In BOTH cases the show choreography must run:
     // early-returning on a fading slot would leave it visible+loaded at
     // opacity 0 forever once the superseded hide completion no-ops.
+
+    // Same user-font pipeline as every other overlay slot (OSD, cheatsheet,
+    // picker): the pills must honour the overlay font family and size scale.
+    // Pushed on the show path only, like all five siblings — a strip relayout
+    // changes no font, so re-pushing six settings-derived properties on every
+    // relayout was pure churn.
+    writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     if (shellWindow) {
         assertWindowOnScreen(shellWindow, screen, screenGeom);

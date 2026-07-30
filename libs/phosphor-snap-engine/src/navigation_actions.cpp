@@ -413,12 +413,22 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         return false;
     }
 
-    // If the target desktop on this screen is a DIFFERENT mode (autotile), snap
-    // has no zone to land in — hand the window to the autotile engine via the
-    // daemon cross-mode handoff, which inserts it into the target desktop's stack.
+    // If the target desktop on this screen is a DIFFERENT mode (autotile or
+    // scrolling), snap has no zone to land in — hand the window to that engine
+    // via the daemon cross-mode handoff, which inserts it into the target
+    // desktop's stack or strip.
+    //
+    // The question is "is the target NOT snapping", not "is it autotile": for a
+    // scrolling target, layoutForScreen answers defaultLayout() for any
+    // non-Snapping entry, so the fall-through below WOULD resolve a zone id and
+    // geometry and snap the window over a scroll-owned desktop, clobbering the
+    // scroll engine's record via the placement store's mutual-exclusivity
+    // invariant. This mirrors the neighbour-tiling gate in
+    // SnapEngine::setLiveModeResolver, where testing for Autotile alone was
+    // itself the shipped bug.
     if (m_layoutManager
         && m_layoutManager->modeForScreen(screenId, targetDesktop, currentActivity())
-            == PhosphorZones::AssignmentEntry::Autotile) {
+            != PhosphorZones::AssignmentEntry::Snapping) {
         // Deliberately do NOT touch SnapState / the placement store here: the
         // daemon's handleCrossModeMove resolves this engine as the source and
         // calls handoffRelease(windowId) on it, vacating the snap zone before the
