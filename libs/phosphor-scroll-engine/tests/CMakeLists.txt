@@ -28,6 +28,7 @@ endfunction()
 pse_add_test(test_scrollstrip_core test_scrollstrip_core.cpp)
 pse_add_test(test_scrollstrip_ops test_scrollstrip_ops.cpp)
 pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
+pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 
 # Shared fixture header, listed so IDE/target file listings see it (both
 # strip tests include it; it carries no Q_OBJECT, so automoc scans it and

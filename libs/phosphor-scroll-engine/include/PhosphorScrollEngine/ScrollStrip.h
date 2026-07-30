@@ -226,6 +226,20 @@ public:
     int rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& params);
 
     // ── View ─────────────────────────────────────────────────────────────────
+    /// The stored active-relative view anchor (see class doc). Exposed for
+    /// the engine's mode-round-trip stash — pixels derived from it are not.
+    int viewAnchor() const
+    {
+        return m_viewAnchor;
+    }
+    /// Restore a previously captured view anchor, RAW: a centered anchor
+    /// implies an out-of-range derived viewX by design (the same shape
+    /// centerActiveColumn stores), so no clamp is applied here — later
+    /// structural inserts re-clamp when the strip cannot honour the view.
+    /// The stash-restore path re-applies the anchor AFTER re-focusing the
+    /// stashed active window, overriding the focus change's own
+    /// centering-policy reanchor with the user's actual view.
+    void restoreViewAnchor(int anchor, const ScrollLayoutParams& params);
     /// Re-apply the centering policy to the current active column (settings
     /// change / work-area change) using the current anchor as the "no
     /// scroll" baseline.

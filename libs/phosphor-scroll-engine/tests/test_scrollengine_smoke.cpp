@@ -52,6 +52,9 @@ private Q_SLOTS:
     void contextSwitchFlagRidesChangedScreenSets();
     void zoneNumbersAreViewportRelativeVisibleSlots();
     void centeredColumnKeepsNeighboursFullRects();
+    // Strip persistence (stash focus/anchor, serialize/restore) is covered
+    // by test_scrollengine_persistence.cpp — this file is at the size split
+    // point.
 
 private:
     // NOTE: windowOpened's cross-screen snap-restore defer gate

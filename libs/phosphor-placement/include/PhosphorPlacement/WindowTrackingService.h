@@ -899,7 +899,8 @@ public:
         DirtyAutotilePending = 1u << 9, // legacy save-trigger → DirtyWindowPlacements
         // bit 10 reserved (was DirtyFloatRestores, removed with the FloatRestoreQueues key)
         DirtyWindowPlacements = 1u << 11, ///< unified WindowPlacementStore (sole per-window restore state)
-        DirtyAll = 0xFFFu, // covers bits 0-11 incl. the reserved bit 10
+        DirtyScrollStrips = 1u << 12, ///< scrolling strip-structure snapshots (WTA-provided blob)
+        DirtyAll = 0x1FFFu, // covers bits 0-12 incl. the reserved bit 10
     };
     using DirtyMask = uint32_t;
 

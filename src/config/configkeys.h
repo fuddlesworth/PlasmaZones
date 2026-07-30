@@ -188,6 +188,11 @@ public:
     // the SOLE persisted per-window restore key for both snap and autotile.
     P_CONFIG_KEY(windowPlacementsKey, "WindowPlacements")
 
+    // Scrolling strip-structure snapshots (per-context column groupings,
+    // tabbed flags, sizes, focus, view anchor) — ScrollEngine::serializeStripState
+    // blob, restored into the engine's arrival-restore stash on load.
+    P_CONFIG_KEY(scrollStripsKey, "ScrollStrips")
+
     // Legacy per-window restore keys — superseded by WindowPlacements. Retained
     // ONLY so saveState() can deleteKey() them, scrubbing them from any session.json
     // written by an older build. Never written, never read.

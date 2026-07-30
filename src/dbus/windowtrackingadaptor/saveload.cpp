@@ -190,6 +190,19 @@ void WindowTrackingAdaptor::saveState()
         }
     }
 
+    // Scrolling strip-structure snapshots — the engine's serializeStripState
+    // blob (live strips + un-consumed stash), fetched at write time via the
+    // late-bound provider. Without it a login restore rebuilds every strip
+    // as one default column per window (tabs, stacks, focus, anchor lost).
+    if (dirty & D::DirtyScrollStrips) {
+        const QJsonObject strips = m_scrollStripStateProvider ? m_scrollStripStateProvider() : QJsonObject();
+        if (!strips.isEmpty()) {
+            tracking->writeJson(ConfigKeys::scrollStripsKey(), strips);
+        } else {
+            tracking->deleteKey(ConfigKeys::scrollStripsKey());
+        }
+    }
+
     tracking.reset(); // release group before write
 
     // Async I/O: snapshot the in-memory JSON root (COW copy) and hand off
@@ -354,6 +367,23 @@ void WindowTrackingAdaptor::loadState()
     // IS the single float-back store and is loaded directly above (deserialize), and
     // validatedUnmanagedGeometry reads it. (The per-engine m_unmanagedGeometries store
     // was removed.)
+
+    // Scrolling strip snapshots: parked here for the daemon to hand to
+    // ScrollEngine::restoreStripState once the engine is wired (the engine
+    // does not exist yet on the ctor's load). Absent key = empty blob.
+    m_loadedScrollStripState = QJsonObject();
+    {
+        const QString stripsStr = readVal(ConfigKeys::scrollStripsKey(), QString());
+        if (!stripsStr.isEmpty()) {
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(stripsStr.toUtf8(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+                m_loadedScrollStripState = doc.object();
+            } else {
+                qCWarning(lcDbusWindow) << "Failed to parse saved scroll strips:" << parseError.errorString();
+            }
+        }
+    }
 
     // Restore active layout from previous session so that previousLayout() is correct
     // on the next layout switch. Without this, the daemon starts with defaultLayout()

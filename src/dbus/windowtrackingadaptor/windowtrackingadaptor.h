@@ -26,6 +26,7 @@
 #include <QHash>
 #include <QVariantMap>
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QQueue>
 #include <QRect>
 #include <QTimer>
@@ -205,6 +206,29 @@ public:
     void setContextResolver(PhosphorContext::IContextResolver* resolver)
     {
         m_contextResolver = resolver;
+    }
+
+    /**
+     * @brief Wire the scrolling strip-structure snapshot provider.
+     *
+     * saveState() calls it under DirtyScrollStrips to fetch
+     * ScrollEngine::serializeStripState's blob at write time (the engine is
+     * constructed after this adaptor, so the provider is late-bound like
+     * setEngines). Pass {} during shutdown teardown.
+     */
+    void setScrollStripStateProvider(std::function<QJsonObject()> provider)
+    {
+        m_scrollStripStateProvider = std::move(provider);
+    }
+
+    /**
+     * @brief The ScrollStrips blob read by the last loadState(), empty when
+     *        the key was absent or unparsable. The daemon feeds it to
+     *        ScrollEngine::restoreStripState once the engine exists.
+     */
+    QJsonObject loadedScrollStripState() const
+    {
+        return m_loadedScrollStripState;
     }
 
     PhosphorSnapEngine::SnapEngine* snapEngine() const;
@@ -1256,6 +1280,11 @@ private:
     /// `(m_screenModeRouter->modeFor → currentVirtualDesktop → currentActivity
     /// → isContextDisabled)` cascade rebuild in `saveload.cpp`.
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
+    /// Late-bound scrolling strip-snapshot provider (setScrollStripStateProvider)
+    /// and the blob the last loadState() read for the daemon to hand to the
+    /// engine once it exists.
+    std::function<QJsonObject()> m_scrollStripStateProvider;
+    QJsonObject m_loadedScrollStripState;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     PhosphorWorkspaces::ActivityManager* m_activityManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)

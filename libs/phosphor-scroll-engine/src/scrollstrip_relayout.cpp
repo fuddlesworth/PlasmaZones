@@ -172,6 +172,17 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewX, const Scro
     m_viewAnchor = clampedAnchor(pos, params);
 }
 
+void ScrollStrip::restoreViewAnchor(int anchor, const ScrollLayoutParams& params)
+{
+    Q_UNUSED(params)
+    // Raw, deliberately UNCLAMPED: a captured centered anchor implies an
+    // out-of-range derived viewX by design (centerActiveColumn stores the
+    // same shape), and clamping here mangled exactly those anchors. Later
+    // structural inserts re-clamp when the strip genuinely cannot honour
+    // the view (insertWindowAt's anchor re-clamp).
+    m_viewAnchor = anchor;
+}
+
 void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
 {
     // Policy re-application only: when the active column is already fully

@@ -695,20 +695,38 @@ void Daemon::initEnginesAndWiring()
     // Scroll strips have the same no-per-window-signal shape as autotile:
     // per-screen placementChanged schedules the save, and the save-time
     // snapshot captures each window's strip slot into the unified store.
+    // DirtyScrollStrips rides along: every structural strip change (insert,
+    // consume/expel, tab toggle, resize) ends in a relayout that emits
+    // placementChanged, so this one mark keeps the durable strip snapshot
+    // (serializeStripState via the provider below) in step with the store.
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, m_windowTrackingAdaptor, [this]() {
         if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
             m_windowTrackingAdaptor->service()->markDirty(
-                PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
+                PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements
+                | PhosphorPlacement::WindowTrackingService::DirtyScrollStrips);
         }
     });
+    // Strip-structure persistence: the adaptor pulls the snapshot at write
+    // time; the engine re-stages the loaded blob into its arrival-restore
+    // stash. The adaptor's ctor loadState already ran (engines did not exist
+    // yet), so hand that blob over NOW — before the effect's re-announce
+    // batch delivers the first windowOpened — and keep the delegate's load
+    // path handing it again after any later reload (restoreStripState is
+    // additive and skips adopted contexts, so the second call is safe).
+    m_windowTrackingAdaptor->setScrollStripStateProvider([engine = QPointer(scrollEngine)]() {
+        return engine ? engine->serializeStripState() : QJsonObject();
+    });
+    scrollEngine->restoreStripState(m_windowTrackingAdaptor->loadedScrollStripState());
     scrollEngine->setPersistenceDelegate(
         [wta = QPointer(m_windowTrackingAdaptor)]() {
             if (wta)
                 wta->saveState();
         },
-        [wta = QPointer(m_windowTrackingAdaptor)]() {
+        [wta = QPointer(m_windowTrackingAdaptor), engine = QPointer(scrollEngine)]() {
             if (wta)
                 wta->loadState();
+            if (wta && engine)
+                engine->restoreStripState(wta->loadedScrollStripState());
         });
 
     // Re-resolve the per-screen tiling algorithm when a screen's tiled-window

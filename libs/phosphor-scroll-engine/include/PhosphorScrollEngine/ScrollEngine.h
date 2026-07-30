@@ -13,6 +13,7 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include <QHash>
+#include <QJsonObject>
 #include <QObject>
 #include <QRect>
 #include <QVariantMap>
@@ -269,6 +270,19 @@ public:
         m_persistSaveFn = std::move(saveFn);
         m_persistLoadFn = std::move(loadFn);
     }
+    /// Durable strip-structure snapshot: every LIVE strip (current states)
+    /// plus the un-consumed mode-round-trip stash entries, keyed
+    /// "screenId|desktop|activity". Live wins on a key collision. The
+    /// daemon persists this blob through the WTA KConfig layer so a login
+    /// restore rebuilds tabbed/stacked columns, focus, and the view anchor
+    /// instead of one default column per window. (engine_serialize.cpp)
+    QJsonObject serializeStripState() const;
+    /// Load a serializeStripState blob into the stash so the EXISTING
+    /// arrival-restore path (restoreFromStripStash) rebuilds each strip as
+    /// its windows are announced. Additive and conservative: keys that
+    /// already have a stash entry or a live populated state are skipped, so
+    /// a second load cannot re-stage stale structure over adopted windows.
+    void restoreStripState(const QJsonObject& state);
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
     void refreshConfigFromSettings() override;
     void retile(const QString& screenId = QString()) override;
@@ -528,6 +542,9 @@ private:
     {
         QString windowId;
         WindowHeight height;
+        /// Carried for serialization fidelity only — the restore paths do
+        /// not re-apply it (the effect re-reports live minimize state).
+        bool minimized = false;
     };
     struct StashedColumn
     {
@@ -535,7 +552,32 @@ private:
         ColumnWidth width;
         ColumnDisplay display = ColumnDisplay::Normal;
     };
-    QHash<PhosphorEngine::PlacementStateKey, QVector<StashedColumn>> m_stripStash;
+    /// One stashed strip: the structural columns plus the focus/view pair
+    /// whose loss made every mode round trip re-anchor on an arbitrary
+    /// window (first arrival won the focus).
+    struct StashedStrip
+    {
+        QVector<StashedColumn> columns;
+        QString focusedWindowId;
+        int viewAnchor = 0;
+
+        bool isEmpty() const
+        {
+            return columns.isEmpty();
+        }
+        int tileCount() const
+        {
+            int total = 0;
+            for (const StashedColumn& c : columns) {
+                total += c.tiles.size();
+            }
+            return total;
+        }
+    };
+    /// Snapshot @p state's strip as a stash entry (columns + focus + view
+    /// anchor). Empty columns list when the state is null or empty.
+    StashedStrip buildStashFromState(const ScrollState* state) const;
+    QHash<PhosphorEngine::PlacementStateKey, StashedStrip> m_stripStash;
     QHash<PhosphorEngine::PlacementStateKey, QSet<QString>> m_stripStashConsumed;
     /// Screens with a retile queued this event-loop pass (coalescing).
     QSet<QString> m_pendingRetiles;

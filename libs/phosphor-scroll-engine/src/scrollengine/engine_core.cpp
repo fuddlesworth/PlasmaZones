@@ -199,23 +199,33 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     state->deleteLater();
 }
 
-void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state)
+ScrollEngine::StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
 {
+    StashedStrip out;
     if (!state || state->strip().isEmpty()) {
-        return;
+        return out;
     }
-    QVector<StashedColumn> stash;
     for (const Column& col : state->strip().columns()) {
         StashedColumn sc;
         sc.width = col.width;
         sc.display = col.display;
         for (const Tile& tile : col.tiles) {
-            sc.tiles.append({tile.windowId, tile.height});
+            sc.tiles.append({tile.windowId, tile.height, tile.minimized});
         }
         if (!sc.tiles.isEmpty()) {
-            stash.append(sc);
+            out.columns.append(sc);
         }
     }
+    // Focus and view travel with the structure: without them every round
+    // trip re-anchored the strip on whichever window arrived first.
+    out.focusedWindowId = state->strip().activeWindowId();
+    out.viewAnchor = state->strip().viewAnchor();
+    return out;
+}
+
+void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state)
+{
+    const StashedStrip stash = buildStashFromState(state);
     if (stash.isEmpty()) {
         return;
     }
@@ -228,8 +238,8 @@ void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& 
 bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
                                          const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
-    const auto it = m_stripStash.constFind(key);
-    if (it == m_stripStash.constEnd()) {
+    const auto it = m_stripStash.find(key);
+    if (it == m_stripStash.end()) {
         return false;
     }
     // A consumed id must not re-enter (same reasoning as the order seed's
@@ -238,7 +248,8 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     if (m_stripStashConsumed.value(key).contains(windowId)) {
         return false;
     }
-    const QVector<StashedColumn>& stash = *it;
+    StashedStrip& stashStrip = it.value();
+    QVector<StashedColumn>& stash = stashStrip.columns;
     int colIdx = -1;
     int tileIdx = -1;
     for (int i = 0; i < stash.size() && colIdx < 0; ++i) {
@@ -253,6 +264,41 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         if (j >= 0) {
             colIdx = i;
             tileIdx = j;
+        }
+    }
+    if (colIdx < 0) {
+        // Cross-session drift: a login restore stashes LAST session's window
+        // ids, whose uuid halves never reappear. Claim the first UNCLAIMED
+        // stashed tile of the same app (the id's prefix before '|'), exact-
+        // then-fuzzy like the placement store, renaming the stashed tile to
+        // the live id so siblings/focus keep matching and two same-app
+        // windows map one-to-one (a claimed tile is never re-claimed —
+        // claiming rewrites its id to a live one, which later arrivals
+        // cannot collide with).
+        const int sep = windowId.indexOf(QLatin1Char('|'));
+        const QString appPrefix = sep > 0 ? windowId.left(sep + 1) : QString();
+        if (!appPrefix.isEmpty()) {
+            const QSet<QString> consumed = m_stripStashConsumed.value(key);
+            for (int i = 0; i < stash.size() && colIdx < 0; ++i) {
+                for (int t = 0; t < stash.at(i).tiles.size(); ++t) {
+                    // Deep copy, NOT a reference: the claim below rewrites
+                    // this very tile's id, and comparing the focus id
+                    // through an alias of the overwritten field silently
+                    // broke the focus hand-over.
+                    const QString candidate = stash.at(i).tiles.at(t).windowId;
+                    if (!candidate.startsWith(appPrefix) || consumed.contains(candidate)
+                        || state->strip().containsWindow(candidate)) {
+                        continue;
+                    }
+                    stash[i].tiles[t].windowId = windowId;
+                    if (stashStrip.focusedWindowId == candidate) {
+                        stashStrip.focusedWindowId = windowId;
+                    }
+                    colIdx = i;
+                    tileIdx = t;
+                    break;
+                }
+            }
         }
     }
     if (colIdx < 0) {
@@ -305,12 +351,19 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         return false;
     }
     state->strip().setWindowHeightIntent(windowId, sc.tiles.at(tileIdx).height);
+    // The stashed FOCUS follows its window, not the arrival order: without
+    // this the first arrival kept the focus it won on the empty strip and
+    // every mode round trip re-anchored on an arbitrary window. The anchor
+    // is restored after the focus so the user's actual view wins over the
+    // focus change's centering-policy reanchor (clamped against the partial
+    // strip now; later arrivals re-clamp as the strip grows).
+    if (windowId == stashStrip.focusedWindowId) {
+        state->strip().focusWindow(windowId, params);
+        state->strip().restoreViewAnchor(stashStrip.viewAnchor, params);
+    }
+    const int total = stashStrip.tileCount();
     QSet<QString>& consumed = m_stripStashConsumed[key];
     consumed.insert(windowId);
-    int total = 0;
-    for (const StashedColumn& c : stash) {
-        total += c.tiles.size();
-    }
     if (consumed.size() >= total) {
         m_stripStash.remove(key);
         m_stripStashConsumed.remove(key);
