@@ -1122,6 +1122,14 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
                     entry.windowId = windowId;
                     entry.targetZoneId = RestoreSentinel;
                     entry.targetGeometry = g;
+                    // The drain gate (emitPendingSnapFloatRestoresForResnapBuffer's
+                    // snapOwnsEntryScreen) holds entries whose screen resolves to a
+                    // tiling-family mode — but an unscreened entry takes its
+                    // permissive path unconditionally. Without this stamp every
+                    // float entry was unscreened, so the hold never bit and the
+                    // restore replayed into the live strip/grid (dolphin popping
+                    // to its float rect mid-flip into scrolling).
+                    entry.targetScreenId = screen.isEmpty() ? rec->screenId : screen;
                     m_pendingSnapFloatRestores.append(entry);
                 }
             } else if (snapSnapped) {
