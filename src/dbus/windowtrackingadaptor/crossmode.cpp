@@ -311,8 +311,17 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     //    because the OTHER window is not there yet / was also refused).
     //    An unverified refusal would strand the window tracked by no
     //    engine — the exact hazard guardedHandoff exists for. ──
+    //    The re-home carries the window's OWN original slot (@p fallbackZones /
+    //    @p fallbackIndex), not a cleared one. A snap fallback engine needs a
+    //    zone: with sourceZoneIds empty its handoffReceive takes the
+    //    !wasFloating tail, which only broadcasts not-floating and returns, so
+    //    the window ends up tracked by no engine and the swap cannot recover
+    //    from a refusal into snap at all. Each window's own slot is already in
+    //    scope — F's original zone on the source screen is what the PARTNER was
+    //    going to land in, and vice versa.
     const auto receiveVerified = [](PhosphorEngine::IPlacementEngine* dest,
                                     PhosphorEngine::IPlacementEngine* fallbackEngine, const QString& fallbackScreen,
+                                    const QStringList& fallbackZones, int fallbackIndex,
                                     PhosphorEngine::IPlacementEngine::HandoffContext ctx) {
         dest->handoffReceive(ctx);
         if (dest->isWindowTracked(ctx.windowId)) {
@@ -321,8 +330,8 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         qCWarning(lcDbusWindow) << "cross-mode swap:" << dest->engineId() << "refused" << ctx.windowId;
         PhosphorEngine::IPlacementEngine::HandoffContext back = ctx;
         back.toScreenId = fallbackScreen;
-        back.insertIndex = -1;
-        back.sourceZoneIds.clear();
+        back.insertIndex = fallbackIndex;
+        back.sourceZoneIds = fallbackZones;
         back.fromEngineId = dest->engineId();
         fallbackEngine->handoffReceive(back);
         if (fallbackEngine->isWindowTracked(ctx.windowId)) {
@@ -346,7 +355,9 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         ctx.minSize = focusedMinSize;
         ctx.insertIndex = focusedLandingIndex;
         ctx.wasFloating = false;
-        receiveVerified(targetEngine, sourceEngine, sourceScreen, ctx);
+        // Re-home slot for F is its ORIGINAL slot on the source screen, which
+        // is the one the partner was going to take.
+        receiveVerified(targetEngine, sourceEngine, sourceScreen, partnerLandingZones, partnerLandingIndex, ctx);
     }
     {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
@@ -357,7 +368,9 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         ctx.minSize = partnerMinSize;
         ctx.insertIndex = partnerLandingIndex;
         ctx.wasFloating = false;
-        receiveVerified(sourceEngine, targetEngine, targetScreenId, ctx);
+        // Mirror: the partner's re-home slot is its own original slot on the
+        // target screen, the one F was going to take.
+        receiveVerified(sourceEngine, targetEngine, targetScreenId, focusedLandingZones, focusedLandingIndex, ctx);
     }
 
     // Source reflow, same rule as handleCrossModeMove: an autotile source

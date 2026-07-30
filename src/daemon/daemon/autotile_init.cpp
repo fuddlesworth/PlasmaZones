@@ -227,6 +227,7 @@ void Daemon::initializeAutotile()
                     return;
                 }
                 const bool wasAutotile = (currentMode == Mode::Autotile);
+                const bool wasScrolling = (currentMode == Mode::Scrolling);
                 const bool toSnapping = (target == Mode::Snapping);
                 qCInfo(lcDaemon) << "Mode toggle: currentAssignment=" << currentAssignment
                                  << "currentMode=" << static_cast<int>(currentMode)
@@ -355,8 +356,23 @@ void Daemon::initializeAutotile()
                     }
                     m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
                     // Direct writes fire no layoutApplied/autotileApplied, so
-                    // nudge the surfaces those signals normally refresh.
+                    // nudge every surface those signals normally refresh.
                     refreshCheatsheetIfVisible();
+                    // Announce the mode change. Both sibling arms give feedback
+                    // (layoutApplied → Snapping, autotileApplied → Autotile, and
+                    // showNotAssignedOsd for the bare-autotile direct write), so
+                    // without this the primary way into scrolling was the only
+                    // silent one. showScrollingModeOsd exists for exactly this
+                    // announcement and was reachable only from the KCM apply path
+                    // and the desktop-switch OSD.
+                    if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+                        showScrollingModeOsd(screenId);
+                    }
+                    // A snap-assist popup is stale the moment placement changes;
+                    // both signal-driven arms hide it for that reason.
+                    if (m_overlayService) {
+                        m_overlayService->hideSnapAssist();
+                    }
                     applied = true;
                 }
 
@@ -382,6 +398,24 @@ void Daemon::initializeAutotile()
                     // windows' snap state stays in the unified record for a
                     // later scrolling→snapping flip to restore.
                     m_pendingSnapFloatRestores.clear();
+                } else if (wasScrolling) {
+                    // Scrolling → anywhere. The scroll release inside
+                    // applyLayoutById reaches handleEngineWindowsReleased, which
+                    // appends snap-ZONE entries that the updateEngineScreens tail
+                    // drain deliberately PRESERVES for "the mode-toggle consumer".
+                    // Every consumer below is gated on wasAutotile, so that
+                    // consumer never ran: the batch simply survived until the next
+                    // recompute's clear discarded it, and windows snapped to zones
+                    // before the screen entered scrolling never returned to those
+                    // zones. Drain it here — to Snapping that restores the zones,
+                    // and to Autotile it drops them for the same reason the
+                    // autotile→scrolling arm above does (the strip/stack owns
+                    // placement, and the snap state stays in the unified record).
+                    if (toSnapping) {
+                        emitPendingSnapFloatRestoresForResnapBuffer();
+                    } else {
+                        m_pendingSnapFloatRestores.clear();
+                    }
                 } else if (wasAutotile && (!applied || !concreteSnap)) {
                     if (applied && m_snapEngine) {
                         qCWarning(lcDaemon) << "Snap engine is not a SnapEngine — autotile→snap resnap skipped";
