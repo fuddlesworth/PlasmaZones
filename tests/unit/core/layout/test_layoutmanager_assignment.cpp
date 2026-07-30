@@ -26,6 +26,101 @@ class TestLayoutManagerAssignment : public LayoutManagerAssignmentFixture
 
 private Q_SLOTS:
 
+    // ─── Mixed-rule survival through the assignment paths ────────────────
+    //
+    // A context assignment rule the user also edited in the Rules editor —
+    // a name, managed=true, and a non-assignment action (SetOpacity) — must
+    // survive every assignment write shape: upsert, batch rebuild, the
+    // clear's STRIP path, and a re-assign after the strip. Every rebuild
+    // routes through makeAssignmentRule, which emits only the three slot
+    // actions, so each path must carry the rest across
+    // (carryOverNonAssignmentActions) or the user's edits silently die.
+    void testMixedRuleSurvivesAssignmentRoundTrips()
+    {
+        namespace PWR = PhosphorRules;
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+        auto* store = mgr->findChild<PWR::RuleStore*>();
+        QVERIFY(store != nullptr);
+
+        // Seed the assignment, then edit it the way the Rules editor can.
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
+        const QUuid ruleId = PWR::ContextRuleBridge::assignmentRuleIdFor(QStringLiteral("DP-1"), 0, QString());
+        std::optional<PWR::Rule> seeded = store->ruleSet().ruleById(ruleId);
+        QVERIFY(seeded.has_value());
+        PWR::RuleAction opacity;
+        opacity.type = QString(PWR::ActionType::SetOpacity);
+        opacity.params.insert(QString(PWR::ActionParam::Value), 0.9);
+        seeded->actions.append(opacity);
+        seeded->name = QStringLiteral("Work monitor");
+        seeded->managed = true;
+        QVERIFY(store->updateRule(*seeded));
+
+        const auto ruleHasOpacity = [&](const std::optional<PWR::Rule>& r) {
+            if (!r) {
+                return false;
+            }
+            for (const PWR::RuleAction& a : r->actions) {
+                if (a.type == QLatin1String(PWR::ActionType::SetOpacity)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // UPSERT: change the layout on the Monitors page.
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutB);
+        std::optional<PWR::Rule> afterUpsert = store->ruleSet().ruleById(ruleId);
+        QVERIFY(afterUpsert.has_value());
+        QVERIFY2(ruleHasOpacity(afterUpsert), "upsert must carry the non-assignment action across");
+        QCOMPARE(afterUpsert->name, QStringLiteral("Work monitor"));
+        QVERIFY(afterUpsert->managed);
+
+        // BATCH: an "apply all" over the monitor axis.
+        QHash<QString, QString> screenMap;
+        screenMap.insert(QStringLiteral("DP-1"), layoutA->id().toString());
+        mgr->setAllScreenAssignments(screenMap);
+        std::optional<PWR::Rule> afterBatch = store->ruleSet().ruleById(ruleId);
+        QVERIFY(afterBatch.has_value());
+        QVERIFY2(ruleHasOpacity(afterBatch), "the batch rebuild must carry the non-assignment action across");
+        QCOMPARE(afterBatch->name, QStringLiteral("Work monitor"));
+        QVERIFY2(afterBatch->managed, "the batch rebuild must not clear the managed flag");
+
+        // CLEAR: strips the assignment slots, keeps the rule alive for the
+        // opacity it still carries.
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), nullptr);
+        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
+        std::optional<PWR::Rule> afterClear = store->ruleSet().ruleById(ruleId);
+        QVERIFY2(afterClear.has_value(), "clearing the assignment must not delete a rule carrying other actions");
+        QVERIFY(ruleHasOpacity(afterClear));
+        for (const PWR::RuleAction& a : afterClear->actions) {
+            QVERIFY2(a.type != QLatin1String(PWR::ActionType::SetEngineMode)
+                         && a.type != QLatin1String(PWR::ActionType::SetSnappingLayout),
+                     "the clear must strip the assignment slots");
+        }
+
+        // RE-ASSIGN after the strip: the deterministic id is occupied by the
+        // stripped rule, so the write must merge onto it, not silently no-op
+        // on an addRule id collision.
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
+        QVERIFY2(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()),
+                 "re-assigning after a strip must take effect, not no-op on the id collision");
+        std::optional<PWR::Rule> reassigned = store->ruleSet().ruleById(ruleId);
+        QVERIFY(reassigned.has_value());
+        QVERIFY(ruleHasOpacity(reassigned));
+
+        // CONTROL: a PURE assignment rule is deleted outright on clear.
+        mgr->assignLayout(QStringLiteral("DP-2"), 0, QString(), layoutA);
+        const QUuid pureId = PWR::ContextRuleBridge::assignmentRuleIdFor(QStringLiteral("DP-2"), 0, QString());
+        QVERIFY(store->ruleSet().ruleById(pureId).has_value());
+        mgr->assignLayout(QStringLiteral("DP-2"), 0, QString(), nullptr);
+        QVERIFY2(!store->ruleSet().ruleById(pureId).has_value(),
+                 "a rule whose only actions were the assignment slots is deleted outright");
+    }
+
     // ─── Combined batch API ──────────────────────────────────────────────
     //
     // setAllCombinedAssignments / combinedAssignments are the triple-axis
