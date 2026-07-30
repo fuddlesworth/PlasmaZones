@@ -24,6 +24,8 @@ private Q_SLOTS:
     void serializedStripRestoreSurvivesIdDrift();
     void pruneSweepsStashedTilesForClosedWindows();
     void pruneSpareStashStagedFromPersistence();
+    void unclaimedStashTilesExpireAfterThreeSessions();
+    void coTenantClaimDoesNotRenewSiblingLease();
 
 private:
     /// Smoke-suite twin: geometry providers wired so the apply path
@@ -239,6 +241,119 @@ void TestScrollEnginePersistence::pruneSpareStashStagedFromPersistence()
     const int n2Col = engine3->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|n2"));
     QVERIFY2(m1Col != n2Col,
              "after a claim the sweep must apply again, so the dead stashed tile cannot capture a later arrival");
+
+    // Positive control for the arm above: identical sequence WITHOUT the
+    // post-claim prune. The second arrival claims app|u2's surviving slot and
+    // stacks into the first claimant's column, proving the separate-columns
+    // assertion really measures the sweep and not a broken claim path.
+    ScrollEngine* engine4 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine4->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine4->restoreStripState(blob);
+    engine4->windowOpened(QStringLiteral("app|m1"), QStringLiteral("S1"), 0, 0);
+    engine4->windowOpened(QStringLiteral("app|n2"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine4->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|n2")),
+             engine4->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|m1")));
+}
+
+void TestScrollEnginePersistence::unclaimedStashTilesExpireAfterThreeSessions()
+{
+    // The per-tile unclaimedSessions lease: a staged tile ages by one at each
+    // serialize it sits through unclaimed, and restoreStripState drops it at
+    // kMaxUnclaimedSessions (3). Without the drop, the prune exemption makes
+    // the tile immortal — pruneStaleWindows fires exactly once per session,
+    // at bringup, while the staged entry is still sweep-exempt — and a
+    // long-dead slot eventually captures an unrelated same-app window.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("app|u2"), QStringLiteral("S1"), 0, 0);
+    engine1->windowFocused(QStringLiteral("app|u1"), QStringLiteral("S1"));
+    engine1->consumeWindowIntoColumn(QStringLiteral("S1")); // u2 joins u1's stack
+    engine1->toggleColumnTabbed(QStringLiteral("S1"));
+    QJsonObject blob = engine1->serializeStripState();
+    QVERIFY(!blob.isEmpty());
+
+    // Three sessions restore the blob and shut down without ANY claim. Each
+    // pass ages the tiles by one: 1, 2, 3.
+    QJsonObject penultimate;
+    for (int session = 0; session < 3; ++session) {
+        penultimate = blob;
+        ScrollEngine* e = makeProviderEngine(&owner, {QStringLiteral("S1")});
+        e->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+        e->restoreStripState(blob);
+        blob = e->serializeStripState();
+    }
+
+    // Control first, with the SECOND-to-last blob (ages 2): the lease is not
+    // yet expired, so the claim still fires and the pair rebuilds tabbed in
+    // one column. This is what makes the expiry assertion below non-vacuous.
+    ScrollEngine* control = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    control->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    control->restoreStripState(penultimate);
+    control->windowOpened(QStringLiteral("app|c1"), QStringLiteral("S1"), 0, 0);
+    control->windowOpened(QStringLiteral("app|c2"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(control->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|c1")),
+             control->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|c2")));
+
+    // The last blob carries age 3: restore drops both tiles, so the arrivals
+    // find no staged slots and open plainly, one column each.
+    ScrollEngine* engine5 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine5->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine5->restoreStripState(blob);
+    engine5->windowOpened(QStringLiteral("app|x1"), QStringLiteral("S1"), 0, 0);
+    engine5->windowOpened(QStringLiteral("app|x2"), QStringLiteral("S1"), 0, 0);
+    const int x1Col = engine5->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|x1"));
+    const int x2Col = engine5->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|x2"));
+    QVERIFY2(x1Col != x2Col, "an expired stash tile must not capture a later same-app arrival");
+}
+
+void TestScrollEnginePersistence::coTenantClaimDoesNotRenewSiblingLease()
+{
+    // The lease is PER TILE, not per entry. A same-app co-tenant that comes
+    // back every session claims ITS tile (fresh lease) but must not renew the
+    // dead sibling's: with an entry-level counter the claim reset the whole
+    // entry's age and the sibling slot lived forever. The claiming window is
+    // closed before each serialize so the stash entry — not a live strip —
+    // is what the shutdown snapshot writes for the key (the claimed-then-
+    // closed tile legitimately writes a fresh lease: its app demonstrably
+    // comes back).
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("app|u2"), QStringLiteral("S1"), 0, 0);
+    engine1->windowFocused(QStringLiteral("app|u1"), QStringLiteral("S1"));
+    engine1->consumeWindowIntoColumn(QStringLiteral("S1")); // u2 joins u1's stack
+    engine1->toggleColumnTabbed(QStringLiteral("S1"));
+    QJsonObject blob = engine1->serializeStripState();
+    QVERIFY(!blob.isEmpty());
+
+    // Three sessions each claim ONE tile (the first slot, by appId match, in
+    // arrival order) and close it again before shutdown. The claimed lineage
+    // re-leases every time; the sibling ages 1, 2, 3 untouched.
+    for (int session = 0; session < 3; ++session) {
+        ScrollEngine* e = makeProviderEngine(&owner, {QStringLiteral("S1")});
+        e->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+        e->restoreStripState(blob);
+        const QString claimant = QStringLiteral("app|m%1").arg(session);
+        e->windowOpened(claimant, QStringLiteral("S1"), 0, 0);
+        e->windowClosed(claimant);
+        blob = e->serializeStripState();
+    }
+
+    // The sibling's lease expired on the final restore; only the claimed
+    // lineage's slot survives. The first arrival claims it, the second finds
+    // no staged slot left and opens its own column. With an entry-level
+    // counter both would claim and stack tabbed into one column.
+    ScrollEngine* engine5 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine5->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine5->restoreStripState(blob);
+    engine5->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine5->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    const int aCol = engine5->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a"));
+    const int bCol = engine5->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
+    QVERIFY2(aCol != bCol, "a returning co-tenant's claim must not renew the dead sibling tile's lease");
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePersistence)
