@@ -163,8 +163,13 @@ SnapState::UnassignResult SnapState::unassignWindow(const QString& rawWindowId)
 bool SnapState::clearScreenAndDesktop(const QString& rawWindowId)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
-    const bool removed = m_windowScreenAssignments.remove(windowId) > 0;
-    return m_windowDesktopAssignments.remove(windowId) > 0 || removed;
+    // Both removals run unconditionally, in their own statements. Folding
+    // them into one `a.remove(...) || b.remove(...)` would let short-circuit
+    // evaluation skip the desktop removal whenever the screen one succeeded,
+    // silently leaking the desktop entry.
+    const bool screenRemoved = m_windowScreenAssignments.remove(windowId) > 0;
+    const bool desktopRemoved = m_windowDesktopAssignments.remove(windowId) > 0;
+    return screenRemoved || desktopRemoved;
 }
 
 SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& rawWindowId, bool preserveScreenAndDesktop)

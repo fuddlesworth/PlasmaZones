@@ -60,7 +60,16 @@ public:
         return m_activeColumnIdx;
     }
     const Column* activeColumn() const;
-    /// The focused window (active tile of the active column), or empty.
+    /// The focused window: the active tile of the active column, or empty.
+    ///
+    /// If that tile is MINIMIZED it falls back to the column's first
+    /// non-minimized tile, so this can name a different window than
+    /// `activeColumn()->activeTileIdx` points at. The mutating verbs
+    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight) all act
+    /// on activeTileIdx, so a caller pairing this accessor with one of them
+    /// could report a window the operation did not touch. Not reachable in
+    /// production today, where the daemon models minimize as float and a
+    /// minimized window is not a strip tile at all.
     QString activeWindowId() const;
     /// Column index owning @p windowId, or -1.
     int columnOfWindow(const QString& windowId) const;
@@ -146,7 +155,13 @@ public:
     bool moveActiveColumnTo(int target, const ScrollLayoutParams& params);
     bool moveActiveColumnToFirst(const ScrollLayoutParams& params);
     bool moveActiveColumnToLast(const ScrollLayoutParams& params);
-    /// Reorder the active tile within its column. @p delta is -1/+1.
+    /// Reorder the active tile within its column by @p delta positions.
+    ///
+    /// Any magnitude is accepted, not just -1/+1: the walk steps over
+    /// minimized tiles, so a single-step request can cross several slots. The
+    /// move is a REMOVE-AND-INSERT (QList::move), not a swap, so for
+    /// |delta| > 1 the intervening tiles shift by one rather than the two
+    /// endpoints exchanging places. A delta of 0 is a no-op.
     bool moveActiveTile(int delta);
     /// Pull the next column's active tile into the bottom of the active
     /// column (niri consume-window-into-column).

@@ -188,10 +188,13 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
 
     int insertionIdx = 0;
     QVector<std::tuple<int, int, QString>> windowsByZone; // (zoneNum, insertionIdx, windowId)
-    // Per-window dedup, mirroring populateResnapBufferForAllScreens' addedIds:
-    // the single-owning-store invariant makes duplicates impossible today, but
-    // a duplicate here would double-seed the autotile order (double-tile), so
-    // the guard keeps the two whole-store consumers symmetric and robust.
+    // Per-window dedup. The single-owning-store invariant makes duplicates
+    // impossible today, but a duplicate here would double-seed the autotile
+    // order (double-tile), so the guard is kept.
+    //
+    // Not identical to populateResnapBufferForAllScreens' addedIds, which
+    // keys on canonicalizeForLookup: this pass has a single source, so the
+    // raw id cannot spell the same window two ways.
     QSet<QString> seenWindowIds;
     forEachZoneAssignedWindow(
         [&](const QString& windowId, const QStringList& zoneIds, const QString& windowScreen, int windowDesktop) {

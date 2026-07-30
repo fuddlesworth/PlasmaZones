@@ -435,6 +435,16 @@ public:
     /// structurally excludes Field::Mode in that case, so neither a positive
     /// `Mode Equals x` nor a negated `None{Mode Equals x}` rule participates.
     /// Without that exclusion the negated form would match every context.
+    ///
+    /// The exclusion is a WHOLE-TREE test, so it also drops a rule that merely
+    /// mentions Mode in an unrelated branch — `Any{Mode Equals "tiling",
+    /// ScreenId Equals "DP-1"}` is invisible to a mode-agnostic call even
+    /// though its ScreenId branch would legitimately match. Deliberate: it
+    /// fails safe (a rule goes unapplied) rather than open (a negated rule
+    /// fires everywhere), and a per-branch test cannot be done without
+    /// evaluating the tree, which is the thing being avoided. The same applies
+    /// to the assignment / lock / overlay / default-assignment resolvers,
+    /// which are unconditionally mode-agnostic.
     ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
                                           const QString& mode = QString()) const override;
 

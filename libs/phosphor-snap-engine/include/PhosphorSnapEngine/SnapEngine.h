@@ -83,8 +83,10 @@ public:
     /// `currentActivity()` is used throughout the engine's own sources
     /// (calculate, lifecycle, navigation_actions, navigation_crosssurface,
     /// SnapEngine); the no-arg `currentVirtualDesktop()` has no in-tree
-    /// caller and survives only as the documented fallback of the
-    /// per-screen accessor below. Both stay public so a future adaptor that
+    /// caller. Note the fallback it mirrors lives in IVirtualDesktopManager,
+    /// not here: currentVirtualDesktopForScreen goes straight to the VDM's
+    /// currentDesktopForScreen and never routes through this accessor. Both
+    /// stay public so a future adaptor that
     /// wants the engine's own view (e.g. for a per-engine OSD) doesn't have
     /// to wire its own VDM.
     int currentVirtualDesktop() const;
