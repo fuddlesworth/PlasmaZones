@@ -329,6 +329,15 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet)
     flipped &= m_managedScreens;
     if (!flipped.isEmpty()) {
         qCInfo(lcEffect) << "Scrolling flip within managed union — re-announcing windows on" << flipped;
+        // A flipped screen's pending staggered applies were computed by the
+        // OLD engine; void them per-screen before the re-announce drives the
+        // new engine's batch. The new batch captures its generations at
+        // build time, after this bump, so it is unaffected. (This is the
+        // union-internal twin of slotScreensChanged's removed-screens bump —
+        // the global epoch stays reserved for desktop switches.)
+        for (const QString& screenId : std::as_const(flipped)) {
+            ++m_tileStaggerGenByScreen[screenId];
+        }
         notifyWindowsAddedBatch(KWin::effects->stackingOrder(), flipped, /*resetNotified=*/true);
     }
     updateScrollWheelShortcuts();

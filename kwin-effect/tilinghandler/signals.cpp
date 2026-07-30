@@ -216,10 +216,6 @@ void TilingHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
 
 void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
 {
-    // Invalidate in-flight stagger timers from prior autotile operations.
-    // Without this, a desktop switch can race with a pending stagger from the
-    // previous desktop, applying geometry from the old context.
-    ++m_tileStaggerGeneration;
     // Invalidate any in-flight loadSettings property reply — this signal
     // carries a newer screen set (see m_screensSignalGeneration doc).
     ++m_screensSignalGeneration;
@@ -227,6 +223,26 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
     const QSet<QString> newScreens(screenIds.begin(), screenIds.end());
     const QSet<QString> removed = m_managedScreens - newScreens;
     const QSet<QString> added = newScreens - m_managedScreens;
+
+    // Stagger-epoch scope. A desktop switch invalidates EVERY in-flight
+    // staggered apply (geometry computed for the old desktop must never land
+    // in the new one) — that is the global epoch's purpose. A plain
+    // managed-set change must NOT bump the global epoch: a mode toggle emits
+    // its tile batch and its managedScreensChanged in the same burst, so the
+    // blanket bump voided the toggle's OWN batch after its first
+    // (synchronous) entry — every later, timer-staggered entry died on the
+    // supersession guard and the screen sat half-tiled while the daemon
+    // believed it tiled (recovered only by a float/unfloat forcing a fresh
+    // batch). Only REMOVED screens' pending applies are genuinely stale;
+    // screens that remain or join keep their in-flight batch — for a joiner
+    // that batch IS the mode flip's own retile.
+    if (isDesktopSwitch) {
+        ++m_tileStaggerGeneration;
+    } else {
+        for (const QString& screenId : removed) {
+            ++m_tileStaggerGenByScreen[screenId];
+        }
+    }
 
     const auto windows = KWin::effects->stackingOrder();
 

@@ -670,9 +670,14 @@ private:
     /// grace) and revalidated at fire time; a re-minimize during the grace
     /// cancels it, leaving the window minimize-floated as before.
     DeferredWindowCommits m_pendingUnminimizeUnfloat{this};
-    /// Global stagger epoch, bumped on a desktop/screen switch (slotScreensChanged)
+    /// Global stagger epoch, bumped ONLY on a desktop switch (slotScreensChanged)
     /// to cancel EVERY in-flight staggered apply — geometry computed for the old
-    /// context must never land in the new one.
+    /// desktop must never land in the new one. Plain managed-set changes must
+    /// not bump it: a mode toggle's own managedScreensChanged lands in the same
+    /// burst as its tile batch, and a blanket bump voided that batch after its
+    /// first synchronous entry (screen sat half-tiled until a manual
+    /// float/unfloat). Non-desktop invalidation is per-screen: removed screens
+    /// in slotScreensChanged, flipped screens in updateScrollingScreens.
     uint64_t m_tileStaggerGeneration = 0;
     /// Per-screen stagger generation. A retile bumps only its own screen(s), so a
     /// newer batch for the SAME screen supersedes an earlier one while a batch for
