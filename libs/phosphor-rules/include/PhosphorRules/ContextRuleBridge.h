@@ -546,7 +546,14 @@ inline ContextAxis contextAxisFor(const MatchExpression& match)
     QString screenId;
     int virtualDesktop = 0;
     QString activity;
-    contextDimsOf(match, screenId, virtualDesktop, activity);
+    // The decode result is honoured, matching matchIsExactContext below. A
+    // failed decode already fails safe (the outputs stay at ("", 0, "") and
+    // contextAxisOf maps an empty screenId to CatchAll), so this is currently
+    // equivalent — but relying on that couples this classifier to another
+    // function's zero-initialisation, which the next refactor need not keep.
+    if (!contextDimsOf(match, screenId, virtualDesktop, activity)) {
+        return ContextAxis::CatchAll;
+    }
     return contextAxisOf(screenId, virtualDesktop, activity);
 }
 

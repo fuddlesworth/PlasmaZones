@@ -844,7 +844,13 @@ QVariantList SettingsController::getScrollingStripPreview(const QString& screenI
         QVariantMap zone;
         zone[QStringLiteral("zoneNumber")] = rect.value(QLatin1String("zoneNumber")).toInt(i + 1);
         zone[QStringLiteral("relativeGeometry")] = relGeo;
-        zone[QStringLiteral("id")] = QString::number(i);
+        // Namespaced, never a bare index. These are render-only synthetic
+        // zones with no persisted identity, so nothing resolves them today —
+        // but a bare "0"/"1"/"2" is indistinguishable from a real zone id, and
+        // any consumer that starts keying on zone.id (a delegate reuse key,
+        // selection state) would collide across screens. CLAUDE.md: zone IDs
+        // everywhere, never indices.
+        zone[QStringLiteral("id")] = QStringLiteral("strip:%1:%2").arg(screenId).arg(i);
         zone[QStringLiteral("name")] = QString();
         zone[QStringLiteral("useCustomColors")] = false;
         zones.append(zone);

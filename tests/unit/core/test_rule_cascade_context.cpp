@@ -948,9 +948,6 @@ private Q_SLOTS:
         QVERIFY(negatedSnapping.innerGap.has_value());
         QCOMPARE(*negatedSnapping.innerGap, 33);
 
-        // Restore the fixture's rule set for the arms below.
-        QVERIFY(f.store->setAllRules({tilingGap}));
-
         // Scrolling arm: a `Mode Equals "scrolling"` gap rule fires for the
         // scrolling asker and stays inert for tiling — the third engine's
         // gap provider resolves with the "scrolling" token.

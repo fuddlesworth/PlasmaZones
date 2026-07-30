@@ -675,23 +675,37 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
                 ++stashIt;
                 continue;
             }
+            // A tile whose window was already CONSUMED is retained even once
+            // that window closes. restoreFromStripStash places a late arrival
+            // by counting the stashed columns before its own that already have
+            // a representative on the strip, so erasing a consumed column
+            // shifts every later sibling's target index left by one and the
+            // next arrival lands in the wrong column. The entry is still
+            // dropped as a whole by the all-consumed condition below.
+            // value(), not operator[]: the latter would INSERT an empty set
+            // for every entry this loop walks.
+            const QSet<QString> consumedIds = m_stripStashConsumed.value(stashIt.key());
             for (auto colIt = stashIt->columns.begin(); colIt != stashIt->columns.end();) {
-                colIt->tiles.removeIf([&aliveWindowIds](const StashedTile& tile) {
-                    return !aliveWindowIds.contains(tile.windowId);
+                colIt->tiles.removeIf([&aliveWindowIds, &consumedIds](const StashedTile& tile) {
+                    return !aliveWindowIds.contains(tile.windowId) && !consumedIds.contains(tile.windowId);
                 });
                 colIt = colIt->tiles.isEmpty() ? stashIt->columns.erase(colIt) : std::next(colIt);
             }
-            if (!stashIt->focusedWindowId.isEmpty() && !aliveWindowIds.contains(stashIt->focusedWindowId)) {
+            if (!stashIt->focusedWindowId.isEmpty() && !aliveWindowIds.contains(stashIt->focusedWindowId)
+                && !consumedIds.contains(stashIt->focusedWindowId)) {
                 // The focus named a tile that is gone; drop it rather than
                 // leave the restore hunting for a window that never arrives.
                 stashIt->focusedWindowId.clear();
             }
+            // The consumed set is deliberately NOT swept. It used to be
+            // trimmed to keep it a subset of the shortened tile list, but the
+            // tiles now RETAIN their consumed entries, so it is a subset by
+            // construction — and trimming it would shrink the numerator of the
+            // all-consumed condition below while the denominator held, leaving
+            // the entry immortal, which is the bug this whole sweep exists to
+            // fix. Only non-consumed dead tiles are removed above, and those
+            // were never in this set.
             auto stashConsumedIt = m_stripStashConsumed.find(stashIt.key());
-            if (stashConsumedIt != m_stripStashConsumed.end()) {
-                stashConsumedIt->removeIf([&aliveWindowIds](const QString& consumed) {
-                    return !aliveWindowIds.contains(consumed);
-                });
-            }
             const int remaining = stashIt->tileCount();
             if (remaining == 0
                 || (stashConsumedIt != m_stripStashConsumed.end() && stashConsumedIt->size() >= remaining)) {
