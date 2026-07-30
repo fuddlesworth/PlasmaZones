@@ -843,9 +843,10 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
             qCWarning(lcDaemon) << "seedAutotileOrderForScreen: no window registry —"
                                 << "minimized windows cannot be filtered for" << screenId;
         }
-        // Drop entries that must not be seeded as tiled (live user floats,
-        // durable snap-slot floats); minimized windows stay as positional
-        // placeholders. See filterEngineSeedOrder's doc for the rationale.
+        // Float is per mode: non-minimized entries always seed (a snap-mode
+        // float must not make the window untileable here). Minimized entries
+        // stay as positional placeholders, except user-floated-then-minimized
+        // ones. See filterEngineSeedOrder's doc for the rationale.
         filterEngineSeedOrder(order, wts, registry);
     }
 

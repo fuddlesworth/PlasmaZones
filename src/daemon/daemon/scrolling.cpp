@@ -67,12 +67,11 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             continue;
         }
         QStringList order = it.value();
-        // Same admission rule as the autotile seed: a captured order describes
-        // a PAST arrangement and knows nothing about what happened to those
-        // windows since, so a window that is live-floating now, or whose
-        // durable record carries a floating snap slot, must not be seeded back
-        // as a managed column. Seeding the raw order put such a window into the
-        // strip as a managed window on every snap->scrolling transition.
+        // Same admission rule as the autotile seed: float is per mode, so
+        // non-minimized entries always seed (a snap-mode float must not make
+        // the window unmanageable as a strip column); minimized entries stay
+        // as placeholders except user-floated-then-minimized ones. See
+        // filterEngineSeedOrder's doc for the rationale.
         if (PhosphorPlacement::WindowTrackingService* wts =
                 m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr) {
             filterEngineSeedOrder(order, wts, wts->windowRegistry());

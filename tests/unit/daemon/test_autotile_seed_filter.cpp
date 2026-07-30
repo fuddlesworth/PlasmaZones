@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Pins the autotile seed-order filter (Daemon::seedAutotileOrderForScreen's
-// admission predicate, extracted as filterEngineSeedOrder): minimized
-// windows stay as positional placeholders, live user floats and durable
-// snap-slot floats are dropped, plain tiled windows pass through.
+// admission predicate, extracted as filterEngineSeedOrder): float is per
+// engine, so non-minimized windows always pass (a source-mode float must not
+// make the window untileable in the target engine); minimized windows stay as
+// positional placeholders EXCEPT user-floated-then-minimized ones (durable
+// floating snap slot), which are dropped so unminimize restores the float.
 
 #include <QObject>
 #include <QTest>
@@ -62,13 +64,17 @@ private Q_SLOTS:
         QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
     }
 
-    void liveFloat_dropped()
+    void liveFloat_passes()
     {
+        // The toggle seeds BEFORE the assignment flips, so a live float read
+        // here is the SOURCE mode's float (per-engine, not this engine's).
+        // It must not disqualify the window: dropping it made a snap-floated
+        // window untileable by mode swap.
         m_registry->upsert(QStringLiteral("u1"), makeMeta(QStringLiteral("kate"), false));
         m_service->setWindowFloating(QStringLiteral("kate|u1"), true);
         QStringList order{QStringLiteral("kate|u1")};
         filterEngineSeedOrder(order, m_service, m_registry);
-        QVERIFY(order.isEmpty());
+        QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
     }
 
     void minimizedFloat_keptAsPlaceholder()
@@ -83,11 +89,13 @@ private Q_SLOTS:
         QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
     }
 
-    void durableSnapFloatSlot_dropped()
+    void durableSnapFloatSlot_passes()
     {
-        // The mode flips before the second seed, so the live floating resolver
-        // reads the empty autotile slot; the instance-exact record's floating
-        // snap slot is what preserves the source-mode user float.
+        // The snap slot's stateFloating is the window's SNAPPING-mode verdict.
+        // It stays untouched for the return-to-snapping restore, but it must
+        // not leak into a tiling seed: dropping on it meant even an explicit
+        // Meta+F tile in autotile never survived a mode round trip (each
+        // snapping interlude re-poisoned the next seed).
         m_registry->upsert(QStringLiteral("u1"), makeMeta(QStringLiteral("kate"), false));
         PhosphorEngine::WindowPlacement p;
         p.windowId = QStringLiteral("kate|u1");
@@ -101,10 +109,10 @@ private Q_SLOTS:
 
         QStringList order{QStringLiteral("kate|u1")};
         filterEngineSeedOrder(order, m_service, m_registry);
-        QVERIFY(order.isEmpty());
+        QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
     }
 
-    void durableSnapFloatSlot_droppedEvenWhenMinimized()
+    void durableSnapFloatSlot_droppedWhenMinimized()
     {
         // A user-floated-then-minimized window must not become a tile
         // placeholder: on unminimize it stays floating.
@@ -134,12 +142,16 @@ private Q_SLOTS:
         QCOMPARE(order, QStringList{QStringLiteral("kate|ghost")});
     }
 
-    void nullRegistry_floatFilterStillApplies()
+    void nullRegistry_liveFloatStillPasses()
     {
+        // Without a registry, minimized state is unknowable and every entry
+        // reads as non-minimized, which under per-engine admission means it
+        // passes. The seed call site warns loudly about the missing registry;
+        // the filter itself stays consistent with the non-minimized rule.
         m_service->setWindowFloating(QStringLiteral("kate|u1"), true);
         QStringList order{QStringLiteral("kate|u1")};
         filterEngineSeedOrder(order, m_service, nullptr);
-        QVERIFY(order.isEmpty());
+        QCOMPARE(order, QStringList{QStringLiteral("kate|u1")});
     }
 
 private:
