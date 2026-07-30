@@ -10,6 +10,10 @@
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+
 namespace PlasmaZones {
 
 ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, QObject* parent)
@@ -64,6 +68,23 @@ void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
     }
     m_engine->focusInDirection(delta < 0 ? QStringLiteral("left") : QStringLiteral("right"),
                                PhosphorEngine::NavigationContext{QString(), screenId});
+}
+
+QString ScrollingAdaptor::visibleStripJson(const QString& screenId)
+{
+    if (!m_engine || screenId.isEmpty()) {
+        return QStringLiteral("[]");
+    }
+    QJsonArray arr;
+    for (const QRectF& r : m_engine->visibleTileRectsRelative(screenId)) {
+        QJsonObject obj;
+        obj[QLatin1String("x")] = r.x();
+        obj[QLatin1String("y")] = r.y();
+        obj[QLatin1String("width")] = r.width();
+        obj[QLatin1String("height")] = r.height();
+        arr.append(obj);
+    }
+    return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
 }
 
 void ScrollingAdaptor::clearEngine()

@@ -97,7 +97,12 @@ public:
     /// NOTE: carries no min-size parameters; callers that know the
     /// window's minimum must follow up with setWindowMinimumSize (the
     /// open/restore/crossing sites all do).
-    bool insertWindowAt(int columnIndex, const QString& windowId, const ColumnWidth& width, ColumnDisplay display);
+    /// @p params re-clamps the view anchor after the positional insert (a
+    /// left-of-active insert grows the strip without moving the active
+    /// column, and an unclamped anchor can strand the view past the strip
+    /// end — the mode-transition seed bug).
+    bool insertWindowAt(int columnIndex, const QString& windowId, const ColumnWidth& width, ColumnDisplay display,
+                        const ScrollLayoutParams& params);
     /// Re-insert @p windowId as a TILE of the existing column at
     /// @p columnIndex (float/minimize round-trip of a stacked tile), at
     /// @p tileIndex clamped into the stack. Fails when the column index is

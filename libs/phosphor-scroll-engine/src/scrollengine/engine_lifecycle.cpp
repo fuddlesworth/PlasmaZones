@@ -118,7 +118,7 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                     ++columnIdx;
                 }
             }
-            inserted = state->strip().insertWindowAt(columnIdx, windowId, width, display);
+            inserted = state->strip().insertWindowAt(columnIdx, windowId, width, display, params);
             if (inserted) {
                 state->strip().setWindowMinimumSize(windowId, minWidth, minHeight);
             }
@@ -128,7 +128,7 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         }
     }
     if (!inserted && restoreColumn >= 0) {
-        inserted = state->strip().insertWindowAt(restoreColumn, windowId, width, display);
+        inserted = state->strip().insertWindowAt(restoreColumn, windowId, width, display, params);
         if (inserted) {
             state->strip().setWindowMinimumSize(windowId, minWidth, minHeight);
         }
@@ -451,7 +451,7 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         }
     }
     if (!inserted && hadSlot) {
-        inserted = state->strip().insertWindowAt(restore.column, windowId, restore.width, restore.display);
+        inserted = state->strip().insertWindowAt(restore.column, windowId, restore.width, restore.display, params);
     }
     if (!inserted) {
         inserted = state->strip().insertWindow(windowId, effectiveDefaultColumnWidth(screenId),
@@ -632,7 +632,8 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // the strip's left edge), and -1 appends at the right end. This
     // function has no direction of its own to derive an edge from.
     const int columnIdx = (ctx.insertIndex >= 0) ? ctx.insertIndex : state->strip().columnCount();
-    if (state->strip().insertWindowAt(columnIdx, windowId, width, effectiveDefaultColumnDisplay(ctx.toScreenId))) {
+    if (state->strip().insertWindowAt(columnIdx, windowId, width, effectiveDefaultColumnDisplay(ctx.toScreenId),
+                                      params)) {
         // Seed the source engine's last-known min size so the first relayout
         // clamps correctly instead of waiting a refuse/re-discover round-trip.
         if (ctx.minSize.width() > 0 || ctx.minSize.height() > 0) {

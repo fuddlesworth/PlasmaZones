@@ -22,6 +22,16 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
+        <method name="visibleStripJson">
+            <annotation name="org.gtk.GDBus.DocString" value="The strip as it currently looks on a screen: a JSON array of visible tile rects normalized to the work area ({x, y, width, height}, 0.0 to 1.0 per axis). The settings app renders it where the other modes show a layout thumbnail. Empty array when the screen has no strip."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip to describe."/>
+            </arg>
+            <arg name="stripJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array string."/>
+            </arg>
+        </method>
+
         <signal name="scrollingScreensChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using the scrolling engine changes."/>
             <arg name="screenIds" type="as">

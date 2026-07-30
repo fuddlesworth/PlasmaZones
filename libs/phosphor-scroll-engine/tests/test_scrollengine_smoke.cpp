@@ -35,6 +35,7 @@ private Q_SLOTS:
     void scheduledRetileRunsUnderEventLoop();
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
+    void seedAdoptionClampsViewToStripEnd();
     void operationScreenFallbackIsDeterministic();
     void minSizeSeedsAndCarries();
     void minSizeSurvivesFloatRoundTrip();
@@ -557,6 +558,31 @@ void TestScrollEngineSmoke::desktopSwitchAwayPreservesSiblingContextStrips()
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              QStringList({QStringLiteral("app|a"), QStringLiteral("app|b")}));
+}
+
+void TestScrollEngineSmoke::seedAdoptionClampsViewToStripEnd()
+{
+    // Mode-transition seed, arrivals in REVERSE seed order (the focused
+    // window announces first and becomes the active column; every earlier
+    // window then inserts to its LEFT). The anchor is active-relative, so
+    // without the insert-time clamp the view drifted past the strip's end:
+    // the active column sat pinned at the LEFT edge with every other
+    // column parked off-screen and dead space on the right (the "toggle
+    // into scrolling shows one window" bug). Work area 1200x800, gap 0,
+    // three 600px half columns: the clamped view must show the active
+    // column c at x=600 with its left neighbour b visible at x=0.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setInitialWindowOrder(QStringLiteral("S1"),
+                                  {QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")});
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             QStringList({QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
+    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|c")).x(), 600);
+    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|b")).x(), 0);
 }
 
 void TestScrollEngineSmoke::operationScreenFallbackIsDeterministic()

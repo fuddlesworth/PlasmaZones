@@ -199,6 +199,9 @@ public:
     /// actually looks like right now. Empty when the screen has no state
     /// or no visible tile.
     QVector<QRect> visibleTileRects(const QString& screenId) const;
+    /// visibleTileRects normalized to the work area (0.0–1.0 per axis) —
+    /// the shape zone previews consume. Same emptiness contract.
+    QVector<QRectF> visibleTileRectsRelative(const QString& screenId) const;
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 

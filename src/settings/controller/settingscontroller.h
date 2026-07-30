@@ -554,6 +554,12 @@ public:
 
     // ── Screen state query ─────────────────────────────────────────────────
     Q_INVOKABLE QVariantList getScreenStates() const;
+    /// The live scrolling strip of @p screenId as zone maps for
+    /// LayoutThumbnail (relativeGeometry + zoneNumber per visible tile),
+    /// fetched from org.plasmazones.Scrolling. Empty when the screen has
+    /// no strip right now (not scrolling, no windows, daemon down) — the
+    /// Monitors page then falls back to a representative static strip.
+    Q_INVOKABLE QVariantList getScrollingStripPreview(const QString& screenId) const;
     Q_INVOKABLE QVariantMap getStagedAssignment(const QString& screenName, int virtualDesktop = 0,
                                                 const QString& activityId = QString()) const;
 

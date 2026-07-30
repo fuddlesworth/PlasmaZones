@@ -213,12 +213,12 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         targetState->strip().takeWindow(partner, targetParams);
         Q_EMIT windowOutputMoveExpected(partner, screenId);
     }
-    targetState->strip().insertWindowAt(columnIdx, windowId, windowWidth, windowDisplay);
+    targetState->strip().insertWindowAt(columnIdx, windowId, windowWidth, windowDisplay, targetParams);
     targetState->strip().setWindowMinimumSize(windowId, windowMinSize.width(), windowMinSize.height());
     targetState->strip().focusWindow(windowId, targetParams);
     m_states.setKeyForWindow(windowId, targetKey);
     if (!partner.isEmpty()) {
-        state->strip().insertWindowAt(qMax(0, partnerLanding), partner, partnerWidth, partnerDisplay);
+        state->strip().insertWindowAt(qMax(0, partnerLanding), partner, partnerWidth, partnerDisplay, sourceParams);
         state->strip().setWindowMinimumSize(partner, partnerMinSize.width(), partnerMinSize.height());
         m_states.setKeyForWindow(partner, sourceKey);
     }

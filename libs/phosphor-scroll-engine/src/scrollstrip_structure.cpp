@@ -171,7 +171,7 @@ bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const
 }
 
 bool ScrollStrip::insertWindowAt(int columnIndex, const QString& windowId, const ColumnWidth& width,
-                                 ColumnDisplay display)
+                                 ColumnDisplay display, const ScrollLayoutParams& params)
 {
     if (windowId.isEmpty() || containsWindow(windowId)) {
         return false;
@@ -193,6 +193,17 @@ bool ScrollStrip::insertWindowAt(int columnIndex, const QString& windowId, const
     }
     if (m_activeColumnIdx < 0) {
         m_activeColumnIdx = insertAt;
+    }
+    // The anchor is active-relative, so the active column stays visually
+    // stationary through positional inserts — but it must be re-clamped:
+    // a mode-transition seed inserts every earlier window to the LEFT of
+    // the first-adopted (active) column, and the unclamped anchor left the
+    // active column pinned at the viewport's left edge with every other
+    // column parked off-screen and dead space on the right (the "toggle
+    // into scrolling shows one window" bug). Clamping is a no-op while the
+    // strip is narrower than the viewport.
+    if (params.workArea.isValid()) {
+        m_viewAnchor = clampedAnchor(m_viewAnchor, params);
     }
     return true;
 }

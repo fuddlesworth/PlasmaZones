@@ -815,6 +815,43 @@ QVariantList SettingsController::getScreenStates() const
     return result;
 }
 
+QVariantList SettingsController::getScrollingStripPreview(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return {};
+    }
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Scrolling),
+                                                QStringLiteral("visibleStripJson"), {screenId});
+    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+        return {};
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(reply.arguments().at(0).toString().toUtf8());
+    if (!doc.isArray()) {
+        return {};
+    }
+    // Shape the rects into the zone maps LayoutThumbnail/LayoutCard render,
+    // mirroring the daemon's OSD strip preview (numbers ascending in strip
+    // order; no custom colors).
+    QVariantList zones;
+    const QJsonArray arr = doc.array();
+    for (int i = 0; i < arr.size(); ++i) {
+        const QJsonObject rect = arr.at(i).toObject();
+        QVariantMap relGeo;
+        relGeo[QStringLiteral("x")] = rect.value(QLatin1String("x")).toDouble();
+        relGeo[QStringLiteral("y")] = rect.value(QLatin1String("y")).toDouble();
+        relGeo[QStringLiteral("width")] = rect.value(QLatin1String("width")).toDouble();
+        relGeo[QStringLiteral("height")] = rect.value(QLatin1String("height")).toDouble();
+        QVariantMap zone;
+        zone[QStringLiteral("zoneNumber")] = i + 1;
+        zone[QStringLiteral("relativeGeometry")] = relGeo;
+        zone[QStringLiteral("id")] = QString::number(i);
+        zone[QStringLiteral("name")] = QString();
+        zone[QStringLiteral("useCustomColors")] = false;
+        zones.append(zone);
+    }
+    return zones;
+}
+
 QVariantMap SettingsController::getStagedAssignment(const QString& screenName, int virtualDesktop,
                                                     const QString& activityId) const
 {

@@ -114,6 +114,22 @@ QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId) const
     return out;
 }
 
+QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) const
+{
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    if (!params.workArea.isValid()) {
+        return {};
+    }
+    const QRect area = params.workArea;
+    QVector<QRectF> out;
+    for (const QRect& r : visibleTileRects(screenId)) {
+        out.append(QRectF(
+            static_cast<qreal>(r.x() - area.x()) / area.width(), static_cast<qreal>(r.y() - area.y()) / area.height(),
+            static_cast<qreal>(r.width()) / area.width(), static_cast<qreal>(r.height()) / area.height()));
+    }
+    return out;
+}
+
 void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
 {
     ScrollState* state = stateForKey(currentKeyForScreen(screenId), false);

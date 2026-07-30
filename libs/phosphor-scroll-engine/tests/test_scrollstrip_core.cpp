@@ -301,7 +301,7 @@ void TestScrollStripCore::viewAnchorSurvivesLeftInsert()
     // Restore-insert a column at index 0 (left of everything): the focused
     // column c must not move on screen.
     const QRect cBefore = rectOf(strip.relayout(params), QStringLiteral("c"));
-    QVERIFY(strip.insertWindowAt(0, QStringLiteral("z"), kHalf, ColumnDisplay::Normal));
+    QVERIFY(strip.insertWindowAt(0, QStringLiteral("z"), kHalf, ColumnDisplay::Normal, params));
     QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
     QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("c")), cBefore);
 }

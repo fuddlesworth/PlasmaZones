@@ -318,6 +318,51 @@ SettingsFlickable {
             property bool isSnapping: localMode === 0
             // Resolved layout object for LayoutThumbnail
             property var currentLayout: root._findLayout(localLayoutId)
+            // Live strip zones for the scrolling preview, refreshed with the
+            // selection context. Empty when the screen is not scrolling right
+            // now (mode staged but not applied, no windows, daemon down).
+            property var scrollingStripZones: []
+            // Representative endless strip: a full column mid-view with a
+            // clipped column at each edge, so the sketch reads as a window
+            // onto a longer strip rather than a fixed zone layout.
+            readonly property var scrollingFallbackZones: [
+                {
+                    "zoneNumber": 1,
+                    "id": "0",
+                    "name": "",
+                    "useCustomColors": false,
+                    "relativeGeometry": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 0.1,
+                        "height": 1
+                    }
+                },
+                {
+                    "zoneNumber": 2,
+                    "id": "1",
+                    "name": "",
+                    "useCustomColors": false,
+                    "relativeGeometry": {
+                        "x": 0.115,
+                        "y": 0,
+                        "width": 0.5,
+                        "height": 1
+                    }
+                },
+                {
+                    "zoneNumber": 3,
+                    "id": "2",
+                    "name": "",
+                    "useCustomColors": false,
+                    "relativeGeometry": {
+                        "x": 0.63,
+                        "y": 0,
+                        "width": 0.37,
+                        "height": 1
+                    }
+                }
+            ]
 
             Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.largeSpacing
@@ -335,6 +380,9 @@ SettingsFlickable {
                 localAlgorithmCleared = false;
                 localLayoutTouched = false;
                 localAlgorithmTouched = false;
+                // Refresh the live strip preview with the selection context
+                // (cheap one-shot D-Bus read; [] when not scrolling).
+                scrollingStripZones = settingsController.getScrollingStripPreview(root._selectedScreen);
                 var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
                 if (Object.keys(staged).length > 0) {
                     // A staged entry carries the WHOLE context rule, so every
@@ -406,8 +454,25 @@ SettingsFlickable {
                 }
             }
 
-            // Scrolling has no layout to preview or pick, so it gets a short
-            // explanation in place of the thumbnail and selector.
+            // Strip preview (scrolling): the live strip when the screen is
+            // scrolling right now, else a representative endless-strip
+            // sketch (clipped columns at both edges suggest continuation).
+            LayoutThumbnail {
+                Layout.alignment: Qt.AlignHCenter
+                visible: stateView.isScrolling
+                layout: ({
+                        "displayName": i18nc("tiling mode name", "Scrolling"),
+                        "zones": stateView.scrollingStripZones.length > 0 ? stateView.scrollingStripZones : stateView.scrollingFallbackZones
+                    })
+                isSelected: true
+                baseHeight: Kirigami.Units.gridUnit * 14
+                maxThumbnailWidth: Kirigami.Units.gridUnit * 32
+                screenAspectRatio: root._selectedScreenAspectRatio
+                Accessible.name: i18n("Scrolling strip preview")
+            }
+
+            // Scrolling picks neither a layout nor an algorithm, so a short
+            // explanation stands in for the selector.
             Kirigami.InlineMessage {
                 Layout.fillWidth: true
                 Layout.maximumWidth: Kirigami.Units.gridUnit * 32
