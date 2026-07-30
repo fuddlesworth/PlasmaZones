@@ -750,9 +750,15 @@ bool SettingsController::importAllSettings(const QString& filePath)
                     // stamps _version=5, leaves the stashes orphaned in
                     // config.json, and silently drops every imported zone
                     // assignment and exclusion.
+                    //
+                    // By this point the blob has been parsed, validated as an
+                    // object, and version-checked above, so the only way this
+                    // arm fires is a file WRITE error (disk full, read-only
+                    // config dir) — the message names that, not a version
+                    // problem the earlier check would have caught.
                     qCWarning(PlasmaZones::lcCore) << "Imported settings could not be migrated:" << safeFilePath;
                     Q_EMIT settingsTransferFailed(
-                        PhosphorI18n::tr("That settings file is from a version this app cannot upgrade."));
+                        PhosphorI18n::tr("Your settings file was read but the upgrade could not be saved."));
                     ok = false;
                 }
             }

@@ -641,6 +641,19 @@ public:
     /// (snapped or floated) for persistence, or nullopt if untracked.
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
 
+    /// capturePlacement with the mode gate resolved at an EXPLICIT desktop.
+    ///
+    /// The public capture gates on the window's screen at its CURRENT desktop,
+    /// which is the right question for the periodic refresh but the wrong one
+    /// for a cross-desktop handoff: the daemon routed the handoff here because
+    /// (screen, toDesktop) resolves to Snapping, yet the screen's visible
+    /// desktop may be a tiling one, so the current-desktop gate refused the
+    /// capture and the durable record silently kept the OLD desktop.
+    /// @p gateDesktop <= 0 means "the screen's current desktop" (the public
+    /// capture's behaviour, including its live-resolver fast path).
+    std::optional<PhosphorEngine::WindowPlacement> capturePlacementAtDesktop(const QString& windowId,
+                                                                             int gateDesktop) const;
+
     /// Snap every unmanaged window on the screen. The IPlacementEngine
     /// override takes PhosphorEngine::NavigationContext; coexists with the existing
     /// snapAllWindows(const QString&) method which it delegates to.

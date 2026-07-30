@@ -388,6 +388,17 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         ctx.wasFloating = false;
         // Mirror: the partner's re-home slot is its own original slot on the
         // target screen, the one F was going to take.
+        //
+        // COLLISION NOTE, so this is not re-raised as data loss: when F's
+        // receive was refused, receiveVerified re-homed F into the source at
+        // (partnerLandingZones, partnerLandingIndex) — the same slot this
+        // receive now targets. No engine EVICTS on receive (snap assigns the
+        // window into the zone beside any co-occupant, autotile and scroll
+        // inserts shift indices), so the worst outcome is a shared zone or a
+        // shifted tile order on the source screen: degraded, visible, and
+        // user-recoverable, with both windows still tracked. A pre-emptive
+        // slot reroute here would need engine-specific vacancy queries for a
+        // state the user can fix with one drag.
         partnerAdopted =
             receiveVerified(sourceEngine, targetEngine, targetScreenId, focusedLandingZones, focusedLandingIndex, ctx);
     }

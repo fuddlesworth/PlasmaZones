@@ -66,10 +66,15 @@ target_link_libraries(PhosphorSnapEngine
         PhosphorEngine::PhosphorEngine
         PhosphorZones::PhosphorZones
         PhosphorProtocol::Types
+        # PUBLIC because the installed SnapEngine.h includes
+        # <PhosphorRules/RuleEvaluator.h> and holds a RuleEvaluator member —
+        # a PRIVATE link does not propagate the include dirs, so consumers of
+        # the installed package could not compile against the header (in-tree
+        # it only built because the daemon links PhosphorRules itself).
+        PhosphorRules::PhosphorRules
     PRIVATE
         PhosphorScreens::Runtime  # SnapEngine queries screen geometry via ScreenManager
         PhosphorIdentity::PhosphorIdentity
-        PhosphorRules::PhosphorRules
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

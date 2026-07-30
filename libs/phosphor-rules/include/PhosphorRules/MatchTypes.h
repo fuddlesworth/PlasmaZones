@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QLatin1StringView>
+#include <QSet>
 #include <QString>
 #include <QStringView>
 
@@ -178,6 +179,26 @@ inline constexpr FieldDescriptor kFieldTable[] = {
 };
 static_assert(sizeof(kFieldTable) / sizeof(kFieldTable[0]) == static_cast<unsigned>(FieldCount),
               "kFieldTable must have one entry per Field");
+
+/// Every Window-sourced field, derived from the table so a new field can never
+/// silently miss it. This is the exclusion set the windowless context
+/// resolvers pass to MatchExpression::negatesAnyField — an absent window field
+/// makes a positive leaf inert (false, by design) but makes a NEGATED leaf
+/// match unconditionally, so a context resolver must refuse rules that negate
+/// any of these.
+inline const QSet<Field>& windowSourcedFields()
+{
+    static const QSet<Field> fields = [] {
+        QSet<Field> out;
+        for (const FieldDescriptor& d : kFieldTable) {
+            if (d.source == FieldSource::Window) {
+                out.insert(d.field);
+            }
+        }
+        return out;
+    }();
+    return fields;
+}
 
 consteval bool verifyFieldTableOrder()
 {

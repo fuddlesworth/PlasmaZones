@@ -414,6 +414,13 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     if (auto stashIt = m_stripStash.find(key); stashIt != m_stripStash.end()) {
         stashIt->stagedFromPersistence = false;
     }
+    // The CLAIMED tile's per-tile lease resets too: it was just consumed, so
+    // it is no longer persistence-pending, and serializeStripState must not
+    // age it (its window is live and will usually be pruned from the write
+    // anyway, but a claimed-then-closed tile writes 0 — a fresh lease — which
+    // is right: its app demonstrably comes back).
+    stash[colIdx].tiles[tileIdx].stagedFromPersistence = false;
+    stash[colIdx].tiles[tileIdx].unclaimedSessions = 0;
     QSet<QString>& consumed = m_stripStashConsumed[key];
     consumed.insert(windowId);
     if (consumed.size() >= total) {

@@ -1002,6 +1002,86 @@ private Q_SLOTS:
     // ─── Per-monitor gap beats a global per-mode gap (specificity, not priority) ─
     // A per-monitor (ScreenId-pinned) gap override and a global per-mode
     // (Mode-pinned) gap rule can both match the same window/slot. A hand-authored
+    // The window-field negation-polarity guard: a windowless context query
+    // leaves every Window-sourced field ABSENT, which makes a positive leaf
+    // evaluate false (inert, by design) but makes a leaf under `none{}` match
+    // unconditionally — `none{AppId == firefox}` on a gap or lock rule would
+    // fire on EVERY context. The resolvers exclude rules that NEGATE a window
+    // field (negatesAnyField over the table-derived windowSourcedFields), and
+    // deliberately do NOT exclude positive references, because an `any{}`
+    // rule's context branch may legitimately fire. Both polarities pinned.
+    void testNegatedWindowFieldStaysInertOnContextResolvers()
+    {
+        RegistryFixture f = makeRegistryFixture();
+
+        // A `none{AppId == firefox}` gap rule: without the guard it gaps every
+        // context (the absent AppId leaf is false, so the None matches).
+        PWR::RuleAction gapAction;
+        gapAction.type = QString(PWR::ActionType::SetInnerGap);
+        gapAction.params.insert(QString(PWR::ActionParam::Value), 44);
+        PWR::Rule negatedApp;
+        negatedApp.id = QUuid::createUuid();
+        negatedApp.name = QStringLiteral("Gap everywhere except firefox");
+        negatedApp.enabled = true;
+        negatedApp.priority = 500;
+        negatedApp.match = PWR::MatchExpression::makeNone(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals, QStringLiteral("firefox"))});
+        negatedApp.actions = {gapAction};
+        QVERIFY(f.store->setAllRules({negatedApp}));
+
+        const PhosphorZones::ContextGapOverride negated =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("snapping"));
+        QVERIFY2(!negated.innerGap.has_value(),
+                 "a rule negating a window field must not fire on a windowless context query");
+
+        // Same shape on the LOCK resolver, whose spurious match would lock
+        // every context.
+        PWR::RuleAction lockAction;
+        lockAction.type = QString(PWR::ActionType::LockContext);
+        lockAction.params.insert(QString(PWR::ActionParam::Value), true);
+        PWR::Rule negatedLock = negatedApp;
+        negatedLock.id = QUuid::createUuid();
+        negatedLock.actions = {lockAction};
+        QVERIFY(f.store->setAllRules({negatedLock}));
+        QVERIFY2(!f.registry->resolveContextLocked(QStringLiteral("DP-9"), 1, QString()),
+                 "a rule negating a window field must not lock a windowless context");
+
+        // POSITIVE CONTROL 1: the guard is negation-scoped, not a blanket
+        // window-field ban. An `any{ScreenId == DP-9, AppId == firefox}` gap
+        // rule still fires through its context branch.
+        PWR::Rule anyMixed;
+        anyMixed.id = QUuid::createUuid();
+        anyMixed.name = QStringLiteral("DP-9 or firefox gap");
+        anyMixed.enabled = true;
+        anyMixed.priority = 500;
+        anyMixed.match = PWR::MatchExpression::makeAny(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-9")),
+             PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals, QStringLiteral("firefox"))});
+        anyMixed.actions = {gapAction};
+        QVERIFY(f.store->setAllRules({anyMixed}));
+        const PhosphorZones::ContextGapOverride positive =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("snapping"));
+        QVERIFY2(positive.innerGap.has_value() && *positive.innerGap == 44,
+                 "a POSITIVE window-field reference must not be excluded — the context branch fires");
+
+        // POSITIVE CONTROL 2: a context-only rule on the same store still
+        // resolves, so the negative arms above failed because of the guard,
+        // not a dead fixture.
+        PWR::Rule plain;
+        plain.id = QUuid::createUuid();
+        plain.name = QStringLiteral("Plain DP-9 gap");
+        plain.enabled = true;
+        plain.priority = 500;
+        plain.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-9"));
+        plain.actions = {gapAction};
+        QVERIFY(f.store->setAllRules({plain}));
+        const PhosphorZones::ContextGapOverride control =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("snapping"));
+        QVERIFY(control.innerGap.has_value());
+        QCOMPARE(*control.innerGap, 44);
+    }
+
     // per-mode gap rule can even carry a HIGHER raw priority (500) than a
     // per-screen rule (300). resolveContextGaps must therefore order the slot by
     // MATCH SPECIFICITY (ScreenId-pinned > Mode-pinned), so the per-monitor

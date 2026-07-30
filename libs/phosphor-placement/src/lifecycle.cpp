@@ -256,12 +256,19 @@ void WindowTrackingService::onLayoutChanged()
 
         auto addToBuffer = [&](const QString& windowIdOrStableId, const QStringList& zoneIdList,
                                const QString& screenId, int vd) {
-            // Skip windows floating in their OWN mode. isWindowFloating here is
-            // the mode-routed resolver, which is the right call at this layer:
-            // phosphor-placement is engine-agnostic, so it asks whichever engine
-            // owns the window's screen. Float is per engine — a window floating
-            // in its own mode stays where it is rather than being resnapped.
-            if (windowIdOrStableId.isEmpty() || isWindowFloating(windowIdOrStableId)) {
+            // SNAP's own float bit, not the mode-routed read — the same rule
+            // as resnap.cpp's two candidate passes and windowClosed above.
+            // The layer is engine-agnostic, but this QUESTION is not: the
+            // candidate set is snap-owned (zone assignments), so the float
+            // choice that decides whether a resnap overrides it is the
+            // SNAPPING-mode verdict. The routed read dispatches on the
+            // screen's current mode, so on a screen mid-flip a foreign
+            // engine's float bit would decide a snap-owned candidate's fate.
+            // (A pending entry keyed by appId resolves no per-window float
+            // either way — identical outcome to the old read there.)
+            const PhosphorSnapEngine::SnapState* snapFloat =
+                windowIdOrStableId.isEmpty() ? nullptr : snapForWindow(windowIdOrStableId);
+            if (windowIdOrStableId.isEmpty() || (snapFloat && snapFloat->isFloating(windowIdOrStableId))) {
                 return;
             }
             if (addedIds.contains(windowIdOrStableId)) {

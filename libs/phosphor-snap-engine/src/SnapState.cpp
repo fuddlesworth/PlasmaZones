@@ -203,6 +203,26 @@ QString SnapState::screenForWindow(const QString& rawWindowId) const
     return m_windowScreenAssignments.value(windowId);
 }
 
+void SnapState::recordResidence(const QString& rawWindowId, const QString& screenId, int virtualDesktop)
+{
+    if (rawWindowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    bool changed = false;
+    if (m_windowScreenAssignments.value(windowId) != screenId) {
+        m_windowScreenAssignments[windowId] = screenId;
+        changed = true;
+    }
+    if (m_windowDesktopAssignments.value(windowId, -1) != virtualDesktop) {
+        m_windowDesktopAssignments[windowId] = virtualDesktop;
+        changed = true;
+    }
+    if (changed) {
+        Q_EMIT stateChanged();
+    }
+}
+
 int SnapState::desktopForWindow(const QString& rawWindowId) const
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);

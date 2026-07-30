@@ -38,7 +38,21 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     }
     const QString& primaryZoneId = zoneIds.first();
 
-    if (m_windowTracker->clearFloatingForSnap(windowId)) {
+    // The broadcast is gated on EITHER float verdict, not the routed one
+    // alone. clearFloatingForSnap reads the mode-routed isWindowFloating,
+    // which on a screen mid-flip answers the FOREIGN engine's bit — false —
+    // while snap's OWN bit is true and the zone assignment below clears it
+    // silently. Subscribers that last heard "floating" (the adaptor's float
+    // bookkeeping, the effect's per-screen float cache) then keep stale float
+    // chrome on a window snap just committed to a zone. The routed call still
+    // runs for its own bookkeeping; when only the own bit was set, the
+    // pre-float capture is cleared to match the normal path.
+    const bool ownFloating = isFloating(windowId);
+    const bool routedCleared = m_windowTracker->clearFloatingForSnap(windowId);
+    if (ownFloating && !routedCleared) {
+        m_windowTracker->clearPreFloatZone(windowId);
+    }
+    if (ownFloating || routedCleared) {
         Q_EMIT windowFloatingClearedForSnap(windowId, screenId);
     }
 

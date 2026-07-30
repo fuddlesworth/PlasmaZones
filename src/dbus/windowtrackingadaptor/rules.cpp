@@ -57,22 +57,26 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
     // resolveCached is keyed on (windowId, ruleSet revision) and ignores the
-    // query on a hit. Safe HERE because this predicate stamps nothing beyond
-    // what buildRuleQueryForWindow produced — there is no per-call context to
-    // lose — and the effect pushes the window's full metadata before the
-    // engine's open-path resolve, so the first (and only) resolve for a window
-    // sees complete metadata. shouldRestoreToZoneOnLogin shares the cache for
-    // exactly the same reason.
+    // query on a hit. Six callers share the memo: four stamp ScreenId
+    // (placementZonesByRule and the three open-routing resolvers) and two
+    // stamp nothing (this one and shouldRestoreToZoneOnLogin).
     //
-    // The four ScreenId-stamping resolvers (placementZonesByRule and the three
-    // open-routing ones) also use resolveCached, but they are safe on a
-    // DIFFERENT and load-bearing basis: each resolves FIRST on its own open
-    // path, so it seeds the memo with its own stamped query rather than
-    // reading someone else's. That is an ORDERING invariant — reordering an
-    // unstamped predicate ahead of them would seed an empty screenId and every
-    // ScreenId-scoped SnapToZone / RouteToScreen rule would silently stop
-    // firing. shouldFloatByRule and scrollOpenRuleParams opted out of the
-    // cache entirely instead, because they stamp Mode as well.
+    // The load-bearing ORDERING invariant: on every open path a STAMPING
+    // resolver runs before either unstamped one, so the memo is seeded with a
+    // ScreenId-stamped query. The snap path routes at
+    // src/dbus/snapadaptor/snaprestore.cpp (applyOpenDesktopRouting) BEFORE
+    // calling the engine's resolveWindowRestore, which is what reaches
+    // placementZonesByRule and these predicates; the tiling path runs
+    // applyOpenRoutingForTiling before the engine's windowOpened. All four
+    // stampers stamp the SAME screenId, and an unstamped reader consuming a
+    // stamped verdict only ever sees a SUPERSET (ScreenId-scoped rules can
+    // match; nothing it needs is lost). The hazard is the reverse order: an
+    // unstamped predicate resolving FIRST would seed an empty screenId and
+    // every ScreenId-scoped SnapToZone / RouteToScreen rule would silently
+    // stop firing for that window. Do not reorder these calls.
+    //
+    // shouldFloatByRule and scrollOpenRuleParams opted out of the cache
+    // entirely, because they stamp Mode as well.
     const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestorePosition))) {

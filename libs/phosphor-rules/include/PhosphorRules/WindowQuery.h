@@ -20,8 +20,13 @@ namespace PhosphorRules {
  *
  * Window attributes are `std::optional`: absent when evaluating a windowless
  * context query (zone-assignment resolution). A predicate over an absent
- * window field evaluates `false`, so window-property rules are naturally
- * inert during context resolution — no special-casing in the evaluator.
+ * window field evaluates `false`, so a POSITIVE window-property leaf is
+ * naturally inert during context resolution — no special-casing in the
+ * evaluator. That inertness does NOT extend to negation: `none{}` matches when
+ * no child matched, so a NEGATED leaf over an absent field matches
+ * unconditionally. The context resolvers therefore exclude rules that negate
+ * any Window-sourced field, via MatchExpression::negatesAnyField over
+ * windowSourcedFields().
  *
  * Context attributes are present even for a windowless context query, with one
  * exception: `tiledWindowCount` is optional and absent when the count is

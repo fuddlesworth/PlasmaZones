@@ -29,13 +29,14 @@ void LayoutRegistry::clearAutotileAssignments()
     // Flip every Autotile assignment rule to Snapping (preserving both layout
     // fields) and drop autotile quick-layout slots.
     QList<PWR::Rule> updated = m_ruleStore->ruleSet().rules();
-    // Dedup on the FULL context dims, activity included — see
-    // purgeSnappingLayoutFromAssignments above for the duplicate-emit hazard
-    // this guards against. Dropping the activity (as this did) collapses two
-    // rules differing only in activity into one emit, and resolves the
-    // survivor under m_currentActivity, so an Activity- or Combined-pinned
-    // rule reports the layout of a wider Desktop/Monitor rule instead. The
-    // batch driver was fixed the same way.
+    // `affected` collects the FULL context dims for the debug log; the EMIT
+    // loop below dedupes on (screen, desktop) only. That collapse is
+    // deliberate and safe: the payload resolves under m_currentActivity and
+    // layoutAssigned carries no activity, so two rules differing only in
+    // activity would produce byte-identical signals, each re-running the
+    // daemon's full engine-screen re-derive. (An older shape resolved the
+    // payload under each rule's OWN activity, and there the per-activity
+    // dedupe key was load-bearing — that payload is gone.)
     QSet<ContextDims> affected;
     bool changed = false;
 
@@ -100,10 +101,8 @@ void LayoutRegistry::clearAutotileAssignments()
             // layoutAssigned(…, nullptr): the flip PRESERVED each rule's
             // snapping layout, so observers should receive the layout the
             // context now resolves to, not a null pointer that reads as
-            // "no layout here". The DEDUPE key is the full ContextDims so an
-            // activity-pinned rule gets its own emit rather than collapsing
-            // into a sibling's, but the PAYLOAD resolves under the CURRENT
-            // activity. layoutAssigned carries only (screen, desktop, layout)
+            // "no layout here". The PAYLOAD resolves under the CURRENT
+            // activity — layoutAssigned carries only (screen, desktop, layout)
             // and every consumer reads it as "this screen's layout now" —
             // requestRecalculate recomputes zone geometry from it, the KCM
             // renders it, the drag popup selects it. A rule pinned to a

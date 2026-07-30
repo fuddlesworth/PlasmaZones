@@ -201,8 +201,14 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             // hooks all wired to nothing.
             const auto slotMatch = [&](bool (*carriesSlot)(const PWR::Rule&)) -> const PWR::Rule* {
                 return m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::Rule& rule) {
+                    // negatesAnyField(windowSourcedFields): a positive window
+                    // leaf is inert here by design (absent field, leaf false),
+                    // but a leaf under a `none{}` INVERTS on absence and would
+                    // match every context. Table-derived, so a new window
+                    // field can never silently miss the guard.
                     return carriesSlot(rule)
-                        && !rule.match.referencesAnyField({PWR::Field::ActiveLayout, PWR::Field::Mode});
+                        && !rule.match.referencesAnyField({PWR::Field::ActiveLayout, PWR::Field::Mode})
+                        && !rule.match.negatesAnyField(PWR::windowSourcedFields());
                 });
             };
 
@@ -342,6 +348,14 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
                     if (rule.match.referencesAnyField({PWR::Field::TiledWindowCount})) {
                         return false;
                     }
+                    // Same polarity trap for every WINDOW-sourced field, but
+                    // scoped to NEGATED references only: a positive window
+                    // leaf is inert here by design, while a leaf under a
+                    // `none{}` inverts on absence and the rule would gap
+                    // every context.
+                    if (rule.match.negatesAnyField(PWR::windowSourcedFields())) {
+                        return false;
+                    }
                     for (const PWR::RuleAction& a : rule.actions) {
                         if (registry.slotFor(a) == slotId) {
                             return true;
@@ -443,8 +457,12 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
                 // same negation-polarity reason as
                 // Mode: unstamped here, so a
                 // negated leaf on it matches every
-                // context and locks all of them.
-                if (r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})) {
+                // context and locks all of them. Window-sourced
+                // fields carry the negation-scoped form of the same
+                // guard: a positive window leaf is inert by design,
+                // but `none{AppId == x}` would lock EVERY context.
+                if (r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})
+                    || r.match.negatesAnyField(PWR::windowSourcedFields())) {
                     return false;
                 }
                 for (const PWR::RuleAction& action : r.actions) {
@@ -502,8 +520,12 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
             // the empty placeholder and wrongly force/suppress the default. Use a
             // filtered highestPriorityMatch rather than the unfiltered resolve().
             const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, [](const PWR::Rule& r) {
+                // Plus the negation-scoped window-field guard: a `none{}` over
+                // an unstamped window field matches every context and would
+                // wrongly force/suppress the default everywhere.
                 if (r.match.referencesAnyField(
-                        {PWR::Field::ActiveLayout, PWR::Field::Mode, PWR::Field::TiledWindowCount})) {
+                        {PWR::Field::ActiveLayout, PWR::Field::Mode, PWR::Field::TiledWindowCount})
+                    || r.match.negatesAnyField(PWR::windowSourcedFields())) {
                     return false;
                 }
                 for (const PWR::RuleAction& action : r.actions) {
@@ -573,7 +595,10 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
                 // TiledWindowCount joins Mode: neither is stamped on an overlay
                 // query, and an absent field makes a leaf false, so a negated
                 // leaf on it matches every context and restyles every screen.
-                return !r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount});
+                // Window-sourced fields get the negation-scoped guard for the
+                // same inversion (positive leaves stay inert by design).
+                return !r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})
+                    && !r.match.negatesAnyField(PWR::windowSourcedFields());
             });
 
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayShader))) {
@@ -665,8 +690,11 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [](const PWR::Rule& r) {
         // TiledWindowCount is not stamped here either, and an absent field
         // makes a leaf false, so a negated leaf on it would match every
-        // context. Mode IS stamped above, so only this one needs excluding.
-        return !r.match.referencesAnyField({PWR::Field::TiledWindowCount});
+        // context. Mode IS stamped above, so it stays admitted. Window-sourced
+        // fields carry the negation-scoped guard (positive leaves stay inert
+        // by design; a `none{}` leaf inverts on absence).
+        return !r.match.referencesAnyField({PWR::Field::TiledWindowCount})
+            && !r.match.negatesAnyField(PWR::windowSourcedFields());
     });
 
     ContextTilingParams params;
@@ -747,8 +775,10 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [](const PWR::Rule& r) {
         // TiledWindowCount is not stamped here, and an absent field makes a
         // leaf false, so a negated leaf on it would match every context. Mode
-        // IS stamped above, so only this one needs excluding.
-        return !r.match.referencesAnyField({PWR::Field::TiledWindowCount});
+        // IS stamped above, so it stays admitted. Window-sourced fields carry
+        // the negation-scoped guard, same as the tiling-param twin.
+        return !r.match.referencesAnyField({PWR::Field::TiledWindowCount})
+            && !r.match.negatesAnyField(PWR::windowSourcedFields());
     });
 
     ContextScrollingParams params;

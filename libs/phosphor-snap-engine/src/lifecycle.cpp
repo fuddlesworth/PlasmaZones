@@ -647,6 +647,12 @@ bool SnapEngine::isEnabled() const noexcept
 
 std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(const QString& windowId) const
 {
+    return capturePlacementAtDesktop(windowId, 0);
+}
+
+std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacementAtDesktop(const QString& windowId,
+                                                                                     int gateDesktop) const
+{
     using PhosphorEngine::WindowPlacement;
     if (windowId.isEmpty() || !m_globals) {
         return std::nullopt;
@@ -672,7 +678,16 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
         // float/zone restore on return to snapping would have nothing to
         // read. Once the tiling engine claims the screen the resolver
         // reports the tiling mode and the frozen-memory refusal applies.
-        if (m_liveModeResolver) {
+        if (gateDesktop >= 1 && m_layoutManager) {
+            // Explicit-desktop gate (the cross-desktop handoff): the question
+            // is whether the DESTINATION context is snapping, which the live
+            // resolver cannot answer — its signature is screen-only, so it
+            // reports the visible desktop's mode.
+            if (m_layoutManager->modeForScreen(effScreen, gateDesktop, currentActivity())
+                != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+                return std::nullopt;
+            }
+        } else if (m_liveModeResolver) {
             if (m_liveModeResolver(effScreen) != PhosphorZones::AssignmentEntry::Mode::Snapping) {
                 return std::nullopt;
             }
@@ -689,7 +704,11 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
     p.appId = m_windowTracker ? m_windowTracker->currentAppIdFor(windowId) : QString();
     // Bind the captured desktop to the window's OWN screen, not the global current
     // (Plasma 6.7 per-output virtual desktops, #648), so a float-back restores to
-    // the right desktop on a screen that isn't the active one.
+    // the right desktop on a screen that isn't the active one. This is only the
+    // FALLBACK: the branches below prefer the store's RECORDED desktop, because
+    // the screen's current desktop is not the window's — a window snapped or
+    // floated on desktop 2 must not have its record rewritten to desktop 1 by a
+    // refresh capture that happens to run after the user switched away.
     p.virtualDesktop = currentVirtualDesktopForScreen(effScreen);
     p.activity = currentActivity();
 
@@ -707,10 +726,19 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
         slot.state = WindowPlacement::stateFloating();
         slot.zoneIds = state ? state->preFloatZones(windowId) : QStringList{};
         p.screenId = screenForTrackedWindow(windowId);
+        // The RECORDED desktop wins over the screen's current one — a plain
+        // setFloating (globals store) records none, hence the >= 1 guard.
+        if (const int recorded = state ? state->desktopForWindow(windowId) : 0; recorded >= 1) {
+            p.virtualDesktop = recorded;
+        }
     } else if (state && state->isWindowSnapped(windowId)) {
         slot.state = WindowPlacement::stateSnapped();
         slot.zoneIds = state->zonesForWindow(windowId);
         p.screenId = state->screenForWindow(windowId);
+        // Same recorded-desktop preference as the floating branch.
+        if (const int recorded = state->desktopForWindow(windowId); recorded >= 1) {
+            p.virtualDesktop = recorded;
+        }
     } else {
         // Snapping has only two states — snapped (above) or floated. An unmanaged
         // window on a snap-mode screen is FLOATED (the retired `free` state). The

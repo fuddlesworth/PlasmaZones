@@ -598,18 +598,27 @@ SettingsFlickable {
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {
                     stateView.localMode = idx;
-                    // A mode toggle is an explicit re-pin FOR THE ENTERED
-                    // MODE only: its earlier "Default" pick no longer
-                    // applies, so clear that flag and stage the resolved
-                    // value. The SIBLING mode's cleared flag survives — a
-                    // pending "Default" on the mode being left is a
+                    // Entering a mode drops that mode's pending "Default"
+                    // pick (the flag, not the combo's own pick — a Default
+                    // chosen IN the combo also set touched, which survives
+                    // and still carries the clear through carrySibling's
+                    // touched arm). The SIBLING mode's cleared flag survives:
+                    // a pending Default on the mode being left is a
                     // deliberate pick the toggle must not silently re-pin.
+                    //
+                    // touched is deliberately NOT set here. A mode toggle is
+                    // not a slot pick, and carrySibling's touched arm returns
+                    // localId — which is pre-filled from the RESOLVED value —
+                    // so setting it made every toggle stage the cascade
+                    // default as an explicit assignment. Left untouched, the
+                    // slot falls to the explicitFlag arm: it carries only
+                    // what the daemon marked explicit, so a pure
+                    // Snapping-Scrolling-Snapping round trip leaves a
+                    // default-following screen following the default.
                     if (idx === 0) {
                         stateView.localLayoutCleared = false;
-                        stateView.localLayoutTouched = true;
                     } else if (idx === 1) {
                         stateView.localAlgorithmCleared = false;
-                        stateView.localAlgorithmTouched = true;
                     }
                     root._stageCurrentState();
                 }

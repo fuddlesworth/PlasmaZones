@@ -99,6 +99,20 @@ public:
     bool isWindowSnapped(const QString& windowId) const;
 
     QString screenForWindow(const QString& windowId) const;
+
+    /// Record screen + desktop residence WITHOUT a zone assignment and without
+    /// touching the floating set.
+    ///
+    /// This is how a cross-engine handoff adopts a window as a plain FREE
+    /// window (snapping's default for unmanaged windows): the arrival carries
+    /// no resolvable zone and is not floating, but the adoption must still be
+    /// VISIBLE — guardedHandoff verifies with isWindowTracked() after
+    /// handoffReceive returns, and with no zone and no float only the
+    /// screen-assignment arm can answer. Residence-only is an established
+    /// state in this model (unsnapForFloat preserves it via
+    /// clearZoneAssignment's preserve flag) and handoffRelease clears it
+    /// symmetrically through clearScreenAndDesktop.
+    void recordResidence(const QString& windowId, const QString& screenId, int virtualDesktop);
     int desktopForWindow(const QString& windowId) const;
 
     /// Re-stamp a snapped window's virtual-desktop membership to @p virtualDesktop,

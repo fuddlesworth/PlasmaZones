@@ -567,6 +567,21 @@ private:
         /// Carried for serialization fidelity only — the restore paths do
         /// not re-apply it (the effect re-reports live minimize state).
         bool minimized = false;
+        /// True while THIS tile was staged from the persisted blob and has
+        /// not been claimed. Per tile, not per entry: a key co-tenanted by a
+        /// returning app and a dead one must age the dead tile out while the
+        /// returning one keeps claiming.
+        bool stagedFromPersistence = false;
+        /// Consecutive logins THIS tile was staged without ever being
+        /// claimed. Incremented at serialize while stagedFromPersistence
+        /// holds; a claim zeroes it; restoreStripState drops a tile that has
+        /// gone kMaxUnclaimedSessions logins unclaimed. The aging exists
+        /// because pruneStaleWindows fires exactly ONCE per session (at
+        /// bring-up, while the ENTRY is still sweep-exempt), so no sweep can
+        /// ever reach a persisted tile whose app never relaunches — without
+        /// the lease it would be re-staged forever and eventually hand an
+        /// unrelated same-app window a long-dead slot.
+        int unclaimedSessions = 0;
     };
     struct StashedColumn
     {
@@ -597,23 +612,15 @@ private:
         ///
         /// Cleared on the first successful consume, at which point the entry
         /// is anchored in THIS session's id space and the sweep is meaningful.
+        ///
+        /// This exemption is not the whole story: pruneStaleWindows fires
+        /// exactly once per session, at bring-up, while the entry is still
+        /// exempt — so no sweep ever reaches a persisted tile whose app
+        /// never relaunches. That is handled by the PER-TILE
+        /// StashedTile::unclaimedSessions lease, which ages each unclaimed
+        /// tile out individually so a returning co-tenant cannot keep a dead
+        /// sibling's tile alive forever.
         bool stagedFromPersistence = false;
-        /// How many consecutive logins have staged this entry without a
-        /// SINGLE tile ever being claimed.
-        ///
-        /// The exemption above cannot be the whole story, because
-        /// pruneStaleWindows fires exactly ONCE per daemon session (the effect
-        /// sends it at bring-up and there is no periodic sweep). An entry
-        /// whose app never relaunches is therefore exempt at the only moment
-        /// the sweep runs, stays whole, is written back out, and is re-staged
-        /// and re-exempted at the next login — immortal, and eventually able
-        /// to hand an unrelated same-app window a long-dead tile's slot.
-        ///
-        /// So the exemption AGES OUT: serializeStripState writes this
-        /// incremented for an entry that is still unclaimed, and
-        /// restoreStripState refuses to stage one that has gone unclaimed for
-        /// kMaxUnclaimedSessions logins. A single claim resets it to zero.
-        int unclaimedSessions = 0;
 
         bool isEmpty() const
         {

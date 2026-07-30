@@ -184,6 +184,12 @@ QJsonObject ScrollEngine::serializeStripState() const
                 t.insert(kWindowId(), tile.windowId);
                 t.insert(kHeight(), heightToJson(tile.height));
                 t.insert(kMinimized(), tile.minimized);
+                // PER-TILE lease. A tile still flagged staged-from-persistence
+                // has not been claimed this session, so it ages by one; a
+                // claimed tile (flag cleared, count zeroed) and a fresh
+                // mode-exit stash both write 0. Per tile so a returning
+                // co-tenant app cannot keep a dead sibling's tile alive.
+                t.insert(kUnclaimedSessions(), tile.stagedFromPersistence ? tile.unclaimedSessions + 1 : 0);
                 tiles.append(t);
             }
             QJsonObject c;
@@ -196,10 +202,6 @@ QJsonObject ScrollEngine::serializeStripState() const
         obj.insert(kColumns(), columns);
         obj.insert(kFocused(), stash.focusedWindowId);
         obj.insert(kViewAnchor(), stash.viewAnchor);
-        // An entry still flagged staged-from-persistence has had NO tile
-        // claimed this session, so it ages by one. Any claim clears the flag,
-        // which resets the count to 0 and gives the entry a fresh lease.
-        obj.insert(kUnclaimedSessions(), stash.stagedFromPersistence ? stash.unclaimedSessions + 1 : 0);
         return obj;
     };
     // Every window id that is LIVE on some strip right now. Writing the stash
@@ -276,20 +278,6 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
         StashedStrip stash;
         stash.focusedWindowId = obj.value(kFocused()).toString();
         stash.viewAnchor = obj.value(kViewAnchor()).toInt(0);
-        // Absent key reads 0, so a blob written before this field existed gets
-        // a full fresh lease rather than being dropped on sight.
-        stash.unclaimedSessions = obj.value(kUnclaimedSessions()).toInt(0);
-        if (stash.unclaimedSessions >= kMaxUnclaimedSessions) {
-            // Staged this many logins with nothing ever claiming a tile. The
-            // app is not coming back, and the sweep cannot reach the entry
-            // (pruneStaleWindows fires once per session, at bring-up, while
-            // the entry is still exempt), so aging it out here is the only
-            // thing that stops it living forever and eventually handing an
-            // unrelated same-app window a long-dead tile's slot.
-            qCInfo(lcScrollEngine) << "restoreStripState: dropping strip snapshot for" << it.key() << "after"
-                                   << stash.unclaimedSessions << "sessions with no claimed tile";
-            continue;
-        }
         const QJsonArray columns = obj.value(kColumns()).toArray();
         for (const QJsonValue& colVal : columns) {
             if (!colVal.isObject()) {
@@ -311,6 +299,24 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
                 tile.windowId = tileObj.value(kWindowId()).toString();
                 tile.height = heightFromJson(tileObj.value(kHeight()).toObject());
                 tile.minimized = tileObj.value(kMinimized()).toBool(false);
+                // PER-TILE lease, bounded at the system boundary like every
+                // other numeric in this file (persisted config is
+                // user-writable). Absent key reads 0, so an older blob gets a
+                // full fresh lease. A tile at the cap has gone that many
+                // logins without any claim; its app is not coming back, and
+                // the aliveness sweep can never reach it (pruneStaleWindows
+                // fires once per session, at bring-up, while the entry is
+                // still sweep-exempt), so dropping it here is what stops it
+                // living forever and eventually handing an unrelated same-app
+                // window a long-dead slot. Per tile so a returning co-tenant
+                // in the same key cannot renew a dead sibling's lease.
+                tile.unclaimedSessions = qBound(0, tileObj.value(kUnclaimedSessions()).toInt(0), kMaxUnclaimedSessions);
+                if (tile.unclaimedSessions >= kMaxUnclaimedSessions) {
+                    qCInfo(lcScrollEngine) << "restoreStripState: dropping stashed tile" << tile.windowId << "for"
+                                           << it.key() << "after" << tile.unclaimedSessions << "sessions with no claim";
+                    continue;
+                }
+                tile.stagedFromPersistence = true;
                 if (!tile.windowId.isEmpty() && !claimedWindowIds.contains(tile.windowId)) {
                     claimedWindowIds.insert(tile.windowId);
                     col.tiles.append(tile);

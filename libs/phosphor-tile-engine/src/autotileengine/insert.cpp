@@ -249,7 +249,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     const TilingStateKey currentKey = currentKeyForScreen(screenId);
     if (!inserted && hasStableAppId && m_windowTracker) {
         using PhosphorEngine::WindowPlacement;
-        auto rec = m_windowTracker->placementStore().take(windowId, appId, [&](const WindowPlacement& p) {
+        const auto accept = [&](const WindowPlacement& p) {
             const PhosphorEngine::EngineSlot s = p.slotFor(engineId());
             if (s.state == WindowPlacement::stateFloating()) {
                 // A geometry-less floating record (the order-only slot the
@@ -272,7 +272,21 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     && p.activity == currentKey.activity;
             }
             return false;
-        });
+        };
+        // A REJECTED exact record is FINAL — no FIFO fallback past it. The
+        // fallback exists for a cross-session reopen, whose fresh uuid by
+        // definition has no exact record. A LIVE window whose own record was
+        // rejected on context (tiled on another desktop, say) is not that
+        // case: falling through would consume a SIBLING's record and the
+        // re-bind below would re-record it under this window's id, where the
+        // store's merge overwrites this window's own other-context slot — its
+        // remembered desktop-2 tile dies because it happened to reopen on
+        // desktop 1.
+        std::optional<WindowPlacement> rec;
+        const auto own = m_windowTracker->placementStore().peekExact(windowId);
+        if (!own || accept(*own)) {
+            rec = m_windowTracker->placementStore().take(windowId, appId, accept);
+        }
         if (rec) {
             // Re-record bound to the LIVE windowId so the autotile slot + per-screen
             // free/float geometry survive the reopen. KWin assigns a NEW uuid at
