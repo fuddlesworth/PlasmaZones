@@ -336,6 +336,88 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowSnapped(windowId));
     }
 
+    void testOnLayoutChanged_nonSnappingScreenKeepsAssignments()
+    {
+        // onLayoutChanged prunes assignments whose zones no longer exist in the
+        // screen's effective layout. A screen owned by a NON-snapping engine
+        // must be skipped entirely: neither autotile nor scrolling has a layout
+        // entity of its own, so resolveLayoutForScreen would answer some
+        // unrelated cascade layout and prune every assignment the screen is
+        // holding for its eventual return to snapping.
+        //
+        // Both arms matter and only the control was covered before: every
+        // existing onLayoutChanged test uses a snapping screen, so deleting
+        // either half of the `isAutotile(id) || isScrolling(id)` predicate
+        // failed nothing.
+        const QString autotileScreen = QStringLiteral("DP-1");
+        const QString scrollingScreen = QStringLiteral("HDMI-1");
+        const QString snappingScreen = QStringLiteral("DP-2");
+        const QString autotileWindow = QStringLiteral("app|aaaa");
+        const QString scrollingWindow = QStringLiteral("app|bbbb");
+        const QString snappingWindow = QStringLiteral("app|cccc");
+        const int desktop = m_layoutManager->currentVirtualDesktop();
+
+        m_service->assignWindowToZone(autotileWindow, m_zoneIds[0], autotileScreen, 0);
+        m_service->assignWindowToZone(scrollingWindow, m_zoneIds[0], scrollingScreen, 0);
+        m_service->assignWindowToZone(snappingWindow, m_zoneIds[0], snappingScreen, 0);
+        QVERIFY(m_service->isWindowSnapped(autotileWindow));
+        QVERIFY(m_service->isWindowSnapped(scrollingWindow));
+        QVERIFY(m_service->isWindowSnapped(snappingWindow));
+
+        // A layout whose zones do NOT include m_zoneIds[0], so every screen
+        // resolving it has a genuinely stale assignment to prune.
+        PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(newLayout);
+        m_layoutManager->setActiveLayout(newLayout);
+        // EVERY screen must resolve newLayout, including the two about to become
+        // non-snapping. Without this the cascade answered the fixture's original
+        // 3-zone layout for them, m_zoneIds[0] still existed there, and the
+        // assignment survived whether the non-snapping skip ran or not — the
+        // test looked green while pinning nothing. These assignments must land
+        // BEFORE the mode writes below, because assignLayout resets the mode.
+        m_layoutManager->assignLayout(snappingScreen, desktop, QString(), newLayout);
+        m_layoutManager->assignLayout(autotileScreen, desktop, QString(), newLayout);
+        m_layoutManager->assignLayout(scrollingScreen, desktop, QString(), newLayout);
+
+        // Now hand the first two screens to the non-snapping engines, keeping
+        // newLayout in the snappingLayout slot — the lossless shape the daemon
+        // writes on a mode flip.
+        PhosphorZones::AssignmentEntry autotileEntry;
+        autotileEntry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotileEntry.tilingAlgorithm = QStringLiteral("bsp");
+        autotileEntry.snappingLayout = newLayout->id().toString();
+        m_layoutManager->setAssignmentEntryDirect(autotileScreen, desktop, QString(), autotileEntry);
+
+        PhosphorZones::AssignmentEntry scrollingEntry;
+        scrollingEntry.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        scrollingEntry.snappingLayout = newLayout->id().toString();
+        m_layoutManager->setAssignmentEntryDirect(scrollingScreen, desktop, QString(), scrollingEntry);
+
+        QCOMPARE(m_layoutManager->modeForScreen(autotileScreen, desktop), PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(m_layoutManager->modeForScreen(scrollingScreen, desktop), PhosphorZones::AssignmentEntry::Scrolling);
+        // The sentinel ids are what the predicate under test inspects.
+        QVERIFY(
+            PhosphorLayout::LayoutId::isScrolling(m_layoutManager->assignmentIdForScreen(scrollingScreen, desktop)));
+
+        // Retire the layout m_zoneIds came from. This is what makes the test
+        // DISCRIMINATE rather than merely pass: for a non-snapping entry the
+        // cascade ignores the snappingLayout slot and falls back to an unrelated
+        // layout (exactly the hazard the production comment describes), and while
+        // that fallback was the fixture's own 3-zone layout the zone still
+        // existed, so the assignment survived with or without the skip. With it
+        // gone, any screen that actually reaches resolveLayoutForScreen prunes.
+        m_layoutManager->removeLayout(m_testLayout);
+        m_testLayout = nullptr;
+
+        m_service->onLayoutChanged();
+
+        QVERIFY2(m_service->isWindowSnapped(autotileWindow), "an autotile screen's assignments must survive");
+        QVERIFY2(m_service->isWindowSnapped(scrollingWindow), "a scrolling screen's assignments must survive");
+        // Control: the snapping screen still prunes, so the skip above is a
+        // genuine mode discrimination rather than onLayoutChanged doing nothing.
+        QVERIFY2(!m_service->isWindowSnapped(snappingWindow), "a snapping screen's stale assignment must be pruned");
+    }
+
     void testOnLayoutChanged_resnapBufferPopulated()
     {
         QString window1 = QStringLiteral("app1|11111");

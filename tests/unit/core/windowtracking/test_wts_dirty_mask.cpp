@@ -292,6 +292,49 @@ private Q_SLOTS:
         // bits are set — the zone bit is best-effort.
     }
 
+    void testPlacementStoreMutators_markWindowPlacementsDirty()
+    {
+        // The placement store is the single per-window restore state, and
+        // DirtyWindowPlacements is the ONLY bit gating its save block. Before
+        // this test the string "DirtyWindowPlacements" appeared nowhere in
+        // tests/, so deleting any one of these four markDirty calls left the
+        // mutation sitting in memory and silently dropped at saveState's
+        // DirtyNone early return — the same defect
+        // testPruneStaleAssignments_marksPersistedFieldsDirty pins for zone
+        // assignments.
+        const QString windowId = QStringLiteral("app|abc");
+        const QString screenId = QStringLiteral("DP-1");
+        const QRect geometry(10, 20, 300, 400);
+        const auto placementsBit = PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements;
+
+        // 1. recordFreeGeometry
+        m_service->clearDirty();
+        m_service->recordFreeGeometry(windowId, screenId, geometry, /*overwrite=*/true);
+        QVERIFY2((m_service->peekDirty() & placementsBit) != 0, "recordFreeGeometry must mark DirtyWindowPlacements");
+
+        // 2. clearFreeGeometry(windowId, screenId) — the per-screen overload.
+        //    Seeded first so the clear has something to remove; otherwise a
+        //    no-op clear could pass without touching the mask.
+        m_service->recordFreeGeometry(windowId, screenId, geometry, /*overwrite=*/true);
+        m_service->clearDirty();
+        m_service->clearFreeGeometry(windowId, screenId);
+        QVERIFY2((m_service->peekDirty() & placementsBit) != 0,
+                 "clearFreeGeometry(windowId, screenId) must mark DirtyWindowPlacements");
+
+        // 3. clearFreeGeometry(windowId) — the all-screens overload.
+        m_service->recordFreeGeometry(windowId, screenId, geometry, /*overwrite=*/true);
+        m_service->clearDirty();
+        m_service->clearFreeGeometry(windowId);
+        QVERIFY2((m_service->peekDirty() & placementsBit) != 0,
+                 "clearFreeGeometry(windowId) must mark DirtyWindowPlacements");
+
+        // 4. recordFloatingClose — the authoritative close capture, which also
+        //    re-homes the record's managed screen.
+        m_service->clearDirty();
+        m_service->recordFloatingClose(windowId, QStringLiteral("HDMI-2"), geometry);
+        QVERIFY2((m_service->peekDirty() & placementsBit) != 0, "recordFloatingClose must mark DirtyWindowPlacements");
+    }
+
     void testMarkDirty_All_setsEveryBit()
     {
         // Phase 3 safety net: the DirtyAll constant covers every declared
