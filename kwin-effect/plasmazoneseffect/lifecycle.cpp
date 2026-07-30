@@ -29,6 +29,7 @@
 #include <QTimer>
 #include <QVarLengthArray>
 
+#include "input_filter.h"
 #include "tilinghandler/tilinghandler.h"
 #include "compositor/compositorclock.h"
 #include "handlers/dragtracker.h"

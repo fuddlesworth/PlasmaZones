@@ -121,6 +121,7 @@ inline constexpr int kSpuriousMinimizePairMs = 75;
 // Forward declarations for helper classes
 class TilingHandler;
 class SnapHandler;
+class ScrollOverhangInputFilter;
 class KWinCompositorBridge;
 class NavigationHandler;
 class ScreenChangeHandler;
@@ -685,6 +686,18 @@ private:
     /// or not-yet-resolved id. The counterpart to outputScreenId, for the
     /// paths that hold an id and need the output's geometry.
     KWin::LogicalOutput* outputForScreenId(const QString& screenId) const;
+    /**
+     * @brief The screen rect a scrolling-strip window's rendering AND input
+     *        are confined to, or an invalid rect when no confinement applies.
+     *
+     * Valid only for a scroll-managed, non-floating window that is not in a
+     * user move/resize: the managed output's geometry. paintWindow skips the
+     * window in paint passes whose viewport misses this rect, and the
+     * overhang input filter treats hits outside it as landing on the
+     * clipped-away (invisible) overhang. One predicate, two consumers — keep
+     * them in lockstep.
+     */
+    QRect scrollClipGeometryFor(KWin::EffectWindow* w);
     TilingHandler* tilingHandler() const
     {
         return m_tilingHandler.get();
@@ -807,6 +820,7 @@ private:
     // Friend classes for helpers
     friend class TilingHandler;
     friend class SnapHandler;
+    friend class ScrollOverhangInputFilter;
     friend class NavigationHandler;
     friend class ScreenChangeHandler;
     friend class SnapAssistHandler;
@@ -2115,6 +2129,11 @@ private:
     // Per-window tracked screen ID for cross-screen move detection.
     // Replaces the per-window `new QString` heap allocation that was leaked.
     QHash<KWin::EffectWindow*, QString> m_trackedScreenPerWindow;
+
+    // Blocks pointer/touch input on strip straddlers' clipped-away overhangs
+    // (see input_filter.h). Installed once daemon subscriptions are wired;
+    // destruction uninstalls it from InputRedirection.
+    std::unique_ptr<ScrollOverhangInputFilter> m_overhangInputFilter;
 
     // Windows withheld from compositing between windowAdded and the frame
     // their snap-restore / autotile reposition lands — see RestoreSuppression.

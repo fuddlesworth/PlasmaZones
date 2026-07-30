@@ -568,6 +568,26 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     OffscreenEffect::prePaintWindow(view, w, data);
 }
 
+QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w)
+{
+    // User moves/resizes are exempt — a window dragged out of the strip must
+    // stay visible (and interactive) while it crosses outputs — and so are
+    // engine-floating windows, which are not strip columns.
+    if (!w || w->isDeleted() || w->isUserMove() || w->isUserResize()) {
+        return QRect();
+    }
+    const QString trackedScreen = m_trackedScreenPerWindow.value(w);
+    if (trackedScreen.isEmpty() || !m_tilingHandler || !m_tilingHandler->isScrollingScreen(trackedScreen)
+        || !m_navigationHandler || m_navigationHandler->isWindowFloating(getWindowId(w))) {
+        return QRect();
+    }
+    const KWin::LogicalOutput* managedOutput = outputForScreenId(trackedScreen);
+    if (!managedOutput) {
+        return QRect();
+    }
+    return managedOutput->geometry();
+}
+
 void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                                     KWin::WindowPaintData& data)
@@ -580,20 +600,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // own output the render target already scissors at the edge; the only
     // place the overhang becomes visible is the ADJACENT output's paint
     // pass, so skip the window entirely in passes whose viewport doesn't
-    // touch its managed screen. User moves/resizes are exempt — a window
-    // dragged out of the strip must stay visible while it crosses outputs —
-    // and so are engine-floating windows (they are not strip columns).
-    if (w && !w->isDeleted() && !w->isUserMove() && !w->isUserResize()) {
-        const QString trackedScreen = m_trackedScreenPerWindow.value(w);
-        if (!trackedScreen.isEmpty() && m_tilingHandler && m_tilingHandler->isScrollingScreen(trackedScreen)
-            && m_navigationHandler && !m_navigationHandler->isWindowFloating(getWindowId(w))) {
-            if (const KWin::LogicalOutput* managedOutput = outputForScreenId(trackedScreen)) {
-                const QRect managedGeom = managedOutput->geometry();
-                if (managedGeom.isValid() && !viewport.renderRect().intersects(QRectF(managedGeom))) {
-                    return;
-                }
-            }
-        }
+    // touch its managed screen. The predicate lives in scrollClipGeometryFor
+    // and is shared with the overhang input filter, which keeps the same
+    // invisible region from receiving pointer/touch input.
+    if (const QRect clip = scrollClipGeometryFor(w);
+        clip.isValid() && !viewport.renderRect().intersects(QRectF(clip))) {
+        return;
     }
 
     // Read the cached per-frame clock pinned by prePaintScreen. Multiple

@@ -75,6 +75,8 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/drag_end.cpp
     plasmazoneseffect/mesh_sim.cpp
     plasmazoneseffect/mesh_sim.h
+    plasmazoneseffect/input_filter.cpp
+    plasmazoneseffect/input_filter.h
     plasmazoneseffect/paint_pipeline.cpp
     plasmazoneseffect/paint_shader_window.cpp
     plasmazoneseffect/paint_capture.cpp

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "input_filter.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -318,6 +319,13 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     auto* initialScreen = KWin::effects->activeScreen();
     if (initialScreen) {
         m_lastCursorOutput = initialScreen->name();
+    }
+
+    // Overhang input filter: keeps clicks off strip straddlers' clipped-away
+    // overhangs (see input_filter.h). Guarded so a re-entry into this wiring
+    // can never double-install; the unique_ptr uninstalls on effect teardown.
+    if (!m_overhangInputFilter) {
+        m_overhangInputFilter = std::make_unique<ScrollOverhangInputFilter>(this);
     }
 
     qCInfo(lcEffect) << "initialized: C++ effect with D-Bus support and mouseChanged connection";
