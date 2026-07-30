@@ -423,7 +423,19 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     // all, silently. Recover it the way receiveVerified would have: back into
     // the source engine on the source screen, at its original slot (which is
     // the one the partner was going to take).
-    if (focusedAdopted && !focusedStillOnTarget) {
+    // Gated on !partnerAdopted too. The landing slot used below is F's ORIGINAL
+    // source slot, which is exactly where the partner goes when ITS receive
+    // SUCCEEDS — so re-homing there while the partner holds it would displace
+    // one of the two windows, and would also falsify the partner's own
+    // move-marker gate below. The eviction this recovers from is by definition
+    // caused by the partner's RE-HOME, i.e. its receive was refused. F leaving
+    // the target while the partner WAS adopted is a different fault; log it
+    // rather than guessing.
+    if (focusedAdopted && !focusedStillOnTarget && partnerAdopted) {
+        qCWarning(lcDbusWindow) << "cross-mode swap:" << windowId << "left" << targetEngine->engineId()
+                                << "but the partner was adopted, so its source slot is taken - not re-homing";
+    }
+    if (focusedAdopted && !focusedStillOnTarget && !partnerAdopted) {
         qCWarning(lcDbusWindow) << "cross-mode swap:" << windowId << "was adopted by" << targetEngine->engineId()
                                 << "then evicted by the partner's re-home - re-homing into" << sourceEngine->engineId();
         PhosphorEngine::IPlacementEngine::HandoffContext back;

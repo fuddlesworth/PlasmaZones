@@ -81,9 +81,21 @@ void LayoutRegistry::clearAutotileAssignments()
     if (changed) {
         m_ruleStore->setAllRules(updated);
         writeQuickLayouts();
+        // The EMIT dedupes on (screen, desktop) only. The payload resolves
+        // under m_currentActivity and layoutAssigned carries no activity, so
+        // two rules differing only in activity would produce two BYTE-IDENTICAL
+        // signals — and each one re-runs updateEngineScreens, updateLayoutFilter
+        // and diffActiveAssignments in the daemon. `affected` keeps the full
+        // dims for the debug log's sake.
+        QSet<QPair<QString, int>> emitted;
         for (const ContextDims& dims : std::as_const(affected)) {
             qCDebug(lcZonesLib) << "clearAutotileAssignments: flipped to Snapping for screen=" << dims.screenId
                                 << "desktop=" << dims.virtualDesktop << "activity=" << dims.activity;
+            const auto emitKey = qMakePair(dims.screenId, dims.virtualDesktop);
+            if (emitted.contains(emitKey)) {
+                continue;
+            }
+            emitted.insert(emitKey);
             // Route through emitLayoutAssigned rather than a bare
             // layoutAssigned(…, nullptr): the flip PRESERVED each rule's
             // snapping layout, so observers should receive the layout the
@@ -155,6 +167,13 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         // therefore destroys a mixed rule's extra actions even when the purity
         // gate deliberately kept the rule. Carried back in at rebuild time.
         QList<PWR::RuleAction> preservedActions;
+        // The user-facing identity, preserved for the same reason
+        // upsertAssignmentRule preserves it: makeAssignmentRule is handed an
+        // empty name and stamps managed=false, so a batch "apply all" would
+        // blank the name the user gave a context rule in the Rules editor and
+        // clear the managed flag on a built-in, making it user-deletable.
+        QString name;
+        bool managed = false;
     };
     QHash<KeyT, OldEntrySnapshot> oldEntries;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
@@ -171,7 +190,7 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
             carryOverNonAssignmentActions(carrier, *existing);
             oldEntries.insert(it.key(),
                               {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority,
-                               existing->id, carrier.actions});
+                               existing->id, carrier.actions, existing->name, existing->managed});
         }
     }
 
@@ -277,8 +296,11 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         // mixed rule, but sparing it is not enough on its own: the rebuild
         // carries the same deterministic id, so the kept-index write below
         // would overwrite the spared rule wholesale and strip exactly the
-        // actions the gate meant to protect.
+        // actions the gate meant to protect. The user-facing identity rides
+        // across for the same reason upsertAssignmentRule preserves it.
         rebuilt.actions += oldSnapshot.preservedActions;
+        rebuilt.name = oldSnapshot.name;
+        rebuilt.managed = oldSnapshot.managed;
         if (const auto keptIt = keptIndexById.constFind(rebuilt.id); keptIt != keptIndexById.cend()) {
             kept[*keptIt] = rebuilt;
         } else {
@@ -304,13 +326,22 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     // Union in the erased-only contexts; the set dedupes any that a rebuild
     // already covers.
     emitContexts.unite(droppedContexts);
+    // The PAYLOAD resolves under the CURRENT activity: layoutAssigned carries
+    // no activity of its own and every consumer reads it as "this screen's
+    // layout now", so resolving under a rule's non-current activity would hand
+    // them a layout that is not on screen. Because the payload is therefore
+    // activity-INDEPENDENT, the emit also dedupes on (screen, desktop) only —
+    // otherwise N rules differing solely in activity fan out N byte-identical
+    // signals, each re-running the daemon's full engine-screen re-derive.
+    QSet<QPair<QString, int>> emitted;
     for (const ContextDims& ctx : std::as_const(emitContexts)) {
-        // The DEDUPE key is the full ContextDims, so two rules differing only
-        // in activity each get an emit instead of collapsing into one. The
-        // PAYLOAD, though, resolves under the CURRENT activity: layoutAssigned
-        // carries no activity of its own and every consumer reads it as "this
-        // screen's layout now", so resolving under a rule's non-current
-        // activity would hand them a layout that is not on screen.
+        // ctx.virtualDesktop is already the RESOLVED emit desktop (the #648
+        // per-output sentinel was folded in when emitContexts was built).
+        const auto emitKey = qMakePair(ctx.screenId, ctx.virtualDesktop);
+        if (emitted.contains(emitKey)) {
+            continue;
+        }
+        emitted.insert(emitKey);
         emitLayoutAssigned(ctx.screenId, ctx.virtualDesktop,
                            assignmentIdForScreen(ctx.screenId, ctx.virtualDesktop, m_currentActivity));
     }
@@ -384,6 +415,13 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         // therefore destroys a mixed rule's extra actions even when the purity
         // gate deliberately kept the rule. Carried back in at rebuild time.
         QList<PWR::RuleAction> preservedActions;
+        // The user-facing identity, preserved for the same reason
+        // upsertAssignmentRule preserves it: makeAssignmentRule is handed an
+        // empty name and stamps managed=false, so a batch "apply all" would
+        // blank the name the user gave a context rule in the Rules editor and
+        // clear the managed flag on a built-in, making it user-deletable.
+        QString name;
+        bool managed = false;
     };
     QHash<CombinedAssignmentKey, OldEntrySnapshot> oldEntries;
     // Validity gate up front: a malformed key (zero desktop or empty
@@ -406,7 +444,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
             carryOverNonAssignmentActions(carrier, *existing);
             oldEntries.insert(key,
                               {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority,
-                               existing->id, carrier.actions});
+                               existing->id, carrier.actions, existing->name, existing->managed});
         }
     }
 
@@ -475,6 +513,8 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         }
         // Merge, never replace — identical reasoning to applyBatchAssignments.
         rebuilt.actions += oldSnapshot.preservedActions;
+        rebuilt.name = oldSnapshot.name;
+        rebuilt.managed = oldSnapshot.managed;
         if (const auto keptIt = keptIndexById.constFind(rebuilt.id); keptIt != keptIndexById.cend()) {
             kept[*keptIt] = rebuilt;
         } else {
@@ -494,7 +534,17 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     // Combined rule pinned to a non-current activity must not fan its layout
     // out as though it were on screen.
     emittedKeys.unite(droppedKeys);
+    // Deduped on (screen, desktop): the payload is activity-independent, so
+    // several Combined keys on one screen+desktop would otherwise fan out
+    // byte-identical signals, each re-running the daemon's engine-screen
+    // re-derive. Same reasoning as applyBatchAssignments.
+    QSet<QPair<QString, int>> emitted;
     for (const CombinedAssignmentKey& emitKey : std::as_const(emittedKeys)) {
+        const auto dedupKey = qMakePair(emitKey.screenId, emitKey.virtualDesktop);
+        if (emitted.contains(dedupKey)) {
+            continue;
+        }
+        emitted.insert(dedupKey);
         emitLayoutAssigned(emitKey.screenId, emitKey.virtualDesktop,
                            assignmentIdForScreen(emitKey.screenId, emitKey.virtualDesktop, m_currentActivity));
     }

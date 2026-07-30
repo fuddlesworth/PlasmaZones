@@ -794,6 +794,11 @@ PhosphorUi.SettingsAppWindow {
         id: flatTitleLabelsObject
 
         readonly property string windowAppearance: i18n("Appearance")
+        // Scrolling's leaf is registered as "Behavior", which is right inside
+        // the section but wrong on the flat rail, where it sits beside
+        // "Snapping" and "Tiling" and must name the same kind of thing. The
+        // tree walk keeps the parent's title, so only the flat walk needs this.
+        readonly property string scrolling: i18nc("tiling mode name", "Scrolling")
     }
 
     // Constant, so declarative alongside its siblings rather than an
@@ -801,7 +806,8 @@ PhosphorUi.SettingsAppWindow {
     sidebar.searchEnabled: false
     sidebar.flattenTree: !settingsController.advancedMode
     sidebar.flatTitleOverrides: ({
-            "window-appearance": flatTitleLabelsObject.windowAppearance
+            "window-appearance": flatTitleLabelsObject.windowAppearance,
+            "scrolling-behavior": flatTitleLabelsObject.scrolling
         })
 
     // Simple/advanced mode toggle, pinned at the bottom of the sidebar — it

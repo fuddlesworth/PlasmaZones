@@ -436,8 +436,24 @@ private Q_SLOTS:
         // A legal pair is left completely alone, both ways round.
         QTest::newRow("fixed-in-range") << ConfigDefaults::scrollingWidthKindFixed() << 640.0 << 640.0;
         QTest::newRow("proportion-in-range") << ConfigDefaults::scrollingWidthKindProportion() << 0.25 << 0.25;
+        // IN-kind but out of RANGE clamps rather than re-seeding: the value is
+        // the right SORT of thing, just outside the bounds. Without these two
+        // the repair's clamp tail could be replaced by `return value;` and the
+        // suite would stay green, so a hand-edited Fixed=50000 would reach the
+        // engine unclamped.
+        QTest::newRow("fixed-above-max") << ConfigDefaults::scrollingWidthKindFixed() << 50000.0
+                                         << ConfigDefaults::scrollingDefaultColumnWidthFixedMax();
+        QTest::newRow("proportion-below-min") << ConfigDefaults::scrollingWidthKindProportion() << 0.001
+                                              << ConfigDefaults::scrollingDefaultColumnWidthValueMin();
         // ClientDecides ignores the value entirely, so nothing is repaired.
-        QTest::newRow("client-decides-untouched") << ConfigDefaults::scrollingWidthKindClientDecides() << 0.5 << 0.5;
+        // The stored value is deliberately PIXEL-magnitude: with 0.5 this row
+        // passed whether or not the early return existed, because the
+        // proportion arm would have left 0.5 alone too. 800 survives ONLY if
+        // the return is really there, and it is the real-world case — a pixel
+        // width parked through a ClientDecides hop, which the kind-transition
+        // table's "C→F 1200px retained" row depends on surviving.
+        QTest::newRow("client-decides-untouched")
+            << ConfigDefaults::scrollingWidthKindClientDecides() << 800.0 << 800.0;
     }
 
     void widthValueNormalizesOnLoad()

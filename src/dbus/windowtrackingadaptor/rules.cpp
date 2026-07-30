@@ -159,7 +159,13 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QSt
             // == 3` rule answer against desktop 1's mode. Every sibling in
             // this file passes the explicit desktop for the same reason.
             const int desktop = query->virtualDesktop > 0 ? query->virtualDesktop : currentDesktopForScreen(screenId);
-            switch (m_layoutManager->modeForScreen(screenId, desktop, m_layoutManager->currentActivity())) {
+            // And the window's own ACTIVITY, with the same fallback shape.
+            // Mode is keyed on the full (screen, desktop, activity) triple, so
+            // taking the window's desktop but the CURRENT activity answers for
+            // a context the window is not in — the identical defect on the
+            // other axis. buildRuleQueryForWindow stamps both from the registry.
+            const QString activity = query->activity.isEmpty() ? m_layoutManager->currentActivity() : query->activity;
+            switch (m_layoutManager->modeForScreen(screenId, desktop, activity)) {
             case PhosphorZones::AssignmentEntry::Snapping:
                 query->mode = QStringLiteral("snapping");
                 break;

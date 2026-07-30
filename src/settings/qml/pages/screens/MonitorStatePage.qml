@@ -335,7 +335,7 @@ SettingsFlickable {
             readonly property var scrollingFallbackZones: [
                 {
                     "zoneNumber": 1,
-                    "id": "0",
+                    "id": "strip:fallback:0",
                     "name": "",
                     "useCustomColors": false,
                     "relativeGeometry": {
@@ -347,7 +347,7 @@ SettingsFlickable {
                 },
                 {
                     "zoneNumber": 2,
-                    "id": "1",
+                    "id": "strip:fallback:1",
                     "name": "",
                     "useCustomColors": false,
                     "relativeGeometry": {
@@ -359,7 +359,7 @@ SettingsFlickable {
                 },
                 {
                     "zoneNumber": 3,
-                    "id": "2",
+                    "id": "strip:fallback:2",
                     "name": "",
                     "useCustomColors": false,
                     "relativeGeometry": {
@@ -431,7 +431,12 @@ SettingsFlickable {
                 // thumbnail is hidden, and polling for something nobody is
                 // looking at is the one thing a blocking call must not do.
                 running: stateView.visible && stateView.isScrolling && stateView.screenState !== null && (stateView.screenState.mode || 0) === 2
-                onTriggered: stateView.refreshScrollingStrip()
+                // allowRetry=false: the settle beat exists for EVENT-driven
+                // reads (a mode flip whose re-announce batch briefly reports an
+                // empty strip). This timer already re-reads in 2s, so letting
+                // each tick arm a 400ms retry just doubles the blocking-call
+                // rate for as long as the strip is legitimately empty.
+                onTriggered: stateView.refreshScrollingStrip(false)
             }
 
             Layout.alignment: Qt.AlignHCenter

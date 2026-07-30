@@ -145,11 +145,26 @@ bool LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
 
 bool LayoutRegistry::removeAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity)
 {
-    const QUuid existing = exactContextRuleId(screenId, virtualDesktop, activity);
-    if (existing.isNull()) {
+    const PWR::Rule* rule = findExactContextRule(screenId, virtualDesktop, activity);
+    if (rule == nullptr) {
         return false;
     }
-    return m_ruleStore->removeRule(existing);
+    // Symmetric with the rebuild paths' merge. findExactContextRule claims
+    // MIXED rules (a context assignment the user also hung a SetOpacity or
+    // LockContext on), so a wholesale removeRule here would destroy those
+    // extra actions when the user merely CLEARS the context's assignment on
+    // the Monitors page. Strip the three assignment slots instead and keep the
+    // rule alive for whatever else it carries; only delete it outright when
+    // nothing survives. Same shape purgeSnappingLayoutFromAssignments already
+    // uses for its Shape-2 rules.
+    PWR::Rule stripped;
+    carryOverNonAssignmentActions(stripped, *rule);
+    if (stripped.actions.isEmpty()) {
+        return m_ruleStore->removeRule(rule->id);
+    }
+    PWR::Rule kept = *rule;
+    kept.actions = stripped.actions;
+    return m_ruleStore->updateRule(kept);
 }
 
 bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)

@@ -690,6 +690,20 @@ bool SettingsController::importAllSettings(const QString& filePath)
                     // Says what failed, not what the restore below will do:
                     // that runs after this and can fail too.
                     Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not replace your settings with that file."));
+                } else if (!ConfigMigration::runMigrationChain(configPath)) {
+                    // An imported blob can be ANY older schema version — an
+                    // export from an older install, or a restored backup. The
+                    // INI branch already migrates; this one did not, and
+                    // ensureJsonConfig's one-shot latch has long since fired,
+                    // so nothing else would either. An unmigrated blob then
+                    // reads as "every moved key absent", load() takes the
+                    // schema defaults, and the first Save purges the old
+                    // groups and stamps the current version over them — the
+                    // user's settings gone, with the backup already removed.
+                    qCWarning(PlasmaZones::lcCore) << "Imported settings could not be migrated:" << safeFilePath;
+                    Q_EMIT settingsTransferFailed(
+                        PhosphorI18n::tr("That settings file is from a version this app cannot upgrade."));
+                    ok = false;
                 }
             }
         }
