@@ -381,8 +381,12 @@ SettingsFlickable {
                 localLayoutTouched = false;
                 localAlgorithmTouched = false;
                 // Refresh the live strip preview with the selection context
-                // (cheap one-shot D-Bus read; [] when not scrolling).
-                scrollingStripZones = settingsController.getScrollingStripPreview(root._selectedScreen);
+                // (cheap one-shot D-Bus read; [] when not scrolling). Keyed
+                // on the STATE's own screen id — before the user clicks a
+                // monitor, _selectedScreen is still empty while the shown
+                // state is the first reported one, and fetching with the
+                // empty id left the sketch up despite a live strip.
+                scrollingStripZones = settingsController.getScrollingStripPreview(screenState.screenId || "");
                 var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
                 if (Object.keys(staged).length > 0) {
                     // A staged entry carries the WHOLE context rule, so every
@@ -460,8 +464,19 @@ SettingsFlickable {
             LayoutThumbnail {
                 Layout.alignment: Qt.AlignHCenter
                 visible: stateView.isScrolling
+                // Re-read the live strip when the preview surfaces (a mode
+                // pick flips visibility without a screen-state change).
+                onVisibleChanged: {
+                    if (visible && stateView.screenState)
+                        stateView.scrollingStripZones = settingsController.getScrollingStripPreview(stateView.screenState.screenId || "");
+                }
+                // category 1 renders the "Dynamic" badge (a live strip
+                // snapshot is generated, not editable) and the zone numbers
+                // stay off — strip positions are transient.
                 layout: ({
                         "displayName": i18nc("tiling mode name", "Scrolling"),
+                        "category": 1,
+                        "zoneNumberDisplay": "none",
                         "zones": stateView.scrollingStripZones.length > 0 ? stateView.scrollingStripZones : stateView.scrollingFallbackZones
                     })
                 isSelected: true
