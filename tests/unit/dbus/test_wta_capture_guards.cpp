@@ -172,6 +172,65 @@ private Q_SLOTS:
     // free-geometry write, or applyGeometryForFloat (which runs AFTER the
     // capture) reads the poisoned value back and "restores" the window onto
     // its own tile — permanently overwriting the genuine float-back.
+    void testScrollArmRefusesStillTiledFrameAsFloatBack()
+    {
+        // isFrameStillOnTileRect has TWO arms, one per tiling engine, and its
+        // own comment says "Scroll-managed windows carry the same float-toggle
+        // capture edge: the strip rect must never be adopted as float-back
+        // geometry." Every other test in this file wires the stub into the
+        // AUTOTILE slot and passes nullptr for scroll, so deleting the scroll
+        // arm failed nothing. This is the same scenario as
+        // testRefusesStillTiledFrameAsFloatBack with the stub in the scroll slot.
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        StubTileRectEngine scrollEngine;
+        std::unique_ptr<SnapEngine> snap;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        // Autotile slot deliberately empty: only the SCROLL arm may answer here.
+        wta->setEngines(snap.get(), nullptr, &scrollEngine);
+
+        const QString windowId = QStringLiteral("ghostty|inst-strip");
+        const QString screenId = QStringLiteral("DP-1");
+        const QString appId = wta->service()->currentAppIdFor(windowId);
+        const QRect stripRect(1540, 8, 1524, 829);
+        const QRect realFreeBack(1743, 795, 800, 628);
+
+        wta->service()->recordFreeGeometry(windowId, screenId, realFreeBack, true);
+
+        snap->snapState()->setFloatingOnScreen(windowId, screenId, 0);
+        wta->setFrameGeometry(windowId, stripRect.x(), stripRect.y(), stripRect.width(), stripRect.height());
+        scrollEngine.managedRect = stripRect;
+
+        wta->captureWindowPlacement(windowId);
+
+        // The strip rect must be refused: the genuine float-back survives.
+        auto rec = wta->service()->placementStore().peek(windowId, appId);
+        QVERIFY(rec);
+        QCOMPARE(rec->freeGeometryFor(screenId), realFreeBack);
+
+        // Positive control: once the frame leaves the strip rect the capture
+        // adopts it, so the refusal above is a real discrimination rather than
+        // the capture never writing anything.
+        const QRect movedFrame(600, 400, 900, 700);
+        wta->setFrameGeometry(windowId, movedFrame.x(), movedFrame.y(), movedFrame.width(), movedFrame.height());
+        wta->captureWindowPlacement(windowId);
+
+        rec = wta->service()->placementStore().peek(windowId, appId);
+        QVERIFY(rec);
+        QCOMPARE(rec->freeGeometryFor(screenId), movedFrame);
+
+        wta->setEngines(snap.get(), nullptr, nullptr);
+    }
+
     void testRefusesStillTiledFrameAsFloatBack()
     {
         PhosphorScreens::FakeScreenProvider fake;
