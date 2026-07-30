@@ -178,11 +178,13 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // open-path Float / Restore / placement resolvers only. The effect's live
     // per-window query (ruleQueryFor) stamps ScreenId / Mode / ScreenOrientation, so
     // a rule pairing one of those with a window property resolves there but not on
-    // this path. ActiveLayout is populated only by the windowless context cascade
-    // (never by either per-window query), so it is context-scoped in practice —
-    // which is the primary use of all four of these fields anyway.
-    // Extended properties — optional→optional copy preserves engagement exactly,
-    // so a field the effect could not observe stays disengaged and inert here too.
+    // this path. Two callers here do know more and pin what they know on top of
+    // the query this builds: placementZonesByRule stamps ScreenId, and
+    // scrollOpenRuleParams stamps ScreenId plus Mode. Both are documented at
+    // their own call sites, including why the latter resolves uncached. ActiveLayout is populated only by the
+    // windowless context cascade (never by either per-window query), so it is context-scoped in practice — which is the
+    // primary use of all four of these fields anyway. Extended properties — optional→optional copy preserves engagement
+    // exactly, so a field the effect could not observe stays disengaged and inert here too.
     query.isMinimized = meta->isMinimized;
     query.isFullscreen = meta->isFullscreen;
     query.isSticky = meta->isSticky;

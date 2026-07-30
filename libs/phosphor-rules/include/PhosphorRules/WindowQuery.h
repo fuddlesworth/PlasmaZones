@@ -60,7 +60,7 @@ struct WindowQuery
     std::optional<int> positionX; ///< frame left edge X in px
     std::optional<int> positionY; ///< frame top edge Y in px
     std::optional<QString> captionNormal; ///< title without the WM-added app-name suffix
-    std::optional<bool> isFloating; ///< floated out of tiling (snap or autotile)
+    std::optional<bool> isFloating; ///< floated out of any placement engine (snapping, autotile, or scrolling)
     std::optional<bool> isSnapped; ///< occupies a snap zone (snap mode only)
     std::optional<QString> zone; ///< the snap zone's UUID the window occupies
     std::optional<bool> isTiled; ///< managed by a tiling-family engine — autotile or scrolling (distinct from

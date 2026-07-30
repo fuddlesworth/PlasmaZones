@@ -424,20 +424,21 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
             scroll->setFloatPredicate([this](const QString& windowId) -> bool {
                 return shouldFloatByRule(windowId);
             });
-            scroll->setOpenParamsResolver([this](const QString& windowId) -> PhosphorScrollEngine::ScrollOpenParams {
-                PhosphorScrollEngine::ScrollOpenParams params;
-                const QVariantMap raw = scrollOpenRuleParams(windowId);
-                if (const auto it = raw.constFind(ScrollOpenKeys::widthFraction()); it != raw.constEnd()) {
-                    params.widthFraction = it->toDouble();
-                }
-                if (const auto it = raw.constFind(ScrollOpenKeys::tabbed()); it != raw.constEnd()) {
-                    params.tabbed = it->toBool();
-                }
-                if (const auto it = raw.constFind(ScrollOpenKeys::consume()); it != raw.constEnd()) {
-                    params.consume = it->toBool();
-                }
-                return params;
-            });
+            scroll->setOpenParamsResolver(
+                [this](const QString& windowId, const QString& screenId) -> PhosphorScrollEngine::ScrollOpenParams {
+                    PhosphorScrollEngine::ScrollOpenParams params;
+                    const QVariantMap raw = scrollOpenRuleParams(windowId, screenId);
+                    if (const auto it = raw.constFind(ScrollOpenKeys::widthFraction()); it != raw.constEnd()) {
+                        params.widthFraction = it->toDouble();
+                    }
+                    if (const auto it = raw.constFind(ScrollOpenKeys::tabbed()); it != raw.constEnd()) {
+                        params.tabbed = it->toBool();
+                    }
+                    if (const auto it = raw.constFind(ScrollOpenKeys::consume()); it != raw.constEnd()) {
+                        params.consume = it->toBool();
+                    }
+                    return params;
+                });
         }
     }
 }

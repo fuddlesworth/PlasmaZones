@@ -770,7 +770,7 @@ public:
     /// header stays free of scroll-engine types. Keys (present only when the
     /// slot matched): "widthFraction" (double), "tabbed" (bool), "consume"
     /// (bool). Same resolveCached contract as shouldFloatByRule.
-    QVariantMap scrollOpenRuleParams(const QString& windowId);
+    QVariantMap scrollOpenRuleParams(const QString& windowId, const QString& screenId);
 
     /// Resolve the open-placement directive for a window from its matched window
     /// rules: the 1-based `SnapToZone` ordinals to snap into (empty when no

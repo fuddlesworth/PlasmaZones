@@ -75,7 +75,7 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // Per-window open rules layer over the context/config defaults.
     ScrollOpenParams openParams;
     if (m_openParamsResolver) {
-        openParams = m_openParamsResolver(windowId);
+        openParams = m_openParamsResolver(windowId, screenId);
     }
     if (openParams.widthFraction) {
         width = ColumnWidth::makeProportion(qBound<qreal>(0.05, *openParams.widthFraction, 1.0));

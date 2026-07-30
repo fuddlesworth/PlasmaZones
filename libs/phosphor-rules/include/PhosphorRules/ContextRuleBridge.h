@@ -624,7 +624,13 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
     QString s;
     int d = 0;
     QString a;
-    contextDimsOf(match, s, d, a);
+    // Honour the decode verdict. On failure contextDimsOf resets the outputs to
+    // ("", 0, ""), which is exactly the global catch-all tuple — so discarding
+    // the bool would report a malformed match as the exact catch-all context and
+    // let a caller rebuild it as one, dropping whatever it really pinned.
+    if (!contextDimsOf(match, s, d, a)) {
+        return false;
+    }
     return s == screenId && d == virtualDesktop && a == activity;
 }
 

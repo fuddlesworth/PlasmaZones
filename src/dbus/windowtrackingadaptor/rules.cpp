@@ -153,20 +153,35 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
     return resolved.slot(QString(PhosphorRules::ActionSlot::Float)).has_value();
 }
 
-QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId)
+QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId, const QString& screenId)
 {
     QVariantMap out;
     if (!m_ruleStore) {
         return out;
     }
-    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
         return out;
     }
+    // Pin the two context fields this path knows and buildRuleQueryForWindow
+    // cannot: the window is opening on @p screenId, and it is opening on a
+    // SCROLLING screen by construction (only ScrollEngine calls this). Without
+    // them a user-authored open rule carrying a ScreenId or Mode condition
+    // never matches, and those are the two conditions the settings editor
+    // offers alongside the scrolling open actions.
+    query->screenId = screenId;
+    query->mode = QStringLiteral("scrolling");
+
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    // Deliberately UNCACHED, unlike the sibling predicates. resolveCached is
+    // keyed on (windowId, ruleSet revision) alone, so seeding it from this
+    // extra-stamped query would hand the screen-only placement resolver a
+    // verdict built under a Mode condition it never asked for (and vice
+    // versa, on whichever path resolves first). This is one resolve per
+    // window open on a scrolling screen.
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolve(*query);
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnWidth))) {
         // Only forward a genuinely numeric fraction inside the SHARED
         // column-width bounds (PhosphorRules::Min/MaxColumnWidthRatio, the

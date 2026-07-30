@@ -299,8 +299,12 @@ public:
     }
 
     /// Resolver for the per-window open-behaviour rule overrides. Same
-    /// injection contract as the float predicate.
-    using OpenParamsResolver = std::function<ScrollOpenParams(const QString& windowId)>;
+    /// injection contract as the float predicate. Takes the OPENING screen
+    /// as well as the window: the open-behaviour rules a user authors are
+    /// commonly pinned to a screen or to Scrolling mode, and the daemon-side
+    /// window metadata carries neither, so this path is the one that can
+    /// supply them.
+    using OpenParamsResolver = std::function<ScrollOpenParams(const QString& windowId, const QString& screenId)>;
     void setOpenParamsResolver(OpenParamsResolver resolver)
     {
         m_openParamsResolver = std::move(resolver);
