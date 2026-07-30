@@ -66,17 +66,6 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
         return;
     }
 
-    // Engine-driven strip movement pause (see the header doc): ignore
-    // incidental pointer jitter after the strip scrolled under a
-    // stationary cursor; a deliberate move past the radius resumes FFM.
-    if (m_ffmSuppressPending) {
-        constexpr qreal kFfmResumeRadiusPx = 32.0;
-        if ((pos - m_ffmSuppressAnchor).manhattanLength() < kFfmResumeRadiusPx) {
-            return;
-        }
-        m_ffmSuppressPending = false;
-    }
-
     // Pause FFM entirely during show-desktop/peek. Peeked windows are hidden
     // from the scene but keep their frameGeometry, so the scan below would
     // find one under the cursor and activateWindow() would synchronously
@@ -90,6 +79,19 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
     // Only act on autotile screens (screenId already resolved by caller)
     if (screenId.isEmpty() || !m_managedScreens.contains(screenId)) {
         return;
+    }
+
+    // Engine-driven strip movement pause (see the header doc): ignore
+    // incidental pointer jitter after the strip scrolled under a
+    // stationary cursor; a deliberate move past the radius resumes FFM.
+    // Evaluated AFTER the screen gate so a move on an unmanaged screen
+    // cannot clear a latch the managed screen is still relying on.
+    if (m_ffmSuppressPending) {
+        constexpr qreal kFfmResumeRadiusPx = 32.0;
+        if ((pos - m_ffmSuppressAnchor).manhattanLength() < kFfmResumeRadiusPx) {
+            return;
+        }
+        m_ffmSuppressPending = false;
     }
 
     // Pause focus-follows-mouse while the currently active window is one we
@@ -329,10 +331,18 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         // notifyWindowAdded (unminimize, exit-fullscreen) hits the
         // already-notified bail and silently never announces it.
         if (resetNotified) {
-            m_notifiedWindows.remove(windowId);
+            const bool wasNotified = m_notifiedWindows.remove(windowId);
             // Its screen record travels with it — leaving it behind orphans a
             // stale screen association the next notify would read.
             m_notifiedWindowScreens.remove(windowId);
+            // A window on ANOTHER desktop or activity is ineligible below, so
+            // it would never re-announce and the drop above would be its
+            // silent, permanent detracking. Park it exactly where the
+            // desktop-switch demotion parks its own, so the desktop-return
+            // branch re-tracks it instead of re-notifying it as new.
+            if (wasNotified && (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity())) {
+                m_savedNotifiedForDesktopReturn.insert(windowId);
+            }
         }
 
         bool minimizedOnly = false;

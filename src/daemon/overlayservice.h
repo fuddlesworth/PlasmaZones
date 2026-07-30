@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): OverlayService is the single façade every
+// overlay surface goes through — zone overlay, selector, snap assist, OSD,
+// cheatsheet, and the scroll tab strip — so its members are the per-screen
+// state and per-role wiring those surfaces share. The implementation is
+// already split by surface across daemon/overlayservice/*.cpp; splitting the
+// class DECLARATION would scatter the per-screen ownership and teardown-order
+// contract the member ordering encodes, exactly as documented on daemon.h.
+
 #pragma once
 
 #include <QElapsedTimer>

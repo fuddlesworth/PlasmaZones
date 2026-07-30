@@ -830,6 +830,8 @@ private:
     /// AFTER initializeAutotile() — sharing one list would drop these handles
     /// the moment after they were installed.
     QList<QMetaObject::Connection> m_autotileShortcutConnections;
+    /// Scrolling twin of the list above, cleared and refilled on the same
+    /// schedule and kept separate for the same reason.
     QList<QMetaObject::Connection> m_scrollingShortcutConnections;
     /// Handles for every connection installed by initLayoutAndSettingsWiring().
     /// The senders (m_settings, m_layoutManager, the three value-member

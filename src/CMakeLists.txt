@@ -495,10 +495,12 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/init_services.cpp
     daemon/daemon/init_adaptors.cpp
     daemon/daemon/init_engines.cpp
+    daemon/daemon/init_dbus_service.cpp
     daemon/daemon/lifecycle.cpp
     daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
+    daemon/daemon/engine_release.cpp
     daemon/daemon/seedorderfilter.cpp
     daemon/daemon/seedorderfilter.h
     daemon/daemon/osd.cpp

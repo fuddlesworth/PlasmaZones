@@ -322,11 +322,10 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     }
 
     // Overhang input filter: keeps clicks off strip straddlers' clipped-away
-    // overhangs (see input_filter.h). Guarded so a re-entry into this wiring
-    // can never double-install; the unique_ptr uninstalls on effect teardown.
-    if (!m_overhangInputFilter) {
-        m_overhangInputFilter = std::make_unique<ScrollOverhangInputFilter>(this);
-    }
+    // overhangs (see input_filter.h). This wiring runs once per effect, so the
+    // assignment stands on its own; the unique_ptr uninstalls the filter on
+    // effect teardown.
+    m_overhangInputFilter = std::make_unique<ScrollOverhangInputFilter>(this);
 
     qCInfo(lcEffect) << "initialized: C++ effect with D-Bus support and mouseChanged connection";
 }

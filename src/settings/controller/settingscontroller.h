@@ -6,6 +6,13 @@
 // the shared Settings instance. Per-page Q_PROPERTY surfaces are split out
 // into page-scoped sub-controllers (EditorPageController, …) hung off this
 // class via child Q_PROPERTYs so QML reads `settingsController.<page>.<prop>`.
+//
+// FILE-SIZE EXCEPTION (sanctioned): what remains here after that split is the
+// root object QML binds to. Its Q_PROPERTY surface IS the QML contract, so
+// moving another group of properties out means either a new child controller
+// every page URL and binding has to be rewritten for, or a second root QML
+// cannot see. The implementation is already split across
+// settingscontroller_*.cpp by concern, same shape as daemon.h.
 
 #pragma once
 

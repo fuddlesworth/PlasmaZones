@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): LayoutRegistry is the single owner of
+// layout storage, per-context assignments, quick slots, and the context
+// resolve cascade, and this is an INSTALLED public header — carving the
+// class in two would be an API break for third-party consumers the library
+// exists to serve. The implementation is already split by concern across
+// src/layoutregistry_*.cpp, and the member ordering here encodes which
+// state each of those files owns.
+
 #pragma once
 
 #include <PhosphorZones/AssignmentEntry.h>

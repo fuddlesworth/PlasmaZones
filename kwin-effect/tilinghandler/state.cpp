@@ -104,6 +104,13 @@ void TilingHandler::clearTiledTracking()
 void TilingHandler::setFocusFollowsMouse(bool enabled)
 {
     m_focusFollowsMouse = enabled;
+    if (!enabled) {
+        // handleCursorMoved bails before the suppression latch while FFM is
+        // off, so a latch set just before the setting was turned off would
+        // survive with a long-stale anchor and swallow the first move after
+        // it is turned back on.
+        m_ffmSuppressPending = false;
+    }
 }
 
 void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const QString& screenId,

@@ -13,6 +13,7 @@
 #include "shortcutmanager.h"
 #include "shortcutmanager_ids.h"
 
+#include "config/configdefaults.h"
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
 
@@ -241,6 +242,29 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // unassigned, a rebind off-pattern — falls back to the individual rows,
     // because a compressed row would then lie about what the keys do.
     using FamilySpec = CheatsheetFamily;
+    // The scrolling pairs have no structural token pattern to expect (unlike
+    // the digits and the arrows), so their expected tokens come from the
+    // SAME defaults the shortcuts are registered with. Spelling them here
+    // would silently stop the family collapsing the moment a default is
+    // retuned, and the sheet would fall back to two near-identical rows with
+    // nothing to explain why.
+    const auto lastKeyOf = [](const QString& sequence) {
+        const int split = sequence.lastIndexOf(QLatin1Char('+'));
+        return split < 0 ? sequence : sequence.mid(split + 1);
+    };
+    // Both members' key tokens joined for the merged chip. The digit family
+    // reads as a range and the directional one as a class name; a bare
+    // space-joined pair instead read as one chord, so the alternatives are
+    // separated the way the row labels separate them.
+    const auto scrollPair = [&lastKeyOf](const char* firstId, const QString& firstDefault, const char* secondId,
+                                         const QString& secondDefault, const QString& label) {
+        const QString firstKey = lastKeyOf(firstDefault);
+        const QString secondKey = lastKeyOf(secondDefault);
+        return FamilySpec{{QString::fromLatin1(firstId), QString::fromLatin1(secondId)},
+                          {firstKey, secondKey},
+                          label,
+                          firstKey + QStringLiteral(" / ") + secondKey};
+    };
     const QStringList arrowTokens{QStringLiteral("Left"), QStringLiteral("Right"), QStringLiteral("Up"),
                                   QStringLiteral("Down")};
     const QString arrowsTail = PhosphorI18n::tr("Arrows");
@@ -283,22 +307,17 @@ QVariantList ShortcutManager::cheatsheetModel() const
          arrowsTail},
         // The scrolling family's natural pairs collapse the same way the
         // directional quads do, trimming the 20-row Scrolling group.
-        {{QString::fromLatin1(kIdScrollConsumeWindow), QString::fromLatin1(kIdScrollExpelWindow)},
-         {QStringLiteral(";"), QStringLiteral("'")},
-         PhosphorI18n::tr("Consume / Expel Window"),
-         QStringLiteral("; '")},
-        {{QString::fromLatin1(kIdScrollConsumeOrExpelLeft), QString::fromLatin1(kIdScrollConsumeOrExpelRight)},
-         {QStringLiteral("U"), QStringLiteral("O")},
-         PhosphorI18n::tr("Consume or Expel Left / Right"),
-         QStringLiteral("U O")},
-        {{QString::fromLatin1(kIdScrollIncreaseColumnWidth), QString::fromLatin1(kIdScrollDecreaseColumnWidth)},
-         {QStringLiteral("="), QStringLiteral("-")},
-         PhosphorI18n::tr("Adjust Column Width"),
-         QStringLiteral("= -")},
-        {{QString::fromLatin1(kIdScrollIncreaseWindowHeight), QString::fromLatin1(kIdScrollDecreaseWindowHeight)},
-         {QStringLiteral("PgUp"), QStringLiteral("PgDown")},
-         PhosphorI18n::tr("Adjust Window Height"),
-         QStringLiteral("PgUp PgDown")},
+        scrollPair(kIdScrollConsumeWindow, ConfigDefaults::scrollingConsumeWindowShortcut(), kIdScrollExpelWindow,
+                   ConfigDefaults::scrollingExpelWindowShortcut(), PhosphorI18n::tr("Consume / Expel Window")),
+        scrollPair(kIdScrollConsumeOrExpelLeft, ConfigDefaults::scrollingConsumeOrExpelLeftShortcut(),
+                   kIdScrollConsumeOrExpelRight, ConfigDefaults::scrollingConsumeOrExpelRightShortcut(),
+                   PhosphorI18n::tr("Consume or Expel Left / Right")),
+        scrollPair(kIdScrollIncreaseColumnWidth, ConfigDefaults::scrollingIncreaseColumnWidthShortcut(),
+                   kIdScrollDecreaseColumnWidth, ConfigDefaults::scrollingDecreaseColumnWidthShortcut(),
+                   PhosphorI18n::tr("Adjust Column Width")),
+        scrollPair(kIdScrollIncreaseWindowHeight, ConfigDefaults::scrollingIncreaseWindowHeightShortcut(),
+                   kIdScrollDecreaseWindowHeight, ConfigDefaults::scrollingDecreaseWindowHeightShortcut(),
+                   PhosphorI18n::tr("Adjust Window Height")),
     };
 
     QVector<QVariantMap> out = compressCheatsheetFamilies(rows, families);
