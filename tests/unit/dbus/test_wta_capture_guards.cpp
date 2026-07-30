@@ -187,6 +187,12 @@ private Q_SLOTS:
             PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
+        // Declared BEFORE `parent` (and therefore before wta) so the stub
+        // outlives the adaptor on EVERY exit path — an early QVERIFY failure
+        // skips the explicit setEngines detach at the tail, and while the
+        // adaptor's engine ref is a self-nulling QPointer, outliving it makes
+        // the teardown safety structural rather than incidental. Same reason
+        // the sibling tests spell this out.
         StubTileRectEngine scrollEngine;
         std::unique_ptr<SnapEngine> snap;
         QObject parent;

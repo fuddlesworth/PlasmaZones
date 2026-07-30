@@ -287,12 +287,23 @@ private Q_SLOTS:
         const QString layoutId = layout->id().toString();
         const auto snapping = PhosphorZones::AssignmentEntry::Snapping;
         const auto autotile = PhosphorZones::AssignmentEntry::Autotile;
+        const auto scrolling = PhosphorZones::AssignmentEntry::Scrolling;
 
         // Same slot number in each mode holds an independent binding: a manual
         // layout UUID for snapping, an autotile algorithm ID for tiling.
         mgr->setQuickLayoutSlot(snapping, 1, layoutId);
         mgr->setQuickLayoutSlot(autotile, 1, QStringLiteral("autotile:bsp"));
 
+        QCOMPARE(mgr->quickLayoutSlots(snapping).value(1), layoutId);
+        QCOMPARE(mgr->quickLayoutSlots(autotile).value(1), QStringLiteral("autotile:bsp"));
+
+        // Scrolling is the third mode but has NO quick slots of its own: it
+        // selects no layout and no algorithm, so there is nothing to bind. A
+        // write for it is refused outright, and — the part worth pinning —
+        // refused WITHOUT disturbing the two modes that do have slots.
+        mgr->setQuickLayoutSlot(scrolling, 1, QStringLiteral("scrolling:"));
+        QVERIFY(mgr->quickLayoutSlots(scrolling).isEmpty());
+        QVERIFY(mgr->layoutForShortcut(scrolling, 1) == nullptr);
         QCOMPARE(mgr->quickLayoutSlots(snapping).value(1), layoutId);
         QCOMPARE(mgr->quickLayoutSlots(autotile).value(1), QStringLiteral("autotile:bsp"));
 

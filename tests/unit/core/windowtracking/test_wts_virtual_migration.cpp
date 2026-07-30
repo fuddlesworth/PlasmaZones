@@ -30,6 +30,8 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorScreens/Manager.h>
+#include "FakeScreenProvider.h"
 #include "core/utils/utils.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
@@ -38,6 +40,28 @@
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
+
+namespace {
+/// A two-way 50/50 horizontal split of @p physId, the shape the settings app
+/// writes for a side-by-side subdivision.
+PhosphorScreens::VirtualScreenConfig makeHorizontalSplit(const QString& physId)
+{
+    const auto makeDef = [&physId](int index, const QString& name, const QRectF& region) {
+        PhosphorScreens::VirtualScreenDef def;
+        def.id = PhosphorIdentity::VirtualScreenId::make(physId, index);
+        def.physicalScreenId = physId;
+        def.displayName = name;
+        def.region = region;
+        def.index = index;
+        return def;
+    };
+    PhosphorScreens::VirtualScreenConfig config;
+    config.physicalScreenId = physId;
+    config.screens.append(makeDef(0, QStringLiteral("Left"), QRectF(0, 0, 0.5, 1.0)));
+    config.screens.append(makeDef(1, QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1.0)));
+    return config;
+}
+} // namespace
 
 // =========================================================================
 // Test Class
@@ -84,19 +108,56 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: Migration from physical to virtual IDs
-    // migrateScreenAssignmentsToVirtual requires a PhosphorScreens::ScreenManager for
-    // geometry lookups. With nullptr mgr it early-returns (guard clause).
-    // We test that behavior explicitly, and also test the reverse direction
-    // (migrateFromVirtual) which does NOT need a PhosphorScreens::ScreenManager.
+    // P0: Migration from physical to virtual IDs.
     //
-    // NOTE: The forward migration happy path (physical → virtual with
-    // geometry-based routing via PhosphorScreens::ScreenManager) is not tested here because
-    // PhosphorScreens::ScreenManager requires a running QGuiApplication with real QScreen
-    // objects. This path is covered by manual integration testing per the
-    // PR test plan.
+    // migrateScreenAssignmentsToVirtual needs a ScreenManager for the
+    // geometry lookups, and gets one here: ScreenManager takes an injected
+    // IScreenProvider, so FakeScreenProvider stages the physical output
+    // headlessly and no QGuiApplication or real QScreen is involved. The
+    // happy path is covered by testMigrateToVirtual_routesZoneToItsHalf
+    // below; the two guard clauses (null manager, empty virtual list) are
+    // covered separately, each naming the guard it actually exercises.
     // =====================================================================
 
+    // The happy path: with a real (headless) ScreenManager, each window is
+    // routed to the virtual sub-screen its ZONE's centre falls in, not
+    // blanket-assigned to the first one. The layout's zone 0 sits in the left
+    // third and zone 2 in the right third, so a 50/50 split must separate
+    // them — a migration that ignored geometry would put both on vs:0.
+    void testMigrateToVirtual_routesZoneToItsHalf()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        mgr.start();
+        QVERIFY(mgr.physicalScreenFor(physId).isValid());
+        QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
+
+        const QStringList virtualIds = mgr.virtualScreenIdsFor(physId);
+        QCOMPARE(virtualIds.size(), 2);
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        const QString vs1 = PhosphorIdentity::VirtualScreenId::make(physId, 1);
+
+        const QString leftWin = QStringLiteral("konsole|left");
+        const QString rightWin = QStringLiteral("dolphin|right");
+        m_service->assignWindowToZone(leftWin, m_zoneIds[0], physId, 1);
+        m_service->assignWindowToZone(rightWin, m_zoneIds[2], physId, 1);
+
+        m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, &mgr);
+
+        QCOMPARE(m_service->screenForWindow(leftWin), vs0);
+        QCOMPARE(m_service->screenForWindow(rightWin), vs1);
+        // Zone assignments survive the screen rewrite.
+        QCOMPARE(m_service->zonesForWindow(leftWin).first(), m_zoneIds[0]);
+        QCOMPARE(m_service->zonesForWindow(rightWin).first(), m_zoneIds[2]);
+    }
+
+    // Guard clause: a null manager refuses the migration. The virtual list is
+    // deliberately NON-EMPTY so the null-manager conjunct is the only reason
+    // the call can return early — with both falsy the test would pass under a
+    // guard that had lost the manager check entirely.
     void testMigrateToVirtual_requiresScreenManager()
     {
         const QString physId = QStringLiteral("Dell:U2722D:115107");
@@ -178,15 +239,26 @@ private Q_SLOTS:
     {
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         const QString otherPhysId = QStringLiteral("LG:27GP850:ABC123");
-        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
-        const QStringList virtualIds = {vs0};
+
+        // A REAL manager, so the migration runs for real and the per-window
+        // screen filter is what leaves the LG window alone. Passing nullptr
+        // here would short-circuit on the guard clause instead, and the test
+        // would pass even if the filter were removed entirely.
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+        fake.addScreen(QStringLiteral("DP-2"), QRect(3840, 0, 1920, 1080), otherPhysId);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        mgr.start();
+        QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
+        const QStringList virtualIds = mgr.virtualScreenIdsFor(physId);
 
         // Assign window to a *different* physical screen
         const QString windowId = QStringLiteral("konsole|noop-test");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], otherPhysId, 1);
 
         // Migrate the Dell screen — should not touch the LG window
-        m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, nullptr);
+        m_service->migrateScreenAssignmentsToVirtual(physId, virtualIds, &mgr);
 
         QCOMPARE(m_service->screenForWindow(windowId), otherPhysId);
     }
@@ -226,8 +298,14 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // T1: Cross-VS boundary crossing — window moves between virtual screens
-    // on the same physical monitor
+    // T1: A window re-assigned across a virtual-screen boundary on the same
+    // physical monitor lands wholly on the new sub-screen.
+    //
+    // The WTS does NOT detect the crossing — the daemon does, from the
+    // window's centre, and calls assignWindowToZone with the new (zone,
+    // screen) pair. What is pinned here is that the service's own state
+    // moves as one: the screen value, the zone list, and the reverse map all
+    // follow, with nothing left pointing at vs:0.
     // =====================================================================
 
     void testCrossBoundaryCrossing_windowMovesFromVs0ToVs1()
@@ -243,15 +321,21 @@ private Q_SLOTS:
         QCOMPARE(m_service->screenForWindow(windowId), vs0);
         QVERIFY(m_service->isWindowSnapped(windowId));
 
-        // Simulate the window moving to vs:1 (right half) by reassigning
-        // This mirrors what the daemon does when it detects a window's center
-        // has moved to a different virtual screen
+        // The daemon detects the crossing from the window's centre and
+        // re-assigns; this is that call.
         m_service->assignWindowToZone(windowId, m_zoneIds[1], vs1, 1);
 
-        // Verify the WTS detects the screen change and updates the assignment
         QCOMPARE(m_service->screenForWindow(windowId), vs1);
         QCOMPARE(m_service->zonesForWindow(windowId).first(), m_zoneIds[1]);
         QVERIFY(m_service->isWindowSnapped(windowId));
+        // The store holds ONE screen entry for this window and it names vs:1
+        // — the distinguishing assertion this test used to lack, and the
+        // reason it is not a duplicate of the plain re-assignment tests: a
+        // rewrite that recorded the new screen without retiring the old one
+        // would pass every line above.
+        const QHash<QString, QString> assigns = m_snapState->screenAssignments();
+        QCOMPARE(assigns.value(windowId), vs1);
+        QVERIFY(assigns.value(windowId) != vs0);
     }
 
     // =====================================================================
@@ -364,7 +448,17 @@ private Q_SLOTS:
         const QString windowId = QStringLiteral("konsole|empty-list");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], physId, 1);
 
-        m_service->migrateScreenAssignmentsToVirtual(physId, {}, nullptr);
+        // A live manager, so the EMPTY LIST is the only reason the guard
+        // fires. The sibling test covers the null-manager conjunct; passing
+        // both falsy here would let either half of the guard be deleted
+        // without a test noticing.
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
+        PhosphorScreens::ScreenManager mgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        mgr.start();
+
+        m_service->migrateScreenAssignmentsToVirtual(physId, {}, &mgr);
 
         QCOMPARE(m_service->screenForWindow(windowId), physId);
     }

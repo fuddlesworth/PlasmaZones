@@ -251,28 +251,34 @@ private Q_SLOTS:
     // =====================================================================
     // Test 4: Per-engine float independence (root fix for the shared-bit defect)
     //
-    // A window floated in AUTOTILE mode must NOT be floating in SNAPPING mode,
-    // and vice versa. The harness wires only the SnapEngine, so we model the
-    // two engines' authoritative float stores with in-test maps and drive WTS
-    // through the injected resolver/writer exactly as the daemon does. This
-    // asserts the WTS contract: isWindowFloating / setWindowFloating route to
-    // the engine owning the window's CURRENT mode, with no shared bit.
+    // A window floated in one mode must NOT be floating in either of the
+    // others. There are THREE placement engines now, and a two-engine bool
+    // could not tell "snap float does not reach autotile" apart from "snap
+    // float does not reach whichever engine is not snap" — a resolver that
+    // lumped the two tiling-family engines together would pass it. The
+    // harness wires only the SnapEngine, so the three authoritative float
+    // stores are modelled with in-test sets and WTS is driven through the
+    // injected resolver/writer exactly as the daemon does. This asserts the
+    // WTS contract: isWindowFloating / setWindowFloating route to the engine
+    // owning the window's CURRENT mode, with no shared bit.
     // =====================================================================
     void testPerEngineFloatIndependence()
     {
         const QString winA = QStringLiteral("firefox|dddddddd-0000-0000-0000-000000000004");
 
-        // Per-engine float stores, keyed by windowId, modelling SnapState and
-        // TilingState. The mode flag selects which one WTS sees as "current".
-        QSet<QString> snapFloats;
-        QSet<QString> autotileFloats;
-        bool autotileMode = false; // start in snapping mode
+        enum class Mode {
+            Snapping,
+            Autotile,
+            Scrolling
+        };
+        QHash<int, QSet<QString>> floatsByMode;
+        Mode mode = Mode::Snapping;
 
         m_service->setEngineFloatResolver([&](const QString& w) -> bool {
-            return autotileMode ? autotileFloats.contains(w) : snapFloats.contains(w);
+            return floatsByMode.value(static_cast<int>(mode)).contains(w);
         });
         m_service->setEngineFloatWriter([&](const QString& w, bool floating) {
-            QSet<QString>& store = autotileMode ? autotileFloats : snapFloats;
+            QSet<QString>& store = floatsByMode[static_cast<int>(mode)];
             if (floating) {
                 store.insert(w);
             } else {
@@ -280,36 +286,56 @@ private Q_SLOTS:
             }
         });
 
-        // Float in SNAPPING mode.
-        autotileMode = false;
+        const auto floatsIn = [&](Mode m) {
+            return floatsByMode.value(static_cast<int>(m)).contains(winA);
+        };
+
+        // Float in SNAPPING mode. Neither tiling-family engine sees it.
+        mode = Mode::Snapping;
         m_service->setWindowFloating(winA, true);
-        QVERIFY(m_service->isWindowFloating(winA)); // floating in snap
-        QVERIFY(snapFloats.contains(winA));
-        QVERIFY(!autotileFloats.contains(winA)); // snap float did NOT leak into autotile
-
-        // Switch the window's screen to AUTOTILE mode: it must NOT be floating
-        // there — the snap float bit is independent.
-        autotileMode = true;
-        QVERIFY(!m_service->isWindowFloating(winA)); // not floating in autotile
-
-        // Float it in AUTOTILE mode now.
-        m_service->setWindowFloating(winA, true);
-        QVERIFY(m_service->isWindowFloating(winA)); // floating in autotile
-        QVERIFY(autotileFloats.contains(winA));
-
-        // Back to SNAPPING mode: still floating there from before — autotile
-        // float did NOT clear the snap float.
-        autotileMode = false;
         QVERIFY(m_service->isWindowFloating(winA));
-        QVERIFY(snapFloats.contains(winA));
+        QVERIFY(floatsIn(Mode::Snapping));
+        QVERIFY(!floatsIn(Mode::Autotile));
+        QVERIFY(!floatsIn(Mode::Scrolling));
 
-        // Unfloat in SNAPPING mode: autotile float must SURVIVE.
+        // The window's screen flips to each tiling mode in turn: the snap
+        // float is invisible from both.
+        mode = Mode::Autotile;
+        QVERIFY(!m_service->isWindowFloating(winA));
+        mode = Mode::Scrolling;
+        QVERIFY(!m_service->isWindowFloating(winA));
+
+        // Float it in SCROLLING mode. This must not disturb the other two,
+        // and in particular must not be readable as an autotile float — the
+        // two tiling-family engines are as independent of each other as
+        // either is of snapping.
+        m_service->setWindowFloating(winA, true);
+        QVERIFY(m_service->isWindowFloating(winA));
+        QVERIFY(floatsIn(Mode::Scrolling));
+        QVERIFY(!floatsIn(Mode::Autotile));
+        mode = Mode::Autotile;
+        QVERIFY(!m_service->isWindowFloating(winA));
+
+        // Float it in AUTOTILE mode too; all three now hold their own bit.
+        m_service->setWindowFloating(winA, true);
+        QVERIFY(floatsIn(Mode::Snapping));
+        QVERIFY(floatsIn(Mode::Autotile));
+        QVERIFY(floatsIn(Mode::Scrolling));
+
+        // Unfloat in SNAPPING mode: the other two must SURVIVE.
+        mode = Mode::Snapping;
         m_service->setWindowFloating(winA, false);
-        QVERIFY(!m_service->isWindowFloating(winA)); // not floating in snap
-        QVERIFY(!snapFloats.contains(winA));
-        autotileMode = true;
-        QVERIFY(m_service->isWindowFloating(winA)); // still floating in autotile
-        QVERIFY(autotileFloats.contains(winA));
+        QVERIFY(!m_service->isWindowFloating(winA));
+        QVERIFY(!floatsIn(Mode::Snapping));
+        mode = Mode::Autotile;
+        QVERIFY(m_service->isWindowFloating(winA));
+        mode = Mode::Scrolling;
+        QVERIFY(m_service->isWindowFloating(winA));
+
+        // Unfloat in SCROLLING mode: autotile still floats.
+        m_service->setWindowFloating(winA, false);
+        QVERIFY(!floatsIn(Mode::Scrolling));
+        QVERIFY(floatsIn(Mode::Autotile));
 
         // Clear injected hooks so cleanup() and other tests use the fallback.
         m_service->setEngineFloatResolver({});

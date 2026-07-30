@@ -75,9 +75,12 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId)
     if (!m_engine || screenId.isEmpty()) {
         return QStringLiteral("[]");
     }
-    // Same screen gate as focusColumn: header and XML both promise an empty
-    // array for a screen that is not scrolling, and a stale state left by an
-    // earlier scrolling session would otherwise be described as current.
+    // Same screen gate as focusColumn, making the "empty for a screen that is
+    // not scrolling" half of the XML contract explicit at this call site.
+    // Belt and braces rather than load-bearing today: a screen leaving the
+    // active set has its state released, so the strip below would resolve
+    // empty anyway. Stated here so the contract does not silently depend on
+    // that teardown staying eager.
     if (!m_engine->isActiveOnScreen(screenId)) {
         return QStringLiteral("[]");
     }

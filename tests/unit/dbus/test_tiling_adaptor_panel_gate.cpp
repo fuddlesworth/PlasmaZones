@@ -284,6 +284,52 @@ private Q_SLOTS:
         emitPanelGeometryReady(mgr);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
     }
+
+    // -------------------------------------------------------------------------
+    // TWO engines, which is the shape this adaptor exists for. Every other test
+    // here wires a one-element list, and against a single engine the strict
+    // claim loop is indistinguishable from an unconditional
+    // m_lifecycleEngines.first() — the exact bug the loop's own comment warns
+    // about. With two engines owning different screens, an open must reach the
+    // engine that CLAIMS its screen and no other, and the announced screen set
+    // must be the union of both.
+    // -------------------------------------------------------------------------
+    void testTwoEngines_openGoesToTheClaimingEngineOnly()
+    {
+        AutotileEngine first(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        AutotileEngine second(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        first.setAutotileScreens({QStringLiteral("HDMI-1")});
+        second.setAutotileScreens({QStringLiteral("HDMI-2")});
+
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&first, &second});
+
+        // A screen only the SECOND engine claims. Dispatching to the first
+        // (the fallback shape) would track the window there instead.
+        adaptor.windowOpened(QStringLiteral("kitty|two"), QStringLiteral("HDMI-2"), 0, 0);
+        QVERIFY(second.isWindowTracked(QStringLiteral("kitty|two")));
+        QVERIFY(!first.isWindowTracked(QStringLiteral("kitty|two")));
+
+        // And the mirror, so neither engine is simply adopting everything.
+        adaptor.windowOpened(QStringLiteral("kitty|one"), QStringLiteral("HDMI-1"), 0, 0);
+        QVERIFY(first.isWindowTracked(QStringLiteral("kitty|one")));
+        QVERIFY(!second.isWindowTracked(QStringLiteral("kitty|one")));
+
+        // A screen NEITHER claims is dropped, not handed to the first engine.
+        adaptor.windowOpened(QStringLiteral("kitty|none"), QStringLiteral("DP-9"), 0, 0);
+        QVERIFY(!first.isWindowTracked(QStringLiteral("kitty|none")));
+        QVERIFY(!second.isWindowTracked(QStringLiteral("kitty|none")));
+        QCOMPARE(adaptor.pendingUnclaimedOpensCount(), 0);
+
+        // managedScreens is the UNION, sorted — a single-engine list could
+        // never show the difference between a union and a passthrough.
+        QSignalSpy spy(&adaptor, &TilingAdaptor::managedScreensChanged);
+        adaptor.notifyEngineScreensChanged(false);
+        QCoreApplication::processEvents();
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toStringList(), (QStringList{QStringLiteral("HDMI-1"), QStringLiteral("HDMI-2")}));
+    }
 };
 
 QTEST_MAIN(TestTilingAdaptorPanelGate)

@@ -72,7 +72,9 @@ add_executable(test_wts_clearfloat core/windowtracking/test_wts_clearfloat.cpp)
 target_link_libraries(test_wts_clearfloat PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_clearfloat COMMAND test_wts_clearfloat)
 
-add_executable(test_wts_virtual_migration core/windowtracking/test_wts_virtual_migration.cpp)
+add_executable(test_wts_virtual_migration core/windowtracking/test_wts_virtual_migration.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wts_virtual_migration PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
 target_link_libraries(test_wts_virtual_migration PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_virtual_migration COMMAND test_wts_virtual_migration)
 
@@ -872,10 +874,23 @@ target_include_directories(test_wta_convenience PRIVATE ${CMAKE_SOURCE_DIR}/libs
 target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_convenience COMMAND test_wta_convenience)
 
+add_executable(test_scrolling_adaptor dbus/test_scrolling_adaptor.cpp)
+target_link_libraries(test_scrolling_adaptor PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                     PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_scrolling_adaptor COMMAND test_scrolling_adaptor)
+
+add_executable(test_wta_scroll_strips dbus/test_wta_scroll_strips.cpp)
+target_link_libraries(test_wta_scroll_strips PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_scroll_strips COMMAND test_wta_scroll_strips)
+
 add_executable(test_wta_routing dbus/test_wta_routing.cpp
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_wta_routing PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
-target_link_libraries(test_wta_routing PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Links PhosphorScrollEngine directly: the fixture constructs real ScrollEngine
+# objects, so the dependency is this target's own, not something to inherit
+# through plasmazones_core's link interface.
+target_link_libraries(test_wta_routing PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                               PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_wta_routing COMMAND test_wta_routing)
 
 add_executable(test_wta_capture_guards dbus/test_wta_capture_guards.cpp

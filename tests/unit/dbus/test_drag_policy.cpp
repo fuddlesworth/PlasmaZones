@@ -296,6 +296,12 @@ private Q_SLOTS:
             &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
             settings.m_dragBehavior == AutotileDragBehavior::Reorder);
 
+        // Both tiling-family engines report the SAME bypass reason: the value
+        // means "a tiling-family engine owns this screen", and its
+        // autotile_screen wire token predates the scroll engine. The branches
+        // are told apart by the policy FIELDS, not by this token, which is
+        // what the immediateFloatOnStart assertion below does — the autotile
+        // Reorder case asserts the opposite.
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
