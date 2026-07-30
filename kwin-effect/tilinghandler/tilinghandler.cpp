@@ -365,10 +365,21 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
             // That set means one specific thing: "the desktop-switch demotion
             // dropped this window locally, but the daemon STILL holds it in
             // the other desktop's state, so re-track on return without
-            // re-notifying." Both batch callers that pass resetNotified are
-            // the opposite case — bring-up after a daemon restart, and the
-            // engine-flip re-announce, where the daemon has a fresh or
-            // torn-down engine holding nothing. Parking there made the
+            // re-notifying."
+            //
+            // The invariant that makes the plain drop safe across all THREE
+            // resetNotified callers: such a batch only ever sees a window that
+            // is either (a) on a daemon that lost it — bring-up after a
+            // restart (wiring.cpp) and the engine-flip re-announce (state.cpp),
+            // where a fresh or torn-down engine holds nothing — or (b) already
+            // parked by the desktop-switch demotion, which is the genuine user
+            // toggle branch (signals.cpp): for a screen to be in `added` it was
+            // outside the union, so any off-desktop window on it was demoted on
+            // the switch that left that desktop and is already absent from
+            // m_notifiedWindows, making this remove() a no-op that leaves its
+            // park intact. Neither case can lose the only record of a window.
+            //
+            // Parking regardless made the
             // desktop-return branch silently re-insert the window into
             // m_notifiedWindows with no windowOpened, so the daemon never
             // learned it existed and every later notifyWindowAdded hit the

@@ -423,7 +423,7 @@ public:
 
     /// Resolve the per-context gap override for (screen, desktop, activity) by
     /// evaluating a windowless WindowQuery through the RuleEvaluator and
-    /// reading the gap action slots (ZonePadding / OuterGap /
+    /// reading the gap action slots (InnerGap / OuterGap /
     /// UsePerSideOuterGap / per-side). Unlike @ref resolveAssignmentEntry this
     /// is a PER-SLOT read across all matching context rules (not a single
     /// winning rule), so independent gap rules compose and there is no
@@ -949,7 +949,13 @@ private:
     /// RuleSet::updateRule has no equality check, so an identical re-apply
     /// would otherwise bump the revision (dropping every context cache and
     /// rewriting rules.json) and make the caller emit layoutAssigned for a
-    /// layout that did not change. Callers gate their emit on this.
+    /// layout that did not change.
+    ///
+    /// The return reports whether the STORE was written. Callers must NOT gate
+    /// @c layoutAssigned on it: that signal is the sole trigger for
+    /// updateEngineScreens() and updateLayoutFilter(), so an idempotent
+    /// re-apply issued precisely to force a re-derive must still fan out.
+    /// Gating it is what broke the scrolling-to-snapping restore once already.
     bool upsertAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity,
                               const AssignmentEntry& entry);
 

@@ -91,7 +91,9 @@ public:
     /// to wire its own VDM.
     int currentVirtualDesktop() const;
     /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
-    /// desktops, #648), falling back to the global currentVirtualDesktop().
+    /// desktops, #648). Goes STRAIGHT to the VDM's currentDesktopForScreen —
+    /// the per-screen-to-global fallback lives inside IVirtualDesktopManager,
+    /// not here, so this never routes through currentVirtualDesktop().
     int currentVirtualDesktopForScreen(const QString& screenId) const;
     QString currentActivity() const;
 

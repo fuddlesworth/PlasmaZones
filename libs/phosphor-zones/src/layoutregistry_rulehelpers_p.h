@@ -148,10 +148,13 @@ bool matchIsExactContextActivity(const PWR::MatchExpression& match);
 // an engine-mode action).
 //
 // NOT a purity check, despite the family name: this says nothing about the
-// rule's OTHER actions. Any caller that REBUILDS rule.actions must gate on
-// isPureAssignmentRule as well, or a context rule carrying SetEngineMode
-// alongside SetOpacity or LockContext loses the extra action — rebuilding
-// force-injects the three slot actions and drops everything else.
+// rule's OTHER actions. Any caller that REBUILDS rule.actions must therefore
+// either gate on isPureAssignmentRule OR call carryOverNonAssignmentActions,
+// because rebuilding force-injects the three slot actions and drops
+// everything else — so a context rule carrying SetEngineMode alongside
+// SetOpacity or LockContext would lose the extra action. Every rebuild path
+// now takes the second option, which is why clearAutotileAssignments can flip
+// a mixed rule without a purity gate.
 bool isContextAssignmentRule(const PWR::Rule& rule);
 
 // Build the AssignmentEntry encoded directly by a rule's action list (no

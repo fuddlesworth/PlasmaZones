@@ -85,15 +85,17 @@ bool hasTilingAlgorithmAction(const PWR::Rule& rule)
 bool isPureAssignmentRule(const PWR::Rule& rule)
 {
     // True when every action belongs to the three assignment slots
-    // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). Used by
-    // the shape-based scan in findExactContextRule to refuse to claim a
-    // user-authored rule that carries non-assignment actions
-    // (SetOpacity, OverrideAnimation*, Float, Exclude, ...) — admitting
-    // such a rule would silently strip those actions through the
-    // assignment-rebuild path (upsertAssignmentRule, assignLayout,
-    // applyBatchAssignments) since makeAssignmentActions emits only the
-    // three slot actions. False on an empty action list as well — a
-    // context match with no actions is not an assignment rule.
+    // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm), i.e. the rule
+    // is a PURE assignment. False on an empty action list as well — a context
+    // match with no actions is not an assignment rule.
+    //
+    // NOT the claim predicate. findExactContextRule used to gate on this and
+    // now uses hasAnyAssignmentSlotAction, because the rebuild paths carry
+    // non-assignment actions across (carryOverNonAssignmentActions) and so no
+    // longer strip a mixed rule. The remaining users are the ones that need
+    // "pure" specifically: purgeSnappingLayoutFromAssignments' Shape-1 gate,
+    // and the two batch family DROPS, which spare a mixed rule so the rebuild
+    // can merge onto it rather than shadow it.
     if (rule.actions.isEmpty()) {
         return false;
     }
