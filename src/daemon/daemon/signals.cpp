@@ -144,6 +144,14 @@ void Daemon::connectLayoutSignals()
         [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
             updateEngineScreens();
             updateLayoutFilter();
+            // Re-prime the active-assignment snapshot: layoutAssigned is the
+            // tail of every registry assignment write (applyLayoutById and
+            // setAssignmentEntryDirect alike), and the rule backing the entry
+            // was stored before the emit. Capturing the post-write ids here
+            // makes the deferred rulesChanged reconcile diff empty for
+            // self-inflicted writes — its apply pass is reserved for external
+            // rule edits, which never pass through here.
+            diffActiveAssignments();
 
             // Sync unified controller cycling index when assignment affects current desktop.
             const int curDesktop = currentDesktopForScreen(screenId);

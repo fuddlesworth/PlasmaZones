@@ -24,6 +24,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QThread>
+#include <QTimer>
 #include <array>
 
 #include <PhosphorServiceIdle/IdleService.h>
@@ -433,8 +434,28 @@ void Daemon::initEnginesAndWiring()
     // diffs the per-screen active assignment and drives the same apply path for
     // the screens that actually changed (a no-op for appearance/exclude/lock
     // edits, which don't alter the active assignment).
+    //
+    // DEFERRED, never inline: rulesChanged is emitted synchronously from
+    // inside every store mutation, and the daemon's own assignment writes
+    // (mode toggle, quick layouts, KCM batch) are stored as rules via the
+    // ContextRuleBridge. Reconciling inline re-entered the full KCM
+    // assignment-apply path in the middle of the write's own apply —
+    // duplicate OSDs, a duplicate resnapToNewLayout, and a resnap that
+    // raced the engine flip (dolphin snapped to a zone rect on a screen
+    // mid-flip into scrolling). One event-loop pass later the write's
+    // layoutAssigned tail has re-primed m_activeAssignmentByScreen, so a
+    // self-inflicted edit diffs empty and only genuinely external rule
+    // edits (D-Bus setAllRules / file reload) still move windows. The
+    // pending flag compresses a mutation burst (KCM batch) into one pass.
     connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this](bool /*persisted*/) {
-        reconcileActiveAssignments();
+        if (m_reconcileAssignmentsPending) {
+            return;
+        }
+        m_reconcileAssignmentsPending = true;
+        QTimer::singleShot(0, this, [this]() {
+            m_reconcileAssignmentsPending = false;
+            reconcileActiveAssignments();
+        });
     });
     // Prime the snapshot from the initial rule set so the first real rule edit
     // diffs against the live assignments rather than an empty baseline.

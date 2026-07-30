@@ -1151,6 +1151,16 @@ private:
     // reconcileActiveAssignments / diffActiveAssignments.
     QHash<QString, QString> m_activeAssignmentByScreen;
 
+    // Compression latch for the deferred rulesChanged → reconcile pass. The
+    // store emits rulesChanged synchronously from inside every mutation, and
+    // the daemon's own assignment writes (mode toggle, quick layouts, KCM
+    // batch) are stored as rules — reconciling inline re-entered the full
+    // assignment-apply path mid-toggle (double OSDs, a resnap racing the
+    // engine flip). Deferring to the next event-loop pass lets the write's
+    // own layoutAssigned tail re-prime the snapshot first, so self-inflicted
+    // edits diff empty and only external rule edits actually apply.
+    bool m_reconcileAssignmentsPending = false;
+
     // Last observed tiled-window count per screen, tracked so the engine's
     // placementChanged stream only re-resolves the per-screen tiling algorithm
     // when the count actually changes (a Field::TiledWindowCount rule keys on
