@@ -81,7 +81,8 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // of modifier-change events during a drag no longer causes the
             // overlay destroy/create churn that prompted discussion #310's
             // sibling regression.
-            const bool bypassed = m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen
+            const bool bypassed =
+                m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen
                 || m_dragBypassedForEngine;
             const bool shouldForward =
                 bypassed || detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded;

@@ -659,7 +659,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // Same reason but different screenId (autotile→autotile cross-VS):
         // update the captured screen so endDrag's ApplyFloat uses the right one.
         m_currentDragPolicy = newPolicy;
-        if (newReason == PhosphorProtocol::DragBypassReason::AutotileScreen) {
+        if (newReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen) {
             m_dragBypassScreenId = newPolicy.screenId;
         }
         return;
@@ -670,7 +670,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
 
     m_currentDragPolicy = newPolicy;
 
-    if (newReason == PhosphorProtocol::DragBypassReason::AutotileScreen) {
+    if (newReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen) {
         // Snap → autotile (or context-disabled → autotile). Cancel any
         // active snap overlay, enter bypass mode. Mirrors the old
         // effect-side flip block's "snap→autotile" branch, but driven by
@@ -701,7 +701,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
     // title bar while it snapped), the keyboard was never grabbed, and the
     // activation state was never reset. Scrolling widens the reachable surface
     // because every scrolling screen is in the union the fast path latches on.
-    if (oldReason == PhosphorProtocol::DragBypassReason::AutotileScreen || m_dragBypassedForEngine) {
+    if (oldReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen || m_dragBypassedForEngine) {
         // Autotile → snap (or autotile → context-disabled). Drop the
         // bypass flag and initialize snap-drag state as if the drag just
         // started on this snap screen. Remove the window from autotile

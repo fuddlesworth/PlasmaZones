@@ -16,6 +16,7 @@
 #include "settingsadaptor.h"
 #include "core/interfaces/interfaces.h"
 #include "config/settings.h" // For concrete Settings type
+#include "config/configdefaults.h" // ConfigDefaults::isValidScrolling* validators
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ProfileTree.h>

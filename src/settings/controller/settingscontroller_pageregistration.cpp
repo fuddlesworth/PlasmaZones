@@ -287,7 +287,7 @@ void SettingsController::buildApplicationController()
     // of Snapping and Tiling above (its sidebar row carries the same inline
     // enable toggle). One surface serves both modes: the engine has a single
     // page of knobs, so there is no simple/advanced split to declare.
-    regVirtual(QStringLiteral("scrolling-behavior"), QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling"),
+    regVirtual(QStringLiteral("scrolling-behavior"), QStringLiteral("scrolling"), PhosphorI18n::tr("Behavior"),
                QStringLiteral("pages/scrolling/ScrollingPage.qml"), QStringLiteral("view-list-details"),
                /*collapsible=*/false,
                /*divider=*/true);

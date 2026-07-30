@@ -209,6 +209,11 @@ void Settings::load()
 
     m_configBackend->reparseConfiguration();
 
+    // Whatever the reparse just brought in may have bypassed the kind-aware
+    // width setter, and the schema clamp cannot catch it (its bounds span both
+    // kinds). Coerce before anything reads the pair.
+    normalizeScrollingColumnWidthValue();
+
     // Per-mode disable lists live in rules.json, a separate file the
     // config backend's reparseConfiguration() does not touch. Reload the
     // rule store explicitly so a cross-process write (daemon shortcut, KCM

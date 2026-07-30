@@ -343,6 +343,12 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         }
         return false;
     };
+    // Whether each receive was actually adopted. The downstream reflow and
+    // move-marker gates read these instead of asking isWindowTracked again:
+    // the verdict is decided here, and re-deriving it left two sources of
+    // truth for one fact.
+    bool focusedAdopted = false;
+    bool partnerAdopted = false;
     // (Both placements: an autotile receiver's handoffReceive also announces
     // the arrival's tiled state on the passive float-sync channel —
     // intended; the relay's last-broadcast gate dedups an agreeing bit.)
@@ -357,7 +363,8 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         ctx.wasFloating = false;
         // Re-home slot for F is its ORIGINAL slot on the source screen, which
         // is the one the partner was going to take.
-        receiveVerified(targetEngine, sourceEngine, sourceScreen, partnerLandingZones, partnerLandingIndex, ctx);
+        focusedAdopted =
+            receiveVerified(targetEngine, sourceEngine, sourceScreen, partnerLandingZones, partnerLandingIndex, ctx);
     }
     {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
@@ -370,7 +377,8 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         ctx.wasFloating = false;
         // Mirror: the partner's re-home slot is its own original slot on the
         // target screen, the one F was going to take.
-        receiveVerified(sourceEngine, targetEngine, targetScreenId, focusedLandingZones, focusedLandingIndex, ctx);
+        partnerAdopted =
+            receiveVerified(sourceEngine, targetEngine, targetScreenId, focusedLandingZones, focusedLandingIndex, ctx);
     }
 
     // Source reflow, same rule as handleCrossModeMove: an autotile source
@@ -389,8 +397,7 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     // (re-homed into the source) while the partner's receive into the source
     // succeeded, nothing ever arrives on the target to close the partner's
     // vacated slot. Same autotile-only rule as above.
-    if (!targetScreenId.isEmpty() && targetEngine == m_autotileEngine.data()
-        && !targetEngine->isWindowTracked(windowId)) {
+    if (!targetScreenId.isEmpty() && targetEngine == m_autotileEngine.data() && !focusedAdopted) {
         targetEngine->retile(targetScreenId);
     }
 
@@ -402,10 +409,10 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     //    path: the receives above already re-pointed the effect's
     //    notified-screen records at each window's destination.
     if (targetScreenId != sourceScreen) {
-        if (targetEngine->isWindowTracked(windowId)) {
+        if (focusedAdopted) {
             Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, sourceScreen);
         }
-        if (sourceEngine->isWindowTracked(partner)) {
+        if (partnerAdopted) {
             Q_EMIT windowOutputMoveExpected(partner, sourceScreen, targetScreenId);
         }
     }

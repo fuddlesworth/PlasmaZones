@@ -125,7 +125,7 @@ QVariantList ruleTemplates()
                      QLatin1String("view-list-tree")));
     out.append(entry(QLatin1String("scrollingOnMonitor"), PhosphorI18n::tr("Use scrolling mode on a monitor"),
                      PhosphorI18n::tr("Switch one monitor to the scrolling placement mode."),
-                     QLatin1String("view-split-left-right")));
+                     QLatin1String("view-list-details")));
     out.append(entry(QLatin1String("lockLayoutOnMonitor"), PhosphorI18n::tr("Lock the layout on a monitor"),
                      PhosphorI18n::tr("Pin the active layout on one monitor so it can't be switched. This is the "
                                       "rule-driven version of the lock-layout shortcut."),

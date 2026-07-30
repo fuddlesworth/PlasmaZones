@@ -28,10 +28,12 @@ namespace PhosphorProtocol {
 /// branch and fell through to the canonical snap path).
 enum class DragBypassReason : int {
     None = 0, ///< canonical snap path — drag flows through the snap pipeline
-    AutotileScreen = 1, ///< drag started/ended on an ENGINE-OWNED screen (autotile
-                        ///< or scrolling) — the engine owns placement. The name and
-                        ///< the "autotile_screen" wire string predate the scrolling
-                        ///< engine and are kept for wire stability.
+    EngineOwnedScreen = 1, ///< drag started/ended on a screen owned by a tiling-family
+                           ///< engine (autotile or scrolling), which owns placement
+                           ///< there. The "autotile_screen" wire string predates the
+                           ///< scrolling engine and is kept verbatim for wire
+                           ///< stability, so the token names only one of the two
+                           ///< engines this value covers.
     SnappingDisabled = 2, ///< snap mode off globally — dead drag
     ContextDisabled = 3, ///< monitor/desktop/activity excluded in settings — dead drag
 };

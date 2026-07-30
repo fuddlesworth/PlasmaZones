@@ -75,6 +75,12 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId)
     if (!m_engine || screenId.isEmpty()) {
         return QStringLiteral("[]");
     }
+    // Same screen gate as focusColumn: header and XML both promise an empty
+    // array for a screen that is not scrolling, and a stale state left by an
+    // earlier scrolling session would otherwise be described as current.
+    if (!m_engine->isActiveOnScreen(screenId)) {
+        return QStringLiteral("[]");
+    }
     QJsonArray arr;
     QVector<int> columnNumbers;
     const QVector<QRectF> rects = m_engine->visibleTileRectsRelative(screenId, &columnNumbers);

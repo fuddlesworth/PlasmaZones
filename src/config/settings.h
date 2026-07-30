@@ -1268,6 +1268,13 @@ private:
     /// the already-merged list.
     void writeLockedScreens(const QStringList& screens);
 
+    /// Coerce the shared scrolling column-width VALUE into the range its
+    /// current KIND allows. Called from load(), which is the only point where
+    /// a value that bypassed the kind-aware setter (profile staging, config
+    /// import, hand edit) can be caught. See the definition for why this is
+    /// not done on read.
+    void normalizeScrollingColumnWidthValue();
+
 public:
     bool isScreenLocked(const QString& screenIdOrName) const override;
     void setScreenLocked(const QString& screenIdOrName, bool locked) override;

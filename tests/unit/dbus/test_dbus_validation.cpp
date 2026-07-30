@@ -171,18 +171,18 @@ private Q_SLOTS:
     void dragPolicy_autotileBypassRequiresScreenId()
     {
         PhosphorProtocol::DragPolicy p;
-        p.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
+        p.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
         p.captureGeometry = true;
         // screenId empty
         const QString err = p.validationError();
         QVERIFY(!err.isEmpty());
-        QVERIFY(err.contains(QStringLiteral("AutotileScreen bypass requires non-empty screenId")));
+        QVERIFY(err.contains(QStringLiteral("EngineOwnedScreen bypass requires non-empty screenId")));
     }
 
     void dragPolicy_autotileBypass_valid()
     {
         PhosphorProtocol::DragPolicy p;
-        p.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
+        p.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
         p.screenId = QStringLiteral("HP-1");
         p.captureGeometry = true;
         QVERIFY(p.validationError().isEmpty());
@@ -377,7 +377,7 @@ private Q_SLOTS:
     void dragBypassReason_wireRoundTrip_all()
     {
         // Every enum value must round-trip through the wire format.
-        for (auto r : {PhosphorProtocol::DragBypassReason::None, PhosphorProtocol::DragBypassReason::AutotileScreen,
+        for (auto r : {PhosphorProtocol::DragBypassReason::None, PhosphorProtocol::DragBypassReason::EngineOwnedScreen,
                        PhosphorProtocol::DragBypassReason::SnappingDisabled,
                        PhosphorProtocol::DragBypassReason::ContextDisabled}) {
             QCOMPARE(bypassReasonFromWireString(toWireString(r)), r);

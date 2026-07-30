@@ -11,8 +11,20 @@ namespace PlasmaZones {
 // ── Scrolling (PhosphorConfig::Store-backed) ────────────────────────────────
 // Scalars live in m_store under Scrolling; the schema validators own
 // the enum/list validation (validIntOr / canonicalProportionList). The width
-// value's REAL clamp is the kind-aware hand-written setter below — the
-// schema's clampDouble alone spans both kinds' ranges.
+// value's REAL clamp is kind-aware and applied by the hand-written getter AND
+// setter below, because the schema's clampDouble alone spans both kinds'
+// ranges and so cannot reject a value that is out of range for the kind
+// actually in force.
+
+namespace {
+qreal clampColumnWidthForKind(qreal value, bool isFixed)
+{
+    return isFixed ? qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthFixedMin(), value,
+                                   ConfigDefaults::scrollingDefaultColumnWidthFixedMax())
+                   : qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value,
+                                   ConfigDefaults::scrollingDefaultColumnWidthProportionMax());
+}
+} // namespace
 
 P_STORE_GET(bool, scrollingEnabled, scrollingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabledChanged)
@@ -89,17 +101,43 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
 
 P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, scrollingGroup, defaultColumnWidthValueKey, double)
 
+// Post-load normalization for the shared width VALUE key. The key serves both
+// kinds, so the schema's clampDouble has to span their union (0.05 proportion
+// up to 10000 px) and cannot reject a Fixed=5px that reached the store without
+// passing the setter below: profile staging, a config import, and a hand edit
+// all write the store directly. Settings::load calls this after the reparse so
+// a bypassed value is coerced once, before any consumer reads it. Read-time
+// coercion is deliberately NOT how this is done: the kind setter announces the
+// flip before coercing the value, and a clamping getter would report the new
+// kind's bounds against the old kind's value in that window.
+void Settings::normalizeScrollingColumnWidthValue()
+{
+    const int kind = scrollingDefaultColumnWidthKind();
+    // ClientDecides stores no width of its own — it deliberately leaves
+    // whatever the previous kind wrote in place, so there is nothing to
+    // validate against.
+    if (kind == ConfigDefaults::scrollingWidthKindClientDecides()) {
+        return;
+    }
+    const qreal stored = scrollingDefaultColumnWidthValue();
+    const qreal coerced = clampColumnWidthForKind(stored, kind == ConfigDefaults::scrollingWidthKindFixed());
+    if (qFuzzyCompare(1.0 + stored, 1.0 + coerced)) {
+        return;
+    }
+    qCWarning(lcConfig) << "scrolling: stored column width" << stored << "is out of range for the current kind" << kind
+                        << "— coercing to" << coerced;
+    m_store->write(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey(), coerced);
+    Q_EMIT scrollingDefaultColumnWidthValueChanged();
+}
+
 // Hand-written value setter: kind-aware clamp (Proportion values live in
 // [ValueMin, ProportionMax]; Fixed in pixels with a FixedMin floor, rounded
 // to whole pixels by the engine on load) — the schema clamp alone spans
 // both ranges.
 void Settings::setScrollingDefaultColumnWidthValue(qreal value)
 {
-    const bool isFixed = scrollingDefaultColumnWidthKind() == ConfigDefaults::scrollingWidthKindFixed();
-    value = isFixed ? qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthFixedMin(), value,
-                                    ConfigDefaults::scrollingDefaultColumnWidthFixedMax())
-                    : qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value,
-                                    ConfigDefaults::scrollingDefaultColumnWidthProportionMax());
+    value =
+        clampColumnWidthForKind(value, scrollingDefaultColumnWidthKind() == ConfigDefaults::scrollingWidthKindFixed());
     const qreal before =
         m_store->read<double>(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
     m_store->write(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey(), value);

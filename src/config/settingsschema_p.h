@@ -4,9 +4,12 @@
 #pragma once
 
 // Validator helpers shared between settingsschema.cpp and the per-domain
-// schema TUs split out of it (settingsschema_scrolling.cpp). Only the helpers
-// with more than one TU's worth of users live here; the ones used by a single
-// group stay in that TU's anonymous namespace.
+// schema TUs split out of it (settingsschema_scrolling.cpp). A helper belongs
+// here once it is used by more than one GROUP, whether or not those groups
+// live in the same TU: canonicalProportionList serves the two preset-list keys
+// from one TU today, and the point of the shared home is that the next domain
+// TU to grow a preset list finds it instead of copying it. Helpers with a
+// single group's worth of users stay in that TU's anonymous namespace.
 //
 // Each helper returns a function object with the same shape as
 // PhosphorConfig::KeyDef::validator.

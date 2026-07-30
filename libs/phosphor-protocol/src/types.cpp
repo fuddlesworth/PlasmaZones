@@ -23,7 +23,7 @@ QString toWireString(DragBypassReason r)
     switch (r) {
     case DragBypassReason::None:
         return {};
-    case DragBypassReason::AutotileScreen:
+    case DragBypassReason::EngineOwnedScreen:
         return kBypassAutotileScreen;
     case DragBypassReason::SnappingDisabled:
         return kBypassSnappingDisabled;
@@ -39,7 +39,7 @@ DragBypassReason bypassReasonFromWireString(const QString& s)
         return DragBypassReason::None;
     }
     if (s == kBypassAutotileScreen) {
-        return DragBypassReason::AutotileScreen;
+        return DragBypassReason::EngineOwnedScreen;
     }
     if (s == kBypassSnappingDisabled) {
         return DragBypassReason::SnappingDisabled;
@@ -110,14 +110,14 @@ QString BridgeRegistrationResult::validationError() const
 
 QString DragPolicy::validationError() const
 {
-    // The only strong invariant: an AutotileScreen bypass must carry the
-    // autotile screen id, because the effect uses it to scope retroactive
+    // The only strong invariant: an EngineOwnedScreen bypass must carry the
+    // owning engine's screen id, because the effect uses it to scope retroactive
     // bypass state and the post-drag float target. Other bypass reasons
     // (SnappingDisabled, ContextDisabled) may be emitted with an empty
     // screenId when beginDrag was called with an empty startScreenId —
     // the producer code in drag_protocol.cpp deliberately tolerates that.
-    if (bypassReason == DragBypassReason::AutotileScreen && screenId.isEmpty()) {
-        return QStringLiteral("DragPolicy: AutotileScreen bypass requires non-empty screenId");
+    if (bypassReason == DragBypassReason::EngineOwnedScreen && screenId.isEmpty()) {
+        return QStringLiteral("DragPolicy: EngineOwnedScreen bypass requires non-empty screenId");
     }
     return {};
 }
@@ -179,8 +179,8 @@ QDebug operator<<(QDebug debug, DragBypassReason r)
     case DragBypassReason::None:
         debug << "DragBypassReason::None";
         break;
-    case DragBypassReason::AutotileScreen:
-        debug << "DragBypassReason::AutotileScreen";
+    case DragBypassReason::EngineOwnedScreen:
+        debug << "DragBypassReason::EngineOwnedScreen";
         break;
     case DragBypassReason::SnappingDisabled:
         debug << "DragBypassReason::SnappingDisabled";

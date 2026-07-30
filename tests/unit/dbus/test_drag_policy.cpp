@@ -258,7 +258,7 @@ private Q_SLOTS:
             &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("HP-1"),
             &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
         QVERIFY(!p.grabKeyboard);
@@ -296,7 +296,7 @@ private Q_SLOTS:
             &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
             settings.m_dragBehavior == AutotileDragBehavior::Reorder);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
         QVERIFY(!p.grabKeyboard);
@@ -323,7 +323,7 @@ private Q_SLOTS:
             &settings, autotile.get(), scroll.get(), QStringLiteral("win-untracked"), QStringLiteral("HP-1"), &resolver,
             settings.m_dragBehavior == AutotileDragBehavior::Reorder);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(!p.immediateFloatOnStart);
         QVERIFY(p.validationError().isEmpty());
     }
@@ -369,7 +369,7 @@ private Q_SLOTS:
             &settings, autotile.get(), scroll.get(), QString(), QStringLiteral("HP-1"), &resolver,
             settings.m_dragBehavior == AutotileDragBehavior::Reorder);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(p.captureGeometry);
         QVERIFY(!p.immediateFloatOnStart);
         QVERIFY(p.validationError().isEmpty());
@@ -498,7 +498,7 @@ private Q_SLOTS:
             &settings, autotile.get(), scroll.get(), QStringLiteral("win-2"), QStringLiteral("HP-2"), &resolver,
             settings.m_dragBehavior == AutotileDragBehavior::Reorder);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         // The autotile Reorder branch keeps the window tiled for the
         // drag-insert preview; the scroll branch would have floated it.
         QVERIFY(!p.immediateFloatOnStart);
@@ -550,7 +550,7 @@ private Q_SLOTS:
             &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("HP-1"),
             &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(p.captureGeometry);
         QVERIFY(p.validationError().isEmpty());
     }
@@ -678,7 +678,7 @@ private Q_SLOTS:
             &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("HP-1"),
             &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         // The window IS tracked, yet Reorder mode must leave immediateFloatOnStart
         // cleared.
         QVERIFY(!p.immediateFloatOnStart);
@@ -708,7 +708,7 @@ private Q_SLOTS:
             &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("HP-1"),
             &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         // Float mode + tracked window → immediateFloatOnStart set. This is the
         // behavior the paired reorder test proves is suppressed under Reorder.
         QVERIFY(p.immediateFloatOnStart);
@@ -749,7 +749,7 @@ private Q_SLOTS:
 
         // Bypass-reason change still flips (regression guard).
         PhosphorProtocol::DragPolicy diffReason = base;
-        diffReason.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
+        diffReason.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
         QVERIFY(!(diffReason == base));
 
         // Every routing flag participates — these cases exist so a future

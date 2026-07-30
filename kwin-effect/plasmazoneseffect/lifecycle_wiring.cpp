@@ -377,7 +377,7 @@ void PlasmaZonesEffect::connectDragTracker()
                     // fast path below already did this synchronously;
                     // this catches the stale-cache case where the fast
                     // path missed.
-                    if (m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen) {
+                    if (m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen) {
                         if (!m_dragBypassedForEngine) {
                             m_dragBypassedForEngine = true;
                             m_dragBypassScreenId = capturedScreenId;
@@ -497,43 +497,44 @@ void PlasmaZonesEffect::connectDragTracker()
                 m_keyboardGrabbed = true;
             }
         });
-    connect(
-        m_dragTracker.get(), &DragTracker::dragMoved, this, [this](const QString& windowId, const QPointF& cursorPos) {
-            // Cross-VS flip detection is daemon-owned. The
-            // daemon's updateDragCursor handler computes policy at the
-            // cursor position and emits dragPolicyChanged when it flips.
-            // The effect reacts via slotDragPolicyChanged (see below).
-            //
-            // Here we only forward the cursor to the daemon as a
-            // fire-and-forget call. The daemon-side dispatch handles
-            // both the snap-path overlay updates and the cross-VS
-            // detection in a single round trip.
+    connect(m_dragTracker.get(), &DragTracker::dragMoved, this,
+            [this](const QString& windowId, const QPointF& cursorPos) {
+                // Cross-VS flip detection is daemon-owned. The
+                // daemon's updateDragCursor handler computes policy at the
+                // cursor position and emits dragPolicyChanged when it flips.
+                // The effect reacts via slotDragPolicyChanged (see below).
+                //
+                // Here we only forward the cursor to the daemon as a
+                // fire-and-forget call. The daemon-side dispatch handles
+                // both the snap-path overlay updates and the cross-VS
+                // detection in a single round trip.
 
-            // In autotile bypass — skip snap zone processing locally;
-            // the daemon's updateDragCursor still watches for a flip
-            // BACK to snap mode.
-            const bool bypassed = m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen
-                || m_dragBypassedForEngine;
-            if (!bypassed) {
-                // Gate D-Bus calls on activation trigger state so a drag
-                // without any intent to use zones doesn't flood the bus
-                // at 30Hz. This is a local input-event optimization; it
-                // isn't policy and doesn't come from the daemon.
-                if (!detectActivationAndGrab() && !m_cachedZoneSelectorEnabled && m_triggersLoaded) {
-                    return;
+                // In autotile bypass — skip snap zone processing locally;
+                // the daemon's updateDragCursor still watches for a flip
+                // BACK to snap mode.
+                const bool bypassed =
+                    m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen
+                    || m_dragBypassedForEngine;
+                if (!bypassed) {
+                    // Gate D-Bus calls on activation trigger state so a drag
+                    // without any intent to use zones doesn't flood the bus
+                    // at 30Hz. This is a local input-event optimization; it
+                    // isn't policy and doesn't come from the daemon.
+                    if (!detectActivationAndGrab() && !m_cachedZoneSelectorEnabled && m_triggersLoaded) {
+                        return;
+                    }
                 }
-            }
 
-            // Forward the cursor to the daemon. For snap drags, this
-            // drives overlay/zone detection. For bypass drags, the
-            // daemon watches the cursor for a cross-VS flip and emits
-            // dragPolicyChanged when the policy changes.
-            PhosphorProtocol::ClientHelpers::fireAndForget(
-                this, PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("updateDragCursor"),
-                {windowId, qRound(cursorPos.x()), qRound(cursorPos.y()), static_cast<int>(m_currentModifiers),
-                 static_cast<int>(m_currentMouseButtons)},
-                QStringLiteral("updateDragCursor"));
-        });
+                // Forward the cursor to the daemon. For snap drags, this
+                // drives overlay/zone detection. For bypass drags, the
+                // daemon watches the cursor for a cross-VS flip and emits
+                // dragPolicyChanged when the policy changes.
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    this, PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("updateDragCursor"),
+                    {windowId, qRound(cursorPos.x()), qRound(cursorPos.y()), static_cast<int>(m_currentModifiers),
+                     static_cast<int>(m_currentMouseButtons)},
+                    QStringLiteral("updateDragCursor"));
+            });
     connect(m_dragTracker.get(), &DragTracker::dragStopped, this,
             [this](KWin::EffectWindow* w, const QString& windowId, bool cancelled) {
                 // Release keyboard grab before handling drag end

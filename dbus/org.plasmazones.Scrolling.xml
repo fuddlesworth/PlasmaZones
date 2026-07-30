@@ -23,7 +23,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="visibleStripJson">
-            <annotation name="org.gtk.GDBus.DocString" value="The strip as it currently looks on a screen: a JSON array of visible tile rects normalized to the work area ({x, y, width, height}, 0.0 to 1.0 per axis). The settings app renders it where the other modes show a layout thumbnail. Empty array when the screen has no strip."/>
+            <annotation name="org.gtk.GDBus.DocString" value="The strip as it currently looks on a screen: a JSON array of visible tile rects normalized to the work area ({x, y, width, height}, 0.0 to 1.0 per axis) plus zoneNumber, the 1-based visible column slot the rect occupies. The settings app renders it where the other modes show a layout thumbnail. Empty array when the screen has no strip or is not scrolling."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip to describe."/>
             </arg>

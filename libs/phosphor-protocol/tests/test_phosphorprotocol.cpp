@@ -49,8 +49,8 @@ private Q_SLOTS:
     void testBypassReasonWireStringRoundTrip()
     {
         QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::None)), DragBypassReason::None);
-        QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::AutotileScreen)),
-                 DragBypassReason::AutotileScreen);
+        QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::EngineOwnedScreen)),
+                 DragBypassReason::EngineOwnedScreen);
         QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::SnappingDisabled)),
                  DragBypassReason::SnappingDisabled);
         QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::ContextDisabled)),
@@ -92,7 +92,7 @@ private Q_SLOTS:
     void testDragPolicyValidationAutotileNoScreen()
     {
         DragPolicy p;
-        p.bypassReason = DragBypassReason::AutotileScreen;
+        p.bypassReason = DragBypassReason::EngineOwnedScreen;
         p.screenId.clear();
         QVERIFY(!p.validationError().isEmpty());
     }

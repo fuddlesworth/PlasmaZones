@@ -29,13 +29,15 @@ namespace {
 // per session and return shouldSnap=false rather than handing back wrong coordinates.
 // The effect treats shouldSnap=false as "no snap" and leaves the window where KWin placed
 // it, which is the same fallback as if the slot had never been called.
-bool isSnapReadyOrWarn(PhosphorPlacement::WindowTrackingService* service, const char* method)
+// @p warned is the CALLER's latch, not a function-local static: a static here
+// is process-wide, so in a ctest binary the first fixture to hit this path
+// would swallow the warning for every fixture after it.
+bool isSnapReadyOrWarn(PhosphorPlacement::WindowTrackingService* service, const char* method, bool& warned)
 {
     auto* mgr = service ? service->screenManager() : nullptr;
     if (!mgr || mgr->isPanelGeometryReady()) {
         return true;
     }
-    static bool warned = false;
     if (!warned) {
         warned = true;
         qCWarning(lcDbusWindow) << method << "called before panel geometry ready — returning no-snap."
@@ -66,7 +68,7 @@ void SnapAdaptor::snapToLastZone(const QString& windowId, const QString& windowS
         return;
     }
 
-    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToLastZone")) {
+    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToLastZone", m_snapNotReadyWarned)) {
         return;
     }
 
@@ -99,7 +101,7 @@ void SnapAdaptor::snapToAppRule(const QString& windowId, const QString& windowSc
         return;
     }
 
-    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToAppRule")) {
+    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToAppRule", m_snapNotReadyWarned)) {
         return;
     }
 
@@ -132,7 +134,7 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
         return;
     }
 
-    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToEmptyZone")) {
+    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToEmptyZone", m_snapNotReadyWarned)) {
         return;
     }
 
@@ -176,7 +178,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
-    if (!isSnapReadyOrWarn(m_adaptor->service(), "resolveWindowRestore")) {
+    if (!isSnapReadyOrWarn(m_adaptor->service(), "resolveWindowRestore", m_snapNotReadyWarned)) {
         return;
     }
 

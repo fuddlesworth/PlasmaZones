@@ -558,7 +558,7 @@ private:
     // (requires (a) autotile-bypass path, (b) AutotileDragBehavior::Reorder,
     // (c) window tiled at drag-start) and RE-LATCHED to the cursor's current screen
     // on each policy flip in updateDragCursor under the SAME conditions (destination
-    // bypassReason == AutotileScreen AND isWindowTiled), so a mid-drag crossing
+    // bypassReason == EngineOwnedScreen AND isWindowTiled), so a mid-drag crossing
     // between screens with divergent per-context SetDragBehavior rules applies the
     // destination screen's mode without ever adopting a floating window into the
     // stack or forcing a preview on a context-disabled screen. Cleared by endDrag,
