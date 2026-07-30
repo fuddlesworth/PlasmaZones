@@ -633,6 +633,48 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
     return true;
 }
 
+int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& params)
+{
+    // Visible = the column's strip span intersects the viewport. Fully
+    // minimized columns resolve to zero width and never qualify.
+    const int viewX = viewXFor(params);
+    const int workW = params.workArea.width();
+    QVector<int> visible;
+    for (int i = 0; i < m_columns.size(); ++i) {
+        const int w = columnWidthPx(m_columns.at(i), params);
+        if (w <= 0) {
+            continue;
+        }
+        const int x = columnStripX(i, params) - viewX;
+        if (x < workW && x + w > 0) {
+            visible.append(i);
+        }
+    }
+    if (visible.size() < 2) {
+        return 0;
+    }
+    // Rotate tiles + active-tile slot through the visible columns; width
+    // and display stay with the SLOT so the strip's geometry holds still.
+    QVector<QVector<Tile>> tiles;
+    QVector<int> activeTileIdx;
+    tiles.reserve(visible.size());
+    activeTileIdx.reserve(visible.size());
+    for (const int idx : visible) {
+        tiles.append(m_columns.at(idx).tiles);
+        activeTileIdx.append(m_columns.at(idx).activeTileIdx);
+    }
+    int rotated = 0;
+    const int n = visible.size();
+    for (int i = 0; i < n; ++i) {
+        const int from = clockwise ? (i - 1 + n) % n : (i + 1) % n;
+        Column& dest = m_columns[visible.at(i)];
+        dest.tiles = tiles.at(from);
+        dest.activeTileIdx = activeTileIdx.at(from);
+        rotated += dest.tiles.size();
+    }
+    return rotated;
+}
+
 // ── Display ─────────────────────────────────────────────────────────────────
 
 bool ScrollStrip::toggleActiveColumnTabbed()

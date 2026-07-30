@@ -204,6 +204,16 @@ public:
     /// Toggle the active column between Normal and Tabbed presentation.
     bool toggleActiveColumnTabbed();
 
+    /// Rotate the window contents of the VISIBLE columns through their
+    /// slots (clockwise = every stack shifts one slot right, the last
+    /// visible wraps to the first). Widths and display stay with the SLOT,
+    /// like autotile's rotate through fixed zones, so the strip's geometry
+    /// does not move — only the windows do. The active column index stays
+    /// put (focus follows the slot; callers activate its new window).
+    /// Returns the number of windows rotated, 0 when fewer than two
+    /// columns are visible.
+    int rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& params);
+
     // ── View ─────────────────────────────────────────────────────────────────
     /// Re-apply the centering policy to the current active column (settings
     /// change / work-area change) using the current anchor as the "no

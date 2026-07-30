@@ -62,6 +62,7 @@ private Q_SLOTS:
     void takeWindowLeavesFocusPolicyAlone();
     void onOverflowIgnoresShiftedPrevIdxOnRemoval();
     void reconcileLoneTileRecordsHeightIntent();
+    void rotateVisibleColumnsCyclesWindowsThroughSlots();
     void degenerateWorkAreaNeverAsserts();
     void monsterFixedSiblingLeavesAutoTilesVisible();
     void moveActiveColumnToTracksPreMaximizeSlot();
@@ -407,6 +408,35 @@ void TestScrollStripOps::reconcileGuardsAndEmptyAck()
 
     // Unknown window: plain no-op.
     QVERIFY(!strip.reconcileWindowSize(QStringLiteral("nope"), QSize(100, 100)));
+}
+
+void TestScrollStripOps::rotateVisibleColumnsCyclesWindowsThroughSlots()
+{
+    // a | b | c, focus on c: the view shows [b, c] and a sits off-left.
+    // Rotate cycles WINDOWS through the visible slots only — a stays put,
+    // the slot geometry (widths, positions) does not move, and the active
+    // slot keeps its index so focus lands on the window rotated into it.
+    const auto params = defaultParams();
+    ScrollStrip strip = threeColumns(params);
+    const QRect bSlot = rectOf(strip.relayout(params), QStringLiteral("b"));
+    const QRect cSlot = rectOf(strip.relayout(params), QStringLiteral("c"));
+
+    QCOMPARE(strip.rotateVisibleColumns(true, params), 2);
+    QCOMPARE(strip.windowsInOrder(), QStringList({QStringLiteral("a"), QStringLiteral("c"), QStringLiteral("b")}));
+    // Slot geometry holds still; the windows traded places.
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("c")), bSlot);
+    QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("b")), cSlot);
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("b"));
+
+    // Counterclockwise undoes it.
+    QCOMPARE(strip.rotateVisibleColumns(false, params), 2);
+    QCOMPARE(strip.windowsInOrder(), QStringList({QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
+
+    // A lone visible column has nothing to rotate with.
+    ScrollStrip lone;
+    QVERIFY(lone.insertWindow(QStringLiteral("solo"), kHalf, ColumnDisplay::Normal, params));
+    QCOMPARE(lone.rotateVisibleColumns(true, params), 0);
 }
 
 void TestScrollStripOps::reconcileLoneTileRecordsHeightIntent()

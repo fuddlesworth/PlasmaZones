@@ -280,9 +280,25 @@ void ScrollEngine::moveFocusedToPosition(int position, const PhosphorEngine::Nav
 
 void ScrollEngine::rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx)
 {
-    Q_UNUSED(clockwise)
-    Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("not_supported"), ctx.windowId, QString(),
-                              ctx.screenId);
+    P_SCROLL_RESOLVE(ctx.screenId);
+    const QString action = QStringLiteral("rotate");
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), ctx.windowId, QString(), screen);
+        return;
+    }
+    const int rotated = state->strip().rotateVisibleColumns(clockwise, params);
+    if (rotated < 2) {
+        // Fewer than two visible columns: nothing meaningfully rotates.
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
+        return;
+    }
+    applyLayout(screen, true);
+    Q_EMIT placementChanged(screen);
+    // "direction:count" is the rotate OSD's wire convention (the overlay
+    // splits it into the arrow and the "Rotated %n windows" copy).
+    const QString reason =
+        (clockwise ? QStringLiteral("clockwise:%1") : QStringLiteral("counterclockwise:%1")).arg(rotated);
+    Q_EMIT navigationFeedback(true, action, reason, ctx.windowId, state->strip().activeWindowId(), screen);
 }
 
 void ScrollEngine::reapplyLayout(const PhosphorEngine::NavigationContext& ctx)
