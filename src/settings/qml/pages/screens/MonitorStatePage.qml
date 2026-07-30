@@ -471,12 +471,12 @@ SettingsFlickable {
                         stateView.scrollingStripZones = settingsController.getScrollingStripPreview(stateView.screenState.screenId || "");
                 }
                 // category 1 renders the "Dynamic" badge (a live strip
-                // snapshot is generated, not editable) and the zone numbers
-                // stay off — strip positions are transient.
+                // snapshot is generated, not editable). Zone numbers are the
+                // 1-based strip column positions the Snap-to-Zone digits
+                // target, so they show like the other modes' previews.
                 layout: ({
                         "displayName": i18nc("tiling mode name", "Scrolling"),
                         "category": 1,
-                        "zoneNumberDisplay": "none",
                         "zones": stateView.scrollingStripZones.length > 0 ? stateView.scrollingStripZones : stateView.scrollingFallbackZones
                     })
                 isSelected: true

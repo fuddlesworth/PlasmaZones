@@ -183,7 +183,9 @@ CatalogMeta catalogMetaForId(const QString& id)
         return {QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all"};
     }
     if (id.startsWith(QLatin1String("snap_to_zone_"))) {
-        return {QT_TRANSLATE_NOOP("plasmazones", "Snap to Zone"), 3, "snapping"};
+        // Every engine implements moveFocusedToPosition: zone N in
+        // snapping, layout slot N in tiling, column N in scrolling.
+        return {QT_TRANSLATE_NOOP("plasmazones", "Snap to Zone"), 3, "all"};
     }
     // A shortcut added to the table without catalog metadata still shows up
     // (miscategorised beats invisible), and the log points at the fix.

@@ -204,6 +204,12 @@ public:
     /// Toggle the active column between Normal and Tabbed presentation.
     bool toggleActiveColumnTabbed();
 
+    /// Direct height-intent write for @p windowId (any tile, not just the
+    /// active one) — the mode-round-trip restore path re-applies stashed
+    /// heights through this. Returns false for an unknown window or an
+    /// unchanged intent.
+    bool setWindowHeightIntent(const QString& windowId, const WindowHeight& height);
+
     /// Rotate the window contents of the VISIBLE columns through their
     /// slots (clockwise = every stack shifts one slot right, the last
     /// visible wraps to the first). Widths and display stay with the SLOT,

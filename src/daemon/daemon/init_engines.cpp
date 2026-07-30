@@ -175,6 +175,31 @@ void Daemon::initEnginesAndWiring()
             == PhosphorZones::AssignmentEntry::Mode::Snapping;
     });
 
+    // Scroll "zone numbers" for the navigation OSD: a strip window's zone
+    // number is its 1-based column position, the same coordinate the
+    // Snap-to-Zone digits drive through moveFocusedToPosition. This keeps
+    // the "Zone %1" OSD copy meaningful on scrolling screens, which have
+    // no zone layout of their own.
+    m_overlayService->setScrollZonesProvider([this](const QString& screenId) -> QVariantList {
+        const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+        if (!scroll || !scroll->isActiveOnScreen(screenId)) {
+            return {};
+        }
+        QVariantList zones;
+        const QStringList order = scroll->managedWindowOrder(screenId);
+        for (const QString& windowId : order) {
+            const int column = scroll->columnIndexForWindow(screenId, windowId);
+            if (column < 0) {
+                continue;
+            }
+            QVariantMap zone;
+            zone[QStringLiteral("id")] = windowId;
+            zone[QStringLiteral("zoneNumber")] = column + 1;
+            zones.append(zone);
+        }
+        return zones;
+    });
+
     // Autotile provider. setContextGapProvider is derived-only
     // (AutotileEngine); m_autotileEngine is held as the base
     // PlacementEngineBase, so use the derived `autotileEngine` pointer

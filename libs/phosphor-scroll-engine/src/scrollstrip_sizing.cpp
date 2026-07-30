@@ -264,6 +264,21 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     return true;
 }
 
+bool ScrollStrip::setWindowHeightIntent(const QString& windowId, const WindowHeight& height)
+{
+    const int colIdx = columnOfWindow(windowId);
+    if (colIdx < 0) {
+        return false;
+    }
+    Column& col = m_columns[colIdx];
+    Tile& tile = col.tiles[col.indexOfWindow(windowId)];
+    if (tile.height == height) {
+        return false;
+    }
+    tile.height = height;
+    return true;
+}
+
 bool ScrollStrip::resetActiveColumnHeights()
 {
     Column* col = activeColumnMutable();

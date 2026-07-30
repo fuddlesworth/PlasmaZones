@@ -87,8 +87,11 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
     return params;
 }
 
-QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId) const
+QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId, QVector<int>* columnNumbers) const
 {
+    if (columnNumbers) {
+        columnNumbers->clear();
+    }
     const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
     if (!state || state->strip().isEmpty()) {
         return {};
@@ -109,21 +112,27 @@ QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId) const
             const QRect clipped = tile.rect.intersected(params.workArea);
             if (!clipped.isEmpty()) {
                 out.append(clipped);
+                if (columnNumbers) {
+                    columnNumbers->append(column.columnIndex + 1);
+                }
             }
         }
     }
     return out;
 }
 
-QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) const
+QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId, QVector<int>* columnNumbers) const
 {
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
     if (!params.workArea.isValid()) {
+        if (columnNumbers) {
+            columnNumbers->clear();
+        }
         return {};
     }
     const QRect area = params.workArea;
     QVector<QRectF> out;
-    for (const QRect& r : visibleTileRects(screenId)) {
+    for (const QRect& r : visibleTileRects(screenId, columnNumbers)) {
         out.append(QRectF(
             static_cast<qreal>(r.x() - area.x()) / area.width(), static_cast<qreal>(r.y() - area.y()) / area.height(),
             static_cast<qreal>(r.width()) / area.width(), static_cast<qreal>(r.height()) / area.height()));

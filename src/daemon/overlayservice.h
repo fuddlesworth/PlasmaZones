@@ -185,6 +185,20 @@ public:
     /// "set-once after construction" discipline used by every other
     /// setAutotileLayoutSource call site keeps the contract uniform.
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
+
+    /// Scroll-mode zone model for the navigation OSD: returns one entry per
+    /// strip window ({id: windowId, zoneNumber: 1-based strip column
+    /// position}) for a scrolling screen, empty otherwise. Daemon-injected
+    /// (the overlay stays engine-agnostic); when it answers non-empty, the
+    /// navigation OSD uses it in place of the layout's zone list so the
+    /// "Zone %1" copy resolves and no snap layout is required on a
+    /// scrolling screen. Same clear-before-destroy contract as the other
+    /// injected closures.
+    using ScrollZonesProvider = std::function<QVariantList(const QString& screenId)>;
+    void setScrollZonesProvider(ScrollZonesProvider provider)
+    {
+        m_scrollZonesProvider = std::move(provider);
+    }
     PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager;
@@ -663,6 +677,7 @@ private:
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
+    ScrollZonesProvider m_scrollZonesProvider;
     /// Borrowed from Daemon. stop() detaches this even when init never reached start().
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutManager =

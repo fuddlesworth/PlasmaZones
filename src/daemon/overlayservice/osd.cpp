@@ -741,8 +741,13 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // resolvable), so gating them on a layout would drop the feedback the
     // engine emitted them for.
     const bool needsLayout = success && !noLayoutActions.contains(action);
+    // Scrolling screens have no zone layout of their own; the daemon-injected
+    // provider supplies the strip's window→column-number model instead, so
+    // "Zone %1" copy resolves and the missing-layout bail below must not
+    // swallow the feedback.
+    const QVariantList scrollZones = m_scrollZonesProvider ? m_scrollZonesProvider(effectiveId) : QVariantList();
     PhosphorZones::Layout* screenLayout = resolveScreenLayout(effectiveId);
-    if (needsLayout && (!screenLayout || screenLayout->zones().isEmpty())) {
+    if (needsLayout && scrollZones.isEmpty() && (!screenLayout || screenLayout->zones().isEmpty())) {
         qCDebug(lcOverlay) << "No layout or zones for navigation OSD: screen=" << effectiveId
                            << "layout=" << (screenLayout ? screenLayout->name() : QStringLiteral("null"))
                            << "zones=" << (screenLayout ? screenLayout->zones().size() : 0) << "action=" << action;
@@ -810,8 +815,11 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // lookup (only need zoneId and zoneNumber, not name/appearance). Pass
     // navScreenGeom so fixed-mode zones normalize against the navigated-to
     // screen rather than Layout::lastRecalcGeometry().
-    QVariantList zonesList = PhosphorZones::LayoutUtils::zonesToVariantList(
-        screenLayout, PhosphorZones::ZoneField::Minimal, QRectF(navScreenGeom));
+    QVariantList zonesList = scrollZones;
+    if (zonesList.isEmpty()) {
+        zonesList = PhosphorZones::LayoutUtils::zonesToVariantList(screenLayout, PhosphorZones::ZoneField::Minimal,
+                                                                   QRectF(navScreenGeom));
+    }
     writeQmlProperty(osdSlot, QStringLiteral("zones"), zonesList);
 
     // Stage d: resolve + push the OSD surface decoration. Navigation OSDs do

@@ -112,7 +112,12 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
             [&currentKey](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
                 return key == currentKey;
             },
-            [this, &releasedWindows](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
+            [this, &releasedWindows](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
+                // Mode reassignment: remember the strip's structure so a
+                // cycle back to Scrolling rebuilds it (stacks, widths,
+                // tabbed flags) instead of a default one-window-per-column
+                // strip. Captured BEFORE the release strips the state.
+                stashStripStructure(key, state);
                 releaseScreenState(state, releasedWindows);
             });
         releasedScreens.insert(screenId);
@@ -173,6 +178,135 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     m_consumedInitialOrder.remove(screenId);
     clearTabStripsForScreen(screenId);
     state->deleteLater();
+}
+
+void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state)
+{
+    if (!state || state->strip().isEmpty()) {
+        return;
+    }
+    QVector<StashedColumn> stash;
+    for (const Column& col : state->strip().columns()) {
+        StashedColumn sc;
+        sc.width = col.width;
+        sc.display = col.display;
+        for (const Tile& tile : col.tiles) {
+            sc.tiles.append({tile.windowId, tile.height});
+        }
+        if (!sc.tiles.isEmpty()) {
+            stash.append(sc);
+        }
+    }
+    if (stash.isEmpty()) {
+        return;
+    }
+    m_stripStash.insert(key, stash);
+    // Fresh capture: nothing consumed yet (a stale consumed set from an
+    // earlier round trip must not mask the new stash's ids).
+    m_stripStashConsumed.remove(key);
+}
+
+bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
+                                         const QString& windowId, const QString& screenId, int minWidth, int minHeight)
+{
+    const auto it = m_stripStash.constFind(key);
+    if (it == m_stripStash.constEnd()) {
+        return false;
+    }
+    // A consumed id must not re-enter (same reasoning as the order seed's
+    // consumed guard: a later unrelated open reusing the id would be
+    // re-positioned by the stale entry).
+    if (m_stripStashConsumed.value(key).contains(windowId)) {
+        return false;
+    }
+    const QVector<StashedColumn>& stash = *it;
+    int colIdx = -1;
+    int tileIdx = -1;
+    for (int i = 0; i < stash.size() && colIdx < 0; ++i) {
+        const int j = [&]() {
+            for (int t = 0; t < stash.at(i).tiles.size(); ++t) {
+                if (stash.at(i).tiles.at(t).windowId == windowId) {
+                    return t;
+                }
+            }
+            return -1;
+        }();
+        if (j >= 0) {
+            colIdx = i;
+            tileIdx = j;
+        }
+    }
+    if (colIdx < 0) {
+        return false;
+    }
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    const StashedColumn& sc = stash.at(colIdx);
+    bool inserted = false;
+    // A stashed sibling already present re-locates the live column — the
+    // stashed column index goes stale as columns arrive and close.
+    int liveCol = -1;
+    for (const StashedTile& sibling : sc.tiles) {
+        if (sibling.windowId == windowId) {
+            continue;
+        }
+        const int c = state->strip().columnOfWindow(sibling.windowId);
+        if (c >= 0) {
+            liveCol = c;
+            break;
+        }
+    }
+    if (liveCol >= 0) {
+        // Tile position among the ALREADY-ARRIVED stashed siblings.
+        int at = 0;
+        const Column& live = state->strip().columns().at(liveCol);
+        for (int j = 0; j < tileIdx; ++j) {
+            if (live.indexOfWindow(sc.tiles.at(j).windowId) >= 0) {
+                ++at;
+            }
+        }
+        inserted = state->strip().insertWindowIntoColumnAt(liveCol, at, windowId, params, minWidth, minHeight);
+    } else {
+        // New column at its stashed position among the stashed columns
+        // that already have a representative on the strip.
+        int colAt = 0;
+        for (int i = 0; i < colIdx; ++i) {
+            for (const StashedTile& t : stash.at(i).tiles) {
+                if (state->strip().columnOfWindow(t.windowId) >= 0) {
+                    ++colAt;
+                    break;
+                }
+            }
+        }
+        inserted = state->strip().insertWindowAt(colAt, windowId, sc.width, sc.display, params);
+        if (inserted) {
+            state->strip().setWindowMinimumSize(windowId, minWidth, minHeight);
+        }
+    }
+    if (!inserted) {
+        return false;
+    }
+    state->strip().setWindowHeightIntent(windowId, sc.tiles.at(tileIdx).height);
+    QSet<QString>& consumed = m_stripStashConsumed[key];
+    consumed.insert(windowId);
+    int total = 0;
+    for (const StashedColumn& c : stash) {
+        total += c.tiles.size();
+    }
+    if (consumed.size() >= total) {
+        m_stripStash.remove(key);
+        m_stripStashConsumed.remove(key);
+    }
+    return true;
+}
+
+void ScrollEngine::sweepStripStash(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale)
+{
+    for (auto it = m_stripStash.begin(); it != m_stripStash.end();) {
+        it = stale(it.key()) ? m_stripStash.erase(it) : std::next(it);
+    }
+    for (auto it = m_stripStashConsumed.begin(); it != m_stripStashConsumed.end();) {
+        it = stale(it.key()) ? m_stripStashConsumed.erase(it) : std::next(it);
+    }
 }
 
 void ScrollEngine::clearTabStripsForScreen(const QString& screenId)
@@ -549,6 +683,9 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     });
     m_context.pruneDesktop(removedDesktop);
     sweepStatelessScreenBookkeeping(touchedScreens);
+    sweepStripStash([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
+        return key.desktop == removedDesktop;
+    });
 }
 
 void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
@@ -570,6 +707,9 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
         return stale(key.activity);
     });
     sweepStatelessScreenBookkeeping(touchedScreens);
+    sweepStripStash([&stale](const PhosphorEngine::PlacementStateKey& key) {
+        return stale(key.activity);
+    });
 }
 
 void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
@@ -608,6 +748,9 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
             state->deleteLater();
         });
     m_states.removeWindowsIf([&matches](const QString&, const PhosphorEngine::PlacementStateKey& key) {
+        return matches(key.screenId);
+    });
+    sweepStripStash([&matches](const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId);
     });
     // Standalone sweep for STATELESS sub-screens too: a virtual sub-screen

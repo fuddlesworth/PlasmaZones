@@ -325,12 +325,14 @@ void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
         return;
     }
     const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
-    QVector<QRectF> rects = scroll ? scroll->visibleTileRectsRelative(screenId) : QVector<QRectF>();
+    QVector<int> columnNumbers;
+    QVector<QRectF> rects = scroll ? scroll->visibleTileRectsRelative(screenId, &columnNumbers) : QVector<QRectF>();
     if (rects.isEmpty()) {
         // Representative endless strip (kept in step with MonitorStatePage's
         // scrollingFallbackZones): clipped columns at both edges read as a
         // window onto a longer strip.
         rects = {QRectF(0.0, 0.0, 0.1, 1.0), QRectF(0.115, 0.0, 0.5, 1.0), QRectF(0.63, 0.0, 0.37, 1.0)};
+        columnNumbers = {1, 2, 3};
     }
     QVariantList zones;
     zones.reserve(rects.size());
@@ -342,7 +344,10 @@ void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
         relGeo[QLatin1String("width")] = r.width();
         relGeo[QLatin1String("height")] = r.height();
         QVariantMap zoneMap;
-        zoneMap[QLatin1String("zoneNumber")] = i + 1;
+        // The scroll zone number is the tile's 1-based strip column
+        // position — the coordinate the Snap-to-Zone digits drive — so a
+        // partially-scrolled strip labels its columns 3,4 rather than 1,2.
+        zoneMap[QLatin1String("zoneNumber")] = (i < columnNumbers.size()) ? columnNumbers.at(i) : (i + 1);
         zoneMap[QLatin1String("relativeGeometry")] = relGeo;
         zoneMap[QLatin1String("id")] = QString::number(i);
         zoneMap[QLatin1String("name")] = QString();
@@ -350,12 +355,11 @@ void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
         zones.append(zoneMap);
     }
     // Autotile category: the renderer treats it as "generated, not
-    // editable", which is exactly what a live strip snapshot is. Zone
-    // numbers are suppressed — strip positions are transient.
+    // editable", which is exactly what a live strip snapshot is.
     m_overlayService->showLayoutOsd(QString(PhosphorLayout::LayoutId::ScrollingId),
                                     PhosphorI18n::tr("Scrolling", "tiling mode name"), zones,
                                     static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId, false,
-                                    false, QStringLiteral("none"), 1);
+                                    false, QStringLiteral("all"), 1);
     qCInfo(lcDaemon) << "Showing scrolling-mode strip preview OSD: screen=" << screenId << "tiles=" << rects.size();
 }
 

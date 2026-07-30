@@ -96,6 +96,17 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         }
     }
 
+    // Mode-round-trip structure restore FIRST: a strip stashed at the last
+    // reassignment away from Scrolling rebuilds exactly (stacks, widths,
+    // display, heights), which is strictly stronger than the order seed's
+    // position-only verdict. The seed entry is still consumed so it cannot
+    // linger past the adoption.
+    bool inserted = false;
+    if (restoreFromStripStash(state, currentKeyForScreen(screenId), windowId, screenId, minWidth, minHeight)) {
+        inserted = true;
+        consumePendingInitialOrder(screenId, windowId);
+    }
+
     // Deterministic mode-transition seeding: when the previous engine's
     // window order was captured for this screen, insert each arriving window
     // at its recorded relative position instead of next-to-focus. Each id is
@@ -103,7 +114,6 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // "consumed as windows arrive" contract. Without consumption a stale
     // seed would re-position an unrelated later open that happens to share
     // an id with the captured list.
-    bool inserted = false;
     const auto pendingIt = m_pendingInitialOrder.constFind(screenId);
     if (pendingIt != m_pendingInitialOrder.constEnd()) {
         const int orderIdx = pendingIt->indexOf(windowId);

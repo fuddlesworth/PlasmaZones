@@ -198,10 +198,13 @@ public:
     /// shows the layout's zones, a scrolling screen shows what the strip
     /// actually looks like right now. Empty when the screen has no state
     /// or no visible tile.
-    QVector<QRect> visibleTileRects(const QString& screenId) const;
+    /// @p columnNumbers, when given, receives one entry per returned rect:
+    /// the tile's 1-based strip column position — the scroll "zone number"
+    /// the Snap-to-Zone digits target — so previews can label the columns.
+    QVector<QRect> visibleTileRects(const QString& screenId, QVector<int>* columnNumbers = nullptr) const;
     /// visibleTileRects normalized to the work area (0.0–1.0 per axis) —
     /// the shape zone previews consume. Same emptiness contract.
-    QVector<QRectF> visibleTileRectsRelative(const QString& screenId) const;
+    QVector<QRectF> visibleTileRectsRelative(const QString& screenId, QVector<int>* columnNumbers = nullptr) const;
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 
@@ -380,6 +383,24 @@ private:
     /// in @p screenIds that no longer has ANY context state. Overrides
     /// survive by design; see the definition.
     void sweepStatelessScreenBookkeeping(const QSet<QString>& screenIds);
+    /// Capture @p state's strip STRUCTURE (column groupings, widths,
+    /// display, per-tile height intents) before a mode reassignment tears
+    /// it down, so cycling back to Scrolling rebuilds the strip the user
+    /// left instead of one default-width column per window — the scroll
+    /// twin of AutotileEngine's script-state stash. Keyed per context;
+    /// overwritten on every teardown of the same key.
+    void stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state);
+    /// insertOpenedWindow's stash restore: place @p windowId per the
+    /// stashed structure for @p key (rejoin its stashed column beside an
+    /// already-arrived sibling, or recreate the column at its stashed
+    /// position with its width/display), re-applying its height intent.
+    /// Returns false when the stash has no verdict (no entry, id absent,
+    /// or already consumed) — the caller falls through to the seed path.
+    bool restoreFromStripStash(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
+                               const QString& windowId, const QString& screenId, int minWidth, int minHeight);
+    /// Drop stash entries whose key @p stale answers true for — called by
+    /// the same prunes that reap context states.
+    void sweepStripStash(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale);
     // engine_apply.cpp
     ScrollLayoutParams layoutParamsForScreen(const QString& screenId) const;
     /// Relayout the strip and emit the geometry batch for @p screenId's
@@ -476,6 +497,24 @@ private:
     /// Kept beside, not inside, the list so consuming an id cannot shift the
     /// recorded positions of the ids still pending.
     QHash<QString, QSet<QString>> m_consumedInitialOrder;
+    /// Mode-round-trip structure stash (see stashStripStructure). The
+    /// stashed lists stay INTACT while they live (positions are counted
+    /// against windows already present); consumption is tracked in
+    /// m_stripStashConsumed and both entries drop once every stashed id is
+    /// consumed. Swept with the context on desktop/activity/output removal.
+    struct StashedTile
+    {
+        QString windowId;
+        WindowHeight height;
+    };
+    struct StashedColumn
+    {
+        QVector<StashedTile> tiles;
+        ColumnWidth width;
+        ColumnDisplay display = ColumnDisplay::Normal;
+    };
+    QHash<PhosphorEngine::PlacementStateKey, QVector<StashedColumn>> m_stripStash;
+    QHash<PhosphorEngine::PlacementStateKey, QSet<QString>> m_stripStashConsumed;
     /// Screens with a retile queued this event-loop pass (coalescing).
     QSet<QString> m_pendingRetiles;
     /// Whether the last tabStripsChanged emission for a screen was

@@ -842,7 +842,7 @@ QVariantList SettingsController::getScrollingStripPreview(const QString& screenI
         relGeo[QStringLiteral("width")] = rect.value(QLatin1String("width")).toDouble();
         relGeo[QStringLiteral("height")] = rect.value(QLatin1String("height")).toDouble();
         QVariantMap zone;
-        zone[QStringLiteral("zoneNumber")] = i + 1;
+        zone[QStringLiteral("zoneNumber")] = rect.value(QLatin1String("zoneNumber")).toInt(i + 1);
         zone[QStringLiteral("relativeGeometry")] = relGeo;
         zone[QStringLiteral("id")] = QString::number(i);
         zone[QStringLiteral("name")] = QString();

@@ -38,6 +38,7 @@ private Q_SLOTS:
     void desktopSwitchAwayPreservesSiblingContextStrips();
     void seedAdoptionClampsViewToStripEnd();
     void parkingAvoidsAdjacentOutputs();
+    void modeRoundTripRestoresStripStructure();
     void operationScreenFallbackIsDeterministic();
     void minSizeSeedsAndCarries();
     void minSizeSurvivesFloatRoundTrip();
@@ -618,6 +619,41 @@ void TestScrollEngineSmoke::parkingAvoidsAdjacentOutputs()
     const QRect parked = engine->lastManagedRect(QStringLiteral("app|c"));
     QVERIFY2(parked.right() < 0, qPrintable(QStringLiteral("expected left park, got x=%1").arg(parked.x())));
     engine->setCrossSurfaceResolver(nullptr);
+}
+
+void TestScrollEngineSmoke::modeRoundTripRestoresStripStructure()
+{
+    // Cycling the CURRENT context away from Scrolling and back must rebuild
+    // the strip the user left — consumed stacks, adjusted widths — not one
+    // default-width column per window. The reassignment prune stashes the
+    // structure; re-adoption restores it even with scrambled arrivals.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1")); // b joins a's stack
+    engine->adjustColumnWidth(10.0, QStringLiteral("S1")); // 600px + 10% of 1200 = 720px
+    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|a")).width(), 720);
+
+    // Mode reassignment of the SAME context (no desktop change): teardown.
+    engine->setActiveScreens({});
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("app|a")));
+
+    // Cycle back; arrivals scrambled relative to the stashed order.
+    engine->setActiveScreens({QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a")), 0);
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|c")), 1);
+    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|a")).width(), 720);
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             QStringList({QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
 }
 
 void TestScrollEngineSmoke::operationScreenFallbackIsDeterministic()
