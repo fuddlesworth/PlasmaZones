@@ -390,9 +390,13 @@ private:
      *
      * Prefers the SAVED order from the last mode toggle
      * (m_lastEngineOrders, deterministic re-entry) and only falls back to
-     * the zone-ordered window list from WTS. Live filters run before
-     * seeding (filterEngineSeedOrder): user floats and durable snap-slot
-     * floats are dropped, minimized windows stay as positional placeholders.
+     * the zone-ordered window list from WTS. filterEngineSeedOrder runs
+     * before seeding: float is PER MODE, so a non-minimized window always
+     * seeds (a snap-mode float must never make it untileable here), and
+     * minimized windows stay as positional placeholders except the
+     * user-floated-then-minimized case. See that function's contract — this
+     * summary previously claimed the opposite and is exactly what would lead
+     * a future fixer to reintroduce the untileable-by-mode-swap bug.
      * The result goes to the autotile engine's setInitialWindowOrder(). Used
      * by both per-screen toggle and global snapping→autotile transition.
      *

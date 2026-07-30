@@ -668,6 +668,22 @@ void Daemon::stop()
         // self-null when the engine is destroyed — there is no `this`/raw-pointer
         // capture to invalidate, unlike the float callbacks above.
     }
+    // The strip-state provider is cleared for a different reason than the
+    // float callbacks: it captures only a QPointer, so there is no dangling
+    // pointer — but once the scroll engine is destroyed it answers an EMPTY
+    // blob, and saveload turns an empty blob into deleteKey(scrollStrips).
+    // Any save that commits DirtyScrollStrips after this point would then
+    // WIPE the user's persisted strip structure rather than leave it.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setScrollStripStateProvider({});
+    }
+    // The one remaining `this`-capturing closure on the overlay service. It
+    // is safe today (the lambda re-resolves m_scrollEngine and null-checks
+    // it), but leaving it installed breaks the grep-discoverable
+    // clear-before-teardown contract its siblings below rely on.
+    if (m_overlayService) {
+        m_overlayService->setScrollZonesProvider({});
+    }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.
     // Explicit symmetric clear across all three borrowers — SnapAdaptor's
@@ -808,6 +824,12 @@ void Daemon::stop()
     // Per-session restore staging: entries computed against the pre-stop
     // window set must not feed a post-restart KCM apply with dead geometry.
     m_pendingSnapFloatRestores.clear();
+    // The derived engine sets are only read while the recompute latch is held,
+    // and the next cycle's first recompute rewrites them before any read — but
+    // they are per-session change-gate state like the two above, and leaving
+    // them out was an asymmetry in a block whose whole purpose is that reset.
+    m_derivedAutotileScreens.clear();
+    m_derivedScrollingScreens.clear();
 
     // Release the shortcut grabs and the Portal session with the connections:
     // registerShortcuts() on the next start() lazily recreates the registry

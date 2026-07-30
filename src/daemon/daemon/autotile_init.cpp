@@ -409,8 +409,11 @@ void Daemon::initializeAutotile()
                     // consumer never ran: the batch simply survived until the next
                     // recompute's clear discarded it, and windows snapped to zones
                     // before the screen entered scrolling never returned to those
-                    // zones. Drain it here — to Snapping that restores the zones,
-                    // and to Autotile it drops them for the same reason the
+                    // zones. Resolve it here. To Snapping, the buffer resnap below
+                    // is what puts the windows back on their zones (it reads each
+                    // one's durable snap slot); the drain that follows releases the
+                    // FLOAT half, since a full consume discards the zone entries.
+                    // To Autotile it drops them for the same reason the
                     // autotile→scrolling arm above does (the strip/stack owns
                     // placement, and the snap state stays in the unified record).
                     if (toSnapping) {
@@ -432,8 +435,12 @@ void Daemon::initializeAutotile()
                                 engineManagedScreens.unite(
                                     QSet<QString>(parts.scrolling.begin(), parts.scrolling.end()));
                             }
-                            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(
-                                engineManagedScreens, {screenId}, currentDesktop());
+                            // The toggled screen's OWN desktop, not the global
+                            // current one: under per-output virtual desktops
+                            // (#648) they differ, and every sibling daemon site
+                            // passes the per-screen value.
+                            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens,
+                                                                                                  {screenId}, desktop);
                             armResnapOsdSuppression(1);
                             m_snapAdaptor->resnapToNewLayout();
                         }

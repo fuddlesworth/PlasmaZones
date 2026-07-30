@@ -501,9 +501,15 @@ void Daemon::emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntrie
     // replaying it would float the window out of the live autotile grid or
     // scroll strip (observed as dolphin popping out of Aligned Grid seconds
     // after a snapping→autotile toggle — the presave for the RETURN trip
-    // was drained into the mode it was saved against). Held entries stay
-    // pending for the eventual snapping consumer; the next presave
-    // overwrites them.
+    // was drained into the mode it was saved against).
+    //
+    // A held entry is DROPPED, not durably queued: updateEngineScreens clears
+    // the whole batch at entry, and the engines' placementChanged count gates
+    // re-enter it within the same adoption burst, so a held float survives
+    // milliseconds at most. That is by design — the durable restore source is
+    // the window's snap slot in its placement record, which
+    // handleEngineWindowsReleased re-reads on the return trip. Holding here
+    // only has to stop the replay landing in the wrong mode.
     const auto snapOwnsEntryScreen = [this](const ZoneAssignmentEntry& e) {
         if (e.targetScreenId.isEmpty()) {
             return true; // unscreened: historical permissive path
@@ -541,8 +547,9 @@ void Daemon::emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntrie
         // consumer on its path. Remaining zone entries are deliberately
         // handed to an in-flight resnapToNewLayout when one exists, else
         // dropped (a prune-origin batch's zones reference a dead screen).
-        // Held floats survive even a full consume — their moment is the
-        // screen's return to snapping, which this caller is not.
+        // Held floats are carried past THIS caller for the same reason they
+        // were held — it is not a snapping consumer — but see the note above:
+        // the next recompute clears them, and the record is the durable source.
         m_pendingSnapFloatRestores = heldFloatEntries;
     }
     if (floatEntries.isEmpty()) {

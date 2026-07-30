@@ -12,6 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"
+#include "core/platform/logging.h"
 #include "seedorderfilter.h"
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -36,10 +37,13 @@ void Daemon::captureScrollingOrders(const QSet<QString>& scrollingScreens)
     const QSet<QString> currentScrollScreens = m_scrollEngine->activeScreens();
     for (const QString& screenId : currentScrollScreens - scrollingScreens) {
         const int desktop = currentDesktopForScreen(screenId);
-        const QStringList order = m_scrollEngine->managedWindowOrder(screenId);
-        if (!order.isEmpty()) {
-            m_lastEngineOrders[TilingStateKey{screenId, desktop, activity}] = order;
-        }
+        // Stored UNCONDITIONALLY, empty included. An empty order must
+        // overwrite a stale non-empty entry from an earlier toggle, or
+        // re-entry resurrects windows that have since closed or left the
+        // screen as columns. (The autotile capture documents the same rule;
+        // its mode-toggle caller additionally pre-clears the toggled screen's
+        // key, which this path has no equivalent of.)
+        m_lastEngineOrders[TilingStateKey{screenId, desktop, activity}] = m_scrollEngine->managedWindowOrder(screenId);
     }
 }
 
@@ -72,10 +76,18 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // the window unmanageable as a strip column); minimized entries stay
         // as placeholders except user-floated-then-minimized ones. See
         // filterEngineSeedOrder's doc for the rationale.
-        if (PhosphorPlacement::WindowTrackingService* wts =
-                m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr) {
-            filterEngineSeedOrder(order, wts, wts->windowRegistry());
+        PhosphorPlacement::WindowTrackingService* wts =
+            m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr;
+        if (!wts) {
+            // Fail CLOSED, like the autotile twin. filterEngineSeedOrder
+            // early-returns without a WTS, so seeding here would stage the
+            // saved order UNFILTERED and hand a user-floated-then-minimized
+            // window to the strip as a column instead of restoring its float.
+            qCWarning(lcDaemon) << "updateScrollingScreens: no WindowTrackingService —"
+                                << "refusing unfiltered seed for" << screenId;
+            continue;
         }
+        filterEngineSeedOrder(order, wts, wts->windowRegistry());
         if (!order.isEmpty()) {
             m_scrollEngine->setInitialWindowOrder(screenId, order);
         }
