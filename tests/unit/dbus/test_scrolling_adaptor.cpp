@@ -150,6 +150,31 @@ private Q_SLOTS:
             }
         }
         QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
+
+        // The two-adjacent-columns fixture above yields ordinals {1, 2},
+        // which is exactly `i + 1` — so it cannot tell the real column
+        // numbers from the adaptor's index fallback. Stack both windows into
+        // ONE column: two rects now share column ordinal 1, and any
+        // regression to `i + 1` reports {1, 2} and fails here.
+        // Focus the LEFT column first: consume pulls the neighbour to its
+        // right into the active column, so with the last-opened window active
+        // there is nothing to its right and the call is a no-op.
+        m_engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("DP-1"));
+        m_engine->consumeWindowIntoColumn(QStringLiteral("DP-1"));
+
+        QVector<int> stackedColumns;
+        const QVector<QRectF> stackedRects =
+            m_engine->visibleTileRectsRelative(QStringLiteral("DP-1"), &stackedColumns);
+        QCOMPARE(stackedRects.size(), 2);
+        QCOMPARE(stackedColumns, (QVector<int>{1, 1}));
+
+        const QJsonDocument stackedDoc =
+            QJsonDocument::fromJson(m_adaptor->visibleStripJson(QStringLiteral("DP-1")).toUtf8());
+        const QJsonArray stackedArr = stackedDoc.array();
+        QCOMPARE(stackedArr.size(), 2);
+        QCOMPARE(stackedArr.at(0).toObject().value(QLatin1String("zoneNumber")).toInt(-1), 1);
+        QVERIFY2(stackedArr.at(1).toObject().value(QLatin1String("zoneNumber")).toInt(-1) == 1,
+                 "both tiles of one column must report that column's ordinal, not their rect index");
     }
 
     // focusColumn's own doc: gated on the engine owning the screen, because
@@ -178,15 +203,44 @@ private Q_SLOTS:
     // the tiling channel's benefit. This adaptor must not relay those.
     void testScreensChanged_suppressesUnchangedSets()
     {
+        // The adaptor's `screenIds == m_lastBroadcastScreens` gate only earns
+        // its keep against a payload the ENGINE actually re-sends. The engine
+        // re-emits an identical set exactly once per armed desktop-context
+        // switch (setCurrentDesktop / setCurrentDesktopForScreen /
+        // setCurrentActivity set the flag, and every setActiveScreens entry
+        // consumes it), so a plain repeat push emits nothing at all and the
+        // gate is never reached. Arming it is what makes this test real:
+        // without the arming calls below, deleting the gate outright leaves
+        // the suite green.
+        QSignalSpy engineSpy(m_engine, &ScrollEngine::scrollingScreensChanged);
         QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollingScreensChanged);
 
         m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.first().at(0).toStringList(), (QStringList{QStringLiteral("DP-1"), QStringLiteral("DP-2")}));
+        QCOMPARE(engineSpy.count(), 1);
 
-        // Same set again, and again in a different order: neither is a change.
+        // Two desktop switches, each followed by a push of the SAME set. This
+        // is the real-world shape: with per-context modes every switch
+        // re-derives the scrolling set and pushes it, usually unchanged.
+        //
+        // The FIRST setCurrentDesktop only primes the tracker — armSwitch is
+        // gated on the desktop context having been set before, so a fresh
+        // engine's first call records the context without claiming a switch.
+        // The second one arms, and its push is the identical-set re-emit the
+        // adaptor has to absorb. The second set is also spelled in the other
+        // order, which carries no information (the parameter is a QSet) but
+        // matches how the daemon builds it.
+        m_engine->setCurrentDesktop(2);
         m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        m_engine->setCurrentDesktop(3);
         m_engine->setActiveScreens({QStringLiteral("DP-2"), QStringLiteral("DP-1")});
+
+        // Positive control: the engine really did re-emit the unchanged set
+        // once, so the adaptor's count staying at 1 below is the GATE working
+        // rather than the engine staying silent. Without this pair the test
+        // passes with the gate deleted outright.
+        QCOMPARE(engineSpy.count(), 2);
         QCOMPARE(spy.count(), 1);
 
         // A genuine change does get through.

@@ -423,6 +423,27 @@ private Q_SLOTS:
         m_layoutManager->setAssignmentEntryDirect(screenId, 0, QString(), entry);
         QVERIFY2(!m_wta->shouldFloatByRule(windowId, screenId),
                  "the same rule must stay inert on a screen in a different mode");
+
+        // POSITIVE CONTROL for that negative. On its own the arm above also
+        // passes if the second setAssignmentEntryDirect failed to take and the
+        // screen now resolves to NEITHER token — an unstamped or empty mode is
+        // inert too, for the wrong reason. A rule pinned to "snapping" firing
+        // on the very same screen proves it genuinely resolves to snapping.
+        PhosphorRules::Rule snappingRule;
+        snappingRule.id = QUuid::createUuid();
+        snappingRule.name = QStringLiteral("float-dolphin-on-snapping");
+        snappingRule.enabled = true;
+        snappingRule.priority = 100;
+        snappingRule.match = PhosphorRules::MatchExpression::makeAll(
+            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::AppId, PhosphorRules::Operator::Equals,
+                                                      QStringLiteral("org.kde.dolphin")),
+             PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::Mode, PhosphorRules::Operator::Equals,
+                                                      QStringLiteral("snapping"))});
+        snappingRule.actions.append(action);
+        QVERIFY(store.removeRule(rule.id));
+        QVERIFY(store.addRule(snappingRule));
+        QVERIFY2(m_wta->shouldFloatByRule(windowId, screenId),
+                 "the screen must genuinely resolve to snapping, not to an empty mode token");
     }
 
     void floatRule_floatsMatchedWindow_viaCompositeWindowId()
