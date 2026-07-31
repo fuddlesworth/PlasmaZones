@@ -324,14 +324,13 @@ SettingsFlickable {
                     title: i18n("Column widths")
                     searchAnchor: "presetColumnWidths"
                     description: i18n("Percentages of the work area width, cycled in this order by the preset shortcuts")
-                }
 
-                PresetListEditor {
-                    Layout.fillWidth: true
-                    presets: appSettings.scrollingPresetColumnWidths
-                    entryName: i18n("column width preset")
-                    commit: function (joined) {
-                        appSettings.scrollingPresetColumnWidths = joined;
+                    PresetListEditor {
+                        presets: appSettings.scrollingPresetColumnWidths
+                        entryName: i18n("column width preset")
+                        commit: function (joined) {
+                            appSettings.scrollingPresetColumnWidths = joined;
+                        }
                     }
                 }
 
@@ -341,14 +340,13 @@ SettingsFlickable {
                     title: i18n("Window heights")
                     searchAnchor: "presetWindowHeights"
                     description: i18n("Percentages of the work area height, cycled in this order by the preset shortcuts")
-                }
 
-                PresetListEditor {
-                    Layout.fillWidth: true
-                    presets: appSettings.scrollingPresetWindowHeights
-                    entryName: i18n("window height preset")
-                    commit: function (joined) {
-                        appSettings.scrollingPresetWindowHeights = joined;
+                    PresetListEditor {
+                        presets: appSettings.scrollingPresetWindowHeights
+                        entryName: i18n("window height preset")
+                        commit: function (joined) {
+                            appSettings.scrollingPresetWindowHeights = joined;
+                        }
                     }
                 }
             }
