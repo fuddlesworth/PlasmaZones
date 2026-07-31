@@ -279,8 +279,7 @@ float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
 
 void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
                                            const CompiledSurfacePack& pack, qreal scale, float timeSec,
-                                           const QPointF& foldCursor, qreal texturePaddingLogical,
-                                           const QString& windowId)
+                                           const QPointF& foldCursor, const QRectF& canvasRect, const QString& windowId)
 {
     // The caller (renderSurfaceChainComposite's per-pack fold) has already
     // resolved @p pack and @p wb, confirmed the border is applied, and bound
@@ -305,17 +304,18 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // scale is the frame's offset inside that texture (top-down device px), and
     // frameSize = frameGeometry.size * scale its extent.
     const QRectF frame = w->frameGeometry();
-    QRectF expanded = w->expandedGeometry();
-    if (expanded.isEmpty()) {
-        expanded = frame;
-    }
-    // Padded composite path: the target texture's canvas is the expanded rect
-    // inflated by the chain's outer margin (renderSurfaceChainComposite uses
-    // the same construction), so the geometry uniforms must describe that
-    // padded space. @p texturePaddingLogical is 0 when the chain declares no
-    // padding pack.
-    if (texturePaddingLogical > 0.0) {
-        expanded.adjust(-texturePaddingLogical, -texturePaddingLogical, texturePaddingLogical, texturePaddingLogical);
+    // The canvas the fold is drawing into — surfaceCanvasFor's device-aligned
+    // rect, padding included. NOT re-derived from expandedGeometry + padding:
+    // the alignment shifts the canvas off the raw expanded rect by a
+    // sub-pixel band, and these uniforms position the frame INSIDE the
+    // texture in device px, so they must describe the actual canvas to the
+    // texel. The expanded/frame fallback covers callers with no canvas.
+    QRectF expanded = canvasRect;
+    if (!expanded.isValid() || expanded.isEmpty()) {
+        expanded = w->expandedGeometry();
+        if (expanded.isEmpty()) {
+            expanded = frame;
+        }
     }
     const QVector2D windowExpandedSize(static_cast<float>(expanded.width() * scale),
                                        static_cast<float>(expanded.height() * scale));

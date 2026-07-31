@@ -728,7 +728,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             }
             // Contract uniforms + pack params. windowId threaded in so the
             // focus-fade ramp doesn't recompute getWindowId(w) per pack.
-            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, foldTime, plan.foldCursor, pad, windowId);
+            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, foldTime, plan.foldCursor, logicalGeometry,
+                               windowId);
             drawFullscreenQuad();
         }
         for (int i = 0; i < mainChannelsBound; ++i) {
