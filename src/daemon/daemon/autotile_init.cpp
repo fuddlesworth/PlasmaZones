@@ -10,9 +10,11 @@
 #include "config/settings.h"
 #include "core/platform/logging.h"
 #include "core/types/constants.h"
+#include "core/resolve/screenmoderouter.h"
 #include "daemon/controllers/shortcutmanager.h"
 #include "daemon/controllers/unifiedlayoutcontroller.h"
 #include "daemon/overlayservice.h"
+#include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorContext/ContextResolver.h>
@@ -120,114 +122,7 @@ void Daemon::initializeAutotile()
         // Must check isModeSpecificFloated BEFORE clearing the marker.
         connect(m_autotileEngine.get(), &PlacementEngineBase::windowsReleased, this,
                 [this](const QStringList& windowIds, const QSet<QString>& releasedScreenIds) {
-                    // Clear unconditionally: entries from a previous release
-                    // batch are stale the moment a new one arrives, and leaving
-                    // them behind because the adaptor happens to be null would
-                    // leak them into the next toggle.
-                    m_pendingSnapFloatRestores.clear();
-                    if (m_windowTrackingAdaptor) {
-                        PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-                        for (const QString& windowId : windowIds) {
-                            // Only process windows whose current WTS screen is one of the
-                            // screens being released. A window that moved to a different
-                            // screen (e.g., dragged from autotile VS to snap VS and resnapped)
-                            // is no longer on the releasing screen — its state on the current
-                            // screen must not be disturbed.
-                            const QString windowScreen = wts->screenForWindow(windowId);
-                            if (!windowScreen.isEmpty() && !releasedScreenIds.contains(windowScreen)) {
-                                // Window is on a different screen — do NOT touch its state.
-                                // It may be on another autotile screen (flag still valid) or
-                                // a snap screen (flag already cleared by assignWindowToZones).
-                                qCDebug(lcDaemon) << "windowsReleased: skipping" << windowId << "on screen"
-                                                  << windowScreen << "(not in released set)";
-                                continue;
-                            }
-                            if (!m_autotileEngine || !m_snapEngine)
-                                continue;
-                            // Clear autotile-originated floats (they don't persist into snap mode)
-                            bool wasAutotileFloated = m_autotileEngine->isModeSpecificFloated(windowId);
-                            if (wasAutotileFloated) {
-                                m_windowTrackingAdaptor->setWindowFloating(windowId, false);
-                            }
-                            m_autotileEngine->clearModeSpecificFloatMarker(windowId);
-                            // Restore the snap-mode float from the SINGLE source of truth — the
-                            // window's placement record (its snap slot), captured when the screen
-                            // last left snapping. No parallel saved-float set. Float state is set
-                            // immediately; geometry restore is deferred to the batched resnap
-                            // signal to avoid individual D-Bus signals queuing behind the resnap.
-                            // Same-instance record only: this is a LIVE mid-session window (uuids stable),
-                            // so a same-app sibling's record must not float/zone-restore it.
-                            const auto rec = wts->placementStore().peekExact(windowId);
-                            const PhosphorEngine::EngineSlot snapSlot = rec
-                                ? rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId())
-                                : PhosphorEngine::EngineSlot{};
-                            const bool snapFloat = snapSlot.state == PhosphorEngine::WindowPlacement::stateFloating();
-                            // A window SNAPPED in snapping mode, then floated in autotile, keeps its
-                            // snap-engine state — float is PER ENGINE. Such a window is excluded from
-                            // the captured autotile tile order (floated windows aren't ordered), so the
-                            // order-driven resnap and buildAutotileRestoreEntries never see it; without
-                            // this branch it falls through every restore path and keeps its autotile-
-                            // float geometry on return to snapping (the "still floated" bug). Gated on
-                            // wasAutotileFloated so order-driven (tiled, non-floated) windows — which the
-                            // order-resnap path already handles — are not double-snapped here.
-                            //
-                            // A MINIMIZED window qualifies too: its autotile representation is a
-                            // suspension float that never sets the mode-specific marker, so a
-                            // snap-SNAPPED window that was autotiled and then minimized would
-                            // otherwise take no restore branch at all and unminimize at a stale
-                            // rect before anything resnaps it.
-                            const bool wasMinimized = wts->windowRegistry()
-                                && wts->windowRegistry()->minimizedState(windowId).value_or(false);
-                            const bool snapSnapped = (wasAutotileFloated || wasMinimized)
-                                && snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()
-                                && !snapSlot.zoneIds.isEmpty();
-                            if (snapFloat) {
-                                qCInfo(lcDaemon) << "windowsReleased: restoring snap-float for" << windowId;
-                                m_windowTrackingAdaptor->setWindowFloating(windowId, true);
-                                const QString screen = wts->screenForWindow(windowId);
-                                // Per-screen rect only. anyFreeGeometry() would return a rect
-                                // remembered for a DIFFERENT monitor and teleport the window
-                                // there on multi-monitor; with no rect for this screen the
-                                // window simply stays where it is.
-                                const QRect g = rec->freeGeometryFor(screen.isEmpty() ? rec->screenId : screen);
-                                if (g.isValid()) {
-                                    ZoneAssignmentEntry entry;
-                                    entry.windowId = windowId;
-                                    entry.targetZoneId = RestoreSentinel;
-                                    entry.targetGeometry = g;
-                                    m_pendingSnapFloatRestores.append(entry);
-                                }
-                            } else if (snapSnapped) {
-                                const QString screen = wts->screenForWindow(windowId);
-                                const QString restoreScreen = screen.isEmpty() ? rec->screenId : screen;
-                                const QRect geo = wts->resolveZoneGeometry(snapSlot.zoneIds, restoreScreen);
-                                if (geo.isValid()) {
-                                    qCInfo(lcDaemon) << "windowsReleased: restoring snap-zone for" << windowId
-                                                     << "zones=" << snapSlot.zoneIds << "screen=" << restoreScreen;
-                                    // Float is already cleared above for autotile-floated windows; this
-                                    // window returns to its snapped state, not floating. Multiple windows
-                                    // may legitimately share a zone, so no cross-window zone dedup here.
-                                    ZoneAssignmentEntry entry;
-                                    entry.windowId = windowId;
-                                    entry.targetZoneId = snapSlot.zoneIds.first();
-                                    entry.targetZoneIds = snapSlot.zoneIds;
-                                    entry.targetGeometry = geo;
-                                    entry.targetScreenId = restoreScreen;
-                                    // The durable record knows which desktop this snap
-                                    // belongs to; carry it so the batch commit doesn't
-                                    // re-stamp the window onto the current desktop.
-                                    entry.virtualDesktop = rec->virtualDesktop;
-                                    m_pendingSnapFloatRestores.append(entry);
-                                } else {
-                                    qCWarning(lcDaemon) << "windowsReleased: snap-zone restore for" << windowId
-                                                        << "failed — zone geometry unresolved for" << snapSlot.zoneIds;
-                                }
-                            } else {
-                                qCDebug(lcDaemon) << "windowsReleased: no snap-float to restore for" << windowId
-                                                  << "wasAutotileFloated:" << wasAutotileFloated;
-                            }
-                        }
-                    }
+                    handleEngineWindowsReleased(m_autotileEngine.get(), windowIds, releasedScreenIds);
                 });
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -293,27 +188,55 @@ void Daemon::initializeAutotile()
                 QString currentAssignment = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
 
                 bool applied = false;
-                const bool wasAutotile = PhosphorLayout::LayoutId::isAutotile(currentAssignment);
+                // Three-mode cycle: Snapping → Tiling → Scrolling → Snapping.
+                // currentMode is the router-resolved answer from above, so an
+                // unclaimed/downgraded scrolling context cycles from Snapping,
+                // matching what the user actually sees on screen.
+                using Mode = PhosphorZones::AssignmentEntry::Mode;
+                const auto modeEnabled = [this](Mode m) {
+                    switch (m) {
+                    case Mode::Snapping:
+                        return m_settings->snappingEnabled();
+                    case Mode::Autotile:
+                        return m_settings->autotileEnabled();
+                    case Mode::Scrolling:
+                        return m_settings->scrollingEnabled();
+                    }
+                    return false;
+                };
+                const auto nextInCycle = [](Mode m) {
+                    switch (m) {
+                    case Mode::Snapping:
+                        return Mode::Autotile;
+                    case Mode::Autotile:
+                        return Mode::Scrolling;
+                    case Mode::Scrolling:
+                        return Mode::Snapping;
+                    }
+                    return Mode::Snapping;
+                };
+                // Feature gate: only cycle INTO a mode whose master switch is
+                // on. Disabled modes are skipped, so with scrolling off the
+                // cycle degrades to the historical two-state flip; with every
+                // other mode off the toggle is a no-op.
+                Mode target = nextInCycle(currentMode);
+                while (target != currentMode && !modeEnabled(target)) {
+                    target = nextInCycle(target);
+                }
+                if (target == currentMode) {
+                    qCInfo(lcDaemon) << "Mode toggle: ignored — no other enabled mode to cycle into";
+                    updateLayoutFilter();
+                    return;
+                }
+                const bool wasAutotile = (currentMode == Mode::Autotile);
+                const bool wasScrolling = (currentMode == Mode::Scrolling);
+                const bool toSnapping = (target == Mode::Snapping);
                 qCInfo(lcDaemon) << "Mode toggle: currentAssignment=" << currentAssignment
-                                 << "wasAutotile=" << wasAutotile;
-
-                // Feature gate: only allow toggling INTO a mode whose feature flag is enabled.
-                // Without this, disabling snapping in the KCM while autotile remains on still
-                // lets the user toggle back into snapping — and vice versa.
-                const bool targetAutotile = !wasAutotile;
-                if (targetAutotile && !m_settings->autotileEnabled()) {
-                    qCInfo(lcDaemon) << "Mode toggle: ignored — autotile disabled in settings";
-                    updateLayoutFilter();
-                    return;
-                }
-                if (!targetAutotile && !m_settings->snappingEnabled()) {
-                    qCInfo(lcDaemon) << "Mode toggle: ignored — snapping disabled in settings";
-                    updateLayoutFilter();
-                    return;
-                }
+                                 << "currentMode=" << static_cast<int>(currentMode)
+                                 << "target=" << static_cast<int>(target);
 
                 // Capture autotile window order BEFORE layout switch destroys PhosphorTiles::TilingState.
-                // Merge (not replace) into m_lastAutotileOrders so other desktops' saved
+                // Merge (not replace) into m_lastEngineOrders so other desktops' saved
                 // orders are preserved — a replace would discard them.
                 if (wasAutotile) {
                     auto currentOrders = captureAutotileOrders();
@@ -323,14 +246,14 @@ void Daemon::initializeAutotile()
                     // capture below may not cover (their live state can be
                     // empty right now while their saved order is still the
                     // re-entry seed).
-                    m_lastAutotileOrders.remove(TilingStateKey{screenId, desktop, activity});
+                    m_lastEngineOrders.remove(TilingStateKey{screenId, desktop, activity});
                     for (auto it = currentOrders.constBegin(); it != currentOrders.constEnd(); ++it) {
-                        m_lastAutotileOrders[it.key()] = it.value();
+                        m_lastEngineOrders[it.key()] = it.value();
                     }
                 }
 
-                if (wasAutotile) {
-                    // Autotile → Snapping: restore this context's snappingLayout
+                if (toSnapping) {
+                    // → Snapping: restore this context's snappingLayout
                     // from the PhosphorZones::AssignmentEntry (preserved even when mode is Autotile).
                     // Try current context first; fall back to broader scopes when the
                     // context-specific entry has no snappingLayout (e.g., fresh KCM
@@ -353,7 +276,7 @@ void Daemon::initializeAutotile()
                             applied = m_unifiedLayoutController->applyLayoutById(fallback->id().toString());
                         }
                     }
-                } else {
+                } else if (target == Mode::Autotile) {
                     // Pre-save snap-float state before autotile entry so rapid
                     // toggles don't lose snap-mode floats. Scoped to the toggled
                     // screen — windows floating on other screens are unaffected.
@@ -376,7 +299,7 @@ void Daemon::initializeAutotile()
                     // context. Under suppress, switching to autotile applies a bare
                     // "autotile:" assignment (mode set, no algorithm) so the context
                     // selects autotile mode but does NOT tile with the global default;
-                    // updateAutotileScreens skips a suppressed bare context until the
+                    // updateEngineScreens skips a suppressed bare context until the
                     // user assigns a concrete algorithm.
                     if (algoId.isEmpty()
                         && !m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)) {
@@ -396,7 +319,7 @@ void Daemon::initializeAutotile()
                         // mode but does not tile. applyLayoutById can't apply a bare
                         // "autotile:" (it has no matching layout preview and returns
                         // false), so write the entry directly. The emitted layoutAssigned
-                        // drives the daemon's updateAutotileScreens (which skips this bare
+                        // drives the daemon's updateEngineScreens (which skips this bare
                         // suppressed context, so it does not tile) AND updateLayoutFilter,
                         // so the mode filter refreshes off that signal — no explicit call
                         // needed here.
@@ -412,6 +335,47 @@ void Daemon::initializeAutotile()
                         refreshCheatsheetIfVisible();
                         applied = true;
                     }
+                } else {
+                    // → Scrolling. The mode IS the assignment (the strip has
+                    // no layout entity), so like the bare-autotile arm this is
+                    // a direct entry write — applyLayoutById has nothing to
+                    // apply. Both sibling slots are carried so the toggle
+                    // stays lossless: cycling back restores the same snapping
+                    // layout and tiling algorithm this context had before.
+                    // Snap-float presave for a snapping→scrolling flip runs in
+                    // updateEngineScreens' derive pass (driven by the emitted
+                    // layoutAssigned), which fires before the scroll engine
+                    // claims the screen.
+                    PhosphorZones::AssignmentEntry entry;
+                    entry.mode = Mode::Scrolling;
+                    entry.snappingLayout = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+                    if (entry.snappingLayout.isEmpty() && !activity.isEmpty()) {
+                        entry.snappingLayout = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
+                    }
+                    entry.tilingAlgorithm = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
+                    if (entry.tilingAlgorithm.isEmpty() && !activity.isEmpty()) {
+                        entry.tilingAlgorithm = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, QString());
+                    }
+                    m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
+                    // Direct writes fire no layoutApplied/autotileApplied, so
+                    // nudge every surface those signals normally refresh.
+                    refreshCheatsheetIfVisible();
+                    // Announce the mode change. Both sibling arms give feedback
+                    // (layoutApplied → Snapping, autotileApplied → Autotile, and
+                    // showNotAssignedOsd for the bare-autotile direct write), so
+                    // without this the primary way into scrolling was the only
+                    // silent one. showScrollingModeOsd exists for exactly this
+                    // announcement and was reachable only from the KCM apply path
+                    // and the desktop-switch OSD.
+                    if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+                        showScrollingModeOsd(screenId);
+                    }
+                    // A snap-assist popup is stale the moment placement changes;
+                    // both signal-driven arms hide it for that reason.
+                    if (m_overlayService) {
+                        m_overlayService->hideSnapAssist();
+                    }
+                    applied = true;
                 }
 
                 // If apply failed (e.g. layout was deleted), restore the correct filter
@@ -429,20 +393,77 @@ void Daemon::initializeAutotile()
                 // pre-autotile floating geometry restored via the batched buildAutotileRestoreEntries →
                 // emitBatchedResnap path.
                 auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get());
-                if (wasAutotile && (!applied || !concreteSnap)) {
+                if (wasAutotile && !toSnapping) {
+                    // Autotile → Scrolling: the released windows re-enter the
+                    // strip, so replaying the preserved snap-ZONE half would
+                    // fight the scroll engine's placement. Drop it; the
+                    // windows' snap state stays in the unified record for a
+                    // later scrolling→snapping flip to restore.
+                    m_pendingSnapFloatRestores.clear();
+                } else if (wasScrolling) {
+                    // Scrolling → anywhere. The scroll release inside
+                    // applyLayoutById reaches handleEngineWindowsReleased, which
+                    // appends snap-ZONE entries that the updateEngineScreens tail
+                    // drain deliberately PRESERVES for "the mode-toggle consumer".
+                    // Every consumer below is gated on wasAutotile, so that
+                    // consumer never ran: the batch simply survived until the next
+                    // recompute's clear discarded it, and windows snapped to zones
+                    // before the screen entered scrolling never returned to those
+                    // zones. Resolve it here. To Snapping, the buffer resnap below
+                    // is what puts the windows back on their zones (it reads each
+                    // one's durable snap slot); the drain that follows releases the
+                    // FLOAT half, since a full consume discards the zone entries.
+                    // To Autotile it drops them for the same reason the
+                    // autotile→scrolling arm above does (the strip/stack owns
+                    // placement, and the snap state stays in the unified record).
+                    if (toSnapping) {
+                        // Buffer-based resnap into the restored snapping layout,
+                        // scoped to the toggled screen and current desktop. This
+                        // used to happen only as a side effect of the rulesChanged
+                        // reconcile re-entering the KCM apply path mid-toggle;
+                        // with that reconcile deferred and self-write-suppressed,
+                        // this branch must drive its own resnap or the released
+                        // strip windows keep their scroll geometry. Mirrors
+                        // resnapIfManualMode (navigation.cpp) including the
+                        // engine-managed exclude union and the OSD suppress arm.
+                        // service() is null-checked with the adaptor, not just
+                        // the adaptor: the body dereferences it, and every
+                        // other daemon site pairs the two.
+                        if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service() && m_snapAdaptor) {
+                            QSet<QString> engineManagedScreens;
+                            if (m_screenModeRouter && m_screenManager) {
+                                const auto parts =
+                                    m_screenModeRouter->partitionByMode(m_screenManager->effectiveScreenIds());
+                                engineManagedScreens = QSet<QString>(parts.autotile.begin(), parts.autotile.end());
+                                engineManagedScreens.unite(
+                                    QSet<QString>(parts.scrolling.begin(), parts.scrolling.end()));
+                            }
+                            // The toggled screen's OWN desktop, not the global
+                            // current one: under per-output virtual desktops
+                            // (#648) they differ, and every sibling daemon site
+                            // passes the per-screen value.
+                            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens,
+                                                                                                  {screenId}, desktop);
+                            armResnapOsdSuppression(1);
+                            m_snapAdaptor->resnapToNewLayout();
+                        }
+                        emitPendingSnapFloatRestoresForResnapBuffer();
+                    } else {
+                        m_pendingSnapFloatRestores.clear();
+                    }
+                } else if (wasAutotile && (!applied || !concreteSnap)) {
                     if (applied && m_snapEngine) {
                         qCWarning(lcDaemon) << "Snap engine is not a SnapEngine — autotile→snap resnap skipped";
                     }
-                    // The resnap path below is what normally consumes
-                    // m_pendingSnapFloatRestores. Bailing without draining leaves
-                    // them to be wiped by the next windowsReleased clear(), so the
-                    // user's snap-mode floats never come back — emit them here.
-                    //
-                    // NOTE this helper emits only the float half and drops the
-                    // snap-zone entries, on the assumption that an in-flight
-                    // resnap consumes those. No resnap runs on THIS bail, so the
-                    // zone entries are dropped deliberately: without a SnapEngine
-                    // there is nothing that could apply them.
+                    // The resnap path below is what normally consumes the
+                    // snap-ZONE half that the updateEngineScreens tail drain
+                    // preserved for us. Bailing without draining leaves it to be
+                    // wiped by the next recompute's clear, or replayed by an
+                    // unrelated later consumer — so drop the preserved zone half
+                    // here. No restoration is attempted: this arm is reached
+                    // either because the layout apply failed (there is no target
+                    // layout to snap into) or because there is no SnapEngine to
+                    // apply the entries at all.
                     emitPendingSnapFloatRestoresForResnapBuffer();
                 } else if (applied && wasAutotile && concreteSnap) {
                     // Build exclusion set: windows that fit into the target layout's zones
@@ -451,7 +472,7 @@ void Daemon::initializeAutotile()
                     // arrive AFTER the resnap and overwrite the zone positions.
                     // Use per-screen zone count (not global activeLayout) because each screen
                     // may have a different layout assigned with a different zone count.
-                    // Only process entries for the CURRENT desktop (m_lastAutotileOrders
+                    // Only process entries for the CURRENT desktop (m_lastEngineOrders
                     // accumulates entries across desktops after the merge fix).
                     //
                     // Batch all resnap entries into ONE signal to eliminate the race condition
@@ -471,6 +492,11 @@ void Daemon::initializeAutotile()
                     // geometry restore for them.
                     QStringList preClaimedZoneIds;
                     for (const ZoneAssignmentEntry& e : m_pendingSnapFloatRestores) {
+                        // The RestoreSentinel arm is unreachable today — the
+                        // updateEngineScreens tail drain emitted every float
+                        // entry and left only zone entries behind. Kept as
+                        // defence so a future drain-mode change cannot silently
+                        // turn a float restore into a pre-claimed zone id.
                         if (e.targetZoneId.isEmpty() || e.targetZoneId == RestoreSentinel) {
                             continue; // float restore (no zone claimed)
                         }
@@ -482,7 +508,7 @@ void Daemon::initializeAutotile()
                         resnappedWindows.insert(e.windowId);
                     }
 
-                    for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
+                    for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
                         if (it.key().desktop != desktop || it.key().activity != activity) {
                             continue;
                         }
@@ -543,8 +569,10 @@ void Daemon::initializeAutotile()
                         }
                         allResnapEntries.append(entries);
                     }
-                    // Batch float-restore entries into the resnap signal:
-                    // 1. Snap-float restores (collected during windowsReleased)
+                    // Batch the remaining restore entries into the resnap signal:
+                    // 1. Snap-ZONE restores collected during windowsReleased (the
+                    //    float half was already emitted by the updateEngineScreens
+                    //    tail drain, which preserves only the zone half for us)
                     // 2. Autotile-only windows (never zone-snapped, need pre-tile geometry)
                     // This eliminates individual D-Bus signals that would queue behind
                     // the resnap, causing visible delay for floating/new windows.

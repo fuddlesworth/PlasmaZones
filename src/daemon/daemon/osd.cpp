@@ -19,7 +19,9 @@
 #include <PhosphorEngine/IPlacementState.h>
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "helpers.h"
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
@@ -66,7 +68,7 @@ void Daemon::showOverlay()
         }
     }
     // Per-screen autotile exclusion is handled by OverlayService::initializeOverlay()
-    // via m_excludedScreens (set in updateAutotileScreens)
+    // via m_excludedScreens (set in updateEngineScreens)
     if (m_overlayService) {
         m_overlayService->show();
     }
@@ -280,6 +282,88 @@ void Daemon::showNotAssignedOsd(const QString& screenId)
     qCInfo(lcDaemon) << "Showing not-assigned text OSD: screen=" << screenId;
 }
 
+void Daemon::showScrollingModeOsd(const QString& screenId)
+{
+    // The mode-switch announcement for a screen entering Scrolling. Preview
+    // style renders the strip: the engine's visible tile rects stand in for
+    // the zone list a layout switch would show, and an EMPTY strip shows
+    // the representative endless-strip sketch (a full column with clipped
+    // edge columns) — the algorithm OSD likewise previews with zero
+    // windows, and the Monitors page uses the same sketch.
+    if (shouldSuppressOsd()) {
+        return;
+    }
+    const OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+    if (style == OsdStyle::None) {
+        return;
+    }
+    if (style == OsdStyle::Preview && m_overlayService) {
+        const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+        if (scroll && !scroll->visibleTileRects(screenId).isEmpty()) {
+            showScrollingStripPreviewOsd(screenId);
+            return;
+        }
+        // A mode toggle announces BEFORE the effect's re-announce batch
+        // lands, so at OSD time the strip is still empty. Defer one beat
+        // so the adoption settles and the card shows the user's actual
+        // columns; a strip that is still empty then shows the sketch.
+        QTimer::singleShot(kScrollingOsdAdoptSettleMs, this, [this, screenId]() {
+            if (shouldSuppressOsd()) {
+                return;
+            }
+            showScrollingStripPreviewOsd(screenId);
+        });
+        return;
+    }
+    showKdeTextOsd(QStringLiteral("plasmazones"), PhosphorI18n::tr("Scrolling", "tiling mode name"));
+    qCInfo(lcDaemon) << "Showing scrolling-mode text OSD: screen=" << screenId;
+}
+
+void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
+{
+    if (!m_overlayService) {
+        return;
+    }
+    const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    QVector<int> columnNumbers;
+    QVector<QRectF> rects = scroll ? scroll->visibleTileRectsRelative(screenId, &columnNumbers) : QVector<QRectF>();
+    if (rects.isEmpty()) {
+        // Representative endless strip (kept in step with MonitorStatePage's
+        // scrollingFallbackZones): clipped columns at both edges read as a
+        // window onto a longer strip.
+        rects = {QRectF(0.0, 0.0, 0.1, 1.0), QRectF(0.115, 0.0, 0.5, 1.0), QRectF(0.63, 0.0, 0.37, 1.0)};
+        columnNumbers = {1, 2, 3};
+    }
+    QVariantList zones;
+    zones.reserve(rects.size());
+    for (int i = 0; i < rects.size(); ++i) {
+        const QRectF& r = rects.at(i);
+        QVariantMap relGeo;
+        relGeo[QLatin1String("x")] = r.x();
+        relGeo[QLatin1String("y")] = r.y();
+        relGeo[QLatin1String("width")] = r.width();
+        relGeo[QLatin1String("height")] = r.height();
+        QVariantMap zoneMap;
+        // The scroll zone number is the tile's 1-based VISIBLE column slot
+        // (leftmost on-screen column is 1) — the same viewport-relative
+        // coordinate the Snap-to-Zone digits drive, so the card labels
+        // exactly what is on screen.
+        zoneMap[QLatin1String("zoneNumber")] = (i < columnNumbers.size()) ? columnNumbers.at(i) : (i + 1);
+        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
+        zoneMap[QLatin1String("id")] = QString::number(i);
+        zoneMap[QLatin1String("name")] = QString();
+        zoneMap[QLatin1String("useCustomColors")] = false;
+        zones.append(zoneMap);
+    }
+    // Autotile category: the renderer treats it as "generated, not
+    // editable", which is exactly what a live strip snapshot is.
+    m_overlayService->showLayoutOsd(QString(PhosphorLayout::LayoutId::ScrollingId),
+                                    PhosphorI18n::tr("Scrolling", "tiling mode name"), zones,
+                                    static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId, false,
+                                    false, QStringLiteral("all"), 1);
+    qCInfo(lcDaemon) << "Showing scrolling-mode strip preview OSD: screen=" << screenId << "tiles=" << rects.size();
+}
+
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
     if (shouldSuppressOsd()) {
@@ -419,7 +503,18 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
                 focusedScreenId, currentDesktopForScreen(focusedScreenId), activity);
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
-            } else {
+            } else if (!PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+                // A scrolling screen sets neither flag here, but the
+                // includeManual fallback below (manualActive ||
+                // !autotileActive) still offers the MANUAL list for it —
+                // deliberately: picking a snap layout is the exit from
+                // scrolling mode (same policy as
+                // resolvePerScreenLayoutInclude in overlayservice.cpp).
+                // The Meta+Alt+[ / ] layout CYCLE inherits this and is
+                // therefore a one-way door out of scrolling (no cycle
+                // entry represents Scrolling; re-entry is via the Monitors
+                // page, a rule, or the mode-toggle shortcut) — an accepted
+                // trade-off, matching how autotile screens cycle too.
                 manualActive = true;
             }
         } else {
@@ -434,7 +529,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
                     m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
                 if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                     autotileActive = true;
-                } else {
+                } else if (!PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
                     manualActive = true;
                 }
             }
@@ -502,7 +597,13 @@ void Daemon::syncModeFromAssignments()
             // should trigger resnap via the global active layout signal. KCM saves
             // use populateResnapBufferForAllScreens() + resnapToNewLayout()
             // (per-screen, independent of global active layout) instead.
-            if (!PhosphorLayout::LayoutId::isAutotile(focusedAssignmentId)) {
+            // Scrolling short-circuits the same way autotile does: the
+            // "scrolling:" sentinel is not a manual layout, so
+            // layoutForScreen() would hand back the context's fallback snap
+            // layout and this would install it as the GLOBAL active layout —
+            // clobbering it for every screen on a desktop switch.
+            if (!PhosphorLayout::LayoutId::isAutotile(focusedAssignmentId)
+                && !PhosphorLayout::LayoutId::isScrolling(focusedAssignmentId)) {
                 PhosphorZones::Layout* desktopLayout =
                     m_layoutManager->layoutForScreen(focusedScreenId, desktop, activity);
                 if (desktopLayout && desktopLayout != m_layoutManager->activeLayout()) {
@@ -609,11 +710,37 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                 continue;
             }
             const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+            if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+                // Scrolling screens announce the mode, never a fallback snap
+                // layout (the "scrolling:" sentinel is not a manual layout).
+                // LIVE-mode gated: a context-disabled Scrolling assignment is
+                // excluded from the engine set and the router downgrades the
+                // screen, so announcing "Scrolling" there would claim a mode
+                // that is inert (the disabled probe above checks the
+                // DOWNGRADED mode's list and misses).
+                if (currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Scrolling) {
+                    showScrollingModeOsd(screenId);
+                    continue;
+                }
+                // Downgraded. Re-probe the SCROLLING disable lists directly
+                // (the resolver probe above asked the downgraded mode) so a
+                // context that turned scrolling off gets the same "why"
+                // card the mode toggle shows, not a misleading "no layout
+                // assigned".
+                const DisabledReason scrollingWhy = contextDisabledReason(
+                    m_settings.get(), PhosphorZones::AssignmentEntry::Scrolling, screenId, desktop, activity);
+                if (scrollingWhy != DisabledReason::NotDisabled) {
+                    showContextDisabledOsd(screenId, desktop, activity, scrollingWhy);
+                } else {
+                    showNotAssignedOsd(screenId);
+                }
+                continue;
+            }
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
                 // Bare autotile (mode set, no concrete algorithm) draws its
                 // algorithm from the suppressed global default, so it won't tile
-                // (see updateAutotileScreens) — show "not assigned" rather than
+                // (see updateEngineScreens) — show "not assigned" rather than
                 // announcing the default algorithm. A concrete assigned algorithm
                 // always shows.
                 if (algoId.isEmpty()
@@ -673,8 +800,8 @@ namespace {
 const QLatin1String kCheatsheetDismissId("cheatsheet_dismiss");
 
 // String form of the per-screen tiling mode as CheatsheetContent consumes
-// it. Scrolling has no engine yet but is a real router state; the sheet
-// shows the mode-independent groups there.
+// it. All three engines are live; the sheet filters each mode's group plus
+// the mode-independent ones.
 QString cheatsheetModeString(PhosphorZones::AssignmentEntry::Mode mode)
 {
     switch (mode) {

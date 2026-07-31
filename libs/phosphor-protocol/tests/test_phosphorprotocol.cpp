@@ -49,8 +49,8 @@ private Q_SLOTS:
     void testBypassReasonWireStringRoundTrip()
     {
         QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::None)), DragBypassReason::None);
-        QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::AutotileScreen)),
-                 DragBypassReason::AutotileScreen);
+        QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::EngineOwnedScreen)),
+                 DragBypassReason::EngineOwnedScreen);
         QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::SnappingDisabled)),
                  DragBypassReason::SnappingDisabled);
         QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::ContextDisabled)),
@@ -92,7 +92,7 @@ private Q_SLOTS:
     void testDragPolicyValidationAutotileNoScreen()
     {
         DragPolicy p;
-        p.bypassReason = DragBypassReason::AutotileScreen;
+        p.bypassReason = DragBypassReason::EngineOwnedScreen;
         p.screenId.clear();
         QVERIFY(!p.validationError().isEmpty());
     }
@@ -138,11 +138,11 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // Bumped to 4 alongside setWindowMetadata's signature widening
-        // (4 args → 9 args) so a stale effect can't silently send the old
-        // wire format and crash on marshalling.
-        QCOMPARE(Service::ApiVersion, 4);
-        QCOMPARE(Service::MinPeerApiVersion, 4);
+        // Bumped to 5 alongside the Autotile→Tiling interface rename: a v4
+        // effect would pass the handshake and then silently hear nothing on
+        // the renamed lifecycle surface, so both sides must move together.
+        QCOMPARE(Service::ApiVersion, 5);
+        QCOMPARE(Service::MinPeerApiVersion, 5);
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.

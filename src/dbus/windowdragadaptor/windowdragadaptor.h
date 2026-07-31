@@ -83,6 +83,18 @@ public:
     }
 
     /**
+     * @brief Set the scrolling engine for per-screen drag policy.
+     *
+     * The scrolling engine owns placement on its screens exactly like
+     * autotile does, so drags there take the engine bypass (drag-to-float)
+     * instead of the snap pipeline. Pass nullptr during shutdown.
+     */
+    void setScrollEngine(PhosphorEngine::IPlacementEngine* engine)
+    {
+        m_scrollEngine = engine;
+    }
+
+    /**
      * @brief Set the frozen-snapshot resolver used to gate snap/drag handlers
      *        on the per-screen disable + lock cascade.
      *
@@ -394,31 +406,48 @@ public:
      * beginDrag returns to the compositor plugin and what is emitted on
      * dragPolicyChanged during cross-VS cursor crossings.
      *
-     * Precedence: context_disabled → autotile_screen → snapping_disabled →
-     * snap path (canonical). First match wins so the bypassReason string is
-     * stable across coincidental disables.
+     * Precedence: context_disabled → autotile_screen (either tiling-family
+     * engine claiming the screen — autotile or scrolling) →
+     * snapping_disabled → snap path (canonical). First match wins so the
+     * bypassReason string is stable across coincidental disables.
      *
      * @param settings Settings interface (snappingEnabled, zone-span triggers, etc.)
      * @param autotileEngine May be nullptr in tests that don't exercise autotile
+     * @param scrollEngine May be nullptr in tests that don't exercise scrolling;
+     *        a screen it claims takes the same engine bypass as autotile
      * @param windowId Dragged window (used for the isWindowTracked lookup
      *                 that decides immediateFloatOnStart)
      * @param screenId Virtual-screen-aware screen ID at drag start
      * @param resolver Frozen-snapshot context resolver — supplies the
-     *        (desktop, activity, Snapping-mode) tuple used for the
+     *        (desktop, activity, live-mode) tuple used for the
      *        context-disabled check. nullptr disables the disable gate
      *        (matches the historical `settings == nullptr` fallback).
      */
-    static PhosphorProtocol::DragPolicy computeDragPolicy(const ISettings* settings,
-                                                          const PhosphorEngine::IPlacementEngine* autotileEngine,
-                                                          const QString& windowId, const QString& screenId,
-                                                          const PhosphorContext::IContextResolver* resolver,
-                                                          bool reorderMode);
+    static PhosphorProtocol::DragPolicy
+    computeDragPolicy(const ISettings* settings, const PhosphorEngine::IPlacementEngine* autotileEngine,
+                      const PhosphorEngine::IPlacementEngine* scrollEngine, const QString& windowId,
+                      const QString& screenId, const PhosphorContext::IContextResolver* resolver, bool reorderMode);
+
+    /**
+     * @brief Whether reorder (drag-to-swap) mode is effective for @p screenId
+     *
+     * A matched context SetDragBehavior rule wins over the global
+     * `autotileDragBehavior` setting. Static for the same reason
+     * computeDragPolicy is — the decision needs the layout registry, which
+     * computeDragPolicy cannot reach, and a test must be able to pin the
+     * precedence without standing up a whole adaptor.
+     *
+     * @param layoutManager Rule/assignment cascade source; nullptr falls back
+     *        to the global setting
+     * @param settings Global-setting source; nullptr means "not reorder"
+     * @param screenId Screen the drag starts on; empty falls back to the
+     *        global setting (no context to resolve a rule against)
+     */
+    static bool resolveReorderMode(const PhosphorZones::LayoutRegistry* layoutManager, const ISettings* settings,
+                                   const QString& screenId);
 
 private:
-    /// Whether reorder (drag-to-swap) mode is effective for @p screenId: a matched
-    /// context SetDragBehavior rule wins, otherwise the global
-    /// `autotileDragBehavior` setting. Resolves through m_layoutManager (which the
-    /// static computeDragPolicy can't reach), so callers pass the result in.
+    /// resolveReorderMode bound to this adaptor's registry and settings.
     bool effectiveReorderMode(const QString& screenId) const;
 
     // Helper: Find screen containing a point (returns primary screen if not found)
@@ -459,6 +488,7 @@ private:
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     PhosphorEngine::IPlacementEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
+    PhosphorEngine::IPlacementEngine* m_scrollEngine = nullptr; // Optional: per-screen scrolling check
     PhosphorContext::IContextResolver* m_contextResolver =
         nullptr; // Non-owning; set via setContextResolver after Daemon builds it.
     PhosphorShortcutsIntegration::IAdhocRegistrar* m_shortcutRegistrar =
@@ -528,7 +558,7 @@ private:
     // (requires (a) autotile-bypass path, (b) AutotileDragBehavior::Reorder,
     // (c) window tiled at drag-start) and RE-LATCHED to the cursor's current screen
     // on each policy flip in updateDragCursor under the SAME conditions (destination
-    // bypassReason == AutotileScreen AND isWindowTiled), so a mid-drag crossing
+    // bypassReason == EngineOwnedScreen AND isWindowTiled), so a mid-drag crossing
     // between screens with divergent per-context SetDragBehavior rules applies the
     // destination screen's mode without ever adopting a floating window into the
     // stack or forcing a preview on a context-disabled screen. Cleared by endDrag,
@@ -575,6 +605,14 @@ private:
 
     // DRY helper: cancel any active autotile drag-insert preview.
     void cancelDragInsertIfActive();
+
+    /// Drop-path settle for a live autotile drag-insert preview. Commits it
+    /// and returns true when the preview belongs to the screen under
+    /// (@p cursorX, @p cursorY); otherwise cancels it (or does nothing when no
+    /// preview is live) and returns false. Shared by the two drop entry points
+    /// (drop.cpp's dragStopped and drag_protocol.cpp's autotile bypass), which
+    /// differ only in how they finalize after a commit.
+    bool settleDragInsertPreviewAt(int cursorX, int cursorY);
 
     // Last emitted zone geometry (emit only when changed)
     QRect m_lastEmittedZoneGeometry;

@@ -28,6 +28,10 @@ namespace PhosphorSnapEngine {
 class SnapEngine;
 }
 
+namespace PhosphorScrollEngine {
+class ScrollEngine;
+}
+
 namespace PhosphorEngine {
 class WindowRegistry;
 }
@@ -54,11 +58,12 @@ struct EngineSet
     std::unique_ptr<CrossSurfaceResolver> crossSurfaceResolver;
     std::unique_ptr<PhosphorTileEngine::AutotileEngine> autotile;
     std::unique_ptr<PhosphorSnapEngine::SnapEngine> snap;
+    std::unique_ptr<PhosphorScrollEngine::ScrollEngine> scroll;
     std::unique_ptr<ScreenModeRouter> router;
 };
 
 /**
- * @brief Create both placement engines and the mode router.
+ * @brief Create all three placement engines and the mode router.
  *
  * Concrete engine headers are included in the .cpp — the factory header
  * only forward-declares them. The caller (Daemon) must wire persistence

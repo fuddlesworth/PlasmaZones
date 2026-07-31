@@ -72,7 +72,7 @@ public:
     /**
      * @brief Clear the engine pointer during shutdown
      *
-     * Disconnects all signals. Mirrors AutotileAdaptor::clearEngine().
+     * Disconnects all signals. Mirrors TilingAdaptor::clearEngine().
      * Called by Daemon::stop() before the SnapEngine unique_ptr is reset.
      */
     void clearEngine();
@@ -336,6 +336,12 @@ private:
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;
     ISettings* m_settings = nullptr;
+    /// One-shot latch for the "called before panel geometry ready" warning, so
+    /// the four snap-restore slots log it once between them and then fall back
+    /// to debug. Per-adaptor rather than a function-local static: a static is
+    /// process-wide, and a ctest binary running several fixtures would see the
+    /// warning only for whichever fixture happened to hit the path first.
+    bool m_snapNotReadyWarned = false;
     /// Late-bound by Daemon via setContextResolver — replaces the inline
     /// `(modeFor → isContextDisabled)` cascade in snaprestore.cpp.
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;

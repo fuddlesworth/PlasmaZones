@@ -1,20 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Qt headers
-#include <algorithm>
-#include <cmath>
-#include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QScopeGuard>
-#include <QScreen>
-#include <QTimer>
-#include <QVarLengthArray>
+// Own header
+#include <PhosphorTileEngine/AutotileEngine.h>
 
 // Project headers
-#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorGeometry/GeometryUtils.h>
@@ -37,6 +27,18 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "engine_internal.h"
+
+// Qt and std
+#include <QDebug>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QScreen>
+#include <QTimer>
+#include <QVarLengthArray>
+#include <algorithm>
+#include <cmath>
 
 namespace PhosphorTileEngine {
 
@@ -441,7 +443,13 @@ void AutotileEngine::retileScreen(const QString& screenId)
     // (newly floated windows) were already handled inside applyTiling's
     // batch emit, and placementChanged is emitted last.
     for (const QString& wid : unfloated) {
-        Q_EMIT windowFloatingChanged(wid, false, screenId);
+        // PASSIVE, not active: overflow recovery is engine-initiated (the cap
+        // freed a slot), never a user toggle. The active signal's daemon
+        // handler unconditionally shows the navigation OSD, so an automatic
+        // recovery popped a "Tiled" OSD the user never asked for. The
+        // symmetric direction — overflow FLOATING — already rides the
+        // batch/passive channel.
+        Q_EMIT windowFloatingStateSynced(wid, false, screenId);
     }
     Q_EMIT placementChanged(screenId);
 }

@@ -12,7 +12,7 @@
 
 #include <epoxy/gl.h>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/snaphandler.h"
 #include "shader_internal.h"
 #include "surface_fold.h"
@@ -735,7 +735,7 @@ QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId) const
     // sole render gate (see updateWindowDecoration) — there is no separate show-border
     // gate. Autotile-first precedence; falls back to window.floating for an
     // unmanaged window.
-    if (m_autotileHandler->isTiledWindow(windowId)) {
+    if (m_tilingHandler->isTiledWindow(windowId)) {
         return QStringLiteral("window.tiled");
     }
     if (m_snapHandler->isTiledWindow(windowId)) {

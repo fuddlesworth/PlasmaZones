@@ -136,13 +136,16 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     };
     static const QSet<QString> kTilingAllLeaves =
         QSet<QString>{kTilingSimple, kTilingBehavior, kTilingAlgorithm} + kTilingConfigChildren;
+    // The scrolling section's single leaf; the peer of the two sets above.
+    static const QString kScrollingBehavior = QStringLiteral("scrolling-behavior");
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
-        // "placement" is the inline-collapsible parent of snapping + tiling;
-        // when collapsed its dirty badge must light if any snapping OR tiling
-        // leaf is dirty, so its leaf set is the union of both modes' leaves.
-        {QStringLiteral("placement"), kSnappingAllLeaves + kTilingAllLeaves},
+        {QStringLiteral("scrolling"), QSet<QString>{kScrollingBehavior}},
+        // "placement" is the inline-collapsible parent of the three placement
+        // modes; when collapsed its dirty badge must light if any snapping,
+        // tiling, or scrolling leaf is dirty, so its leaf set is their union.
+        {QStringLiteral("placement"), kSnappingAllLeaves + kTilingAllLeaves + QSet<QString>{kScrollingBehavior}},
         {QStringLiteral("snapping-overlay-cat"), kSnappingOverlayChildren},
         {QStringLiteral("snapping-config-cat"), kSnappingConfigChildren},
         {QStringLiteral("tiling-config-cat"), kTilingConfigChildren},
@@ -334,6 +337,20 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::tilingAlgorithmGroup(), CD::maxWindowsKey()},
              {CD::tilingAlgorithmGroup(), CD::perAlgorithmSettingsKey()},
          }},
+        {QStringLiteral("scrolling-behavior"),
+         {
+             // The master switch (Scrolling.enabled) is deliberately absent:
+             // like snappingEnabled/autotileEnabled it is committed through
+             // the sidebar toggle's beginExternalEdit/endExternalEdit pair,
+             // not staged through per-page dirtiness.
+             {CD::scrollingGroup(), CD::centerFocusedColumnKey()},
+             {CD::scrollingGroup(), CD::alwaysCenterSingleColumnKey()},
+             {CD::scrollingGroup(), CD::defaultColumnWidthKindKey()},
+             {CD::scrollingGroup(), CD::defaultColumnWidthValueKey()},
+             {CD::scrollingGroup(), CD::defaultColumnDisplayKey()},
+             {CD::scrollingGroup(), CD::presetColumnWidthsKey()},
+             {CD::scrollingGroup(), CD::presetWindowHeightsKey()},
+         }},
         // Only the GLOBAL Windows.* / Gaps.* keys are listed. Per-monitor gap
         // overrides live in the per-screen autotile store (AutotileScreen:*), not
         // in flat config keys, so — like the Tiling Algorithm page's per-monitor
@@ -469,6 +486,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("tiling-simple"),
         QStringLiteral("tiling-behavior"),
         QStringLiteral("tiling-algorithm"),
+        QStringLiteral("scrolling-behavior"),
         QStringLiteral("tiling-shortcuts"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),

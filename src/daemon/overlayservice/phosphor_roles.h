@@ -118,6 +118,18 @@ inline const PhosphorLayer::Role LayoutPicker =
 inline const PhosphorLayer::Role Cheatsheet =
     PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-cheatsheet"));
 
+/// Scroll tab-strip config-only role. The tab indicators for tabbed
+/// scrolling columns live as a per-screen Item slot inside the passive
+/// shell (NOT a singleton — every scrolling screen can carry strips at
+/// once); this role exists purely as the SurfaceAnimator role lookup key.
+/// DELIBERATELY has no registered per-role config: the animation-profile
+/// taxonomy defines no popup.scrollTabs domain, so both legs use the
+/// library-default 150 ms motion and user motion/shader profiles do not
+/// apply (see setupSurfaceAnimator's no-config list). Display-only and
+/// click-through: it never counts toward the shell's input-grabbing set.
+inline const PhosphorLayer::Role ScrollTabs =
+    PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-scroll-tabs"));
+
 /// Shader preview (editor Shader Settings dialog). Floating Overlay
 /// layer, no anchors, no keyboard. Singleton. Positioned programmatically
 /// by the caller.

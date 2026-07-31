@@ -133,7 +133,7 @@ public:
      * pruneStatesForDesktop(). The m_states map itself stays private; per-screen
      * lookup is available through tilingStateForScreen(screenId). (Design notes
      * on why the older screenStates() accessor was removed live above the
-     * definition in AutotileEngine.cpp.)
+     * definition in src/autotileengine/algorithm_state.cpp.)
      */
     QSet<int> desktopsWithActiveState() const override;
 
@@ -284,7 +284,7 @@ public:
      * @brief Set the current virtual desktop for per-desktop tiling state
      *
      * Swaps the active PhosphorTiles::TilingState set without releasing windows. Must be
-     * called BEFORE updateAutotileScreens() on desktop switch so the engine
+     * called BEFORE updateEngineScreens() on desktop switch so the engine
      * resolves states for the correct desktop.
      *
      * @param desktop Virtual desktop number (1-based from KWin)
@@ -299,7 +299,7 @@ public:
      * currentKeyForScreen() resolves that screen's per-(screen, desktop) state. Does
      * NOT migrate windows between states — the other desktop's state stays put so it
      * reappears when the screen returns. Like setCurrentDesktop(), call BEFORE
-     * updateAutotileScreens() so the new key resolves.
+     * updateEngineScreens() so the new key resolves.
      */
     void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
 
@@ -317,7 +317,7 @@ public:
      * @brief Set the current activity for per-activity tiling state
      *
      * Swaps the active PhosphorTiles::TilingState set without releasing windows. Must be
-     * called BEFORE updateAutotileScreens() on activity switch so the engine
+     * called BEFORE updateEngineScreens() on activity switch so the engine
      * resolves states for the correct activity.
      *
      * @param activity Activity ID (empty string for no activity)
@@ -359,11 +359,11 @@ public:
     /**
      * @brief Prune PhosphorTiles::TilingState entries for a permanently removed monitor
      *
-     * Removes every state whose key.screenId belongs to the removed physical
-     * monitor (including its virtual sub-screens), plus their tuned-flag /
-     * script-stash / scheduling / context residue. updateAutotileScreens only
-     * tears down the CURRENT (desktop, activity) context, so without this the
-     * removed monitor's other contexts' states leak for the session. Mirrors
+     * Prune every TilingState (all desktops/activities) whose screen is the
+     * removed physical output or one of its virtual sub-screens.
+     * updateEngineScreens only reaps CURRENT-context states, so without
+     * this the sibling-context states of an unplugged monitor would leak
+     * and resurface ghost tiles when the connector returns. Mirrors
      * SnapEngine::pruneStatesForRemovedScreen.
      */
     void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
@@ -502,7 +502,10 @@ public:
      * UNSET (default) no window is rule-floated. Clear with `{}` before destroying
      * any state the closure captured.
      */
-    using FloatPredicate = std::function<bool(const QString& windowId)>;
+    /// Takes the OPENING SCREEN as well, so the resolver can stamp ScreenId
+    /// and derive Mode — without which a rule pairing either with Float is
+    /// silently inert.
+    using FloatPredicate = std::function<bool(const QString& windowId, const QString& screenId)>;
 
     void setFloatPredicate(FloatPredicate predicate)
     {
@@ -971,7 +974,9 @@ public:
      * @brief Notify the engine that a new window was added
      *
      * Called by Daemon when KWin reports a new window. Triggers retiling
-     * if autotile is enabled and window is tileable.
+     * if autotile is enabled and window is tileable. A no-op when
+     * @p screenId names a screen this engine does not own — the claiming
+     * engine (scrolling/snap) handles the open instead.
      *
      * @param windowId Window identifier from KWin
      * @param screenId Screen where the window appeared
@@ -991,7 +996,8 @@ public:
      * @param minWidth New minimum width in pixels (0 if unconstrained)
      * @param minHeight New minimum height in pixels (0 if unconstrained)
      */
-    void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight);
+    void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
+    QSize windowMinimumSize(const QString& windowId) const override;
 
     /**
      * @brief Notify the engine that a window was closed
@@ -1260,7 +1266,9 @@ private:
      *
      * Captures every window's placement into the unified record, drops the
      * overflow set (AFTER capture — the discriminator needs it), appends the
-     * released windows, clears the pending-order bookkeeping, and
+     * released windows, drops their min-size entries (they are screen-capped,
+     * so a stale entry would lay a returning window out against the cap of
+     * the screen it left), clears the pending-order bookkeeping, and
      * deleteLater()s the state. Callers own the divergent parts: removing
      * the state from m_states (they iterate it) and the per-path
      * override policy — toggle-off drops only the resolver's in-memory
@@ -1270,11 +1278,25 @@ private:
      *        share one screenId (the orphaned-VS loop spans every
      *        desktop/activity context); the overflow bucket is keyed per
      *        screenId only, so the caller must drain once per screen AFTER
-     *        all of that screen's states are captured.
+     *        all of that screen's states are captured. Pass false ALSO when
+     *        the screen SURVIVES and only some of its contexts are going
+     *        away (the removed-desktop / removed-activity prunes): draining
+     *        there would strip the current desktop's overflow windows of
+     *        their overflow classification, and capturePlacement would later
+     *        mis-record them as USER floats, so they stick floating instead
+     *        of re-tiling.
+     * @param clearScreenOrderMaps Whether to drop the three SCREEN-keyed seed
+     *        bookkeeping maps (pending order, generation, strict flag). True
+     *        is right when the whole screen is going away. Pass false for a
+     *        context-scoped prune on a surviving screen, or deleting one
+     *        virtual desktop would destroy an in-flight strict seed order for
+     *        that screen on the CURRENT desktop and its windows would be
+     *        inserted in arbitrary order.
      * @return Whether the state released any managed windows.
      */
     bool releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
-                                       QStringList& releasedWindows, bool drainOverflow = true);
+                                       QStringList& releasedWindows, bool drainOverflow = true,
+                                       bool clearScreenOrderMaps = true);
 
     /**
      * @brief Shared key-migration body for focus-driven window moves.
@@ -1514,7 +1536,7 @@ private:
 
     /// The float state @p windowId must be inserted with: the live state it
     /// carried across a migration, else the open-time "Float this app" rule.
-    bool insertShouldFloat(const QString& windowId) const;
+    bool insertShouldFloat(const QString& windowId, const QString& screenId) const;
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
@@ -1636,7 +1658,7 @@ private:
     // desktop overrides (#648), the sticky-desktop pin, the current activity, and
     // the "ever set" arming flags. Used by tilingStateForScreen() to construct
     // the owning key via currentKeyForScreen(). Fed by setCurrentDesktop()/
-    // setCurrentActivity()/setCurrentDesktopForScreen() BEFORE updateAutotileScreens()
+    // setCurrentActivity()/setCurrentDesktopForScreen() BEFORE updateEngineScreens()
     // runs on a desktop/activity switch.
     PhosphorEngine::ScreenContextTracker m_context;
 

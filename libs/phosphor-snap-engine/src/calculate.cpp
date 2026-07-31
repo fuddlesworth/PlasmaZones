@@ -81,16 +81,21 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
         directive.targetDesktop >= 1 ? directive.targetDesktop : currentVirtualDesktopForScreen(placementScreen);
 
     // The placement only applies when the (screen, desktop) target is in snapping
-    // mode. An autotile-mode target is owned by the autotile routing hook, and a
+    // mode. An autotile- or scrolling-mode target is owned by that engine, and a
     // disabled / unresolvable target has no layout — decline so the window falls
-    // through to the normal restore chain rather than being stranded. Gate whenever
-    // the target differs from the opening (screen, desktop), so a cross-desktop or
-    // cross-screen route is validated against where the window will actually land.
+    // through to the normal restore chain rather than being stranded.
+    //
+    // Validated for EVERY target, routed or not. The gate used to fire only when
+    // the target differed from the opening (screen, desktop), on the assumption
+    // that an unrouted target is the opening screen and the caller already
+    // checked it. That assumption breaks on the cross-screen-restore bypass in
+    // resolveWindowRestore: it deliberately runs the rest of the open path on a
+    // TILED opening screen, so an unrouted SnapToZone rule reached this function
+    // with a tiled target, snapped the window into a zone there, and overwrote
+    // the owning engine's slot through the store's mutual-exclusivity invariant.
     // (m_layoutManager is non-null here — the early guard above already returned.)
-    const bool routed = placementScreen != windowScreenName || directive.targetDesktop >= 1;
-    if (routed
-        && m_layoutManager->modeForScreen(placementScreen, placementDesktop, currentActivity())
-            != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+    if (m_layoutManager->modeForScreen(placementScreen, placementDesktop, currentActivity())
+        != PhosphorZones::AssignmentEntry::Mode::Snapping) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "calculateSnapToPlacementRule: route target" << placementScreen << "desktop" << placementDesktop
             << "is not in snapping mode — declining snap route for" << windowId;
@@ -159,9 +164,11 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
         return SnapResult::noSnap();
     }
 
-    // Check if window was floating - floating windows should NOT be auto-snapped
-    // They should remain floating when reopened
-    if (m_windowTracker->isWindowFloating(windowId)) {
+    // A window floating in SNAPPING mode is not auto-snapped; it stays where
+    // it is. Read from this engine's own store, not the mode-routed resolver:
+    // snapadaptor calls this directly over D-Bus with no mode gate, so the
+    // routed read would let a tiling engine's float bit decide a snap.
+    if (isFloating(windowId)) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "snapToLastZone:" << windowId << "was floating, skipping";
         return SnapResult::noSnap();
     }

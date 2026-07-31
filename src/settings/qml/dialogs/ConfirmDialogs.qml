@@ -130,7 +130,10 @@ Item {
         property bool pendingValue: false
 
         title: i18n("Discard unsaved changes?")
-        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?")
+        // Each arm names its own section rather than letting one of the three
+        // be the else branch, so a pendingSection this dialog does not handle
+        // cannot show the wrong feature's wording.
+        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : (pendingSection === "tiling" ? i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?") : (pendingSection === "scrolling" ? i18n("Disabling Scrolling will discard your unsaved Scrolling changes. Continue?") : i18n("Disabling this will discard your unsaved changes. Continue?")))
         standardButtons: Kirigami.Dialog.NoButton
         customFooterActions: [
             Kirigami.Action {
@@ -143,8 +146,9 @@ Item {
                     // Discard the section's staged edits first, THEN flip the
                     // enable flag — otherwise the inline beginExternalEdit /
                     // endExternalEdit pair would surface the still-staged edits
-                    // alongside the disable. discardPage("snapping"/"tiling")
-                    // reverts every manifest-backed leaf under that mode back to
+                    // alongside the disable. discardPage("snapping" / "tiling"
+                    // / "scrolling") reverts every manifest-backed leaf under
+                    // that mode back to
                     // the committed baseline (the framework PageAdapter.discard()
                     // for these virtual parents is a no-op, so the old
                     // registry.controller(section).discard() call did nothing).
@@ -152,8 +156,10 @@ Item {
                     settingsController.beginExternalEdit(section);
                     if (section === "snapping")
                         appSettings.snappingEnabled = value;
-                    else
+                    else if (section === "tiling")
                         appSettings.autotileEnabled = value;
+                    else if (section === "scrolling")
+                        appSettings.scrollingEnabled = value;
                     settingsController.endExternalEdit();
                 }
             },

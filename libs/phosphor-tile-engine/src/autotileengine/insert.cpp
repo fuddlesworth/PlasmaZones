@@ -1,20 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Qt headers
-#include <algorithm>
-#include <cmath>
-#include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QScopeGuard>
-#include <QScreen>
-#include <QTimer>
-#include <QVarLengthArray>
+// Own header
+#include <PhosphorTileEngine/AutotileEngine.h>
 
 // Project headers
-#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorGeometry/GeometryUtils.h>
@@ -37,6 +27,18 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "engine_internal.h"
+
+// Qt and std
+#include <QDebug>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QScreen>
+#include <QTimer>
+#include <QVarLengthArray>
+#include <algorithm>
+#include <cmath>
 
 namespace PhosphorTileEngine {
 
@@ -63,9 +65,18 @@ void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QSt
     // the window to a cross-screen-adjusted rect and resizes it.
     if (state->isFloating(windowId)) {
         Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
-    } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
-        Q_EMIT windowFloatingStateSynced(windowId, false, screenId);
     }
+    // NO cross-engine else-arm. This used to broadcast not-floating whenever
+    // the ROUTED WindowTrackingService read disagreed, described as "clearing
+    // a stale snap-mode float". It cannot do that job any more: the routed
+    // read dispatches on the window's screen's current mode, which here IS
+    // autotile, so it returns this engine's own bit — which the branch above
+    // has already proven false. The arm is inert on the case it documents.
+    //
+    // Worse, on a screen mid-flip it returns a FOREIGN engine's bit, and an
+    // autotile insertion would then broadcast away a snapping-mode float
+    // verdict. Float is per engine, so this engine announces only what its own
+    // state says, and says nothing when its own state says not-floating.
 }
 
 void AutotileEngine::notifyAlgorithmWindowAdded(PhosphorTiles::TilingState* state, const QString& screenId,
@@ -80,7 +91,7 @@ void AutotileEngine::notifyAlgorithmWindowAdded(PhosphorTiles::TilingState* stat
     }
 }
 
-bool AutotileEngine::insertShouldFloat(const QString& windowId) const
+bool AutotileEngine::insertShouldFloat(const QString& windowId, const QString& screenId) const
 {
     // A window ARRIVING from another state was already managed, so the open-time
     // "Float this app" rule has nothing to say about it — it carries the float
@@ -92,7 +103,7 @@ bool AutotileEngine::insertShouldFloat(const QString& windowId) const
         return m_migrationArrival->wasFloating;
     }
     // A genuine open consults the rule.
-    return m_floatPredicate && m_floatPredicate(windowId);
+    return m_floatPredicate && m_floatPredicate(windowId, screenId);
 }
 
 bool AutotileEngine::insertWindow(const QString& windowId, const QString& screenId)
@@ -238,7 +249,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     const TilingStateKey currentKey = currentKeyForScreen(screenId);
     if (!inserted && hasStableAppId && m_windowTracker) {
         using PhosphorEngine::WindowPlacement;
-        auto rec = m_windowTracker->placementStore().take(windowId, appId, [&](const WindowPlacement& p) {
+        const auto accept = [&](const WindowPlacement& p) {
             const PhosphorEngine::EngineSlot s = p.slotFor(engineId());
             if (s.state == WindowPlacement::stateFloating()) {
                 // A geometry-less floating record (the order-only slot the
@@ -261,7 +272,21 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     && p.activity == currentKey.activity;
             }
             return false;
-        });
+        };
+        // A REJECTED exact record is FINAL — no FIFO fallback past it. The
+        // fallback exists for a cross-session reopen, whose fresh uuid by
+        // definition has no exact record. A LIVE window whose own record was
+        // rejected on context (tiled on another desktop, say) is not that
+        // case: falling through would consume a SIBLING's record and the
+        // re-bind below would re-record it under this window's id, where the
+        // store's merge overwrites this window's own other-context slot — its
+        // remembered desktop-2 tile dies because it happened to reopen on
+        // desktop 1.
+        std::optional<WindowPlacement> rec;
+        const auto own = m_windowTracker->placementStore().peekExact(windowId);
+        if (!own || accept(*own)) {
+            rec = m_windowTracker->placementStore().take(windowId, appId, accept);
+        }
         if (rec) {
             // Re-record bound to the LIVE windowId so the autotile slot + per-screen
             // free/float geometry survive the reopen. KWin assigns a NEW uuid at
@@ -329,7 +354,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // a manual float toggle. Guarded on not-already-floating so the
     // placement-record float-restore branch above is not re-applied. onWindowAdded
     // then emits windowFloatingStateSynced so the daemon mirrors the state.
-    if (!state->isFloating(windowId) && insertShouldFloat(windowId)) {
+    if (!state->isFloating(windowId) && insertShouldFloat(windowId, screenId)) {
         state->setFloating(windowId, true);
     }
 

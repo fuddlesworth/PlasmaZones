@@ -4,6 +4,7 @@
 #include "plasmazoneseffect.h"
 
 #include <PhosphorIdentity/ScreenId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -27,7 +28,7 @@
 
 #include <climits>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "compositor/compositorclock.h"
 #include "compositor/windowanimator.h"
 
@@ -123,10 +124,59 @@ KWin::LogicalOutput* PlasmaZonesEffect::windowOutput(KWin::EffectWindow* w) cons
     return output ? output : w->screen();
 }
 
+KWin::LogicalOutput* PlasmaZonesEffect::outputForScreenId(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return nullptr;
+    }
+    // Virtual screens subdivide one output, so match on the physical part.
+    const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+    for (const auto& output : KWin::effects->screens()) {
+        if (outputScreenId(output) == physId) {
+            return output;
+        }
+    }
+    return nullptr;
+}
+
+const QSet<QString>& PlasmaZonesEffect::connectedPhysicalIds() const
+{
+    if (!m_idCaches.connectedPhysicalIdsValid) {
+        m_idCaches.connectedPhysicalIds.clear();
+        for (const auto* output : KWin::effects->screens()) {
+            const QString physId = outputScreenId(output);
+            if (!physId.isEmpty()) {
+                m_idCaches.connectedPhysicalIds.insert(physId);
+            }
+        }
+        m_idCaches.connectedPhysicalIdsValid = true;
+    }
+    return m_idCaches.connectedPhysicalIds;
+}
+
 QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
 {
     if (!w) {
         return QString();
+    }
+    // Engine-authoritative override for scroll-managed windows: the strip
+    // parks off-viewport columns and hidden tabs ENTIRELY outside their
+    // screen rect, so a parked frame's centre lands inside a NEIGHBOUR
+    // output's geometry and the position-derived resolution below would
+    // misattribute the window (wrong minimize routing, wrong close/float
+    // record, wrong Mode stamp). Scroll windows change screens only through
+    // engine-driven handoffs, which update the tracked screen first.
+    // hasScrollingScreens short-circuit keeps the common no-scrolling
+    // session on the pure positional path (no id-cache lookups per call).
+    // Both invariant gates (tiled membership AND connected output) live in
+    // scrollTrackedScreenFor itself. m_tilingHandler is constructed first
+    // and lives for the effect's lifetime (the VS re-resolve loop below
+    // derefs it unguarded for the same reason).
+    if (m_tilingHandler->hasScrollingScreens()) {
+        const QString tracked = m_tilingHandler->scrollTrackedScreenFor(getWindowId(w));
+        if (!tracked.isEmpty()) {
+            return tracked;
+        }
     }
     const QPointF cf = w->frameGeometry().center();
     const QPoint c(qRound(cf.x()), qRound(cf.y()));
@@ -260,8 +310,13 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
             // generation == 0 — otherwise an errored / stale / malformed
             // reply leaves the gate closed forever and VS crossings
             // silently stop being detected for that physical screen.
+            // A live reply arriving while a startup batch is still outstanding
+            // must NOT open the gate: the batch owns it and countdownVsGate is
+            // the only thing entitled to flip it once the last reply lands.
+            // Opening it here would let crossing detection run against a
+            // half-populated m_virtualScreenDefs.
             const auto restoreReadyIfLive = [self, generation]() {
-                if (generation == 0) {
+                if (generation == 0 && self->m_daemonGate.pendingVsConfigReplies == 0) {
                     self->m_daemonGate.virtualScreensReady = true;
                 }
             };
@@ -355,15 +410,26 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 {
                     // Position-based resolution (getWindowScreenId), consistent
                     // with the daemon — do not trust window->screen() for
-                    // identical-model monitors.
+                    // identical-model monitors. For SCROLL-managed windows
+                    // this re-resolve is deliberately inert: getWindowScreenId
+                    // answers from the engine's tracked screen (a parked
+                    // frame's position is meaningless), so writing it back
+                    // re-keys nothing. That is acceptable, not a gap: the
+                    // daemon retiles every scrolling screen on a VS
+                    // reconfigure, and the tile-apply path rewrites both
+                    // maps with the new effective ids — the daemon, not this
+                    // loop, is the re-keying authority for strip windows.
+                    const QString windowId = self->getWindowId(window);
+                    if (!self->m_tilingHandler->scrollTrackedScreenFor(windowId).isEmpty()) {
+                        continue;
+                    }
                     const QString newScreenId = self->getWindowScreenId(window);
                     if (!newScreenId.isEmpty()) {
                         it.value() = newScreenId;
                         // Also update the autotile handler's notified screen map
                         // so slotWindowFrameGeometryChanged does not compare against
                         // the stale pre-config-change screen ID.
-                        const QString windowId = self->getWindowId(window);
-                        self->m_autotileHandler->updateNotifiedScreen(windowId, newScreenId);
+                        self->m_tilingHandler->updateNotifiedScreen(windowId, newScreenId);
                     }
                 }
             }
@@ -424,6 +490,7 @@ void PlasmaZonesEffect::onVirtualScreensChanged(const QString& physicalScreenId)
 {
     qCInfo(lcEffect) << "Virtual screens changed for" << physicalScreenId;
     m_idCaches.screenIdCache.clear();
+    m_idCaches.connectedPhysicalIdsValid = false;
     m_lastEffectiveScreenId.clear();
     // Temporarily disable VS-aware crossing detection while the async fetch is in-flight.
     // Without this, slotWindowFrameGeometryChanged uses stale boundary definitions from the
@@ -448,6 +515,11 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
+    // Hotplug is the earliest signal in the cascade (before any per-window
+    // outputChanged): the connected-physical-id set must invalidate HERE or
+    // scrollTrackedScreenFor's liveness gate answers from the pre-plug set
+    // for the whole cascade.
+    clearScreenIdCache();
     // Construct a bound clock for this output. Idempotent: if the same
     // output arrives twice (rare, but possible on some compositors'
     // hotplug sequences) we keep the existing clock rather than
@@ -465,13 +537,41 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
+    // Resolve the dying connector's id BEFORE the cache is dropped: resolving
+    // it afterwards would re-populate the fresh cache with the very entry this
+    // handler exists to purge.
+    const QString removedScreenId = outputScreenId(output);
+    // Unplug twin of the onScreenAdded invalidation: KWin fires
+    // screenRemoved BEFORE the per-window outputChanged cascade, and the
+    // connected-output gate in scrollTrackedScreenFor exists for exactly
+    // that cascade — a stale cached set would keep answering the dead
+    // screen for every scroll-tiled window's close/minimize/drag routing.
+    clearScreenIdCache();
+
+    // Rebuild the connected set eagerly, MINUS the dying output. The lazy
+    // rebuild in connectedPhysicalIds() reads KWin::effects->screens(), which
+    // still lists this output while screenRemoved is being delivered, so the
+    // first caller anywhere in the rest of the cascade would re-insert the
+    // connector that is going away. The next add/remove/reconfigure
+    // invalidates this again.
+    m_idCaches.connectedPhysicalIds.clear();
+    for (const auto* other : KWin::effects->screens()) {
+        if (other == output) {
+            continue;
+        }
+        const QString physId = outputScreenId(other);
+        if (!physId.isEmpty()) {
+            m_idCaches.connectedPhysicalIds.insert(physId);
+        }
+    }
+    m_idCaches.connectedPhysicalIdsValid = true;
 
     // Drop this output's per-screen desktop dedup entry, symmetric with the
     // daemon's VirtualDesktopManager::removeScreenDesktop (#648): otherwise
     // reportScreenDesktop's m_lastScreenDesktop cache retains a stale value for
     // a disconnected connector. Runs before the motion-clock early-return below
     // so it fires even for an output that never had an animation clock.
-    m_lastScreenDesktop.remove(outputScreenId(output));
+    m_lastScreenDesktop.remove(removedScreenId);
 
     // Drop any live desktop-switch transition on this output. A disconnected
     // LogicalOutput* left in the transition manager's active map would dangle:

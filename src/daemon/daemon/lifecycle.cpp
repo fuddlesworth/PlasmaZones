@@ -73,6 +73,7 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
@@ -101,6 +102,8 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
+#include "dbus/scrollingadaptor/scrollingadaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/shaderadaptor.h"
 #include "dbus/compositorbridgeadaptor.h"
@@ -221,6 +224,7 @@ void Daemon::start()
     // (stop()'s guard is defensive teardown symmetry, not a live invariant).
     m_shortcutManager->registerShortcuts();
     connectShortcutSignals();
+    connectScrollingShortcuts();
     initializeAutotile();
     initializeUnifiedController();
     connectLayoutSignals();
@@ -398,6 +402,7 @@ void Daemon::stop()
     // idempotent, so running this on an already-stopped daemon costs nothing.
     if (m_windowDragAdaptor) {
         m_windowDragAdaptor->setAutotileEngine(nullptr);
+        m_windowDragAdaptor->setScrollEngine(nullptr);
         m_windowDragAdaptor->setShortcutRegistrar(nullptr);
     }
 
@@ -545,7 +550,7 @@ void Daemon::stop()
     // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
     // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
-    // SnapAdaptor, AutotileAdaptor) all ship destructors that don't
+    // SnapAdaptor, TilingAdaptor) all ship destructors that don't
     // deref any borrowed pointer — most are `= default` / empty-body
     // (no member access), and the two outliers do only self-cleanup
     // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-
@@ -627,8 +632,14 @@ void Daemon::stop()
     // Adaptors are Qt children of the daemon (destroyed later); a D-Bus call
     // arriving between engine destruction and adaptor destruction would otherwise
     // access freed memory. After clearing, ensureEngine() returns false.
+    if (m_tilingAdaptor) {
+        m_tilingAdaptor->clearEngine();
+    }
     if (m_autotileAdaptor) {
         m_autotileAdaptor->clearEngine();
+    }
+    if (m_scrollingAdaptor) {
+        m_scrollingAdaptor->clearEngine();
     }
     if (m_snapAdaptor) {
         m_snapAdaptor->clearEngine();
@@ -637,7 +648,7 @@ void Daemon::stop()
     // Null the WindowDragAdaptor's engine pointer for the same reason.
     // Clear engine references before destruction
     if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setEngines(nullptr, nullptr);
+        m_windowTrackingAdaptor->setEngines(nullptr, nullptr, nullptr);
     }
 
     // Clear the late-bound WTS float / mode callbacks that capture `this` (Daemon,
@@ -651,11 +662,24 @@ void Daemon::stop()
         wts->setEngineFloatWriter({});
         wts->setEngineFloatLister({});
         wts->setAutotileModePredicate({});
-        wts->setAutotileTiledPredicate({});
+        wts->setEngineTiledPredicate({});
         // Deliberately NOT cleared here: the snap-state resolver (setSnapStateResolver)
         // and setSnapEngine both capture/store only QPointer(snapEngine), so they
         // self-null when the engine is destroyed — there is no `this`/raw-pointer
         // capture to invalidate, unlike the float callbacks above.
+    }
+    // NOTE: the strip-state provider is deliberately NOT cleared here with
+    // the float callbacks. It captures only a QPointer, so it cannot dangle,
+    // and clearing it early makes saveState SKIP the strips write entirely —
+    // so the final shutdown save (further down, before the engine is
+    // destroyed) would drop every strip mutation from the last debounce
+    // window. It is cleared immediately before m_scrollEngine.reset() instead.
+    // The one remaining `this`-capturing closure on the overlay service. It
+    // is safe today (the lambda re-resolves m_scrollEngine and null-checks
+    // it), but leaving it installed breaks the grep-discoverable
+    // clear-before-teardown contract its siblings below rely on.
+    if (m_overlayService) {
+        m_overlayService->setScrollZonesProvider({});
     }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.
@@ -679,14 +703,14 @@ void Daemon::stop()
         // the symmetric clear (snapadaptor.cpp).
         m_windowTrackingAdaptor->setScreenModeRouter(nullptr);
     }
-    if (m_autotileAdaptor) {
-        // Sever the autotile adaptor's post-construction borrow of the WTA (wired
-        // in init() so the autotile open path can resolve RouteToScreen /
-        // RouteToDesktop rules). The autotile open path no-ops on a null WTA, so
+    if (m_tilingAdaptor) {
+        // Sever the tiling adaptor's post-construction borrow of the WTA (wired
+        // in init() so the tiling open path can resolve RouteToScreen /
+        // RouteToDesktop rules). The tiling open path no-ops on a null WTA, so
         // a D-Bus open landing in the teardown gap can't drive routing against
         // half-torn-down state. Symmetric with the resolver / router clears above
-        // and honours the shutdown-nullptr contract documented in autotileadaptor.h.
-        m_autotileAdaptor->setWindowTrackingAdaptor(nullptr);
+        // and honours the shutdown-nullptr contract documented in tilingadaptor.h.
+        m_tilingAdaptor->setWindowTrackingAdaptor(nullptr);
     }
 
     // Sever SnapEngine's borrow of m_excludeRuleSet (a daemon-owned value
@@ -700,6 +724,11 @@ void Daemon::stop()
     // concreteAutotile narrowing a few lines below.
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         concreteSnap->setExcludeRuleSet(nullptr);
+        // The live-mode resolver captures `this` and consults the router,
+        // which is destroyed BEFORE the engines (declaration order) — the
+        // closure null-checks the router, but clearing it here keeps the
+        // teardown grep-discoverable like every other late-bound borrow.
+        concreteSnap->setLiveModeResolver({});
     }
 
     // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
@@ -719,6 +748,13 @@ void Daemon::stop()
     // setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
+    }
+    // Scroll twin of the clear above: its context-gap provider captures the
+    // same Daemon `this` (init_engines.cpp) and honours the same
+    // clear-before-destroy contract (ScrollEngine.h documents it).
+    if (auto* concreteScroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
+        concreteScroll->setContextGapProvider({});
+        concreteScroll->setSnappingModeResolver({});
     }
 
     // Everything ABOVE this gate is init/ctor-origin teardown that must run on
@@ -785,6 +821,12 @@ void Daemon::stop()
     // Per-session restore staging: entries computed against the pre-stop
     // window set must not feed a post-restart KCM apply with dead geometry.
     m_pendingSnapFloatRestores.clear();
+    // The derived engine sets are only read while the recompute latch is held,
+    // and the next cycle's first recompute rewrites them before any read — but
+    // they are per-session change-gate state like the two above, and leaving
+    // them out was an asymmetry in a block whose whole purpose is that reset.
+    m_derivedAutotileScreens.clear();
+    m_derivedScrollingScreens.clear();
 
     // Release the shortcut grabs and the Portal session with the connections:
     // registerShortcuts() on the next start() lazily recreates the registry
@@ -879,8 +921,18 @@ void Daemon::stop()
     // above the running gate.
     m_snapEngine.reset();
     m_autotileEngine.reset();
+    // Drop the strip-state provider FIRST, and only now: once the engine is
+    // gone the closure answers an EMPTY blob, and saveload turns an empty
+    // blob into deleteKey(scrollStrips), so any later save would WIPE the
+    // user's persisted strip structure. Clearing it makes saveState skip the
+    // strips write instead, which is why it cannot happen any earlier — the
+    // shutdown save above still needs a live engine to answer.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setScrollStripStateProvider({});
+    }
+    m_scrollEngine.reset();
 
-    // Both engines borrowed m_crossSurfaceResolver (injected at construction).
+    // All three engines borrowed m_crossSurfaceResolver (injected at construction).
     // They are destroyed immediately above, so the borrow is already dead;
     // reset the resolver here too so the teardown order is explicit and
     // grep-discoverable — matching the exclude-rule / window-rule borrow

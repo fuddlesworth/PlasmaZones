@@ -54,4 +54,10 @@ inline const QString& Cheatsheet()
     return s;
 }
 
+inline const QString& ScrollTabs()
+{
+    static const auto s = QStringLiteral("scrollTabs");
+    return s;
+}
+
 } // namespace PlasmaZones::PhosphorSlotKeys

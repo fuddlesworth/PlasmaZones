@@ -209,6 +209,11 @@ void Settings::load()
 
     m_configBackend->reparseConfiguration();
 
+    // Whatever the reparse just brought in may have bypassed the kind-aware
+    // width setter, and the schema clamp cannot catch it (its bounds span both
+    // kinds). Coerce before anything reads the pair.
+    normalizeScrollingColumnWidthValue();
+
     // Per-mode disable lists live in rules.json, a separate file the
     // config backend's reparseConfiguration() does not touch. Reload the
     // rule store explicitly so a cross-process write (daemon shortcut, KCM
@@ -337,13 +342,15 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
+        ConfigDefaults::scrollingGroup(), // "Scrolling"
         ConfigDefaults::displayGroup(), // "Display" — dead in v4 (per-mode disable lists moved to rules.json);
                                         // listed so reset() drops any partial-v3 migration husk left in this group
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
         ConfigDefaults::renderingGroup(), // "Rendering"
         ConfigDefaults::shadersGroup(), // "Shaders"
-        ConfigDefaults::shortcutsGroup(), // "Shortcuts" — covers Shortcuts.Global + Shortcuts.Tiling
+        ConfigDefaults::shortcutsGroup(), // "Shortcuts" — covers Shortcuts.Global + Shortcuts.Tiling +
+                                          // Shortcuts.Scrolling
         ConfigDefaults::animationsGroup(), // "Animations"
         ConfigDefaults::animationsWindowFilteringGroup(), // "Animations.WindowFiltering"
         ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
@@ -665,6 +672,15 @@ bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
         return false;
     }
 
+    // Same repair load() runs, for the same reason and with the same
+    // snapshot/re-emit contract: a shared or hand-edited profile blob can
+    // carry an inconsistent width pair (kind=Fixed with value 0.5), and the
+    // engine's Fixed branch would then compute qMax(1, qRound(0.5)) = ONE
+    // PIXEL for every new column, for the whole session — the repair would
+    // otherwise not land until the next restart or Discard. The normalizer
+    // does not emit on its own, so it composes here unchanged.
+    normalizeScrollingColumnWidthValue();
+
     const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
     if (anyChanged)
         Q_EMIT settingsChanged();
@@ -826,7 +842,7 @@ void Settings::onRuleStoreChanged()
     // Gaps folds config per-monitor gaps under these rule overrides). Re-sync the
     // geometry consumers — the daemon's perScreenSnappingSettingsChanged handler
     // reschedules the gap resnap, and its settingsChanged handler re-runs the
-    // per-screen autotile config (updateAutotileScreens) plus
+    // per-screen autotile config (updateEngineScreens) plus
     // refreshConfigFromSettings — but ONLY when a gap action somewhere in the rule
     // set actually changed. Emitting on every rulesChanged made a mode/assignment
     // toggle (also a rule write) fire settingsChanged, which drove the daemon to

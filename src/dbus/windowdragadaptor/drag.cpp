@@ -188,8 +188,12 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
         return nullptr;
     }
 
-    // Skip overlay and zone detection on autotile-managed screens
-    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(outScreenId)) {
+    // Skip overlay and zone detection on ENGINE-managed screens (autotile
+    // AND scrolling — both own placement; running the per-tick snap
+    // resolve/zone-detect/overlay machinery there is pure waste even though
+    // the excluded-screens set suppresses the visuals).
+    if ((m_autotileEngine && m_autotileEngine->isActiveOnScreen(outScreenId))
+        || (m_scrollEngine && m_scrollEngine->isActiveOnScreen(outScreenId))) {
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;

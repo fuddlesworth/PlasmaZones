@@ -166,6 +166,29 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                      {QStringLiteral("float"), PhosphorI18n::tr("Float excess")},
                      {QStringLiteral("unlimited"), PhosphorI18n::tr("Unlimited")},
                  });
+
+        // ── Scrolling ──
+        // DefaultColumnWidthValue carries NO descriptor on purpose: its unit
+        // is kind-dependent (a fraction under Proportion, pixels under
+        // Fixed), and a fixed pct/px declaration would mislabel one of the
+        // two. The diff view shows the raw number.
+        t.insert(pairKey(CD::scrollingGroup(), CD::centerFocusedColumnKey()),
+                 {
+                     {QStringLiteral("never"), PhosphorI18n::tr("Never")},
+                     {QStringLiteral("always"), PhosphorI18n::tr("Always")},
+                     {QStringLiteral("onOverflow"), PhosphorI18n::tr("On overflow")},
+                 });
+        t.insert(pairKey(CD::scrollingGroup(), CD::defaultColumnWidthKindKey()),
+                 {
+                     {QStringLiteral("proportion"), PhosphorI18n::tr("Proportion of the screen")},
+                     {QStringLiteral("fixed"), PhosphorI18n::tr("Fixed width")},
+                     {QStringLiteral("clientDecides"), PhosphorI18n::tr("Window decides")},
+                 });
+        t.insert(pairKey(CD::scrollingGroup(), CD::defaultColumnDisplayKey()),
+                 {
+                     {QStringLiteral("normal"), PhosphorI18n::tr("Normal")},
+                     {QStringLiteral("tabbed"), PhosphorI18n::tr("Tabbed")},
+                 });
         return t;
     }();
     return table;

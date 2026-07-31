@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "configdefaults_screens.h"
+#include "configdefaults_scrolling.h"
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -21,7 +21,7 @@ namespace PlasmaZones {
  *   int cols = ConfigDefaults::gridColumns();  // Returns 5
  *   int rows = ConfigDefaults::maxRows();      // Returns 4
  */
-class ConfigDefaults : public ConfigDefaultsScreens
+class ConfigDefaults : public ConfigDefaultsScrolling
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -936,11 +936,15 @@ public:
     }
     static QString autotileIncMasterCountShortcut()
     {
-        return QStringLiteral("Meta+Shift+]");
+        // NOT Meta+Shift+] — Shift+symbol chords never fire on Wayland
+        // (KWin consumes Shift in the keysym translation; see
+        // toggleCheatsheetShortcut). Meta+Ctrl+[ ] belong to the rotate
+        // pair; = and - are the free count-adjust idiom.
+        return QStringLiteral("Meta+Ctrl+=");
     }
     static QString autotileDecMasterCountShortcut()
     {
-        return QStringLiteral("Meta+Shift+[");
+        return QStringLiteral("Meta+Ctrl+-");
     }
     static QString autotileRetileShortcut()
     {

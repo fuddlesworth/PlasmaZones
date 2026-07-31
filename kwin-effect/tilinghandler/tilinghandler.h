@@ -5,7 +5,7 @@
 
 #include "compositor/deferredwindowcommits.h"
 
-#include <PhosphorCompositor/AutotileState.h>
+#include <PhosphorCompositor/TilingState.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 
 #include <QHash>
@@ -15,12 +15,14 @@
 #include <QRect>
 #include <QRectF>
 #include <QSet>
+#include <QPointF>
 #include <QString>
 #include <QStringList>
 #include <QVector>
 
 #include <cstdint>
 
+class QAction;
 class QTimer;
 
 namespace KWin {
@@ -32,12 +34,12 @@ namespace PlasmaZones {
 // Targeted using-declarations, not a namespace-wide directive: headers must
 // not leak the whole PhosphorCompositor namespace into every includer.
 using PhosphorCompositor::BorderState;
-namespace AutotileStateHelpers = PhosphorCompositor::AutotileStateHelpers;
+namespace TilingStateHelpers = PhosphorCompositor::TilingStateHelpers;
 
 class PlasmaZonesEffect;
 
 /**
- * @brief Handles autotile integration for PlasmaZones
+ * @brief Handles tiling-family engine integration (autotile + scrolling) for PlasmaZones
  *
  * Manages the autotile D-Bus interface, screen tracking, window tiling,
  * monocle mode, tiled-tracking for border rendering, and pre-autotile
@@ -47,12 +49,12 @@ class PlasmaZonesEffect;
  *
  * Delegates window lookups, geometry application, and animation back to the effect.
  */
-class AutotileHandler : public QObject
+class TilingHandler : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit AutotileHandler(PlasmaZonesEffect* effect, QObject* parent = nullptr);
+    explicit TilingHandler(PlasmaZonesEffect* effect, QObject* parent = nullptr);
 
     // ═══════════════════════════════════════════════════════════════════
     // Integration points (called by PlasmaZonesEffect)
@@ -78,7 +80,7 @@ public:
     bool notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating);
 
     /**
-     * @brief Batch-notify windows added to autotile screens
+     * @brief Batch-notify windows added to engine-managed screens
      *
      * Filters windows the same way as notifyWindowAdded, then sends one
      * windowsOpenedBatch D-Bus call instead of per-window windowOpened calls.
@@ -178,7 +180,7 @@ public:
     /// desktop's tiling) — only genuine destruction may clear it.
     void clearDesktopMoveStash(const QString& windowId)
     {
-        m_savedPreAutotileForDesktopMove.remove(windowId);
+        m_savedPreTileForDesktopMove.remove(windowId);
     }
     bool isScreenQueryPending() const
     {
@@ -206,7 +208,7 @@ public:
      * @param immediate Apply size restore synchronously during the interactive move
      */
     void handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate = false);
-    void savePreAutotileForDesktopMove(const QString& windowId);
+    void savePreTileForDesktopMove(const QString& windowId);
     void handleWindowOutputChanged(KWin::EffectWindow* w);
 
     // D-Bus signal connections and settings
@@ -226,7 +228,86 @@ public:
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
-    bool isAutotileScreen(const QString& screenId) const;
+    bool isManagedScreen(const QString& screenId) const;
+
+    /// The engine-authoritative screen for a window the scrolling engine is
+    /// ACTIVELY TILING, or empty. Parked scroll frames sit inside a
+    /// neighbouring output's geometry by design, so position-derived screen
+    /// resolution must yield to this for strip-placed windows. Gated on
+    /// tiled membership: a FLOATED window on a scrolling screen is never
+    /// parked — its frame is its real position — and answering for it would
+    /// pin every consumer (drag drop, rule Mode stamp, minimize routing) to
+    /// the screen it floated away from.
+    /// Second half of the invariant, folded in (not left to call sites):
+    /// the answer only holds while the tracked screen's physical output is
+    /// still CONNECTED — on unplug/DPMS-off KWin reassigns the window and
+    /// the daemon's scrollingScreensChanged lags, and until it lands every
+    /// id-keyed consumer would keep resolving to the dead output.
+    QString scrollTrackedScreenFor(const QString& windowId) const;
+
+    /// Cheap gate for callers that want to skip scroll-specific work in a
+    /// session with no scrolling screens at all.
+    bool hasScrollingScreens() const
+    {
+        return !m_scrollingScreens.isEmpty();
+    }
+
+    /// Daemon-loss teardown: drop the dead session's scrolling snapshot.
+    /// Deliberately NOT the live chokepoint — setScrollingScreens schedules
+    /// a border sweep, which on this path would re-create rule-matched
+    /// decorations one event-loop turn AFTER the handler's
+    /// clearAllDecorations, undoing the teardown. The generation bump still
+    /// voids in-flight property replies.
+    ///
+    /// CALL-SITE CONTRACT: the ONE sanctioned caller is the effect's
+    /// serviceUnregistered teardown (lifecycle_wiring_daemon.cpp), which
+    /// runs invalidateAllRuleCaches immediately after — this clear changes
+    /// the Mode discriminator, and skipping the invalidate would leave rule
+    /// verdicts memoised against the dead session's stamp. A second caller
+    /// must carry the same pairing or use setScrollingScreens.
+    void clearScrollingScreensForTeardown()
+    {
+        ++m_scrollingScreensGeneration;
+        m_scrollingScreens.clear();
+        // Release Meta+wheel with the dead session (no repaint interplay,
+        // unlike the border sweep this path deliberately skips): a consumed
+        // axis chord with no daemon to serve it would just eat input.
+        updateScrollWheelShortcuts();
+    }
+
+    /// True when @p screenId runs the SCROLLING engine. A subset of the
+    /// engine-managed set the daemon publishes as managedScreens (which is
+    /// the union of both tiling-family engines); tracked separately so
+    /// window rule queries can stamp Mode "scrolling" instead of "tiling".
+    ///
+    /// Intersected with the union at READ time. The union and the
+    /// discriminator arrive as two independent signals with no ordering
+    /// guarantee, so between them m_scrollingScreens can transiently name a
+    /// screen the union has already dropped; answering true there stamped
+    /// Mode "scrolling" for an unmanaged screen and forwarded focusColumn to
+    /// an engine that no longer owns it. Note it does NOT un-consume
+    /// Meta+wheel: updateScrollWheelShortcuts keys registration on the RAW
+    /// m_scrollingScreens, so KWin still swallows the chord in that window;
+    /// the wheel handler simply no-ops instead of acting.
+    bool isScrollingScreen(const QString& screenId) const
+    {
+        return m_scrollingScreens.contains(screenId) && m_managedScreens.contains(screenId);
+    }
+
+    /// The set this discriminator actually answers over.
+    ///
+    /// Because the answer is an INTERSECTION, it can change when EITHER input
+    /// moves. setScrollingScreens invalidates the rule caches on its own
+    /// writes, but m_managedScreens is assigned raw by slotScreensChanged and
+    /// by loadSettings' reply, and those two arrive independently of the
+    /// scrolling-screens signal. Every writer of m_managedScreens must
+    /// therefore snapshot this before and compare after — otherwise a screen
+    /// that enters the union AFTER being marked scrolling leaves every
+    /// `Mode == "scrolling"` verdict memoised as non-matching for the session.
+    QSet<QString> scrollingScreenIntersection() const
+    {
+        return m_scrollingScreens & m_managedScreens;
+    }
 
     /// Check if a window is tracked by the autotile handler (in m_notifiedWindows).
     bool isTrackedWindow(const QString& windowId) const
@@ -251,12 +332,12 @@ public:
         }
     }
 
-    // Tiled-membership accessor — delegates to shared AutotileStateHelpers. The
+    // Tiled-membership accessor — delegates to shared TilingStateHelpers. The
     // membership set feeds the IsTiled rule field; per-window border appearance
     // and title-bar hiding are resolved from rules, not from this state.
     bool isTiledWindow(const QString& windowId) const
     {
-        return AutotileStateHelpers::isTiledWindow(m_border, windowId);
+        return TilingStateHelpers::isTiledWindow(m_border, windowId);
     }
 
     // Tiled-set mutators that re-resolve the window's rules whenever its overall
@@ -282,9 +363,21 @@ public:
     /// Record a daemon-initiated cross-output move so the next outputChanged
     /// for @p windowId to @p targetScreenId updates bookkeeping only. See
     /// m_expectedOutputMove.
-    void markExpectedOutputMove(const QString& windowId, const QString& targetScreenId)
+    ///
+    /// @p sourceScreenId is the screen the daemon moved the window off. It is
+    /// authoritative and must be used whenever it is non-empty: a daemon arm
+    /// site that runs after the handoff has already pushed the destination's
+    /// tiles, so by now m_notifiedWindowScreens names the DESTINATION.
+    ///
+    /// An empty source falls back to the notified screen. That is correct for
+    /// the arm sites that fire ahead of any placement work, and it is what an
+    /// older daemon that does not put the source on the wire produces — in
+    /// which case the fallback is blind for a post-handoff arm exactly as
+    /// described above, and stillTiledOnSource degrades to always-false.
+    void markExpectedOutputMove(const QString& windowId, const QString& targetScreenId, const QString& sourceScreenId)
     {
-        m_expectedOutputMove.insert(windowId, targetScreenId);
+        const QString source = sourceScreenId.isEmpty() ? m_notifiedWindowScreens.value(windowId) : sourceScreenId;
+        m_expectedOutputMove.insert(windowId, ExpectedOutputMove{targetScreenId, source});
     }
 
 public Q_SLOTS:
@@ -293,6 +386,7 @@ public Q_SLOTS:
     void slotFocusWindowRequested(const QString& windowId);
     void slotEnabledChanged(bool enabled);
     void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
+    void slotScrollingScreensChanged(const QStringList& screenIds);
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
 
     // Window state change handlers (connected per-window in setupWindowConnections)
@@ -339,7 +433,7 @@ private:
      *        mode-transition seed would otherwise tile it).
      * @return true if the window should be notified to the autotile daemon
      */
-    bool isEligibleForAutotileNotify(KWin::EffectWindow* w, bool* rejectedOnlyBecauseMinimized = nullptr) const;
+    bool isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejectedOnlyBecauseMinimized = nullptr) const;
 
     /**
      * @brief Claim a window that was already minimized at batch-announce time
@@ -421,14 +515,14 @@ private:
      *        not tracked in the FloatingCache yet, so isWindowFloating()
      *        returns false and would incorrectly reject the initial capture.
      */
-    void saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, KWin::EffectWindow* w,
-                                          const QRectF& frameIn, bool knownFreeFloating = false);
+    void saveAndRecordPreTileGeometry(const QString& windowId, const QString& screenId, KWin::EffectWindow* w,
+                                      const QRectF& frameIn, bool knownFreeFloating = false);
 
     /**
      * @brief All-bucket pre-autotile geometry lookup.
      *
      * Returns the first VALID rect found for @p windowId across every
-     * screen's bucket in m_preAutotileGeometries, or an invalid QRectF if
+     * screen's bucket in m_preTileGeometries, or an invalid QRectF if
      * none holds one. Readers must scan all buckets (not just the window's
      * current screen): a VS config change can re-resolve the window's
      * screen without moving its geometry bucket. Shared by the batch-float,
@@ -438,7 +532,7 @@ private:
      * @param bucketScreenId Optional out — receives the screen key of the
      *        bucket the rect was found under (unchanged when not found).
      */
-    QRectF findPreAutotileGeometry(const QString& windowId, QString* bucketScreenId = nullptr) const;
+    QRectF findPreTileGeometry(const QString& windowId, QString* bucketScreenId = nullptr) const;
 
     /**
      * @brief Async daemon-side pre-tile geometry restore for a desktop-switch
@@ -472,8 +566,39 @@ private:
 
     PlasmaZonesEffect* m_effect;
 
-    QSet<QString> m_autotileScreens;
-    /// Bumped on every autotileScreensChanged signal. loadSettings' async
+    QSet<QString> m_managedScreens;
+    /// Screens running the scrolling engine — a pure mode discriminator
+    /// (see isScrollingScreen); all lifecycle gating keys on
+    /// m_managedScreens, which carries the union.
+    QSet<QString> m_scrollingScreens;
+    /// Authoritative write for the scrolling discriminator. A screen that
+    /// flips engine WITHIN the managed union transits no managedScreensChanged,
+    /// so this re-announces the flipped screens' windows to hand them to the
+    /// new engine. Pass @p announceFlipped false only for BRING-UP clears
+    /// (onDaemonReady), where the tracking maps are about to be reset and
+    /// loadSettings owns the re-announce — announcing there desyncs the
+    /// daemon's view from the effect's until that batch lands.
+    void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true);
+    /// Meta+wheel axis shortcuts for column focus (niri's Mod+wheel).
+    /// Registered while ANY screen runs the scrolling engine, unregistered
+    /// (by destroying the QActions — KWin drops an axis shortcut with its
+    /// action) when none does, so Meta+wheel is only consumed in sessions
+    /// that can actually use it. The trigger itself re-gates on the
+    /// CURSOR's screen being a scrolling screen.
+    void updateScrollWheelShortcuts();
+    void wheelFocusColumn(int delta);
+    QList<QAction*> m_scrollWheelActions;
+    /// Pause the effect's own focus-follows-mouse after an ENGINE-driven
+    /// strip movement on a scrolling screen (tile batch or activation).
+    /// Scrolling slides other columns under a stationary pointer, and the
+    /// next incidental cursor twitch would re-focus whatever landed there,
+    /// yanking focus straight off the column the user just navigated to.
+    /// Cleared once the cursor moves deliberately (beyond the radius) from
+    /// the position it held when the strip moved.
+    void suppressFfmUntilCursorMoves();
+    QPointF m_ffmSuppressAnchor;
+    bool m_ffmSuppressPending = false;
+    /// Bumped on every managedScreensChanged signal. loadSettings' async
     /// Properties.Get reply captures the value at dispatch and discards
     /// itself if a signal landed in between — the signal carried a newer
     /// set AND ran the full per-screen transition handling the raw reply
@@ -488,6 +613,14 @@ private:
         bool canSnapRestore = false;
     };
     QHash<QString, DeferredWindowRoute> m_deferredWindowRoutes;
+    /// Same stale-reply guard for the scrolling-screens property fetch.
+    /// Bumped by setScrollingScreens on EVERY authoritative write (live
+    /// signal, property reply, daemon-restart clear) — even an identical
+    /// set voids in-flight replies dispatched earlier, since the writer is
+    /// always newer than the reply. All writes to m_scrollingScreens go
+    /// through setScrollingScreens so the rule-cache invalidate + border
+    /// sweep on a genuine change cannot be bypassed.
+    quint64 m_scrollingScreensGeneration = 0;
     /// Pre-autotile frame geometry, keyed [screenId][windowId].
     ///
     /// Ownership: this is a local cache. The daemon's unified
@@ -503,7 +636,7 @@ private:
     /// can re-resolve the notified screen without moving the bucket) scan
     /// ALL buckets — see the desktop-switch Pass-2 scan in signals.cpp and
     /// the cross-monitor snapshot in handleWindowOutputChanged.
-    QHash<QString, QHash<QString, QRectF>> m_preAutotileGeometries;
+    QHash<QString, QHash<QString, QRectF>> m_preTileGeometries;
     QHash<QString, QStringList> m_savedAutotileStackingOrder; ///< autotile stacking order, restored on snap→autotile
     QSet<QString> m_notifiedWindows;
     QHash<QString, QString> m_notifiedWindowScreens; ///< windowId → screen ID at time of notification
@@ -515,7 +648,17 @@ private:
     /// windowClosed/windowOpened. A stale entry (no outputChanged ever arrives,
     /// or a different destination) is cleared on the next outputChanged for the
     /// window and on close.
-    QHash<QString, QString> m_expectedOutputMove;
+    struct ExpectedOutputMove
+    {
+        QString targetScreenId;
+        /// Screen the window left. Comes from the daemon when it knows it, else
+        /// falls back to the notified screen at arm time. Read live membership
+        /// against this id to tell a genuine handoff (source bucket already
+        /// emptied) from a strip parking hop (still tiled on the source) — see
+        /// markExpectedOutputMove.
+        QString sourceScreenId;
+    };
+    QHash<QString, ExpectedOutputMove> m_expectedOutputMove;
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
     /// Pre-autotile geometry preserved when a window is moved to another
     /// desktop. Keyed by windowId; value holds (sourceScreenId, frameRect)
@@ -523,7 +666,7 @@ private:
     /// at restore time and skip the saved geometry (the rect is in the
     /// source screen's coordinate space and would land off-target on a
     /// different monitor).
-    QHash<QString, QPair<QString, QRectF>> m_savedPreAutotileForDesktopMove;
+    QHash<QString, QPair<QString, QRectF>> m_savedPreTileForDesktopMove;
     bool m_inOutputChanged = false; ///< re-entrancy guard for handleWindowOutputChanged
     QHash<QString, QMetaObject::Connection>
         m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection
@@ -559,18 +702,23 @@ private:
     /// grace) and revalidated at fire time; a re-minimize during the grace
     /// cancels it, leaving the window minimize-floated as before.
     DeferredWindowCommits m_pendingUnminimizeUnfloat{this};
-    /// Global stagger epoch, bumped on a desktop/screen switch (slotScreensChanged)
+    /// Global stagger epoch, bumped ONLY on a desktop switch (slotScreensChanged)
     /// to cancel EVERY in-flight staggered apply — geometry computed for the old
-    /// context must never land in the new one.
-    uint64_t m_autotileStaggerGeneration = 0;
+    /// desktop must never land in the new one. Plain managed-set changes must
+    /// not bump it: a mode toggle's own managedScreensChanged lands in the same
+    /// burst as its tile batch, and a blanket bump voided that batch after its
+    /// first synchronous entry (screen sat half-tiled until a manual
+    /// float/unfloat). Non-desktop invalidation is per-screen: removed screens
+    /// in slotScreensChanged, flipped screens in setScrollingScreens.
+    uint64_t m_tileStaggerGeneration = 0;
     /// Per-screen stagger generation. A retile bumps only its own screen(s), so a
     /// newer batch for the SAME screen supersedes an earlier one while a batch for
     /// a DIFFERENT screen leaves it untouched. Without this, the destination batch
     /// of a cross-output move (emitted microseconds after the source reflow)
     /// cancelled the source's still-staggered windows via the single global
     /// generation — they never moved, leaving a hole on the source monitor.
-    QHash<QString, uint64_t> m_autotileStaggerGenByScreen;
-    QHash<QString, QRect> m_autotileTargetZones;
+    QHash<QString, uint64_t> m_tileStaggerGenByScreen;
+    QHash<QString, QRect> m_tileTargetZones;
     QHash<QString, QRect> m_centeredWaylandZones; ///< zones where Wayland windows were last centered
     QString m_pendingAutotileFocusWindowId;
     QPointer<KWin::EffectWindow> m_pendingReactivateWindow; ///< re-activate after raise loop (daemon restart)

@@ -14,14 +14,13 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
-    property var _layouts: settingsController.layouts
     // Bridge for LayoutComboBox — exposes only what it accesses.
     // The `layouts` property binding auto-generates a `layoutsChanged` signal,
     // which LayoutComboBox's Connections target listens for.
     readonly property QtObject _layoutBridge: QtObject {
+        readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
         readonly property var layouts: settingsController.layouts
         readonly property string defaultLayoutId: appSettings.defaultLayoutId
-        readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
         // LayoutComboBox's preview CategoryBadge reads `autoAssignAllLayouts` for
         // the global-auto-assign indicator; expose it so the Monitor State
         // dropdowns light it like the rest of the app.
@@ -74,85 +73,129 @@ SettingsFlickable {
     }
 
     function _findLayout(layoutId) {
-        if (!layoutId || !_layouts)
+        if (!layoutId || !_layoutBridge.layouts)
             return null;
 
-        for (var i = 0; i < _layouts.length; i++) {
-            if (_layouts[i].id === layoutId)
-                return _layouts[i];
+        for (var i = 0; i < _layoutBridge.layouts.length; i++) {
+            if (_layoutBridge.layouts[i].id === layoutId)
+                return _layoutBridge.layouts[i];
         }
         return null;
+    }
+
+    // Resolve what one slot (layout or algorithm) carries into a staged entry.
+    // Lossless mode toggling: every staged entry carries the SIBLING mode's
+    // pick too. The daemon rebuilds the whole context rule from the entry, so
+    // staging an empty sibling field would drop a stored layout/algorithm for
+    // good — pin to Scrolling and back and the zone layout would be gone. An
+    // explicit "Default" pick (@p cleared) deliberately carries empty so the
+    // sibling keeps following the global default.
+    // Only a TOUCHED slot carries its local value (@p localId). An untouched
+    // slot falls back to the daemon's assignment (@p resolvedId) and carries
+    // it only when the daemon marked it explicit (@p explicitFlag), so a pure
+    // mode switch never freezes a cascade default into an explicit
+    // assignment. The local ids cannot stand in for that test: they are
+    // pre-filled from the RESOLVED state, so they always look like a pick. A
+    // daemon too old to report the marker leaves it undefined, and there the
+    // existing assignment is preserved rather than silently dropped.
+    function carrySibling(cleared, touched, localId, explicitFlag, resolvedId) {
+        if (cleared)
+            return "";
+
+        if (touched)
+            return localId;
+
+        if (explicitFlag === undefined || explicitFlag)
+            return resolvedId || "";
+
+        return "";
     }
 
     // Stage the current local state for the selected screen (flushed on Apply).
     // Uses setAssignmentEntry targeting the exact (screen, desktop, activity)
     // context from getScreenStates — most specific context wins.
     function _stageCurrentState() {
-        if (!_selectedScreen)
-            return;
-
         var state = stateView.screenState;
         if (!state)
+            return;
+
+        // Key the write off the STATE, exactly as the staged-entry read does.
+        // _selectedScreen is empty until the user picks a monitor, while the
+        // page already shows (and lets the user edit) the first reported
+        // state — bailing on the empty selection made every one of those edits
+        // a silent no-op. Deriving both keys from the same object makes the
+        // read and the write agree by construction.
+        var target = _selectedScreen || (state.screenId || "");
+        if (!target)
             return;
 
         var desktop = state.virtualDesktop || 0;
         var activity = state.activity || "";
         var snapping = "";
         var tiling = "";
-        if (stateView.localMode === 1) {
-            if (stateView.localAlgorithmCleared) {
-                // The user explicitly picked "Default": stage an assignment
-                // clear so an earlier explicit pick in this session and any
-                // daemon-side explicit assignment are reverted on Apply,
-                // instead of pinning the currently-resolved algorithm via
-                // the fallback below.
-                settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
-                return;
-            }
-            // The || fallback serves the mode-toggle path, which stages the
-            // currently-resolved algorithm when the user has not picked one.
-            var algoId = stateView.localAlgorithmId || state.algorithmId;
+        // See carrySibling for the rule both slots follow.
+        var siblingSnapping = root.carrySibling(stateView.localLayoutCleared, stateView.localLayoutTouched, stateView.localLayoutId, state.layoutIdExplicit, state.layoutId);
+        var siblingAlgo = root.carrySibling(stateView.localAlgorithmCleared, stateView.localAlgorithmTouched, stateView.localAlgorithmId, state.algorithmIdExplicit, state.algorithmId);
+        var siblingTiling = siblingAlgo ? "autotile:" + siblingAlgo : "";
+        if (stateView.isScrolling) {
+            // Scrolling has neither a zone layout nor a tiling algorithm of
+            // its own: the entry carries the mode plus both preserved
+            // sibling fields.
+            settingsController.stageAssignmentEntry(target, desktop, activity, stateView.localMode, siblingSnapping, siblingTiling);
+            return;
+        }
+        if (stateView.isTiling) {
+            // An explicit "Default" pick clears the algorithm slot. Otherwise
+            // stage the user's pick, else the currently-resolved algorithm.
+            // carrySibling's rule, for the same reason as the layout slot
+            // below: an untouched algorithm carries the resolved value only
+            // when the daemon marked it explicit, so a pure mode toggle cannot
+            // freeze the global default algorithm onto this screen.
+            var algoId = root.carrySibling(stateView.localAlgorithmCleared, stateView.localAlgorithmTouched, stateView.localAlgorithmId, state.algorithmIdExplicit, state.algorithmId);
             if (!algoId) {
-                // Nothing resolved to pin. Unstage any stale staged entry
-                // for this context (e.g. an opposite-mode pick from earlier
-                // in the session) so Apply cannot commit it while the UI
-                // shows Default. A true unstage, not a staged clear — a
-                // staged clear is pushed on Apply and would wipe a
-                // pre-existing daemon-side assignment the user never touched.
-                if (Object.keys(settingsController.getStagedAssignment(_selectedScreen, desktop, activity)).length > 0)
-                    settingsController.removeStagedAssignment(_selectedScreen, desktop, activity);
+                // Nothing to pin — either the user picked "Default", or
+                // nothing resolved (fresh config, or the context suppresses
+                // the default). Stage a MODE-ONLY entry, exactly like the
+                // Snapping and Scrolling branches. The wire is mode=1 with
+                // an EMPTY algorithm id (the adaptor only validates
+                // non-empty ids), so the switch commits, the slot is cleared
+                // without touching the mode pin or the sibling, the
+                // algorithm keeps FOLLOWING the global default (never frozen
+                // to today's value), and the combo honestly keeps showing
+                // "Default".
+                settingsController.stageAssignmentEntry(target, desktop, activity, stateView.localMode, siblingSnapping, "");
                 return;
             }
 
             tiling = "autotile:" + algoId;
+            snapping = siblingSnapping;
         } else {
-            if (stateView.localLayoutCleared) {
-                // The user explicitly picked "Default": stage an assignment
-                // clear so an earlier explicit pick in this session and any
-                // daemon-side explicit assignment are reverted on Apply,
-                // instead of pinning the currently-resolved layout via the
-                // fallback below.
-                settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
-                return;
-            }
-            // The || fallback serves the mode-toggle path, which stages the
-            // currently-resolved layout when the user has not picked one.
-            var layoutId = stateView.localLayoutId || state.layoutId;
+            // Same rule the SIBLING slot follows (see carrySibling): an
+            // untouched slot carries the daemon's resolved value only when the
+            // daemon marked it EXPLICIT. Falling back to state.layoutId
+            // unconditionally froze a cascade default into an explicit
+            // assignment — toggle Snapping to Scrolling and back, hit Apply,
+            // and the screen now pins today's global default and stops
+            // following it. The entered mode is not exempt from that rule.
+            var layoutId = root.carrySibling(stateView.localLayoutCleared, stateView.localLayoutTouched, stateView.localLayoutId, state.layoutIdExplicit, state.layoutId);
             if (!layoutId) {
-                // Nothing resolved to pin. Unstage any stale staged entry
-                // for this context (e.g. an opposite-mode pick from earlier
-                // in the session) so Apply cannot commit it while the UI
-                // shows Default. A true unstage, not a staged clear — a
-                // staged clear is pushed on Apply and would wipe a
-                // pre-existing daemon-side assignment the user never touched.
-                if (Object.keys(settingsController.getStagedAssignment(_selectedScreen, desktop, activity)).length > 0)
-                    settingsController.removeStagedAssignment(_selectedScreen, desktop, activity);
+                // Nothing to pin — either the user picked "Default", or
+                // nothing resolved (the context suppresses the default
+                // layout, so state.layoutId is empty). The MODE change must
+                // still commit — leaving from Scrolling used to fall into an
+                // unstage here and silently drop the switch while the button
+                // group showed Snapping. Stage a mode-only entry; it clears
+                // the layout slot while keeping the mode pin and the
+                // sibling, and the daemon accepts a bare mode exactly as it
+                // does for Scrolling above.
+                settingsController.stageAssignmentEntry(target, desktop, activity, stateView.localMode, "", siblingTiling);
                 return;
             }
 
             snapping = layoutId;
+            tiling = siblingTiling;
         }
-        settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, snapping, tiling);
+        settingsController.stageAssignmentEntry(target, desktop, activity, stateView.localMode, snapping, tiling);
     }
 
     contentHeight: content.implicitHeight
@@ -201,7 +244,7 @@ SettingsFlickable {
         }
 
         function onLayoutsChanged() {
-            // _layouts is bound to settingsController.layouts and refreshes on
+            // _layoutBridge.layouts is bound to settingsController.layouts and refreshes on
             // its own layoutsChanged; only the dependent view needs a nudge.
             root._refresh();
         }
@@ -229,6 +272,7 @@ SettingsFlickable {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
             text: i18n("View and change the active mode and layout for each monitor.")
+            // Kirigami.InlineMessage defaults to visible: false.
             visible: true
         }
 
@@ -272,9 +316,136 @@ SettingsFlickable {
             // combo reports it as an empty value, indistinguishable from the
             // not-yet-touched state without this flag.
             property bool localAlgorithmCleared: false
+            // True once this session has actually assigned the slot — a
+            // selector pick, a toggle into the slot's mode, or a restored
+            // staged entry. localLayoutId / localAlgorithmId are pre-filled
+            // from the RESOLVED state, so they can never answer "did the
+            // user set this?" on their own; the sibling carry in
+            // _stageCurrentState needs that answer to avoid freezing a
+            // cascade default into an explicit assignment.
+            property bool localLayoutTouched: false
+            property bool localAlgorithmTouched: false
             property bool isTiling: localMode === 1
+            // The scrolling engine is mode 2. It picks neither a layout nor an
+            // algorithm, so the preview, the selectors and the staged entry all
+            // branch on this instead of treating "not tiling" as snapping.
+            property bool isScrolling: localMode === 2
+            property bool isSnapping: localMode === 0
             // Resolved layout object for LayoutThumbnail
             property var currentLayout: root._findLayout(localLayoutId)
+            // Live strip zones for the scrolling preview, refreshed with the
+            // selection context. Empty when the screen is not scrolling right
+            // now (mode staged but not applied, no windows, daemon down).
+            property var scrollingStripZones: []
+            // Representative endless strip: a full column mid-view with a
+            // clipped column at each edge, so the sketch reads as a window
+            // onto a longer strip rather than a fixed zone layout.
+            readonly property var scrollingFallbackZones: [
+                {
+                    "zoneNumber": 1,
+                    "id": "strip:fallback:0",
+                    "name": "",
+                    "useCustomColors": false,
+                    "relativeGeometry": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 0.1,
+                        "height": 1
+                    }
+                },
+                {
+                    "zoneNumber": 2,
+                    "id": "strip:fallback:1",
+                    "name": "",
+                    "useCustomColors": false,
+                    "relativeGeometry": {
+                        "x": 0.115,
+                        "y": 0,
+                        "width": 0.5,
+                        "height": 1
+                    }
+                },
+                {
+                    "zoneNumber": 3,
+                    "id": "strip:fallback:2",
+                    "name": "",
+                    "useCustomColors": false,
+                    "relativeGeometry": {
+                        "x": 0.63,
+                        "y": 0,
+                        "width": 0.37,
+                        "height": 1
+                    }
+                }
+            ]
+
+            // Fetch the live strip for the current selection. The daemon's
+            // strip is briefly empty while a mode flip's re-announce batch is
+            // being adopted (the OSD defers around the same window); a one-shot
+            // read landing there returned [] and left the fallback sketch up
+            // for good. When the daemon says the screen IS scrolling but the
+            // strip came back empty, re-read once after a settle beat.
+            // allowRetry MUST be false when called FROM the settle timer. The
+            // retry is a one-shot settle beat, and a re-arm from inside its own
+            // handler is an unbounded loop: a scrolling screen with no windows
+            // legitimately reports an empty strip forever, and the page object
+            // outlives its visibility (the page host keeps visited pages alive
+            // and merely hides them), so nothing would ever stop it. That is a
+            // blocking D-Bus round trip every 400ms on a page nobody is looking
+            // at.
+            function refreshScrollingStrip(allowRetry) {
+                if (!screenState)
+                    return;
+                // The read is a BLOCKING D-Bus round trip, so it must not run
+                // for a page the user cannot see. The host keeps visited pages
+                // alive and merely hides them, and screenState changes on every
+                // hotplug / desktop / activity event, so without this a stack
+                // of cached Monitors pages would each block the GUI thread on
+                // events that change nothing they are showing. The thumbnail's
+                // onVisibleChanged and the live timer's running transition both
+                // re-read when the page comes back.
+                if (!stateView.visible)
+                    return;
+                scrollingStripZones = settingsController.getScrollingStripPreview(screenState.screenId || "");
+                // The settle beat covers the case where the mode just flipped
+                // and the re-announce batch briefly reports an empty strip: a
+                // 400ms one-shot beats waiting out the 2s live beat. It cannot
+                // compound — the handler passes allowRetry=false, so a retry
+                // never arms another retry, and restart() on a one-shot Timer
+                // replaces any pending fire rather than stacking one.
+                if (allowRetry !== false && scrollingStripZones.length === 0 && (screenState.mode || 0) === 2)
+                    stripSettleRetry.restart();
+            }
+
+            Timer {
+                id: stripSettleRetry
+                interval: 400
+                repeat: false
+                onTriggered: stateView.refreshScrollingStrip(false)
+            }
+
+            // The strip is live state: the user can open a window, widen a
+            // column, or tab two together while this page is up, and the
+            // daemon publishes no per-strip-change signal to subscribe to.
+            // So the preview re-reads on a slow beat, and only while it is
+            // actually on screen showing a scrolling monitor. The read is a
+            // single cheap D-Bus call that returns [] for any other screen.
+            Timer {
+                id: stripLiveRefresh
+                interval: 2000
+                repeat: true
+                // Gated on isScrolling, not just the daemon's mode: with the
+                // daemon scrolling and Snapping staged locally the preview
+                // thumbnail is hidden, and polling for something nobody is
+                // looking at is the one thing a blocking call must not do.
+                running: stateView.visible && stateView.isScrolling && stateView.screenState !== null && (stateView.screenState.mode || 0) === 2
+                // allowRetry=false: the settle beat exists for EVENT-driven
+                // reads (a mode flip whose re-announce batch briefly reports an
+                // empty strip). This timer already re-reads in 2s, so letting
+                // each tick arm a 400ms retry just doubles the blocking-call
+                // rate for as long as the strip is legitimately empty.
+                onTriggered: stateView.refreshScrollingStrip(false)
+            }
 
             Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.largeSpacing
@@ -290,21 +461,34 @@ SettingsFlickable {
                 // staged or daemon values.
                 localLayoutCleared = false;
                 localAlgorithmCleared = false;
-                var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
-                if (staged.fullCleared) {
-                    // A staged full clear means "Default" is pending for this
-                    // context: show Default rather than re-reading the
-                    // daemon's still-resolved explicit values.
-                    localMode = screenState.mode || 0;
-                    localLayoutId = "";
-                    localAlgorithmId = "";
-                    localLayoutCleared = true;
-                    localAlgorithmCleared = true;
-                } else if (Object.keys(staged).length > 0) {
-                    // Restore from staged state
+                localLayoutTouched = false;
+                localAlgorithmTouched = false;
+                // Refresh the live strip preview with the selection context
+                // (cheap D-Bus read; [] when not scrolling). Keyed on the
+                // STATE's own screen id — before the user clicks a monitor,
+                // _selectedScreen is still empty while the shown state is the
+                // first reported one, and fetching with the empty id left the
+                // sketch up despite a live strip.
+                refreshScrollingStrip();
+                // Keyed on the STATE's own screen id, for the same reason the
+                // strip refresh above is: before the user clicks a monitor,
+                // _selectedScreen is still empty while the state being shown
+                // is the first reported one, so reading the staged entry for
+                // the empty id would show the wrong monitor's pending edit.
+                var staged = settingsController.getStagedAssignment(screenState.screenId || "", desktop, activity);
+                if (Object.keys(staged).length > 0) {
+                    // A staged entry carries the WHOLE context rule, so every
+                    // slot in it is authoritative: a missing id is a pending
+                    // slot clear, not an absent opinion. Re-reading the
+                    // daemon's resolved value for such a slot would hide the
+                    // clear and re-carry the value on the next stage.
                     localMode = staged.mode !== undefined ? staged.mode : (screenState.mode || 0);
-                    localLayoutId = staged.layoutId !== undefined ? staged.layoutId : (screenState.layoutId || "");
-                    localAlgorithmId = staged.algorithmId !== undefined ? staged.algorithmId : (screenState.algorithmId || "");
+                    localLayoutId = staged.layoutId !== undefined ? staged.layoutId : "";
+                    localAlgorithmId = staged.algorithmId !== undefined ? staged.algorithmId : "";
+                    localLayoutCleared = staged.layoutId === undefined;
+                    localAlgorithmCleared = staged.algorithmId === undefined;
+                    localLayoutTouched = staged.layoutId !== undefined;
+                    localAlgorithmTouched = staged.algorithmId !== undefined;
                 } else {
                     // No staged changes — use daemon state
                     localMode = screenState.mode || 0;
@@ -316,7 +500,7 @@ SettingsFlickable {
             // Layout preview (snapping)
             LayoutThumbnail {
                 Layout.alignment: Qt.AlignHCenter
-                visible: !stateView.isTiling
+                visible: stateView.isSnapping
                 // Fallback stands in for a layout the local list doesn't carry,
                 // so there are no zones to draw. The daemon still reports the
                 // resolved name, so show that rather than nothing.
@@ -362,20 +546,80 @@ SettingsFlickable {
                 }
             }
 
+            // Strip preview (scrolling): the live strip when the screen is
+            // scrolling right now, else a representative endless-strip
+            // sketch (clipped columns at both edges suggest continuation).
+            LayoutThumbnail {
+                Layout.alignment: Qt.AlignHCenter
+                visible: stateView.isScrolling
+                // Re-read the live strip when the preview surfaces (a mode
+                // pick flips visibility without a screen-state change).
+                onVisibleChanged: {
+                    if (visible)
+                        stateView.refreshScrollingStrip();
+                }
+                // category 1 renders the "Dynamic" badge (a live strip
+                // snapshot is generated, not editable). Zone numbers are the
+                // 1-based VISIBLE column slots the Snap-to-Zone digits
+                // target, so they label exactly what is on screen.
+                layout: ({
+                        "displayName": i18nc("tiling mode name", "Scrolling"),
+                        "category": 1,
+                        "zones": stateView.scrollingStripZones.length > 0 ? stateView.scrollingStripZones : stateView.scrollingFallbackZones
+                    })
+                isSelected: true
+                baseHeight: Kirigami.Units.gridUnit * 14
+                maxThumbnailWidth: Kirigami.Units.gridUnit * 32
+                screenAspectRatio: root._selectedScreenAspectRatio
+                Accessible.name: i18n("Scrolling strip preview")
+            }
+
+            // Scrolling picks neither a layout nor an algorithm, so a short
+            // explanation stands in for the selector.
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 32
+                type: Kirigami.MessageType.Information
+                text: i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.")
+                visible: stateView.isScrolling
+            }
+
             // Mode toggle (below preview)
             SettingsButtonGroup {
                 Layout.alignment: Qt.AlignHCenter
-                model: [i18n("Snapping"), i18n("Tiling")]
+                Accessible.name: i18n("Placement mode")
+                // Deliberately NOT gated on appSettings.autotileEnabled: an
+                // assignment is durable state, and hiding the Tiling button
+                // while a screen is already assigned Tiling would make that
+                // state unrepresentable here. With the feature disabled the
+                // router downgrades the screen to Snapping until it is
+                // re-enabled; the assignment itself is preserved.
+                model: [i18nc("tiling mode name", "Snapping"), i18nc("tiling mode name", "Tiling"), i18nc("tiling mode name", "Scrolling")]
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {
                     stateView.localMode = idx;
-                    // A mode toggle is an explicit re-pin: the user is asking
-                    // for this mode on this screen, so any earlier "Default"
-                    // pick no longer applies. Clear both flags so
-                    // _stageCurrentState stages the currently-resolved value
-                    // instead of silently dropping the mode change.
-                    stateView.localLayoutCleared = false;
-                    stateView.localAlgorithmCleared = false;
+                    // Entering a mode drops that mode's pending "Default"
+                    // pick (the flag, not the combo's own pick — a Default
+                    // chosen IN the combo also set touched, which survives
+                    // and still carries the clear through carrySibling's
+                    // touched arm). The SIBLING mode's cleared flag survives:
+                    // a pending Default on the mode being left is a
+                    // deliberate pick the toggle must not silently re-pin.
+                    //
+                    // touched is deliberately NOT set here. A mode toggle is
+                    // not a slot pick, and carrySibling's touched arm returns
+                    // localId — which is pre-filled from the RESOLVED value —
+                    // so setting it made every toggle stage the cascade
+                    // default as an explicit assignment. Left untouched, the
+                    // slot falls to the explicitFlag arm: it carries only
+                    // what the daemon marked explicit, so a pure
+                    // Snapping-Scrolling-Snapping round trip leaves a
+                    // default-following screen following the default.
+                    if (idx === 0) {
+                        stateView.localLayoutCleared = false;
+                    } else if (idx === 1) {
+                        stateView.localAlgorithmCleared = false;
+                    }
                     root._stageCurrentState();
                 }
             }
@@ -383,7 +627,8 @@ SettingsFlickable {
             // Layout selector (snapping)
             LayoutComboBox {
                 Layout.alignment: Qt.AlignHCenter
-                visible: !stateView.isTiling
+                visible: stateView.isSnapping
+                Accessible.name: i18n("Snapping layout")
                 appSettings: root._layoutBridge
                 currentLayoutId: stateView.localLayoutId
                 layoutFilter: 0
@@ -394,6 +639,7 @@ SettingsFlickable {
                     var id = entry ? (entry.value || "") : "";
                     stateView.localLayoutId = id;
                     stateView.localLayoutCleared = (id === "");
+                    stateView.localLayoutTouched = true;
                     root._stageCurrentState();
                 }
             }
@@ -402,8 +648,9 @@ SettingsFlickable {
             LayoutComboBox {
                 Layout.alignment: Qt.AlignHCenter
                 visible: stateView.isTiling
+                Accessible.name: i18n("Tiling algorithm")
                 appSettings: root._layoutBridge
-                currentLayoutId: "autotile:" + stateView.localAlgorithmId
+                currentLayoutId: stateView.localAlgorithmId ? "autotile:" + stateView.localAlgorithmId : ""
                 layoutFilter: 1
                 noneText: i18n("Default")
                 showPreview: true
@@ -415,6 +662,7 @@ SettingsFlickable {
                     else
                         stateView.localAlgorithmId = id;
                     stateView.localAlgorithmCleared = (id === "");
+                    stateView.localAlgorithmTouched = true;
                     root._stageCurrentState();
                 }
             }

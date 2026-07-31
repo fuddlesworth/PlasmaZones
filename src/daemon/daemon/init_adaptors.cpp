@@ -74,7 +74,12 @@
 #include "dbus/zonedetectionadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
+// Needed as COMPLETE types, not just forward declarations: the re-entry
+// preamble below deletes them, and deleting through an incomplete type calls
+// neither the destructor nor a class-specific operator delete.
 #include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/scrollingadaptor/scrollingadaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/shaderadaptor.h"
 #include "dbus/compositorbridgeadaptor.h"
@@ -104,6 +109,17 @@ void Daemon::initCoreAdaptors()
     m_snapAdaptor = nullptr;
     delete m_autotileAdaptor;
     m_autotileAdaptor = nullptr;
+    // TilingAdaptor and ScrollingAdaptor belong to this set too: both are
+    // QDBusAbstractAdaptor children of the D-Bus-registered Daemon object and
+    // both are unconditionally re-newed in initEnginesAndWiring, which
+    // documents these members as null on a re-cycle. Omitting them leaked the
+    // old pair AND left a second adaptor registered for an interface that
+    // already had one on the same object, which Qt refuses — taking down the
+    // whole Tiling/Scrolling wire surface after a daemon restart.
+    delete m_tilingAdaptor;
+    m_tilingAdaptor = nullptr;
+    delete m_scrollingAdaptor;
+    m_scrollingAdaptor = nullptr;
     delete m_windowDragAdaptor;
     m_windowDragAdaptor = nullptr;
     delete m_windowTrackingAdaptor;
@@ -122,6 +138,13 @@ void Daemon::initCoreAdaptors()
     m_settingsAdaptor = nullptr;
     delete m_layoutAdaptor;
     m_layoutAdaptor = nullptr;
+    // DBusScreenAdaptor is in this set for the same reason as the Tiling and
+    // Scrolling pair above: it is a QDBusAbstractAdaptor child of the
+    // D-Bus-registered Daemon and is re-newed unconditionally below, so
+    // omitting it leaked the old one and left a second adaptor registered for
+    // an interface that already had one on this object.
+    delete m_screenAdaptor;
+    m_screenAdaptor = nullptr;
 
     // Initialize domain-specific D-Bus adaptors
     // Each adaptor has its own D-Bus interface
@@ -191,12 +214,12 @@ void Daemon::initCoreAdaptors()
     // per-engine *RestoreFloatedWindowsOnLogin settings for matched windows).
     m_windowTrackingAdaptor->setRuleStore(m_ruleStore.get());
 
-    // Drop closed windows from m_lastAutotileOrders so a manual→autotile toggle
+    // Drop closed windows from m_lastEngineOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would
     // then tile N+1 windows for N actual windows).
     connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowDisappeared, this,
             [this](const QString& instanceId) {
-                pruneAutotileOrdersForWindow(instanceId);
+                pruneEngineOrdersForWindow(instanceId);
             });
 
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).

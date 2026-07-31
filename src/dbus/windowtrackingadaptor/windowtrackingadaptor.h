@@ -26,6 +26,7 @@
 #include <QHash>
 #include <QVariantMap>
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QQueue>
 #include <QRect>
 #include <QTimer>
@@ -53,6 +54,10 @@ class AutotileEngine;
 namespace PhosphorSnapEngine {
 class SnapEngine;
 class SnapNavigationTargetResolver;
+}
+
+namespace PhosphorScrollEngine {
+class ScrollEngine;
 }
 
 namespace PhosphorWorkspaces {
@@ -103,7 +108,8 @@ public:
      * Use this as a fallback when cursor screen is unavailable.
      *
      * Implementation: prefers the active window's current daemon-tracked
-     * screen assignment over the cached value. KWin only fires
+     * screen assignment over the cached value, probing the snap, autotile
+     * and scrolling engines in that order. KWin only fires
      * `windowActivated` on focus changes, so a window that gets dragged or
      * snapped to a different VS without losing focus leaves
      * `m_lastActiveScreenId` pointing at the OLD screen — which then
@@ -172,17 +178,22 @@ public:
      * @brief Set engine references for routing operations per-screen
      *
      * The adaptor routes IPlacementEngine operations to the correct engine:
-     * AutotileEngine for autotile screens, SnapEngine for manual-zone screens.
-     * Both must be set before navigation/float D-Bus calls work.
+     * AutotileEngine for autotile screens, ScrollEngine for scrolling
+     * screens, SnapEngine for manual-zone screens. All must be set before
+     * navigation/float D-Bus calls work.
      *
      * Signal connections from SnapEngine to adaptor D-Bus signals are established here.
      * The snap-specific signal (windowSnapStateChanged) is connected via qobject_cast.
      *
      * @param snapEngine PlacementEngineBase for snap mode (not owned, must outlive adaptor)
      * @param autotileEngine PlacementEngineBase for autotile mode (not owned, must outlive adaptor)
+     * @param scrollEngine PlacementEngineBase for scrolling mode (not owned;
+     *        explicit at every call site — no default, so a production
+     *        caller cannot silently drop the scroll engine)
      */
     void setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
-                    PhosphorEngine::PlacementEngineBase* autotileEngine);
+                    PhosphorEngine::PlacementEngineBase* autotileEngine,
+                    PhosphorEngine::PlacementEngineBase* scrollEngine);
 
     /**
      * @brief Set the frozen-snapshot resolver used by saveload's disable
@@ -195,6 +206,33 @@ public:
     void setContextResolver(PhosphorContext::IContextResolver* resolver)
     {
         m_contextResolver = resolver;
+    }
+
+    /**
+     * @brief Wire the scrolling strip-structure snapshot provider.
+     *
+     * saveState() calls it under DirtyScrollStrips to fetch
+     * ScrollEngine::serializeStripState's blob at write time (the engine is
+     * constructed after this adaptor, so the provider is late-bound like
+     * setEngines). Pass {} during shutdown teardown, but only AFTER the final
+     * saveStateOnShutdown(): an absent provider makes saveState SKIP the
+     * strips write entirely (it cannot answer, so it leaves the stored blob
+     * alone rather than deleting it), so clearing early silently drops every
+     * strip mutation from the last debounce window.
+     */
+    void setScrollStripStateProvider(std::function<QJsonObject()> provider)
+    {
+        m_scrollStripStateProvider = std::move(provider);
+    }
+
+    /**
+     * @brief The ScrollStrips blob read by the last loadState(), empty when
+     *        the key was absent or unparsable. The daemon feeds it to
+     *        ScrollEngine::restoreStripState once the engine exists.
+     */
+    QJsonObject loadedScrollStripState() const
+    {
+        return m_loadedScrollStripState;
     }
 
     PhosphorSnapEngine::SnapEngine* snapEngine() const;
@@ -308,7 +346,7 @@ public Q_SLOTS:
      * No in-tree caller: the effect's unfloat flow moved to
      * SnapAdaptor::calculateUnfloatRestore. Kept as external contract
      * surface (scripting/automation query into the pre-float state),
-     * same policy as AutotileAdaptor::retileAllScreens.
+     * same policy as TilingAdaptor::retileAllScreens.
      */
     bool getPreFloatZone(const QString& windowId, QString& zoneId);
 
@@ -341,7 +379,7 @@ public Q_SLOTS:
      *
      * No in-tree caller (the effect restores via getValidatedPreTileGeometry
      * without a pre-check) — kept as external contract surface, same policy
-     * as AutotileAdaptor::retileAllScreens.
+     * as TilingAdaptor::retileAllScreens.
      */
     bool hasPreTileGeometry(const QString& windowId);
 
@@ -474,8 +512,8 @@ public Q_SLOTS:
     /// by the KWin effect once the daemon is ready: on a daemon or effect
     /// restart the compositor drops its window-chrome state, so it must be
     /// re-applied from the daemon's authoritative placement state. Delegates to
-    /// the common IPlacementEngine::reapplyManagedWindowAppearance() on both
-    /// engines — does not move windows.
+    /// the common IPlacementEngine::reapplyManagedWindowAppearance() on all
+    /// three engines (snap, autotile, scrolling) — does not move windows.
     void reapplyWindowAppearance();
 
     /**
@@ -491,7 +529,7 @@ public Q_SLOTS:
      *
      * No in-tree caller (snap-to-last-zone moved to SnapAdaptor) — kept as
      * external contract surface, same policy as
-     * AutotileAdaptor::retileAllScreens.
+     * TilingAdaptor::retileAllScreens.
      */
     QString getLastUsedZoneId();
 
@@ -729,7 +767,20 @@ public:
     /// RestorePosition there is no global default — Float is purely rule-driven,
     /// so the answer is false unless a Float rule matches. The Float action's
     /// params are free-form, so the verdict is the presence of the filled slot.
-    bool shouldFloatByRule(const QString& windowId);
+    /// @p screenId is the OPENING screen; it stamps ScreenId and the derived
+    /// Mode onto the query, without which a rule pairing either with Float is
+    /// silently inert. Empty is tolerated (neither is stamped).
+    bool shouldFloatByRule(const QString& windowId, const QString& screenId);
+
+    /// Per-window scrolling open-behaviour rule slots (openColumnWidth /
+    /// openTabbed / openColumnPlacement), returned as a loose map so the
+    /// header stays free of scroll-engine types. Keys (present only when the
+    /// slot matched): "widthFraction" (double), "tabbed" (bool), "consume"
+    /// (bool). Resolves UNCACHED, like shouldFloatByRule and unlike the
+    /// Restore predicates: the query carries ScreenId and Mode stamps, and the
+    /// evaluator cache is keyed on windowId and rule revision alone, so a hit
+    /// would silently discard both. See rules.cpp.
+    QVariantMap scrollOpenRuleParams(const QString& windowId, const QString& screenId);
 
     /// Resolve the open-placement directive for a window from its matched window
     /// rules: the 1-based `SnapToZone` ordinals to snap into (empty when no
@@ -750,14 +801,25 @@ public:
     /// placementZonesByRule seeds.
     void applyOpenDesktopRouting(const QString& windowId, const QString& screenId);
 
-    /// Autotile open-path routing. Emits RouteToDesktop (as applyOpenDesktopRouting)
-    /// AND resolves a RouteToScreen pin: when the matched rule routes the window to a
-    /// DIFFERENT monitor that is itself in autotile mode, emits windowOutputMoveExpected
-    /// and returns that screen id so the caller inserts the window into that screen's
-    /// tiling state. Returns an empty string when there is no autotile redirect (no
-    /// rule, snap/disabled target, or same screen) — the caller then uses the spawn
-    /// screen. Snap-mode targets are handled by the snap placement directive, not here.
-    QString applyOpenRoutingForAutotile(const QString& windowId, const QString& screenId);
+    /// Tiling-family open-path routing. Emits RouteToDesktop (as
+    /// applyOpenDesktopRouting) AND resolves a RouteToScreen pin: when the
+    /// matched rule routes the window to a DIFFERENT monitor that an engine
+    /// (autotile or scrolling) owns, emits windowOutputMoveExpected and
+    /// returns that screen id so the caller hands the window to that
+    /// screen's claiming engine. Returns an empty string when there is no
+    /// engine-owned redirect (no rule, snap/disabled target, or same
+    /// screen) — the caller then uses the spawn screen. Snap-mode targets
+    /// are handled by the snap placement directive, not here.
+    QString applyOpenRoutingForTiling(const QString& windowId, const QString& screenId);
+
+    /// Canonical key for daemon-local per-window shadow maps, and the canonical
+    /// form sibling adaptors must agree on for per-window state. Window ids
+    /// reach the daemon in both a raw compositor form and the registry's
+    /// canonical form for the same window (a class-mutating app renames
+    /// mid-life), so any map keyed on the caller-supplied id splits into two
+    /// independent entries. Returns @p windowId unchanged when no registry is
+    /// wired.
+    QString shadowWindowId(const QString& windowId) const;
 
     /// Engine-neutral RouteToScreen for a BARE route (no SnapToZone): if a matched
     /// rule pins @p windowId to a different monitor and the rule carries no
@@ -772,7 +834,7 @@ public:
     /// over a remembered float position. No-ops when the target is unset, the spawn
     /// screen, or not currently connected, or when the window has pushed no geometry
     /// yet. A target in autotile mode is moved (not tiled) — cross-engine tiling
-    /// insertion stays with the autotile spawn path (applyOpenRoutingForAutotile).
+    /// insertion stays with the autotile spawn path (applyOpenRoutingForTiling).
     void applyOpenScreenRouting(const QString& windowId, const QString& screenId);
 
     /// Shared by the two open-routing entry points: if @p resolved carries a
@@ -944,7 +1006,17 @@ Q_SIGNALS:
     /// reflows. The window's resulting outputChanged is expected; the effect
     /// must update bookkeeping + decoration only, not re-issue windowClosed/
     /// windowOpened. User-drag cross-output moves carry no marker.
-    void windowOutputMoveExpected(const QString& windowId, const QString& targetScreenId);
+    ///
+    /// @p sourceScreenId names the screen the window is leaving, for the arm
+    /// sites that know it authoritatively before the placement runs. It is
+    /// empty when the marker is armed ahead of any placement work (engine
+    /// relays, open-time routing): the compositor's own notified-screen record
+    /// is still the pre-move screen at that point, so it can serve as the
+    /// source itself. Sites that arm AFTER placing the window must pass the
+    /// source explicitly — by then the tile requests have already re-pointed
+    /// the compositor's record at the destination.
+    void windowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,
+                                  const QString& sourceScreenId);
 
     /**
      * @brief Daemon requests KWin to apply geometries for a batch of windows
@@ -968,14 +1040,15 @@ public Q_SLOTS:
      * @brief Set a window's floating state explicitly (directional, not toggle).
      *
      * Routes by the (validated/recovered) screen's mode to a DEST engine, with
-     * the other engine as SOURCE. A window the destination does not yet track
-     * goes through the cross-engine handoff contract first: floats adopt
-     * unconditionally (releasing a tracked source); an unfloat whose float bit
-     * lives in the source is adopted by an autotile destination (tiling the
-     * arrival) or, for a snap destination, released from the source with a
-     * not-floating broadcast. The suspension-float classification is stamped
-     * before routing. Used by minimize/unminimize, drag-to-float, and monocle
-     * unmaximize handlers.
+     * the other engine as SOURCE (autotile or scrolling adopt via the
+     * cross-engine handoff; snap is handled locally). A window the destination
+     * does not yet track goes through the cross-engine handoff contract first:
+     * floats adopt unconditionally (releasing a tracked source); an unfloat
+     * whose float bit lives in the source is adopted by a tiling destination
+     * (tiling the arrival) or, for a snap destination, released from the source
+     * with a not-floating broadcast. The suspension-float classification is
+     * stamped before routing. Used by minimize/unminimize, drag-to-float, and
+     * monocle unmaximize handlers.
      */
     void setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating);
 
@@ -1154,8 +1227,9 @@ private:
 
     /// Tile-rect poison guard, shared by captureWindowPlacement's primary
     /// free-geometry write and its engine-miss close fallback: true when the
-    /// live @p frame still equals the tile rect the autotile engine last
-    /// applied to @p windowId (the engine remembers it PAST the tiled-bit
+    /// live @p frame still equals the tile rect a tiling-family engine
+    /// (autotile or scrolling) last applied to @p windowId (each engine
+    /// remembers it PAST the tiled-bit
     /// clear, past a cross-engine handoff, and past its own windowClosed
     /// teardown — see AutotileEngine::lastManagedRect). Such a frame is a
     /// managed rect, not a genuine free position, and must never become the
@@ -1166,7 +1240,7 @@ private:
     /// effect notifies autotile of a close BEFORE WindowTracking (same
     /// connection, in-order delivery), so a window closing tiled on an
     /// autotile screen reaches this capture already untracked — both
-    /// engines' capturePlacement decline and the isWindowAutotileTiled gate
+    /// engines' capturePlacement decline and the isWindowEngineTiled gate
     /// reads false — and takes the close-path fallback with its live frame
     /// still on the tile rect. Only the retained memory lets this guard
     /// refuse that frame. The guard therefore covers: a float toggle in
@@ -1176,9 +1250,6 @@ private:
     /// tiled close on the autotile screen itself. In each, the live frame
     /// has not yet moved off the tile rect.
     bool isFrameStillOnTileRect(const QString& windowId, const QRect& frame) const;
-    /// Canonical key for daemon-local per-window shadow maps. The compositor
-    /// may resend a changed appId prefix for the same stable instance.
-    QString shadowWindowId(const QString& windowId) const;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Screen tracking (from KWin effect's D-Bus calls)
@@ -1190,8 +1261,12 @@ private:
     // Frame-geometry shadow: populated via setFrameGeometry D-Bus pushes from
     // the compositor plugin. Entries are removed on windowClosed. Used by
     // daemon-local shortcut handlers (float toggle, etc.) so they can read
-    // fresh geometry without round-tripping through the effect. Keys are
-    // canonical window IDs so app-class mutation cannot create aliases.
+    // fresh geometry without round-tripping through the effect.
+    //
+    // Keyed on CANONICAL window ids. The effect pushes the window's current
+    // composite, but captureWindowPlacement reads this map with canonical ids
+    // on the engine-relay path, so both writes and reads translate through
+    // shadowWindowId() and the stale sweep uses the canonical alive set.
     QHash<QString, QRect> m_frameGeometry;
 
     // Last floating value broadcast via windowFloatingChanged, per window. The
@@ -1215,6 +1290,11 @@ private:
     /// `(m_screenModeRouter->modeFor → currentVirtualDesktop → currentActivity
     /// → isContextDisabled)` cascade rebuild in `saveload.cpp`.
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
+    /// Late-bound scrolling strip-snapshot provider (setScrollStripStateProvider)
+    /// and the blob the last loadState() read for the daemon to hand to the
+    /// engine once it exists.
+    std::function<QJsonObject()> m_scrollStripStateProvider;
+    QJsonObject m_loadedScrollStripState;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     PhosphorWorkspaces::ActivityManager* m_activityManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)
@@ -1223,8 +1303,10 @@ private:
     // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     QPointer<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
+    QPointer<PhosphorEngine::PlacementEngineBase> m_scrollEngine;
     QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
     QPointer<PhosphorTileEngine::AutotileEngine> m_cachedAutotileEngine;
+    QPointer<PhosphorScrollEngine::ScrollEngine> m_cachedScrollEngine;
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /
     // restore calls through this instead of direct engine pointer checks.
@@ -1265,9 +1347,12 @@ private:
     QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
 
     // Unified window-rule store (daemon-owned, not owned here) + a lazily-built
-    // evaluator over its full rule set, shared by shouldRestoreFloatedPosition
-    // and shouldFloatByRule (resolveCached returns every matched slot, so one
-    // evaluator serves both per-window resolvers). The evaluator self-invalidates
+    // evaluator over its full rule set. One evaluator serves every per-window
+    // resolver: the cacheable ones (shouldRestoreFloatedPosition,
+    // shouldRestoreToZoneOnLogin, placementZonesByRule) share its resolveCached
+    // memo, and the ones that stamp per-call context (shouldFloatByRule,
+    // scrollOpenRuleParams) call resolve() on the same instance, which neither
+    // reads nor seeds that memo. The evaluator self-invalidates
     // on in-place rule edits via the set revision, so it is built once on first
     // use. Reset in setRuleStore only when the store pointer actually
     // changes (a same-store rebind keeps the evaluator).

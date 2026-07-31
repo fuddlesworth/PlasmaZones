@@ -10,9 +10,11 @@
 //   getFloatingWindows, applyGeometryForFloat, setWindowFloatingForScreen.
 
 #include "windowtrackingadaptor.h"
+#include "internal.h"
 #include "core/interfaces/interfaces.h"
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
+#include <array>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 
@@ -266,21 +268,37 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
 
     // Route to the correct engine based on screen mode. Both directions go
     // through the explicit cross-engine handoff contract when the window
-    // isn't yet tracked by the destination engine.
+    // isn't yet tracked by the destination engine. The scrolling engine is
+    // a first-class destination here: the effect fires this call for
+    // minimize-float / unminimize-unfloat and drag ApplyFloat on EVERY
+    // engine-managed screen, and routing a scrolling screen to snap would
+    // apply the float bit to an engine that does not own the window.
     PhosphorEngine::PlacementEngineBase* dest = nullptr;
-    PhosphorEngine::PlacementEngineBase* source = nullptr;
     if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(effectiveScreenId)) {
         dest = m_autotileEngine.data();
-        source = m_snapEngine.data();
+    } else if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(effectiveScreenId)) {
+        dest = m_scrollEngine.data();
     } else if (m_snapEngine) {
         dest = m_snapEngine.data();
-        source = m_autotileEngine.data();
     } else {
-        // Both engine QPointers null (late-shutdown D-Bus traffic): a silent
+        // Every engine QPointer null (late-shutdown D-Bus traffic): a silent
         // no-op on a public entry point is undiagnosable — log like every
         // other bail in this file.
         qCWarning(lcDbusWindow) << "setWindowFloatingForScreen: no engine wired for" << effectiveScreenId;
         return;
+    }
+    // Source: whichever OTHER engine currently tracks the window (the
+    // window may be crossing engines when its float bit flips mid-move).
+    PhosphorEngine::PlacementEngineBase* source = nullptr;
+    const std::array<PhosphorEngine::PlacementEngineBase*, 3> candidates{
+        static_cast<PhosphorEngine::PlacementEngineBase*>(m_autotileEngine.data()),
+        static_cast<PhosphorEngine::PlacementEngineBase*>(m_scrollEngine.data()),
+        static_cast<PhosphorEngine::PlacementEngineBase*>(m_snapEngine.data())};
+    for (PhosphorEngine::PlacementEngineBase* candidate : candidates) {
+        if (candidate && candidate != dest && candidate->isWindowTracked(windowId)) {
+            source = candidate;
+            break;
+        }
     }
 
     // Float: adopt an untracked window unconditionally (a brand-new floating
@@ -292,8 +310,8 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     // destination engine, which doesn't track the window and early-returns,
     // while the source engine's float bit stays set with no broadcast, so
     // the window reads floating through its own context's mode lens forever.
-    // The two destinations need DIFFERENT handling:
-    //   - Autotile dest: adopt via the handoff (release source, receive with
+    // ADOPTING destinations (autotile AND scrolling) differ from a SNAP one:
+    //   - Adopting dest: adopt via the handoff (release source, receive with
     //     wasFloating=false tiles the arrival and announces it on the
     //     passive sync channel); the trailing relay dedups against that.
     //   - Snap dest: NO adoption. A handoffReceive here would add nothing:
@@ -308,18 +326,30 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     bool recaptureAfterFloatWrite = false;
     if (dest && !dest->isWindowTracked(windowId)) {
         const bool sourceTracked = source && source->isWindowTracked(windowId);
-        const bool destIsAutotile = m_autotileEngine && dest == m_autotileEngine.data();
-        if (floating || (sourceTracked && destIsAutotile)) {
+        // Autotile AND scrolling destinations adopt via the handoff (their
+        // handoffReceive tiles a wasFloating=false arrival); only a snap
+        // destination takes the no-adoption unfloat path documented above.
+        const bool destAdopts =
+            (m_autotileEngine && dest == m_autotileEngine.data()) || (m_scrollEngine && dest == m_scrollEngine.data());
+        if (floating || (sourceTracked && destAdopts)) {
             PhosphorEngine::IPlacementEngine::HandoffContext ctx;
             ctx.windowId = windowId;
             ctx.toScreenId = effectiveScreenId;
             ctx.wasFloating = floating;
+            QString recoverScreen;
             if (sourceTracked) {
                 ctx.fromEngineId = source->engineId();
-                source->handoffRelease(windowId);
+                ctx.sourceGeometry = frameGeometry(windowId);
+                ctx.minSize = source->windowMinimumSize(windowId);
+                recoverScreen = source->screenForTrackedWindow(windowId);
             }
-            dest->handoffReceive(ctx);
-            if (!floating) {
+            // Guarded: a dest whose screen left its engine set between the
+            // isActiveOnScreen pick above and the receive would otherwise
+            // strand the window (released, refused) while subscribers are
+            // told it is not floating.
+            const bool adopted =
+                WindowTrackingInternal::guardedHandoff(sourceTracked ? source : nullptr, dest, ctx, recoverScreen);
+            if (!floating && adopted) {
                 relayWindowFloatingChanged(windowId, false, effectiveScreenId);
             }
         } else if (sourceTracked) {
@@ -338,6 +368,11 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         }
     }
 
+    if (!dest) {
+        // Post-clearEngine / unwired fixture: the write cannot be applied
+        // anywhere, and silence here would contradict the qCInfo above.
+        qCWarning(lcDbusWindow) << "setWindowFloatingForScreen: no engine available for" << windowId;
+    }
     if (dest) {
         // Thread the effect's authoritative live screen so the engine resolves
         // this float/unfloat against the window's REAL current monitor, not its

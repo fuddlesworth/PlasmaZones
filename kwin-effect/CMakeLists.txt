@@ -48,6 +48,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
     plasmazoneseffect/lifecycle_wiring.cpp
+    plasmazoneseffect/lifecycle_wiring_daemon.cpp
     plasmazoneseffect/decoration_appearance.cpp
     plasmazoneseffect/decorations.cpp
     plasmazoneseffect/decoration_teardown.cpp
@@ -74,6 +75,8 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/drag_end.cpp
     plasmazoneseffect/mesh_sim.cpp
     plasmazoneseffect/mesh_sim.h
+    plasmazoneseffect/input_filter.cpp
+    plasmazoneseffect/input_filter.h
     plasmazoneseffect/paint_pipeline.cpp
     plasmazoneseffect/paint_shader_window.cpp
     plasmazoneseffect/paint_capture.cpp
@@ -97,12 +100,13 @@ set(plasmazones_effect_SRCS
     transitions/desktoptransitionshader.cpp
     transitions/desktoptransitionteardown.cpp
     transitions/desktoptransitionmanager.h
-    autotilehandler/autotilehandler.cpp
-    autotilehandler/autotilehandler.h
-    autotilehandler/signals.cpp
-    autotilehandler/state.cpp
-    autotilehandler/tiling.cpp
-    autotilehandler/wiring.cpp
+    tilinghandler/tilinghandler.cpp
+    tilinghandler/tilinghandler.h
+    tilinghandler/minimizefloat.cpp
+    tilinghandler/signals.cpp
+    tilinghandler/state.cpp
+    tilinghandler/tiling.cpp
+    tilinghandler/wiring.cpp
     handlers/snaphandler.cpp
     handlers/snaphandler.h
     handlers/navigationhandler.cpp
@@ -177,12 +181,10 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     PhosphorEngine::PhosphorEngine
     PhosphorProtocol::PhosphorProtocol
     # Explicit link: `compositorclock.h` and `windowanimator.h` directly
-    # include `<PhosphorAnimation/...>`. The dependency is reachable
-    # transitively via `PhosphorCompositor::PhosphorCompositor`, but depending
-    # on a transitive target for a directly-included header is brittle
-    # — a future reshuffle of compositor-common's link graph could drop
-    # the re-export and this target would break mysteriously. Named
-    # here so the link graph matches the include graph.
+    # include `<PhosphorAnimation/...>`. PhosphorCompositor does NOT link
+    # PhosphorAnimation, so this is a genuine direct dependency, not a
+    # transitive re-export. Named here so the link graph matches the
+    # include graph.
     PhosphorAnimation::PhosphorAnimation
     # PhosphorRules: the unified LGPL rule engine. The effect resolves
     # its per-window animation overrides AND its exclusion gates through

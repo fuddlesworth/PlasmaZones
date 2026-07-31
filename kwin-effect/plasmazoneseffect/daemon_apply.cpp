@@ -29,7 +29,7 @@
 #include <QSet>
 #include <QStringList>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
@@ -95,15 +95,16 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     KWin::effects->windowToDesktops(w, {all.at(desktop - 1)});
 }
 
-void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId)
+void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,
+                                                     const QString& sourceScreenId)
 {
     if (windowId.isEmpty() || targetScreenId.isEmpty()) {
         return;
     }
     // Hand the one-shot to the autotile handler: it owns the cross-output
     // outputChanged transfer path that would otherwise re-issue close/open.
-    if (AutotileHandler* handler = m_autotileHandler.get()) {
-        handler->markExpectedOutputMove(windowId, targetScreenId);
+    if (TilingHandler* handler = m_tilingHandler.get()) {
+        handler->markExpectedOutputMove(windowId, targetScreenId, sourceScreenId);
     }
 }
 
@@ -225,9 +226,9 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // both the snap and autotile border sets:
     //   - empty zoneId         → float-restore: leave snapping's set
     //   - empty/autotile screen → autotile-managed or unresolved: leave the set
-    //                             (AutotileHandler tracks autotile-screen windows)
+    //                             (TilingHandler tracks autotile-screen windows)
     //   - snap-mode screen      → snap commit
-    if (zoneId.isEmpty() || screenId.isEmpty() || m_autotileHandler->isAutotileScreen(screenId)) {
+    if (zoneId.isEmpty() || screenId.isEmpty() || m_tilingHandler->isManagedScreen(screenId)) {
         m_snapHandler->clearWindowSnapped(liveWindowId);
     } else {
         // Clear any stale float marker before marking snapped (mirrors the
@@ -388,7 +389,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // pre-rotation m_virtualScreenDefs and report a phantom cross-VS unsnap.
             if (!p.screenId.isEmpty()) {
                 m_trackedScreenPerWindow[p.window] = p.screenId;
-                m_autotileHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
+                m_tilingHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
             }
             // Save/restore, not set/clear (nesting-safe).
             const bool prevInApply = m_daemonGate.inGeometryApply;
@@ -416,10 +417,10 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // misclassify a float-restore as a snap and leave a stale border.
             //   - empty screenId      → float/restore: leave snapping's set
             //   - autotile-mode screen → now autotile-managed: leave snap set
-            //                            (AutotileHandler tracks it)
+            //                            (TilingHandler tracks it)
             //   - snap-mode screen     → snap commit (clears any stale float marker)
             const QString batchWid = getWindowId(p.window);
-            if (p.screenId.isEmpty() || m_autotileHandler->isAutotileScreen(p.screenId)) {
+            if (p.screenId.isEmpty() || m_tilingHandler->isManagedScreen(p.screenId)) {
                 m_snapHandler->clearWindowSnapped(batchWid);
             } else {
                 // Real snap commit on a snap-mode screen. The daemon emits a non-empty
@@ -480,7 +481,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             if (action == QLatin1String("resnap") && m_snapAssistHandler->isEnabled()) {
                 KWin::EffectWindow* activeWin = getActiveWindow();
                 QString activeScreenId = activeWin ? getWindowScreenId(activeWin) : QString();
-                if (activeWin && !activeScreenId.isEmpty() && !m_autotileHandler->isAutotileScreen(activeScreenId)) {
+                if (activeWin && !activeScreenId.isEmpty() && !m_tilingHandler->isManagedScreen(activeScreenId)) {
                     m_snapAssistHandler->showContinuationIfNeeded(activeScreenId, getWindowId(activeWin));
                 }
             }
@@ -556,30 +557,30 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // liveWindowId / stillMinimized were resolved at the top of the
         // function (the handler maps are keyed by the effect-side ids they
         // claimed with).
-        const bool recoveryPending = m_autotileHandler->hasPendingUnminimizeUnfloat(liveWindowId)
+        const bool recoveryPending = m_tilingHandler->hasPendingUnminimizeUnfloat(liveWindowId)
             || m_snapHandler->hasPendingUnminimizeUnfloat(liveWindowId)
-            || m_autotileHandler->hasUnfloatInFlight(liveWindowId) || m_snapHandler->hasUnfloatInFlight(liveWindowId);
+            || m_tilingHandler->hasUnfloatInFlight(liveWindowId) || m_snapHandler->hasUnfloatInFlight(liveWindowId);
         if (stillMinimized || recoveryPending) {
             qCDebug(lcEffect) << "Preserving minimize-float ownership across non-terminal unfloat:" << liveWindowId;
             // Single-owner repair: preservation must never leave the marker in
             // BOTH engines (a missed cross-mode adoption hop can). Resolve a
             // dual hold to the window's current screen mode — the same rule
             // every adoption site applies.
-            if (m_autotileHandler->isMinimizeFloated(liveWindowId) && m_snapHandler->isMinimizeFloated(liveWindowId)) {
+            if (m_tilingHandler->isMinimizeFloated(liveWindowId) && m_snapHandler->isMinimizeFloated(liveWindowId)) {
                 QString ownerScreen = screenId;
                 if (ownerScreen.isEmpty() && liveForOwner) {
                     ownerScreen = getWindowScreenId(liveForOwner);
                 }
                 qCWarning(lcEffect) << "Minimize-float marker held by BOTH engines for" << liveWindowId
                                     << "— resolving to owner of screen" << ownerScreen;
-                if (m_autotileHandler->isAutotileScreen(ownerScreen)) {
+                if (m_tilingHandler->isManagedScreen(ownerScreen)) {
                     m_snapHandler->removeMinimizeFloated(liveWindowId);
                 } else {
-                    m_autotileHandler->removeMinimizeFloated(liveWindowId);
+                    m_tilingHandler->removeMinimizeFloated(liveWindowId);
                 }
             }
         } else {
-            m_autotileHandler->removeMinimizeFloated(liveWindowId);
+            m_tilingHandler->removeMinimizeFloated(liveWindowId);
             m_snapHandler->removeMinimizeFloated(liveWindowId);
         }
     } else {
@@ -692,7 +693,7 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // Spurious-pair suppression: plasmashell notification stacking makes
     // KWin emit minimizedChanged(true) on tiled windows with the matching
     // unminimize ~1-2 ms later (the same quirk kMinimizeFloatDebounceMs
-    // in autotilehandler/signals.cpp debounces on the float side). The
+    // in tilinghandler/signals.cpp debounces on the float side). The
     // reverse leg installs immediately — a genuine minimize must not
     // start late, and a spurious pair paints at most one barely-started
     // frame — but an unminimize landing inside the window means the pair
@@ -752,7 +753,7 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     }
 
     // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler
-    // (mirrors AutotileHandler running its own minimize→float machine for
+    // (mirrors TilingHandler running its own minimize→float machine for
     // autotile screens). Unlike the shader event above, this state
     // machine only concerns windows the tiling system manages.
     if (!shouldHandleWindow(w) || !isTileableWindow(w)) {

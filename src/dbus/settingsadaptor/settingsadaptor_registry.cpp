@@ -16,6 +16,7 @@
 #include "settingsadaptor.h"
 #include "core/interfaces/interfaces.h"
 #include "config/settings.h" // For concrete Settings type
+#include "config/configdefaults.h" // ConfigDefaults::isValidScrolling* validators
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ProfileTree.h>
@@ -282,6 +283,15 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_PER_MODE_DISABLE("snappingDisabledActivities", PhosphorZones::AssignmentEntry::Snapping,
                               disabledActivities, setDisabledActivities)
     REGISTER_PER_MODE_DISABLE("autotileDisabledActivities", PhosphorZones::AssignmentEntry::Autotile,
+                              disabledActivities, setDisabledActivities)
+    // Scrolling tier: the daemon consults handleForMode(..., Scrolling)
+    // (updateEngineScreens' derive phase and the scroll shortcut gate), so
+    // the wire must be able to populate these lists like the other modes'.
+    REGISTER_PER_MODE_DISABLE("scrollingDisabledMonitors", PhosphorZones::AssignmentEntry::Scrolling, disabledMonitors,
+                              setDisabledMonitors)
+    REGISTER_PER_MODE_DISABLE("scrollingDisabledDesktops", PhosphorZones::AssignmentEntry::Scrolling, disabledDesktops,
+                              setDisabledDesktops)
+    REGISTER_PER_MODE_DISABLE("scrollingDisabledActivities", PhosphorZones::AssignmentEntry::Scrolling,
                               disabledActivities, setDisabledActivities)
 #undef REGISTER_PER_MODE_DISABLE
 
@@ -740,6 +750,100 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_STRING("autotileDecMasterCountShortcut", autotileDecMasterCountShortcut,
                                  setAutotileDecMasterCountShortcut)
         REGISTER_CONCRETE_STRING("autotileRetileShortcut", autotileRetileShortcut, setAutotileRetileShortcut)
+    }
+
+    // Scrolling settings (concrete Settings only)
+    if (concrete) {
+        REGISTER_CONCRETE_BOOL("scrollingEnabled", scrollingEnabled, setScrollingEnabled)
+        // scrollingCenterFocusedColumn: enum (0=Never, 1=Always, 2=OnOverflow) — needs range validation
+        m_getters[QStringLiteral("scrollingCenterFocusedColumn")] = [concrete]() {
+            return concrete->scrollingCenterFocusedColumn();
+        };
+        m_setters[QStringLiteral("scrollingCenterFocusedColumn")] = [concrete](const QVariant& v) {
+            const int mode = v.toInt();
+            if (!ConfigDefaults::isValidScrollingCenterFocusedColumn(mode)) {
+                return false;
+            }
+            concrete->setScrollingCenterFocusedColumn(mode);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingCenterFocusedColumn")] = QStringLiteral("int");
+        REGISTER_CONCRETE_BOOL("scrollingAlwaysCenterSingleColumn", scrollingAlwaysCenterSingleColumn,
+                               setScrollingAlwaysCenterSingleColumn)
+        // scrollingDefaultColumnWidthKind: enum (0=Proportion, 1=Fixed, 2=ClientDecides)
+        m_getters[QStringLiteral("scrollingDefaultColumnWidthKind")] = [concrete]() {
+            return concrete->scrollingDefaultColumnWidthKind();
+        };
+        m_setters[QStringLiteral("scrollingDefaultColumnWidthKind")] = [concrete](const QVariant& v) {
+            const int kind = v.toInt();
+            if (!ConfigDefaults::isValidScrollingWidthKind(kind)) {
+                return false;
+            }
+            concrete->setScrollingDefaultColumnWidthKind(kind);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingDefaultColumnWidthKind")] = QStringLiteral("int");
+        REGISTER_CONCRETE_DOUBLE("scrollingDefaultColumnWidthValue", scrollingDefaultColumnWidthValue,
+                                 setScrollingDefaultColumnWidthValue)
+        // scrollingDefaultColumnDisplay: enum (0=Normal, 1=Tabbed)
+        m_getters[QStringLiteral("scrollingDefaultColumnDisplay")] = [concrete]() {
+            return concrete->scrollingDefaultColumnDisplay();
+        };
+        m_setters[QStringLiteral("scrollingDefaultColumnDisplay")] = [concrete](const QVariant& v) {
+            const int display = v.toInt();
+            if (!ConfigDefaults::isValidScrollingColumnDisplay(display)) {
+                return false;
+            }
+            concrete->setScrollingDefaultColumnDisplay(display);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingDefaultColumnDisplay")] = QStringLiteral("int");
+        REGISTER_CONCRETE_STRING("scrollingPresetColumnWidths", scrollingPresetColumnWidthsString,
+                                 setScrollingPresetColumnWidths)
+        REGISTER_CONCRETE_STRING("scrollingPresetWindowHeights", scrollingPresetWindowHeightsString,
+                                 setScrollingPresetWindowHeights)
+
+        // Scrolling shortcuts
+        REGISTER_CONCRETE_STRING("scrollingFocusColumnFirstShortcut", scrollingFocusColumnFirstShortcut,
+                                 setScrollingFocusColumnFirstShortcut)
+        REGISTER_CONCRETE_STRING("scrollingFocusColumnLastShortcut", scrollingFocusColumnLastShortcut,
+                                 setScrollingFocusColumnLastShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMoveColumnToFirstShortcut", scrollingMoveColumnToFirstShortcut,
+                                 setScrollingMoveColumnToFirstShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMoveColumnToLastShortcut", scrollingMoveColumnToLastShortcut,
+                                 setScrollingMoveColumnToLastShortcut)
+        REGISTER_CONCRETE_STRING("scrollingConsumeWindowShortcut", scrollingConsumeWindowShortcut,
+                                 setScrollingConsumeWindowShortcut)
+        REGISTER_CONCRETE_STRING("scrollingExpelWindowShortcut", scrollingExpelWindowShortcut,
+                                 setScrollingExpelWindowShortcut)
+        REGISTER_CONCRETE_STRING("scrollingConsumeOrExpelLeftShortcut", scrollingConsumeOrExpelLeftShortcut,
+                                 setScrollingConsumeOrExpelLeftShortcut)
+        REGISTER_CONCRETE_STRING("scrollingConsumeOrExpelRightShortcut", scrollingConsumeOrExpelRightShortcut,
+                                 setScrollingConsumeOrExpelRightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCenterColumnShortcut", scrollingCenterColumnShortcut,
+                                 setScrollingCenterColumnShortcut)
+        REGISTER_CONCRETE_STRING("scrollingToggleColumnTabbedShortcut", scrollingToggleColumnTabbedShortcut,
+                                 setScrollingToggleColumnTabbedShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleColumnWidthShortcut", scrollingCycleColumnWidthShortcut,
+                                 setScrollingCycleColumnWidthShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleColumnWidthBackShortcut", scrollingCycleColumnWidthBackShortcut,
+                                 setScrollingCycleColumnWidthBackShortcut)
+        REGISTER_CONCRETE_STRING("scrollingIncreaseColumnWidthShortcut", scrollingIncreaseColumnWidthShortcut,
+                                 setScrollingIncreaseColumnWidthShortcut)
+        REGISTER_CONCRETE_STRING("scrollingDecreaseColumnWidthShortcut", scrollingDecreaseColumnWidthShortcut,
+                                 setScrollingDecreaseColumnWidthShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMaximizeColumnShortcut", scrollingMaximizeColumnShortcut,
+                                 setScrollingMaximizeColumnShortcut)
+        REGISTER_CONCRETE_STRING("scrollingExpandColumnShortcut", scrollingExpandColumnShortcut,
+                                 setScrollingExpandColumnShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightShortcut", scrollingCycleWindowHeightShortcut,
+                                 setScrollingCycleWindowHeightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingIncreaseWindowHeightShortcut", scrollingIncreaseWindowHeightShortcut,
+                                 setScrollingIncreaseWindowHeightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingDecreaseWindowHeightShortcut", scrollingDecreaseWindowHeightShortcut,
+                                 setScrollingDecreaseWindowHeightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingResetWindowHeightsShortcut", scrollingResetWindowHeightsShortcut,
+                                 setScrollingResetWindowHeightsShortcut)
     }
 
     // Global shortcuts (concrete Settings only)

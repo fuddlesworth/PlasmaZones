@@ -15,6 +15,7 @@
 // as settingscontroller.cpp, separate translation unit, no API change.
 
 #include "settingscontroller.h"
+#include "version.h"
 
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
@@ -159,14 +160,16 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("about"), QString(), PhosphorI18n::tr("About"), QStringLiteral("AboutPage.qml"),
                QStringLiteral("help-about"));
 
-    // Placement children — the two placement modes. They keep their own
+    // Placement children — the three placement modes. They keep their own
     // drill-down behaviour (collapsible=false) and their inline enable toggles
-    // (keyed by pageId "snapping"/"tiling" in Main.qml's trailing delegate);
-    // only their parent changed from top-level to "placement".
+    // (keyed by pageId "snapping"/"tiling"/"scrolling" in Main.qml's trailing
+    // delegate); only their parent changed from top-level to "placement".
     regVirtual(QStringLiteral("snapping"), QStringLiteral("placement"), PhosphorI18n::tr("Snapping"), QString(),
                QStringLiteral("view-split-left-right"));
     regVirtual(QStringLiteral("tiling"), QStringLiteral("placement"), PhosphorI18n::tr("Tiling"), QString(),
                QStringLiteral("window-duplicate"));
+    regVirtual(QStringLiteral("scrolling"), QStringLiteral("placement"), PhosphorI18n::tr("Scrolling"), QString(),
+               QStringLiteral("view-list-details"));
 
     // Display children
     regVirtual(QStringLiteral("virtualscreens"), QStringLiteral("display"), PhosphorI18n::tr("Virtual Screens"),
@@ -279,6 +282,15 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("tiling-shortcuts"), QStringLiteral("tiling-config-cat"),
                PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("pages/tiling/TilingQuickShortcutsPage.qml"),
                QStringLiteral("bookmark"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+
+    // Scrolling children — the third placement mode's own section, the peer
+    // of Snapping and Tiling above (its sidebar row carries the same inline
+    // enable toggle). One surface serves both modes: the engine has a single
+    // page of knobs, so there is no simple/advanced split to declare.
+    regVirtual(QStringLiteral("scrolling-behavior"), QStringLiteral("scrolling"), PhosphorI18n::tr("Behavior"),
+               QStringLiteral("pages/scrolling/ScrollingPage.qml"), QStringLiteral("view-list-details"),
+               /*collapsible=*/false,
+               /*divider=*/true);
 
     // Animations children — Transitions / Motion / Library categories drill in.
     // The simple-mode surface leads: a SimpleOnly leaf that replaces the whole
@@ -500,6 +512,14 @@ bool SettingsController::hasUnseenWhatsNew() const
     // mis-order "1.10" vs "1.9", so go through QVersionNumber.
     const QVersionNumber latestV = QVersionNumber::fromString(latest);
     const QVersionNumber seenV = QVersionNumber::fromString(m_lastSeenWhatsNewVersion);
+    // Belt-and-braces: the ctor already clamps m_whatsNewEntries to
+    // VERSION_STRING (settingscontroller.cpp), so latestV can only exceed
+    // the running version if that filter regresses. Same version source on
+    // both sides, so the two can never disagree.
+    const QVersionNumber appV = QVersionNumber::fromString(VERSION_STRING);
+    if (!appV.isNull() && appV < latestV) {
+        return false;
+    }
     return seenV < latestV;
 }
 

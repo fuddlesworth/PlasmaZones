@@ -1,20 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Qt headers
-#include <algorithm>
-#include <cmath>
-#include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QScopeGuard>
-#include <QScreen>
-#include <QTimer>
-#include <QVarLengthArray>
+// Own header
+#include <PhosphorTileEngine/AutotileEngine.h>
 
 // Project headers
-#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorGeometry/GeometryUtils.h>
@@ -37,6 +27,18 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "engine_internal.h"
 
+// Qt and std
+#include <QDebug>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QScreen>
+#include <QTimer>
+#include <QVarLengthArray>
+#include <algorithm>
+#include <cmath>
+
 namespace PhosphorTileEngine {
 
 bool AutotileEngine::warnIfEmptyWindowId(const QString& windowId, const char* operation) const
@@ -50,6 +52,12 @@ bool AutotileEngine::warnIfEmptyWindowId(const QString& windowId, const char* op
 
 void AutotileEngine::setWindowRegistry(QObject* registry)
 {
+    // Drop the previous registration hook up front. Both early returns below
+    // leave the engine WITHOUT a usable registry, so a hook installed by an
+    // earlier successful call must not keep installing appId resolvers on
+    // newly registered (hot-reloaded) algorithms — this is a re-wireable seam,
+    // and setWindowRegistry(nullptr) is the documented way to unwire it.
+    disconnect(m_appIdResolverHook);
     m_windowRegistry = dynamic_cast<PhosphorEngine::IWindowRegistry*>(registry);
     if (!m_windowRegistry) {
         if (registry) {
@@ -329,7 +337,11 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     }
     const PhosphorEngine::TilingStateKey key = keyIt.value();
     PhosphorTiles::TilingState* state = m_states.stateForKey(key);
-    if (!state) {
+    if (!state || !state->containsWindow(wid)) {
+        // Membership, not just a live key: windowOpened keys the window
+        // BEFORE onWindowAdded can refuse it, and a phantom-keyed window
+        // would capture a bogus "tiled at order -1" slot that then blocks
+        // the free-geometry write downstream (same guard as isWindowTiled).
         return std::nullopt;
     }
     // Live minimize state via the IWindowRegistry contract (defaulted virtual

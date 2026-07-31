@@ -118,9 +118,9 @@ void SnapNavigationTargetResolver::setCrossSurfaceResolver(PhosphorEngine::ICros
     m_crossSurface = resolver;
 }
 
-void SnapNavigationTargetResolver::setNeighbourAutotileProvider(NeighbourAutotileFn fn)
+void SnapNavigationTargetResolver::setNeighbourTilingProvider(NeighbourTilingFn fn)
 {
-    m_neighbourIsAutotile = std::move(fn);
+    m_neighbourIsTiling = std::move(fn);
 }
 
 PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntryTarget(const QString& currentZoneId,
@@ -139,11 +139,11 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntr
     if (neighborScreen.isEmpty()) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
     }
-    // A MOVE/SWAP must not snap the window onto an autotile neighbour: that screen
-    // has no snap zones to own the window even though its assigned layout still
-    // enumerates zones. Report no crossing so the engine's cross-mode handoff
-    // takes over. FOCUS (requireSnapNeighbour=false) is not gated.
-    if (requireSnapNeighbour && m_neighbourIsAutotile && m_neighbourIsAutotile(neighborScreen)) {
+    // A MOVE/SWAP must not snap the window onto a tiling neighbour (autotile or
+    // scrolling): that screen has no snap zones to own the window even though its
+    // assigned layout still enumerates zones. Report no crossing so the engine's
+    // cross-mode handoff takes over. FOCUS (requireSnapNeighbour=false) is not gated.
+    if (requireSnapNeighbour && m_neighbourIsTiling && m_neighbourIsTiling(neighborScreen)) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
     }
     // Enter the neighbour output from the edge facing back toward the source.
@@ -179,10 +179,11 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
     if (neighborScreen.isEmpty()) {
         return fail(QString());
     }
-    // A swap onto an autotile neighbour is a cross-MODE exchange (bidirectional
-    // handoff) — report no crossing so the snap engine doesn't snap the window
-    // onto a tiled screen. Handled by the cross-mode swap phase, not here.
-    if (m_neighbourIsAutotile && m_neighbourIsAutotile(neighborScreen)) {
+    // A swap onto a tiling neighbour (autotile or scrolling) is a cross-MODE
+    // exchange (bidirectional handoff) — report no crossing so the snap engine
+    // doesn't snap the window onto a tiled screen. Handled by the cross-mode swap
+    // phase, not here.
+    if (m_neighbourIsTiling && m_neighbourIsTiling(neighborScreen)) {
         return fail(QString());
     }
     // Enter the neighbour output from the edge facing back toward the source.
@@ -317,7 +318,7 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
         targetZoneId = m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
         if (targetZoneId.isEmpty()) {
             // No adjacent zone on this output — cross into the adjacent output's
-            // entry zone before giving up. requireSnapNeighbour: an autotile
+            // entry zone before giving up. requireSnapNeighbour: a tiling-mode
             // neighbour is handed off cross-mode by the engine, not snapped here.
             const PhosphorProtocol::MoveTargetResult cross =
                 crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/true);
@@ -750,7 +751,7 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
         // No adjacent zone on this output — try focusing into the adjacent
         // output's entry zone. The neighbour's mode is not gated
         // (requireSnapNeighbour=false), but the landing below still needs a
-        // snap-tracked occupant, so an autotile neighbour dead-ends to
+        // snap-tracked occupant, so a tiling-mode neighbour dead-ends to
         // no_adjacent_zone anyway.
         const PhosphorProtocol::MoveTargetResult cross =
             crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, /*requireSnapNeighbour=*/false);

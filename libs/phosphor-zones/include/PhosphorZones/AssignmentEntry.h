@@ -18,6 +18,15 @@ namespace PhosphorZones {
 
 /**
  * @brief Key for layout assignment (screen + desktop + activity)
+ *
+ * RETAINED PUBLIC API with no in-tree consumer. The daemon now stores
+ * assignments as context RULES (ContextRuleBridge), and the v3 group format
+ * @c fromGroupName parses is drained by configmigration_v4finalize's own
+ * parser — so nothing in this repo constructs one. It stays exported because
+ * this is an installed LGPL library header whose whole point is third-party
+ * linkage: the (screen, desktop, activity) tuple is still the assignment
+ * identity, and removing an exported type is an ABI break for consumers we do
+ * not control. Deliberately kept, not overlooked.
  */
 struct LayoutAssignmentKey
 {
@@ -52,17 +61,19 @@ struct LayoutAssignmentKey
         if (remainder.isEmpty())
             return result;
 
-        int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
+        constexpr QLatin1String kActivityTag(":Activity:");
+        constexpr QLatin1String kDesktopTag(":Desktop:");
+        int actIdx = remainder.indexOf(kActivityTag);
         if (actIdx >= 0) {
-            const QString activity = remainder.mid(actIdx + 10);
+            const QString activity = remainder.mid(actIdx + kActivityTag.size());
             if (!activity.isEmpty())
                 result.activity = activity;
             remainder = remainder.left(actIdx);
         }
-        int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
+        int deskIdx = remainder.indexOf(kDesktopTag);
         if (deskIdx >= 0) {
             bool ok = false;
-            int desktop = remainder.mid(deskIdx + 9).toInt(&ok);
+            int desktop = remainder.mid(deskIdx + kDesktopTag.size()).toInt(&ok);
             if (ok && desktop > 0)
                 result.virtualDesktop = desktop;
             remainder = remainder.left(deskIdx);
@@ -93,23 +104,20 @@ struct AssignmentEntry
     /// STRINGS produced by `modeToWireString` ("snapping", "autotile",
     /// "scrolling") — `ContextRuleBridge::makeDisableRule` writes them
     /// and `disableRuleMode` reads them back. A consumer's legacy v3→v4
-    /// config migration does still read the int side via
-    /// `Display.<screen>:Mode`, so NEVER renumber existing values — a
+    /// config migration does still read the int side from the assignments
+    /// group (`Assignment:<screen>…`, key `Mode` — NOT the `Display.*`
+    /// per-mode disable-list group), so NEVER renumber existing values — a
     /// renumber would silently swap engines for v3 disable lists that
     /// haven't been migrated yet. Append new modes at the end.
     enum Mode {
         Snapping = 0,
         Autotile = 1,
-        /// Reserved engine slot for a future scrolling-workspace engine.
-        /// The settings UI exposes the mode and persists per-mode disable
-        /// lists / config groups, but the router currently has no engine
-        /// to hand windows to — see `ScreenModeRouter::engineFor` for the
-        /// passthrough fallback (returns nullptr for Scrolling) that lets
-        /// KWin place the window naturally rather than blocking on a
-        /// missing engine. A real engine implementer adds an adapter to
-        /// the router and removes the passthrough; no daemon-internal
-        /// switch needs to be edited because the (Mode, Family) settings
-        /// table here drives all downstream config routing.
+        /// The niri-style scrolling engine (PhosphorScrollEngine): windows
+        /// form columns on an endless horizontal strip per context.
+        /// `ScreenModeRouter::engineFor` hands Scrolling screens to the
+        /// live ScrollEngine; the (Mode, Family) settings table here still
+        /// drives all downstream config routing. Scrolling has no layout
+        /// entity of its own — the mode lookup is the discriminator.
         Scrolling = 2
     };
     Mode mode = Snapping;
@@ -118,6 +126,19 @@ struct AssignmentEntry
 
     QString activeLayoutId() const
     {
+        // Scrolling has no layout entity, so the id is the bare sentinel
+        // "scrolling:". This is LOAD-BEARING: the assignment cascade's
+        // visitors reject entries with an empty activeLayoutId(), and a
+        // fresh mode-only Scrolling entry (empty preserved snappingLayout)
+        // would otherwise silently fail to assign. The gap / lock /
+        // overlay / tiling-param / scrolling-param resolvers stamp this
+        // sentinel into query.activeLayout, so `ActiveLayout Equals
+        // "scrolling:"` matches THERE (the assignment and context-default
+        // resolvers deliberately leave activeLayout unstamped — recursion).
+        // There is no per-layout identity to distinguish beyond the mode.
+        if (mode == Scrolling) {
+            return QString(PhosphorLayout::LayoutId::ScrollingId);
+        }
         if (mode == Autotile) {
             // Autotile mode always produces a non-empty id so the cascade
             // visitors in LayoutRegistry accept it (they reject on
@@ -132,6 +153,11 @@ struct AssignmentEntry
         }
         return snappingLayout;
     }
+    /// True when the entry carries a concrete layout/algorithm PAYLOAD.
+    /// This is NOT the cascade's visibility predicate — that is
+    /// activeLayoutId() non-empty, which a payload-less Scrolling entry
+    /// satisfies through the "scrolling:" sentinel while isValid() stays
+    /// false. Kept for tests/tooling; no production caller branches on it.
     bool isValid() const
     {
         return !snappingLayout.isEmpty() || !tilingAlgorithm.isEmpty();
@@ -152,24 +178,25 @@ struct AssignmentEntry
         if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             entry.mode = Autotile;
             entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        } else if (PhosphorLayout::LayoutId::isScrolling(layoutId)) {
+            // The "scrolling:" sentinel carries no layout entity — flip the
+            // mode and preserve both layout fields (the lossless-toggle
+            // contract), so a get→set round-trip cannot degrade a Scrolling
+            // assignment into Snapping-pointing-at-a-bogus-id.
+            entry.mode = Scrolling;
         } else {
             entry.mode = Snapping;
             entry.snappingLayout = layoutId;
         }
         return entry;
     }
-    /** @brief Create a fresh AssignmentEntry from a layoutId string */
+    /** @brief Create a fresh AssignmentEntry from a layoutId string.
+     *  Exactly the two-arg overload applied to a default-constructed entry —
+     *  one classification cascade, so a new mode cannot be added to one
+     *  overload and forgotten in the other. */
     static AssignmentEntry fromLayoutId(const QString& layoutId)
     {
-        AssignmentEntry entry;
-        if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-            entry.mode = Autotile;
-            entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
-        } else {
-            entry.mode = Snapping;
-            entry.snappingLayout = layoutId;
-        }
-        return entry;
+        return fromLayoutId(layoutId, AssignmentEntry{});
     }
 };
 
@@ -288,6 +315,35 @@ struct ContextTilingParams
 };
 
 /**
+ * @brief Per-context scrolling parameter overrides resolved from context rules.
+ *
+ * Each field is set only when a matching context rule fills the corresponding
+ * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
+ * SetScrollDefaultColumnDisplay); an unset field means "use the config value".
+ * Consumed daemon-side: the values are layered onto the scrolling engine's
+ * per-screen parameters (config stays the base, the rule wins where present),
+ * the same way @ref ContextTilingParams is layered onto the autotile override
+ * map. Resolved by @c LayoutRegistry::resolveContextScrollingParams.
+ */
+struct ContextScrollingParams
+{
+    /// Width a newly-opened column takes, as a fraction of the work area
+    /// (0.05-1.0). The wire value is the fraction; the editor shows a percent.
+    std::optional<double> defaultColumnWidth;
+    /// When the viewport re-centres on the focused column (0 = never,
+    /// 1 = always, 2 = on overflow); the resolver maps the wire token to this
+    /// int so the daemon stores the same value the config store uses.
+    std::optional<int> centerFocusedColumn;
+    /// How a newly-opened column lays its windows out (0 = normal, 1 = tabbed).
+    std::optional<int> defaultColumnDisplay;
+
+    bool isEmpty() const
+    {
+        return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay;
+    }
+};
+
+/**
  * @brief Canonical wire-string for an @ref AssignmentEntry::Mode.
  *
  * The wire vocabulary lives next to the enum so every persister/consumer
@@ -323,7 +379,7 @@ inline QString modeToWireString(AssignmentEntry::Mode mode)
     // (`engineModeOptions().contains(...)`), so a malformed disable rule
     // fails load loudly. NOTE: `SetEngineMode`'s validator only checks
     // `hasNonEmptyString` (open-vocabulary by design — see its descriptor
-    // validator in `libs/phosphor-rules/src/ruleaction.cpp`), so a
+    // validator in `libs/phosphor-rules/src/ruleaction_builtins_engine.cpp`), so a
     // malformed assignment rule survives load but is silently coerced
     // back to Snapping at consumption via
     // `entryFromRuleMatchActions → modeFromWireString → nullopt`. The

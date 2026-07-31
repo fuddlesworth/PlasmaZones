@@ -5,6 +5,7 @@
 
 #include <phosphorsnapengine_export.h>
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorEngine/IVirtualDesktopManager.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
@@ -78,14 +79,21 @@ public:
     /// Public for symmetry with AutotileEngine's analogous accessors and
     /// to keep the engine's "current context" surface coherent — the
     /// daemon uses `Daemon::currentDesktop()` / `Daemon::currentActivity()`
-    /// directly rather than going through the engine. The only current
-    /// in-tree caller of these two is `lifecycle.cpp` (snap-engine-
-    /// internal restore logic); kept public so a future adaptor that
-    /// wants the engine's own view (e.g. for a per-engine OSD) doesn't
-    /// have to wire its own VDM.
+    /// directly rather than going through the engine.
+    /// `currentActivity()` is used throughout the engine's own sources
+    /// (calculate, lifecycle, navigation_actions, navigation_crosssurface,
+    /// SnapEngine); the no-arg `currentVirtualDesktop()` has no in-tree
+    /// caller. Note the fallback it mirrors lives in IVirtualDesktopManager,
+    /// not here: currentVirtualDesktopForScreen goes straight to the VDM's
+    /// currentDesktopForScreen and never routes through this accessor. Both
+    /// stay public so a future adaptor that
+    /// wants the engine's own view (e.g. for a per-engine OSD) doesn't have
+    /// to wire its own VDM.
     int currentVirtualDesktop() const;
     /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
-    /// desktops, #648), falling back to the global currentVirtualDesktop().
+    /// desktops, #648). Goes STRAIGHT to the VDM's currentDesktopForScreen —
+    /// the per-screen-to-global fallback lives inside IVirtualDesktopManager,
+    /// not here, so this never routes through currentVirtualDesktop().
     int currentVirtualDesktopForScreen(const QString& screenId) const;
     QString currentActivity() const;
 
@@ -237,6 +245,20 @@ public:
         m_managedRestorePredicate = std::move(predicate);
     }
 
+    /// Live placement-mode resolver injected by the daemon (its
+    /// ScreenModeRouter): engine-live-set-first with cascade fallback and
+    /// the tiling-mode→Snapping downgrade for unclaimed screens. The
+    /// capture gate consults it so a screen ENTERING a tiling mode (the
+    /// cascade already flipped but no engine claims it yet) can still
+    /// presave its live snap state; the raw cascade would refuse it and
+    /// the presave would silently write nothing. Falls back to the
+    /// registry's cascade when unset. Clear with {} at teardown.
+    using LiveModeResolver = std::function<PhosphorZones::AssignmentEntry::Mode(const QString& screenId)>;
+    void setLiveModeResolver(LiveModeResolver resolver)
+    {
+        m_liveModeResolver = std::move(resolver);
+    }
+
     /**
      * @brief Predicate deciding whether an opening window should start FLOATING
      *        because a "Float this app" rule matched it. Daemon-injected,
@@ -246,7 +268,10 @@ public:
      *        lifetime contract as setRestorePositionPredicate — clear with `{}`
      *        before destroying any state the closure captured.
      */
-    using FloatPredicate = std::function<bool(const QString& windowId)>;
+    /// Takes the OPENING SCREEN as well, so the resolver can stamp ScreenId
+    /// and derive Mode — without which a rule pairing either with Float is
+    /// silently inert.
+    using FloatPredicate = std::function<bool(const QString& windowId, const QString& screenId)>;
 
     void setFloatPredicate(FloatPredicate predicate)
     {
@@ -615,6 +640,19 @@ public:
     /// Unified placement model — report this window's current snap state
     /// (snapped or floated) for persistence, or nullopt if untracked.
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
+
+    /// capturePlacement with the mode gate resolved at an EXPLICIT desktop.
+    ///
+    /// The public capture gates on the window's screen at its CURRENT desktop,
+    /// which is the right question for the periodic refresh but the wrong one
+    /// for a cross-desktop handoff: the daemon routed the handoff here because
+    /// (screen, toDesktop) resolves to Snapping, yet the screen's visible
+    /// desktop may be a tiling one, so the current-desktop gate refused the
+    /// capture and the durable record silently kept the OLD desktop.
+    /// @p gateDesktop <= 0 means "the screen's current desktop" (the public
+    /// capture's behaviour, including its live-resolver fast path).
+    std::optional<PhosphorEngine::WindowPlacement> capturePlacementAtDesktop(const QString& windowId,
+                                                                             int gateDesktop) const;
 
     /// Snap every unmanaged window on the screen. The IPlacementEngine
     /// override takes PhosphorEngine::NavigationContext; coexists with the existing
@@ -991,13 +1029,14 @@ private:
     /// no neighbour desktop or the window is not snapped.
     bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
 
-    /// If the neighbour OUTPUT in @p direction is a DIFFERENT mode (autotile),
-    /// defer to the daemon cross-mode handoff and return true: a move
-    /// (@p swap false) emits crossModeMoveRequested so autotile inserts the
-    /// window into its stack; a swap (@p swap true) emits crossModeSwapRequested
-    /// so it trades the window with the neighbour's entry-edge tile. Returns
-    /// false when there is no neighbour output or it is also snap-mode (handled
-    /// by the resolver's entry-zone / cross-output-swap path).
+    /// If the neighbour OUTPUT in @p direction is a DIFFERENT mode (autotile or
+    /// scrolling), defer to the daemon cross-mode handoff and return true: a move
+    /// (@p swap false) emits crossModeMoveRequested so the tiling engine inserts
+    /// the window into its stack or strip; a swap (@p swap true) emits
+    /// crossModeSwapRequested so it trades the window with the neighbour's
+    /// entry-edge tile or column. Returns false when there is no neighbour output
+    /// or it is also snap-mode (handled by the resolver's entry-zone /
+    /// cross-output-swap path).
     bool tryCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId, bool swap);
 
     /// Focus a window on the virtual desktop adjacent to the current one in
@@ -1079,6 +1118,11 @@ private:
     // while empty the engine restores snapped records unconditionally — the
     // historical behaviour unit tests rely on. See ManagedRestorePredicate.
     ManagedRestorePredicate m_managedRestorePredicate{};
+
+    // Live placement-mode resolver. Empty until the daemon wires it; while empty
+    // the engine falls back to the layout registry's cascade. See LiveModeResolver
+    // doc above.
+    LiveModeResolver m_liveModeResolver{};
 
     // Rule-driven open-floating gate. Empty until the daemon wires it; while
     // empty no window is rule-floated. See FloatPredicate doc above.

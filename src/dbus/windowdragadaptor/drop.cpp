@@ -3,6 +3,7 @@
 
 #include "windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
@@ -56,8 +57,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // If a drag-insert preview is live, finalize it: commit the reorder so the
     // dragged window's final geometry is applied on the next retile. Snapping
     // logic is skipped entirely — the window's place in the stack IS the drop.
-    if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-        m_autotileEngine->commitDragInsertPreview(); // commit, not cancel — drop finalizes the reorder
+    // Deliberately autotile-only: the strip has no drag-insert preview
+    // (ScrollEngine keeps the IPlacementEngine no-op defaults).
+    if (settleDragInsertPreviewAt(cursorX, cursorY)) {
         hideOverlayAndSelector();
         resetDragState();
         return;
@@ -133,6 +135,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     if (useOverlayZone && releaseScreen && m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId)) {
         useOverlayZone = false;
     }
+    // Same rule for a scrolling-mode release screen: the strip owns
+    // placement there, a manual drag-snap would fight it.
+    if (useOverlayZone && releaseScreen && m_scrollEngine && m_scrollEngine->isActiveOnScreen(releaseScreenId)) {
+        useOverlayZone = false;
+    }
 
     // Cross-screen drag: when the window's owning engine differs from the
     // engine that owns the release screen, run the IPlacementEngine handoff
@@ -154,42 +161,68 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         const QString snapScreen = snapEngine ? snapEngine->screenForTrackedWindow(windowId) : QString();
         const QString autotileScreen =
             m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();
+        const QString scrollScreen = m_scrollEngine ? m_scrollEngine->screenForTrackedWindow(windowId) : QString();
         PhosphorEngine::IPlacementEngine* sourceEngine = nullptr;
         QString sourceScreen;
-        if (!snapScreen.isEmpty() && snapScreen != releaseScreenId) {
+        // screensMatch, not raw !=: an engine may hold the connector-name form
+        // (or a "/vs:" virtual-screen variant) of the very screen the drop
+        // landed on, and a raw compare would read that as a cross-screen move
+        // and release the window's tracking on its own screen.
+        const auto isCrossScreen = [&releaseScreenId](const QString& engineScreen) {
+            return !engineScreen.isEmpty()
+                && !PhosphorScreens::ScreenIdentity::screensMatch(engineScreen, releaseScreenId);
+        };
+        if (isCrossScreen(snapScreen)) {
             sourceEngine = snapEngine;
             sourceScreen = snapScreen;
-        } else if (!autotileScreen.isEmpty() && autotileScreen != releaseScreenId) {
+        } else if (isCrossScreen(autotileScreen)) {
             sourceEngine = m_autotileEngine;
             sourceScreen = autotileScreen;
+        } else if (isCrossScreen(scrollScreen)) {
+            sourceEngine = m_scrollEngine;
+            sourceScreen = scrollScreen;
         }
         if (sourceEngine) {
-            const bool destIsAutotile = m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId);
-            PhosphorEngine::IPlacementEngine* destEngine = destIsAutotile ? m_autotileEngine : snapEngine;
+            // Destination = whichever tiling-family engine claims the release
+            // screen, else snap (the mode fallback for unmanaged screens).
+            PhosphorEngine::IPlacementEngine* destEngine = snapEngine;
+            if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId)) {
+                destEngine = m_autotileEngine;
+            } else if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(releaseScreenId)) {
+                destEngine = m_scrollEngine;
+            }
             const bool engineTypeChanged = destEngine && destEngine != sourceEngine;
 
-            sourceEngine->handoffRelease(windowId);
-            qCInfo(lcDbusWindow) << "Cross-screen drag: released" << sourceEngine->engineId() << "state for" << windowId
-                                 << "from" << sourceScreen << "to" << releaseScreenId;
+            const QSize windowMinSize = sourceEngine->windowMinimumSize(windowId);
+            qCInfo(lcDbusWindow) << "Cross-screen drag: releasing" << sourceEngine->engineId() << "state for"
+                                 << windowId << "from" << sourceScreen << "to" << releaseScreenId;
 
             // Engine-type change: hand off to the destination so it can
             // adopt the window. The committing snap/tile path below may
             // still finalize the placement — handoffReceive only sets up
-            // tracking with the right floating disposition.
+            // tracking with the right floating disposition. Guarded: a
+            // refused receive on an engine-owned release screen has no
+            // later re-adopter (the commit branches are gated on
+            // useOverlayZone/capturedZoneId), so the helper's re-home into
+            // the source is the only thing keeping the window managed.
             if (engineTypeChanged) {
                 PhosphorEngine::IPlacementEngine::HandoffContext ctx;
                 ctx.windowId = windowId;
                 ctx.toScreenId = releaseScreenId;
                 ctx.fromEngineId = sourceEngine->engineId();
                 ctx.dropPos = QPoint(cursorX, cursorY);
+                ctx.sourceGeometry = capturedOriginalGeometry;
+                ctx.minSize = windowMinSize;
                 ctx.wasFloating = m_windowTracking->service()->isWindowFloating(windowId);
                 if (capturedWasSnapped && !ctx.wasFloating && !capturedZoneId.isEmpty()) {
                     // sourceZoneIds is informational for receiving engines —
-                    // populated from the pre-drop captured zone since
-                    // handoffRelease has already cleared live tracking.
+                    // populated from the pre-drop captured zone (the
+                    // helper's release clears live tracking first).
                     ctx.sourceZoneIds = QStringList{capturedZoneId};
                 }
-                destEngine->handoffReceive(ctx);
+                WindowTrackingInternal::guardedHandoff(sourceEngine, destEngine, ctx, sourceScreen);
+            } else {
+                sourceEngine->handoffRelease(windowId);
             }
         }
     }
@@ -236,7 +269,14 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // handle (empty screenId / desktop=0 / activity=""), which
         // short-circuits to "not disabled" and lets the snap path
         // proceed against stale defaults.
-        if (screen && !selectorScreenLocked && m_contextResolver && m_layoutManager
+        // useOverlayZone carries the engine-ownership verdict for the RELEASE
+        // screen (computed above). It gated only the hover-zone fallback, so a
+        // flick onto an engine-owned screen that released before any 30 Hz
+        // updateDragCursor tick flipped the policy still reached this branch with
+        // bypassReason None: endDrag delegated to dragStopped, which committed a
+        // snap, re-recorded the intent and could even reassign the active layout
+        // on a screen the autotile stack or the scrolling strip owns.
+        if (screen && useOverlayZone && !selectorScreenLocked && m_contextResolver && m_layoutManager
             && !m_contextResolver->isDisabled(selectorCtx)) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(selectorScreenId);
             if (zoneGeom.isValid()) {

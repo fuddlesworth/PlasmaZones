@@ -331,6 +331,51 @@ void SnapEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         return !key.screenId.isEmpty()
             && PhosphorIdentity::VirtualScreenId::samePhysical(key.screenId, physicalScreenId);
     };
+    // Unlike the desktop / activity prunes, whose contexts are gone along with
+    // everything that could observe them, the windows here are ALIVE: only their
+    // output was unplugged, and KWin relocates them to a surviving monitor.
+    // Deleting their stores below drops the zone assignments, so a silent prune
+    // would leave every zone-state consumer (the effect via the D-Bus
+    // windowZoneChanged relay, autotile's onWindowZoneChanged, the daemon's
+    // snap-assist dismissal) still believing the window occupies a zone on a
+    // monitor that no longer exists. Route the drop through the tracking
+    // service's unassign — the same path the interactive unsnap uses — so the
+    // per-window notification and the DirtyZoneAssignments mark both happen,
+    // matching WindowTrackingService::pruneMigratedWindows, the other bulk prune
+    // of live windows' assignments. Two passes: unassignWindow resolves the
+    // owning store through this engine's reverse map, which the removal clears.
+    // FLOATING windows on the removed output need the same treatment for the
+    // same reason: their float bit dies with the store, silently, so every
+    // consumer of the float state keeps believing they float on a monitor
+    // that no longer exists. Collected separately because they carry no zone
+    // assignment for unassignWindow to clear — and OUTSIDE the m_windowTracker
+    // guard, because the emission does not use the tracker and a tracker-less
+    // engine's subscribers need the correction just as much.
+    //
+    // Each pair carries the STATE's own screenId, not physicalScreenId:
+    // `matches` deliberately spans a physical output's virtual sub-screens
+    // ("conn/vs:N"), so emitting the physical id would hand every subscriber
+    // that keys on screenId — the adaptor's float bookkeeping, the effect's
+    // per-screen float cache — a screen the window never floated on.
+    QList<QPair<QString, QString>> floatedWindows;
+    QStringList assignedWindows;
+    const auto& allStates = m_states.states();
+    for (auto it = allStates.constBegin(); it != allStates.constEnd(); ++it) {
+        if (it.value() && matches(it.key())) {
+            assignedWindows += it.value()->snappedWindows();
+            for (const QString& windowId : it.value()->floatingWindows()) {
+                floatedWindows.append({windowId, it.key().screenId});
+            }
+        }
+    }
+    if (m_windowTracker) {
+        for (const QString& windowId : std::as_const(assignedWindows)) {
+            m_windowTracker->unassignWindow(windowId);
+        }
+    }
+    for (const auto& [windowId, stateScreenId] : std::as_const(floatedWindows)) {
+        Q_EMIT windowFloatingChanged(windowId, false, stateScreenId);
+    }
     m_states.removeStatesIf(
         [&](const PhosphorEngine::PlacementStateKey& key, SnapState*) {
             return matches(key);
@@ -399,6 +444,12 @@ void SnapEngine::setAutotileEngine(PhosphorEngine::IPlacementEngine* engine)
     auto* obj = dynamic_cast<QObject*>(engine);
     Q_ASSERT(!engine || obj);
     if (m_autotileEngineObj) {
+        // Same caveat setZoneAdjacencyResolver and setNavigationStateProvider
+        // carry: this severs EVERY destroyed-guard this engine holds on that
+        // sender, not just the one installed below. Correct only while no
+        // other member connects to the same object's destroyed signal — if one
+        // ever does, all three sites must move to context/handle-based
+        // disconnects together.
         disconnect(m_autotileEngineObj, &QObject::destroyed, this, nullptr);
     }
     m_autotileEngineObj = obj;
@@ -486,12 +537,22 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
         });
     m_targetResolver->setCrossSurfaceResolver(m_crossSurfaceResolver);
     // The resolver lacks the current (desktop, activity) context needed to read a
-    // neighbour output's mode; supply it so move/swap cross-output paths defer an
-    // autotile neighbour to the cross-mode handoff instead of snapping onto it.
-    m_targetResolver->setNeighbourAutotileProvider([this](const QString& screenId) {
+    // neighbour output's mode; supply it so move/swap cross-output paths defer a
+    // tiling neighbour to the cross-mode handoff instead of snapping onto it.
+    // The question is "is the neighbour NOT snapping", not "is it autotile": with
+    // three engines a Scrolling neighbour has no snap zones either, and testing
+    // for Autotile alone let snap navigation move and swap windows onto a
+    // scroll-owned output. The router-backed live resolver answers first when
+    // wired (it carries the unclaimed-tiling-mode downgrade to Snapping, so a
+    // screen no engine has claimed is correctly treated as snap); the registry
+    // cascade is the fallback for the unwired case.
+    m_targetResolver->setNeighbourTilingProvider([this](const QString& screenId) {
+        if (m_liveModeResolver) {
+            return m_liveModeResolver(screenId) != PhosphorZones::AssignmentEntry::Mode::Snapping;
+        }
         return m_layoutManager
             && m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
-            == PhosphorZones::AssignmentEntry::Autotile;
+            != PhosphorZones::AssignmentEntry::Mode::Snapping;
     });
     return m_targetResolver.get();
 }
@@ -519,8 +580,16 @@ void SnapEngine::setNavigationStateProvider(INavigationStateProvider* provider)
 
 bool SnapEngine::isActiveOnScreen(const QString& screenId) const
 {
-    // SnapEngine is active on any screen where AutotileEngine is NOT active.
-    // Guard via QPointer: if the QObject was destroyed, m_autotileEngineTyped is stale.
+    // Router-backed live resolver first: with THREE engines, "not autotile"
+    // no longer implies snapping — a scrolling screen must not be claimed.
+    // The resolver carries the router's downgrade semantics (an unclaimed
+    // tiling mode resolves to Snapping), which is exactly the live truth.
+    if (m_liveModeResolver) {
+        return m_liveModeResolver(screenId) == PhosphorZones::AssignmentEntry::Mode::Snapping;
+    }
+    // Legacy cross-wire fallback (resolver not injected, e.g. unit tests):
+    // active wherever AutotileEngine is not. Guard via QPointer: if the
+    // QObject was destroyed, m_autotileEngineTyped is stale.
     if (m_autotileEngineObj && m_autotileEngineTyped) {
         return !m_autotileEngineTyped->isActiveOnScreen(screenId);
     }

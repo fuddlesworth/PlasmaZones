@@ -162,12 +162,12 @@ QString fieldDescription(Field f)
     case Field::CaptionNormal:
         return PhosphorI18n::tr("The window's title without the application-name suffix the window manager adds.");
     case Field::IsFloating:
-        return PhosphorI18n::tr("Whether the window has been floated out of tiling (snap or autotile).");
+        return PhosphorI18n::tr("Whether the window has been floated out of tiling (snapping or tiling mode).");
     case Field::IsSnapped:
         return PhosphorI18n::tr(
             "Whether the window is snapped into a zone (manual-zone mode, where tiled windows are not snapped).");
     case Field::IsTiled:
-        return PhosphorI18n::tr("Whether the window is managed by the autotile engine.");
+        return PhosphorI18n::tr("Whether the window is managed by the tiling engine.");
     case Field::Zone:
         return PhosphorI18n::tr("The zone the window is snapped into (manual-zone mode only).");
     case Field::ScreenId:
@@ -177,7 +177,7 @@ QString fieldDescription(Field f)
     case Field::Activity:
         return PhosphorI18n::tr("The KDE Activity the window is on.");
     case Field::Mode:
-        return PhosphorI18n::tr("The engine mode the window is placed by (snapping or tiling).");
+        return PhosphorI18n::tr("The engine mode the window is placed by (snapping, tiling or scrolling).");
     case Field::TiledWindowCount:
         return PhosphorI18n::tr(
             "How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as "
@@ -275,7 +275,8 @@ struct ClosedTokenOption
 QList<ClosedTokenOption> modeOptions()
 {
     return {{QStringLiteral("snapping"), PhosphorI18n::tr("Snapping")},
-            {QStringLiteral("tiling"), PhosphorI18n::tr("Tiling")}};
+            {QStringLiteral("tiling"), PhosphorI18n::tr("Tiling")},
+            {QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling", "tiling mode name")}};
 }
 QList<ClosedTokenOption> orientationOptions()
 {
@@ -324,10 +325,13 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Snapping");
         }
         if (wireValue == QLatin1String("autotile")) {
-            return PhosphorI18n::tr("Autotile");
+            // Label "Tiling" like the Mode predicate options — one
+            // user-facing word for the engine; only the wire tokens differ
+            // ("autotile" action vs "tiling" match, a frozen vocabulary).
+            return PhosphorI18n::tr("Tiling");
         }
         if (wireValue == QLatin1String("scrolling")) {
-            return PhosphorI18n::tr("Scrolling");
+            return PhosphorI18n::tr("Scrolling", "tiling mode name");
         }
     }
     if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
@@ -363,6 +367,33 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
         }
         if (wireValue == PhosphorRules::DragBehaviorToken::Reorder) {
             return PhosphorI18n::tr("Reorder in stack");
+        }
+    }
+    if (type == ActionType::SetCenterFocusedColumn && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::CenterFocusedColumnToken::Never) {
+            return PhosphorI18n::tr("Never");
+        }
+        if (wireValue == PhosphorRules::CenterFocusedColumnToken::Always) {
+            return PhosphorI18n::tr("Always");
+        }
+        if (wireValue == PhosphorRules::CenterFocusedColumnToken::OnOverflow) {
+            return PhosphorI18n::tr("On overflow");
+        }
+    }
+    if (type == ActionType::SetScrollDefaultColumnDisplay && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::ColumnDisplayToken::Normal) {
+            return PhosphorI18n::tr("Normal");
+        }
+        if (wireValue == PhosphorRules::ColumnDisplayToken::Tabbed) {
+            return PhosphorI18n::tr("Tabbed");
+        }
+    }
+    if (type == ActionType::OpenColumnPlacement && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::ColumnPlacementToken::NewColumn) {
+            return PhosphorI18n::tr("New column");
+        }
+        if (wireValue == PhosphorRules::ColumnPlacementToken::Consume) {
+            return PhosphorI18n::tr("Consume into focused column");
         }
     }
     if (type == ActionType::SetWindowLayer && key == ActionParam::Value) {
@@ -486,7 +517,8 @@ QVariantList matchFields()
             }
             entry[QStringLiteral("options")] = options;
         } else if (f == Field::ActiveLayout) {
-            // The value is a layout id (snap UUID or "autotile:<algo>"). The QML
+            // The value is a layout id (snap UUID, "autotile:<algo>", or the
+            // bare "scrolling:" sentinel a Scrolling assignment carries). The QML
             // editor swaps this for a layout-picker ComboBox driven by
             // `settingsController.layouts` (like the screen / activity pickers), so
             // the user picks a friendly name while the wire value stays the id.

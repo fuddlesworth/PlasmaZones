@@ -167,11 +167,76 @@ private Q_SLOTS:
     // toggle the autotile engine clears its tiled bit BEFORE the compositor
     // repositions the window, so when captureWindowPlacement runs (from
     // setWindowFloating) the live frame still IS the tile rect and the
-    // isWindowAutotileTiled gate no longer refuses it. The capture must
+    // isWindowEngineTiled gate no longer refuses it. The capture must
     // compare against the engine's remembered last-applied rect and skip the
     // free-geometry write, or applyGeometryForFloat (which runs AFTER the
     // capture) reads the poisoned value back and "restores" the window onto
     // its own tile — permanently overwriting the genuine float-back.
+    void testScrollArmRefusesStillTiledFrameAsFloatBack()
+    {
+        // isFrameStillOnTileRect has TWO arms, one per tiling engine, and its
+        // own comment says "Scroll-managed windows carry the same float-toggle
+        // capture edge: the strip rect must never be adopted as float-back
+        // geometry." Every other test in this file wires the stub into the
+        // AUTOTILE slot and passes nullptr for scroll, so deleting the scroll
+        // arm failed nothing. This is the same scenario as
+        // testRefusesStillTiledFrameAsFloatBack with the stub in the scroll slot.
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        // Declared BEFORE `parent` (and therefore before wta) so the stub
+        // outlives the adaptor on EVERY exit path — an early QVERIFY failure
+        // skips the explicit setEngines detach at the tail, and while the
+        // adaptor's engine ref is a self-nulling QPointer, outliving it makes
+        // the teardown safety structural rather than incidental. Same reason
+        // the sibling tests spell this out.
+        StubTileRectEngine scrollEngine;
+        std::unique_ptr<SnapEngine> snap;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        // Autotile slot deliberately empty: only the SCROLL arm may answer here.
+        wta->setEngines(snap.get(), nullptr, &scrollEngine);
+
+        const QString windowId = QStringLiteral("ghostty|inst-strip");
+        const QString screenId = QStringLiteral("DP-1");
+        const QString appId = wta->service()->currentAppIdFor(windowId);
+        const QRect stripRect(1540, 8, 1524, 829);
+        const QRect realFreeBack(1743, 795, 800, 628);
+
+        wta->service()->recordFreeGeometry(windowId, screenId, realFreeBack, true);
+
+        snap->snapState()->setFloatingOnScreen(windowId, screenId, 0);
+        wta->setFrameGeometry(windowId, stripRect.x(), stripRect.y(), stripRect.width(), stripRect.height());
+        scrollEngine.managedRect = stripRect;
+
+        wta->captureWindowPlacement(windowId);
+
+        // The strip rect must be refused: the genuine float-back survives.
+        auto rec = wta->service()->placementStore().peek(windowId, appId);
+        QVERIFY(rec);
+        QCOMPARE(rec->freeGeometryFor(screenId), realFreeBack);
+
+        // Positive control: once the frame leaves the strip rect the capture
+        // adopts it, so the refusal above is a real discrimination rather than
+        // the capture never writing anything.
+        const QRect movedFrame(600, 400, 900, 700);
+        wta->setFrameGeometry(windowId, movedFrame.x(), movedFrame.y(), movedFrame.width(), movedFrame.height());
+        wta->captureWindowPlacement(windowId);
+
+        rec = wta->service()->placementStore().peek(windowId, appId);
+        QVERIFY(rec);
+        QCOMPARE(rec->freeGeometryFor(screenId), movedFrame);
+
+        wta->setEngines(snap.get(), nullptr, nullptr);
+    }
+
     void testRefusesStillTiledFrameAsFloatBack()
     {
         PhosphorScreens::FakeScreenProvider fake;
@@ -197,7 +262,7 @@ private Q_SLOTS:
         snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap.get());
-        wta->setEngines(snap.get(), &tileEngine);
+        wta->setEngines(snap.get(), &tileEngine, nullptr);
 
         const QString windowId = QStringLiteral("ghostty|inst-tile");
         const QString screenId = QStringLiteral("DP-1");
@@ -231,7 +296,7 @@ private Q_SLOTS:
         QVERIFY(rec);
         QCOMPARE(rec->freeGeometryFor(screenId), movedFrame);
 
-        wta->setEngines(snap.get(), nullptr);
+        wta->setEngines(snap.get(), nullptr, nullptr);
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
         snap.reset();
@@ -264,7 +329,7 @@ private Q_SLOTS:
         snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap.get());
-        wta->setEngines(snap.get(), nullptr);
+        wta->setEngines(snap.get(), nullptr, nullptr);
 
         const QString windowId = QStringLiteral("app|handoff");
         const QString appId = wta->service()->currentAppIdFor(windowId);
@@ -298,6 +363,7 @@ private Q_SLOTS:
 
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
+        wta->setEngines(nullptr, nullptr, nullptr); // symmetric with the siblings; the QPointer self-null is incidental
         snap.reset();
     }
 
@@ -326,7 +392,7 @@ private Q_SLOTS:
         snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap.get());
-        wta->setEngines(snap.get(), nullptr);
+        wta->setEngines(snap.get(), nullptr, nullptr);
 
         const QString instanceId = QStringLiteral("minimized-instance");
         const QString windowId = QStringLiteral("app|minimized-instance");
@@ -378,7 +444,7 @@ private Q_SLOTS:
         QVERIFY(stored);
         QCOMPARE(stored->slotFor(snap->engineId()).state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
 
-        wta->setEngines(snap.get(), nullptr);
+        wta->setEngines(snap.get(), nullptr, nullptr);
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
         snap.reset();
@@ -524,22 +590,30 @@ private Q_SLOTS:
         snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap.get());
-        wta->setEngines(snap.get(), &tileEngine);
+        wta->setEngines(snap.get(), &tileEngine, nullptr);
 
         const QString windowId = QStringLiteral("app|closed-on-tile");
         const QString screenId = QStringLiteral("DP-1");
         const QString appId = wta->service()->currentAppIdFor(windowId);
         const QRect tileRect(1540, 8, 1524, 829);
 
+        // Seed a genuine free-geometry record first: the guard must
+        // PRESERVE it, and without the seed the assert below would only
+        // prove "did not create", passing even if the guard clobbered an
+        // existing record with the tile rect.
+        const QRect realFreeBack(120, 90, 800, 600);
+        wta->service()->recordFreeGeometry(windowId, screenId, realFreeBack, true);
+
         // Untracked by snap (no float/zone state) and the stub tile engine's
         // capturePlacement default returns nullopt — the close capture takes
         // the engine-miss fallback. The frame still equals the remembered
-        // tile rect, so the fallback must record NOTHING.
+        // tile rect, so the fallback must record NOTHING new.
         wta->setFrameGeometry(windowId, tileRect.x(), tileRect.y(), tileRect.width(), tileRect.height());
         tileEngine.managedRect = tileRect;
         wta->captureWindowPlacement(windowId, screenId);
-        QVERIFY2(!wta->service()->placementStore().peek(windowId, appId),
-                 "a close frame still on the tile rect must not become the reopen float-back");
+        const auto seeded = wta->service()->placementStore().peek(windowId, appId);
+        QVERIFY2(seeded && seeded->freeGeometryFor(screenId) == realFreeBack,
+                 "a close frame still on the tile rect must not clobber the recorded free geometry");
 
         // A close frame off the tile rect records the genuine free position.
         const QRect freeFrame(600, 400, 900, 700);
@@ -549,7 +623,7 @@ private Q_SLOTS:
         QVERIFY(rec);
         QCOMPARE(rec->freeGeometryFor(screenId), freeFrame);
 
-        wta->setEngines(snap.get(), nullptr);
+        wta->setEngines(snap.get(), nullptr, nullptr);
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
         snap.reset();

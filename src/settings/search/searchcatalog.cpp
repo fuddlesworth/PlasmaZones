@@ -141,6 +141,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("tiling-algorithm"),
                             {PhosphorI18n::tr("algorithm"), PhosphorI18n::tr("bsp"), PhosphorI18n::tr("binary"),
                              PhosphorI18n::tr("spiral"), PhosphorI18n::tr("master"), PhosphorI18n::tr("stack")});
+    search->setPageKeywords(QStringLiteral("scrolling-behavior"),
+                            {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("column"),
+                             PhosphorI18n::tr("strip"),
+                             // Proper noun (the upstream compositor), deliberately not translated —
+                             // the one exception to this section's tr-for-extraction rule.
+                             QStringLiteral("niri"), PhosphorI18n::tr("tab")});
     search->setPageKeywords(QStringLiteral("tiling-ordering"),
                             {PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
     search->setPageKeywords(QStringLiteral("tiling-shortcuts"),
@@ -553,6 +559,39 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Master count"),
                {PhosphorI18n::tr("master"), PhosphorI18n::tr("center"), PhosphorI18n::tr("count"),
                 PhosphorI18n::tr("number")});
+
+    // Tiling › Scrolling
+    addSection(search, QStringLiteral("scrolling-behavior"), QStringLiteral("focusAndView"),
+               PhosphorI18n::tr("Focus and view"));
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("centerFocusedColumn"),
+               PhosphorI18n::tr("Center the focused column"),
+               {PhosphorI18n::tr("center"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("column"),
+                PhosphorI18n::tr("scroll")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("alwaysCenterSingleColumn"),
+               PhosphorI18n::tr("Center a lone column"),
+               {PhosphorI18n::tr("center"), PhosphorI18n::tr("single"), PhosphorI18n::tr("column")});
+    addSection(search, QStringLiteral("scrolling-behavior"), QStringLiteral("newColumns"),
+               PhosphorI18n::tr("New columns"));
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("defaultColumnWidthKind"),
+               PhosphorI18n::tr("Default width"),
+               {PhosphorI18n::tr("width"), PhosphorI18n::tr("column"), PhosphorI18n::tr("proportion"),
+                PhosphorI18n::tr("pixels")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("defaultColumnWidthProportion"),
+               PhosphorI18n::tr("Proportion of the screen"),
+               {PhosphorI18n::tr("width"), PhosphorI18n::tr("proportion"), PhosphorI18n::tr("percent")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("defaultColumnWidthFixed"),
+               PhosphorI18n::tr("Fixed width"), {PhosphorI18n::tr("width"), PhosphorI18n::tr("pixels")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("defaultColumnDisplay"),
+               PhosphorI18n::tr("Open new columns as"),
+               {PhosphorI18n::tr("tabbed"), PhosphorI18n::tr("tabs"), PhosphorI18n::tr("column")});
+    addSection(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingPresets"),
+               PhosphorI18n::tr("Width and height presets"));
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("presetColumnWidths"),
+               PhosphorI18n::tr("Column widths"),
+               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("width"), PhosphorI18n::tr("cycle")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("presetWindowHeights"),
+               PhosphorI18n::tr("Window heights"),
+               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("height"), PhosphorI18n::tr("cycle")});
 
     // Tiling › Window (behaviour rows)
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("alwaysReinsertOnDrag"),

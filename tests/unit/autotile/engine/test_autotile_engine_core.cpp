@@ -691,8 +691,7 @@ private Q_SLOTS:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
-        PlasmaZones::StubZoneDetector zoneDetector;
-        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
 
         AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("DP-1");
@@ -732,8 +731,7 @@ private Q_SLOTS:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
-        PlasmaZones::StubZoneDetector zoneDetector;
-        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
         PhosphorEngine::WindowRegistry registry;
         AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setWindowRegistry(&registry);
@@ -812,8 +810,7 @@ private Q_SLOTS:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
-        PlasmaZones::StubZoneDetector zoneDetector;
-        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
         PhosphorEngine::WindowRegistry registry;
         AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setWindowRegistry(&registry);

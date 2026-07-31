@@ -31,7 +31,17 @@ inline constexpr QLatin1String Settings("org.plasmazones.Settings");
 inline constexpr QLatin1String WindowDrag("org.plasmazones.WindowDrag");
 inline constexpr QLatin1String WindowTracking("org.plasmazones.WindowTracking");
 inline constexpr QLatin1String Overlay("org.plasmazones.Overlay");
+// Shared tiling-family engine pipeline (autotile + scrolling). Renamed
+// from org.plasmazones.Autotile when the scrolling engine joined; the
+// project ships daemon and effect together, so no wire compatibility
+// alias is kept.
+inline constexpr QLatin1String Tiling("org.plasmazones.Tiling");
+// Engine-specific sibling interfaces (autotile verbs / scrolling screen
+// set). Listed so this namespace stays a complete index of published
+// interfaces even though the adaptors' Q_CLASSINFO must repeat the
+// literal (macro argument).
 inline constexpr QLatin1String Autotile("org.plasmazones.Autotile");
+inline constexpr QLatin1String Scrolling("org.plasmazones.Scrolling");
 inline constexpr QLatin1String LayoutRegistry("org.plasmazones.LayoutRegistry");
 inline constexpr QLatin1String Screen("org.plasmazones.Screen");
 inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
@@ -141,8 +151,14 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       path resolves live. A stale effect sending an older form would fail
 //       marshalling, so the bridge handshake rejects mismatched peers up front.
 //
-inline constexpr int ApiVersion = 4;
-inline constexpr int MinPeerApiVersion = 4;
+//   v5: the org.plasmazones.Autotile lifecycle surface moved wholesale to
+//       the engine-neutral org.plasmazones.Tiling interface (property
+//       managedScreens, signal managedScreensChanged), with engine-specific
+//       verbs split onto org.plasmazones.Autotile / org.plasmazones.Scrolling.
+//       A v4 effect would pass the handshake and then silently receive
+//       nothing on the renamed surface, so both sides must move together.
+inline constexpr int ApiVersion = 5;
+inline constexpr int MinPeerApiVersion = 5;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

@@ -55,6 +55,31 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+/// Whether an imported settings blob is one this build can migrate FORWARD to
+/// the current schema.
+///
+/// The migration chain cannot answer this on its own: it reports success both
+/// for a blob already at the target and for one stamped ABOVE it (the loop
+/// breaks on `readVersion >= target` and an unchanged version returns true).
+/// A newer blob accepted as "migrated" then reads as every moved key absent,
+/// load() substitutes schema defaults, and the first Save stamps this version
+/// over the user's settings — with the import backup already removed.
+///
+/// An ABSENT version stamp is treated as upgradable: that is a pre-versioning
+/// (v1-era) config, exactly what the chain exists to lift.
+bool importedBlobIsUpgradable(const QJsonObject& root)
+{
+    const QJsonValue version = root.value(QLatin1String("_version"));
+    if (!version.isDouble()) {
+        return true;
+    }
+    return version.toInt() <= PlasmaZones::ConfigSchemaVersion;
+}
+
+} // namespace
+
 QStringList SettingsController::fontStylesForFamily(const QString& family) const
 {
     return QFontDatabase::styles(family);
@@ -84,17 +109,11 @@ void SettingsController::stageAssignmentEntry(const QString& screenName, int vir
     setNeedsSave(true);
 }
 
-void SettingsController::stageAssignmentClear(const QString& screenName, int virtualDesktop, const QString& activityId)
-{
-    m_staging.stageFullClear(screenName, virtualDesktop, activityId);
-    setNeedsSave(true);
-}
-
 void SettingsController::removeStagedAssignment(const QString& screenName, int virtualDesktop,
                                                 const QString& activityId)
 {
     m_staging.removeStagedAssignment(screenName, virtualDesktop, activityId);
-    // Same bookkeeping as stageAssignmentClear. Removing a staged entry can
+    // Same bookkeeping as stageAssignmentEntry. Removing a staged entry can
     // leave the staging map empty, but dirtiness here is page-level, not a
     // count of staged entries: the user interacted with the page, and Apply
     // simply flushes whatever remains (possibly nothing) — the flush of an
@@ -696,6 +715,51 @@ bool SettingsController::importAllSettings(const QString& filePath)
                     // Says what failed, not what the restore below will do:
                     // that runs after this and can fail too.
                     Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not replace your settings with that file."));
+                } else if (!importedBlobIsUpgradable(importDoc.object())) {
+                    // A blob stamped NEWER than this build cannot be migrated
+                    // down, and runMigrationChain reports "success" for it
+                    // (readVersion >= target breaks the loop immediately and
+                    // newVersion == oldVersion returns true), so the chain
+                    // result alone cannot detect it. Without this check the
+                    // import is accepted, load() reads every moved key as
+                    // absent and takes schema defaults, and the first Save
+                    // stamps this version over them — with the backup already
+                    // removed.
+                    qCWarning(PlasmaZones::lcCore) << "Imported settings are from a newer schema:" << safeFilePath;
+                    Q_EMIT settingsTransferFailed(
+                        PhosphorI18n::tr("That settings file is from a newer version of this app."));
+                    ok = false;
+                } else if (!ConfigMigration::runMigrationChain(configPath)
+                           || !ConfigMigration::finalizeV4Conversion(configPath)) {
+                    // An imported blob can be ANY older schema version — an
+                    // export from an older install, or a restored backup. The
+                    // INI branch already migrates; this one did not, and
+                    // ensureJsonConfig's one-shot latch has long since fired,
+                    // so nothing else would either. An unmigrated blob then
+                    // reads as "every moved key absent", load() takes the
+                    // schema defaults, and the first Save purges the old
+                    // groups and stamps the current version over them — the
+                    // user's settings gone, with the backup already removed.
+                    //
+                    // finalizeV4Conversion is PAIRED with the chain, as at
+                    // every other call site: migrateV3ToV4 only STASHES the
+                    // exclusion / assignment / animation data under _v4* root
+                    // keys, and the finalize step is what turns those into
+                    // rules.json and quicklayouts.json and strips the scratch
+                    // keys. Running the chain alone on a v3-or-older import
+                    // stamps _version=5, leaves the stashes orphaned in
+                    // config.json, and silently drops every imported zone
+                    // assignment and exclusion.
+                    //
+                    // By this point the blob has been parsed, validated as an
+                    // object, and version-checked above, so the only way this
+                    // arm fires is a file WRITE error (disk full, read-only
+                    // config dir) — the message names that, not a version
+                    // problem the earlier check would have caught.
+                    qCWarning(PlasmaZones::lcCore) << "Imported settings could not be migrated:" << safeFilePath;
+                    Q_EMIT settingsTransferFailed(
+                        PhosphorI18n::tr("Your settings file was read but the upgrade could not be saved."));
+                    ok = false;
                 }
             }
         }
@@ -821,6 +885,49 @@ QVariantList SettingsController::getScreenStates() const
     return result;
 }
 
+QVariantList SettingsController::getScrollingStripPreview(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return {};
+    }
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Scrolling),
+                                                QStringLiteral("visibleStripJson"), {screenId});
+    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+        return {};
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(reply.arguments().at(0).toString().toUtf8());
+    if (!doc.isArray()) {
+        return {};
+    }
+    // Shape the rects into the zone maps LayoutThumbnail/LayoutCard render,
+    // mirroring the daemon's OSD strip preview (numbers ascending in strip
+    // order; no custom colors).
+    QVariantList zones;
+    const QJsonArray arr = doc.array();
+    for (int i = 0; i < arr.size(); ++i) {
+        const QJsonObject rect = arr.at(i).toObject();
+        QVariantMap relGeo;
+        relGeo[QStringLiteral("x")] = rect.value(QLatin1String("x")).toDouble();
+        relGeo[QStringLiteral("y")] = rect.value(QLatin1String("y")).toDouble();
+        relGeo[QStringLiteral("width")] = rect.value(QLatin1String("width")).toDouble();
+        relGeo[QStringLiteral("height")] = rect.value(QLatin1String("height")).toDouble();
+        QVariantMap zone;
+        zone[QStringLiteral("zoneNumber")] = rect.value(QLatin1String("zoneNumber")).toInt(i + 1);
+        zone[QStringLiteral("relativeGeometry")] = relGeo;
+        // Namespaced, never a bare index. These are render-only synthetic
+        // zones with no persisted identity, so nothing resolves them today —
+        // but a bare "0"/"1"/"2" is indistinguishable from a real zone id, and
+        // any consumer that starts keying on zone.id (a delegate reuse key,
+        // selection state) would collide across screens. CLAUDE.md: zone IDs
+        // everywhere, never indices.
+        zone[QStringLiteral("id")] = QStringLiteral("strip:%1:%2").arg(screenId).arg(i);
+        zone[QStringLiteral("name")] = QString();
+        zone[QStringLiteral("useCustomColors")] = false;
+        zones.append(zone);
+    }
+    return zones;
+}
+
 QVariantMap SettingsController::getStagedAssignment(const QString& screenName, int virtualDesktop,
                                                     const QString& activityId) const
 {
@@ -828,14 +935,6 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
     if (!s)
         return {};
     QVariantMap map;
-    // A staged full clear carries no mode/layout fields (stageFullClear
-    // resets them), so surface it explicitly — otherwise QML restore code
-    // would see an empty map and fall back to the daemon's still-resolved
-    // explicit values, hiding the pending clear.
-    if (s->fullCleared) {
-        map[QStringLiteral("fullCleared")] = true;
-        return map;
-    }
     if (s->snappingLayoutId.has_value())
         map[QStringLiteral("layoutId")] = *s->snappingLayoutId;
     if (s->tilingAlgorithmId.has_value()) {

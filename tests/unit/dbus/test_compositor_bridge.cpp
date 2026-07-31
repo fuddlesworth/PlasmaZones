@@ -20,6 +20,8 @@
 #include <memory>
 
 #include "dbus/compositorbridgeadaptor.h"
+
+#include <PhosphorProtocol/ServiceConstants.h>
 #include "dbus/controladaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -48,51 +50,13 @@ using StubSettingsBridge = StubSettings;
 // Stub PhosphorZones::Zone Detector
 // =========================================================================
 
-class StubZoneDetectorBridge : public PhosphorZones::IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorBridge(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-    PhosphorZones::Layout* layout() const override
-    {
-        return nullptr;
-    }
-    void setLayout(PhosphorZones::Layout*) override
-    {
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-};
+// WindowTrackingAdaptor only null-checks the detector and SnapEngine only
+// stores it, so the shared inert stub covers both. The former local copy
+// answered layout() with nullptr instead of remembering the set layout; no
+// caller in this suite reads it either way.
+#include "helpers/StubZoneDetector.h"
+
+using StubZoneDetectorBridge = PlasmaZones::StubZoneDetector;
 
 // =========================================================================
 // Test Class
@@ -122,7 +86,7 @@ private Q_SLOTS:
         m_snapEngine->setEngineSettings(m_settings);
         m_wta->service()->setSnapState(m_snapEngine->snapState());
         m_wta->service()->setSnapEngine(m_snapEngine);
-        m_wta->setEngines(m_snapEngine, nullptr);
+        m_wta->setEngines(m_snapEngine, nullptr, nullptr);
 
         // Create a test layout so getFullState has data
         auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), m_layoutManager);
@@ -143,7 +107,11 @@ private Q_SLOTS:
         delete m_controlParent;
         m_controlParent = nullptr;
         m_controlAdaptor = nullptr;
+        // Detach BOTH borrowed pointers before the engine dies so the service
+        // never holds a dangling SnapEngine* (same discipline as
+        // wta_convenience_fixture.h).
         m_wta->service()->setSnapState(nullptr);
+        m_wta->service()->setSnapEngine(nullptr);
         delete m_snapEngine;
         m_snapEngine = nullptr;
         delete m_wtaParent;
@@ -167,15 +135,44 @@ private Q_SLOTS:
 
     void testRegisterBridge_returnsApiVersion()
     {
+        // A NEWER peer version: the reply must carry the DAEMON's own
+        // version, so passing ApiVersion here would make the assertion a
+        // tautological echo check.
         PhosphorProtocol::BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
-            QStringLiteral("kwin"), QStringLiteral("4"), {QStringLiteral("borderless"), QStringLiteral("animation")});
+            QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion + 1),
+            {QStringLiteral("borderless"), QStringLiteral("animation")});
 
-        QCOMPARE(result.apiVersion, QStringLiteral("4"));
+        // The reply must be an ACCEPT carrying the daemon's own version —
+        // the reject paths also echo it, so acceptance is asserted too.
+        QVERIFY(result.sessionId != QStringLiteral("REJECTED"));
+        QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
+        QCOMPARE(result.apiVersion, QString::number(PhosphorProtocol::Service::ApiVersion));
+    }
+
+    void testRegisterBridge_rejectsEmptyName()
+    {
+        // Input-validation boundary: an empty compositorName would commit a
+        // registration isBridgeRegistered() can never observe. Live-peer
+        // pattern (same as the old-version reject): the gate must also not
+        // CLOBBER an existing registration through the replacement path.
+        QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
+        const PhosphorProtocol::BridgeRegistrationResult live = m_bridgeAdaptor->registerBridge(
+            QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+            {QStringLiteral("borderless")});
+        QVERIFY(live.sessionId != QStringLiteral("REJECTED"));
+        QCOMPARE(spy.count(), 1);
+
+        PhosphorProtocol::BridgeRegistrationResult result =
+            m_bridgeAdaptor->registerBridge(QString(), QString::number(PhosphorProtocol::Service::ApiVersion), {});
+        QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
+        QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
+        QCOMPARE(spy.count(), 1);
     }
 
     void testRegisterBridge_storesBridgeName()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), {});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        {});
 
         QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
     }
@@ -183,7 +180,8 @@ private Q_SLOTS:
     void testRegisterBridge_storesCapabilities()
     {
         QStringList caps = {QStringLiteral("borderless"), QStringLiteral("maximize"), QStringLiteral("animation")};
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), caps);
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        caps);
 
         QCOMPARE(m_bridgeAdaptor->bridgeCapabilities(), caps);
     }
@@ -192,43 +190,83 @@ private Q_SLOTS:
     {
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
 
-        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"), QStringLiteral("4"), {QStringLiteral("modifiers")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"),
+                                        QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        {QStringLiteral("modifiers")});
 
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("hyprland"));
-        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("4"));
+        QCOMPARE(spy.at(0).at(1).toString(), QString::number(PhosphorProtocol::Service::ApiVersion));
     }
 
     // Version gate regression test: a peer speaking an older protocol
     // version (< MinPeerApiVersion) must be rejected with the REJECTED
     // sentinel in sessionId, must NOT update the stored bridge name, and
     // must NOT emit bridgeRegistered. If this regresses, stale effects
-    // would silently connect and crash on marshalling mismatches. Peer
-    // string is "3" so this test directly pins the v3→v4 bump (the
-    // setWindowMetadata 4→9-arg signature widening); a peer that was valid
-    // pre-bump is now rejected.
+    // would silently connect and either crash on marshalling mismatches or
+    // hear nothing on a renamed surface. The peer string is derived as
+    // MinPeerApiVersion - 1, so the test pins the CURRENT floor across
+    // every future bump.
     void testRegisterBridge_rejectsOldVersion()
     {
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
 
+        // Register a VALID peer first: the real hazard is a stale v(N-1)
+        // effect clobbering a live registration through the replacement
+        // path that sits right after the version gates — a fresh-adaptor
+        // "name still empty" assert cannot distinguish "gate fired" from
+        // "call did nothing".
+        const PhosphorProtocol::BridgeRegistrationResult live = m_bridgeAdaptor->registerBridge(
+            QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+            {QStringLiteral("borderless")});
+        QVERIFY(live.sessionId != QStringLiteral("REJECTED"));
+        QCOMPARE(spy.count(), 1);
+
+        // One below the CURRENT floor, so every future MinPeerApiVersion
+        // bump keeps this test pinning the just-outdated peer instead of an
+        // anciently-rejected one.
         PhosphorProtocol::BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
-            QStringLiteral("kwin"), QStringLiteral("3"), {QStringLiteral("borderless")});
+            QStringLiteral("stale-kwin"), QString::number(PhosphorProtocol::Service::MinPeerApiVersion - 1),
+            {QStringLiteral("shadow")});
 
         QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
-        QCOMPARE(result.apiVersion, QStringLiteral("4"));
-        QCOMPARE(spy.count(), 0);
-        QVERIFY(m_bridgeAdaptor->bridgeName().isEmpty());
+        QCOMPARE(result.apiVersion, QString::number(PhosphorProtocol::Service::ApiVersion));
+        QCOMPARE(spy.count(), 1); // only the live registration announced
+        // The live registration survives untouched.
+        QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
+        QVERIFY(m_bridgeAdaptor->hasCapability(QStringLiteral("borderless")));
+        QVERIFY(!m_bridgeAdaptor->hasCapability(QStringLiteral("shadow")));
     }
 
     // Non-numeric versions parse as 0 via QString::toInt(), which is
     // below MinPeerApiVersion and must also be rejected.
     void testRegisterBridge_rejectsNonNumericVersion()
     {
+        QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
+        const PhosphorProtocol::BridgeRegistrationResult live = m_bridgeAdaptor->registerBridge(
+            QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion), {});
+        QVERIFY(live.sessionId != QStringLiteral("REJECTED"));
+        QCOMPARE(spy.count(), 1);
+
         PhosphorProtocol::BridgeRegistrationResult result =
             m_bridgeAdaptor->registerBridge(QStringLiteral("weird-compositor"), QStringLiteral("garbage"), {});
 
         QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
-        QVERIFY(m_bridgeAdaptor->bridgeName().isEmpty());
+        QCOMPARE(result.apiVersion, QString::number(PhosphorProtocol::Service::ApiVersion));
+        QCOMPARE(spy.count(), 1); // no clobber, no new announce
+        QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
+    }
+
+    // Accept boundary at EXACTLY MinPeerApiVersion: covered only
+    // coincidentally while ApiVersion == MinPeerApiVersion; the first
+    // ApiVersion bump past the floor would otherwise leave an off-by-one
+    // `<=` in the gate unpinned.
+    void testRegisterBridge_acceptsAtExactFloor()
+    {
+        PhosphorProtocol::BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
+            QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::MinPeerApiVersion), {});
+        QVERIFY(result.sessionId != QStringLiteral("REJECTED"));
+        QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
     }
 
     // =====================================================================
@@ -237,14 +275,16 @@ private Q_SLOTS:
 
     void testHasCapability_registered_returnsTrue()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        {QStringLiteral("borderless")});
 
         QVERIFY(m_bridgeAdaptor->hasCapability(QStringLiteral("borderless")));
     }
 
     void testHasCapability_notRegistered_returnsFalse()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
+                                        {QStringLiteral("borderless")});
 
         QVERIFY(!m_bridgeAdaptor->hasCapability(QStringLiteral("unknown_capability")));
     }

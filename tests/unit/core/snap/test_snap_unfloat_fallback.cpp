@@ -86,7 +86,7 @@ private Q_SLOTS:
         // screenManager == nullptr: zoneGeometry() then resolves against
         // QGuiApplication::primaryScreen() (valid under the offscreen QPA), which
         // is exactly what makes the on-success geometry path reachable here.
-        m_wts = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
+        m_wts = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
     }
 
     void cleanup()

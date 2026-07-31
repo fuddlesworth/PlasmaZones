@@ -70,7 +70,7 @@ private Q_SLOTS:
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
-        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
         m_engine->setEngineSettings(m_settings);
         // Default single-store wiring; per-key tests call installFullResolver().

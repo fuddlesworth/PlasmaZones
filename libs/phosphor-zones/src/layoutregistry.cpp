@@ -73,7 +73,10 @@ void LayoutRegistry::initCommon()
 
 LayoutRegistry::~LayoutRegistry()
 {
-    qDeleteAll(m_layouts);
+    // No qDeleteAll: addLayout() parents every Layout to this registry, so
+    // ~QObject destroys them. The manual sweep was redundant and read against
+    // the parent-ownership rule the rest of this file follows (deleteLater
+    // everywhere else).
 }
 
 void LayoutRegistry::setDefaultLayoutIdProvider(std::function<QString()> provider)
@@ -218,8 +221,13 @@ static PhosphorZones::Layout* findLayout(const QVector<PhosphorZones::Layout*>& 
 // Helper: emit layoutAssigned for a single screenId/layoutId pair
 void LayoutRegistry::emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId)
 {
-    PhosphorZones::Layout* layout =
-        PhosphorLayout::LayoutId::isAutotile(layoutId) ? nullptr : layoutById(QUuid::fromString(layoutId));
+    // Only Snapping ids name a Layout*. The two engine-owned id shapes carry no
+    // layout entity, so both emit a null pointer. Scrolling is spelled out
+    // rather than left to fall through the UUID parse (which would also yield
+    // null, by accident) so the third mode is visible at the emit site.
+    const bool hasNoLayoutEntity =
+        PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId);
+    PhosphorZones::Layout* layout = hasNoLayoutEntity ? nullptr : layoutById(QUuid::fromString(layoutId));
     Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
 }
 
@@ -230,8 +238,13 @@ bool LayoutRegistry::shouldSkipLayoutAssignment(const QString& layoutId, const Q
     if (layoutId.isEmpty()) {
         return true;
     }
-    if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-        return false; // Autotile IDs are valid without PhosphorZones::Layout* lookup
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)) {
+        // Autotile ids and the bare scrolling sentinel are valid without a
+        // PhosphorZones::Layout* lookup. Skipping the sentinel here would be
+        // DATA LOSS in the batch path: applyBatchAssignments drops the
+        // addressed rule family before this validation re-adds entries, so
+        // a rejected Scrolling context would lose its assignment for good.
+        return false;
     }
     if (!layoutById(QUuid::fromString(layoutId))) {
         qCWarning(lcZonesLib) << "Skipping non-existent layout for" << context << ":" << layoutId;
@@ -334,11 +347,17 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // shared with applyQuickLayout. Cycling with an empty screenId
     // (uncommon but not invalid — happens when no focused screen is
     // known) just updates the global active layout.
-    applyLayoutToScreen(resolvedScreenId, newLayout);
+    // Report what was actually COMMITTED: applyLayoutToScreen refuses the
+    // write on a Scrolling-mode screen, and returning newLayout there claimed
+    // a switch that never happened. Both current callers discard the value,
+    // so this only makes the contract honest for the next one.
+    if (!applyLayoutToScreen(resolvedScreenId, newLayout)) {
+        return nullptr;
+    }
     return newLayout;
 }
 
-void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones::Layout* layout)
+bool LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones::Layout* layout)
 {
     // Per-screen assignment: write per-desktop assignment first so the
     // layoutAssigned handler recalculates zone geometry for this screen.
@@ -348,6 +367,18 @@ void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones:
         // applyQuickLayout via LayoutAdaptor) pass an already idForName-resolved
         // screenId, matching the per-output map's key.
         const int desktop = currentVirtualDesktopForScreen(screenId);
+        // Scrolling gate. A manual Layout* means nothing on a scrolling screen,
+        // and assignLayout below would classify its UUID as Snapping and flip
+        // the screen off the scrolling engine — a layout cycle or a quick-slot
+        // press must never change which engine owns a screen. Both callers
+        // already resolve the mode before they get here, so this is the
+        // invariant made LOCAL rather than a live path. Mirrors the way
+        // layoutForShortcut refuses an autotile slot for the same reason.
+        if (modeForScreen(screenId, desktop, m_currentActivity) == AssignmentEntry::Scrolling) {
+            qCInfo(lcZonesLib) << "applyLayoutToScreen: screen" << screenId
+                               << "is in scrolling mode — manual layouts do not apply";
+            return false;
+        }
         // Write per-desktop assignment with empty activity so it applies
         // regardless of which activity is active. Activity-specific
         // overrides are a separate KCM-only feature. Clear any stale
@@ -365,6 +396,7 @@ void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones:
         const QSignalBlocker blocker(this);
         setActiveLayout(layout);
     }
+    return true;
 }
 
 PhosphorZones::Layout* LayoutRegistry::layoutById(const QUuid& id) const
@@ -558,6 +590,11 @@ void LayoutRegistry::setActiveLayout(PhosphorZones::Layout* layout)
     } else if (m_activeLayout == layout) {
         qCInfo(lcZonesLib) << "setActiveLayout: SKIPPED (already active):"
                            << (layout ? layout->name() : QStringLiteral("null"));
+    } else {
+        // Non-null but absent from m_layouts. Every other rejection path here
+        // logs; this one returned in silence, so a caller passing a retired or
+        // foreign Layout* saw no signal and no explanation.
+        qCWarning(lcZonesLib) << "setActiveLayout: REFUSED (layout not owned by this registry):" << layout->name();
     }
 }
 
@@ -568,7 +605,11 @@ void LayoutRegistry::setActiveLayoutById(const QUuid& id)
 
 PhosphorZones::Layout* LayoutRegistry::layoutForShortcut(AssignmentEntry::Mode mode, int number) const
 {
-    const auto& slots = m_quickLayoutSlots[modeIndex(mode)];
+    const auto idx = slotIndexFor(mode);
+    if (!idx) {
+        return nullptr; // Scrolling carries no quick slots
+    }
+    const auto& slots = m_quickLayoutSlots[*idx];
     if (slots.contains(number)) {
         const QString& id = slots[number];
         if (PhosphorLayout::LayoutId::isAutotile(id))
@@ -590,7 +631,7 @@ void LayoutRegistry::applyQuickLayout(AssignmentEntry::Mode mode, int number, co
     // Only manual (Snapping) slots can be applied here: an autotile slot
     // resolves to an algorithm ID with no Layout*, and switching algorithms
     // needs the autotile engine, which lives in the daemon. The daemon's
-    // shortcut handler applies autotile slots directly; see daemon/start.cpp.
+    // shortcut handler applies autotile slots directly; see daemon/shortcuts_wiring.cpp.
     auto layout = layoutForShortcut(mode, number);
     if (!layout) {
         qCInfo(lcZonesLib) << "Quick slot" << number << "is unset or not directly applicable — no-op";
@@ -608,7 +649,12 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
         return;
     }
 
-    auto& slots = m_quickLayoutSlots[modeIndex(mode)];
+    const auto idx = slotIndexFor(mode);
+    if (!idx) {
+        qCWarning(lcZonesLib) << "setQuickLayoutSlot: Scrolling carries no quick slots — ignored";
+        return;
+    }
+    auto& slots = m_quickLayoutSlots[*idx];
 
     if (layoutId.isEmpty()) {
         // Clear the slot
@@ -642,7 +688,12 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
 
 void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QHash<int, QString>& slots)
 {
-    auto& target = m_quickLayoutSlots[modeIndex(mode)];
+    const auto idx = slotIndexFor(mode);
+    if (!idx) {
+        qCWarning(lcZonesLib) << "setAllQuickLayoutSlots: Scrolling carries no quick slots — ignored";
+        return;
+    }
+    auto& target = m_quickLayoutSlots[*idx];
 
     // Clear all existing slots for this mode first
     target.clear();

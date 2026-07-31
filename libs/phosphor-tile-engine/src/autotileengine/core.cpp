@@ -1,20 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Qt headers
-#include <algorithm>
-#include <cmath>
-#include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QScopeGuard>
-#include <QScreen>
-#include <QTimer>
-#include <QVarLengthArray>
+// Own header
+#include <PhosphorTileEngine/AutotileEngine.h>
 
 // Project headers
-#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorGeometry/GeometryUtils.h>
@@ -37,6 +27,18 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "engine_internal.h"
+
+// Qt and std
+#include <QDebug>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QScreen>
+#include <QTimer>
+#include <QVarLengthArray>
+#include <algorithm>
+#include <cmath>
 
 namespace PhosphorTileEngine {
 
@@ -148,6 +150,16 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             survivingOrderScreens.append(pit.key());
             ++pit;
         }
+    }
+    // Pending FOCUS entries, for the same reason as the orders above: a window
+    // that lives only in a pending-focus entry has no tracking key, so the
+    // sweep never reaches it, and the dead id is later emitted as
+    // activateWindowRequested on that screen's next applyTiling.
+    m_pendingFocusByScreen.removeIf([&aliveWindowIds](const auto& entry) {
+        return !aliveWindowIds.contains(entry.value());
+    });
+    if (!m_pendingFocusReseedWindowId.isEmpty() && !aliveWindowIds.contains(m_pendingFocusReseedWindowId)) {
+        m_pendingFocusReseedWindowId.clear();
     }
     // After the walk — see purgeFromPendingOrders for why the resolution
     // re-check must not erase other entries mid-iteration.
@@ -354,7 +366,7 @@ void AutotileEngine::connectSignals()
         // orphan cleanup (no VSs removed/added) and just retile each VS with
         // its new geometry. This is the single authoritative retile for the
         // change; the Daemon's regions-only handler deliberately does NOT
-        // call updateAutotileScreens so there is no second retile pass.
+        // call updateEngineScreens so there is no second retile pass.
         connect(m_screenManager, &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this,
                 [this](const QString& physicalScreenId) {
                     const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);

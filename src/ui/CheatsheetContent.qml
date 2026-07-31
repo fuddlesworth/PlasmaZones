@@ -26,7 +26,8 @@ Item {
 
     /// Catalog rows from ShortcutManager::cheatsheetModel(): one object per
     /// shortcut with id, label, category, categoryOrder, triggers (list of
-    /// display strings), assigned (bool), mode ("all"|"snapping"|"autotile").
+    /// display strings), assigned (bool), mode
+    /// ("all"|"snapping"|"autotile"|"scrolling").
     property var shortcuts: []
     /// Tiling mode of the screen the sheet opened on:
     /// "snapping" | "autotile" | "scrolling".
@@ -59,6 +60,8 @@ Item {
             return root.autotileAvailable && root.currentMode === "autotile";
         if (row.mode === "snapping")
             return root.currentMode === "snapping";
+        if (row.mode === "scrolling")
+            return root.currentMode === "scrolling";
         return true;
     }
 
@@ -67,10 +70,13 @@ Item {
     /// shortcuts / currentMode / autotileAvailable changes.
     readonly property var groups: {
         var byCat = [];
-        var index = {};
-        for (var i = 0; i < shortcuts.length; i++) {
-            var row = shortcuts[i];
-            if (!rowVisible(row))
+        // Object.create(null): a plain {} would let `in` walk the prototype
+        // chain, so a category named "constructor" would collide with a
+        // Function slot.
+        var index = Object.create(null);
+        for (var i = 0; i < root.shortcuts.length; i++) {
+            var row = root.shortcuts[i];
+            if (!root.rowVisible(row))
                 continue;
 
             if (!(row.category in index)) {
@@ -98,17 +104,17 @@ Item {
             buckets.push([]);
             weights.push(0);
         }
-        for (var g = 0; g < groups.length; g++) {
+        for (var g = 0; g < root.groups.length; g++) {
             var target = 0;
             for (var k = 1; k < n; k++) {
                 if (weights[k] < weights[target])
                     target = k;
             }
-            buckets[target].push(groups[g]);
+            buckets[target].push(root.groups[g]);
             // A group costs its rows plus a fixed heading + inter-group gap
             // allowance; row units are all the same height so counting rows
             // is an honest proxy for pixels.
-            weights[target] += groups[g].rows.length + 2;
+            weights[target] += root.groups[g].rows.length + 2;
         }
         return buckets;
     }
@@ -133,7 +139,7 @@ Item {
             return Math.max(1, Math.min(maxColumns, Math.min(fit, root.groups.length)));
         }
         readonly property int contentWidth: columns * columnWidth + (columns - 1) * columnSpacing
-        readonly property int maxContentHeight: Math.round(root.height * 0.85) - paddingSide * 3 - titleLabel.height
+        readonly property int maxContentHeight: Math.max(0, Math.round(root.height * 0.85) - paddingSide * 3 - titleLabel.height)
     }
 
     // Backdrop — click outside to dismiss, same bare click-only backdrop
@@ -144,6 +150,7 @@ Item {
         onClicked: root._requestDismiss()
         Accessible.name: i18n("Dismiss shortcut cheatsheet")
         Accessible.role: Accessible.Button
+        Accessible.onPressAction: root._requestDismiss()
     }
 
     QFZCommon.PopupFrame {
@@ -316,7 +323,7 @@ Item {
                                                 }
 
                                                 delegate: KeyChip {
-                                                    required property var modelData
+                                                    required property string modelData
 
                                                     text: modelData
                                                     fontFamily: root.fontFamily

@@ -236,6 +236,23 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
     }
 }
 
+bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
+{
+    if (!m_autotileEngine || !m_autotileEngine->hasDragInsertPreview()) {
+        return false;
+    }
+    // Screen-matched: a fast drop can land on another screen before any
+    // dragMoved tick cancelled the departed preview, and committing then would
+    // reorder the WRONG screen and swallow the real drop outcome.
+    if (!PhosphorScreens::ScreenIdentity::screensMatch(m_autotileEngine->dragInsertPreviewScreenId(),
+                                                       resolveScreenAt(QPointF(cursorX, cursorY)).screenId)) {
+        m_autotileEngine->cancelDragInsertPreview();
+        return false;
+    }
+    m_autotileEngine->commitDragInsertPreview(); // commit, not cancel — the drop finalizes the reorder
+    return true;
+}
+
 void WindowDragAdaptor::cancelSnap()
 {
     // Layout picker takes precedence: Escape on a visible picker should
@@ -476,6 +493,25 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
             }
             return;
         }
+    }
+
+    // An engine-owned cursor screen gets no zone selector: the autotile stack
+    // or the scrolling strip owns placement there, so a manual drag-snap out of
+    // the selector would fight it. dragMoved reaches this on EVERY bypass drag
+    // (it sits outside prepareHandlerContext, which is where the other overlay
+    // paths are suppressed), so without this gate edge-hovering during a drag on
+    // a scrolling screen popped the selector on a screen the strip owns — and
+    // endDrag's non-snap exits do not tear the popup down, leaving it stranded
+    // with no further cursor ticks to hide it. Mirrors drop.cpp's useOverlayZone.
+    const bool engineOwnsSelectorScreen = (m_autotileEngine && m_autotileEngine->isActiveOnScreen(selectorScreenId))
+        || (m_scrollEngine && m_scrollEngine->isActiveOnScreen(selectorScreenId));
+    if (engineOwnsSelectorScreen) {
+        if (m_zoneSelectorShown) {
+            m_zoneSelectorShown = false;
+            m_zoneSelectorShownOn.clear();
+            m_overlayService->hideZoneSelector();
+        }
+        return;
     }
 
     bool nearEdge = isNearTriggerEdge(screen, cursorX, cursorY, selectorScreenId);

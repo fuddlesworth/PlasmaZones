@@ -107,6 +107,11 @@ QQuickItem* OverlayService::PerScreenOverlayState::cheatsheetSlot() const
     return slotItemOrNull(*this, PhosphorSlotKeys::Cheatsheet());
 }
 
+QQuickItem* OverlayService::PerScreenOverlayState::scrollTabsSlot() const
+{
+    return slotItemOrNull(*this, PhosphorSlotKeys::ScrollTabs());
+}
+
 // Per-role SurfaceAnimator config builders + setupSurfaceAnimator +
 // applyShaderProfilesToAnimator live in overlayservice/animation_config.cpp.
 
@@ -606,16 +611,17 @@ bool OverlayService::isSnappingContextInactive(const QString& screenId) const
     if (m_layoutManager->isContextActiveLayoutSuppressed(screenId, virtualDesktop, m_currentActivity)) {
         return true;
     }
-    // The context is in autotile mode — the snapping overlay/selector never
-    // applies there. Active autotile screens are already kept out via
-    // setExcludedScreens(autotileScreens), but a bare/suppressed autotile
-    // context (mode set, no concrete algorithm) is deliberately NOT in that
-    // active set, so without this check the snap overlay would surface on it and
-    // make a screen the user just switched to autotile look like it's still
-    // snapping. Derive the mode from the resolved assignment id (an "autotile:"
-    // id — bare or concrete — means autotile mode).
-    return PhosphorLayout::LayoutId::isAutotile(
-        m_layoutManager->assignmentIdForScreen(screenId, virtualDesktop, m_currentActivity));
+    // The context is in an ENGINE mode (autotile or scrolling) — the
+    // snapping overlay/selector never applies there. Active engine screens
+    // are already kept out via setExcludedScreens, but a bare/suppressed
+    // autotile context, or a scrolling context whose engine is
+    // context-disabled, is deliberately NOT in that active set — without
+    // this check the snap overlay would surface on it and make a screen the
+    // user just switched away from snapping look like it's still snapping.
+    // Derive the mode from the resolved assignment id ("autotile:" bare or
+    // concrete, or the "scrolling:" sentinel).
+    const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, virtualDesktop, m_currentActivity);
+    return PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId);
 }
 
 PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
@@ -645,6 +651,13 @@ QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
         const QString assignmentId = m_layoutManager->assignmentIdForScreen(
             screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
         if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+            return assignmentId;
+        }
+        if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+            // Scrolling has no layout entity: no picker card is "active", so
+            // return the sentinel (matches nothing) rather than falling into
+            // the manual resolution, which would highlight a snap layout the
+            // screen is not using.
             return assignmentId;
         }
     }
@@ -745,6 +758,13 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         flags.manual = false;
         flags.autotile = true;
+    } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        // Same flags as the snapping arm below — the branch exists to carry
+        // the policy, not to differ behaviourally: offer the manual list
+        // (picking one is the exit from scrolling mode) but no autotile
+        // cards; nothing is highlighted active (see activeLayoutIdForScreen).
+        flags.manual = true;
+        flags.autotile = false;
     } else {
         flags.manual = true;
         flags.autotile = false;

@@ -212,21 +212,23 @@ def main():
         # The opening brace has to precede the first statement; put it on the
         # highest free line before it so no call line is displaced.
         first = min(body)
+        opening = "static void generated_%d() {" % first
         for i in range(first - 2, 0, -1):
             if not lines[i]:
-                lines[i] = "static void generated_%d() {" % first
+                lines[i] = opening
                 break
         else:
-            # Only happens when the first extractable call sits on line 1-2,
-            # leaving no room for the wrapper's opening brace above it. Skip
-            # this one file with a warning rather than aborting the entire
-            # update-ts run — the other files' strings still extract fine, and
-            # the dropped file's strings are the only ones missing.
-            print("%s: first i18n() call is too near the top of the file to emit a stub; skipping" % rel,
-                  file=sys.stderr)
-            skipped += len(calls)
-            total -= len(calls)
-            continue
+            # No free line, so the first call is on line 1 or 2. Sharing line 1
+            # does NOT work: an #include directive owns its whole physical
+            # line, so the preprocessor swallows everything written after the
+            # header name and the opening brace disappeared, leaving the stub
+            # with an unbalanced closing brace. Give the include and the brace
+            # their own lines and reset the numbering with #line, so every call
+            # statement still reports its original .qml line.
+            body_lines = [""] * last
+            for line, stmts in body.items():
+                body_lines[line - 1] = " ".join(stmts)
+            lines = ['#include "phosphor_i18n.h"', opening, "#line 1"] + body_lines
         lines.append("}")
 
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
@@ -243,7 +245,7 @@ def main():
         if list_dir:
             os.makedirs(list_dir, exist_ok=True)
         with open(args.list, "w", encoding="utf-8") as f:
-            f.write("\n".join(written) + "\n")
+            f.write("\n".join(written) + "\n" if written else "")
     print("qml-i18n-stubs: %d calls from %d files, %d not extractable" % (total, len(written), skipped),
           file=sys.stderr)
 

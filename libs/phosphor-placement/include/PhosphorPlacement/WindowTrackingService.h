@@ -1,6 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): WindowTrackingService is the engine-
+// agnostic facade every placement engine and the daemon share, and this is an
+// INSTALLED public header — splitting the class is an API break for the
+// third-party consumers the LGPL boundary exists to serve. The implementation
+// is already split by concern across src/*.cpp (snap, resnap, navigation,
+// virtualscreenmigration, lifecycle), and the member ordering here encodes
+// which of those owns what. Same rationale as
+// PhosphorTileEngine/AutotileEngine.h.
+
 #pragma once
 
 #include <phosphorplacement_export.h>
@@ -30,7 +39,6 @@
 #include <utility>
 
 namespace PhosphorZones {
-class IZoneDetector;
 class Layout;
 class LayoutRegistry;
 class Zone;
@@ -79,7 +87,6 @@ class PHOSPHORPLACEMENT_EXPORT WindowTrackingService : public QObject, public Ph
 
 public:
     explicit WindowTrackingService(PhosphorZones::LayoutRegistry* layoutManager,
-                                   PhosphorZones::IZoneDetector* zoneDetector,
                                    PhosphorScreens::ScreenManager* screenManager,
                                    PhosphorWorkspaces::VirtualDesktopManager* vdm,
                                    IGeometryResolver* geometryResolver = nullptr, PlacementConfig config = {},
@@ -124,7 +131,7 @@ public:
     void setSnapState(PhosphorSnapEngine::SnapState* state);
 
     /// The unified, engine-agnostic placement store (one WindowPlacement record
-    /// per window). Both engines reach it via this service; the WTA persists it.
+    /// per window). Every engine reaches it via this service; the WTA persists it.
     PhosphorEngine::WindowPlacementStore& placementStore() override;
     const PhosphorEngine::WindowPlacementStore& placementStore() const;
 
@@ -206,25 +213,26 @@ public:
     bool isWindowInAutotileMode(const QString& windowId) const;
 
     /**
-     * @brief Predicate: is the window ACTIVELY TILED by the autotile engine
-     * right now (engine-owned, non-floating)?
+     * @brief Predicate: is the window ACTIVELY TILED by a tiling-family
+     * engine (autotile / scrolling) right now (engine-owned, non-floating)?
      *
      * Injected by the daemon (same LGPL-boundary pattern as
-     * AutotileModePredicate). Distinct from the MODE predicate: a fresh
-     * spawn on an autotile screen is in autotile mode but not yet tiled —
-     * its frame is a genuine free geometry — while a tiled window's frame
-     * IS the tile rect and must never be recorded as a float-back.
+     * AutotileModePredicate); the production wiring ORs both engines'
+     * isWindowTiled. Distinct from the MODE predicate: a fresh spawn on an
+     * engine-managed screen is in that mode but not yet tiled — its frame
+     * is a genuine free geometry — while a tiled window's frame IS the
+     * engine's rect and must never be recorded as a float-back.
      * recordFreeGeometry uses this to refuse tiled frames the same way it
      * refuses snapped frames; it complements the effect-side capture guard,
      * which cannot help on an effect reload (the effect's border tracking
-     * starts empty while this engine still holds the tiling state).
+     * starts empty while the engines still hold their tiling state).
      */
-    using AutotileTiledPredicate = std::function<bool(const QString& windowId)>;
-    void setAutotileTiledPredicate(AutotileTiledPredicate predicate);
+    using EngineTiledPredicate = std::function<bool(const QString& windowId)>;
+    void setEngineTiledPredicate(EngineTiledPredicate predicate);
 
-    /// True if the autotile engine reports the window actively tiled.
+    /// True if a tiling-family engine (autotile / scrolling) reports the window actively tiled.
     /// Returns false when the predicate is unwired (snap-only tests).
-    bool isWindowAutotileTiled(const QString& windowId) const;
+    bool isWindowEngineTiled(const QString& windowId) const;
 
     /**
      * @brief Accessor for consumers that need direct access (effect, adaptor).
@@ -355,7 +363,7 @@ public:
     /// the managed-context screen untouched), this records the float geometry AND
     /// updates the record's managed `screenId` to @p screenId — carrying an engine
     /// slot so the store merge adopts the new screen. Used by the close-capture
-    /// fallback when a cross-screen move has orphaned the window from both engines,
+    /// fallback when a cross-screen move has orphaned the window from every engine,
     /// so the only authoritative source of its final screen is KWin (passed down
     /// from the effect). The existing record's per-engine slots and desktop/activity
     /// are preserved; only the screen and this screen's free geometry change.
@@ -391,7 +399,7 @@ public:
 
     void setEngineFloatResolver(EngineFloatResolver resolver);
     void setEngineFloatWriter(EngineFloatWriter writer);
-    /// Aggregates both engines' floating windows for the engine-agnostic
+    /// Aggregates every engine's floating windows for the engine-agnostic
     /// floatingWindows() enumeration. See setEngineFloatResolver rationale.
     void setEngineFloatLister(EngineFloatLister lister);
 
@@ -846,6 +854,13 @@ public:
 
     /**
      * @brief Set user-snapped classes (loaded from KConfig by adaptor)
+     *
+     * FAILS SAFE, not lossy: called before a SnapState is wired (the adaptor's
+     * constructor loads state before the daemon installs the resolver), the
+     * classes are HELD and flushed by setSnapStateResolver / setSnapState.
+     * Dropping them made recovery depend on an incidental second load, and a
+     * save in between would have written the emptied set back over the user's
+     * auto-snap-by-class list.
      */
     void setUserSnappedClasses(const QSet<QString>& classes);
 
@@ -900,7 +915,8 @@ public:
         DirtyAutotilePending = 1u << 9, // legacy save-trigger → DirtyWindowPlacements
         // bit 10 reserved (was DirtyFloatRestores, removed with the FloatRestoreQueues key)
         DirtyWindowPlacements = 1u << 11, ///< unified WindowPlacementStore (sole per-window restore state)
-        DirtyAll = 0xFFFu, // covers bits 0-11 incl. the reserved bit 10
+        DirtyScrollStrips = 1u << 12, ///< scrolling strip-structure snapshots (WTA-provided blob)
+        DirtyAll = 0x1FFFu, // covers bits 0-12 incl. the reserved bit 10
     };
     using DirtyMask = uint32_t;
 
@@ -1082,9 +1098,18 @@ private:
     void forEachZoneAssignedWindow(const std::function<void(const QString& windowId, const QStringList& zoneIds,
                                                             const QString& screenId, int desktop)>& fn) const;
 
+    /// Push a load that arrived before any SnapState was wired into the store
+    /// once one exists. No-op when nothing is held. See setUserSnappedClasses.
+    /// A detach (`setSnapState(nullptr)`) DISCARDS the hold rather than
+    /// carrying it to the next store.
+    void flushPendingUserSnappedClasses();
+
     // Dependencies
     PhosphorZones::LayoutRegistry* m_layoutManager;
     SnapStateResolver m_snapResolver;
+    /// User-snapped classes loaded before a SnapState existed, awaiting the
+    /// flush above. Engaged only across that startup window.
+    std::optional<QSet<QString>> m_pendingUserSnappedClasses;
     PhosphorEngine::WindowPlacementStore m_placementStore;
     IGeometryResolver* m_geometryResolver;
     PlacementConfig m_config;
@@ -1098,7 +1123,7 @@ private:
     QPointer<PhosphorScreens::ScreenManager> m_screenManager;
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     AutotileModePredicate m_autotileModePredicate{};
-    AutotileTiledPredicate m_autotileTiledPredicate{};
+    EngineTiledPredicate m_engineTiledPredicate{};
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence.

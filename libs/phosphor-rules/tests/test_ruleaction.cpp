@@ -72,6 +72,11 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetOverflowBehavior,
     ActionType::SetDragBehavior,
     ActionType::SetAlgorithmParam,
+    // Scrolling parameter overrides are context-domain too — resolved per
+    // screen/desktop/activity and layered onto the scrolling engine's params.
+    ActionType::SetScrollDefaultColumnWidth,
+    ActionType::SetCenterFocusedColumn,
+    ActionType::SetScrollDefaultColumnDisplay,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -107,6 +112,11 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     // Stacking-layer override — window-domain, effect-consumed
     // (reconcileRuleWindowLayer maps the token onto keepAbove/keepBelow).
     ActionType::SetWindowLayer,
+    // Scrolling open overrides — window-domain, read on the daemon open path
+    // for the matched window and layered over the context / config defaults.
+    ActionType::OpenColumnWidth,
+    ActionType::OpenTabbed,
+    ActionType::OpenColumnPlacement,
 };
 } // namespace
 
@@ -838,6 +848,87 @@ private Q_SLOTS:
         QVERIFY(RuleAction::fromJson(o).has_value());
     }
 
+    void testScrollingParamActions_range()
+    {
+        // The six scrolling actions are the only load-time defence for a
+        // hand-edited rules.json — pin bounds and the three closed token
+        // vocabularies exactly like the tiling family above.
+        // SetScrollDefaultColumnWidth / OpenColumnWidth: [0.05, 1.0] fraction.
+        for (QLatin1StringView type : {ActionType::SetScrollDefaultColumnWidth, ActionType::OpenColumnWidth}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), 0.02); // below 0.05 rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 1.5); // above 1.0 rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("wide")); // non-numeric rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 0.05); // inclusive lower bound accepted
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 1.0); // inclusive upper bound accepted
+            const auto accepted = RuleAction::fromJson(o);
+            QVERIFY2(accepted.has_value(), type.data());
+            // Slot pin: these two actions are the pair most likely to be
+            // cross-wired by a copy-pasted constantSlot — a swap passes
+            // every bounds assertion above but not this.
+            const QString expectedSlot = (type == ActionType::SetScrollDefaultColumnWidth)
+                ? QString(ActionSlot::ScrollDefaultColumnWidth)
+                : QString(ActionSlot::OpenColumnWidth);
+            QCOMPARE(ActionRegistry::instance().slotFor(*accepted), expectedSlot);
+        }
+        // SetCenterFocusedColumn: closed token vocabulary.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetCenterFocusedColumn));
+            o.insert(QStringLiteral("value"), QStringLiteral("sometimes")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (QLatin1StringView token : {CenterFocusedColumnToken::Never, CenterFocusedColumnToken::Always,
+                                            CenterFocusedColumnToken::OnOverflow}) {
+                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
+                const auto loaded = RuleAction::fromJson(o);
+                QVERIFY2(loaded.has_value(), token.data());
+                QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::CenterFocusedColumn));
+            }
+        }
+        // SetScrollDefaultColumnDisplay: normal | tabbed.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetScrollDefaultColumnDisplay));
+            o.insert(QStringLiteral("value"), QStringLiteral("stacked")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (QLatin1StringView token : {ColumnDisplayToken::Normal, ColumnDisplayToken::Tabbed}) {
+                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
+                const auto loaded = RuleAction::fromJson(o);
+                QVERIFY2(loaded.has_value(), token.data());
+                QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::ScrollDefaultColumnDisplay));
+            }
+        }
+        // OpenColumnPlacement: newColumn | consume.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::OpenColumnPlacement));
+            o.insert(QStringLiteral("value"), QStringLiteral("sideways")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (QLatin1StringView token : {ColumnPlacementToken::NewColumn, ColumnPlacementToken::Consume}) {
+                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
+                const auto loaded = RuleAction::fromJson(o);
+                QVERIFY2(loaded.has_value(), token.data());
+                QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::OpenColumnPlacement));
+            }
+        }
+        // OpenTabbed: bool only.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::OpenTabbed));
+            o.insert(QStringLiteral("value"), QStringLiteral("yes")); // non-bool rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), true);
+            const auto loaded = RuleAction::fromJson(o);
+            QVERIFY(loaded.has_value());
+            QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::OpenTabbed));
+        }
+    }
+
     void testNewActions_rejectStrayKeys()
     {
         // The new border/gap family all declare `allowedKeys = {Value}`; pin
@@ -864,6 +955,13 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetTintStrength, QJsonValue(0.5));
         rejectsStray(ActionType::SetTintColor, QJsonValue(QStringLiteral("#FF0000")));
         rejectsStray(ActionType::SetOuterGapTop, QJsonValue(8));
+        // The scrolling family declares the same {Value} key set.
+        rejectsStray(ActionType::SetScrollDefaultColumnWidth, QJsonValue(0.5));
+        rejectsStray(ActionType::SetCenterFocusedColumn, QJsonValue(QStringLiteral("always")));
+        rejectsStray(ActionType::SetScrollDefaultColumnDisplay, QJsonValue(QStringLiteral("tabbed")));
+        rejectsStray(ActionType::OpenColumnWidth, QJsonValue(0.5));
+        rejectsStray(ActionType::OpenTabbed, QJsonValue(true));
+        rejectsStray(ActionType::OpenColumnPlacement, QJsonValue(QStringLiteral("consume")));
         rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
         rejectsStray(ActionType::LockContext, QJsonValue(true));
         rejectsStray(ActionType::DefaultLayoutAssignment, QJsonValue(true));

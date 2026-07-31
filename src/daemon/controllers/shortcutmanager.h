@@ -82,7 +82,7 @@ public:
      *   category (translated QString), categoryOrder (int),
      *   triggers (QStringList — the user's EFFECTIVE keys via backend
      *   read-back, falling back to the config value), assigned (bool),
-     *   mode ("all" | "snapping" | "autotile" — which tiling mode the
+     *   mode ("all" | "snapping" | "autotile" | "scrolling" — which tiling mode the
      *   action is meaningful in; the overlay filters on it).
      * Ad-hoc/transient grabs never appear. Empty before registerShortcuts().
      */
@@ -166,6 +166,26 @@ Q_SIGNALS:
 
     void swapVirtualScreenRequested(NavigationDirection direction);
     void rotateVirtualScreensRequested(bool clockwise);
+
+    // Scrolling-mode column vocabulary. Directional focus/move/swap reuse
+    // the generic navigation signals above; these are the scroll-specific
+    // verbs. Direction deltas (consumeOrExpel, cyclePresets) carry -1 =
+    // left/back, +1 = right/forward; the two ADJUST signals instead carry a
+    // signed PERCENT of the work area (±10 per keypress).
+    void scrollFocusColumnEndRequested(bool last);
+    void scrollMoveColumnToEndRequested(bool last);
+    void scrollConsumeWindowRequested();
+    void scrollExpelWindowRequested();
+    void scrollConsumeOrExpelRequested(int delta);
+    void scrollCenterColumnRequested();
+    void scrollToggleColumnTabbedRequested();
+    void scrollCycleColumnWidthRequested(int delta);
+    void scrollAdjustColumnWidthRequested(int deltaPercent);
+    void scrollMaximizeColumnRequested();
+    void scrollExpandColumnRequested();
+    void scrollCycleWindowHeightRequested();
+    void scrollAdjustWindowHeightRequested(int deltaPercent);
+    void scrollResetWindowHeightsRequested();
 
 private:
     struct Entry

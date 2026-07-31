@@ -17,19 +17,27 @@
  *  - engineFor() returns the engine that owns the screen.
  *  - isSnapMode / isAutotileMode are consistent with modeFor.
  *  - partitionByMode splits a screen list by mode, preserving input order.
+ *  - the scrolling engine's live set is consulted the same way (after
+ *    autotile), and a cascade Scrolling/Autotile answer whose engine does
+ *    not claim the screen downgrades to Snapping.
  */
 
 #include <QTest>
 
+#include <memory>
+
+#include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
 #include "core/resolve/screenmoderouter.h"
 #include "helpers/AutotileTestHelpers.h"
+#include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
-#include <PhosphorSnapEngine/SnapEngine.h>
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using namespace PhosphorTileEngine;
 using namespace PhosphorSnapEngine;
 
@@ -38,15 +46,21 @@ class TestScreenModeRouter : public QObject
     Q_OBJECT
 
 private:
+    // setAssignmentEntryDirect PERSISTS a rule via RuleStore::save(); without
+    // this guard the downgrade test would write DP-7 rules into the shared
+    // test-xdg config that every sibling test then loads.
+    std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     SnapEngine* m_snapEngine = nullptr;
     AutotileEngine* m_autotileEngine = nullptr;
+    PhosphorScrollEngine::ScrollEngine* m_scrollEngine = nullptr;
     ScreenModeRouter* m_router = nullptr;
 
 private Q_SLOTS:
 
     void init()
     {
+        m_guard = std::make_unique<IsolatedConfigGuard>();
         // PhosphorZones::LayoutRegistry with no backend — every screen hits the default
         // modeForScreen fallback (Snapping unless explicitly assigned).
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
@@ -66,19 +80,26 @@ private Q_SLOTS:
         // share the test-process registry.
         m_autotileEngine = new AutotileEngine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
-        m_router = new ScreenModeRouter(m_layoutManager, m_snapEngine, m_autotileEngine);
+        // ScrollEngine with null dependencies mirrors the two stubs above —
+        // the router only reads isActiveOnScreen from it.
+        m_scrollEngine = new PhosphorScrollEngine::ScrollEngine(nullptr, nullptr);
+
+        m_router = new ScreenModeRouter(m_layoutManager, m_snapEngine, m_autotileEngine, m_scrollEngine);
     }
 
     void cleanup()
     {
         delete m_router;
         m_router = nullptr;
+        delete m_scrollEngine;
+        m_scrollEngine = nullptr;
         delete m_autotileEngine;
         m_autotileEngine = nullptr;
         delete m_snapEngine;
         m_snapEngine = nullptr;
         delete m_layoutManager;
         m_layoutManager = nullptr;
+        m_guard.reset();
     }
 
     // ─── modeFor ──────────────────────────────────────────────────────────
@@ -108,9 +129,16 @@ private Q_SLOTS:
 
     void modeFor_emptyScreenId_returnsSnapping()
     {
-        // Defensive: an empty screen id should never trigger autotile mode.
-        // The engine's set does not contain the empty string by default.
+        // Defensive contract, pinned for real: even when BOTH engines'
+        // live sets somehow contain the empty string (a corrupt seed), the
+        // router still answers Snapping for an empty id — the guard, not
+        // the default.
         QCOMPARE(m_router->modeFor(QString()), PhosphorZones::AssignmentEntry::Snapping);
+        m_autotileEngine->setAutotileScreens({QString(), QStringLiteral("DP-1")});
+        m_scrollEngine->setActiveScreens({QString()});
+        QCOMPARE(m_router->modeFor(QString()), PhosphorZones::AssignmentEntry::Snapping);
+        m_autotileEngine->setAutotileScreens({});
+        m_scrollEngine->setActiveScreens({});
     }
 
     // ─── engineFor ────────────────────────────────────────────────────────
@@ -162,19 +190,27 @@ private Q_SLOTS:
 
     void modePredicates_areMutuallyExclusive()
     {
-        // For any given screen, isSnapMode and isAutotileMode must disagree.
-        // Today PhosphorZones::AssignmentEntry::Mode is 2-valued so this is tautological;
-        // the test pins the invariant so if the enum gains a third state
-        // (e.g. a "Disabled" mode) the predicate pair is forced to update
-        // in lockstep.
-        const QStringList screens = {QStringLiteral("DP-1"), QStringLiteral("DP-2"), QStringLiteral("HDMI-1"),
-                                     QStringLiteral("phys/vs:0"), QString()};
+        // For any given screen, EXACTLY ONE of {snapping, autotile,
+        // scrolling} must hold — derived from modeFor(), whose switch is
+        // exhaustive by construction. The old two-predicate xor became a
+        // false guard the moment Scrolling landed (both predicates are
+        // false on a scrolling screen), so the loop now seeds all three
+        // modes and counts.
+        const QStringList screens = {QStringLiteral("DP-1"),      QStringLiteral("DP-2"), QStringLiteral("HDMI-1"),
+                                     QStringLiteral("phys/vs:0"), QStringLiteral("DP-9"), QString()};
         m_autotileEngine->setAutotileScreens({QStringLiteral("DP-1"), QStringLiteral("phys/vs:0")});
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-9")});
 
         for (const QString& sid : screens) {
             const bool isSnap = m_router->isSnapMode(sid);
             const bool isAuto = m_router->isAutotileMode(sid);
-            QVERIFY2(isSnap != isAuto, qPrintable(QStringLiteral("mode predicate collision on %1").arg(sid)));
+            const bool isScroll = m_router->isScrollingMode(sid);
+            const int claims = int(isSnap) + int(isAuto) + int(isScroll);
+            QCOMPARE_EQ(claims, 1);
+            // All THREE predicates must agree with modeFor's verdict.
+            QCOMPARE(isSnap, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Snapping);
+            QCOMPARE(isAuto, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Autotile);
+            QCOMPARE(isScroll, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Scrolling);
         }
     }
 
@@ -190,6 +226,7 @@ private Q_SLOTS:
 
         QCOMPARE(result.snap, (QStringList{QStringLiteral("DP-1"), QStringLiteral("DP-3")}));
         QCOMPARE(result.autotile, (QStringList{QStringLiteral("DP-2"), QStringLiteral("HDMI-1")}));
+        QVERIFY(result.scrolling.isEmpty());
     }
 
     void partitionByMode_preservesInputOrderPerBucket()
@@ -205,6 +242,7 @@ private Q_SLOTS:
 
         QCOMPARE(result.snap, (QStringList{QStringLiteral("DP-3"), QStringLiteral("DP-1")}));
         QCOMPARE(result.autotile, (QStringList{QStringLiteral("DP-4"), QStringLiteral("DP-2")}));
+        QVERIFY(result.scrolling.isEmpty());
     }
 
     void partitionByMode_emptyInput_returnsEmptyBuckets()
@@ -212,6 +250,7 @@ private Q_SLOTS:
         const auto result = m_router->partitionByMode({});
         QVERIFY(result.snap.isEmpty());
         QVERIFY(result.autotile.isEmpty());
+        QVERIFY(result.scrolling.isEmpty());
     }
 
     void partitionByMode_allSnap_allAutotileIsEmpty()
@@ -220,6 +259,7 @@ private Q_SLOTS:
         const auto result = m_router->partitionByMode(input);
         QCOMPARE(result.snap, input);
         QVERIFY(result.autotile.isEmpty());
+        QVERIFY(result.scrolling.isEmpty());
     }
 
     void partitionByMode_allAutotile_allSnapIsEmpty()
@@ -228,7 +268,74 @@ private Q_SLOTS:
         const QStringList input = {QStringLiteral("DP-1"), QStringLiteral("DP-2")};
         const auto result = m_router->partitionByMode(input);
         QVERIFY(result.snap.isEmpty());
+        QVERIFY(result.scrolling.isEmpty());
         QCOMPARE(result.autotile, input);
+    }
+
+    // ─── Scrolling engine ─────────────────────────────────────────────────
+
+    void modeFor_scrollingScreen_returnsScrolling()
+    {
+        // Seeding the scroll engine's live set takes the same fast path the
+        // autotile set does: modeFor answers from the engine, no cascade.
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-1")});
+        QCOMPARE(m_router->modeFor(QStringLiteral("DP-1")), PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(m_router->engineFor(QStringLiteral("DP-1")),
+                 static_cast<PhosphorEngine::IPlacementEngine*>(m_scrollEngine));
+        QVERIFY(m_router->isScrollingMode(QStringLiteral("DP-1")));
+        QVERIFY(!m_router->isSnapMode(QStringLiteral("DP-1")));
+        QVERIFY(!m_router->isAutotileMode(QStringLiteral("DP-1")));
+    }
+
+    void modeFor_cascadeScrollingWithoutEngineClaim_downgradesToSnapping()
+    {
+        // The cascade says Scrolling but the engine's live set does not
+        // claim the screen (disabled engine / mid-transition): the router
+        // trusts the engine and downgrades to Snapping, symmetric with the
+        // stale-Autotile downgrade.
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-7"), 0, QString(), entry);
+        QCOMPARE(m_router->modeFor(QStringLiteral("DP-7")), PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(m_router->engineFor(QStringLiteral("DP-7")),
+                 static_cast<PhosphorEngine::IPlacementEngine*>(m_snapEngine));
+    }
+
+    void modeFor_cascadeAutotileWithoutEngineClaim_downgradesToSnapping()
+    {
+        // The twin of the Scrolling downgrade above, and the one the comment
+        // there calls "symmetric": the cascade says Autotile but the autotile
+        // engine's live set does not claim the screen, so the router trusts
+        // the engine and falls back to Snapping.
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-9"), 0, QString(), entry);
+        QCOMPARE(m_router->modeFor(QStringLiteral("DP-9")), PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(m_router->engineFor(QStringLiteral("DP-9")),
+                 static_cast<PhosphorEngine::IPlacementEngine*>(m_snapEngine));
+    }
+
+    void modeFor_bothEnginesClaim_autotileWins()
+    {
+        // Both live sets claiming one screen is a transition artefact; the
+        // router's documented order consults autotile first, so it wins
+        // deterministically rather than flapping.
+        m_autotileEngine->setAutotileScreens({QStringLiteral("DP-8")});
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-8")});
+        QCOMPARE(m_router->modeFor(QStringLiteral("DP-8")), PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(m_router->engineFor(QStringLiteral("DP-8")),
+                 static_cast<PhosphorEngine::IPlacementEngine*>(m_autotileEngine));
+    }
+
+    void partitionByMode_scrollingBucket()
+    {
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-2")});
+        m_autotileEngine->setAutotileScreens({QStringLiteral("DP-3")});
+        const QStringList input = {QStringLiteral("DP-1"), QStringLiteral("DP-2"), QStringLiteral("DP-3")};
+        const auto result = m_router->partitionByMode(input);
+        QCOMPARE(result.snap, (QStringList{QStringLiteral("DP-1")}));
+        QCOMPARE(result.scrolling, (QStringList{QStringLiteral("DP-2")}));
+        QCOMPARE(result.autotile, (QStringList{QStringLiteral("DP-3")}));
     }
 };
 

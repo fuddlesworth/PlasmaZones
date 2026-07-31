@@ -61,7 +61,15 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // Per-window candidate processing, shared by the live and durable passes below.
     const auto addCandidate = [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                   int virtualDesktop) {
-        if (zoneIds.isEmpty() || isWindowFloating(windowId))
+        // SNAP's own float bit, not the mode-routed read. This candidate set is
+        // snap-owned by construction (live snap-store assignments plus durable
+        // records whose snap slot is stateSnapped), and the routed read
+        // dispatches on the window's screen's CURRENT mode — which on a screen
+        // mid-flip is the DESTINATION engine. Float is per engine, so a
+        // destination-engine float bit must not decide whether a snap-owned
+        // candidate participates. Same fix as resnap_calc.cpp's.
+        const PhosphorSnapEngine::SnapState* snap = snapForWindow(windowId);
+        if (zoneIds.isEmpty() || (snap && snap->isFloating(windowId)))
             return;
         if (screenId.isEmpty())
             return;
@@ -93,9 +101,16 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
                 return;
         }
 
-        if (addedIds.contains(windowId))
+        // Dedup on the CANONICAL key. The live pass feeds this canonical store
+        // keys while the durable pass below feeds each record's own composite,
+        // and for a class-mutating window (its store key is the first-seen
+        // canonical, its record carries the current composite) those two
+        // spellings differ — so a raw compare missed the duplicate and the
+        // window contributed two resnap rows.
+        const QString dedupKey = canonicalizeForLookup(windowId);
+        if (addedIds.contains(dedupKey))
             return;
-        addedIds.insert(windowId);
+        addedIds.insert(dedupKey);
 
         // Look up the zone position from the global map
         const QString& primaryZoneId = zoneIds.first();
@@ -128,7 +143,8 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // per-mode snap border / title-bar appearance is never applied). Mirrors the
     // live-or-durable fallback in recordedSnapZones().
     for (const PhosphorEngine::WindowPlacement& rec : m_placementStore.records()) {
-        if (addedIds.contains(rec.windowId))
+        // Canonical, matching what addCandidate inserts — see its own note.
+        if (addedIds.contains(canonicalizeForLookup(rec.windowId)))
             continue;
         const PhosphorEngine::EngineSlot snapSlot = rec.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped())
@@ -180,10 +196,13 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
 
     int insertionIdx = 0;
     QVector<std::tuple<int, int, QString>> windowsByZone; // (zoneNum, insertionIdx, windowId)
-    // Per-window dedup, mirroring populateResnapBufferForAllScreens' addedIds:
-    // the single-owning-store invariant makes duplicates impossible today, but
-    // a duplicate here would double-seed the autotile order (double-tile), so
-    // the guard keeps the two whole-store consumers symmetric and robust.
+    // Per-window dedup. The single-owning-store invariant makes duplicates
+    // impossible today, but a duplicate here would double-seed the autotile
+    // order (double-tile), so the guard is kept.
+    //
+    // Not identical to populateResnapBufferForAllScreens' addedIds, which
+    // keys on canonicalizeForLookup: this pass has a single source, so the
+    // raw id cannot spell the same window two ways.
     QSet<QString> seenWindowIds;
     forEachZoneAssignedWindow(
         [&](const QString& windowId, const QStringList& zoneIds, const QString& windowScreen, int windowDesktop) {
@@ -197,9 +216,18 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
                 return;
             }
             seenWindowIds.insert(windowId);
-            // Skip floating windows — they should not participate in zone-ordered
-            // transitions (the user's manual-mode float choice should be preserved).
-            if (isWindowFloating(windowId)) {
+            // Skip floating windows — the user's manual-mode float choice is
+            // preserved across the transition.
+            //
+            // SNAP's own bit, not the mode-routed read. This list is the
+            // snapping→tiling SEED source, and by the time it is built the
+            // screen's mode has already flipped to the DESTINATION engine, so
+            // the routed read would let the destination engine's own float bit
+            // decide what enters its own seed order — a transition-path read
+            // must be a SOURCE-mode read. The seed filter downstream applies
+            // the destination engine's per-engine rule separately.
+            const PhosphorSnapEngine::SnapState* snap = snapForWindow(windowId);
+            if (snap && snap->isFloating(windowId)) {
                 return;
             }
             if (zoneIds.isEmpty()) {

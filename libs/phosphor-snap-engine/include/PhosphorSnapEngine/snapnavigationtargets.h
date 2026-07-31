@@ -148,19 +148,20 @@ public:
     /// of failing. May be nullptr.
     void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver);
 
-    /// Reports whether a neighbour OUTPUT is in autotile mode, evaluated in the
-    /// engine's current (desktop, activity) context — which the resolver itself
-    /// lacks. When set, the MOVE and SWAP cross-output paths skip an autotile
+    /// Reports whether a neighbour OUTPUT is owned by a TILING engine — autotile
+    /// or scrolling, i.e. anything that is not Snapping — evaluated in the
+    /// engine's current (desktop, activity) context, which the resolver itself
+    /// lacks. When set, the MOVE and SWAP cross-output paths skip a tiling
     /// neighbour (deferring to the engine's cross-mode handoff) instead of
     /// snapping the window onto a tiled screen. May be empty, in which case no
     /// gating happens and every neighbour is treated as snap-mode (the
     /// pre-provider behaviour). The FOCUS cross-output path is never gated
     /// here, but landing still requires a snap-tracked occupant in the
-    /// neighbour's entry zone (autotile windows are not in windowsInZone),
-    /// so focus toward an autotile output collapses to no_adjacent_zone
-    /// instead of crossing.
-    using NeighbourAutotileFn = std::function<bool(const QString& screenId)>;
-    void setNeighbourAutotileProvider(NeighbourAutotileFn fn);
+    /// neighbour's entry zone (tiled windows are not in windowsInZone), so
+    /// focus toward a tiling output collapses to no_adjacent_zone instead of
+    /// crossing.
+    using NeighbourTilingFn = std::function<bool(const QString& screenId)>;
+    void setNeighbourTilingProvider(NeighbourTilingFn fn);
 
     PhosphorProtocol::MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction,
                                                               const QString& screenId);
@@ -229,7 +230,7 @@ private:
     /// non-success MoveTargetResult when there's no neighbour output / entry
     /// zone. Shared by the move and focus paths; the caller emits feedback so
     /// the move/focus tag stays correct.
-    /// @param requireSnapNeighbour when true (move/swap), an autotile neighbour
+    /// @param requireSnapNeighbour when true (move/swap), a tiling-mode neighbour
     /// output yields a non-success result so the caller defers to the cross-mode
     /// handoff; when false (focus), the neighbour's mode is not gated.
     PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& currentZoneId, const QString& direction,
@@ -267,7 +268,7 @@ private:
     IZoneAdjacencyResolver* m_zoneAdjacency = nullptr;
     PhosphorEngine::ICrossSurfaceResolver* m_crossSurface = nullptr;
     FeedbackFn m_feedback;
-    NeighbourAutotileFn m_neighbourIsAutotile;
+    NeighbourTilingFn m_neighbourIsTiling;
 };
 
 } // namespace PhosphorSnapEngine

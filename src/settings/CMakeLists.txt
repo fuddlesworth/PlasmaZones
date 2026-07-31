@@ -161,6 +161,8 @@ set(plasmazones_settings_SRCS
     # daemon's org.plasmazones.Rules adaptor.
     rules/rulemodel.h
     rules/rulemodel.cpp
+    # Label tables + summaries, split from rulemodel.cpp for file-size.
+    rules/rulemodel_labels.cpp
     rules/rulecontroller.h
     rules/rulecontroller.cpp
     # Read-only / projection methods of RuleController — sections,
@@ -304,6 +306,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/snapping/SnappingWindowBehaviorPage.qml
         qml/pages/tiling/TilingBehaviorPage.qml
         qml/pages/tiling/TilingAlgorithmPage.qml
+        qml/pages/scrolling/ScrollingPage.qml
         qml/pages/tiling/TilingSimplePage.qml
         qml/pages/snapping/SnappingSimplePage.qml
         qml/components/GlobalTimingDefaultsCard.qml

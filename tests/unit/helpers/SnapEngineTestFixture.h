@@ -42,51 +42,10 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 // Minimal stubs for WTS constructor assertions
 // =========================================================================
 
-class StubZoneDetectorSnap : public PhosphorZones::IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorSnap(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-    PhosphorZones::Layout* layout() const override
-    {
-        return nullptr;
-    }
-    void setLayout(PhosphorZones::Layout*) override
-    {
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-};
+// The already-included shared stub is the same inert placeholder: SnapEngine
+// stores the detector and never calls it. Keeping a Q_OBJECT copy in this
+// shared header also forced AUTOMOC wiring on every consuming target.
+using StubZoneDetectorSnap = PlasmaZones::StubZoneDetector;
 
 /**
  * @brief Shared fixture for the SnapEngine test suite: screen routing,
@@ -122,7 +81,7 @@ protected Q_SLOTS:
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
-        m_wts = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
+        m_wts = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_wts->setSnapState(m_snapState);
     }

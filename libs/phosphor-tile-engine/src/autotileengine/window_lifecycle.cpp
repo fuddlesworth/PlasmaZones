@@ -1,20 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Qt headers
-#include <algorithm>
-#include <cmath>
-#include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QScopeGuard>
-#include <QScreen>
-#include <QTimer>
-#include <QVarLengthArray>
+// Own header
+#include <PhosphorTileEngine/AutotileEngine.h>
 
 // Project headers
-#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorGeometry/GeometryUtils.h>
@@ -38,6 +28,18 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "engine_internal.h"
 
+// Qt and std
+#include <QDebug>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QScreen>
+#include <QTimer>
+#include <QVarLengthArray>
+#include <algorithm>
+#include <cmath>
+
 namespace PhosphorTileEngine {
 
 void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& screenId, int minWidth, int minHeight)
@@ -50,6 +52,16 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     // mutated appId (Electron/CEF apps) resolve back to the same string so
     // m_states / PhosphorTiles::TilingState / m_windowMinSizes stay consistent.
     const QString windowId = canonicalizeWindowId(rawWindowId);
+
+    // Self-guard, symmetric with ScrollEngine::windowOpened: never adopt a
+    // window for a screen this engine does not own. The adaptor dispatches
+    // by live-set claim, but a mid-flip caller (or a future one) must not be
+    // able to make autotile tile a window on another engine's screen.
+    if (!screenId.isEmpty() && !isActiveOnScreen(screenId)) {
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "windowOpened:" << windowId << "ignored - screen" << screenId << "not autotile-active";
+        return;
+    }
 
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "windowOpened:" << windowId << "screen=" << screenId << "minSize=" << minWidth << "x" << minHeight;
@@ -78,8 +90,16 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     // SnapEngine::resolveWindowRestore returns early (isEnabled() false) and will NEVER
     // claim the window, so deferring here would strand it unmanaged. In that state
     // autotile keeps the window and tiles it normally.
+    // Membership, not the raw reverse-map key: a REFUSED first open leaves
+    // a phantom key (windowOpened keys before onWindowAdded can refuse), and
+    // hasWindow alone would then skip the defer while autotile manages
+    // nothing — the exact race this guard exists to prevent.
+    const auto deferKeyIt = m_states.windowKeys().constFind(windowId);
+    const PhosphorTiles::TilingState* deferState =
+        deferKeyIt != m_states.windowKeys().constEnd() ? m_states.stateForKey(deferKeyIt.value()) : nullptr;
+    const bool trackedInState = deferState && deferState->containsWindow(windowId);
     if (!screenId.isEmpty() && m_windowTracker && m_layoutManager && m_layoutManager->snappingPreferred()
-        && !m_states.hasWindow(windowId)) {
+        && !trackedInState) {
         const QString appId = currentAppIdFor(windowId);
         if (!appId.isEmpty() && appId != windowId) {
             // Shared predicate with snap's reciprocal gate
@@ -98,6 +118,27 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
                 qCInfo(PhosphorTileEngine::lcTileEngine)
                     << "windowOpened:" << windowId << "on autotile screen" << screenId
                     << "defers to snap — carries a cross-screen snap restore";
+                // A refused-first-open phantom key (the very case the
+                // membership gate exists for) must not survive the defer:
+                // isWindowTracked would keep answering true for a window
+                // snap is about to own, misrouting the daemon's float and
+                // cross-screen handoff dispatch.
+                if (deferKeyIt != m_states.windowKeys().constEnd()) {
+                    m_states.removeWindow(windowId);
+                }
+                // The other per-window caches follow the key (same sweep as
+                // windowFocused's non-autotile arm): a refused earlier open
+                // already stored a min size here, and windowMinimumSize
+                // would keep answering an autotile-screen-capped value for
+                // a window snap now owns.
+                m_windowMinSizes.remove(windowId);
+                m_autotileFloatedWindows.remove(windowId);
+                // Pending seeds too, like every other drop path (cap rejection,
+                // close, handoffRelease). A strict pending order that still
+                // names this window keeps its timeout re-arming for the whole
+                // session, waiting on a window snap now owns — the strict seed
+                // skips minimized entries without removing them.
+                purgeFromPendingOrders(windowId);
                 return;
             }
         }
@@ -156,6 +197,11 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
         return;
     }
     onWindowAdded(windowId);
+}
+
+QSize AutotileEngine::windowMinimumSize(const QString& rawWindowId) const
+{
+    return m_windowMinSizes.value(canonicalizeForLookup(rawWindowId), QSize(0, 0));
 }
 
 void AutotileEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth, int minHeight)
@@ -364,7 +410,8 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
 }
 
 bool AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
-                                                   QStringList& releasedWindows, bool drainOverflow)
+                                                   QStringList& releasedWindows, bool drainOverflow,
+                                                   bool clearScreenOrderMaps)
 {
     // Snapshot each window's autotile slot into the unified record BEFORE the
     // PhosphorTiles::TilingState is torn down — the record is the SINGLE
@@ -411,9 +458,36 @@ bool AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, Phos
     }
     releasedWindows.append(tiled);
     releasedWindows.append(floated);
-    m_pendingInitialOrders.remove(screenId);
-    m_pendingOrderGeneration.remove(screenId);
-    m_strictInitialOrderScreens.remove(screenId);
+    // The min-size cache leaves with the tracking, exactly as it does in
+    // handoffRelease and windowFocused's off-autotile arm: entries are
+    // SCREEN-CAPPED by storeWindowMinSize, so a released window that returns
+    // (re-enable, replug, another output) would otherwise be laid out against
+    // a cap computed for the screen it just left. The effect re-reports a
+    // live min size with every re-announce, so nothing is lost.
+    //
+    // The other two per-window caches deliberately stay: m_lastAppliedTileRect
+    // is the float-back poison guard for windows that are still OPEN here (see
+    // its member doc), and m_autotileFloatedWindows must survive until the
+    // daemon's windowsReleased handler has read isModeSpecificFloated — that
+    // handler is the marker's consumer and clears it per window.
+    // Over this state's own two lists, not the caller's accumulator — that
+    // one spans every state torn down in the same sweep.
+    for (const QString& windowId : tiled) {
+        m_windowMinSizes.remove(windowId);
+    }
+    for (const QString& windowId : floated) {
+        m_windowMinSizes.remove(windowId);
+    }
+    // SCREEN-keyed, not context-keyed, so they only go when the whole screen
+    // does. A context-scoped prune on a surviving screen (removed desktop or
+    // activity) passes false: the seed order in flight belongs to the screen,
+    // and dropping it would leave a parallel mode transition inserting its
+    // windows in arbitrary order.
+    if (clearScreenOrderMaps) {
+        m_pendingInitialOrders.remove(screenId);
+        m_pendingOrderGeneration.remove(screenId);
+        m_strictInitialOrderScreens.remove(screenId);
+    }
     state->deleteLater();
     return releasedAny;
 }
@@ -564,8 +638,18 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     // callback, so not running it keeps an arrival's marker window free of
     // foreign code — matching insertShouldFloat, which short-circuits it for the
     // same reason.
-    const bool ruleWillFloat = !isMigrationArrival && m_floatPredicate && m_floatPredicate(windowId);
-    if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat && !isMigrationArrival) {
+    const bool ruleWillFloat = !isMigrationArrival && m_floatPredicate && m_floatPredicate(windowId, screenId);
+    // A window the state ALREADY holds is exempt from the cap: it consumes no
+    // new slot, and refusing its RE-ANNOUNCE broke every mode transition whose
+    // strict seed filled the state to exactly the cap — each of the effect's
+    // follow-up windowOpened calls hit tiledWindowCount >= maxWin and PURGED
+    // the window from the seed order, so the order could never resolve and its
+    // timeout chain stayed armed for the session. (The insert-time float/focus
+    // sync is skipped either way: insertWindow returns false for a contained
+    // window, and seeded windows get that sync separately in the strict-seed
+    // path.) insertWindow below no-ops safely on a contained window.
+    const bool alreadyHeld = state && state->containsWindow(windowId);
+    if (state && !alreadyHeld && state->tiledWindowCount() >= maxWin && !ruleWillFloat && !isMigrationArrival) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";
         // Purge this window from pending initial orders so the order doesn't

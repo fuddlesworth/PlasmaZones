@@ -162,6 +162,11 @@ void Daemon::handleFloat()
         }
         // Restart only on actual dispatch — see handleSpan.
         m_floatDebounce.restart();
+        // Dispatch log: performToggleFloat's "now floating" line is emitted
+        // for shortcut and engine paths alike, so without this line a user
+        // Meta+F is indistinguishable in the journal from an engine float.
+        qCInfo(lcDaemon) << "handleFloat: toggling float for focused window" << ctx.windowId << "screen"
+                         << ctx.screenId;
         nav->toggleFocusedFloat(ctx);
     }
 }
@@ -450,10 +455,15 @@ void Daemon::resnapIfManualMode()
     // screen cycling to the same layout), setActiveLayout is a no-op and no signal fires.
     // Explicitly populating here mirrors the KCM's assignmentChangesApplied path.
     if (m_windowTrackingAdaptor) {
-        QSet<QString> autotileScreens;
+        // Exclude EVERY engine-managed screen, not just autotile: the
+        // resnap's only mode gate is this exclude set, and resnapping a
+        // scroll-owned screen would reposition strip windows to stale zone
+        // rects (the KCM twin in init_engines.cpp builds the same union).
+        QSet<QString> engineManagedScreens;
         if (m_screenModeRouter && m_screenManager) {
             const auto parts = m_screenModeRouter->partitionByMode(m_screenManager->effectiveScreenIds());
-            autotileScreens = QSet<QString>(parts.autotile.begin(), parts.autotile.end());
+            engineManagedScreens = QSet<QString>(parts.autotile.begin(), parts.autotile.end());
+            engineManagedScreens.unite(QSet<QString>(parts.scrolling.begin(), parts.scrolling.end()));
         }
         // Restrict the resnap to the current virtual desktop. Cycle/picker /
         // zone-selector all change a single (screen, desktop, activity)
@@ -465,11 +475,13 @@ void Daemon::resnapIfManualMode()
         // osd.cpp) for the null-safe VDM read — the same pattern used
         // by every daemon-side site that needs the current desktop
         // (autotile.cpp, signals.cpp, osd.cpp, start.cpp).
-        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, {}, currentDesktop());
+        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens, {},
+                                                                              currentDesktop());
     }
     // Co-locate the suppress pre-arm with the resnap call so a null
     // m_snapAdaptor doesn't leave the counter armed for the next
-    // unrelated navigationFeedback. Mirrors the daemon.cpp:1249 site.
+    // unrelated navigationFeedback. Mirrors the other armResnapOsdSuppression
+    // call sites (a line number into another TU rots on every file split).
     if (m_snapAdaptor) {
         armResnapOsdSuppression(1);
         m_snapAdaptor->resnapToNewLayout();
@@ -480,29 +492,127 @@ void Daemon::resnapIfManualMode()
     emitPendingSnapFloatRestoresForResnapBuffer();
 }
 
-void Daemon::emitPendingSnapFloatRestoresForResnapBuffer()
+void Daemon::emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntries)
 {
     if (m_pendingSnapFloatRestores.isEmpty()) {
         return;
     }
+    // A snap-float restore is a SNAPPING-mode action. An entry whose screen
+    // currently resolves to a tiling-family mode is HELD, not emitted:
+    // replaying it would float the window out of the live autotile grid or
+    // scroll strip (observed as dolphin popping out of Aligned Grid seconds
+    // after a snapping→autotile toggle — the presave for the RETURN trip
+    // was drained into the mode it was saved against).
+    //
+    // A held entry is DROPPED, not durably queued: updateEngineScreens clears
+    // the whole batch at entry, and the engines' placementChanged count gates
+    // re-enter it within the same adoption burst, so a held float survives
+    // milliseconds at most. That is by design — the durable restore source is
+    // the window's snap slot in its placement record, which
+    // handleEngineWindowsReleased re-reads on the return trip. Holding here
+    // only has to stop the replay landing in the wrong mode.
+    const auto snapOwnsEntryScreen = [this](const ZoneAssignmentEntry& e) {
+        if (e.targetScreenId.isEmpty()) {
+            return true; // unscreened: historical permissive path
+        }
+        // Router-backed (downgrades disabled modes to Snapping) — the same
+        // verdict every shortcut dispatch uses.
+        return currentModeFor(e.targetScreenId) == PhosphorZones::AssignmentEntry::Snapping;
+    };
     QVector<ZoneAssignmentEntry> floatEntries;
+    QVector<ZoneAssignmentEntry> heldFloatEntries;
+    QVector<ZoneAssignmentEntry> zoneEntries;
     for (const ZoneAssignmentEntry& e : std::as_const(m_pendingSnapFloatRestores)) {
         if (e.targetZoneId == RestoreSentinel) {
-            floatEntries.append(e);
+            if (snapOwnsEntryScreen(e)) {
+                floatEntries.append(e);
+            } else {
+                heldFloatEntries.append(e);
+            }
+        } else {
+            zoneEntries.append(e);
         }
     }
-    // Consume the whole buffer: the float entries are emitted below; the
-    // snap-ZONE entries are deliberately handed to the in-flight
-    // resnapToNewLayout (new-layout zones), not re-applied here against the
-    // old layout. Clearing prevents them leaking into the next windowsReleased.
-    m_pendingSnapFloatRestores.clear();
-    if (floatEntries.isEmpty() || !m_snapEngine) {
+    if (preserveZoneEntries) {
+        // Tail-drain mode (updateEngineScreens): the float half is emitted
+        // now — floats are excluded from every downstream resnap, so this
+        // batch's window set is disjoint from anything a consumer emits
+        // later — but the snap-ZONE half MUST survive for the mode-toggle
+        // and autotile-disable consumers, which feed it into
+        // preClaimedZoneIds / the batched restore. Clearing it here was a
+        // regression that left previously-floated-then-toggled windows
+        // stranded off their zones.
+        m_pendingSnapFloatRestores = zoneEntries + heldFloatEntries;
+    } else {
+        // Full consume: the caller is (or stands in for) the final
+        // consumer on its path. Remaining zone entries are deliberately
+        // handed to an in-flight resnapToNewLayout when one exists, else
+        // dropped (a prune-origin batch's zones reference a dead screen).
+        // Held floats are carried past THIS caller for the same reason they
+        // were held — it is not a snapping consumer — but see the note above:
+        // the next recompute clears them, and the record is the durable source.
+        m_pendingSnapFloatRestores = heldFloatEntries;
+    }
+    if (floatEntries.isEmpty()) {
+        return;
+    }
+    if (!m_snapEngine) {
+        qCWarning(lcDaemon) << "emitPendingSnapFloatRestoresForResnapBuffer: dropping" << floatEntries.size()
+                            << "snap-float restores — no snap engine to apply them";
         return;
     }
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         armResnapOsdSuppression(1); // the batched emit drives an additional resnap feedback
         concreteSnap->emitBatchedResnap(floatEntries);
+    } else {
+        qCWarning(lcDaemon) << "emitPendingSnapFloatRestoresForResnapBuffer: dropping" << floatEntries.size()
+                            << "snap-float restores — snap engine is not a SnapEngine";
     }
+}
+
+void Daemon::flushPendingSnapZoneRestores()
+{
+    // Nested inside an outer recompute: our updateEngineScreens() call was
+    // deferred to a queued re-run by the re-entrancy latch, so the batch we
+    // would drain here belongs to the OUTER pass and its consumer (the
+    // mode-toggle / autotile-disable paths feed the zone half into
+    // preClaimedZoneIds). Draining it here strands those windows off their
+    // zones — the exact regression the tail drain's preserveZoneEntries mode
+    // was added to avoid.
+    if (m_updateEngineScreensInProgress) {
+        return;
+    }
+    if (m_pendingSnapFloatRestores.isEmpty()) {
+        return;
+    }
+    QVector<ZoneAssignmentEntry> zoneEntries;
+    for (const ZoneAssignmentEntry& e : std::as_const(m_pendingSnapFloatRestores)) {
+        if (e.targetZoneId != RestoreSentinel) {
+            zoneEntries.append(e);
+        }
+    }
+    // The float half was already emitted by the updateEngineScreens tail
+    // drain on every path that reaches here; clear wholesale regardless so a
+    // leftover entry can never be replayed by a later unrelated consumer.
+    m_pendingSnapFloatRestores.clear();
+    if (zoneEntries.isEmpty()) {
+        return;
+    }
+    if (!m_snapEngine) {
+        qCWarning(lcDaemon) << "flushPendingSnapZoneRestores: dropping" << zoneEntries.size()
+                            << "snap-zone restores — no snap engine to apply them";
+        return;
+    }
+    auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get());
+    if (!concreteSnap) {
+        qCWarning(lcDaemon) << "flushPendingSnapZoneRestores: dropping" << zoneEntries.size()
+                            << "snap-zone restores — snap engine is not a SnapEngine";
+        return;
+    }
+    qCInfo(lcDaemon) << "flushPendingSnapZoneRestores: restoring" << zoneEntries.size()
+                     << "windows to their snap zones";
+    armResnapOsdSuppression(1); // the batched emit drives an additional resnap feedback
+    concreteSnap->emitBatchedResnap(zoneEntries);
 }
 
 void Daemon::handleSwapVirtualScreen(NavigationDirection direction)

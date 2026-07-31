@@ -200,7 +200,9 @@ public Q_SLOTS:
     // rules are not included.
     QVariantMap getAllCombinedAssignments();
 
-    // Quick layout slots (1-9), keyed by tiling mode (0 = Snapping, 1 = Autotile)
+    // Quick layout slots (1-9), keyed by tiling mode (0 = Snapping,
+    // 1 = Autotile). Scrolling (2) carries no quick slots — quickSlotMode in
+    // layoutadaptor.cpp rejects it rather than clamping onto another mode's map.
     QString getQuickLayoutSlot(int mode, int slotNumber);
     void setQuickLayoutSlot(int mode, int slotNumber, const QString& layoutId);
     void setAllQuickLayoutSlots(int mode, const QVariantMap& slots); // Batch set - saves once
@@ -272,8 +274,14 @@ public Q_SLOTS:
      * @brief Get current mode, layout, and algorithm for all screens
      *
      * Returns a JSON array with one object per screen:
-     *   screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile),
-     *   layoutId, layoutName, algorithmId, algorithmName.
+     *   screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile,
+     *   2=Scrolling), layoutId, layoutName, layoutIdExplicit, algorithmId,
+     *   algorithmName, algorithmIdExplicit.
+     *
+     * layoutId / algorithmId carry the RESOLVED values (cascade and default
+     * fallbacks included). The two *Explicit booleans say whether this exact
+     * (screen, desktop, activity) tuple pins the field itself, so a caller can
+     * tell an inherited value from an assigned one.
      *
      * @return JSON string
      */

@@ -8,6 +8,7 @@
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleEvaluator.h>
 
+#include <core/output.h>
 #include <effect/effecthandler.h>
 #include <window.h>
 #include <workspace.h>
@@ -17,7 +18,7 @@
 
 #include <optional>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
 #include "window_query.h"
 
@@ -72,7 +73,33 @@ QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QR
     if (!kw) {
         return fallback;
     }
+    // Off-screen poison guard: the scrolling engine parks off-viewport
+    // columns and hidden tabs ENTIRELY outside every screen rect, so a
+    // capture that runs while the frame is parked (float toggle on a parked
+    // tile, unminimize-unfloat, cross-screen transfer) would persist an
+    // off-screen rect as the window's restore geometry and the window would
+    // later restore off-screen. A rect intersecting no screen is never a
+    // legitimate free geometry — return invalid so the caller skips the
+    // capture entirely (this is the shared chokepoint for both engines'
+    // free-geometry capture paths). The restore rects below get the same
+    // check: KWin records geometryRestore from the live frame, so a
+    // maximize while parked snapshots the parked rect too.
+    const auto onAnyScreen = [](const QRectF& rect) {
+        if (!KWin::effects) {
+            // No compositor context to verify against (teardown); treat as
+            // on-screen rather than discarding a possibly-good capture.
+            return true;
+        }
+        for (const auto* screen : KWin::effects->screens()) {
+            if (rect.intersects(QRectF(screen->geometry()))) {
+                return true;
+            }
+        }
+        return false;
+    };
+    bool restoreBranchEntered = false;
     if (kw->isFullScreen()) {
+        restoreBranchEntered = true;
         // A window maximized and THEN made fullscreen has a fullscreenGeometryRestore()
         // equal to the maximized (full work-area) rect, so it would still float back
         // maximized-sized. When the pre-fullscreen state was itself maximized, prefer
@@ -80,19 +107,29 @@ QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QR
         // restore rect, before giving up to the fallback.
         if (kw->maximizeMode() != KWin::MaximizeRestore) {
             const QRectF unmaximized(kw->geometryRestore());
-            if (unmaximized.width() > 0 && unmaximized.height() > 0) {
+            if (unmaximized.width() > 0 && unmaximized.height() > 0 && onAnyScreen(unmaximized)) {
                 return unmaximized;
             }
         }
         const QRectF restore(kw->fullscreenGeometryRestore());
-        if (restore.width() > 0 && restore.height() > 0) {
+        if (restore.width() > 0 && restore.height() > 0 && onAnyScreen(restore)) {
             return restore;
         }
     } else if (kw->maximizeMode() != KWin::MaximizeRestore) {
+        restoreBranchEntered = true;
         const QRectF restore(kw->geometryRestore());
-        if (restore.width() > 0 && restore.height() > 0) {
+        if (restore.width() > 0 && restore.height() > 0 && onAnyScreen(restore)) {
             return restore;
         }
+    }
+    // A maximized/fullscreen window whose restore rects were all rejected
+    // must NOT fall through to the live frame — that IS the full-monitor
+    // rect this function exists to keep out of the free-geometry store.
+    if (restoreBranchEntered) {
+        return QRectF();
+    }
+    if (!onAnyScreen(fallback)) {
+        return QRectF();
     }
     return fallback;
 }
@@ -120,9 +157,35 @@ void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
 PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);
-    PhosphorRules::WindowQuery query =
-        ruleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
-                     m_autotileHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    const QString screenId = getWindowScreenId(w);
+    PhosphorRules::WindowQuery query = ruleQueryFor(w, screenId, isWindowFloating(windowId), isWindowSnapped(windowId),
+                                                    m_tilingHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    // Scroll-managed windows ride the same tile-request pipeline as autotile,
+    // so ruleQueryFor derives "tiling" from the tiled bit; re-stamp from the
+    // per-screen engine discriminator so a `Mode Equals "scrolling"` window
+    // rule matches strip-managed windows.
+    if (query.mode == QLatin1String("tiling") && m_tilingHandler->isScrollingScreen(screenId)) {
+        query.mode = QStringLiteral("scrolling");
+    }
+    // Stamp the screen orientation from the resolved screen id. ruleQueryFor
+    // leaves the field to us whenever it is handed an id: its own derivation
+    // is centre-based, which answers for the wrong monitor (or not at all) for
+    // a scroll strip's windows parked off-screen beside their column. The id
+    // is authoritative for those — it comes from the engine's own per-window
+    // screen override. An id that resolves to no output (a screen that just
+    // disconnected) falls back to the centre-derived answer.
+    QString orientation;
+    if (const KWin::LogicalOutput* output = outputForScreenId(screenId)) {
+        if (const QRect g = output->geometry(); g.isValid()) {
+            orientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+        }
+    }
+    if (orientation.isEmpty()) {
+        orientation = centreScreenOrientation(w);
+    }
+    if (!orientation.isEmpty()) {
+        query.screenOrientation = orientation;
+    }
     applyOwnLayerFlags(query, windowId);
     return query;
 }

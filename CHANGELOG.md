@@ -5,6 +5,17 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Scrolling mode**: a third placement mode alongside Snapping and Tiling, modeled on the niri compositor. Windows form columns on an endless horizontal strip and the screen is a window onto it, so opening a new window never resizes the ones you have. The strip slides them aside and scrolls the view instead. Columns cycle through width presets or take any width. Windows in a column split its height or show one at a time as tabs with a compact indicator above the column, and a window can be consumed into a neighboring column or expelled into its own. A column can be centered on demand or follow one of niri's focus centering policies. Scrolling is assigned per screen, desktop, and activity from the Monitors page, and the mode toggle shortcut cycles through all three modes. It has its own settings section beside Snapping and Tiling, with an enable switch and a shortcut family on Meta+Alt. Rule actions cover per-app and per-context behavior. Windows too large for the strip float instead, using the existing floating support, and a minimized window returns to the slot it left ([#852](https://github.com/fuddlesworth/PlasmaZones/pull/852)).
+- **Meta+wheel scrolls through columns**: on a screen in Scrolling mode, holding Meta and scrolling the mouse wheel focuses the next column and slides the strip, matching niri's Mod+wheel navigation. Horizontal wheel ticks and two-finger horizontal touchpad scrolls work too. Meta+Alt+wheel does the same, for setups where KWin's zoom effect already owns Meta+wheel. The binding is only active while at least one screen uses Scrolling mode ([#852](https://github.com/fuddlesworth/PlasmaZones/pull/852)).
+
+### Changed
+
+- **Breaking D-Bus interface split**: the shared engine transport moved from org.plasmazones.Autotile to the engine-neutral org.plasmazones.Tiling interface, which serves every tiling-family engine. The moved surface covers the window lifecycle calls (windowOpened, windowsOpenedBatch, windowClosed, windowMinSizeUpdated, notifyWindowFocused), the tile-request and float signals (windowsTileRequested, focusWindowRequested, windowFloatingChanged, tilingChanged, windowsReleasedFromTiling), the retile methods, the enabled property with its change signal, and the screen set, now published as the union property managedScreens. The org.plasmazones.Autotile name still exists but is narrower now, carrying algorithm selection, master operations, focus cycling, and autotile configuration beside the new org.plasmazones.Scrolling interface. Check any external script against the new interface files before relying on it ([#852](https://github.com/fuddlesworth/PlasmaZones/pull/852)).
+
 ## [3.3.2] - 2026-07-29
 
 ### Fixed
@@ -1768,6 +1779,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.2...HEAD
 [3.3.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.1...v3.3.2
 [3.3.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.0...v3.3.1
 [3.3.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.7...v3.3.0

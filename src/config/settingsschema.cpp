@@ -4,6 +4,7 @@
 #include "settingsschema.h"
 
 #include "settingsschemachoices.h"
+#include "settingsschema_p.h"
 
 #include "configdefaults.h"
 #include "configmigration.h"
@@ -40,6 +41,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendActivationSchema(s);
     appendBehaviorSchema(s);
     appendAutotilingSchema(s);
+    appendScrollingSchema(s);
     appendWindowsSchema(s);
     appendGapsSchema(s);
     appendDecorationsSchema(s);
@@ -49,29 +51,17 @@ PhosphorConfig::Schema buildSettingsSchema()
 
 // ─── Validator helpers ──────────────────────────────────────────────────────
 // Common coercion patterns factored to keep group schemas readable. Return
-// the same function-object type as KeyDef::validator.
+// the same function-object type as KeyDef::validator. The ones the scrolling
+// TU shares live in settingsschema_p.h; the rest are local to this file.
+
+using SchemaValidators::clampDouble;
+using SchemaValidators::validIntOr;
 
 namespace {
 auto clampInt(int minVal, int maxVal)
 {
     return [minVal, maxVal](const QVariant& v) -> QVariant {
         return qBound(minVal, v.toInt(), maxVal);
-    };
-}
-
-auto clampDouble(double minVal, double maxVal)
-{
-    return [minVal, maxVal](const QVariant& v) -> QVariant {
-        const double d = v.toDouble();
-        // qBound on NaN is unspecified — it decays to qMin/qMax comparisons,
-        // all false for NaN, so a corrupt "nan" in the config would land on an
-        // arbitrary bound depending on argument order. NaN is not a value, so
-        // pin it deterministically to the minimum rather than leaving it to
-        // that pathology.
-        if (qIsNaN(d)) {
-            return minVal;
-        }
-        return qBound(minVal, d, maxVal);
     };
 }
 
@@ -83,19 +73,6 @@ auto validColorOr(QColor fallback)
     return [fallback](const QVariant& v) -> QVariant {
         const QColor c = v.value<QColor>();
         return c.isValid() ? QVariant::fromValue(c) : QVariant::fromValue(fallback);
-    };
-}
-
-/// Snap-to-default enum validator: accept a value only if it appears in the
-/// explicit valid set, otherwise return @p fallback. Used for enums where
-/// qBound would silently reinterpret out-of-range values as the nearest
-/// neighbour — that's the exact bug the effect-side cache loader avoids,
-/// and both readers must agree (see testAutotile*_unknownValueClampsToFloat).
-auto validIntOr(std::initializer_list<int> valid, int fallback)
-{
-    return [valid = QVector<int>(valid), fallback](const QVariant& v) -> QVariant {
-        const int raw = v.toInt();
-        return valid.contains(raw) ? raw : fallback;
     };
 }
 
@@ -537,6 +514,11 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::decMasterCountKey(), CD::autotileDecMasterCountShortcut(), QMetaType::QString},
         {CD::retileKey(), CD::autotileRetileShortcut(), QMetaType::QString},
     };
+
+    // Shortcuts.Scrolling is declared by the scrolling TU (split out for
+    // file-size) but still assembled from here, so the whole Shortcuts.*
+    // family has one entry point.
+    appendScrollingShortcutsSchema(schema);
 }
 
 // ─── Editor ─────────────────────────────────────────────────────────────────

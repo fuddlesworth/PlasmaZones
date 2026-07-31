@@ -6,8 +6,8 @@
 include(GenerateExportHeader)
 
 # QTP0004: All QML files are explicitly listed in qt_add_qml_module.
-# Guarded — the policy exists only from Qt 6.8 and QT_MIN_VERSION is 6.6;
-# unguarded, a 6.6/6.7 toolchain fatal-errors on the unknown policy.
+# Guarded — the policy exists only from Qt 6.8, so a toolchain older than that
+# fatal-errors on the unknown policy if it is set unconditionally.
 # QT_KNOWN_POLICY_*, not if(POLICY ...): CMake's POLICY test only knows
 # CMP* policies and is always false for QTP*.
 if(QT_KNOWN_POLICY_QTP0004)
@@ -101,6 +101,7 @@ set(plasmazones_core_SRCS
     config/settings/systemcolors.cpp
     config/settings/storescalars.cpp
     config/settings/shortcuts.cpp
+    config/settings/scrolling.cpp
     config/settings.h
     config/configdefaults.cpp
     config/configbackends.h
@@ -111,6 +112,8 @@ set(plasmazones_core_SRCS
     config/perscreenresolver.cpp
     config/settingsschema.h
     config/settingsschema.cpp
+    config/settingsschema_p.h
+    config/settingsschema_scrolling.cpp
     config/settingsschemachoices.h
     config/settingsvaluelabels.cpp
     config/settingsvaluelabels.h
@@ -162,7 +165,6 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/saveload.cpp
     dbus/windowtrackingadaptor/persistenceworker.cpp
     dbus/windowtrackingadaptor/persistenceworker.h
-    dbus/windowtrackingadaptor/snaprestore.cpp
     dbus/windowtrackingadaptor/convenience.cpp
     dbus/windowtrackingadaptor/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
@@ -173,9 +175,13 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor/dragactivation.cpp
     dbus/windowdragadaptor/dragactivation.h
     dbus/windowdragadaptor/windowdragadaptor.h
+    dbus/scrollingadaptor/scrollingadaptor.cpp
+    dbus/scrollingadaptor/scrollingadaptor.h
     dbus/autotileadaptor/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor/autotileadaptor.h
+    dbus/tilingadaptor/tilingadaptor.cpp
+    dbus/tilingadaptor/tilingadaptor.h
     dbus/snapadaptor/snapadaptor.cpp
     dbus/snapadaptor/commit.cpp
     dbus/snapadaptor/snaprestore.cpp
@@ -233,6 +239,7 @@ target_link_libraries(plasmazones_core
         PhosphorPlacement::PhosphorPlacement
         PhosphorTileEngine::PhosphorTileEngine
         PhosphorSnapEngine::PhosphorSnapEngine
+        PhosphorScrollEngine::PhosphorScrollEngine
         PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::PhosphorProtocol
@@ -474,22 +481,30 @@ set(plasmazones_daemon_SRCS
     daemon/rendering/vulkansupport.cpp
     daemon/daemon.cpp
     daemon/controllers/enginefactory.cpp
+    daemon/controllers/shortcutmanager_catalog.cpp
+    daemon/controllers/shortcutmanager_ids.h
     daemon/daemon/start.cpp
+    daemon/daemon/shortcuts_wiring.cpp
     daemon/daemon/autotile_init.cpp
+    daemon/daemon/scrolling_init.cpp
+    daemon/daemon/scrolling.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/shader_warmup.cpp
     daemon/daemon/animation_profiles.cpp
     daemon/daemon/init_services.cpp
     daemon/daemon/init_adaptors.cpp
     daemon/daemon/init_engines.cpp
+    daemon/daemon/init_dbus_service.cpp
     daemon/daemon/lifecycle.cpp
     daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
+    daemon/daemon/engine_release.cpp
     daemon/daemon/seedorderfilter.cpp
     daemon/daemon/seedorderfilter.h
     daemon/daemon/osd.cpp
     daemon/daemon.h
+    daemon/daemon_fwd.h
     daemon/daemon/helpers.h
     daemon/daemon/macros.h
     # Concrete daemon-side adapters bridging the existing services
@@ -508,6 +523,7 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/priming.cpp
     daemon/overlayservice/rekey.cpp
     daemon/overlayservice/cheatsheet.cpp
+    daemon/overlayservice/scrolltabs.cpp
     daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
     daemon/overlayservice/shellhost_bridge.cpp
@@ -626,7 +642,6 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/plasmazones.service
     DESTINATION ${KDE_INSTALL_SYSTEMDUSERUNITDIR}
 )
-
 
 # Daemon desktop file: use full Exec path so KWin's fetchRestrictedDBusInterfacesFromPid
 # can match the process (it compares executable path to desktop Exec).

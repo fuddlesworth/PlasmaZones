@@ -48,7 +48,8 @@ Window {
     // true` so vertex shaders bind to the visible OSD body rather than
     // the fullscreen slot Item.
     // Sibling slots below: snapAssistSlot (z=2), layoutPickerSlot (z=2),
-    // cheatsheetSlot (z=2), zoneSelectorSlot (z=1), mainOverlaySlot (z=0).
+    // cheatsheetSlot (z=2), zoneSelectorSlot (z=1), scrollTabsSlot (z=0.5),
+    // mainOverlaySlot (z=0).
     // The osdSlot's z is
     // dynamic (3 normally, 1.5 while a modal slot is visible — see the
     // binding on osdSlot). Each is a sibling Item with its own
@@ -87,6 +88,10 @@ Window {
     /// matching show/dismiss signals — the shell is kbd-None so QML
     /// Shortcuts can't fire here.
     readonly property alias cheatsheetSlotItem: cheatsheetSlot
+    /// Scroll tab-strip slot Item — per-screen tab indicators for tabbed
+    /// scrolling columns. Display-only and click-through; content updates
+    /// are plain property writes (no per-update re-instantiation).
+    readonly property alias scrollTabsSlotItem: scrollTabsSlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
     /// the slot-hide animation start (not Surface::hide() — only the
@@ -196,6 +201,13 @@ Window {
         property bool locked: false
         property bool disabled: false
         property string disabledReason: ""
+        // Overlay glyph for the disabled-style card; the daemon overwrites
+        // it per show (neutral icon for the Scrolling mode announcement).
+        // Third copy of this literal: LayoutOsdContent.qml's failureIcon is
+        // the one the card compares against to decide the failure tint, and
+        // src/daemon/overlayservice/osd.cpp writes the same string as its
+        // empty-icon fallback. Change one and change all three.
+        property string disabledIcon: "dialog-cancel"
         property bool success: true
         property string action: ""
         property string reason: ""
@@ -239,7 +251,8 @@ Window {
         // above the passive content types (main overlay z=0, zone
         // selector z=1) so a layout-OSD or nav-OSD reads cleanly over an
         // active zone overlay or drag-time selector. While a MODAL slot
-        // (snap-assist / layout picker, both z=2) is visible the OSD
+        // (snap-assist, layout picker, or the shortcut cheatsheet, all
+        // z=2) is visible the OSD
         // drops to 1.5 — still above the passive tiers, but below the
         // modal — so a concurrently-fired OSD card neither occludes
         // modal content for its ~1.5s display nor lets its
@@ -321,6 +334,7 @@ Window {
                 locked: osdSlot.locked
                 disabled: osdSlot.disabled
                 disabledReason: osdSlot.disabledReason
+                disabledIcon: osdSlot.disabledIcon
             }
         }
 
@@ -666,6 +680,58 @@ Window {
             decorationChain: cheatsheetSlot.decorationChain
             decorationOuterPadding: cheatsheetSlot.decorationOuterPadding
             audioSpectrum: cheatsheetSlot.audioSpectrum
+        }
+    }
+
+    Item {
+        id: scrollTabsSlot
+
+        // Tab-strip model — C++ writes a list of strip entries, each a map
+        // with x / y / width (shell-window coordinates) and tabs
+        // (list of {title, active}).
+        property var strips: []
+        // Content lifecycle gate, toggled by C++ on show/hide. Unlike the
+        // OSD-style slots the content is NOT re-instantiated per update —
+        // strip changes are frequent (every relayout) and flow through the
+        // `strips` binding.
+        property bool loaded: false
+        // User overlay font, pushed by C++ writeFontProperties (same
+        // pipeline as every other slot).
+        property string fontFamily: ""
+        property real fontSizeScale: 1
+        property int fontWeight: Font.Normal
+        property bool fontItalic: false
+        property bool fontUnderline: false
+        property bool fontStrikeout: false
+
+        anchors.fill: parent
+        // Indicator tier: above the main overlay, below the zone selector,
+        // the OSDs and the modals.
+        z: 0.5
+        opacity: 0
+        visible: false
+
+        Loader {
+            id: scrollTabsLoader
+
+            anchors.fill: parent
+            active: scrollTabsSlot.loaded
+            // SYNCHRONOUS by contract — see snapAssistLoader.
+            sourceComponent: scrollTabsContentComp
+        }
+
+        Component {
+            id: scrollTabsContentComp
+
+            ScrollTabStripContent {
+                strips: scrollTabsSlot.strips
+                fontFamily: scrollTabsSlot.fontFamily
+                fontSizeScale: scrollTabsSlot.fontSizeScale
+                fontWeight: scrollTabsSlot.fontWeight
+                fontItalic: scrollTabsSlot.fontItalic
+                fontUnderline: scrollTabsSlot.fontUnderline
+                fontStrikeout: scrollTabsSlot.fontStrikeout
+            }
         }
     }
 

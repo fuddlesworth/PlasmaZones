@@ -65,6 +65,26 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     return WindowType::Unknown;
 }
 
+QString centreScreenOrientation(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return {};
+    }
+    // Position-resolved output (screenAt on the frame centre), NOT w->screen():
+    // KWin can assign a window the wrong one of two identical-model outputs
+    // (discussion #724).
+    const QPointF centreF = w->frameGeometry().center();
+    const auto* output = KWin::effects->screenAt(QPoint(qRound(centreF.x()), qRound(centreF.y())));
+    if (!output) {
+        return {};
+    }
+    const QRect g = output->geometry();
+    if (!g.isValid()) {
+        return {};
+    }
+    return g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+}
+
 PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating, bool isSnapped,
                                         bool isTiled, const QString& zoneId)
 {
@@ -84,9 +104,12 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     }
     // Engine mode (context field) — derived from the snapped / tiled state above
     // so a per-mode rule (`Mode Equals "tiling"`) resolves this window's border /
-    // title / colour the same way the daemon resolves its per-mode gaps. Snapping
-    // and tiling are the only engine modes; a floating (unmanaged) window has no
-    // mode, so query.mode is left empty and no Mode leaf matches it.
+    // title / colour the same way the daemon resolves its per-mode gaps. A
+    // floating (unmanaged) window has no mode, so query.mode is left empty and
+    // no Mode leaf matches it. Scrolling is indistinguishable from tiling at
+    // this level (strip windows ride the tile pipeline); the effect's
+    // ruleQuery() funnel re-stamps "scrolling" from the per-screen engine
+    // discriminator, which this free helper cannot reach.
     if (isTiled) {
         query.mode = QStringLiteral("tiling");
     } else if (isSnapped) {
@@ -100,12 +123,14 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     query.screenId = screenId;
     // Orientation of the window's screen ("portrait" when taller than wide), so a
     // window rule can match ScreenOrientation the same way a context rule does.
-    // Left empty (inert) when the output or its geometry is unavailable; a square
-    // screen counts as landscape, matching the daemon-side orientation provider.
-    if (const auto* output = w->screen()) {
-        const QRect g = output->geometry();
-        if (g.isValid()) {
-            query.screenOrientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+    // Only derived from the frame centre when the caller has no screen id to
+    // offer: a centre-resolved output is wrong for a scroll strip's off-screen
+    // parked windows, so a caller that HAS an id (the effect's ruleQuery()
+    // funnel) derives the field from that id instead and only falls back to
+    // this helper when the id resolves to no output.
+    if (screenId.isEmpty()) {
+        if (const QString orientation = centreScreenOrientation(w); !orientation.isEmpty()) {
+            query.screenOrientation = orientation;
         }
     }
     // `WindowQuery` fields are `std::optional` — leaving a field disengaged

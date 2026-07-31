@@ -6,6 +6,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "tileslogging.h"
 
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorRegistry/IFactoryBase.h>
 #include <PhosphorRegistry/Registry.h>
 
@@ -28,6 +29,25 @@ const QString& recommendedDefaultAlgorithmId()
 {
     static const QString id = QStringLiteral("bsp");
     return id;
+}
+
+/// Debug assert plus a release-build refusal for the registry's mutation
+/// entry points.
+///
+/// The underlying PhosphorRegistry store is internally mutex-guarded, so the
+/// hazard is not store corruption: it is the QObject work AROUND it —
+/// setRegistryId and the entry deleter's deleteLater touching an object with
+/// another thread affinity, and the direct-connected algorithmRegistered /
+/// algorithmUnregistered / contentsChanged emissions running consumers' slots
+/// on the wrong thread. An assert alone left all of that live in release.
+bool assertMainThread(const char* function)
+{
+    if (!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread()) {
+        return true;
+    }
+    Q_ASSERT_X(false, function, "AlgorithmRegistry mutated off the main thread");
+    qCWarning(PhosphorTiles::lcTilesLib) << "AlgorithmRegistry:" << function << "called off the main thread — refusing";
+    return false;
 }
 } // namespace
 
@@ -176,7 +196,14 @@ void AlgorithmRegistry::cleanup()
 
 void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* algorithm)
 {
-    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
+    // Deliberately does NOT delete `algorithm` on this path: the
+    // double-ownership guard below has not run yet, so the object may already
+    // belong to the registry and deleting it would be a double free. Refusing
+    // an off-thread call is a programming-error path that must never happen in
+    // production; leaking there is strictly safer.
+    if (!assertMainThread(__func__)) {
+        return;
+    }
 
     if (!algorithm) {
         return;
@@ -208,19 +235,20 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
         }
     }
 
-    // From here `algorithm` is NOT already owned by the registry, so deleting it
-    // on a validation-failure path is safe (prevents leaks, matching the prior
-    // contract).
+    // From here `algorithm` is NOT already owned by the registry, so the caller's
+    // unparented object is ours to dispose on a validation-failure path. Held in
+    // a unique_ptr across the validation block rather than hand-deleted at each
+    // exit (CLAUDE.md: never manual delete); ownership is released into the
+    // registry once every check passes.
+    std::unique_ptr<TilingAlgorithm> owned(algorithm);
     if (id.isEmpty()) {
-        delete algorithm;
         return;
     }
     // Reserved namespace: "autotile:" is the prefix LayoutId uses to wrap
     // algorithm ids into composite LayoutPreview ids.
-    if (id.startsWith(QLatin1String("autotile:"))) {
+    if (PhosphorLayout::LayoutId::isAutotile(id)) {
         qCWarning(PhosphorTiles::lcTilesLib)
             << "AlgorithmRegistry: refusing algorithm id with reserved 'autotile:' prefix" << id;
-        delete algorithm;
         return;
     }
     // IDs flow into LayoutPreview::id, JSON keys, D-Bus args, QML model roles.
@@ -233,7 +261,6 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
         if (!ok) {
             qCWarning(PhosphorTiles::lcTilesLib) << "AlgorithmRegistry: refusing algorithm id with invalid character"
                                                  << id << "(allowed: [A-Za-z0-9._:-])";
-            delete algorithm;
             return;
         }
     }
@@ -252,6 +279,8 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
         }
     }
     algorithm->setRegistryId(id);
+    // Every validation passed: hand ownership to the registry entry.
+    owned.release();
     // Replace: the prior entry at `id` is dropped here, deferring the old
     // algorithm's deletion past the signals below (the entry's deleter), with
     // the NEW algorithm already queryable when handlers run.
@@ -269,7 +298,9 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
 
 bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
 {
-    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
+    if (!assertMainThread(__func__)) {
+        return false;
+    }
 
     const auto entry = m_impl->registry.factory(id);
     if (!entry) {

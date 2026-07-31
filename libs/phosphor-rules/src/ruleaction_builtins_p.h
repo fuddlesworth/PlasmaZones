@@ -118,6 +118,14 @@ inline constexpr double kMinSplitPercent = 10.0;
 inline constexpr double kMaxSplitPercent = 90.0;
 inline constexpr double kMinSplitRatio = kMinSplitPercent / 100.0;
 inline constexpr double kMaxSplitRatio = kMaxSplitPercent / 100.0;
+// Scrolling column-width bounds. The RATIO pair is the installed
+// PhosphorRules/RuleAction.h constants (shared with the zones-layer context
+// resolver); the percent pair derives from it so the descriptor display
+// range and the stored fraction can never drift.
+inline constexpr double kMinColumnWidthRatio = MinColumnWidthRatio;
+inline constexpr double kMaxColumnWidthRatio = MaxColumnWidthRatio;
+inline constexpr double kMinColumnWidthPercent = kMinColumnWidthRatio * 100.0;
+inline constexpr double kMaxColumnWidthPercent = kMaxColumnWidthRatio * 100.0;
 
 /// Helper to keep the registerBuiltins body legible — every built-in shares
 /// the same constant slot pattern (no slot-from-params resolution).
@@ -143,7 +151,7 @@ inline const QStringList& engineModeOptions()
 {
     // NOTE: this is the engine-mode ACTION vocabulary (SetEngineMode param) and
     // is DELIBERATELY distinct from the Mode MATCH-field vocabulary in
-    // MatchTypes.h, which uses "snapping" / "tiling" (no "autotile"). The action
+    // MatchTypes.h, which uses "snapping" / "tiling" / "scrolling" (no "autotile"). The action
     // names the engine ("autotile"); the match field names the placement mode a
     // window is in ("tiling"). Do not unify them — a Mode match rule authored
     // with "autotile" would silently never match.

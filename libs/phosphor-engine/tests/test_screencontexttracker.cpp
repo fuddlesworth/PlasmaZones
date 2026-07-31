@@ -92,6 +92,18 @@ void TestScreenContextTracker::setCurrentDesktopForScreen_perOutput()
 
     t.clearCurrentDesktopForScreen(QStringLiteral("S1"));
     QCOMPARE(t.screenDesktop(QStringLiteral("S1")), 1);
+
+    // A FIRST per-output push that EQUALS the global desktop must still pin
+    // the screen (presence, not value): without the pin, a later global
+    // switch dragged this screen's key onto a desktop it was not showing.
+    ScreenContextTracker t2;
+    t2.setCurrentDesktop(2);
+    ContextChange first = t2.setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    QVERIFY(!first.changed); // effective desktop did not move
+    QVERIFY(!first.armSwitch);
+    t2.setCurrentDesktop(5);
+    QCOMPARE(t2.screenDesktop(QStringLiteral("S1")), 2); // pinned, not dragged
+    QCOMPARE(t2.currentKeyForScreen(QStringLiteral("S2")).desktop, 5); // unpinned screens follow
 }
 
 void TestScreenContextTracker::setCurrentActivity_arming()

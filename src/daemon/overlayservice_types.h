@@ -61,6 +61,7 @@ struct PerScreenOverlayState
     QQuickItem* zoneSelectorSlot() const;
     QQuickItem* mainOverlaySlot() const;
     QQuickItem* cheatsheetSlot() const;
+    QQuickItem* scrollTabsSlot() const;
 
     // overlayPhysScreen != nullptr is the sentinel for "main overlay
     // mode is active on this screen" - set in createOverlayWindow,
@@ -82,6 +83,16 @@ struct PerScreenOverlayState
     /// stores the geometry we requested so hit-testing in
     /// updateSelectorPosition() has a stable reference.
     QRect zoneSelectorGeometry;
+};
+
+/// Per-screen layout-family filter used for the zone selector. `manual`
+/// enables PhosphorZones layout entries; `autotile` enables algorithm
+/// previews. Both default-true is "show everything"; the resolver narrows
+/// to a single family when the screen has an explicit assignment.
+struct LayoutIncludeFlags
+{
+    bool manual = true;
+    bool autotile = true;
 };
 
 /// Shared property-push parameters for layout-OSD content. Used by both

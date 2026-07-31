@@ -260,7 +260,7 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  * returns `nullopt` for unknown tokens and leaves the entry on its
  * Snapping default. Every token the validator accepts — today
  * `snapping`/`autotile`/`scrolling`, see `engineModeOptions()` in
- * `ruleaction.cpp` — round-trips end-to-end through the consumer.
+ * `ruleaction_builtins_p.h` — round-trips end-to-end through the consumer.
  */
 inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const QString& snappingLayout,
                                                const QString& tilingAlgorithm)
@@ -546,7 +546,14 @@ inline ContextAxis contextAxisFor(const MatchExpression& match)
     QString screenId;
     int virtualDesktop = 0;
     QString activity;
-    contextDimsOf(match, screenId, virtualDesktop, activity);
+    // The decode result is honoured, matching matchIsExactContext below. A
+    // failed decode already fails safe (the outputs stay at ("", 0, "") and
+    // contextAxisOf maps an empty screenId to CatchAll), so this is currently
+    // equivalent — but relying on that couples this classifier to another
+    // function's zero-initialisation, which the next refactor need not keep.
+    if (!contextDimsOf(match, screenId, virtualDesktop, activity)) {
+        return ContextAxis::CatchAll;
+    }
     return contextAxisOf(screenId, virtualDesktop, activity);
 }
 
@@ -624,7 +631,13 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
     QString s;
     int d = 0;
     QString a;
-    contextDimsOf(match, s, d, a);
+    // Honour the decode verdict. On failure contextDimsOf resets the outputs to
+    // ("", 0, ""), which is exactly the global catch-all tuple — so discarding
+    // the bool would report a malformed match as the exact catch-all context and
+    // let a caller rebuild it as one, dropping whatever it really pinned.
+    if (!contextDimsOf(match, s, d, a)) {
+        return false;
+    }
     return s == screenId && d == virtualDesktop && a == activity;
 }
 
@@ -641,7 +654,7 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
  *
  * Open-vocabulary within the bridge itself. At persistence boundaries the
  * DisableEngine action descriptor's load-time validator already enforces
- * the closed `engineModeOptions()` set (see ruleaction.cpp), so a rule
+ * the closed `engineModeOptions()` set (see ruleaction_builtins_p.h), so a rule
  * that survived load has a vocabulary-valid token. The bridge keeps the
  * verbatim contract so an in-memory caller building a rule programmatically
  * — or a test pinning the bridge's unrecognised-token behaviour — can

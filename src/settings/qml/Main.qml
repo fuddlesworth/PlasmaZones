@@ -575,6 +575,11 @@ PhosphorUi.SettingsAppWindow {
                 window.sidebar.drillOut();
         }
 
+        function onScrollingEnabledChanged() {
+            if (!appSettings.scrollingEnabled && window.sidebar.currentParentId === "scrolling")
+                window.sidebar.drillOut();
+        }
+
         target: appSettings
     }
 
@@ -789,6 +794,11 @@ PhosphorUi.SettingsAppWindow {
         id: flatTitleLabelsObject
 
         readonly property string windowAppearance: i18n("Appearance")
+        // Scrolling's leaf is registered as "Behavior", which is right inside
+        // the section but wrong on the flat rail, where it sits beside
+        // "Snapping" and "Tiling" and must name the same kind of thing. The
+        // tree walk keeps the parent's title, so only the flat walk needs this.
+        readonly property string scrolling: i18nc("tiling mode name", "Scrolling")
     }
 
     // Constant, so declarative alongside its siblings rather than an
@@ -796,7 +806,8 @@ PhosphorUi.SettingsAppWindow {
     sidebar.searchEnabled: false
     sidebar.flattenTree: !settingsController.advancedMode
     sidebar.flatTitleOverrides: ({
-            "window-appearance": flatTitleLabelsObject.windowAppearance
+            "window-appearance": flatTitleLabelsObject.windowAppearance,
+            "scrolling-behavior": flatTitleLabelsObject.scrolling
         })
 
     // Simple/advanced mode toggle, pinned at the bottom of the sidebar — it
@@ -901,6 +912,18 @@ PhosphorUi.SettingsAppWindow {
             // The inline enable toggles must stay with them.
             readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
             readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
+            // Scrolling differs from its two siblings: it has no SimpleOnly
+            // condensed page, so its leaf is visible in BOTH modes. Both ids
+            // are matched unconditionally, and that cannot double-render the
+            // toggle: "scrolling" is a virtual parent (empty qmlSource,
+            // collapsible=false) whose ONLY navigable descendant is
+            // "scrolling-behavior", so the tree walk flattens it away and
+            // emits a single row carrying the LEAF's pageId with the parent's
+            // title. The bare "scrolling" arm therefore only ever fires if the
+            // page gains a second navigable child, at which point the parent
+            // becomes a real drill row one rail level above its children and
+            // the two still cannot appear together.
+            readonly property bool isScrolling: entry && (entry.pageId === "scrolling" || entry.pageId === "scrolling-behavior")
             // The id whose dirty state this row REPRESENTS, which is not
             // always the id it renders. Simple mode condenses a whole subtree
             // down to one visible row, and that row's own dirty state covers
@@ -914,10 +937,14 @@ PhosphorUi.SettingsAppWindow {
             readonly property string dirtyScopeId: entry ? settingsController.dirtyScopeFor(entry.pageId) : ""
             // The section-toggle's own scope, deliberately NOT dirtyScopeId.
             // pendingSection feeds discardPage() / beginExternalEdit() and a
-            // subtitle that names one of exactly two features, so it must stay
-            // bounded to the two ids those consumers handle. dirtyScopeId is an
-            // unbounded walk result and could hop past them.
-            readonly property string sectionId: isSnapping ? "snapping" : "tiling"
+            // subtitle that names one of exactly three features, so it must
+            // stay bounded to the three ids those consumers handle.
+            // dirtyScopeId is an unbounded walk result and could hop past them.
+            // Spelled out rather than defaulting to "scrolling" in the else
+            // branch: the three flags are not exhaustive over every row, and
+            // an empty id is a visibly inert scope rather than a silent write
+            // to scrollingEnabled from a row that is none of the three.
+            readonly property string sectionId: isSnapping ? "snapping" : (isTiling ? "tiling" : (isScrolling ? "scrolling" : ""))
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0
@@ -979,12 +1006,12 @@ PhosphorUi.SettingsAppWindow {
                 }
             }
 
-            // ── Snapping / Tiling toggle ────────────────────────────
+            // ── Snapping / Tiling / Scrolling toggle ────────────────
             SettingsSwitch {
                 id: sectionToggle
 
-                visible: trailingRow.isSnapping || trailingRow.isTiling
-                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : false)
+                visible: trailingRow.isSnapping || trailingRow.isTiling || trailingRow.isScrolling
+                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : (trailingRow.isScrolling ? appSettings.scrollingEnabled : false))
                 accessibleName: trailingRow.entry ? trailingRow.entry.title : ""
                 onToggled: function (newValue) {
                     // Disabling from the sidebar is a destructive shortcut
@@ -1015,8 +1042,10 @@ PhosphorUi.SettingsAppWindow {
                     settingsController.beginExternalEdit(trailingRow.sectionId);
                     if (trailingRow.isSnapping)
                         appSettings.snappingEnabled = newValue;
-                    else
+                    else if (trailingRow.isTiling)
                         appSettings.autotileEnabled = newValue;
+                    else if (trailingRow.isScrolling)
+                        appSettings.scrollingEnabled = newValue;
                     settingsController.endExternalEdit();
                 }
             }

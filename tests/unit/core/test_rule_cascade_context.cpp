@@ -9,8 +9,9 @@
  * engine-mode / layout assignment cascade, this one covers the non-assignment
  * context resolvers that share the same priority-wins, per-slot-composition
  * model: gaps, orientation / active-layout stamping, autotile tiling params,
- * overlay shader / style / appearance overrides, context locks, and the
- * per-mode gap routing through the context `Mode` field. The shared harness
+ * scrolling context params, overlay shader / style / appearance overrides,
+ * context locks, and the per-mode gap routing through the context `Mode`
+ * field. The shared harness
  * lives in RuleCascadeFixture.h.
  */
 
@@ -284,6 +285,93 @@ private Q_SLOTS:
         QVERIFY(f.registry->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 0, QString()));
     }
 
+    // ─── exactContextEntry discriminates EXPLICIT from RESOLVED ──────────────
+    // exactContextEntry is the settings UI's explicit-vs-resolved discriminator:
+    // it reports only what THIS exact (screen, desktop, activity) tuple has a
+    // rule for, and never what the tuple merely inherits. The Monitors page
+    // relies on the distinction — re-pinning a cascade default as if it were
+    // explicit would freeze an inherited value into a rule the user never
+    // authored. The cascade resolver (assignmentEntryForScreen) is the foil in
+    // each case below: it answers, and exactContextEntry must not.
+    void testExactContextEntry_explicitOnly_notCascadeOrDefault()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // A global snap default, so every unpinned context still RESOLVES to
+        // something — otherwise the negative assertions would pass vacuously.
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+
+        // One explicit context rule on the MONITOR axis: (DP-1, no desktop, no
+        // activity), so its match is a bare ScreenId leaf that every desktop on
+        // DP-1 inherits.
+        const PWR::Rule assign =
+            CRB::makeAssignmentRule(QStringLiteral("layout DP-1"), QStringLiteral("DP-1"), 0, QString(),
+                                    QStringLiteral("snapping"), QStringLiteral("{explicit-layout}"), QString(), 301);
+        QVERIFY(f.store->setAllRules({assign}));
+
+        // (1) The exact tuple → the stored entry comes back.
+        const PhosphorZones::AssignmentEntry exact =
+            f.registry->exactContextEntry(QStringLiteral("DP-1"), 0, QString());
+        QCOMPARE(exact.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(exact.snappingLayout, QStringLiteral("{explicit-layout}"));
+        QVERIFY(f.registry->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
+
+        // (2) A tuple that only INHERITS the value through the cascade. Desktop
+        // 5 on the same screen resolves to the monitor rule's layout, but
+        // nothing is stored AT (DP-1, 5, "") — the canonical desktop-axis shape
+        // that tuple names is a different match than the bare ScreenId leaf —
+        // so exactContextEntry must report an empty entry.
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 5, QString()).snappingLayout,
+                 QStringLiteral("{explicit-layout}"));
+        const PhosphorZones::AssignmentEntry inherited =
+            f.registry->exactContextEntry(QStringLiteral("DP-1"), 5, QString());
+        QVERIFY(!inherited.isValid());
+        QVERIFY(inherited.snappingLayout.isEmpty());
+        QVERIFY(inherited.tilingAlgorithm.isEmpty());
+        QVERIFY(!f.registry->hasExplicitAssignment(QStringLiteral("DP-1"), 5, QString()));
+
+        // (3) A tuple that resolves only through the global DEFAULT tier — a
+        // different screen entirely. The resolver answers with the provider's
+        // id; exactContextEntry stays empty.
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-2"), 0, QString()).snappingLayout,
+                 QStringLiteral("{provider-snap-default}"));
+        const PhosphorZones::AssignmentEntry defaulted =
+            f.registry->exactContextEntry(QStringLiteral("DP-2"), 0, QString());
+        QVERIFY(!defaulted.isValid());
+        QVERIFY(defaulted.snappingLayout.isEmpty());
+        QVERIFY(!f.registry->hasExplicitAssignment(QStringLiteral("DP-2"), 0, QString()));
+    }
+
+    // exactContextEntry is deliberately BLIND to the rule's enabled flag: it
+    // reports stored intent, not the effective cascade result, because the
+    // settings UI must keep rendering a pin the user switched off. The cascade
+    // resolver is the opposite — the evaluator skips disabled rules — so the
+    // two must DISAGREE for a disabled pin. That disagreement is the contract.
+    void testExactContextEntry_disabledRuleStillReportsStoredEntry()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+
+        PWR::Rule assign =
+            CRB::makeAssignmentRule(QStringLiteral("layout DP-1"), QStringLiteral("DP-1"), 0, QString(),
+                                    QStringLiteral("snapping"), QStringLiteral("{explicit-layout}"), QString(), 301);
+        assign.enabled = false;
+        QVERIFY(f.store->setAllRules({assign}));
+
+        // Stored intent survives the disable.
+        const PhosphorZones::AssignmentEntry exact =
+            f.registry->exactContextEntry(QStringLiteral("DP-1"), 0, QString());
+        QCOMPARE(exact.snappingLayout, QStringLiteral("{explicit-layout}"));
+
+        // The cascade does not: the disabled rule is skipped and the global
+        // default tier answers instead.
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout,
+                 QStringLiteral("{provider-snap-default}"));
+    }
+
     // ─── Context autotile-parameter resolution (max / split / master) ────────
     // resolveContextTilingParams is a per-slot read: independent
     // SetMaxWindows / SetSplitRatio / SetMasterCount rules compose, and an
@@ -358,6 +446,59 @@ private Q_SLOTS:
         // A screen the rules do not pin → all-unset (the daemon then leaves the
         // config-derived override map untouched for that screen).
         QVERIFY(f.registry->resolveContextTilingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+    }
+
+    // ─── Context scrolling-parameter resolution (width / centering / display) ──
+    // resolveContextScrollingParams is a per-slot read like its tiling sibling:
+    // independent SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
+    // SetScrollDefaultColumnDisplay rules compose, and an unpinned screen resolves
+    // to an all-unset (empty) params struct.
+    void testContextScrollingParams_perSlotComposition()
+    {
+        const auto valueAction = [](QLatin1StringView type, const QVariant& value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), QJsonValue::fromVariant(value));
+            return a;
+        };
+        const auto scrollRule = [&](const QString& name, int priority, const QString& screenId,
+                                    const QList<PWR::RuleAction>& actions) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = actions;
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // Separate rules fill separate slots — all compose (per-slot read).
+        const PWR::Rule cw = scrollRule(QStringLiteral("cw"), 400, QStringLiteral("DP-1"),
+                                        {valueAction(PWR::ActionType::SetScrollDefaultColumnWidth, 0.75)});
+        // Centering carries a wire token → the centering int.
+        const PWR::Rule cf = scrollRule(
+            QStringLiteral("cf"), 300, QStringLiteral("DP-1"),
+            {valueAction(PWR::ActionType::SetCenterFocusedColumn, QString(PWR::CenterFocusedColumnToken::OnOverflow))});
+        // Column display carries a wire token → the display int.
+        const PWR::Rule cd = scrollRule(
+            QStringLiteral("cd"), 200, QStringLiteral("DP-1"),
+            {valueAction(PWR::ActionType::SetScrollDefaultColumnDisplay, QString(PWR::ColumnDisplayToken::Tabbed))});
+        QVERIFY(f.store->setAllRules({cw, cf, cd}));
+
+        const PhosphorZones::ContextScrollingParams p =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(p.defaultColumnWidth.has_value());
+        QCOMPARE(*p.defaultColumnWidth, 0.75);
+        QVERIFY(p.centerFocusedColumn.has_value());
+        QCOMPARE(*p.centerFocusedColumn, 2); // "onOverflow" → 2
+        QVERIFY(p.defaultColumnDisplay.has_value());
+        QCOMPARE(*p.defaultColumnDisplay, 1); // "tabbed" → 1
+
+        // A screen the rules do not pin → all-unset (the engine then keeps its
+        // config-derived parameters for that screen).
+        QVERIFY(f.registry->resolveContextScrollingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 
     // ─── Per-monitor gap rule overrides the baseline for that screen only ────
@@ -597,7 +738,8 @@ private Q_SLOTS:
         // AppId == firefox} carrying a LockContext action at a far-above band.
         // Against the windowless context query the AppId leaf evaluates false,
         // so the All{} fails and DP-4 must NOT lock — symmetric to the
-        // assignment-path mixed-rule inertness proof (testMixedRule* above).
+        // assignment-path mixed-rule inertness proof (the testMixedRule* slots
+        // in test_rule_cascade_fidelity.cpp).
         PWR::RuleAction mixedLockAction;
         mixedLockAction.type = QString(PWR::ActionType::LockContext);
         mixedLockAction.params.insert(QString(PWR::ActionParam::Value), true);
@@ -773,11 +915,173 @@ private Q_SLOTS:
         const PhosphorZones::ContextGapOverride none =
             f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString());
         QVERIFY(!none.innerGap.has_value());
+
+        // NEGATED Mode leaf, mode-agnostic caller. This is the polarity trap:
+        // an unstamped mode reads back as an ENGAGED empty string, so
+        // `None{Mode Equals "tiling"}` evaluates TRUE and the rule would fire
+        // on every context — silently overriding gaps for a caller that asked
+        // about no mode at all. The resolver excludes Field::Mode structurally
+        // for a mode-agnostic call, so the rule stays inert here while still
+        // firing for a caller that names a different mode.
+        PWR::RuleAction negatedGapAction;
+        negatedGapAction.type = QString(PWR::ActionType::SetInnerGap);
+        negatedGapAction.params.insert(QString(PWR::ActionParam::Value), 33);
+        PWR::Rule negatedGap;
+        negatedGap.id = QUuid::createUuid();
+        negatedGap.name = QStringLiteral("Not-tiling inner gap");
+        negatedGap.enabled = true;
+        negatedGap.priority = 500;
+        negatedGap.match = PWR::MatchExpression::makeNone(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("tiling"))});
+        negatedGap.actions = {negatedGapAction};
+        QVERIFY(f.store->setAllRules({negatedGap}));
+
+        const PhosphorZones::ContextGapOverride negatedAgnostic =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString());
+        QVERIFY2(!negatedAgnostic.innerGap.has_value(), "a negated Mode rule must not fire for a mode-agnostic caller");
+
+        // Positive control: the same rule DOES fire for a caller that names a
+        // mode other than the negated one, so the exclusion above is scoped to
+        // the agnostic call and has not simply disabled the rule.
+        const PhosphorZones::ContextGapOverride negatedSnapping =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("snapping"));
+        QVERIFY(negatedSnapping.innerGap.has_value());
+        QCOMPARE(*negatedSnapping.innerGap, 33);
+
+        // Scrolling arm: a `Mode Equals "scrolling"` gap rule fires for the
+        // scrolling asker and stays inert for tiling — the third engine's
+        // gap provider resolves with the "scrolling" token.
+        PWR::RuleAction scrollGapAction;
+        scrollGapAction.type = QString(PWR::ActionType::SetInnerGap);
+        scrollGapAction.params.insert(QString(PWR::ActionParam::Value), 8);
+        PWR::Rule scrollGap;
+        scrollGap.id = QUuid::createUuid();
+        scrollGap.name = QStringLiteral("Scrolling inner gap");
+        scrollGap.enabled = true;
+        scrollGap.priority = 500;
+        scrollGap.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("scrolling"));
+        scrollGap.actions = {scrollGapAction};
+        QVERIFY(scrollGap.match.isContextOnly());
+        QVERIFY(f.store->setAllRules({scrollGap}));
+
+        const PhosphorZones::ContextGapOverride scrolled =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("scrolling"));
+        QVERIFY(scrolled.innerGap.has_value());
+        QCOMPARE(*scrolled.innerGap, 8);
+        const PhosphorZones::ContextGapOverride tiledAgain =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("tiling"));
+        QVERIFY(!tiledAgain.innerGap.has_value());
+
+        // COEXISTING per-mode rules (not replacement): a tiling-pinned and a
+        // scrolling-pinned gap rule in the SAME rule set must each fire only
+        // for their own mode token.
+        PWR::RuleAction tilingGapAction2;
+        tilingGapAction2.type = QString(PWR::ActionType::SetInnerGap);
+        tilingGapAction2.params.insert(QString(PWR::ActionParam::Value), 14);
+        PWR::Rule tilingGap2;
+        tilingGap2.id = QUuid::createUuid();
+        tilingGap2.name = QStringLiteral("Tiling inner gap");
+        tilingGap2.enabled = true;
+        tilingGap2.priority = 400;
+        tilingGap2.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("tiling"));
+        tilingGap2.actions = {tilingGapAction2};
+        QVERIFY(f.store->setAllRules({scrollGap, tilingGap2}));
+
+        const PhosphorZones::ContextGapOverride scrolledBoth =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("scrolling"));
+        QVERIFY(scrolledBoth.innerGap.has_value());
+        QCOMPARE(*scrolledBoth.innerGap, 8);
+        const PhosphorZones::ContextGapOverride tiledBoth =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("tiling"));
+        QVERIFY(tiledBoth.innerGap.has_value());
+        QCOMPARE(*tiledBoth.innerGap, 14);
     }
 
     // ─── Per-monitor gap beats a global per-mode gap (specificity, not priority) ─
     // A per-monitor (ScreenId-pinned) gap override and a global per-mode
     // (Mode-pinned) gap rule can both match the same window/slot. A hand-authored
+    // The window-field negation-polarity guard: a windowless context query
+    // leaves every Window-sourced field ABSENT, which makes a positive leaf
+    // evaluate false (inert, by design) but makes a leaf under `none{}` match
+    // unconditionally — `none{AppId == firefox}` on a gap or lock rule would
+    // fire on EVERY context. The resolvers exclude rules that NEGATE a window
+    // field (negatesAnyField over the table-derived windowSourcedFields), and
+    // deliberately do NOT exclude positive references, because an `any{}`
+    // rule's context branch may legitimately fire. Both polarities pinned.
+    void testNegatedWindowFieldStaysInertOnContextResolvers()
+    {
+        RegistryFixture f = makeRegistryFixture();
+
+        // A `none{AppId == firefox}` gap rule: without the guard it gaps every
+        // context (the absent AppId leaf is false, so the None matches).
+        PWR::RuleAction gapAction;
+        gapAction.type = QString(PWR::ActionType::SetInnerGap);
+        gapAction.params.insert(QString(PWR::ActionParam::Value), 44);
+        PWR::Rule negatedApp;
+        negatedApp.id = QUuid::createUuid();
+        negatedApp.name = QStringLiteral("Gap everywhere except firefox");
+        negatedApp.enabled = true;
+        negatedApp.priority = 500;
+        negatedApp.match = PWR::MatchExpression::makeNone(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals, QStringLiteral("firefox"))});
+        negatedApp.actions = {gapAction};
+        QVERIFY(f.store->setAllRules({negatedApp}));
+
+        const PhosphorZones::ContextGapOverride negated =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("snapping"));
+        QVERIFY2(!negated.innerGap.has_value(),
+                 "a rule negating a window field must not fire on a windowless context query");
+
+        // Same shape on the LOCK resolver, whose spurious match would lock
+        // every context.
+        PWR::RuleAction lockAction;
+        lockAction.type = QString(PWR::ActionType::LockContext);
+        lockAction.params.insert(QString(PWR::ActionParam::Value), true);
+        PWR::Rule negatedLock = negatedApp;
+        negatedLock.id = QUuid::createUuid();
+        negatedLock.actions = {lockAction};
+        QVERIFY(f.store->setAllRules({negatedLock}));
+        QVERIFY2(!f.registry->resolveContextLocked(QStringLiteral("DP-9"), 1, QString()),
+                 "a rule negating a window field must not lock a windowless context");
+
+        // POSITIVE CONTROL 1: the guard is negation-scoped, not a blanket
+        // window-field ban. An `any{ScreenId == DP-9, AppId == firefox}` gap
+        // rule still fires through its context branch.
+        PWR::Rule anyMixed;
+        anyMixed.id = QUuid::createUuid();
+        anyMixed.name = QStringLiteral("DP-9 or firefox gap");
+        anyMixed.enabled = true;
+        anyMixed.priority = 500;
+        anyMixed.match = PWR::MatchExpression::makeAny(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-9")),
+             PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals, QStringLiteral("firefox"))});
+        anyMixed.actions = {gapAction};
+        QVERIFY(f.store->setAllRules({anyMixed}));
+        const PhosphorZones::ContextGapOverride positive =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("snapping"));
+        QVERIFY2(positive.innerGap.has_value() && *positive.innerGap == 44,
+                 "a POSITIVE window-field reference must not be excluded — the context branch fires");
+
+        // POSITIVE CONTROL 2: a context-only rule on the same store still
+        // resolves, so the negative arms above failed because of the guard,
+        // not a dead fixture.
+        PWR::Rule plain;
+        plain.id = QUuid::createUuid();
+        plain.name = QStringLiteral("Plain DP-9 gap");
+        plain.enabled = true;
+        plain.priority = 500;
+        plain.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-9"));
+        plain.actions = {gapAction};
+        QVERIFY(f.store->setAllRules({plain}));
+        const PhosphorZones::ContextGapOverride control =
+            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("snapping"));
+        QVERIFY(control.innerGap.has_value());
+        QCOMPARE(*control.innerGap, 44);
+    }
+
     // per-mode gap rule can even carry a HIGHER raw priority (500) than a
     // per-screen rule (300). resolveContextGaps must therefore order the slot by
     // MATCH SPECIFICITY (ScreenId-pinned > Mode-pinned), so the per-monitor

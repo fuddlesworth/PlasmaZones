@@ -45,10 +45,11 @@ class ICrossSurfaceResolver;
 ///
 /// ## Design Rationale
 ///
-/// Both snap-mode (manual zone layouts) and autotile-mode (automatic
-/// tiling algorithms) implement this so the daemon can dispatch all
-/// window lifecycle events and user navigation intents through a single
-/// polymorphic call — zero mode branches.
+/// All three engines — snap (manual zone layouts), autotile (automatic
+/// tiling algorithms), and scrolling (niri-style column strip) — implement
+/// this so the daemon can dispatch all window lifecycle events and user
+/// navigation intents through a single polymorphic call — zero mode
+/// branches.
 ///
 /// Each method represents a USER INTENT, not a mode-specific
 /// implementation step. "Move focused window left" has different internal
@@ -109,11 +110,15 @@ public:
     ///
     /// @param screenId The window's authoritative current screen, when the
     /// caller knows it (the D-Bus setWindowFloatingForScreen threads the
-    /// effect's live output here). Engines that resolve a screen for the float
-    /// or unfloat MUST prefer this over their own tracked association, which can
-    /// be stale after a floating window drifts across monitors — using the stale
-    /// screen makes the unfloat's cross-monitor guard non-deterministic. Empty
-    /// (the default) means "resolve it yourself" for internal callers.
+    /// effect's live output here). An engine WITHOUT live per-window screen
+    /// tracking MUST prefer this over its own tracked association, which
+    /// can be stale after a floating window drifts across monitors — using
+    /// the stale screen makes the unfloat's cross-monitor guard
+    /// non-deterministic (snap and scroll honour it for exactly that
+    /// reason). AutotileEngine deliberately resolves from its own tracking
+    /// instead: its focus-driven migration keeps the association current,
+    /// and the parameter can lag it mid-handoff. Empty (the default) means
+    /// "resolve it yourself" for internal callers.
     virtual void setWindowFloat(const QString& windowId, bool shouldFloat, const QString& screenId = QString()) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -203,7 +208,7 @@ public:
     //
     // The single seam for the unified WindowPlacement restore model. An engine
     // implements exactly these two methods to participate in save+restore; a new
-    // engine (e.g. a future scrolling engine) needs no core/schema change — it keys
+    // engine (e.g. the scrolling engine) needs no core/schema change — it keys
     // its own EngineSlot (state token + slot reference) under its engineId() in the
     // single per-window record and reads/writes the shared freeGeometryByScreen.
     // ═══════════════════════════════════════════════════════════════════════════
@@ -229,14 +234,15 @@ public:
     /// .state, reading the engine's slot reference and the shared freeGeometryByScreen.
     ///
     /// Contract pair of capturePlacement() and the engine-agnostic entry point for a
-    /// new engine. NOTE: the built-in snap and autotile engines do NOT route through
-    /// this method — they apply restore inline in their own open paths
+    /// new engine. NOTE: NO built-in engine overrides this today — snap, autotile
+    /// and scrolling all apply restore inline in their own open paths
     /// (SnapEngine::resolveWindowRestore consults the store and returns a SnapResult
-    /// to the effect; AutotileEngine::insertWindow take()s the record and inserts at
-    /// position) because those paths carry engine-specific policy (snap's auto-snap
-    /// fallback chain; autotile's burst-insert coalescing) that a single
-    /// apply-this-record call cannot express. A minimal future engine may instead
-    /// implement only this method and have its own open path invoke it directly.
+    /// to the effect; AutotileEngine::insertWindow and the scroll engine's open path
+    /// take()/claim the record themselves) because those paths carry engine-specific
+    /// policy (snap's auto-snap fallback chain; autotile's burst-insert coalescing;
+    /// scrolling's strip-stash claim) that a single apply-this-record call cannot
+    /// express. A minimal future engine may instead implement only this method and
+    /// have its own open path invoke it directly.
     virtual bool restorePlacement(const WindowPlacement& placement, const QString& screenId)
     {
         Q_UNUSED(placement)
@@ -279,9 +285,20 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // OPTIONAL: Mode-specific float tracking (override if engine has mode-aware float)
+    // OPTIONAL: Mode-specific float MARKER (runtime discriminator, NOT persistence)
+    //
+    // Distinguishes a USER float in this engine's mode from an incidental float
+    // (e.g. autotile overflow). It is live runtime state the capture funnel reads
+    // to decide whether a float should persist into the record — there is no
+    // parallel "saved floats" store; the WindowPlacement record is the single
+    // source of truth for cross-mode float state. All three verbs live here,
+    // in one section (mark / query / clear).
     // ═══════════════════════════════════════════════════════════════════════════
 
+    virtual void markModeSpecificFloated(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
     virtual bool isModeSpecificFloated(const QString& windowId) const
     {
         Q_UNUSED(windowId)
@@ -291,6 +308,7 @@ public:
     {
         Q_UNUSED(windowId)
     }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Drag insert preview (override if engine supports drag-to-insert)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -315,6 +333,18 @@ public:
     {
         return {};
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPTIONAL: Per-window tracking state
+    //
+    // What the daemon asks an engine about ONE window: does it track it, does
+    // it manage/tile it, which screen does it think the window is on, what min
+    // size does it model — plus the two per-window updates that follow from
+    // those answers (a late min-size discovery, an interactive resize). The
+    // drag-preview verbs above are a separate group; these have nothing to do
+    // with a drag.
+    // ═══════════════════════════════════════════════════════════════════════════
+
     virtual bool isWindowTracked(const QString& windowId) const
     {
         Q_UNUSED(windowId)
@@ -323,6 +353,8 @@ public:
     /// Whether the engine considers the window "managed" (eligible for
     /// layout operations). Semantics are engine-specific:
     /// - Autotile: equivalent to isWindowTiled (floating windows excluded).
+    /// - Scrolling: the window occupies a strip column (floating windows
+    ///   excluded), same shape as autotile.
     /// - Snap: a window assigned to a zone (including floated-in-zone).
     /// Callers that need a consistent cross-engine check for "engine owns
     /// this window at all" should use isWindowTracked instead.
@@ -354,6 +386,28 @@ public:
     {
         Q_UNUSED(windowId)
         return {};
+    }
+
+    /// The window's client-reported minimum size as last known by this
+    /// engine, or 0x0 when unknown / untracked. Read by the cross-engine
+    /// handoff dispatcher to seed HandoffContext::minSize; must be queried
+    /// before handoffRelease. Default suits engines without a min-size model.
+    virtual QSize windowMinimumSize(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return {};
+    }
+
+    /// Update a window's minimum size after the initial windowOpened.
+    /// The compositor discovers a min size late for some clients (or the
+    /// client raises it at runtime); engines that fit windows to slots
+    /// re-validate their layout on a change. Default is a no-op for
+    /// engines without a min-size model.
+    virtual void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(minWidth)
+        Q_UNUSED(minHeight)
     }
 
     /// Notify the engine that a tracked window finished an interactive resize.
@@ -407,7 +461,7 @@ public:
     struct HandoffContext
     {
         QString windowId;
-        QString fromEngineId; ///< source engine identity ("snap" / "autotile" / "")
+        QString fromEngineId; ///< source engine identity ("snap" / "autotile" / "scrolling" / "")
         QString toScreenId; ///< destination screen (must be owned by `to` engine)
         int toDesktop = 0; ///< destination virtual desktop (1-based); 0 = current
                            ///< desktop (drag-drop / same-desktop monitor crossing).
@@ -415,13 +469,25 @@ public:
                            ///< receiver places the window in the target desktop's
                            ///< state/layout, not the currently-visible one.
         QPoint dropPos; ///< cursor position at drop, or invalid for non-drag handoffs
+        QRect sourceGeometry; ///< window's frame at handoff time (for size preservation)
+        QSize minSize; ///< minimum size as the SOURCE engine models it (0x0
+                       ///< when unknown) — autotile stores it screen-capped,
+                       ///< scrolling raw, so treat it as a hint, not the
+                       ///< client's exact value. The compositor only
+                       ///< re-reports a min size when it changes or a retile
+                       ///< discovers a refusal, so the receiver seeds its own
+                       ///< min-size model from this instead of waiting a
+                       ///< refuse/re-discover round-trip. Callers must query
+                       ///< the source BEFORE handoffRelease drops its tracking.
         QStringList sourceZoneIds; ///< zones the window held at source (empty if not snapped)
         bool wasFloating = false; ///< window was floating in source engine
-        int insertIndex = -1; ///< autotile target: raw window-order index (position
-                              ///< in windowOrder(), counting floats — NOT the
-                              ///< tiled-only index) to insert at. -1 = insertion-order
-                              ///< policy. Used by a cross-mode SWAP so the arriving
-                              ///< window takes the departed partner's exact slot.
+        int insertIndex = -1; ///< PER-TARGET unit. Autotile target: raw
+                              ///< window-order index (position in windowOrder(),
+                              ///< counting floats — NOT the tiled-only index).
+                              ///< Scrolling target: COLUMN index (0 = first
+                              ///< column; -1 appends at the strip's right end).
+                              ///< Used by cross-mode SWAP (partner's exact slot)
+                              ///< and by edge-aware cross-mode MOVE entry.
                               ///< Ignored by snap targets.
     };
 
@@ -462,7 +528,7 @@ public:
     }
 
     /// Stable engine identity for HandoffContext.fromEngineId. Conventional
-    /// values: "snap" / "autotile". Empty string means "unidentified" and
+    /// values: "snap" / "autotile" / "scrolling". Empty string means "unidentified" and
     /// disables receive-side reasoning that depends on the source mode.
     virtual QString engineId() const
     {
@@ -564,10 +630,15 @@ public:
     }
     /// Prune per-(screen, desktop, activity) state for a PHYSICALLY REMOVED output
     /// (monitor hot-unplug), matching every virtual sub-screen of the removed
-    /// physical id. AutotileEngine self-prunes screens via its autotile-screens set,
-    /// so it leaves this a no-op; a per-screen engine WITHOUT such a set (SnapEngine,
-    /// whose stores are created lazily on placement) overrides it and is driven by
-    /// the daemon's screenRemoved signal, otherwise the removed monitor's stores leak.
+    /// physical id. All three engines override this and the daemon drives each
+    /// from its screenRemoved handling: snap's stores are created lazily on
+    /// placement with no screens set to reap them, and the two tiling engines'
+    /// screens-set sweeps only reap CURRENT-context states, so sibling-context
+    /// states (other desktops/activities) of the removed output would leak
+    /// without the explicit whole-output prune. A tiling-family engine must emit
+    /// windowsReleased for the windows it drops here, AFTER its reverse-map
+    /// cleanup, so the daemon's restore consumers can re-home them; snap does not,
+    /// because it is the engine those releases are restored INTO.
     virtual void pruneStatesForRemovedScreen(const QString& physicalScreenId)
     {
         Q_UNUSED(physicalScreenId)
@@ -621,21 +692,6 @@ public:
     virtual void scheduleRetileForScreen(const QString& screenId)
     {
         Q_UNUSED(screenId)
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // OPTIONAL: Mode-specific float MARKER (runtime discriminator, NOT persistence)
-    //
-    // Distinguishes a USER float in this engine's mode from an incidental float
-    // (e.g. autotile overflow). It is live runtime state the capture funnel reads
-    // to decide whether a float should persist into the record — there is no
-    // parallel "saved floats" store; the WindowPlacement record is the single
-    // source of truth for cross-mode float state.
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    virtual void markModeSpecificFloated(const QString& windowId)
-    {
-        Q_UNUSED(windowId)
     }
 
     // Per-window restore persistence is unified: engines implement

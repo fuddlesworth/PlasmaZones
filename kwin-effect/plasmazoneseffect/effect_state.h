@@ -203,7 +203,7 @@ struct DaemonGateState
     /// advanced, and the z-order restore drops only when every screen it
     /// targeted has advanced. Per-screen, not global, so a batch on
     /// one output never strands an in-flight cascade on another — mirrors the
-    /// autotile cascade guard (m_autotileStaggerGenByScreen).
+    /// autotile cascade guard (m_tileStaggerGenByScreen).
     QHash<QString, uint64_t> batchGenByScreen;
     int pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
     uint64_t vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs
@@ -233,6 +233,14 @@ struct IdCacheState
     // Avoids repeated QScreen iteration and sysfs reads during drag (~30Hz).
     // Cleared on screen geometry changes (add/remove/reconfigure).
     QHash<QString, QString> screenIdCache;
+
+    // Connected physical screen ids (outputScreenId per KWin output),
+    // rebuilt lazily after every screenIdCache invalidation. Lets the
+    // scroll-override path (getWindowScreenId — a per-candidate call inside
+    // both focus-follows-mouse stacking walks) test output liveness with a
+    // set lookup instead of an O(outputs) string-building scan per call.
+    QSet<QString> connectedPhysicalIds;
+    bool connectedPhysicalIdsValid = false;
 
     // Window ID cache: EffectWindow* → "appId|uuid" (populated on first getWindowId call,
     // cleared in slotWindowClosed/windowDeleted). Eliminates 3-5 QString allocations per

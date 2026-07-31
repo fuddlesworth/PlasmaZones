@@ -89,6 +89,21 @@
 
 namespace PlasmaZones {
 
+QVariantMap SettingsController::scrollingWidthConstants() const
+{
+    return {
+        {QStringLiteral("kindProportion"), ConfigDefaults::scrollingWidthKindProportion()},
+        {QStringLiteral("kindFixed"), ConfigDefaults::scrollingWidthKindFixed()},
+        {QStringLiteral("kindClientDecides"), ConfigDefaults::scrollingWidthKindClientDecides()},
+        {QStringLiteral("proportionMin"), ConfigDefaults::scrollingDefaultColumnWidthValueMin()},
+        {QStringLiteral("proportionMax"), ConfigDefaults::scrollingDefaultColumnWidthProportionMax()},
+        {QStringLiteral("fixedMin"), ConfigDefaults::scrollingDefaultColumnWidthFixedMin()},
+        {QStringLiteral("fixedMax"), ConfigDefaults::scrollingDefaultColumnWidthFixedMax()},
+        {QStringLiteral("proportionStep"), ConfigDefaults::scrollingDefaultColumnWidthProportionStep()},
+        {QStringLiteral("fixedStep"), ConfigDefaults::scrollingDefaultColumnWidthFixedStep()},
+    };
+}
+
 QVariantList SettingsController::valueOptions(const QString& group, const QString& key) const
 {
     QVariantList out;
@@ -186,8 +201,8 @@ SettingsController::~SettingsController()
     // ~RuleController runs as part of the QObject teardown, those
     // captured containers are already gone. Any model-signal slot that
     // reaches a lookup during teardown would deref destroyed state.
-    // RuleModel::leafLabel/actionLabel treat empty lookups as
-    // identity, so clearing here is the safe contract.
+    // The leafLabel/actionLabel helpers in rulemodel_labels.cpp treat empty
+    // lookups as identity, so clearing here is the safe contract.
     if (m_rulesPage) {
         m_rulesPage->setScreenLookup({});
         m_rulesPage->setActivityLookup({});
@@ -945,8 +960,27 @@ SettingsController::SettingsController(QObject* parent)
             } else {
                 releases = doc.object().value(QLatin1String("releases")).toArray();
             }
+            // Only entries for THIS build or older are consumed: whatsnew.json
+            // gains the next release's entry while it is still unreleased, and
+            // without the clamp a user opening What's New on the current build
+            // would both SEE the unreleased entry and get it stamped as seen,
+            // so the badge never fires when that release actually ships. An
+            // unparsable app version fails open (no filtering).
+            // VERSION_STRING, not applicationVersion(): the latter is only
+            // set by the settings app's own main(); a host that skips
+            // setApplicationVersion would fail the clamp open, let the
+            // unreleased entry through, AND let markWhatsNewSeen stamp it —
+            // exactly the badge-never-fires bug the clamp prevents. An
+            // unparsable VERSION_STRING (impossible for a release build)
+            // fails open: no filtering, and the stamp risk returns with it.
+            const QVersionNumber appVersion = QVersionNumber::fromString(PlasmaZones::VERSION_STRING);
             for (const auto& entry : releases) {
                 const auto obj = entry.toObject();
+                const QVersionNumber entryVersion =
+                    QVersionNumber::fromString(obj.value(QLatin1String("version")).toString());
+                if (!appVersion.isNull() && !entryVersion.isNull() && entryVersion > appVersion) {
+                    continue;
+                }
                 QVariantMap release;
                 release[QStringLiteral("version")] = obj.value(QLatin1String("version")).toString();
                 release[QStringLiteral("date")] = obj.value(QLatin1String("date")).toString();

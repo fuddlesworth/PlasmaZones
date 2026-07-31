@@ -6,6 +6,13 @@
 // the shared Settings instance. Per-page Q_PROPERTY surfaces are split out
 // into page-scoped sub-controllers (EditorPageController, …) hung off this
 // class via child Q_PROPERTYs so QML reads `settingsController.<page>.<prop>`.
+//
+// FILE-SIZE EXCEPTION (sanctioned): what remains here after that split is the
+// root object QML binds to. Its Q_PROPERTY surface IS the QML contract, so
+// moving another group of properties out means either a new child controller
+// every page URL and binding has to be rewritten for, or a second root QML
+// cannot see. The implementation is already split across
+// settingscontroller_*.cpp by concern, same shape as daemon.h.
 
 #pragma once
 
@@ -356,6 +363,13 @@ public:
     /// Empty list + warning for a key with no declared choices.
     Q_INVOKABLE QVariantList valueOptions(const QString& group, const QString& key) const;
 
+    /// The scrolling width-kind vocabulary and value bounds, from
+    /// ConfigDefaults — the C++ home for these numbers. The Scrolling page
+    /// binds to this map instead of re-spelling the literals in QML (the
+    /// kind ints, the proportion slider range, and the pixel spin range
+    /// would otherwise be duplicated across the C++/QML boundary).
+    Q_INVOKABLE QVariantMap scrollingWidthConstants() const;
+
     // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
     // Loads the on-disk layouts via an in-process LayoutRegistry +
     // ZonesLayoutSource so QML preview paths render even when the daemon
@@ -547,23 +561,23 @@ public:
 
     // ── Screen state query ─────────────────────────────────────────────────
     Q_INVOKABLE QVariantList getScreenStates() const;
+    /// The live scrolling strip of @p screenId as zone maps for
+    /// LayoutThumbnail (relativeGeometry + zoneNumber per visible tile),
+    /// fetched from org.plasmazones.Scrolling. Empty when the screen has
+    /// no strip right now (not scrolling, no windows, daemon down) — the
+    /// Monitors page then falls back to a representative static strip.
+    Q_INVOKABLE QVariantList getScrollingStripPreview(const QString& screenId) const;
     Q_INVOKABLE QVariantMap getStagedAssignment(const QString& screenName, int virtualDesktop = 0,
                                                 const QString& activityId = QString()) const;
 
     // ── Atomic mode+layout staging (overview page) ──────────────────────────
     Q_INVOKABLE void stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
                                           int mode, const QString& snappingLayoutId, const QString& tilingAlgorithmId);
-    /// Stage a full clear of the (screen × desktop × activity) assignment
-    /// context — replaces any earlier staged entry for the context and, on
-    /// Apply, clears the daemon-side explicit assignment so the context
-    /// falls back to the resolved default.
-    Q_INVOKABLE void stageAssignmentClear(const QString& screenName, int virtualDesktop, const QString& activityId);
     /// Remove any staged entry for the (screen × desktop × activity)
-    /// assignment context — a true unstage. Unlike `stageAssignmentClear`
-    /// this stages nothing: on Apply the context's daemon-side assignment
-    /// is left untouched. Used by the Monitor State page's mode-toggle
-    /// path to drop a stale opposite-mode pick without clearing an
-    /// explicit assignment the user never touched.
+    /// assignment context — a true unstage: on Apply the context's
+    /// daemon-side assignment is left untouched. Used by the Monitor State
+    /// page's mode-toggle path to drop a stale opposite-mode pick without
+    /// clearing an explicit assignment the user never touched.
     Q_INVOKABLE void removeStagedAssignment(const QString& screenName, int virtualDesktop, const QString& activityId);
 
     // ── Ordering helpers (staged — flushed to settings on save) ────────────

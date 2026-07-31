@@ -69,7 +69,7 @@
 #include "dbus/zonedetectionadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
-#include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/shaderadaptor.h"
 #include "dbus/compositorbridgeadaptor.h"
@@ -239,10 +239,10 @@ Daemon::Daemon(QObject* parent)
     // FactoryContext and calls buildFromRegistered (both steps are
     // wrapped in buildStandardLayoutSourceBundle — shared with editor
     // + settings so service additions touch one helper rather than
-    // three near-identical blocks). Adding a new engine library
-    // (the planned scrolling engine) is purely a library-side change
-    // — daemon source only edits if the new engine demands a service
-    // the daemon doesn't already publish here. ZonesLayoutSource and
+    // three near-identical blocks). Adding a new engine library is
+    // purely a library-side change — the scrolling engine landed this
+    // way — and daemon source only edits if the new engine demands a
+    // service the daemon doesn't already publish here. ZonesLayoutSource and
     // AutotileLayoutSource both self-wire to their registry's
     // ILayoutSourceRegistry::contentsChanged signal, so no manual
     // bridging is required after build.

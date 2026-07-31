@@ -114,15 +114,18 @@ QVariantList ruleTemplates()
     // smart gaps already ships as a plain autotile setting
     // (AutotileConfig::smartGaps, Settings → Tiling), and such a rule would
     // silently never fire anyway — the gap resolver (resolveContextGaps in
-    // layoutregistry_assignments.cpp) never stamps tiledWindowCount into its
+    // layoutregistry_contextresolve.cpp) never stamps tiledWindowCount into its
     // context query; only resolveAssignmentEntry does, which is why
     // TiledWindowCount works for algorithm-switch rules but not gap rules.
     QVariantList out;
     out.append(entry(QLatin1String("layoutOnMonitor"), PhosphorI18n::tr("Set a layout on a monitor"),
                      PhosphorI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
     out.append(entry(QLatin1String("algorithmOnMonitor"), PhosphorI18n::tr("Set a tiling algorithm on a monitor"),
-                     PhosphorI18n::tr("Pick an autotile algorithm to use on one monitor."),
+                     PhosphorI18n::tr("Pick a tiling algorithm to use on one monitor."),
                      QLatin1String("view-list-tree")));
+    out.append(entry(QLatin1String("scrollingOnMonitor"), PhosphorI18n::tr("Use scrolling mode on a monitor"),
+                     PhosphorI18n::tr("Switch one monitor to the scrolling placement mode."),
+                     QLatin1String("view-list-details")));
     out.append(entry(QLatin1String("lockLayoutOnMonitor"), PhosphorI18n::tr("Lock the layout on a monitor"),
                      PhosphorI18n::tr("Pin the active layout on one monitor so it can't be switched. This is the "
                                       "rule-driven version of the lock-layout shortcut."),
@@ -145,7 +148,7 @@ QVariantList ruleTemplates()
                                       "managed, unlike a full exclusion."),
                      QLatin1String("window-restore")));
     out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from tiling"),
-                     PhosphorI18n::tr("Keep one application's windows out of the snap and autotile engines entirely."),
+                     PhosphorI18n::tr("Keep one application's windows out of window placement entirely."),
                      QLatin1String("edit-delete-remove")));
     out.append(entry(QLatin1String("excludeSmallFromAnimations"), PhosphorI18n::tr("Don't animate small windows"),
                      PhosphorI18n::tr("Skip open and close animations for windows narrower than a chosen width. Handy "
@@ -182,6 +185,17 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         algoAction.type = QString::fromLatin1(ActionType::SetTilingAlgorithm);
         algoAction.params.insert(ActionParam::Algorithm, QString());
         rule.actions.append(algoAction);
+    } else if (templateId == QLatin1String("scrollingOnMonitor")) {
+        rule.name = PhosphorI18n::tr("Scrolling mode on monitor");
+        rule.priority = kContextBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
+        // Assignment flow like the algorithm template, but scrolling has no
+        // per-layout payload: the SetEngineMode action alone carries it.
+        RuleAction engineMode;
+        engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
+        engineMode.params.insert(ActionParam::Mode,
+                                 PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Scrolling));
+        rule.actions.append(engineMode);
     } else if (templateId == QLatin1String("lockLayoutOnMonitor")) {
         rule.name = PhosphorI18n::tr("Lock layout on monitor");
         rule.priority = kContextBandBase;

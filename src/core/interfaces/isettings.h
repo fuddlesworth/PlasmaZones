@@ -603,6 +603,38 @@ Q_SIGNALS:
     void autotileDecMasterCountShortcutChanged();
     void autotileIncMasterRatioShortcutChanged();
     void autotileDecMasterRatioShortcutChanged();
+
+    // Scrolling settings
+    void scrollingEnabledChanged();
+    void scrollingCenterFocusedColumnChanged();
+    void scrollingAlwaysCenterSingleColumnChanged();
+    void scrollingDefaultColumnWidthKindChanged();
+    void scrollingDefaultColumnWidthValueChanged();
+    void scrollingDefaultColumnDisplayChanged();
+    void scrollingPresetColumnWidthsChanged();
+    void scrollingPresetWindowHeightsChanged();
+
+    // Scrolling shortcuts
+    void scrollingFocusColumnFirstShortcutChanged();
+    void scrollingFocusColumnLastShortcutChanged();
+    void scrollingMoveColumnToFirstShortcutChanged();
+    void scrollingMoveColumnToLastShortcutChanged();
+    void scrollingConsumeWindowShortcutChanged();
+    void scrollingExpelWindowShortcutChanged();
+    void scrollingConsumeOrExpelLeftShortcutChanged();
+    void scrollingConsumeOrExpelRightShortcutChanged();
+    void scrollingCenterColumnShortcutChanged();
+    void scrollingToggleColumnTabbedShortcutChanged();
+    void scrollingCycleColumnWidthShortcutChanged();
+    void scrollingCycleColumnWidthBackShortcutChanged();
+    void scrollingIncreaseColumnWidthShortcutChanged();
+    void scrollingDecreaseColumnWidthShortcutChanged();
+    void scrollingMaximizeColumnShortcutChanged();
+    void scrollingExpandColumnShortcutChanged();
+    void scrollingCycleWindowHeightShortcutChanged();
+    void scrollingIncreaseWindowHeightShortcutChanged();
+    void scrollingDecreaseWindowHeightShortcutChanged();
+    void scrollingResetWindowHeightsShortcutChanged();
 };
 
 } // namespace PlasmaZones

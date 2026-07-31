@@ -11,11 +11,14 @@ namespace PhosphorLayout {
 
 /// LayoutPreview::id namespace utilities.
 ///
-/// Manual zone layouts use UUID strings; autotile-algorithm previews use the
-/// prefixed form `"autotile:<algorithmId>"` so manual + autotile IDs share a
-/// single namespace at the consumer level. Everyone who needs to build / parse
-/// / classify a LayoutPreview id goes through the helpers here — no inline
-/// `"autotile:"` literals outside this namespace.
+/// There are three id forms sharing a single namespace at the consumer level.
+/// Manual zone layouts use UUID strings. Autotile-algorithm previews use the
+/// prefixed form `"autotile:<algorithmId>"`. Scrolling has no layout entity of
+/// its own, so it uses the bare payload-free sentinel `"scrolling:"` (see
+/// ScrollingId below for why it is compared exactly, not by prefix). Everyone
+/// who needs to build, parse, or classify a LayoutPreview id goes through the
+/// helpers here — no inline `"autotile:"` or `"scrolling:"` literals outside
+/// this namespace.
 ///
 /// Lives in phosphor-layout-api because both phosphor-zones and phosphor-tiles
 /// produce LayoutPreview values with these IDs, and every consumer of
@@ -24,13 +27,33 @@ namespace PhosphorLayout {
 namespace LayoutId {
 
 inline constexpr QLatin1String AutotilePrefix{"autotile:"};
+/// Scrolling has no layout entity, so its whole id is the bare sentinel —
+/// it exists so a mode-only Scrolling assignment carries a NON-EMPTY
+/// activeLayoutId() and survives the assignment cascade's non-empty-id
+/// visitors (exactly like the bare "autotile:" shape the KCM writes).
+inline constexpr QLatin1String ScrollingId{"scrolling:"};
 
 inline bool isAutotile(const QString& id)
 {
     return id.startsWith(AutotilePrefix);
 }
 
+inline bool isScrolling(const QString& id)
+{
+    // Exact compare, not startsWith: unlike AutotilePrefix, this sentinel
+    // carries no payload — "scrolling:foo" is NOT a valid id, and prefix
+    // matching would classify it as Scrolling while silently dropping the
+    // "foo" in every consumer.
+    return id == ScrollingId;
+}
+
 /// Extract the algorithm id portion from an autotile preview id.
+/// (The misuse warning below is a bare qWarning by design: PhosphorLayoutApi
+/// declares no logging category of its own — it is a contract library, and the
+/// few .cpp files it does build carry only interface glue, no logging. The
+/// message is a programmer-error flag, not runtime noise worth filtering. These
+/// helpers are `inline` and header-resident so a consumer can classify an id
+/// without linking anything.)
 /// Callers are expected to check @c isAutotile first — passing a non-autotile
 /// id here is a contract violation. We warn and return an empty string so
 /// the misuse is loud rather than silent, but remain graceful in release
@@ -60,20 +83,6 @@ inline QString makeAutotileId(const QString& algorithmId)
     // treats the entry as non-empty so modeForScreen correctly reports
     // Autotile.
     return AutotilePrefix + algorithmId;
-}
-
-/// Normalize an algorithm-id-or-prefixed-layout-id into the canonical
-/// `autotile:<algo>` form: pass-through when already prefixed, prefix
-/// when raw. Empty input returns empty (no `autotile:` wrap). Centralises
-/// the prefix-or-not check that several daemon readers apply to the raw
-/// `entry.tilingAlgorithm` field so it round-trips with the prefixed
-/// LayoutComboBox model values.
-inline QString normalizeAlgorithmId(const QString& id)
-{
-    if (id.isEmpty()) {
-        return id;
-    }
-    return isAutotile(id) ? id : makeAutotileId(id);
 }
 
 } // namespace LayoutId

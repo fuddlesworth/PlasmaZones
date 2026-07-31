@@ -184,6 +184,10 @@ struct WindowPlacement
     {
         return QLatin1String("autotile");
     }
+    static QLatin1String scrollingEngineId()
+    {
+        return QLatin1String("scrolling");
+    }
 
     /// Common state-token vocabulary. Engines may define more; these cover the
     /// built-in snap/autotile states.
@@ -308,19 +312,28 @@ struct WindowPlacement
 };
 
 /// Shared cross-engine ownership predicate over a placement record: does this
-/// record carry a SNAPPED snap-slot whose RECORDED screen (its own screenId,
-/// falling back to @p openingScreenId when unscreened) is itself in snapping
-/// mode, resolved in the RECORD'S OWN (desktop, activity) context?
+/// record carry a SNAPPED snap-slot whose RECORDED screen is a DIFFERENT
+/// screen than the opening one, itself in snapping mode, resolved in the
+/// RECORD'S OWN (desktop, activity) context? A same-screen record (or one
+/// with no screen of its own) is never "cross-screen": the window is already
+/// where its snap slot lives, so the engine owning the OPENING context claims
+/// it and the snap slot merely lies dormant. Without the same-screen bail, a
+/// record whose (desktop, activity) context differs from the opening one —
+/// a sticky window, or a per-desktop mode split on one monitor — would defer
+/// here while snap's reciprocal gate also stands down, stranding the window
+/// unmanaged at its stale zone rect on top of the tiled layout.
 ///
-/// SnapEngine (resolveWindowRestore's recorded-screen gate) and AutotileEngine
-/// (windowOpened's snap-defer gate) are RECIPROCAL: when a session window
-/// snapped on monitor A (snap mode) opens on monitor B (autotile mode), snap
-/// must claim it cross-screen and autotile must defer — and both engines must
-/// reach that verdict from the same record, or the window ends up
-/// both-claimed or both-skipped. Keying on the record's context (not each
-/// engine's live current desktop, which can differ under per-screen
-/// virtual-desktop overrides) plus running this ONE predicate on both sides
-/// makes the agreement hold by construction.
+/// The THREE callers are RECIPROCAL: SnapEngine (resolveWindowRestore's
+/// recorded-screen gate) claims, while AutotileEngine (windowOpened's
+/// snap-defer gate) and ScrollEngine (engine_lifecycle's twin gate) defer.
+/// When a session window snapped on monitor A (snap mode) opens on monitor B
+/// (a tiling mode), snap must claim it cross-screen and the tiling engine
+/// must stand down — and every engine must reach that verdict from the same
+/// record, or the window ends up both-claimed or both-skipped. Keying on the
+/// record's context (not each engine's live current desktop, which can differ
+/// under per-screen virtual-desktop overrides) plus running this ONE
+/// predicate on every side makes the N-way agreement hold by construction.
+/// A new tiling engine's open path must add the same defer gate.
 ///
 /// @p isSnappingMode is invoked as (screenId, virtualDesktop, activity) →
 /// bool; callers wrap their layout-manager mode lookup (and any null-manager
@@ -333,8 +346,10 @@ bool pendingCrossScreenSnapRestore(const WindowPlacement& p, const QString& open
     if (p.slotFor(WindowPlacement::snapEngineId()).state != WindowPlacement::stateSnapped()) {
         return false;
     }
-    const QString recordedScreen = p.screenId.isEmpty() ? openingScreenId : p.screenId;
-    return isSnappingMode(recordedScreen, p.virtualDesktop, p.activity);
+    if (p.screenId.isEmpty() || p.screenId == openingScreenId) {
+        return false; // same screen (or unscreened): the opening context's engine owns it
+    }
+    return isSnappingMode(p.screenId, p.virtualDesktop, p.activity);
 }
 
 } // namespace PhosphorEngine

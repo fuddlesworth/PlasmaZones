@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): OverlayService is the single façade every
+// overlay surface goes through — zone overlay, selector, snap assist, OSD,
+// cheatsheet, and the scroll tab strip — so its members are the per-screen
+// state and per-role wiring those surfaces share. The implementation is
+// already split by surface across daemon/overlayservice/*.cpp; splitting the
+// class DECLARATION would scatter the per-screen ownership and teardown-order
+// contract the member ordering encodes, exactly as documented on daemon.h.
+
 #pragma once
 
 #include <QElapsedTimer>
@@ -185,6 +193,20 @@ public:
     /// "set-once after construction" discipline used by every other
     /// setAutotileLayoutSource call site keeps the contract uniform.
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
+
+    /// Scroll-mode zone model for the navigation OSD: returns one entry per
+    /// strip window ({id: windowId, zoneNumber: 1-based strip column
+    /// position}) for a scrolling screen, empty otherwise. Daemon-injected
+    /// (the overlay stays engine-agnostic); when it answers non-empty, the
+    /// navigation OSD uses it in place of the layout's zone list so the
+    /// "Zone %1" copy resolves and no snap layout is required on a
+    /// scrolling screen. Same clear-before-destroy contract as the other
+    /// injected closures.
+    using ScrollZonesProvider = std::function<QVariantList(const QString& screenId)>;
+    void setScrollZonesProvider(ScrollZonesProvider provider)
+    {
+        m_scrollZonesProvider = std::move(provider);
+    }
     PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager;
@@ -266,7 +288,11 @@ public:
                        bool producesOverlappingZones = false, const QString& zoneNumberDisplay = QStringLiteral("all"),
                        int masterCount = 1);
     void showLockedLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
-    void showDisabledOsd(const QString& reason, const QString& screenId = QString());
+    /// @p icon overrides the card's overlay glyph — the default is the
+    /// failure "dialog-cancel"; a positive announcement that reuses this
+    /// card (showScrollingModeOsd) passes its own so success does not wear
+    /// the failure icon.
+    void showDisabledOsd(const QString& reason, const QString& screenId = QString(), const QString& icon = QString());
 
     /**
      * @brief Pre-create the per-screen passive overlay shell for all connected
@@ -376,6 +402,13 @@ public:
     void refreshCheatsheet(const QVariantList& model, const QString& currentMode, bool autotileAvailable);
     /// Screen the visible cheatsheet is bound to; empty when hidden.
     QString cheatsheetScreenId() const;
+
+    /// Tab indicators for tabbed scrolling columns on @p screenId (per
+    /// screen, NOT a singleton). @p strips is a list of maps with x / y /
+    /// width (absolute px, converted to shell coordinates here) and tabs
+    /// ({title, active} list); empty hides the screen's indicators.
+    /// Display-only and click-through.
+    void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
 
     /// Forwarders to the active picker slot's QML moveSelection /
     /// confirmSelection functions. Used by global-accel callbacks
@@ -553,16 +586,10 @@ private:
     ///   keeps the legacy square-canvas behaviour for screen-agnostic
     ///   consumers.
     QVariantList buildLayoutsList(const QString& screenId = QString(), QSize autotilePreviewCanvas = {}) const;
-    /// Per-screen layout-family filter used for the zone selector.
-    /// `manual` enables PhosphorZones layout entries; `autotile` enables
-    /// algorithm previews. Both default-true is "show everything"; the
-    /// resolver narrows to a single family when the screen has an
-    /// explicit assignment.
-    struct LayoutIncludeFlags
-    {
-        bool manual = true;
-        bool autotile = true;
-    };
+    /// Defined in overlayservice_types.h (hoisted with the other value
+    /// types); aliased so existing OverlayService::LayoutIncludeFlags
+    /// references keep working.
+    using LayoutIncludeFlags = PlasmaZones::LayoutIncludeFlags;
     /// Resolve the per-screen include filter. buildLayoutsList (the popup
     /// model) and visibleLayoutCount (used by isNearTriggerEdge to size
     /// the keep-visible bar) both go through here so the trigger geometry
@@ -641,17 +668,24 @@ private:
     //
     // ~OverlayService explicitly resets m_shellHost AFTER draining
     // m_screenStates and BEFORE implicit member destruction, so the lib
-    // dtor's PreDestroyCallback re-fire (for any entry the explicit
-    // drain missed) runs while m_screenStates and friends are still
-    // alive. The decl order below (m_screenStates before m_shellHost)
-    // also makes reverse-destruction order safe - m_shellHost
-    // (declared later) destroys FIRST, while m_screenStates is still
-    // alive - even if a future change removes the explicit reset.
+    // dtor's PreDestroyCallback re-fire (for entries the drain missed)
+    // runs while m_screenStates and friends are still alive. The decl
+    // order (m_screenStates before m_shellHost) keeps reverse-destruction
+    // safe even if a future change removes the explicit reset.
     QHash<QString, PerScreenOverlayState> m_screenStates;
+    /// Per-screen generation guard for the scroll tab-strip animated hide:
+    /// bumped per updateScrollTabStrips call so a hide completion that lost
+    /// the race to a newer non-empty update no-ops instead of tearing down
+    /// a repopulated slot. Retained after teardown (monotonic).
+    QHash<QString, quint64> m_scrollTabsHideGuard;
+    /// Screens with a hide in flight; the show path treats these as not
+    /// visible so a mid-hide repopulation re-runs beginShow.
+    QSet<QString> m_scrollTabsHidePending;
     std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
+    ScrollZonesProvider m_scrollZonesProvider;
     /// Borrowed from Daemon. stop() detaches this even when init never reached start().
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutManager =

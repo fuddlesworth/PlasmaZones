@@ -24,6 +24,17 @@ surface rather than linking this library directly.
 | `WindowTrackingService` | Main service — zone assignments, floating, auto-snap, resnap, rotation |
 | `IGeometryResolver` | Interface for gap/padding resolution (consumer provides) |
 | `PlacementConfig` | Value struct for runtime config (replaces ISettings dependency) |
+| `SnapStateResolver` | Injectable seam mapping a window or screen to its owning `SnapState` |
+
+Snap state is per (screen, desktop, activity), so production wires a
+`SnapStateResolver` through `setSnapStateResolver`. The `setSnapState`
+overload in the example below is the single-store convenience shim, which
+builds a resolver whose every arm routes to one store. It suits unit tests
+and single-store consumers.
+
+Float state is owned per engine, not by this service. A window floated in
+snapping mode is not floated for the autotile or scrolling engine, so never
+read one engine's float verdict to gate another's placement.
 
 ## Typical use
 
@@ -45,7 +56,7 @@ class MyResolver : public PhosphorPlacement::IGeometryResolver {
 
 MyResolver resolver;
 PhosphorPlacement::WindowTrackingService wts(
-    layoutManager, zoneDetector, screenManager, vdm, &resolver);
+    layoutManager, screenManager, vdm, &resolver);
 wts.setSnapState(snapState);
 wts.setWindowRegistry(registry);
 ```

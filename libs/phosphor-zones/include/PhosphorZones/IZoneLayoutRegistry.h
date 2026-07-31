@@ -15,7 +15,7 @@
 // Inherits PhosphorLayout::ILayoutSourceRegistry so concrete registries
 // (LayoutManager) carry the unified `contentsChanged` signal that
 // ZonesLayoutSource subscribes to - matching the pattern every other
-// provider library (phosphor-tiles, future phosphor-scrolling, …)
+// provider library (phosphor-tiles, phosphor-scroll-engine, …)
 // follows. Inheriting QObject via the unified base rather than
 // directly keeps ILayoutManager's non-virtual multi-inheritance safe:
 // every path through ILayoutManager reaches QObject exactly once, so
@@ -107,8 +107,11 @@ public:
     /// (desktop, activity) context.
     virtual Layout* resolveLayoutForScreen(const QString& screenId) const = 0;
 
-    /// Raw assignment id (manual-layout UUID or @c "autotile:<algorithmId>")
-    /// for @p screenId, with cascade + level-1 provider fallback.
+    /// Raw assignment id (manual-layout UUID, @c "autotile:<algorithmId>",
+    /// or the bare @c "scrolling:" sentinel) for @p screenId, with cascade +
+    /// level-1 provider fallback. An explicit mode-only Snapping pin settles
+    /// as an EMPTY id (no layout identity exists for it) — see the concrete
+    /// class doc.
     virtual QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                           const QString& activity = QString()) const = 0;
 
@@ -168,12 +171,15 @@ public:
     /// override (no rule gaps); a registry that does not model context rules —
     /// e.g. a fixture stub — keeps the legacy per-screen/layout/global cascade.
     ///
-    /// @p mode is the placement-mode wire token ("snapping" / "tiling") of the
-    /// engine asking. It is matched against a context rule's `Mode` leaf, so a
-    /// per-mode gap rule (e.g. a wider inner gap only while tiling) resolves for
-    /// the matching engine and stays inert for the other. The snapping geometry
-    /// path passes "snapping"; the autotile path passes "tiling". Left empty for
-    /// a mode-agnostic caller (no Mode leaf then matches).
+    /// @p mode is the placement-mode wire token ("snapping" / "tiling" /
+    /// "scrolling") of the engine asking. It is matched against a context
+    /// rule's `Mode` leaf, so a per-mode gap rule (e.g. a wider inner gap
+    /// only while tiling) resolves for the matching engine and stays inert
+    /// for the others. The snapping geometry path passes "snapping", the
+    /// autotile path "tiling", the scroll engine's provider "scrolling".
+    /// Left empty for a mode-agnostic caller (no Mode leaf then matches).
+    /// An EMPTY @p mode means "mode-agnostic" and excludes Field::Mode
+    /// structurally — see the LayoutRegistry override.
     virtual ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
                                                   const QString& mode = QString()) const
     {

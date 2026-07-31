@@ -143,17 +143,26 @@ void TestRuleController::dirtyTrackingAndRevert()
     // hermetic means standing up a real `org.plasmazones.Rules` service on a
     // private bus — a fixture no other test in this file needs, for one
     // transition the daemon-side rule tests already cover from the other end.
-    // Do NOT read a green CI run as evidence that a successful revert clears
-    // dirty; that leg is covered on demand by running this test under
-    // `dbus-run-session` with the daemon started.
+    // Under ctest the TEST_LAUNCHER private bus declares NO service
+    // directories, so org.plasmazones.Rules is never reachable and the
+    // failure arm below is the one that runs. The assertion IS
+    // outcome-derived (the branch keeps the success arm alive for a direct
+    // dev-box run against a live daemon), so a ctest environment that ever
+    // grew a service directory would silently swap which contract is
+    // asserted — accepted, since the launcher config is part of this
+    // repo's test contract.
     QSignalSpy loadedSpy(&controller, &RuleController::rulesLoaded);
     controller.revert();
-    // Pump the event loop briefly so the QDBusPendingCall reply (success or
-    // error) lands. A timeout fall-through is acceptable — that's the
-    // daemon-absent path and dirty must stay set.
+    // Pump the event loop briefly so the QDBusPendingCall reply (an error
+    // under ctest) lands.
     loadedSpy.wait(500);
-    const bool reverted = loadedSpy.count() > 0;
-    QCOMPARE(controller.isDirty(), !reverted);
+    if (loadedSpy.count() > 0) {
+        // Direct run against a live daemon: a landed revert clears dirty.
+        QVERIFY(!controller.isDirty());
+    } else {
+        // The ctest path: no daemon, revert cannot land, dirty must stay.
+        QVERIFY(controller.isDirty());
+    }
 }
 
 void TestRuleController::userAuthorableFilterHidesInternalActions()
@@ -422,18 +431,18 @@ void TestRuleController::authoringMetadata()
         fieldCategoryOrder.insert(f.value(QStringLiteral("wire")).toString(),
                                   f.value(QStringLiteral("categoryOrder")).toInt());
     }
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("appId")), 1); // Identity
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("windowType")), 6); // Type
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isTransient")), 6); // Type
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFullscreen")), 3); // State
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isMaximized")), 3); // State
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipTaskbar")), 4); // Taskbar & switcher
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipSwitcher")), 4); // Taskbar & switcher
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFloating")), 5); // Tiling
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("zone")), 5); // Tiling
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width")), 2); // Size
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height")), 2); // Size
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenId")), 0); // Context
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("appId"), -1), 1); // Identity
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("windowType"), -1), 6); // Type
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isTransient"), -1), 6); // Type
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFullscreen"), -1), 3); // State
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isMaximized"), -1), 3); // State
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipTaskbar"), -1), 4); // Taskbar & switcher
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipSwitcher"), -1), 4); // Taskbar & switcher
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFloating"), -1), 5); // Tiling
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("zone"), -1), 5); // Tiling
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width"), -1), 2); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height"), -1), 2); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenId"), -1), 0); // Context
 
     // The four match conditions (IsTransient/IsNotification/Width/Height) must be
     // authorable: present in the picker with the correct value kind, and with
@@ -455,7 +464,7 @@ void TestRuleController::authoringMetadata()
 
     const auto opWires = [&](const QString& wire) {
         QSet<QString> s;
-        for (const QVariant& v : controller.operatorsForField(valueByWire.value(wire))) {
+        for (const QVariant& v : controller.operatorsForField(valueByWire.value(wire, -1))) {
             s.insert(v.toMap().value(QStringLiteral("wire")).toString());
         }
         return s;
@@ -498,9 +507,13 @@ void TestRuleController::authoringMetadata()
     bool sawFloat = false;
     // Every action carries a picker category; collect the order per wire so the
     // grouping can be spot-checked. Context-domain categories come first
-    // (Gaps=0, Engine=1, Snapping=2, Tiling=3, Overlay=4), then the
-    // window-domain categories (Animation=5, Appearance=6, Window=7). The old
-    // flat "Layout & engine" category was split into Engine / Snapping / Tiling.
+    // (Gaps=0, Engine=1, Snapping=2, Tiling/Algorithm and Tiling/Behavior both
+    // =3, Scrolling=4, Overlay=5), then the window-domain categories
+    // (Animation=6, Appearance=7, Window=8, Window/Scrolling=9 — the per-app
+    // scrolling Open* actions live in that submenu so the picker's
+    // context/window divider stays honest). An unregistered or uncategorized
+    // action falls to Other=99. The old flat "Layout & engine" category was
+    // split into Engine / Snapping / Tiling / Scrolling.
     QHash<QString, int> actionCategoryOrder;
     for (const QVariant& v : actions) {
         const QVariantMap a = v.toMap();
@@ -512,15 +525,17 @@ void TestRuleController::authoringMetadata()
                                    a.value(QStringLiteral("categoryOrder")).toInt());
     }
     QVERIFY(sawFloat);
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap")), 0); // Gaps (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode")), 1); // Engine (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setSnappingLayout")), 2); // Snapping (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setTilingAlgorithm")), 3); // Tiling (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setAlgorithmParam")), 3); // Tiling (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("overrideOverlayShader")), 4); // Overlay (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 5); // Animation (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity")), 6); // Appearance (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude")), 7); // Window (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap"), -1), 0); // Gaps (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode"), -1), 1); // Engine (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setSnappingLayout"), -1), 2); // Snapping (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setTilingAlgorithm"), -1), 3); // Tiling (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setAlgorithmParam"), -1), 3); // Tiling (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setCenterFocusedColumn"), -1), 4); // Scrolling (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed"), -1), 9); // Window/Scrolling (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("overrideOverlayShader"), -1), 5); // Overlay (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations"), -1), 6); // Animation (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity"), -1), 7); // Appearance (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude"), -1), 8); // Window (window)
 }
 
 void TestRuleController::matchIsContextOnlyClassifies()
@@ -613,8 +628,6 @@ void TestRuleController::asyncCommitAndRevertAreInvokable()
              "'Discard and reload' action calls it directly from QML");
 }
 
-QTEST_MAIN(TestRuleController)
-
 /// stageUserRules is the profile-activation staging path — a public entry
 /// that bypasses addRule. It must enforce the same boundary: an invalid rule
 /// (constructed directly; Rule::fromJson cannot produce one) is dropped
@@ -654,5 +667,7 @@ void TestRuleController::stageUserRulesEnforcesTheAddRuleBoundary()
     QCOMPARE(controller.model()->rowCount(), 1);
     QCOMPARE(controller.model()->rules().first().id, good.id);
 }
+
+QTEST_MAIN(TestRuleController)
 
 #include "test_rule_controller.moc"
