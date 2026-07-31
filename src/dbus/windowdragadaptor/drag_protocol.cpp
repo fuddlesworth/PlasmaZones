@@ -135,13 +135,17 @@ bool WindowDragAdaptor::isActiveLayoutSuppressedForScreen(const QString& screenI
     if (!m_layoutManager || screenId.isEmpty()) {
         return false;
     }
+    // Key on all three context axes the predicate reads. The two cheap reads
+    // are paid per call; only the rule resolves are elided.
     const int vd = m_layoutManager->currentVirtualDesktopForScreen(screenId);
-    if (screenId == m_suppressMemoScreenId && vd == m_suppressMemoDesktop) {
+    const QString activity = m_layoutManager->currentActivity();
+    if (screenId == m_suppressMemoScreenId && vd == m_suppressMemoDesktop && activity == m_suppressMemoActivity) {
         return m_suppressMemoValue;
     }
     const bool suppressed = isActiveLayoutSuppressedForScreen(screenId, vd);
     m_suppressMemoScreenId = screenId;
     m_suppressMemoDesktop = vd;
+    m_suppressMemoActivity = activity;
     m_suppressMemoValue = suppressed;
     return suppressed;
 }
@@ -199,6 +203,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     // Per-drag suppression memo — assignments may have changed between drags.
     m_suppressMemoScreenId.clear();
     m_suppressMemoDesktop = 0;
+    m_suppressMemoActivity.clear();
     m_suppressMemoValue = false;
     // Reset the modifier-conflict warning latch on every beginDrag,
     // not just the snap-path dragStarted further down. Bypass-path drags
@@ -349,9 +354,8 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
         // Layout-suppressed screens are excluded too: promoting a pending
         // drag there would activate the snap machinery (keyboard grab, zone
         // state) on a screen the policy tier declares a dead drag. The
-        // zone-selector popup itself keeps its suppressed-screen carve-out
-        // via the mid-drag trigger check (see checkZoneSelectorTrigger),
-        // which runs only for drags that are already active.
+        // mid-drag selector check (checkZoneSelectorTrigger) refuses the same
+        // screens, so a suppressed monitor offers no selector at either tier.
         if (resolved.qscreen && m_contextResolver
             && !m_contextResolver->isDisabled(m_contextResolver->handleFor(resolved.screenId))
             && !isActiveLayoutSuppressedForScreen(resolved.screenId)) {

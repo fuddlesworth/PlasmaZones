@@ -219,9 +219,18 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
     // active-screen tick, and its inactive-context gate keeps the idle from
     // re-lighting a suppressed screen.
     if (isActiveLayoutSuppressedForScreen(outScreenId)) {
-        if (m_overlayShown && m_overlayService && !m_overlayIdled) {
-            m_overlayService->setIdleForDragPause();
-            m_overlayIdled = true;
+        if (m_overlayShown && m_overlayService) {
+            // Forget the remembered screen unconditionally: this gate returns
+            // before showAtPosition ever runs, so the service would otherwise
+            // keep pointing at the last ACTIVE screen and a later
+            // refreshFromIdle would re-light it for a tick (the #724
+            // wrong-screen flash), including after a crossing back onto a
+            // different active screen.
+            m_overlayService->forgetCurrentScreen();
+            if (!m_overlayIdled) {
+                m_overlayService->setIdleForDragPause();
+                m_overlayIdled = true;
+            }
         }
         return nullptr;
     }

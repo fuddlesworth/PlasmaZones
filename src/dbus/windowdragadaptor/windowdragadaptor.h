@@ -574,6 +574,7 @@ private:
     // onLayoutChanged clear it.
     mutable QString m_suppressMemoScreenId;
     mutable int m_suppressMemoDesktop = 0;
+    mutable QString m_suppressMemoActivity;
     mutable bool m_suppressMemoValue = false;
 
     // Multi-zone state

@@ -307,6 +307,11 @@ void OverlayService::setIdleForDragPause()
     scheduleIdleQuiesce();
 }
 
+void OverlayService::forgetCurrentScreen()
+{
+    m_currentOverlayScreenId.clear();
+}
+
 void OverlayService::refreshFromIdle()
 {
     // Restore zone data after a setIdleForDragPause() blank and flip

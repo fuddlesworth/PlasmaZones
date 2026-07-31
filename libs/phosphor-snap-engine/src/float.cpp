@@ -47,6 +47,12 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
                                       QString(), screenId);
             return;
         }
+        // The float is over, so the suspension classification is too. This
+        // path never crosses the adaptor edges that normally clear it (the
+        // shortcut calls the engine directly), and a stranded bit would keep
+        // every later capture on the minimize-preserve path and make the next
+        // effect-driven unfloat wrongly read as a suspension.
+        m_windowTracker->clearSuspensionFloat(windowId);
         Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("unfloated"), QString(), QString(),
                                   screenId);
     } else {

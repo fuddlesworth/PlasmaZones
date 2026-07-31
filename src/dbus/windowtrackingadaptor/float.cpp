@@ -390,8 +390,15 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     // while the bit is still set, stays correct for a different reason: it
     // passes fromStateChange=true, which bypasses that guard entirely.)
     if (!floating) {
-        const bool snapDest = m_cachedSnapEngine && dest == m_snapEngine.data();
-        const bool stillFloating = snapDest && m_cachedSnapEngine->isFloating(windowId);
+        const bool snapSlotDest = m_snapEngine && dest == m_snapEngine.data();
+        if (snapSlotDest && !m_cachedSnapEngine) {
+            // Reduced wiring (a non-SnapEngine in the snap slot): the
+            // suspension contract cannot be evaluated, so the clear degrades
+            // to unconditional. Say so rather than degrading silently.
+            qCDebug(lcDbusWindow) << "setWindowFloatingForScreen: snap slot holds a non-SnapEngine for" << windowId
+                                  << "— declassifying unconditionally";
+        }
+        const bool stillFloating = snapSlotDest && m_cachedSnapEngine && m_cachedSnapEngine->isFloating(windowId);
         if (!stillFloating) {
             m_service->clearSuspensionFloat(windowId);
         }
