@@ -39,10 +39,10 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
     if (!releasingEngine) {
         return;
     }
+    const bool releasedFromScroll =
+        (releasingEngine == static_cast<PhosphorEngine::IPlacementEngine*>(m_scrollEngine.get()));
     const PhosphorZones::AssignmentEntry::Mode otherTilingMode =
-        (releasingEngine == static_cast<PhosphorEngine::IPlacementEngine*>(m_scrollEngine.get()))
-        ? PhosphorZones::AssignmentEntry::Autotile
-        : PhosphorZones::AssignmentEntry::Scrolling;
+        releasedFromScroll ? PhosphorZones::AssignmentEntry::Autotile : PhosphorZones::AssignmentEntry::Scrolling;
 
     // NOTE: the batch is cleared ONCE per recompute at the top of
     // updateEngineScreens — both engines can release synchronously in the
@@ -191,6 +191,39 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
                 } else {
                     qCWarning(lcDaemon) << "windowsReleased: snap-zone restore for" << windowId
                                         << "failed — zone geometry unresolved for" << snapSlot.zoneIds;
+                }
+            } else if (releasedFromScroll && rec && snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped()) {
+                // Tiled-in-strip window with NO snap state to return to: it was
+                // free (never zone-snapped, never explicitly floated) when the
+                // screen entered scrolling, so neither the snap-float branch nor
+                // the buffer resnap will place it — without this it keeps its
+                // strip rect, which can sit entirely off the viewport (the
+                // strip extends past the screen). Restore the recorded free
+                // geometry, the same source the autotile return trip taps via
+                // buildAutotileRestoreEntries; autotile releases are excluded
+                // here because that path already covers them. Float state is
+                // deliberately NOT set: a free window in snapping mode carries
+                // no explicit float bit.
+                const QString screen = wts->screenForWindow(windowId);
+                const QString restoreScreen = screen.isEmpty() ? rec->screenId : screen;
+                QRect g = rec->freeGeometryFor(restoreScreen);
+                // Same dead-output guard as the snap-float branch: a rect on no
+                // live screen would push the window off every output.
+                if (g.isValid() && !intersectsAnyLiveScreen(g)) {
+                    qCInfo(lcDaemon) << "windowsReleased: dropping pre-scroll free-geometry restore for" << windowId
+                                     << "geo=" << g << "— target intersects no live screen";
+                    g = QRect();
+                }
+                if (g.isValid()) {
+                    qCInfo(lcDaemon) << "windowsReleased: restoring pre-scroll free geometry for" << windowId
+                                     << "geo=" << g << "screen=" << restoreScreen;
+                    ZoneAssignmentEntry entry;
+                    entry.windowId = windowId;
+                    entry.targetZoneId = RestoreSentinel;
+                    entry.targetGeometry = g;
+                    // Drain-gate stamp — see the snap-float branch above.
+                    entry.targetScreenId = restoreScreen;
+                    m_pendingSnapFloatRestores.append(entry);
                 }
             } else {
                 qCDebug(lcDaemon) << "windowsReleased: no snap-float to restore for" << windowId

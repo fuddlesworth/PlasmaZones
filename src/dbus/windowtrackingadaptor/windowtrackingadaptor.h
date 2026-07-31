@@ -642,6 +642,15 @@ public:
     QRect frameGeometry(const QString& windowId) const override;
 
     /**
+     * Every window the effect has reported a frame for, i.e. every open
+     * window, as canonical shadow-store ids (safe to feed straight back to
+     * captureWindowPlacement — the same contract refreshOpenWindowPlacements
+     * relies on). Daemon-internal; used by the mode-exit presave to snapshot
+     * ALL windows on a screen, not only the explicitly-floated set.
+     */
+    QStringList knownWindowIds() const;
+
+    /**
      * @brief Find the first empty zone in the current layout
      * @return PhosphorZones::Zone ID of first empty zone, or empty string if all occupied
      */

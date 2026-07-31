@@ -48,6 +48,11 @@ QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
     return m_frameGeometry.value(shadowWindowId(windowId));
 }
 
+QStringList WindowTrackingAdaptor::knownWindowIds() const
+{
+    return m_frameGeometry.keys();
+}
+
 QString WindowTrackingAdaptor::lastActiveScreenName() const
 {
     // Prefer the active window's live screen tracking from any of the three

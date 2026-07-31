@@ -760,9 +760,11 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
 
 void Daemon::presaveSnapFloats(const QString& screenId)
 {
-    // Snapshot snap-mode float state into the unified record BEFORE a screen leaves
-    // snapping for autotile, so the screen's return restores the float from the
-    // SINGLE source of truth (the record's snap slot) — no parallel saved-float set.
+    // Snapshot snap-mode window state (explicit floats AND plain free windows)
+    // into the unified record BEFORE a screen leaves snapping for a tiling
+    // mode, so the screen's return restores each window from the SINGLE source
+    // of truth (the record's snap slot + shared free geometry) — no parallel
+    // saved-float set.
     // Runs while the screen is still in snapping mode, so captureWindowPlacement
     // routes to the snap engine and records the snap slot (= floating) plus the
     // shared free geometry from the live frame.
@@ -781,8 +783,17 @@ void Daemon::presaveSnapFloats(const QString& screenId)
         return;
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-    const QStringList floatingIds = wts->floatingWindows();
-    for (const QString& fid : floatingIds) {
+    // EVERY open window, not only the explicitly-floated set. A free window in
+    // snapping mode (never snapped, never floated) has no live state anywhere,
+    // and its CURRENT frame at the flip instant is the only correct restore
+    // target for the return trip — the periodic save-time sweep is dirty-gated,
+    // so a plain user move/resize between saves would otherwise never reach the
+    // record and the return restored a stale rect. captureWindowPlacement's
+    // slot-state gate keeps this safe for the rest of the sweep: snapped and
+    // engine-tiled windows refresh their slots without any geometry write, and
+    // minimized windows take its preserve path.
+    const QStringList allIds = m_windowTrackingAdaptor->knownWindowIds();
+    for (const QString& fid : allIds) {
         // A window floated BY a tiling mode (either engine) is that mode's
         // own float, not a snap float: capturing it here would poison the
         // snap slot with a tiling-mode frame.
