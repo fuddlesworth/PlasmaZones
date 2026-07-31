@@ -109,9 +109,15 @@ public:
 
     /// Flush all staged assignments to the daemon via D-Bus. SettingsController
     /// wraps this with `setSaveBatchMode(true)` + `applyAssignmentChanges` +
-    /// `setSaveBatchMode(false)` to amortise the broadcast cost. Clears the
-    /// staging map on completion.
-    void flushAssignmentsToDaemon();
+    /// `setSaveBatchMode(false)` to amortise the broadcast cost.
+    ///
+    /// Returns false when ANY per-entry call came back as a D-Bus error, and in
+    /// that case the staging map is RETAINED. Clearing it on a failed flush was
+    /// the bug this contract exists to prevent: the retry Save found nothing
+    /// staged, did nothing, and cleared the unsaved badge while the daemon had
+    /// never applied the edits. Every call this method makes is an idempotent
+    /// setter, so re-flushing the whole retained map on the next Save is safe.
+    [[nodiscard]] bool flushAssignmentsToDaemon();
 
     // ── Virtual screen staging ────────────────────────────────────────
 
@@ -142,8 +148,11 @@ public:
     /// Push staged VS configs to the daemon via D-Bus. Runs AFTER
     /// `Settings::save()` but BEFORE `notifyReload` so virtual screen IDs
     /// exist by the time assignments referencing them are processed.
-    /// Clears the staging map on completion.
-    void flushVirtualScreensToDaemon();
+    ///
+    /// Same failure contract as `flushAssignmentsToDaemon`: false when any
+    /// per-screen call errored, and the staging map is retained so the retry
+    /// Save has something to send.
+    [[nodiscard]] bool flushVirtualScreensToDaemon();
 
     // ── Quick layout slots ────────────────────────────────────────────
 
@@ -174,9 +183,12 @@ public:
 
     /// Push staged quick-layout slots (both snapping and tiling modes) to the
     /// daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER `notifyReload`
-    /// so the daemon has the fresh config. Clears both staging maps on
-    /// completion.
-    void flushQuickSlotsToDaemon();
+    /// so the daemon has the fresh config.
+    ///
+    /// Same failure contract as `flushAssignmentsToDaemon`: false when any
+    /// per-slot call errored, and the staging map for the failing mode is
+    /// retained. Both modes are attempted regardless of the other's outcome.
+    [[nodiscard]] bool flushQuickSlotsToDaemon();
 
 private:
     StagedAssignment& assignmentEntry(const QString& screen, int desktop, const QString& activity);

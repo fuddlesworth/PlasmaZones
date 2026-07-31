@@ -20,6 +20,7 @@
 #include <PhosphorShortcuts/Registry.h>
 
 #include <QHash>
+#include <QKeySequence>
 #include <QSet>
 #include <QVariantMap>
 
@@ -38,14 +39,23 @@ using namespace ShortcutIds;
 // the whole classification reads in one place. Category labels are
 // untranslated keys; cheatsheetModel() runs them through PhosphorI18n::tr.
 //
-// Mode classification contract (maintainer-decided):
-//  - directional move/focus/swap are generic navigation → all modes
-//  - zone-centric ops (snap-to-zone slots, empty-zone push, restore size,
-//    cycle/rotate within zones) are hard no-ops off snapping → snapping
-//  - master-stack ops are hard no-ops off autotile → autotile
-//  - column/strip ops (consume/expel, column widths, tab display) are hard
-//    no-ops off scrolling → scrolling
+// Mode classification contract (maintainer-decided). A shortcut is tagged
+// with the modes it actually DOES something in, so the sheet never hides a
+// working key and never advertises a dead one:
+//  - "all" for everything each engine implements in its own address space:
+//    the directional move/focus/swap quads, rotate, the cycle pair, restore
+//    size, and the snap-to-zone digits (moveFocusedToPosition addresses
+//    zones in snapping, layout slots in autotile, visible tile slots in
+//    scrolling)
+//  - "snapping" for ops that are hard no-ops off snapping: the multi-zone
+//    span quad and the empty-zone push
+//  - "autotile" for the master-stack ops, hard no-ops off autotile
+//  - "scrolling" for column/strip ops (consume/expel, column widths, tab
+//    display), hard no-ops off scrolling
 //  - toggle_autotile is the doorway INTO autotile → all modes, always shown
+// A row tagged "all" also has to READ mode-neutrally. A label that names
+// zones on a key which addresses columns in scrolling misinforms the reader
+// exactly as much as the wrong tag would.
 struct CatalogMeta
 {
     const char* category;
@@ -89,6 +99,12 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdOpenSettings, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleCheatsheet, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleWindowFloat, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
+        // "all", not a per-mode tag, and deliberately not gated on how many
+        // modes are enabled. The row advertises the mode CYCLE, which is a
+        // hard no-op only in the one configuration where every mode but the
+        // current one is switched off — and in that configuration the honest
+        // thing is still to show the key, because what fixes it is turning a
+        // mode back on in settings, not a missing row.
         add(kIdToggleAutotile, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
         add(kIdNextLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
@@ -97,7 +113,10 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdResnapToNewLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
         add(kIdSnapAllWindows, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
         add(kIdPushToEmptyZone, QT_TRANSLATE_NOOP("plasmazones", "Snap to Zone"), 3, "snapping");
-        add(kIdRestoreWindowSize, QT_TRANSLATE_NOOP("plasmazones", "Snap to Zone"), 3, "snapping");
+        // Restore size works in every mode (off snapping it is the float-back
+        // half of toggle_window_float), so hiding it on the sheet outside
+        // snapping hid a key that does something.
+        add(kIdRestoreWindowSize, QT_TRANSLATE_NOOP("plasmazones", "Snap to Zone"), 3, "all");
         // Directional families compress to one row each in cheatsheetModel(),
         // so Move/Focus/Swap/rotate/cycle all fit one "Windows" group instead
         // of four near-empty ones.
@@ -118,16 +137,25 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdSpanWindowRight, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
         add(kIdSpanWindowUp, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
         add(kIdSpanWindowDown, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping");
-        // Rotate is meaningful in every mode: zones in snapping, layout
-        // slots in tiling, and the VISIBLE column slots in scrolling.
+        // Rotate is meaningful in every mode, and the unit it rotates differs
+        // per mode by design: zones in snapping, layout slots in tiling, and
+        // whole COLUMNS in scrolling. That last one is deliberately coarser
+        // than the visible TILE the scroll zone numbers and the digits
+        // address, so the two are not the same space and the wording here
+        // must not be aligned with the tile-numbering wording elsewhere.
         add(kIdRotateWindowsCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Rotate Clockwise"));
         add(kIdRotateWindowsCCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Rotate Counterclockwise"));
-        add(kIdCycleWindowForward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping", nullptr,
-            QT_TRANSLATE_NOOP("plasmazones", "Cycle Forward in Zone"));
-        add(kIdCycleWindowBackward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping", nullptr,
-            QT_TRANSLATE_NOOP("plasmazones", "Cycle Backward in Zone"));
+        // Every engine implements the focus cycle and the router does not gate
+        // it, so tagging it snapping-only dropped a working shortcut off the
+        // sheet in the other two modes. The label drops "in Zone" with the
+        // tag: what it cycles through is a zone in snapping, a layout slot in
+        // tiling and a column's tiles in scrolling.
+        add(kIdCycleWindowForward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Focus Forward"));
+        add(kIdCycleWindowBackward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Focus Backward"));
         add(kIdSwapVirtualScreenLeft, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Swap Screen Left"));
         add(kIdSwapVirtualScreenRight, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all", nullptr,
@@ -182,14 +210,19 @@ CatalogMeta catalogMetaForId(const QString& id)
     if (it != kMeta.constEnd()) {
         return *it;
     }
-    // Indexed slot families are prefix-keyed, not enumerated above.
-    if (id.startsWith(QLatin1String("quick_layout_"))) {
+    // Indexed slot families are prefix-keyed, not enumerated above. The
+    // prefixes come from the id header, so a rename moves the ids and these
+    // tests together instead of compiling clean and quietly dumping the whole
+    // family into the "Other" bucket below.
+    if (id.startsWith(QLatin1String(kQuickLayoutPrefix))) {
         return {QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all"};
     }
-    if (id.startsWith(QLatin1String("snap_to_zone_"))) {
+    if (id.startsWith(QLatin1String(kSnapToZonePrefix))) {
         // Every engine implements moveFocusedToPosition: zone N in
-        // snapping, layout slot N in tiling, visible column slot N in
-        // scrolling.
+        // snapping, layout slot N in tiling, visible tile slot N in
+        // scrolling. Only 1 to 9 have shortcuts, so a scrolling strip with
+        // more visible tiles than that numbers them all but leaves the ones
+        // past 9 with no digit that reaches them.
         return {QT_TRANSLATE_NOOP("plasmazones", "Snap to Zone"), 3, "all"};
     }
     // A shortcut added to the table without catalog metadata still shows up
@@ -208,7 +241,12 @@ CatalogMeta catalogMetaForId(const QString& id)
 /// token. The producer special-cased it and the consumer did not, so the two
 /// could never match on such a binding and the family silently stopped
 /// compressing. No shipped default ends in '+', so it took a user rebind to
-/// reach — one definition removes the possibility entirely.
+/// reach.
+///
+/// One definition removes THIS divergence, not every one: the consumer also
+/// rejects split == 0 (a sequence starting with '+') before it ever asks for
+/// the token, where the producer happily tokenizes one. That case cannot
+/// wrongly compress — it only declines to — so the asymmetry is left alone.
 QString lastKeyToken(const QString& sequence)
 {
     const int split = sequence.lastIndexOf(QLatin1Char('+'));
@@ -264,7 +302,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // When every member of a family is assigned, all members share the same
     // modifier prefix, and each member's final key token is the expected one
     // (its digit / direction), the family collapses into ONE row whose last
-    // chip is a range token ("1…9") or "Arrows". Any deviation — a member
+    // chip is a range token ("1-9") or "Arrows". Any deviation — a member
     // unassigned, a rebind off-pattern — falls back to the individual rows,
     // because a compressed row would then lie about what the keys do.
     using FamilySpec = CheatsheetFamily;
@@ -274,8 +312,18 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // would silently stop the family collapsing the moment a default is
     // retuned, and the sheet would fall back to two near-identical rows with
     // nothing to explain why.
+    //
+    // Structural asymmetry worth knowing: because the expectation IS the
+    // default, any user rebind of either member uncompresses this pair for
+    // good, where a digit or arrow family recompresses as soon as the rebind
+    // still lands on its structural token.
     const auto lastKeyOf = [](const QString& sequence) {
-        return lastKeyToken(sequence);
+        // Normalize to PortableText first, exactly as the row builder above
+        // does to the LIVE triggers before the compare. The defaults are
+        // authored in config spelling, and a spelling difference alone would
+        // silently stop the pair collapsing.
+        const QKeySequence parsed(sequence);
+        return lastKeyToken(parsed.isEmpty() ? sequence : parsed.toString(QKeySequence::PortableText));
     };
     // Both members' key tokens joined for the merged chip. The digit family
     // reads as a range and the directional one as a class name; a bare
@@ -301,9 +349,17 @@ QVariantList ShortcutManager::cheatsheetModel() const
         quickLayoutIds.append(quickLayoutId(i));
         snapToZoneIds.append(snapToZoneId(i));
     }
+    // One spelling of the digit range everywhere: the chip token and the row
+    // labels used to disagree ("1…9" against "1-9") for no reason a reader
+    // could act on.
+    const QString digitRange = QStringLiteral("1-9");
     const QVector<FamilySpec> families = {
-        {quickLayoutIds, digitTokens, PhosphorI18n::tr("Apply Layout 1-9"), QStringLiteral("1…9")},
-        {snapToZoneIds, digitTokens, PhosphorI18n::tr("Snap to Zone 1-9"), QStringLiteral("1…9")},
+        {quickLayoutIds, digitTokens, PhosphorI18n::tr("Apply Layout 1-9"), digitRange},
+        // "Zone", not "Snap to Zone": the group heading already carries that,
+        // and the digits address a zone in snapping, a layout slot in tiling
+        // and a visible tile in scrolling, so the row itself stays out of any
+        // one mode's vocabulary.
+        {snapToZoneIds, digitTokens, PhosphorI18n::tr("Zone 1-9"), digitRange},
         {{QString::fromLatin1(kIdMoveWindowLeft), QString::fromLatin1(kIdMoveWindowRight),
           QString::fromLatin1(kIdMoveWindowUp), QString::fromLatin1(kIdMoveWindowDown)},
          arrowTokens,
@@ -331,7 +387,19 @@ QVariantList ShortcutManager::cheatsheetModel() const
          PhosphorI18n::tr("Swap Screens"),
          arrowsTail},
         // The scrolling family's natural pairs collapse the same way the
-        // directional quads do, trimming the 20-row Scrolling group.
+        // directional quads do, trimming the 20-row Scrolling group. Every
+        // opposed pair in the group is here: leaving three of them out was
+        // an omission, not a judgement, and it left near-identical rows on
+        // the sheet the mechanism exists to merge.
+        scrollPair(kIdScrollFocusColumnFirst, ConfigDefaults::scrollingFocusColumnFirstShortcut(),
+                   kIdScrollFocusColumnLast, ConfigDefaults::scrollingFocusColumnLastShortcut(),
+                   PhosphorI18n::tr("Focus First / Last Column")),
+        scrollPair(kIdScrollMoveColumnToFirst, ConfigDefaults::scrollingMoveColumnToFirstShortcut(),
+                   kIdScrollMoveColumnToLast, ConfigDefaults::scrollingMoveColumnToLastShortcut(),
+                   PhosphorI18n::tr("Move Column to Start / End")),
+        scrollPair(kIdScrollCycleColumnWidth, ConfigDefaults::scrollingCycleColumnWidthShortcut(),
+                   kIdScrollCycleColumnWidthBack, ConfigDefaults::scrollingCycleColumnWidthBackShortcut(),
+                   PhosphorI18n::tr("Cycle Column Width")),
         scrollPair(kIdScrollConsumeWindow, ConfigDefaults::scrollingConsumeWindowShortcut(), kIdScrollExpelWindow,
                    ConfigDefaults::scrollingExpelWindowShortcut(), PhosphorI18n::tr("Consume / Expel Window")),
         scrollPair(kIdScrollConsumeOrExpelLeft, ConfigDefaults::scrollingConsumeOrExpelLeftShortcut(),
@@ -371,11 +439,15 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
     QSet<int> removedIndices;
     for (const auto& family : families) {
         // The two lists are parallel arrays; a mismatched spec would index
-        // expectedLastTokens out of bounds below. All current families are
-        // 9/9 or 4/4 — this guards the table against a future bad entry.
+        // expectedLastTokens out of bounds below, and an EMPTY one would walk
+        // the member loop zero times, stay "compressible", and then deref
+        // ids.first() on an empty list. All current families are 9/9 or 4/4 —
+        // this guards the table against a future bad entry.
+        Q_ASSERT(!family.ids.isEmpty());
         Q_ASSERT(family.ids.size() == family.expectedLastTokens.size());
-        if (family.ids.size() != family.expectedLastTokens.size()) {
-            qCWarning(lcShortcuts) << "cheatsheet: family spec size mismatch for" << family.combinedLabel
+        if (family.ids.isEmpty() || family.ids.size() != family.expectedLastTokens.size()) {
+            qCWarning(lcShortcuts) << "cheatsheet: malformed family spec for" << family.combinedLabel
+                                   << "ids=" << family.ids.size() << "tokens=" << family.expectedLastTokens.size()
                                    << "— skipping compression";
             continue;
         }
@@ -417,6 +489,29 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
             continue;
         }
         const int firstIdx = rowIndexById.value(family.ids.first());
+        // The merged row keeps the FIRST member's mode and category and drops
+        // the rest, so a family whose members disagree on either would hide
+        // working rows behind the first member's mode filter or file them
+        // under the wrong heading. Every current family is uniform on both;
+        // this pins that as a requirement of the spec rather than a
+        // coincidence of the table.
+        // Release pair for the Q_ASSERT: a mixed family still merges rather
+        // than bailing, because the consequence is cosmetic (a row filed
+        // under the first member's mode or heading) and dropping the
+        // compression would cost the user a readable sheet over a table
+        // typo. Warn-only is the deliberate choice, not an oversight.
+        for (int m = 1; m < family.ids.size(); ++m) {
+            const int memberIdx = rowIndexById.value(family.ids[m], -1);
+            const bool uniform = memberIdx < 0
+                || (rows[memberIdx].value(QLatin1String("mode")) == rows[firstIdx].value(QLatin1String("mode"))
+                    && rows[memberIdx].value(QLatin1String("categoryOrder"))
+                        == rows[firstIdx].value(QLatin1String("categoryOrder")));
+            Q_ASSERT(uniform);
+            if (!uniform) {
+                qCWarning(lcShortcuts) << "cheatsheet family" << family.ids.first() << "member" << family.ids[m]
+                                       << "disagrees on mode/category; merged row keeps the first member's";
+            }
+        }
         QVariantMap& row = rows[firstIdx];
         row.insert(QStringLiteral("label"), family.combinedLabel);
         row.insert(QStringLiteral("triggers"), QStringList{sharedPrefix + QLatin1Char('+') + family.tailToken});

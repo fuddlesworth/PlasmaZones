@@ -84,14 +84,22 @@ inline constexpr auto kIdScrollIncreaseWindowHeight = "scroll_increase_window_he
 inline constexpr auto kIdScrollDecreaseWindowHeight = "scroll_decrease_window_height";
 inline constexpr auto kIdScrollResetWindowHeights = "scroll_reset_window_heights";
 
+// The indexed slot families are prefix-keyed rather than enumerated above.
+// Exported so the id builders below and the cheatsheet catalog's
+// prefix classification read from ONE definition: a hardcoded copy in the
+// catalog compiled clean through a rename and silently dropped every row of
+// the family into the "Other" bucket.
+inline constexpr auto kQuickLayoutPrefix = "quick_layout_";
+inline constexpr auto kSnapToZonePrefix = "snap_to_zone_";
+
 inline QString quickLayoutId(int slotZeroBased)
 {
-    return QStringLiteral("quick_layout_%1").arg(slotZeroBased + 1);
+    return QLatin1String(kQuickLayoutPrefix) + QString::number(slotZeroBased + 1);
 }
 
 inline QString snapToZoneId(int slotZeroBased)
 {
-    return QStringLiteral("snap_to_zone_%1").arg(slotZeroBased + 1);
+    return QLatin1String(kSnapToZonePrefix) + QString::number(slotZeroBased + 1);
 }
 
 } // namespace ShortcutIds

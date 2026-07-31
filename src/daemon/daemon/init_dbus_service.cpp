@@ -6,13 +6,13 @@
 //
 // Split out of init_engines.cpp, which holds the engine wiring proper. Bus
 // registration is its own concern: it runs before the event loop, owns the
-// bounded synchronous retry, and wires the two overlay-facing adaptors.
+// bounded synchronous retry, and wires the zone-detection adaptor's
+// highlight feedback into the overlay.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"
 
 #include "daemon/overlayservice.h"
-#include "dbus/overlayadaptor.h"
 #include "dbus/zonedetectionadaptor.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -71,7 +71,16 @@ bool Daemon::registerDBusService()
             }
         }
 
-        // Non-retryable error or max retries reached
+        // Non-retryable error or max retries reached. registerService reports
+        // an already-owned name as a plain false with NO error set, so the
+        // generic line below would print an empty message and type 0 for by
+        // far the most common cause — another daemon instance is running.
+        // Name it.
+        if (error.type() == QDBusError::NoError) {
+            qCCritical(lcDaemon) << "Failed to register D-Bus service=" << PhosphorProtocol::Service::Name
+                                 << "— the name is already owned, most likely by another running PlasmaZones daemon";
+            return false;
+        }
         qCCritical(lcDaemon) << "Failed to register D-Bus service=" << PhosphorProtocol::Service::Name
                              << "error=" << error.message() << "type=" << error.type();
         return false;
@@ -95,28 +104,39 @@ bool Daemon::registerDBusService()
     qCInfo(lcDaemon) << "D-Bus service registered service=" << PhosphorProtocol::Service::Name
                      << "path=" << PhosphorProtocol::Service::ObjectPath;
 
-    // Connect overlay adaptor signals to daemon overlay control
-    // Disconnect-first on both: the two adaptors are created in
-    // initCoreAdaptors and survive a stop() -> init() cycle, so bare
-    // connects here would stack duplicate show/hide + updateGeometries
-    // handlers per cycle (same rationale as the rulesChanged sweep).
-    disconnect(m_overlayAdaptor, &OverlayAdaptor::overlayVisibilityChanged, this, nullptr);
-    connect(m_overlayAdaptor, &OverlayAdaptor::overlayVisibilityChanged, this, [this](bool visible) {
-        if (visible) {
-            showOverlay();
-        } else {
-            hideOverlay();
-        }
-    });
+    // OverlayAdaptor::overlayVisibilityChanged is OUTBOUND ONLY: the adaptor
+    // relays OverlayService::visibilityChanged onto the bus for clients. The
+    // daemon deliberately does NOT subscribe to it. It used to, routing the
+    // signal straight back into showOverlay/hideOverlay, so every internal
+    // show or hide re-entered the service that had just emitted it: an
+    // unguarded feedback cycle. It was asymmetric too — showOverlay refuses
+    // when no screen is in snap mode, but hideOverlay always runs
+    // clearHighlight(), so an internal hide cleared highlights through a
+    // path no caller asked for. Inbound overlay control comes from the
+    // adaptor's own D-Bus methods; there is nothing to wire here.
+    //
+    // No disconnect-first below: initCoreAdaptors' delete preamble
+    // (init_adaptors.cpp) tears down the WHOLE previous adaptor set,
+    // m_overlayAdaptor and m_zoneDetectionAdaptor included, and re-news both
+    // before this function runs — so a stop() -> init() cycle hands us fresh
+    // objects with no connections to sweep.
 
-    // Connect zone detection to overlay updates
-    disconnect(m_zoneDetectionAdaptor, &ZoneDetectionAdaptor::zoneDetected, this, nullptr);
+    // Highlight the detected zone. Narrow on purpose: this fires per drag
+    // poll, and the old full updateGeometries() rebuilt every screen's
+    // overlay geometry each time to answer a question about one zone.
+    //
+    // highlightZone is SINGLE-zone: it also resets highlightedZoneIds, so it
+    // collapses a multi-zone (zone-span) highlight to one zone. Its only
+    // trigger is DetectZoneAtPosition, an externally-callable D-Bus method
+    // with no in-repo caller — the daemon's own drag path writes highlights
+    // directly and never routes through here. An external client polling it
+    // DURING a zone-span drag would clobber that drag's multi-highlight;
+    // accepted, since the two uses cannot both win and the drag path repaints
+    // on its next poll.
     connect(m_zoneDetectionAdaptor, &ZoneDetectionAdaptor::zoneDetected, this,
             [this](const QString& zoneId, const PhosphorProtocol::ZoneGeometryRect& geometry) {
-                Q_UNUSED(zoneId)
                 Q_UNUSED(geometry)
-                // Update overlay when zone is detected
-                m_overlayService->updateGeometries();
+                m_overlayService->highlightZone(zoneId);
             });
 
     return true;

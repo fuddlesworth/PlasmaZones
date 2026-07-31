@@ -47,7 +47,7 @@ cp translations/plasmazones_en.ts translations/plasmazones_fr.ts
 
 Then reconfigure CMake so it picks up the new file.
 
-Plural forms: the four `%n` messages need one `<numerusform>` per plural
+Plural forms: every `%n` message needs one `<numerusform>` per plural
 category of the target language (2 for German or Dutch, 3 for Polish or
 Russian, and so on). Qt Linguist fills in the right number of slots once
 the `<TS>` language is set, so open the file in Linguist after copying it

@@ -34,6 +34,8 @@ set(plasmazones_settings_SRCS
     controller/settingscontroller_pagetopology.cpp
     controller/settingscontroller_layouts.cpp
     controller/settingscontroller_session.cpp
+    # Whole-config export/import + KZones import (split from _session).
+    controller/settingscontroller_transfer.cpp
     # Per-screen autotile/snapping/zone-selector override wrappers.
     controller/settingscontroller_perscreen.cpp
     controller/settingscontroller_ordering.cpp

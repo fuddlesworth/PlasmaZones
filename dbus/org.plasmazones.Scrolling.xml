@@ -6,24 +6,24 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <interface name="org.plasmazones.Scrolling">
-        <annotation name="org.gtk.GDBus.DocString" value="Scroll-engine-specific surface. Window lifecycle and tile-request traffic for scrolling screens rides org.plasmazones.Tiling (the shared tiling-family pipeline, which routes per screen); this interface carries only the scrolling screen set and future columnar operations."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Scroll-engine-specific surface. Window lifecycle and tile-request traffic for scrolling screens rides org.plasmazones.Tiling (the shared tiling-family pipeline, which routes per screen). This interface carries the scrolling screen set, the strip snapshot the settings app renders as its preview surface, and future columnar operations."/>
 
         <property name="scrollingScreens" type="as" access="read">
-            <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine. The KWin effect uses it to stamp Mode 'scrolling' in window rule queries."/>
+            <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine, sorted, matching the ordering of the scrollingScreensChanged payload so a consumer can compare the two for the same set. The KWin effect uses it as the discriminator that stamps Mode 'scrolling' rather than 'tiling' in window rule queries, but it does not answer from this raw set: it intersects it at read time with the engine-managed union published on org.plasmazones.Tiling, because the two sets arrive as independent signals with no ordering guarantee and this one can transiently name a screen the union has already dropped. Changes are announced on the scrollingScreensChanged signal below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
         </property>
 
         <method name="focusColumn">
-            <annotation name="org.gtk.GDBus.DocString" value="Focus the adjacent column on a scrolling screen. Called by the KWin effect's Meta+wheel axis shortcut with the cursor's screen; ignored when the screen is not running the scrolling engine."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Focus the adjacent column on a scrolling screen. Called by the KWin effect's Meta+wheel axis shortcut with the cursor's screen. Every rejected call is a silent no-op with no error reply: an empty screenId, a screen the scrolling engine does not own, and any delta other than -1 or +1 are all ignored, so a caller cannot tell a refusal from a call that landed on an empty strip."/>
             <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip should move (the cursor's screen)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip should move (the cursor's screen). An empty string is ignored."/>
             </arg>
             <arg name="delta" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="-1 focuses the column to the left, +1 to the right."/>
+                <annotation name="org.gtk.GDBus.DocString" value="-1 focuses the column to the left, +1 to the right. Any other value is ignored."/>
             </arg>
         </method>
 
         <method name="visibleStripJson">
-            <annotation name="org.gtk.GDBus.DocString" value="The strip as it currently looks on a screen: a JSON array of visible tile rects normalized to the work area ({x, y, width, height}, 0.0 to 1.0 per axis) plus zoneNumber, the 1-based visible column slot the rect occupies. The settings app renders it where the other modes show a layout thumbnail. Empty array when the screen has no strip or is not scrolling."/>
+            <annotation name="org.gtk.GDBus.DocString" value="The strip as it currently looks on a screen: a JSON array of visible tile rects plus zoneNumber, the tile's 1-based visible slot in strip order. Each rect is {x, y, width, height}, 0.0 to 1.0 per axis, normalized against the screen's FULL geometry. The tiles themselves are clipped to the work area after the outer gaps are subtracted, so the fractions show the panel gap and a consumer maps back to pixels by scaling against the screen rectangle. Same basis as the daemon's own OSD strip card. Only what is on screen is listed. Hidden tabs of a tabbed column, minimized tiles, parked columns, and tiles whose intersection with the work area is empty (a stack whose minimum heights overflow the work area resolves its tail below the bottom edge) are all left out and carry no number. A partially visible column is clipped to the work area rather than dropped, with no minimum-visibility threshold: an arbitrarily thin sliver still gets its own number. zoneNumber is the scroll zone number, and the Snap-to-Zone shortcuts cover 1 to 9, so a strip showing more than nine tiles numbers them all but only the first nine have a digit that reaches them. The settings app renders the array where the other modes show a layout thumbnail. Empty array when the screen has no strip or is not scrolling."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip to describe."/>
             </arg>

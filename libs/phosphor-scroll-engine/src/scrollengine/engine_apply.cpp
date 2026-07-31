@@ -23,8 +23,10 @@ namespace {
 /// gives scroll animations a believable enter/leave origin, and it is the
 /// structural fix for the stuck-off-screen-window folklore (extreme
 /// coordinates are never committed).
-// All parked rects on a side share the same x (no per-distance spread);
-// the margin just keeps them clear of edge-snap heuristics.
+// Parked rects on the RIGHT all share one x; on the LEFT each sits its own
+// width beyond the edge, so a wider column parks further out. Neither side
+// spreads by distance — the margin only keeps them clear of edge-snap
+// heuristics.
 constexpr int kParkMargin = 16;
 
 } // namespace
@@ -99,34 +101,45 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     return params;
 }
 
-QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId, QVector<int>* columnNumbers) const
+QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& screenId) const
 {
-    if (columnNumbers) {
-        columnNumbers->clear();
-    }
+    // The state check comes first so an unmanaged screen never pays the
+    // ScreenManager query plus context-gap-provider call for its params.
     const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
     if (!state || state->strip().isEmpty()) {
         return {};
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(screenId, m_smartGaps && state->strip().columnCount() == 1);
-    if (!params.workArea.isValid()) {
+    // Smart gaps resolved here in the wrapper (the caller holds no params
+    // yet); the params-taking overload below trusts whatever its caller
+    // resolved.
+    return visibleTiles(screenId, layoutParamsForScreen(screenId, m_smartGaps && state->strip().columnCount() == 1));
+}
+
+QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& screenId,
+                                                              const ScrollLayoutParams& params) const
+{
+    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+    if (!state || state->strip().isEmpty() || !params.workArea.isValid()) {
         return {};
     }
     const ResolvedStrip resolved = state->strip().relayout(params);
-    QVector<QRect> out;
-    // Viewport-relative numbering: the leftmost VISIBLE column is 1,
-    // whatever its strip position — the numbers describe what is on
-    // screen (the user's chosen zone-number model; digits and the
-    // navigation OSD use the same space).
-    //
-    // The ordinal comes from ScrollStrip::visibleColumnIndices, the SAME
-    // source visibleColumnNumberForWindow uses for the Snap-to-Zone digits.
-    // Deriving it here from a counter over clipped rects instead diverged
-    // whenever a column's tiles overflowed below the work area (the
-    // documented soft min-height overflow): that column contributed no
-    // clipped rect, so the preview label and the digit target disagreed
-    // about the same column.
-    const QVector<int> visibleColumns = state->strip().visibleColumnIndices(params);
+    QVector<VisibleTile> out;
+    int resolvedTiles = 0;
+    for (const ResolvedColumn& column : resolved.columns) {
+        resolvedTiles += column.tiles.size();
+    }
+    out.reserve(resolvedTiles);
+    // THE zone-number walk (see VisibleTile): sequential over what is on
+    // screen, columns left to right, tiles top to bottom. Every consumer of
+    // the number space — preview labels, Snap-to-Zone digits, the
+    // navigation OSD's per-window number, the cross-mode entry window —
+    // derives from this list, so a change to the walk changes all of them
+    // together and they always address the same tiles. The number is
+    // STAMPED here rather than re-derived from each consumer's own loop
+    // index: the two agree today only because the projections are strictly
+    // order-preserving, which is a property a future filter could quietly
+    // break in one consumer and not the others.
+    int zoneNumber = 0;
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.hidden) {
@@ -136,52 +149,68 @@ QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId, QVector<i
             // edge is what tells the viewer the strip continues off-screen.
             const QRect clipped = tile.rect.intersected(params.workArea);
             if (!clipped.isEmpty()) {
-                out.append(clipped);
-                if (columnNumbers) {
-                    // -1, matching visibleColumnNumberForWindow's "no number"
-                    // sentinel. 0 was outside the documented 1-based space and
-                    // disagreed with the sibling accessor. Unreachable in
-                    // practice: a non-empty clipped rect means the column
-                    // intersects the viewport, so it is in visibleColumns.
-                    const int pos = visibleColumns.indexOf(column.columnIndex);
-                    columnNumbers->append(pos < 0 ? -1 : pos + 1);
-                }
+                out.append(VisibleTile{tile.windowId, column.columnIndex, ++zoneNumber, clipped});
             }
         }
     }
     return out;
 }
 
-int ScrollEngine::visibleColumnNumberForWindow(const QString& screenId, const QString& windowId) const
+QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId) const
 {
-    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
-    if (!state) {
-        return -1;
+    QVector<QRect> out;
+    const QVector<VisibleTile> tiles = visibleTiles(screenId);
+    out.reserve(tiles.size());
+    for (const VisibleTile& tile : tiles) {
+        out.append(tile.rect);
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
-    if (!params.workArea.isValid()) {
-        return -1;
-    }
-    const int column = state->strip().columnOfWindow(canonicalizeForLookup(windowId));
-    if (column < 0) {
-        return -1;
-    }
-    const int pos = state->strip().visibleColumnIndices(params).indexOf(column);
-    return pos < 0 ? -1 : pos + 1;
+    return out;
 }
 
-QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId, QVector<int>* columnNumbers) const
+int ScrollEngine::visibleTileNumberForWindow(const QString& screenId, const QString& windowId) const
 {
-    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
-    if (!params.workArea.isValid()) {
-        if (columnNumbers) {
-            columnNumbers->clear();
+    const QString canonical = canonicalizeForLookup(windowId);
+    for (const VisibleTile& tile : visibleTiles(screenId)) {
+        if (tile.windowId == canonical) {
+            return tile.zoneNumber;
         }
+    }
+    return -1;
+}
+
+QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) const
+{
+    // State check first, like visibleTiles: an unmanaged or empty screen must
+    // not pay the ScreenManager query plus context-gap-provider call that
+    // resolving the params costs.
+    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+    if (!state || state->strip().isEmpty()) {
         return {};
     }
-    const QRect area = params.workArea;
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    if (!params.workArea.isValid()) {
+        return {};
+    }
+    // Normalized against the FULL screen geometry, not the gap-inset work
+    // area the tiles are clipped to. Every renderer of these fractions draws
+    // them into a box shaped like the whole screen (the settings app's strip
+    // thumbnail, and the daemon's own OSD card via its twin renorm in
+    // stripzones.h) — work-area fractions in a screen-shaped box stretch the
+    // strip by the panel's share of the output. Falls back to the work area
+    // when no screen rect is resolvable (headless without a provider), same
+    // as the parking-bounds resolution in applyLayout.
+    QRect area = m_screenManager ? m_screenManager->screenGeometry(screenId)
+                                 : (m_screenGeometryProvider ? m_screenGeometryProvider(screenId) : QRect());
+    if (!area.isValid()) {
+        area = params.workArea;
+    }
+    // The params are already resolved, so the walk reuses them rather than
+    // sending visibleTiles back to layoutParamsForScreen for the same values.
+    const QVector<VisibleTile> tiles = visibleTiles(screenId, params);
     QVector<QRectF> out;
-    for (const QRect& r : visibleTileRects(screenId, columnNumbers)) {
+    out.reserve(tiles.size());
+    for (const VisibleTile& tile : tiles) {
+        const QRect& r = tile.rect;
         out.append(QRectF(
             static_cast<qreal>(r.x() - area.x()) / area.width(), static_cast<qreal>(r.y() - area.y()) / area.height(),
             static_cast<qreal>(r.width()) / area.width(), static_cast<qreal>(r.height()) / area.height()));
@@ -214,7 +243,17 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // the stored anchor relative to the OLD width, and nothing else
     // re-derives it until the next focus move. Idempotent for a settled
     // strip (a fully-visible column stays put under Never/OnOverflow).
+    const int anchorBefore = state->strip().viewAnchor();
     state->strip().updateViewForFocus(params);
+    // The anchor is PERSISTED state (serializeStripState) and
+    // placementChanged is the only producer of DirtyScrollStrips. The
+    // focus-moving verbs all emit it themselves, but the re-anchor here also
+    // fires on retile-ONLY entry points (work-area change, a settings flip, a
+    // scheduled retile), which have no emit of their own — so without this a
+    // re-anchor that is the session's last strip event is never saved and the
+    // strip comes back scrolled to the pre-change view. Emitted at the tail,
+    // once the geometry has actually been applied.
+    const bool anchorMoved = state->strip().viewAnchor() != anchorBefore;
     const ResolvedStrip resolved = state->strip().relayout(params);
     if (resolved.columns.isEmpty()) {
         // The strip just emptied (last window closed / floated / released).
@@ -257,6 +296,16 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     const auto parkRight = [&](QRect& rect) {
         rect.moveLeft(screenRect.right() + 1 + kParkMargin);
     };
+    // A vertically-parked rect keeps its strip-derived x, which for a column
+    // scrolled far off the side is well outside this screen and lands over a
+    // horizontal neighbour — the very placement the vertical fallback was
+    // chosen to avoid. Pull x back inside the screen's own span (as close to
+    // the strip-derived value as fits, so the enter animation still comes
+    // from the right side); the rect is off-screen by its y either way.
+    const auto clampXIntoScreen = [&](QRect& rect) {
+        const int maxLeft = qMax(screenRect.left(), screenRect.right() + 1 - rect.width());
+        rect.moveLeft(qBound(screenRect.left(), rect.left(), maxLeft));
+    };
     const auto parkHorizontal = [&](QRect& rect, bool naturalLeft) {
         // Natural side first, opposite side second, vertical third; a fully
         // boxed-in screen keeps the natural side (least-bad; the effect's
@@ -266,10 +315,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         } else if (naturalLeft ? rightFree : leftFree) {
             naturalLeft ? parkRight(rect) : parkLeft(rect);
         } else if (downFree) {
-            // x stays strip-derived, so the horizontal origin of a later
-            // enter animation is still believable.
+            clampXIntoScreen(rect);
             rect.moveTop(screenRect.bottom() + 1 + kParkMargin);
         } else if (upFree) {
+            clampXIntoScreen(rect);
             rect.moveTop(screenRect.top() - rect.height() - kParkMargin);
         } else {
             naturalLeft ? parkLeft(rect) : parkRight(rect);
@@ -319,6 +368,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         }
     }
     if (arr.isEmpty()) {
+        // Unreachable today, kept as the belt: resolved.columns is non-empty
+        // by the bail above, and relayout never emits a column with no
+        // tiles, so every surviving column contributes at least one entry.
         clearTabStripsForScreen(screenId);
         return;
     }
@@ -377,6 +429,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         if (!active.isEmpty()) {
             Q_EMIT activateWindowRequested(active);
         }
+    }
+    if (anchorMoved) {
+        // See the anchorBefore capture above. Callers that already emit for
+        // their own mutation get a second, harmless mark — the dirty flag is
+        // idempotent, and gating on a real anchor move keeps this rare.
+        Q_EMIT placementChanged(screenId);
     }
 }
 

@@ -74,6 +74,18 @@ inline QString respectMinimumSize()
 }
 } // namespace ScrollPerScreenKeys
 
+/// The narrowest column width this engine will accept as a proportion of the
+/// work area. Every producer of a proportion clamps or validates against it:
+/// the config read, the per-screen rule override, the per-window open rule,
+/// the preset list, and the persisted-blob boundary.
+///
+/// KEEP IN SYNC with ConfigDefaults::scrollingDefaultColumnWidthValueMin and
+/// the rules-side PhosphorRules::MinColumnWidthRatio. Neither is reachable
+/// from here — ConfigDefaults is app-side, and PhosphorRules is a library this
+/// one does not link (the dependency runs the other way) — so the bound is
+/// hand-mirrored, but at least it is hand-mirrored once.
+inline constexpr qreal MinColumnWidthFraction = 0.05;
+
 /// Persistent view-centering policy for the focused column (niri's
 /// center-focused-column). Wire/config encoding is the int value; append only.
 enum class CenterFocusedColumn : int {
@@ -158,21 +170,21 @@ struct ColumnWidth
     int fixedPx = 0; ///< Kind::Fixed
     int presetIdx = 0; ///< Kind::Preset
 
-    static ColumnWidth makeProportion(qreal p)
+    static constexpr ColumnWidth makeProportion(qreal p)
     {
         ColumnWidth w;
         w.kind = Proportion;
         w.proportion = p;
         return w;
     }
-    static ColumnWidth makeFixed(int px)
+    static constexpr ColumnWidth makeFixed(int px)
     {
         ColumnWidth w;
         w.kind = Fixed;
         w.fixedPx = px;
         return w;
     }
-    static ColumnWidth makePreset(int idx)
+    static constexpr ColumnWidth makePreset(int idx)
     {
         ColumnWidth w;
         w.kind = Preset;

@@ -1595,7 +1595,12 @@ public:
     // Persistence
     void load() override;
     void save() override;
-    void reset() override;
+    /// Restore factory defaults. Returns false when the cleared configuration
+    /// could not be written to disk — in that case NOTHING was reset: the
+    /// deletions are dropped, the store is reparsed from disk, and the session
+    /// file and rule store are left untouched. Callers must gate the rest of
+    /// their reset sequence on this rather than assuming it landed.
+    bool reset() override;
 
     /// Write the current settings to @p filePath as a standalone config file,
     /// without touching the live config or the per-page Discard baseline.

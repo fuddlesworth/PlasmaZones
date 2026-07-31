@@ -27,8 +27,9 @@ namespace PlasmaZones {
 namespace {
 
 /// Emit a D-Bus setVirtualScreenConfig for @p physicalScreenId carrying @p screens.
-/// Empty list ≡ remove the config.
-void pushVirtualScreenConfigToDaemon(const QString& physicalScreenId, const QVariantList& screens)
+/// Empty list ≡ remove the config. Returns false when the daemon answered with
+/// an error, so the caller can retain the staged config for the next Save.
+bool pushVirtualScreenConfigToDaemon(const QString& physicalScreenId, const QVariantList& screens)
 {
     QJsonObject root;
     root[QLatin1String("physicalScreenId")] = physicalScreenId;
@@ -54,8 +55,15 @@ void pushVirtualScreenConfigToDaemon(const QString& physicalScreenId, const QVar
     root[QLatin1String("screens")] = screensArr;
 
     const QString json = QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
-    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Screen),
-                           QStringLiteral("setVirtualScreenConfig"), {physicalScreenId, json});
+    const QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Screen),
+                               QStringLiteral("setVirtualScreenConfig"), {physicalScreenId, json});
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcConfig) << "flushVirtualScreensToDaemon: setVirtualScreenConfig failed for" << physicalScreenId
+                            << ":" << reply.errorMessage();
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -193,9 +201,18 @@ const StagingService::StagedAssignment* StagingService::stagedAssignmentFor(cons
     return assignmentEntryConst(screen, desktop, activity);
 }
 
-void StagingService::flushAssignmentsToDaemon()
+bool StagingService::flushAssignmentsToDaemon()
 {
     qCDebug(lcCore) << "flushStagedAssignments: count=" << m_assignments.size();
+    bool ok = true;
+    // Every branch below routes its reply through here so a failure on ANY
+    // entry is both logged and carried out to the caller's commit gate.
+    const auto check = [&ok](const QDBusMessage& reply, const char* what, const QString& screenId) {
+        if (reply.type() == QDBusMessage::ErrorMessage) {
+            qCWarning(lcCore) << "  " << what << "FAILED for screen" << screenId << ":" << reply.errorMessage();
+            ok = false;
+        }
+    };
     for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
         const auto& s = it.value();
         const bool isActivity = !s.activityId.isEmpty();
@@ -219,9 +236,10 @@ void StagingService::flushAssignmentsToDaemon()
             const int mode = *s.stagedMode;
             const QString snapping = s.snappingLayoutId.value_or(QString());
             const QString tiling = s.tilingAlgorithmId.has_value() ? normTile(*s.tilingAlgorithmId) : QString();
-            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                   QStringLiteral("setAssignmentEntry"),
-                                   {s.screenId, s.virtualDesktop, s.activityId, mode, snapping, tiling});
+            check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                         QStringLiteral("setAssignmentEntry"),
+                                         {s.screenId, s.virtualDesktop, s.activityId, mode, snapping, tiling}),
+                  "setAssignmentEntry", s.screenId);
             continue;
         }
 
@@ -241,9 +259,10 @@ void StagingService::flushAssignmentsToDaemon()
             const QString snap = *s.snappingLayoutId;
             const QString tile = normTile(*s.tilingAlgorithmId);
             const int mode = tile.isEmpty() ? 0 : 1;
-            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                   QStringLiteral("setAssignmentEntry"),
-                                   {s.screenId, s.virtualDesktop, s.activityId, mode, snap, tile});
+            check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                         QStringLiteral("setAssignmentEntry"),
+                                         {s.screenId, s.virtualDesktop, s.activityId, mode, snap, tile}),
+                  "setAssignmentEntry", s.screenId);
             continue;
         }
 
@@ -270,20 +289,26 @@ void StagingService::flushAssignmentsToDaemon()
                 reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                QStringLiteral("assignLayoutToScreen"), {s.screenId, layoutId});
             }
-            if (reply.type() == QDBusMessage::ErrorMessage) {
-                qCWarning(lcCore) << "  assignLayout FAILED:" << reply.errorMessage();
-            }
+            check(reply, "assignLayout", s.screenId);
             continue;
         }
 
         // Only tile staged. Empty ≡ tiling-clear (reverts to snapping mode 0).
         const QString tile = normTile(*s.tilingAlgorithmId);
         const int mode = tile.isEmpty() ? 0 : 1;
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("setAssignmentEntry"),
-                               {s.screenId, s.virtualDesktop, s.activityId, mode, QString(), tile});
+        check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                     QStringLiteral("setAssignmentEntry"),
+                                     {s.screenId, s.virtualDesktop, s.activityId, mode, QString(), tile}),
+              "setAssignmentEntry", s.screenId);
     }
-    m_assignments.clear();
+    // Retain the whole map on failure. Partial retention would need per-entry
+    // bookkeeping for no gain: the daemon setters are idempotent, so re-sending
+    // the entries that already landed costs one round trip each and leaves the
+    // same state behind.
+    if (ok) {
+        m_assignments.clear();
+    }
+    return ok;
 }
 
 // ─── Virtual screen staging ──────────────────────────────────────────
@@ -329,12 +354,21 @@ void StagingService::flushVirtualScreensToSettings(Settings& settings)
     }
 }
 
-void StagingService::flushVirtualScreensToDaemon()
+bool StagingService::flushVirtualScreensToDaemon()
 {
+    bool ok = true;
     for (auto it = m_virtualScreenConfigs.constBegin(); it != m_virtualScreenConfigs.constEnd(); ++it) {
-        pushVirtualScreenConfigToDaemon(it.key(), it.value());
+        if (!pushVirtualScreenConfigToDaemon(it.key(), it.value())) {
+            ok = false;
+        }
     }
-    m_virtualScreenConfigs.clear();
+    // Retained on failure for the same reason the assignment flush retains:
+    // clearing here would leave the retry Save with nothing to send while the
+    // daemon still holds the old split.
+    if (ok) {
+        m_virtualScreenConfigs.clear();
+    }
+    return ok;
 }
 
 void StagingService::clearVirtualScreenConfigs()
@@ -384,7 +418,7 @@ void StagingService::clearTilingQuickSlots()
     m_tilingQuickSlots.clear();
 }
 
-void StagingService::flushQuickSlotsToDaemon()
+bool StagingService::flushQuickSlotsToDaemon()
 {
     // Quick slots are mode-keyed in the daemon's LayoutRegistry: snapping
     // slots hold zone-layout UUIDs, tiling slots hold autotile algorithm IDs.
@@ -392,14 +426,29 @@ void StagingService::flushQuickSlotsToDaemon()
     constexpr int kSnappingMode = 0;
     constexpr int kAutotileMode = 1;
     const auto flush = [](int mode, QHash<int, QString>& slots) {
+        bool ok = true;
         for (auto it = slots.constBegin(); it != slots.constEnd(); ++it) {
-            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                   QStringLiteral("setQuickLayoutSlot"), {mode, it.key(), it.value()});
+            const QDBusMessage reply =
+                DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                       QStringLiteral("setQuickLayoutSlot"), {mode, it.key(), it.value()});
+            if (reply.type() == QDBusMessage::ErrorMessage) {
+                qCWarning(lcCore) << "flushQuickSlotsToDaemon: setQuickLayoutSlot failed for mode" << mode << "slot"
+                                  << it.key() << ":" << reply.errorMessage();
+                ok = false;
+            }
         }
-        slots.clear();
+        // Per-mode retention: a snapping-side failure must not throw away the
+        // tiling slots that did land, and vice versa.
+        if (ok) {
+            slots.clear();
+        }
+        return ok;
     };
-    flush(kSnappingMode, m_snappingQuickSlots);
-    flush(kAutotileMode, m_tilingQuickSlots);
+    // Both modes are attempted before the verdict — `&&` would short-circuit
+    // the second flush on a snapping failure and silently skip it.
+    const bool snappingOk = flush(kSnappingMode, m_snappingQuickSlots);
+    const bool tilingOk = flush(kAutotileMode, m_tilingQuickSlots);
+    return snappingOk && tilingOk;
 }
 
 } // namespace PlasmaZones

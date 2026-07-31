@@ -7,19 +7,25 @@
 // into page-scoped sub-controllers (EditorPageController, …) hung off this
 // class via child Q_PROPERTYs so QML reads `settingsController.<page>.<prop>`.
 //
-// FILE-SIZE EXCEPTION (sanctioned): what remains here after that split is the
-// root object QML binds to. Its Q_PROPERTY surface IS the QML contract, so
-// moving another group of properties out means either a new child controller
-// every page URL and binding has to be rewritten for, or a second root QML
-// cannot see. The implementation is already split across
+// FILE-SIZE EXCEPTION (sanctioned), CEILING 1215 LINES: what remains here after
+// that split is the root object QML binds to. Its Q_PROPERTY surface IS the QML
+// contract, so moving another group of properties out means either a new child
+// controller every page URL and binding has to be rewritten for, or a second
+// root QML cannot see. The implementation is already split across
 // settingscontroller_*.cpp by concern, same shape as daemon.h.
+//
+// The number above is a real budget, not a description of wherever the file
+// happens to sit: the exception is for the QML contract, so a new declaration
+// that pushes past it has to buy its room by removing another (a retired
+// Q_INVOKABLE, a property that moved to a child controller). It does NOT
+// license a comment block — those belong on the definition in the matching
+// settingscontroller_*.cpp when they will not fit here.
 
 #pragma once
 
 #include "config/configdefaults.h"
 #include "phosphor_i18n.h"
 #include "config/settings.h"
-#include "config/updatechecker.h"
 #include "common/daemoncontroller.h"
 #include "settings/utils/screenhelper.h"
 #include "core/types/constants.h"
@@ -34,6 +40,10 @@ class ScriptedAlgorithmLoader;
 
 namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
+}
+
+namespace PlasmaZones::KZonesImporter {
+struct ImportResult;
 }
 
 namespace PhosphorSurfaceShaders {
@@ -109,9 +119,6 @@ class SettingsController : public QObject
     Q_PROPERTY(QString activeDirtyScope READ activeDirtyScope NOTIFY activeDirtyScopeChanged)
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
     Q_PROPERTY(DaemonController* daemonController READ daemonController CONSTANT)
-    Q_PROPERTY(UpdateChecker* updateChecker READ updateChecker CONSTANT)
-    Q_PROPERTY(QString dismissedUpdateVersion READ dismissedUpdateVersion WRITE setDismissedUpdateVersion NOTIFY
-                   dismissedUpdateVersionChanged)
 
     // What's New
     Q_PROPERTY(QString lastSeenWhatsNewVersion READ lastSeenWhatsNewVersion NOTIFY lastSeenWhatsNewVersionChanged)
@@ -321,17 +328,6 @@ public:
     {
         return &m_daemonController;
     }
-    UpdateChecker* updateChecker()
-    {
-        return &m_updateChecker;
-    }
-    QString dismissedUpdateVersion() const
-    {
-        return m_dismissedUpdateVersion;
-    }
-    void setDismissedUpdateVersion(const QString& version);
-    Q_INVOKABLE void dismissUpdate();
-
     // What's New
     QString lastSeenWhatsNewVersion() const
     {
@@ -550,10 +546,6 @@ public:
     {
         return m_cachedRunningWindows;
     }
-    Q_INVOKABLE bool runningWindowsPending() const
-    {
-        return m_runningWindowsTimeout.isActive();
-    }
 
     // ── Config export/import ────────────────────────────────────────────────
     Q_INVOKABLE bool exportAllSettings(const QString& filePath);
@@ -567,6 +559,17 @@ public:
     /// no strip right now (not scrolling, no windows, daemon down) — the
     /// Monitors page then falls back to a representative static strip.
     Q_INVOKABLE QVariantList getScrollingStripPreview(const QString& screenId) const;
+    /// The staged (not yet applied) assignment for the (screen × desktop ×
+    /// activity) context, as a map of only the fields that are actually staged.
+    ///
+    /// Key ABSENCE is meaningful and spans three files: staging collapses an
+    /// EMPTY id to "not staged" on the way in (StagingService maps it to
+    /// nullopt), so once an entry is staged, an absent "layoutId" or
+    /// "algorithmId" here is the echo of a staged CLEAR of that field. A
+    /// present key always carries a non-empty id, and a producer must never
+    /// insert an empty-string value expecting it to read back as a distinct
+    /// clear state — there is no such state on this map. An absent "mode"
+    /// means neither an explicit mode nor an inferable one was staged.
     Q_INVOKABLE QVariantMap getStagedAssignment(const QString& screenName, int virtualDesktop = 0,
                                                 const QString& activityId = QString()) const;
 
@@ -575,9 +578,12 @@ public:
                                           int mode, const QString& snappingLayoutId, const QString& tilingAlgorithmId);
     /// Remove any staged entry for the (screen × desktop × activity)
     /// assignment context — a true unstage: on Apply the context's
-    /// daemon-side assignment is left untouched. Used by the Monitor State
-    /// page's mode-toggle path to drop a stale opposite-mode pick without
-    /// clearing an explicit assignment the user never touched.
+    /// daemon-side assignment is left untouched.
+    ///
+    /// No QML page calls this today. It is kept as the staging surface's
+    /// inverse: stageAssignmentEntry is the only way in, and a page that stages
+    /// a pick and then wants to take it back (rather than stage the opposite)
+    /// has no other route. Deleting it would leave the surface one-way.
     Q_INVOKABLE void removeStagedAssignment(const QString& screenName, int virtualDesktop, const QString& activityId);
 
     // ── Ordering helpers (staged — flushed to settings on save) ────────────
@@ -646,10 +652,11 @@ public:
     Q_INVOKABLE void clearPerScreenGapOverride(const QString& screenName);
 
     // ── Virtual screen configuration ──────────────────────────────────────────
-    Q_INVOKABLE QStringList getPhysicalScreens() const;
     Q_INVOKABLE QVariantList getVirtualScreenConfig(const QString& physicalScreenId) const;
-    Q_INVOKABLE void applyVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens);
-    Q_INVOKABLE void removeVirtualScreenConfig(const QString& physicalScreenId);
+    // No immediate apply/remove pair, deliberately: every writer goes through
+    // the staging methods below, so a virtual-screen edit lands on the same
+    // Apply / Discard footer as everything else. The two direct Q_INVOKABLEs
+    // that used to sit here had no caller and bypassed the staging entirely.
     // ── Staged virtual screen configuration (flushed on Apply) ──────────────
     Q_INVOKABLE void stageVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens);
     Q_INVOKABLE void stageVirtualScreenRemoval(const QString& physicalScreenId);
@@ -676,6 +683,10 @@ public:
     /// text: i18n lives in QML in this tree.
     static constexpr QLatin1String ReasonDaemonUnreachable{"daemon-unreachable"};
     static constexpr QLatin1String ReasonOverridesNotCleared{"overrides-not-cleared"};
+    /// The cleared configuration could not be written, so nothing was reset.
+    /// Raised by the global `defaults()` with an EMPTY page id — a factory reset
+    /// is not scoped to a page.
+    static constexpr QLatin1String ReasonResetNotWritten{"reset-not-written"};
 
 Q_SIGNALS:
     void activePageChanged();
@@ -726,10 +737,6 @@ Q_SIGNALS:
     /// `ReasonOverridesNotCleared`; the branch checks `asyncRevertInFlight()`
     /// first so a benign refusal during a global async discard never emits.
     void pageDiscardFailed(const QString& page, const QString& reason);
-    /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
-    /// fails at the daemon — QML can surface the reason in a toast so the
-    /// user knows the change wasn't saved.
-    void virtualScreenConfigFailed(const QString& physicalScreenId, const QString& reason);
     void screensChanged();
     void scopeScreenNameChanged();
     /// Emitted whenever any per-screen override map changes (set or clear,
@@ -737,7 +744,6 @@ Q_SIGNALS:
     /// to refresh its per-output override dots, which a plain WRITE on an
     /// individual key can't drive on its own.
     void perScreenOverridesChanged();
-    void dismissedUpdateVersionChanged();
     void lastSeenWhatsNewVersionChanged();
 
     // Virtual desktop / activity / assignment signals
@@ -889,8 +895,48 @@ private:
     // membership for "rules" (= userRulesDirty), emitting dirtyPagesChanged on a
     // change. Called on every rule-model mutation and on revert/apply completion.
     void reconcileRuleBackedDirty();
-    void refreshVirtualDesktops();
+    /// Re-read the virtual-desktop count and names from the daemon. Returns
+    /// whether BOTH reads succeeded. A failed count read falls the member back to
+    /// 1 so QML stops rendering desktop indices the daemon no longer enumerates.
+    /// That fallback is a display value: any caller that destroys state on the
+    /// strength of the count (the disabled-desktop pruner) must check this return
+    /// first, or a daemon hiccup reads as "every desktop but the first is gone".
+    bool refreshVirtualDesktops();
+    /// Void by design, unlike its virtual-desktop twin: every failing branch
+    /// CLEARS the state it could not refresh, so the emptiness the pruner
+    /// already gates on carries the failure. A destructive caller that needs to
+    /// tell "no activities" from "could not ask" must give this a bool return.
     void refreshActivities();
+
+    /// Stage an empty layout id for every quick-layout slot of @p snappingMode
+    /// that currently holds one (a slot's default IS "no assignment"), setting
+    /// @p stagedAny to whether anything was staged. False when the daemon's slot
+    /// map could not be read, and then NOTHING is staged: an error map reads the
+    /// same as "all slots already unassigned", so reporting success would show a
+    /// clean page for a reset that never happened. Shared by per-page Reset and
+    /// defaults() — quick slots are daemon-backed, so Settings::reset() cannot
+    /// clear them.
+    bool stageQuickSlotClears(bool snappingMode, bool& stagedAny);
+
+    /// Adopt whatever is on disk as the session's state: reload settings and the
+    /// local rule store, re-fetch the daemon's rules into the rules page, refresh
+    /// screens and layouts, and drop every staged edit. Shared by load() (the
+    /// Discard path) and the config-import success path, which need exactly the
+    /// same thing done to the in-memory session. The whole body runs under
+    /// m_loading, and the caller owns the trailing setNeedsSave(false).
+    ///
+    /// @param treatAsyncRevertAsClean whether an animation revert refused because
+    ///        an async discard already owns the snapshot map counts as clean. True
+    ///        on Discard, where that worker IS the restore. False on import, where
+    ///        the snapshots hold pre-import content for files just rewritten.
+    /// @return whether the animation page's snapshots came back clean. False means
+    ///         the adopt only partly landed and needsSave must not be cleared.
+    bool adoptOnDiskState(bool treatAsyncRevertAsClean);
+
+    /// Shared tail of the two KZones import entry points: stash the layout to
+    /// auto-select, schedule the layout refresh, report count and message to QML,
+    /// and return the count both Q_INVOKABLEs hand back.
+    int finishKZonesImport(const KZonesImporter::ImportResult& result);
 
     /// Single Rule store shared by m_settings (disable lists) and the
     /// LayoutRegistry. Declared FIRST so it outlives all borrowers.
@@ -971,8 +1017,6 @@ private:
     std::unique_ptr<ShaderPreviewController> m_shaderPreviewController;
 
     DaemonController m_daemonController;
-    UpdateChecker m_updateChecker;
-    QString m_dismissedUpdateVersion;
     QString m_lastSeenWhatsNewVersion;
     QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;
@@ -1112,6 +1156,10 @@ private:
 
     // Virtual desktop / activity state
     int m_virtualDesktopCount = 1;
+    /// Whether m_virtualDesktopCount came from the daemon, as opposed to the
+    /// display fallback of 1 a failed read leaves behind. Any caller that
+    /// REFUSES or DESTROYS on the strength of the count must gate on this.
+    bool m_virtualDesktopCountFromDaemon = false;
     QStringList m_virtualDesktopNames;
     bool m_activitiesAvailable = false;
     QVariantList m_activities;

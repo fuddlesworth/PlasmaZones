@@ -41,6 +41,16 @@ Item {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
+    // Smallest a zone rect may render at. ZonePreview hides a zone's number
+    // below 16px in either direction, so a host whose zones must stay
+    // number-readable (the scrolling strip, where every tile is a digit
+    // target) raises this to 16.
+    property int minZoneSize: 8
+    // Zone fill opacities when no settings source is attached — the same
+    // values LayoutCard's own activeOpacity / inactiveOpacity defaults carry,
+    // named here so the pair stays in step by reference rather than by luck.
+    readonly property real _fallbackActiveOpacity: 0.5
+    readonly property real _fallbackInactiveOpacity: 0.3
     // Override: set to a positive value to force the aspect ratio for the target screen
     // (e.g., a virtual screen that is portrait even though the primary display is landscape).
     property real screenAspectRatio: 0
@@ -82,21 +92,42 @@ Item {
     readonly property bool _fitMode: fitWidth > 0 && fitHeight > 0
     // The tallest preview that fits both bounds once the side padding and
     // vertical chrome are reserved. The width-derived bound divides by the
-    // aspect ratio; the min/max width clamp below can only make the box
-    // narrower than this budget, never wider, so the fit stays conservative.
+    // aspect ratio.
     // The lower bound only guards against degenerate (zero/negative) budgets
     // during layout; it must stay below every realistic budget or the box
     // overflows the very bounds it is meant to fit (a gridUnit*3 floor already
     // exceeds the 32:9 width budget at minimum card width).
     readonly property real _fitBaseHeight: Math.max(Kirigami.Units.gridUnit, Math.min(fitHeight - _verticalChrome, (fitWidth - _sidePadding * 2) / Math.max(0.1, layoutAspectRatio)))
-    // Preview-box sizing. Height is the fixed side for every class, so a
-    // portrait ratio (< 1) simply yields a narrower width, which the
-    // min/max clamp below keeps usable.
+    // Preview-box sizing runs WIDTH first: baseHeight is the height budget, it
+    // yields a width, the min/max clamp settles the final width, and the box
+    // height is derived back from that width. Deriving the height last is what
+    // keeps the requested aspect ratio through both clamps — holding the height
+    // fixed while the max clamp narrowed the box drew an ultrawide strip in a
+    // box too tall for it, so its tiles rendered wider than the windows they
+    // stand for.
     property real baseHeight: _fitMode ? _fitBaseHeight : Kirigami.Units.gridUnit * 9
     readonly property real calculatedWidth: baseHeight * layoutAspectRatio
     property real minThumbnailWidth: Kirigami.Units.gridUnit * 5 // Narrower min for portrait
     property real maxThumbnailWidth: Kirigami.Units.gridUnit * 26 // Wider max for super-ultrawide
-    readonly property real previewBoxWidth: Math.max(minThumbnailWidth, Math.min(calculatedWidth, maxThumbnailWidth))
+    // In fit mode the min clamp must not widen the box past the width the
+    // bounds actually offer: a portrait layout in a narrow card has a width
+    // budget below minThumbnailWidth, and widening to that floor overflowed the
+    // very card the thumbnail was asked to fit.
+    readonly property real _fitWidthBudget: Math.max(1, fitWidth - _sidePadding * 2)
+    readonly property real previewBoxWidth: {
+        // No minThumbnailWidth floor in fit mode. The height is DERIVED from
+        // the width, so a floor that widens a portrait box also TALLENS it —
+        // past the fitHeight budget the box was asked to honour (a 9:16
+        // layout floored to 90px wide is 160px tall in a 110px budget,
+        // spilling over the card). Without the floor, width ≤ calculatedWidth
+        // keeps height ≤ _fitBaseHeight, which is bounded by the fit budget
+        // by construction; the fit budgets are the only bounds fit mode
+        // needs.
+        if (_fitMode)
+            return Math.min(calculatedWidth, maxThumbnailWidth, _fitWidthBudget);
+        return Math.max(minThumbnailWidth, Math.min(calculatedWidth, maxThumbnailWidth));
+    }
+    readonly property real previewBoxHeight: previewBoxWidth / Math.max(0.1, layoutAspectRatio)
     // Chrome budget around the preview box — matches the popup card cell
     // (LayoutPickerContent: cardWidth = preview + paddingSide*2,
     // cardHeight = preview + containerPadding + paddingSide).
@@ -115,26 +146,43 @@ Item {
     }
 
     implicitWidth: previewBoxWidth + _sidePadding * 2
-    implicitHeight: baseHeight + _verticalChrome
-    width: implicitWidth
-    height: implicitHeight
+    implicitHeight: previewBoxHeight + _verticalChrome
+    // A bare Item is exposed with NoRole, which assistive technology skips
+    // along with any Accessible.name a host set on it. Declaring the role makes
+    // the thumbnail an announceable graphic, which is what hosts that name it
+    // are relying on.
+    // Conditional together with the card's Accessible.ignored below: a host
+    // that names the thumbnail gets a named Graphic wrapping an ignored
+    // card; an unnamed host keeps the card's own Pane announcement and this
+    // root stays out of the accessibility tree.
+    Accessible.role: root.Accessible.name !== "" ? Accessible.Graphic : Accessible.NoRole
 
     QFZCommon.LayoutCard {
         anchors.fill: parent
+        // The card carries its own Pane name (the layout's display name). When
+        // the host named the thumbnail itself, that Pane would be announced
+        // instead of the host's name, so step aside for it. Hosts that leave
+        // the thumbnail unnamed (the layout grid) still rely on the card name,
+        // so this must stay conditional.
+        Accessible.ignored: root.Accessible.name !== ""
         layoutData: root._cardData
         isSelected: root.isSelected
         isHovered: root.isHovered
         globalAutoAssign: root.globalAutoAssign
         previewWidth: root.previewBoxWidth
-        previewHeight: root.baseHeight
-        // Same feature configuration as the popup cards
+        previewHeight: root.previewBoxHeight
+        // Same feature configuration as the popup cards. The three pixel
+        // literals are deliberate overrides of LayoutCard's own defaults
+        // (2 / 2 / 10): the settings thumbnail draws a denser grid than a
+        // popup card, so the gaps are halved and the zone floor lowered.
+        // Hosts that need a different floor set minZoneSize on the thumbnail.
         showCardBackground: true
         zonePadding: 1
         edgeGap: 1
-        minZoneSize: 8
+        minZoneSize: root.minZoneSize
         zoneNumberDisplay: root.layout ? (root.layout.zoneNumberDisplay || "all") : "all"
-        producesOverlappingZones: root.layout && root.layout.producesOverlappingZones === true
-        showMasterDot: root.layout && root.layout.isAutotile === true && root.layout.supportsMasterCount === true
+        producesOverlappingZones: root.layout ? root.layout.producesOverlappingZones === true : false
+        showMasterDot: root.layout ? (root.layout.isAutotile === true && root.layout.supportsMasterCount === true) : false
         masterCount: root.layout && root.layout.masterCount !== undefined ? root.layout.masterCount : 1
         // Effective settings-pipeline values — the daemon pushes the same
         // settings->activeOpacity()/inactiveOpacity()/highlightColor() into
@@ -142,8 +190,8 @@ Item {
         // from the injected settingsSource. Zone fill/border colors need no
         // override: LayoutCard's ZoneColorDefaults preview* defaults already
         // resolve through the same source.
-        activeOpacity: QFZCommon.ZoneColorDefaults.settingsSource ? QFZCommon.ZoneColorDefaults.settingsSource.activeOpacity : 0.5
-        inactiveOpacity: QFZCommon.ZoneColorDefaults.settingsSource ? QFZCommon.ZoneColorDefaults.settingsSource.inactiveOpacity : 0.3
+        activeOpacity: QFZCommon.ZoneColorDefaults.settingsSource ? QFZCommon.ZoneColorDefaults.settingsSource.activeOpacity : root._fallbackActiveOpacity
+        inactiveOpacity: QFZCommon.ZoneColorDefaults.settingsSource ? QFZCommon.ZoneColorDefaults.settingsSource.inactiveOpacity : root._fallbackInactiveOpacity
         highlightColor: QFZCommon.ZoneColorDefaults.settingsSource ? QFZCommon.ZoneColorDefaults.settingsSource.highlightColor : Kirigami.Theme.highlightColor
         fontFamily: root.fontFamily
         fontSizeScale: root.fontSizeScale

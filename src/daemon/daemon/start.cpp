@@ -185,6 +185,13 @@ void Daemon::connectScreenSignals()
                     m_scrollEngine->pruneStatesForRemovedScreen(removedScreenId);
                 }
 
+                // The removed output's strip-preview settle timers, including
+                // every virtual sub-screen of it. Without this they are only
+                // reaped in stop(), so a session that hot-plugs monitors
+                // accumulates one dead timer per screen id ever seen and each
+                // armed one would fire a card for an output that is gone.
+                reapScrollingOsdSettleTimers(removedScreenId);
+
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
                 PhosphorScreens::ScreenIdentity::invalidateEdidCache(removedName);
 

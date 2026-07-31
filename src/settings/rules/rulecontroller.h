@@ -503,6 +503,15 @@ private:
     /// apply() dispatches a duplicate setAllRules push, and the reply
     /// lambdas race on setDirty(false) + applyResult emission.
     bool m_asyncCommitInFlight = false;
+    /// Set when reload() skips a daemon rulesChanged because a setAllRules
+    /// push was in flight, consumed in that push's reply lambda. On a FAILED
+    /// push a skipped signal cannot be our own echo (a rejected or
+    /// transport-failed push changes nothing daemon-side, so nothing is
+    /// emitted) — it is a genuinely foreign write whose conflict flag must be
+    /// re-latched. On a successful push D-Bus FIFO ordering guarantees any
+    /// signal inside the window was either our echo or a write ours
+    /// superseded, so it is safely dropped.
+    bool m_reloadSkippedDuringCommit = false;
     /// Split lookups: monitorOverview's tile picks one by the assignment
     /// winner's engine mode (snapping layout vs tiling algorithm), so a
     /// SetSnappingLayout with a UUID-shaped value can't accidentally hit the

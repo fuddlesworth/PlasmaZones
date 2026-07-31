@@ -21,6 +21,7 @@ Q_LOGGING_CATEGORY(lcDbus, "plasmazones.dbus", QtInfoMsg)
 Q_LOGGING_CATEGORY(lcDbusLayout, "plasmazones.dbus.layout", QtInfoMsg)
 Q_LOGGING_CATEGORY(lcDbusWindow, "plasmazones.dbus.window", QtInfoMsg)
 Q_LOGGING_CATEGORY(lcDbusSettings, "plasmazones.dbus.settings", QtInfoMsg)
+Q_LOGGING_CATEGORY(lcDbusRules, "plasmazones.dbus.rules", QtInfoMsg)
 
 // Editor module categories
 Q_LOGGING_CATEGORY(lcEditor, "plasmazones.editor", QtInfoMsg)

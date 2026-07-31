@@ -37,7 +37,7 @@ namespace PlasmaZones {
 ///
 /// DEFINED HERE, not in a .cpp: it is constructed from three TUs
 /// (settingscontroller_pagestate.cpp, settingscontroller_pagereset.cpp and
-/// settingscontroller_session.cpp), and a TU-local copy in one of them only
+/// settingscontroller_lifecycle.cpp), and a TU-local copy in one of them only
 /// ever linked because CMAKE_UNITY_BUILD merged the files into one batch. Same
 /// rationale as SettingsController::DirtyEmitScope.
 class ScopedFlag
@@ -51,13 +51,26 @@ public:
     }
     ~ScopedFlag()
     {
-        m_flag = m_previous;
+        release();
+    }
+    /// Restore the flag NOW instead of at end of scope, for a caller whose last
+    /// step has to run with the flag already down (defaults() recomputes the
+    /// dirty set outside the gate it held over the reset itself). Idempotent:
+    /// the destructor calls this too, and a second call is a no-op rather than
+    /// a second restore.
+    void release()
+    {
+        if (m_active) {
+            m_active = false;
+            m_flag = m_previous;
+        }
     }
     Q_DISABLE_COPY_MOVE(ScopedFlag)
 
 private:
     bool& m_flag;
     bool m_previous;
+    bool m_active = true;
 };
 
 /// Which drag-to-reorder page this is, or None. Returns the KIND rather than a

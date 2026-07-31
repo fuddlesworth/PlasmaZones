@@ -2155,8 +2155,9 @@ public:
     void save() override
     {
     }
-    void reset() override
+    bool reset() override
     {
+        return true;
     }
 
 private:

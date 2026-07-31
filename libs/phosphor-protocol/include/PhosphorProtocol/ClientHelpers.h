@@ -105,7 +105,8 @@ inline void reloadDaemonSettings(QObject* parent, const QString& logContext = {}
  * @brief Blocking form of @ref reloadDaemonSettings.
  *
  * Only for a caller with a real ordering requirement against the reply — the
- * KCM clears its `m_saving` guard once this returns, and an async call there
+ * settings app's SettingsController clears its `m_saving` guard once this
+ * returns (the KCM is only a launcher for it), and an async call there
  * races: the daemon's settingsChanged can land after the guard is clear and
  * trigger a spurious load() that reverts the just-saved assignments. A caller
  * that only needs the daemon to catch up eventually wants the async form.

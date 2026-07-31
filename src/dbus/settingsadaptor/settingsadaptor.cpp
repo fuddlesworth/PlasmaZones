@@ -181,7 +181,13 @@ void SettingsAdaptor::resetToDefaults()
     if (!m_settings) {
         return;
     }
-    m_settings->reset();
+    // The D-Bus method is void, so the caller cannot be told — but a reset that
+    // could not write is invisible otherwise, and the settings that stayed
+    // behind look like a reset that did nothing.
+    if (!m_settings->reset()) {
+        qCWarning(lcDbusSettings)
+            << "resetToDefaults: the cleared configuration could not be written; settings are unchanged";
+    }
 }
 
 QString SettingsAdaptor::getAllSettings()
