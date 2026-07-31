@@ -29,7 +29,6 @@ SettingsFlickable {
     readonly property int widthKindPreset: _scrollWidthConsts.kindPreset
     readonly property int heightKindFixed: _scrollWidthConsts.heightKindFixed
     readonly property int heightKindPreset: _scrollWidthConsts.heightKindPreset
-    readonly property int fieldWidth: Kirigami.Units.gridUnit * 16
 
     // Largest legal preset index for the CURRENT lists (the schema caps the
     // stored index independently; the engine clamps at relayout).
@@ -400,33 +399,15 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Column widths")
                     searchAnchor: "presetColumnWidths"
-                    description: i18n("Comma-separated fractions of the work area width, cycled by the preset shortcuts")
+                    description: i18n("Percentages of the work area width, cycled in this order by the preset shortcuts")
+                }
 
-                    TextField {
-                        id: widthPresetField
-
-                        width: root.fieldWidth
-                        Accessible.name: i18n("Column width presets")
-                        placeholderText: i18nc("@info:placeholder comma separated column width fractions", "0.333,0.5,0.667")
-                        // Echo the stored value back after the write: Enter
-                        // fires editingFinished with focus still held, and the
-                        // guarded Binding below is blocked while focused — so a
-                        // destructive canonicalisation (dropped garbage entries,
-                        // de-duped values) would stay invisible until focus
-                        // moves. Reading back shows what was actually kept.
-                        onEditingFinished: {
-                            appSettings.scrollingPresetColumnWidths = text;
-                            text = appSettings.scrollingPresetColumnWidths;
-                        }
-                        // Guarded Binding, not a plain `text:` one — typing
-                        // severs a plain binding, and per-page Discard/Reset,
-                        // profile switches, and schema canonicalisation would
-                        // then never reach the field again.
-                        Binding on text {
-                            value: appSettings.scrollingPresetColumnWidths
-                            when: !widthPresetField.activeFocus
-                            restoreMode: Binding.RestoreNone
-                        }
+                PresetListEditor {
+                    Layout.fillWidth: true
+                    presets: appSettings.scrollingPresetColumnWidths
+                    entryName: i18n("column width preset")
+                    commit: function (joined) {
+                        appSettings.scrollingPresetColumnWidths = joined;
                     }
                 }
 
@@ -435,25 +416,15 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Window heights")
                     searchAnchor: "presetWindowHeights"
-                    description: i18n("Comma-separated fractions of the work area height, cycled by the preset shortcuts")
+                    description: i18n("Percentages of the work area height, cycled in this order by the preset shortcuts")
+                }
 
-                    TextField {
-                        id: heightPresetField
-
-                        width: root.fieldWidth
-                        Accessible.name: i18n("Window height presets")
-                        placeholderText: i18nc("@info:placeholder comma separated window height fractions", "0.333,0.5,0.667")
-                        // Same echo rationale as the width field.
-                        onEditingFinished: {
-                            appSettings.scrollingPresetWindowHeights = text;
-                            text = appSettings.scrollingPresetWindowHeights;
-                        }
-                        // Same guarded-binding rationale as the width field.
-                        Binding on text {
-                            value: appSettings.scrollingPresetWindowHeights
-                            when: !heightPresetField.activeFocus
-                            restoreMode: Binding.RestoreNone
-                        }
+                PresetListEditor {
+                    Layout.fillWidth: true
+                    presets: appSettings.scrollingPresetWindowHeights
+                    entryName: i18n("window height preset")
+                    commit: function (joined) {
+                        appSettings.scrollingPresetWindowHeights = joined;
                     }
                 }
             }

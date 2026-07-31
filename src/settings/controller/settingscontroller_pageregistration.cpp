@@ -285,12 +285,16 @@ void SettingsController::buildApplicationController()
 
     // Scrolling children — the third placement mode's own section, the peer
     // of Snapping and Tiling above (its sidebar row carries the same inline
-    // enable toggle). One surface serves both modes: the engine has a single
-    // page of knobs, so there is no simple/advanced split to declare.
+    // enable toggle). The SimpleOnly condensed page leads, mirroring its two
+    // siblings; the full Behavior page is its advanced counterpart.
+    regVirtual(QStringLiteral("scrolling-simple"), QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling"),
+               QStringLiteral("pages/scrolling/ScrollingSimplePage.qml"), QStringLiteral("view-list-details"),
+               /*collapsible=*/false,
+               /*divider=*/true, PV::SimpleOnly, QStringLiteral("scrolling-behavior"));
     regVirtual(QStringLiteral("scrolling-behavior"), QStringLiteral("scrolling"), PhosphorI18n::tr("Behavior"),
                QStringLiteral("pages/scrolling/ScrollingPage.qml"), QStringLiteral("view-list-details"),
                /*collapsible=*/false,
-               /*divider=*/true);
+               /*divider=*/true, AdvancedOnly, QStringLiteral("scrolling-simple"));
 
     // Animations children — Transitions / Motion / Library categories drill in.
     // The simple-mode surface leads: a SimpleOnly leaf that replaces the whole

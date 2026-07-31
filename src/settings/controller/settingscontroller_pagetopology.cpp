@@ -136,16 +136,18 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     };
     static const QSet<QString> kTilingAllLeaves =
         QSet<QString>{kTilingSimple, kTilingBehavior, kTilingAlgorithm} + kTilingConfigChildren;
-    // The scrolling section's single leaf; the peer of the two sets above.
+    // The scrolling section's leaves; the peer of the two sets above.
+    static const QString kScrollingSimple = QStringLiteral("scrolling-simple");
     static const QString kScrollingBehavior = QStringLiteral("scrolling-behavior");
+    static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingBehavior};
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
-        {QStringLiteral("scrolling"), QSet<QString>{kScrollingBehavior}},
+        {QStringLiteral("scrolling"), kScrollingAllLeaves},
         // "placement" is the inline-collapsible parent of the three placement
         // modes; when collapsed its dirty badge must light if any snapping,
         // tiling, or scrolling leaf is dirty, so its leaf set is their union.
-        {QStringLiteral("placement"), kSnappingAllLeaves + kTilingAllLeaves + QSet<QString>{kScrollingBehavior}},
+        {QStringLiteral("placement"), kSnappingAllLeaves + kTilingAllLeaves + kScrollingAllLeaves},
         {QStringLiteral("snapping-overlay-cat"), kSnappingOverlayChildren},
         {QStringLiteral("snapping-config-cat"), kSnappingConfigChildren},
         {QStringLiteral("tiling-config-cat"), kTilingConfigChildren},
@@ -458,6 +460,7 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
         {QStringLiteral("snapping-simple"),
          {QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-window-behavior")}},
         {QStringLiteral("tiling-simple"), {QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm")}},
+        {QStringLiteral("scrolling-simple"), {QStringLiteral("scrolling-behavior")}},
     };
     // Checked once at first call, in debug AND release: the assert names the
     // offending page for a developer, and resetPage / discardPage additionally
@@ -505,6 +508,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("tiling-simple"),
         QStringLiteral("tiling-behavior"),
         QStringLiteral("tiling-algorithm"),
+        QStringLiteral("scrolling-simple"),
         QStringLiteral("scrolling-behavior"),
         QStringLiteral("tiling-shortcuts"),
         QStringLiteral("snapping-ordering"),
