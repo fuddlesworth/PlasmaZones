@@ -98,7 +98,7 @@ void ScrollStrip::clampActiveIndices()
 // ── Open / close / minimize ─────────────────────────────────────────────────
 
 bool ScrollStrip::insertWindow(const QString& windowId, const ColumnWidth& width, ColumnDisplay display,
-                               const ScrollLayoutParams& params, int minWidth, int minHeight)
+                               const ScrollLayoutParams& params, int minWidth, int minHeight, ScrollInsertPosition pos)
 {
     if (windowId.isEmpty() || containsWindow(windowId)) {
         return false;
@@ -113,9 +113,27 @@ bool ScrollStrip::insertWindow(const QString& windowId, const ColumnWidth& width
     tile.windowId = windowId;
     tile.minWidth = minWidth;
     tile.minHeight = minHeight;
+    tile.height = params.defaultWindowHeight;
     col.tiles.append(tile);
 
-    const int insertAt = m_columns.isEmpty() ? 0 : m_activeColumnIdx + 1;
+    int insertAt = m_columns.isEmpty() ? 0 : m_activeColumnIdx + 1;
+    if (!m_columns.isEmpty()) {
+        switch (pos) {
+        case ScrollInsertPosition::First:
+            insertAt = 0;
+            break;
+        case ScrollInsertPosition::Last:
+            insertAt = m_columns.size();
+            break;
+        case ScrollInsertPosition::LeftOfActive:
+            insertAt = m_activeColumnIdx;
+            break;
+        case ScrollInsertPosition::RightOfActive:
+        case ScrollInsertPosition::IntoActiveColumn: // engine-routed; degrade
+            insertAt = m_activeColumnIdx + 1;
+            break;
+        }
+    }
     m_columns.insert(insertAt, col);
     if (m_preMaximizeColumnIdx >= insertAt) {
         ++m_preMaximizeColumnIdx;
@@ -141,6 +159,7 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
     tile.windowId = windowId;
     tile.minWidth = minWidth;
     tile.minHeight = minHeight;
+    tile.height = params.defaultWindowHeight;
     col->tiles.append(tile);
     col->activeTileIdx = col->tiles.size() - 1;
     // The arrival joins an EXISTING column: the column's width intent is
@@ -194,6 +213,9 @@ bool ScrollStrip::insertWindowAt(int columnIndex, const QString& windowId, const
     col.display = display;
     Tile tile;
     tile.windowId = windowId;
+    // Restore callers overwrite this via setWindowHeightIntent; a fresh
+    // positional insert (cross-mode handoff landing slot) takes the default.
+    tile.height = params.defaultWindowHeight;
     col.tiles.append(tile);
 
     const int insertAt = qBound(0, columnIndex, m_columns.size());

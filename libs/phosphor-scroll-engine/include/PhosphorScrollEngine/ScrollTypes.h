@@ -63,6 +63,36 @@ enum class DefaultWidthKind : int {
     Proportion = 0,
     Fixed = 1,
     ClientDecides = 2,
+    /// New columns open at a preset-list index (ColumnWidth::makePreset), so
+    /// they reflow with preset-list changes. Appended as 3 — 2 is taken by
+    /// ClientDecides and stored configs rely on it.
+    Preset = 3,
+};
+
+/// Wire vocabulary of the DEFAULT-window-height KIND setting. Unlike the
+/// width pair above, this one IS the model enum's vocabulary
+/// (WindowHeight::Kind values match 1:1 — Auto/Fixed/Preset, no
+/// "client decides" wrinkle on the height axis), so the engine may cast the
+/// config value directly after a range guard.
+enum class DefaultHeightKind : int {
+    Auto = 0,
+    Fixed = 1,
+    Preset = 2,
+};
+
+/// Where a fresh-opened window's new column enters the strip (config
+/// default; the openColumnPlacement window rule outranks it). Wire/config
+/// encoding is the int value; append only. RightOfActive must stay 0 so an
+/// absent key preserves the historical behavior.
+enum class ScrollInsertPosition : int {
+    RightOfActive = 0,
+    LeftOfActive = 1,
+    /// Leftmost column of the strip.
+    First = 2,
+    /// Rightmost column of the strip (niri's append).
+    Last = 3,
+    /// Stack into the focused column instead of opening a new one.
+    IntoActiveColumn = 4,
 };
 
 struct ColumnWidth
@@ -253,6 +283,11 @@ struct ScrollLayoutParams
     /// overhangs. The open-time work-area-oversized float escape ignores
     /// this flag.
     bool respectMinimumSize = true;
+    /// The context's default window height intent, seeded onto every
+    /// fresh-created tile (restore paths overwrite it via
+    /// setWindowHeightIntent). Default-constructed = Auto weight 1, the
+    /// historical even split.
+    WindowHeight defaultWindowHeight{};
     /// The context's default column width — the un-maximize fallback for a
     /// full-width column with no stored pre-maximize intent.
     ColumnWidth defaultColumnWidth = ColumnWidth::makeProportion(0.5);

@@ -106,6 +106,15 @@ QVariantMap SettingsController::scrollingWidthConstants() const
         // above, see ConfigDefaults.
         {QStringLiteral("stepPercentMin"), ConfigDefaults::scrollingStepPercentMin()},
         {QStringLiteral("stepPercentMax"), ConfigDefaults::scrollingStepPercentMax()},
+        // Preset default kind + index bounds, and the height trio's
+        // vocabulary and fixed-pixel range.
+        {QStringLiteral("kindPreset"), ConfigDefaults::scrollingWidthKindPreset()},
+        {QStringLiteral("presetIndexMax"), ConfigDefaults::scrollingPresetIndexMax()},
+        {QStringLiteral("heightKindAuto"), ConfigDefaults::scrollingHeightKindAuto()},
+        {QStringLiteral("heightKindFixed"), ConfigDefaults::scrollingHeightKindFixed()},
+        {QStringLiteral("heightKindPreset"), ConfigDefaults::scrollingHeightKindPreset()},
+        {QStringLiteral("heightFixedMin"), ConfigDefaults::scrollingDefaultWindowHeightMin()},
+        {QStringLiteral("heightFixedMax"), ConfigDefaults::scrollingDefaultWindowHeightMax()},
     };
 }
 

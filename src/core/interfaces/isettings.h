@@ -611,10 +611,15 @@ Q_SIGNALS:
     void scrollingDefaultColumnWidthKindChanged();
     void scrollingDefaultColumnWidthValueChanged();
     void scrollingDefaultColumnDisplayChanged();
+    void scrollingDefaultColumnWidthPresetIndexChanged();
+    void scrollingDefaultWindowHeightKindChanged();
+    void scrollingDefaultWindowHeightValueChanged();
+    void scrollingDefaultWindowHeightPresetIndexChanged();
     void scrollingPresetColumnWidthsChanged();
     void scrollingPresetWindowHeightsChanged();
 
     // Scrolling behavior settings
+    void scrollingInsertPositionChanged();
     void scrollingFocusNewWindowsChanged();
     void scrollingFocusFollowsMouseChanged();
     void scrollingStickyWindowHandlingChanged();

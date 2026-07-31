@@ -521,6 +521,11 @@ private:
     bool m_respectMinimumSize = true;
     /// Shared Tiling.Gaps/SmartGaps value (IScrollSettings forward).
     bool m_smartGaps = true;
+    /// Default height intent for fresh tiles (Auto = historical even split).
+    WindowHeight m_defaultWindowHeight{};
+    /// Where a fresh open's column enters the strip (config default; the
+    /// openColumnPlacement rule and remembered positions outrank it).
+    ScrollInsertPosition m_insertPosition = ScrollInsertPosition::RightOfActive;
 
     /// The exact rect last APPLIED per window while strip-managed (float-back
     /// poison guard; see PlacementEngineBase::lastManagedRect).

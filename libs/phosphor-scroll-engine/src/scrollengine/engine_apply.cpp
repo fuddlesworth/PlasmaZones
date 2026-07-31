@@ -90,6 +90,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     params.workArea = (adjusted.width() > 0 && adjusted.height() > 0) ? adjusted : QRect();
     params.gap = innerGap;
     params.respectMinimumSize = m_respectMinimumSize;
+    params.defaultWindowHeight = m_defaultWindowHeight;
     params.presetColumnWidths = m_presetColumnWidths;
     params.presetWindowHeights = m_presetWindowHeights;
     params.centerFocusedColumn = effectiveCenterFocusedColumn(screenId);

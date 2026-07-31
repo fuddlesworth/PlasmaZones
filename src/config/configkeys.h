@@ -403,6 +403,10 @@ public:
     P_CONFIG_KEY(defaultColumnDisplayKey, "DefaultColumnDisplay")
     P_CONFIG_KEY(presetColumnWidthsKey, "PresetColumnWidths")
     P_CONFIG_KEY(presetWindowHeightsKey, "PresetWindowHeights")
+    P_CONFIG_KEY(defaultColumnWidthPresetIndexKey, "DefaultColumnWidthPresetIndex")
+    P_CONFIG_KEY(defaultWindowHeightKindKey, "DefaultWindowHeightKind")
+    P_CONFIG_KEY(defaultWindowHeightValueKey, "DefaultWindowHeightValue")
+    P_CONFIG_KEY(defaultWindowHeightPresetIndexKey, "DefaultWindowHeightPresetIndex")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Behavior

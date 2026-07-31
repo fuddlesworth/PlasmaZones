@@ -803,7 +803,40 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_STRING("scrollingPresetWindowHeights", scrollingPresetWindowHeightsString,
                                  setScrollingPresetWindowHeights)
 
+        REGISTER_CONCRETE_INT("scrollingDefaultColumnWidthPresetIndex", scrollingDefaultColumnWidthPresetIndex,
+                              setScrollingDefaultColumnWidthPresetIndex)
+        // scrollingDefaultWindowHeightKind: enum (0=Auto, 1=Fixed, 2=Preset)
+        m_getters[QStringLiteral("scrollingDefaultWindowHeightKind")] = [concrete]() {
+            return concrete->scrollingDefaultWindowHeightKind();
+        };
+        m_setters[QStringLiteral("scrollingDefaultWindowHeightKind")] = [concrete](const QVariant& v) {
+            const int kind = v.toInt();
+            if (!ConfigDefaults::isValidScrollingHeightKind(kind)) {
+                return false;
+            }
+            concrete->setScrollingDefaultWindowHeightKind(kind);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingDefaultWindowHeightKind")] = QStringLiteral("int");
+        REGISTER_CONCRETE_DOUBLE("scrollingDefaultWindowHeightValue", scrollingDefaultWindowHeightValue,
+                                 setScrollingDefaultWindowHeightValue)
+        REGISTER_CONCRETE_INT("scrollingDefaultWindowHeightPresetIndex", scrollingDefaultWindowHeightPresetIndex,
+                              setScrollingDefaultWindowHeightPresetIndex)
+
         // Scrolling behavior settings
+        // scrollingInsertPosition: enum (0=RightOfActive .. 4=IntoActiveColumn)
+        m_getters[QStringLiteral("scrollingInsertPosition")] = [concrete]() {
+            return concrete->scrollingInsertPosition();
+        };
+        m_setters[QStringLiteral("scrollingInsertPosition")] = [concrete](const QVariant& v) {
+            const int position = v.toInt();
+            if (!ConfigDefaults::isValidScrollingInsertPosition(position)) {
+                return false;
+            }
+            concrete->setScrollingInsertPosition(position);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingInsertPosition")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("scrollingFocusNewWindows", scrollingFocusNewWindows, setScrollingFocusNewWindows)
         REGISTER_CONCRETE_BOOL("scrollingFocusFollowsMouse", scrollingFocusFollowsMouse, setScrollingFocusFollowsMouse)
         // scrollingStickyWindowHandling: enum (0=TreatAsNormal, 1=RestoreOnly, 2=IgnoreAll)

@@ -26,7 +26,15 @@ SettingsFlickable {
     readonly property int widthKindProportion: _scrollWidthConsts.kindProportion
     readonly property int widthKindFixed: _scrollWidthConsts.kindFixed
     readonly property int widthKindClientDecides: _scrollWidthConsts.kindClientDecides
+    readonly property int widthKindPreset: _scrollWidthConsts.kindPreset
+    readonly property int heightKindFixed: _scrollWidthConsts.heightKindFixed
+    readonly property int heightKindPreset: _scrollWidthConsts.heightKindPreset
     readonly property int fieldWidth: Kirigami.Units.gridUnit * 16
+
+    // Largest legal preset index for the CURRENT lists (the schema caps the
+    // stored index independently; the engine clamps at relayout).
+    readonly property int widthPresetCount: appSettings.scrollingPresetColumnWidths.split(",").length
+    readonly property int heightPresetCount: appSettings.scrollingPresetWindowHeights.split(",").length
 
     contentHeight: content.implicitHeight
     clip: true
@@ -165,6 +173,30 @@ SettingsFlickable {
                     }
                 }
 
+                SettingsRow {
+                    title: i18n("Preset width")
+                    searchAnchor: "defaultColumnWidthPresetIndex"
+                    description: i18n("Which entry of the column width presets a new column opens at, counted from 1. Columns opened this way follow later preset changes.")
+                    enabled: appSettings.scrollingDefaultColumnWidthKind === root.widthKindPreset
+
+                    SettingsSpinBox {
+                        id: widthPresetIndexSpin
+
+                        accessibleName: i18n("Column width preset number")
+                        from: 1
+                        to: Math.max(1, root.widthPresetCount)
+                        stepSize: 1
+                        // Stored 0-based, shown 1-based to match the preset
+                        // cycling OSD.
+                        onValueModified: value => appSettings.scrollingDefaultColumnWidthPresetIndex = value - 1
+                        Binding on value {
+                            value: appSettings.scrollingDefaultColumnWidthPresetIndex + 1
+                            when: !widthPresetIndexSpin.editing
+                            restoreMode: Binding.RestoreNone
+                        }
+                    }
+                }
+
                 SettingsSeparator {}
 
                 SettingsRow {
@@ -179,6 +211,69 @@ SettingsFlickable {
                         model: settingsController.valueOptions("Scrolling", "DefaultColumnDisplay")
                         storedValue: appSettings.scrollingDefaultColumnDisplay
                         onActivated: appSettings.scrollingDefaultColumnDisplay = currentValue
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Default height")
+                    searchAnchor: "defaultWindowHeightKind"
+                    description: i18n("How tall a window is when it joins a column. Share the column evenly splits the remaining space with its neighbors.")
+
+                    WideComboBox {
+                        Accessible.name: i18n("Default window height")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: settingsController.valueOptions("Scrolling", "DefaultWindowHeightKind")
+                        storedValue: appSettings.scrollingDefaultWindowHeightKind
+                        onActivated: appSettings.scrollingDefaultWindowHeightKind = currentValue
+                    }
+                }
+
+                SettingsRow {
+                    title: i18n("Fixed height")
+                    searchAnchor: "defaultWindowHeightFixed"
+                    description: i18n("How many pixels tall a new window is")
+                    enabled: appSettings.scrollingDefaultWindowHeightKind === root.heightKindFixed
+
+                    SettingsSpinBox {
+                        id: fixedHeightSpin
+
+                        accessibleName: i18n("Fixed window height")
+                        from: root._scrollWidthConsts.heightFixedMin
+                        to: root._scrollWidthConsts.heightFixedMax
+                        stepSize: root._scrollWidthConsts.fixedStep
+                        onValueModified: value => appSettings.scrollingDefaultWindowHeightValue = value
+                        // Same guarded-binding rationale as the fixed width.
+                        Binding on value {
+                            value: Math.round(appSettings.scrollingDefaultWindowHeightValue)
+                            when: !fixedHeightSpin.editing
+                            restoreMode: Binding.RestoreNone
+                        }
+                    }
+                }
+
+                SettingsRow {
+                    title: i18n("Preset height")
+                    searchAnchor: "defaultWindowHeightPresetIndex"
+                    description: i18n("Which entry of the window height presets a new window opens at, counted from 1")
+                    enabled: appSettings.scrollingDefaultWindowHeightKind === root.heightKindPreset
+
+                    SettingsSpinBox {
+                        id: heightPresetIndexSpin
+
+                        accessibleName: i18n("Window height preset number")
+                        from: 1
+                        to: Math.max(1, root.heightPresetCount)
+                        stepSize: 1
+                        // Stored 0-based, shown 1-based (see the width twin).
+                        onValueModified: value => appSettings.scrollingDefaultWindowHeightPresetIndex = value - 1
+                        Binding on value {
+                            value: appSettings.scrollingDefaultWindowHeightPresetIndex + 1
+                            when: !heightPresetIndexSpin.editing
+                            restoreMode: Binding.RestoreNone
+                        }
                     }
                 }
             }

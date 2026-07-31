@@ -161,7 +161,23 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         }
     }
     if (!inserted) {
-        inserted = state->strip().insertWindow(windowId, width, display, params, minWidth, minHeight);
+        // Fresh open with no remembered position: the ONLY site the
+        // insert-position setting governs. Restore/seed/unfloat paths above
+        // and the re-homing call sites elsewhere keep right-of-active — a
+        // "first/last" default teleporting a restored window would read as
+        // a lost slot. IntoActiveColumn routes through the consume verb
+        // (same shape as the openColumnPlacement rule) and falls through to
+        // a positional insert on an empty strip.
+        if (m_insertPosition == ScrollInsertPosition::IntoActiveColumn && !state->strip().isEmpty()) {
+            inserted =
+                state->strip().insertWindowIntoActiveColumn(windowId, width, std::nullopt, params, minWidth, minHeight);
+        }
+        if (!inserted) {
+            inserted = state->strip().insertWindow(windowId, width, display, params, minWidth, minHeight,
+                                                   m_insertPosition == ScrollInsertPosition::IntoActiveColumn
+                                                       ? ScrollInsertPosition::RightOfActive
+                                                       : m_insertPosition);
+        }
     }
     if (!inserted) {
         qCWarning(lcScrollEngine) << "insertOpenedWindow: duplicate window" << windowId;

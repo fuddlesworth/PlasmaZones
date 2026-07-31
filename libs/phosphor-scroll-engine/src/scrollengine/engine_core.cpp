@@ -1047,6 +1047,11 @@ void ScrollEngine::refreshConfigFromSettings()
     m_defaultWidthClientDecides = (widthKind == DefaultWidthKind::ClientDecides);
     if (widthKind == DefaultWidthKind::Fixed) {
         m_defaultColumnWidth = ColumnWidth::makeFixed(qMax(1, qRound(widthValue)));
+    } else if (widthKind == DefaultWidthKind::Preset) {
+        // Preset list is parsed above, so the clamp is against the live
+        // list; makePreset re-clamps at relayout if the list later shrinks.
+        m_defaultColumnWidth = ColumnWidth::makePreset(
+            qBound(0, settings->scrollingDefaultColumnWidthPresetIndex(), int(m_presetColumnWidths.size()) - 1));
     } else {
         // KEEP IN SYNC: the 0.05 proportion floor mirrors
         // ConfigDefaults::scrollingDefaultColumnWidthValueMin and the
@@ -1059,6 +1064,24 @@ void ScrollEngine::refreshConfigFromSettings()
     }
     const int display = settings->scrollingDefaultColumnDisplay();
     m_defaultColumnDisplay = (display == 1) ? ColumnDisplay::Tabbed : ColumnDisplay::Normal;
+
+    // Default window height: the config vocabulary IS WindowHeight::Kind
+    // (Auto/Fixed/Preset, see DefaultHeightKind), so a guarded cast is fine.
+    const int heightKind = settings->scrollingDefaultWindowHeightKind();
+    if (heightKind == static_cast<int>(DefaultHeightKind::Fixed)) {
+        m_defaultWindowHeight = WindowHeight::makeFixed(qMax(1, qRound(settings->scrollingDefaultWindowHeightValue())));
+    } else if (heightKind == static_cast<int>(DefaultHeightKind::Preset)) {
+        m_defaultWindowHeight = WindowHeight::makePreset(
+            qBound(0, settings->scrollingDefaultWindowHeightPresetIndex(), int(m_presetWindowHeights.size()) - 1));
+    } else {
+        m_defaultWindowHeight = WindowHeight{};
+    }
+
+    const int insertPos = settings->scrollingInsertPosition();
+    m_insertPosition = (insertPos >= static_cast<int>(ScrollInsertPosition::RightOfActive)
+                        && insertPos <= static_cast<int>(ScrollInsertPosition::IntoActiveColumn))
+        ? static_cast<ScrollInsertPosition>(insertPos)
+        : ScrollInsertPosition::RightOfActive;
 
     const int sticky = settings->scrollingStickyWindowHandling();
     m_stickyWindowHandling = (sticky >= static_cast<int>(PhosphorEngine::StickyWindowHandling::TreatAsNormal)

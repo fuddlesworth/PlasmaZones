@@ -60,6 +60,33 @@ static_assert(ConfigDefaults::scrollingWidthKindFixed()
 static_assert(ConfigDefaults::scrollingWidthKindClientDecides()
                   == static_cast<int>(PhosphorScrollEngine::DefaultWidthKind::ClientDecides),
               "DefaultWidthKind::ClientDecides wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingWidthKindPreset()
+                  == static_cast<int>(PhosphorScrollEngine::DefaultWidthKind::Preset),
+              "DefaultWidthKind::Preset wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingHeightKindAuto()
+                  == static_cast<int>(PhosphorScrollEngine::DefaultHeightKind::Auto),
+              "DefaultHeightKind::Auto wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingHeightKindFixed()
+                  == static_cast<int>(PhosphorScrollEngine::DefaultHeightKind::Fixed),
+              "DefaultHeightKind::Fixed wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingHeightKindPreset()
+                  == static_cast<int>(PhosphorScrollEngine::DefaultHeightKind::Preset),
+              "DefaultHeightKind::Preset wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingInsertRightOfActive()
+                  == static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::RightOfActive),
+              "ScrollInsertPosition::RightOfActive wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingInsertLeftOfActive()
+                  == static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::LeftOfActive),
+              "ScrollInsertPosition::LeftOfActive wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingInsertFirst()
+                  == static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::First),
+              "ScrollInsertPosition::First wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingInsertLast()
+                  == static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::Last),
+              "ScrollInsertPosition::Last wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingInsertIntoActiveColumn()
+                  == static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::IntoActiveColumn),
+              "ScrollInsertPosition::IntoActiveColumn wire value drifted from ConfigDefaults");
 static_assert(ConfigDefaults::scrollingStickyTreatAsNormal()
                   == static_cast<int>(PhosphorEngine::StickyWindowHandling::TreatAsNormal),
               "StickyWindowHandling::TreatAsNormal wire value drifted from ConfigDefaults");
@@ -109,12 +136,18 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          CD::scrollingDefaultColumnWidthKind(),
          QMetaType::Int,
          {},
-         validIntOr(
-             {CD::scrollingWidthKindProportion(), CD::scrollingWidthKindFixed(), CD::scrollingWidthKindClientDecides()},
-             CD::scrollingDefaultColumnWidthKind()),
+         validIntOr({CD::scrollingWidthKindProportion(), CD::scrollingWidthKindFixed(),
+                     CD::scrollingWidthKindClientDecides(), CD::scrollingWidthKindPreset()},
+                    CD::scrollingDefaultColumnWidthKind()),
          intChoices({{CD::scrollingWidthKindProportion(), "proportion"_L1},
                      {CD::scrollingWidthKindFixed(), "fixed"_L1},
-                     {CD::scrollingWidthKindClientDecides(), "clientDecides"_L1}})},
+                     {CD::scrollingWidthKindClientDecides(), "clientDecides"_L1},
+                     {CD::scrollingWidthKindPreset(), "preset"_L1}})},
+        {CD::defaultColumnWidthPresetIndexKey(),
+         CD::scrollingDefaultColumnWidthPresetIndex(),
+         QMetaType::Int,
+         {},
+         clampInt(0, CD::scrollingPresetIndexMax())},
         {CD::defaultColumnWidthValueKey(),
          CD::scrollingDefaultColumnWidthValue(),
          QMetaType::Double,
@@ -150,6 +183,29 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          [](const QVariant& v) {
              return canonicalProportionList(v, CD::scrollingPresetWindowHeights());
          }},
+        // Default window height trio: kind + fixed pixel value + preset
+        // index. Unlike the width pair, the value key serves ONE kind
+        // (Fixed), so a plain clampDouble is the whole story — no kind-aware
+        // setter needed.
+        {CD::defaultWindowHeightKindKey(),
+         CD::scrollingDefaultWindowHeightKind(),
+         QMetaType::Int,
+         {},
+         validIntOr({CD::scrollingHeightKindAuto(), CD::scrollingHeightKindFixed(), CD::scrollingHeightKindPreset()},
+                    CD::scrollingDefaultWindowHeightKind()),
+         intChoices({{CD::scrollingHeightKindAuto(), "auto"_L1},
+                     {CD::scrollingHeightKindFixed(), "fixed"_L1},
+                     {CD::scrollingHeightKindPreset(), "preset"_L1}})},
+        {CD::defaultWindowHeightValueKey(),
+         CD::scrollingDefaultWindowHeightValue(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::scrollingDefaultWindowHeightMin(), CD::scrollingDefaultWindowHeightMax())},
+        {CD::defaultWindowHeightPresetIndexKey(),
+         CD::scrollingDefaultWindowHeightPresetIndex(),
+         QMetaType::Int,
+         {},
+         clampInt(0, CD::scrollingPresetIndexMax())},
     };
 
     // ─── Scrolling behavior (Scrolling.Behavior) ─────────────────────────
@@ -159,6 +215,18 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     // the shared Tiling.Gaps/SmartGaps value, see IScrollSettings).
     schema.groups[CD::scrollingBehaviorGroup()] = {
         {CD::focusNewWindowsKey(), CD::scrollingFocusNewWindows(), QMetaType::Bool},
+        {CD::insertPositionKey(),
+         CD::scrollingInsertPosition(),
+         QMetaType::Int,
+         {},
+         validIntOr({CD::scrollingInsertRightOfActive(), CD::scrollingInsertLeftOfActive(), CD::scrollingInsertFirst(),
+                     CD::scrollingInsertLast(), CD::scrollingInsertIntoActiveColumn()},
+                    CD::scrollingInsertPosition()),
+         intChoices({{CD::scrollingInsertRightOfActive(), "rightOfActive"_L1},
+                     {CD::scrollingInsertLeftOfActive(), "leftOfActive"_L1},
+                     {CD::scrollingInsertFirst(), "first"_L1},
+                     {CD::scrollingInsertLast(), "last"_L1},
+                     {CD::scrollingInsertIntoActiveColumn(), "intoActiveColumn"_L1}})},
         {CD::focusFollowsMouseKey(), CD::scrollingFocusFollowsMouse(), QMetaType::Bool},
         {CD::stickyWindowHandlingKey(),
          CD::scrollingStickyWindowHandling(),

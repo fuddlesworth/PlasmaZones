@@ -78,7 +78,15 @@ public:
     {
         return 2;
     }
-    /// Default column width kind: 0 = proportion, 1 = fixed px, 2 = client decides.
+    /// Preset kind, appended as 3 (2 is taken by ClientDecides; the engine's
+    /// DefaultWidthKind::Preset carries the same value and the schema
+    /// static_asserts the pair).
+    static constexpr int scrollingWidthKindPreset()
+    {
+        return 3;
+    }
+    /// Default column width kind: 0 = proportion, 1 = fixed px,
+    /// 2 = client decides, 3 = preset index.
     static constexpr int scrollingDefaultColumnWidthKind()
     {
         return scrollingWidthKindProportion();
@@ -87,7 +95,22 @@ public:
     static constexpr bool isValidScrollingWidthKind(int v)
     {
         return v == scrollingWidthKindProportion() || v == scrollingWidthKindFixed()
-            || v == scrollingWidthKindClientDecides();
+            || v == scrollingWidthKindClientDecides() || v == scrollingWidthKindPreset();
+    }
+    /// Preset index the Preset width kind opens columns at, clamped by the
+    /// schema into [0, presetIndexMax] and by the engine against the live
+    /// preset list.
+    static constexpr int scrollingDefaultColumnWidthPresetIndex()
+    {
+        return 0;
+    }
+    /// Schema-level ceiling for stored preset indices: the preset-list
+    /// canonicalizer caps lists at 16 entries (settingsschema_p.h
+    /// kMaxPresetEntries), so 15 is the largest index that can ever
+    /// resolve. The engine re-clamps against the actual list length.
+    static constexpr int scrollingPresetIndexMax()
+    {
+        return 15;
     }
     /// Value paired with the kind: a proportion in (0, 1] or a pixel width.
     static constexpr qreal scrollingDefaultColumnWidthValue()
@@ -178,6 +201,53 @@ public:
     {
         return QStringLiteral("0.333,0.5,0.667");
     }
+    /// DefaultWindowHeightKind wire values — the engine's WindowHeight::Kind
+    /// vocabulary 1:1 (0 = auto split, 1 = fixed px, 2 = preset index); the
+    /// schema static_asserts the pair via DefaultHeightKind.
+    static constexpr int scrollingHeightKindAuto()
+    {
+        return 0;
+    }
+    static constexpr int scrollingHeightKindFixed()
+    {
+        return 1;
+    }
+    static constexpr int scrollingHeightKindPreset()
+    {
+        return 2;
+    }
+    /// Default window height kind for fresh tiles: auto (even split).
+    static constexpr int scrollingDefaultWindowHeightKind()
+    {
+        return scrollingHeightKindAuto();
+    }
+    /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
+    static constexpr bool isValidScrollingHeightKind(int v)
+    {
+        return v == scrollingHeightKindAuto() || v == scrollingHeightKindFixed() || v == scrollingHeightKindPreset();
+    }
+    /// Fixed-kind pixel height for fresh tiles, plus its range. Only read
+    /// under the Fixed kind; Auto and Preset ignore it. The relayout
+    /// renormalizes fixed heights into the column budget, so an oversized
+    /// value degrades gracefully rather than overflowing.
+    static constexpr qreal scrollingDefaultWindowHeightValue()
+    {
+        return 600.0;
+    }
+    static constexpr qreal scrollingDefaultWindowHeightMin()
+    {
+        return 100.0;
+    }
+    static constexpr qreal scrollingDefaultWindowHeightMax()
+    {
+        return 10000.0;
+    }
+    /// Preset index the Preset height kind seeds tiles at (see
+    /// scrollingPresetIndexMax for the ceiling rationale).
+    static constexpr int scrollingDefaultWindowHeightPresetIndex()
+    {
+        return 0;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Scrolling behavior (Scrolling.Behavior)
@@ -193,6 +263,40 @@ public:
     static constexpr bool scrollingFocusNewWindows()
     {
         return true;
+    }
+    /// ScrollInsertPosition wire values (0 = right of active, 1 = left of
+    /// active, 2 = first, 3 = last, 4 = into active column); the schema
+    /// static_asserts them against the engine enumerators. Right-of-active
+    /// must stay 0 so an absent key preserves the historical behavior.
+    static constexpr int scrollingInsertRightOfActive()
+    {
+        return 0;
+    }
+    static constexpr int scrollingInsertLeftOfActive()
+    {
+        return 1;
+    }
+    static constexpr int scrollingInsertFirst()
+    {
+        return 2;
+    }
+    static constexpr int scrollingInsertLast()
+    {
+        return 3;
+    }
+    static constexpr int scrollingInsertIntoActiveColumn()
+    {
+        return 4;
+    }
+    static constexpr int scrollingInsertPosition()
+    {
+        return scrollingInsertRightOfActive();
+    }
+    /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
+    static constexpr bool isValidScrollingInsertPosition(int v)
+    {
+        return v == scrollingInsertRightOfActive() || v == scrollingInsertLeftOfActive() || v == scrollingInsertFirst()
+            || v == scrollingInsertLast() || v == scrollingInsertIntoActiveColumn();
     }
     static bool scrollingFocusFollowsMouse()
     {
@@ -399,6 +503,25 @@ static_assert(
 static_assert(ConfigDefaultsScrolling::isValidScrollingStickyWindowHandling(
                   ConfigDefaultsScrolling::scrollingStickyWindowHandling()),
               "ConfigDefaults::scrollingStickyWindowHandling() is not in its own closed set");
+static_assert(
+    ConfigDefaultsScrolling::isValidScrollingHeightKind(ConfigDefaultsScrolling::scrollingDefaultWindowHeightKind()),
+    "ConfigDefaults::scrollingDefaultWindowHeightKind() is not in its own closed set");
+static_assert(
+    ConfigDefaultsScrolling::isValidScrollingInsertPosition(ConfigDefaultsScrolling::scrollingInsertPosition()),
+    "ConfigDefaults::scrollingInsertPosition() is not in its own closed set");
+static_assert(ConfigDefaultsScrolling::scrollingDefaultWindowHeightValue()
+                      >= ConfigDefaultsScrolling::scrollingDefaultWindowHeightMin()
+                  && ConfigDefaultsScrolling::scrollingDefaultWindowHeightValue()
+                      <= ConfigDefaultsScrolling::scrollingDefaultWindowHeightMax(),
+              "ConfigDefaults::scrollingDefaultWindowHeightValue() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingDefaultColumnWidthPresetIndex() >= 0
+                  && ConfigDefaultsScrolling::scrollingDefaultColumnWidthPresetIndex()
+                      <= ConfigDefaultsScrolling::scrollingPresetIndexMax(),
+              "ConfigDefaults::scrollingDefaultColumnWidthPresetIndex() outside [0, presetIndexMax]");
+static_assert(ConfigDefaultsScrolling::scrollingDefaultWindowHeightPresetIndex() >= 0
+                  && ConfigDefaultsScrolling::scrollingDefaultWindowHeightPresetIndex()
+                      <= ConfigDefaultsScrolling::scrollingPresetIndexMax(),
+              "ConfigDefaults::scrollingDefaultWindowHeightPresetIndex() outside [0, presetIndexMax]");
 static_assert(ConfigDefaultsScrolling::scrollingColumnWidthStepPercent()
                       >= ConfigDefaultsScrolling::scrollingStepPercentMin()
                   && ConfigDefaultsScrolling::scrollingColumnWidthStepPercent()

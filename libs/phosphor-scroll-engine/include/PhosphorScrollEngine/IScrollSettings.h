@@ -46,9 +46,20 @@ public:
     virtual int scrollingCenterFocusedColumn() const = 0;
     virtual bool scrollingAlwaysCenterSingleColumn() const = 0;
     /// Default width for new columns: kind (0 = proportion, 1 = fixed px,
-    /// 2 = client decides) + value (proportion in [0,1] or pixels).
+    /// 2 = client decides, 3 = preset index) + value (proportion in [0,1]
+    /// or pixels) + the preset index the Preset kind resolves.
     virtual int scrollingDefaultColumnWidthKind() const = 0;
     virtual qreal scrollingDefaultColumnWidthValue() const = 0;
+    virtual int scrollingDefaultColumnWidthPresetIndex() const = 0;
+    /// Default height intent for fresh tiles: kind (0 = auto, 1 = fixed px,
+    /// 2 = preset index) + fixed pixel value + preset index. Matches
+    /// WindowHeight::Kind 1:1 (DefaultHeightKind).
+    virtual int scrollingDefaultWindowHeightKind() const = 0;
+    virtual qreal scrollingDefaultWindowHeightValue() const = 0;
+    virtual int scrollingDefaultWindowHeightPresetIndex() const = 0;
+    /// ScrollInsertPosition as int (0 = right of active, 1 = left of
+    /// active, 2 = first, 3 = last, 4 = into active column).
+    virtual int scrollingInsertPosition() const = 0;
     /// ColumnDisplay new columns open in (0 = normal, 1 = tabbed).
     virtual int scrollingDefaultColumnDisplay() const = 0;
     /// Preset proportion lists, serialized as decimal strings.

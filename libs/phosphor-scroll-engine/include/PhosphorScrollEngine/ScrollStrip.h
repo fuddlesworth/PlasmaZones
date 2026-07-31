@@ -82,12 +82,17 @@ public:
     QStringList windowsInOrder() const;
     int windowCount() const;
     // ── Structure: open / close / minimize ──────────────────────────────────
-    /// Insert a new single-tile column for @p windowId immediately to the
-    /// right of the active column (or at index 0 on an empty strip), focus
-    /// it, and leave every other column untouched. The view scrolls only as
-    /// the centering policy requires. Returns false when already present.
+    /// Insert a new single-tile column for @p windowId at @p pos (default:
+    /// immediately to the right of the active column, or at index 0 on an
+    /// empty strip), focus it, and leave every other column untouched. The
+    /// view scrolls only as the centering policy requires. Returns false
+    /// when already present. IntoActiveColumn is NOT handled here — the
+    /// engine routes it through insertWindowIntoActiveColumn so the strip's
+    /// two insert verbs stay distinct; passed anyway, it degrades to
+    /// RightOfActive.
     bool insertWindow(const QString& windowId, const ColumnWidth& width, ColumnDisplay display,
-                      const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0);
+                      const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0,
+                      ScrollInsertPosition pos = ScrollInsertPosition::RightOfActive);
     /// Insert @p windowId as a new tile at the bottom of the active column
     /// (rule-driven "open consumed into the focused column"). Falls back to
     /// insertWindow when the strip is empty.

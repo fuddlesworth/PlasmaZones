@@ -152,10 +152,12 @@ P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, scrollingGroup, defaultColu
 void Settings::normalizeScrollingColumnWidthValue()
 {
     const int kind = scrollingDefaultColumnWidthKind();
-    // ClientDecides stores no width of its own — it deliberately leaves
-    // whatever the previous kind wrote in place, so there is nothing to
-    // validate against.
-    if (kind == ConfigDefaults::scrollingWidthKindClientDecides()) {
+    // ClientDecides and Preset store no width of their own — both
+    // deliberately leave whatever the previous kind wrote in place (Preset
+    // resolves through its index key), so there is nothing to validate
+    // against.
+    if (kind == ConfigDefaults::scrollingWidthKindClientDecides()
+        || kind == ConfigDefaults::scrollingWidthKindPreset()) {
         return;
     }
     const qreal stored = scrollingDefaultColumnWidthValue();
@@ -199,6 +201,22 @@ P_STORE_GET(int, scrollingDefaultColumnDisplay, scrollingGroup, defaultColumnDis
 P_STORE_SET_INT(setScrollingDefaultColumnDisplay, scrollingGroup, defaultColumnDisplayKey,
                 scrollingDefaultColumnDisplayChanged)
 
+P_STORE_GET(int, scrollingDefaultColumnWidthPresetIndex, scrollingGroup, defaultColumnWidthPresetIndexKey, int)
+P_STORE_SET_INT(setScrollingDefaultColumnWidthPresetIndex, scrollingGroup, defaultColumnWidthPresetIndexKey,
+                scrollingDefaultColumnWidthPresetIndexChanged)
+
+// Height trio: unlike the width pair, the value key serves one kind (Fixed)
+// so the schema clamp is the whole story and the plain macros suffice.
+P_STORE_GET(int, scrollingDefaultWindowHeightKind, scrollingGroup, defaultWindowHeightKindKey, int)
+P_STORE_SET_INT(setScrollingDefaultWindowHeightKind, scrollingGroup, defaultWindowHeightKindKey,
+                scrollingDefaultWindowHeightKindChanged)
+P_STORE_GET(qreal, scrollingDefaultWindowHeightValue, scrollingGroup, defaultWindowHeightValueKey, double)
+P_STORE_SET_DOUBLE(setScrollingDefaultWindowHeightValue, scrollingGroup, defaultWindowHeightValueKey,
+                   scrollingDefaultWindowHeightValueChanged)
+P_STORE_GET(int, scrollingDefaultWindowHeightPresetIndex, scrollingGroup, defaultWindowHeightPresetIndexKey, int)
+P_STORE_SET_INT(setScrollingDefaultWindowHeightPresetIndex, scrollingGroup, defaultWindowHeightPresetIndexKey,
+                scrollingDefaultWindowHeightPresetIndexChanged)
+
 // Preset lists: comma-joined QString on disk, QStringList through
 // IScrollSettings (the engine parses the decimals), raw string for QML.
 QStringList Settings::scrollingPresetColumnWidths() const
@@ -226,6 +244,9 @@ P_STORE_SET_STRING(setScrollingPresetWindowHeights, scrollingGroup, presetWindow
 // validators own enum validation (validIntOr snaps a bad sticky value back
 // to the default on read, like every other stored enum) and range clamping
 // (clampInt on the step percents).
+
+P_STORE_GET(int, scrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, int)
+P_STORE_SET_INT(setScrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, scrollingInsertPositionChanged)
 
 P_STORE_GET(bool, scrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey, bool)
 P_STORE_SET_BOOL(setScrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey,

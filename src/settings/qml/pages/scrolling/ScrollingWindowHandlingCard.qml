@@ -26,6 +26,23 @@ SettingsCard {
         spacing: Kirigami.Units.smallSpacing
 
         SettingsRow {
+            title: i18n("New window placement")
+            searchAnchor: "scrollingNewWindowPlacement"
+            description: i18n("Where a new window's column enters the strip. Restored windows and per-window rules keep their own position.")
+
+            WideComboBox {
+                Accessible.name: i18n("New window placement")
+                textRole: "text"
+                valueRole: "value"
+                model: settingsController.valueOptions("Scrolling.Behavior", "InsertPosition")
+                storedValue: appSettings.scrollingInsertPosition
+                onActivated: appSettings.scrollingInsertPosition = currentValue
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
             title: i18n("Respect minimum size")
             searchAnchor: "scrollingRespectMinimumSize"
             description: i18n("Keep columns at least as wide and tall as their windows' minimum size, which can push other windows off screen")

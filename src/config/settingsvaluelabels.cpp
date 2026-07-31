@@ -184,6 +184,21 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                      {QStringLiteral("proportion"), PhosphorI18n::tr("Proportion of the screen")},
                      {QStringLiteral("fixed"), PhosphorI18n::tr("Fixed width")},
                      {QStringLiteral("clientDecides"), PhosphorI18n::tr("Window decides")},
+                     {QStringLiteral("preset"), PhosphorI18n::tr("Preset width")},
+                 });
+        t.insert(pairKey(CD::scrollingGroup(), CD::defaultWindowHeightKindKey()),
+                 {
+                     {QStringLiteral("auto"), PhosphorI18n::tr("Share the column evenly")},
+                     {QStringLiteral("fixed"), PhosphorI18n::tr("Fixed height")},
+                     {QStringLiteral("preset"), PhosphorI18n::tr("Preset height")},
+                 });
+        t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::insertPositionKey()),
+                 {
+                     {QStringLiteral("rightOfActive"), PhosphorI18n::tr("Right of the focused column")},
+                     {QStringLiteral("leftOfActive"), PhosphorI18n::tr("Left of the focused column")},
+                     {QStringLiteral("first"), PhosphorI18n::tr("Start of the strip")},
+                     {QStringLiteral("last"), PhosphorI18n::tr("End of the strip")},
+                     {QStringLiteral("intoActiveColumn"), PhosphorI18n::tr("Into the focused column")},
                  });
         t.insert(pairKey(CD::scrollingGroup(), CD::defaultColumnDisplayKey()),
                  {

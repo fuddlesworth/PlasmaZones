@@ -351,6 +351,16 @@ public:
                    setScrollingDefaultColumnWidthValue NOTIFY scrollingDefaultColumnWidthValueChanged)
     Q_PROPERTY(int scrollingDefaultColumnDisplay READ scrollingDefaultColumnDisplay WRITE
                    setScrollingDefaultColumnDisplay NOTIFY scrollingDefaultColumnDisplayChanged)
+    Q_PROPERTY(int scrollingDefaultColumnWidthPresetIndex READ scrollingDefaultColumnWidthPresetIndex WRITE
+                   setScrollingDefaultColumnWidthPresetIndex NOTIFY scrollingDefaultColumnWidthPresetIndexChanged)
+    Q_PROPERTY(int scrollingDefaultWindowHeightKind READ scrollingDefaultWindowHeightKind WRITE
+                   setScrollingDefaultWindowHeightKind NOTIFY scrollingDefaultWindowHeightKindChanged)
+    Q_PROPERTY(qreal scrollingDefaultWindowHeightValue READ scrollingDefaultWindowHeightValue WRITE
+                   setScrollingDefaultWindowHeightValue NOTIFY scrollingDefaultWindowHeightValueChanged)
+    Q_PROPERTY(int scrollingDefaultWindowHeightPresetIndex READ scrollingDefaultWindowHeightPresetIndex WRITE
+                   setScrollingDefaultWindowHeightPresetIndex NOTIFY scrollingDefaultWindowHeightPresetIndexChanged)
+    Q_PROPERTY(int scrollingInsertPosition READ scrollingInsertPosition WRITE setScrollingInsertPosition NOTIFY
+                   scrollingInsertPositionChanged)
     // QML-facing STRING facade: the Q_PROPERTY shares its name with the
     // C++ QStringList accessor (the IScrollSettings surface the engine
     // consumes). Deliberate — QML edits the raw comma-joined text while the
@@ -1078,6 +1088,16 @@ public:
     void setScrollingDefaultColumnWidthValue(qreal value);
     int scrollingDefaultColumnDisplay() const override;
     void setScrollingDefaultColumnDisplay(int display);
+    int scrollingDefaultColumnWidthPresetIndex() const override;
+    void setScrollingDefaultColumnWidthPresetIndex(int index);
+    int scrollingDefaultWindowHeightKind() const override;
+    void setScrollingDefaultWindowHeightKind(int kind);
+    qreal scrollingDefaultWindowHeightValue() const override;
+    void setScrollingDefaultWindowHeightValue(qreal value);
+    int scrollingDefaultWindowHeightPresetIndex() const override;
+    void setScrollingDefaultWindowHeightPresetIndex(int index);
+    int scrollingInsertPosition() const override;
+    void setScrollingInsertPosition(int position);
     // Preset lists: comma-joined string on disk (canonicalProportionList
     // schema validator — a numeric filter, not the plain comma-list),
     // QStringList through IScrollSettings, raw string for QML.

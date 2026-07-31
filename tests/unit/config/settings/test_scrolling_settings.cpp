@@ -182,6 +182,33 @@ private Q_SLOTS:
         QVERIFY(kind && kind->validator);
         QCOMPARE(kind->validator(-1).toInt(), ConfigDefaults::scrollingDefaultColumnWidthKind());
         QCOMPARE(kind->validator(2).toInt(), 2);
+        // Preset (3) is a legal kind; 4 is not (append-only vocabulary).
+        QCOMPARE(kind->validator(ConfigDefaults::scrollingWidthKindPreset()).toInt(),
+                 ConfigDefaults::scrollingWidthKindPreset());
+        QCOMPARE(kind->validator(4).toInt(), ConfigDefaults::scrollingDefaultColumnWidthKind());
+
+        const auto* widthPresetIdx = findKey(schema, group, ConfigDefaults::defaultColumnWidthPresetIndexKey());
+        QVERIFY(widthPresetIdx && widthPresetIdx->validator);
+        QCOMPARE(widthPresetIdx->validator(-1).toInt(), 0);
+        QCOMPARE(widthPresetIdx->validator(99).toInt(), ConfigDefaults::scrollingPresetIndexMax());
+
+        const auto* heightKind = findKey(schema, group, ConfigDefaults::defaultWindowHeightKindKey());
+        QVERIFY(heightKind && heightKind->validator);
+        QCOMPARE(heightKind->validator(9).toInt(), ConfigDefaults::scrollingDefaultWindowHeightKind());
+        QCOMPARE(heightKind->validator(ConfigDefaults::scrollingHeightKindPreset()).toInt(),
+                 ConfigDefaults::scrollingHeightKindPreset());
+
+        const auto* heightValue = findKey(schema, group, ConfigDefaults::defaultWindowHeightValueKey());
+        QVERIFY(heightValue && heightValue->validator);
+        QCOMPARE(heightValue->validator(1.0).toDouble(), ConfigDefaults::scrollingDefaultWindowHeightMin());
+        QCOMPARE(heightValue->validator(99999.0).toDouble(), ConfigDefaults::scrollingDefaultWindowHeightMax());
+
+        const auto* insertPos =
+            findKey(schema, ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::insertPositionKey());
+        QVERIFY(insertPos && insertPos->validator);
+        QCOMPARE(insertPos->validator(9).toInt(), ConfigDefaults::scrollingInsertPosition());
+        QCOMPARE(insertPos->validator(ConfigDefaults::scrollingInsertIntoActiveColumn()).toInt(),
+                 ConfigDefaults::scrollingInsertIntoActiveColumn());
 
         const auto* display = findKey(schema, group, ConfigDefaults::defaultColumnDisplayKey());
         QVERIFY(display && display->validator);
