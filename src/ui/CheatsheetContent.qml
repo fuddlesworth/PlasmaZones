@@ -180,8 +180,9 @@ Item {
             var fit = Math.floor((avail + columnSpacing) / (columnWidth + columnSpacing));
             // Bound by content volume, not group count: groups split across
             // column boundaries, so one long group can legitimately span
-            // several columns — but never open a column that would carry
-            // fewer than ~8 units, or short sheets spread into slivers.
+            // several columns. One column per started ~8 units of content
+            // keeps short sheets from spreading into slivers (the packer's
+            // min-chunk rule still guarantees no column is near-empty).
             var worthwhile = Math.max(1, Math.ceil(root.totalUnits / 8));
             return Math.max(1, Math.min(maxColumns, Math.min(fit, worthwhile)));
         }
