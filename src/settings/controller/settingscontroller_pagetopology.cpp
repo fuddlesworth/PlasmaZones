@@ -138,8 +138,11 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QSet<QString>{kTilingSimple, kTilingBehavior, kTilingAlgorithm} + kTilingConfigChildren;
     // The scrolling section's leaves; the peer of the two sets above.
     static const QString kScrollingSimple = QStringLiteral("scrolling-simple");
-    static const QString kScrollingBehavior = QStringLiteral("scrolling-behavior");
-    static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingBehavior};
+    static const QString kScrollingView = QStringLiteral("scrolling-view");
+    static const QString kScrollingColumns = QStringLiteral("scrolling-columns");
+    static const QString kScrollingWindow = QStringLiteral("scrolling-window");
+    static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingView, kScrollingColumns,
+                                                   kScrollingWindow};
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
@@ -339,26 +342,34 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::tilingAlgorithmGroup(), CD::maxWindowsKey()},
              {CD::tilingAlgorithmGroup(), CD::perAlgorithmSettingsKey()},
          }},
-        {QStringLiteral("scrolling-behavior"),
+        // The three advanced scrolling leaves split the former single page's
+        // keys by concern; the one-owner invariant holds per (group, key).
+        // The master switch (Scrolling.enabled) is deliberately absent from
+        // all three: like snappingEnabled/autotileEnabled it is committed
+        // through the sidebar toggle's beginExternalEdit/endExternalEdit
+        // pair, not staged through per-page dirtiness.
+        {QStringLiteral("scrolling-view"),
          {
-             // The master switch (Scrolling.enabled) is deliberately absent:
-             // like snappingEnabled/autotileEnabled it is committed through
-             // the sidebar toggle's beginExternalEdit/endExternalEdit pair,
-             // not staged through per-page dirtiness.
              {CD::scrollingGroup(), CD::centerFocusedColumnKey()},
              {CD::scrollingGroup(), CD::alwaysCenterSingleColumnKey()},
+             {CD::scrollingGroup(), CD::wheelFocusEnabledKey()},
+             {CD::scrollingGroup(), CD::wheelFocusInvertedKey()},
+         }},
+        {QStringLiteral("scrolling-columns"),
+         {
              {CD::scrollingGroup(), CD::defaultColumnWidthKindKey()},
              {CD::scrollingGroup(), CD::defaultColumnWidthValueKey()},
-             {CD::scrollingGroup(), CD::defaultColumnDisplayKey()},
-             {CD::scrollingGroup(), CD::presetColumnWidthsKey()},
-             {CD::scrollingGroup(), CD::presetWindowHeightsKey()},
              {CD::scrollingGroup(), CD::defaultColumnWidthPresetIndexKey()},
+             {CD::scrollingGroup(), CD::defaultColumnDisplayKey()},
              {CD::scrollingGroup(), CD::defaultWindowHeightKindKey()},
              {CD::scrollingGroup(), CD::defaultWindowHeightValueKey()},
              {CD::scrollingGroup(), CD::defaultWindowHeightPresetIndexKey()},
+             {CD::scrollingGroup(), CD::presetColumnWidthsKey()},
+             {CD::scrollingGroup(), CD::presetWindowHeightsKey()},
              {CD::scrollingGroup(), CD::tabStripEnabledKey()},
-             {CD::scrollingGroup(), CD::wheelFocusEnabledKey()},
-             {CD::scrollingGroup(), CD::wheelFocusInvertedKey()},
+         }},
+        {QStringLiteral("scrolling-window"),
+         {
              // Scrolling.Behavior — the strip's window-handling and focus
              // knobs. Smart gaps is deliberately absent: scrolling forwards
              // the shared Tiling.Gaps/SmartGaps value, whose (group, key)
@@ -461,7 +472,8 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
         {QStringLiteral("snapping-simple"),
          {QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-window-behavior")}},
         {QStringLiteral("tiling-simple"), {QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm")}},
-        {QStringLiteral("scrolling-simple"), {QStringLiteral("scrolling-behavior")}},
+        {QStringLiteral("scrolling-simple"),
+         {QStringLiteral("scrolling-view"), QStringLiteral("scrolling-columns"), QStringLiteral("scrolling-window")}},
     };
     // Checked once at first call, in debug AND release: the assert names the
     // offending page for a developer, and resetPage / discardPage additionally
@@ -510,7 +522,9 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("tiling-behavior"),
         QStringLiteral("tiling-algorithm"),
         QStringLiteral("scrolling-simple"),
-        QStringLiteral("scrolling-behavior"),
+        QStringLiteral("scrolling-view"),
+        QStringLiteral("scrolling-columns"),
+        QStringLiteral("scrolling-window"),
         QStringLiteral("tiling-shortcuts"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),

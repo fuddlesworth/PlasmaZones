@@ -7,13 +7,14 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Scrolling: the niri-style scrolling engine's own knobs. Its own
- * top-level placement section, the peer of Snapping and Tiling; the mode's
- * master switch lives on the sidebar section row like theirs do.
+ * @brief Scrolling → Columns: what a fresh column and a fresh tile look
+ * like (default width and height, display mode, tab indicator) and the
+ * preset lists the cycle shortcuts step through. One of the three advanced
+ * scrolling leaves (View / Columns / Window).
  *
- * Every row binds the app-wide `appSettings` context property directly — the
- * scrolling settings are plain Settings Q_PROPERTYs with no page sub-controller,
- * so there is no per-page state to carry here.
+ * The New columns card is per-monitor overridable through its scope chip
+ * (the Columns sub-domain of the per-screen scrolling map); the tab
+ * indicator row and the preset lists are app-wide.
  */
 SettingsFlickable {
     id: root
@@ -38,9 +39,7 @@ SettingsFlickable {
     // Per-monitor override plumbing, the tiling Algorithm card's pattern:
     // rows read through settingValue (override wins over the global) and
     // write through writeSetting (routes to the per-screen setter when a
-    // monitor is scoped). Each card's chip reports/resets only its own
-    // sub-domain (View / Columns / Window — disjoint key subsets of the one
-    // per-screen scrolling map).
+    // monitor is scoped).
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);
     }
@@ -70,92 +69,11 @@ SettingsFlickable {
         spacing: Kirigami.Units.largeSpacing
 
         // =================================================================
-        // Focus and View Card
-        // =================================================================
-        SettingsCard {
-            Layout.fillWidth: true
-            headerText: i18n("Focus and view")
-            searchAnchor: "focusAndView"
-            collapsible: true
-            scopeEnabled: true
-            scopeAppSettings: settingsController
-            scopeHasOverridesMethod: "hasPerScreenScrollingViewSettings"
-            scopeClearerMethod: "clearPerScreenScrollingViewSettings"
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                SettingsRow {
-                    title: i18n("Center the focused column")
-                    searchAnchor: "centerFocusedColumn"
-                    description: i18n("With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.")
-
-                    WideComboBox {
-                        Accessible.name: i18n("Center the focused column")
-                        textRole: "text"
-                        valueRole: "value"
-                        model: settingsController.valueOptions("Scrolling", "CenterFocusedColumn")
-                        storedValue: root.settingValue("CenterFocusedColumn", appSettings.scrollingCenterFocusedColumn)
-                        onActivated: root.writeSetting("CenterFocusedColumn", currentValue, function (v) {
-                            appSettings.scrollingCenterFocusedColumn = v;
-                        })
-                    }
-                }
-
-                SettingsSeparator {}
-
-                SettingsRow {
-                    title: i18n("Center a lone column")
-                    searchAnchor: "alwaysCenterSingleColumn"
-                    description: i18n("When the strip holds a single column, center it even when Center the focused column is set to Never.")
-
-                    SettingsSwitch {
-                        checked: appSettings.scrollingAlwaysCenterSingleColumn
-                        accessibleName: i18n("Center a lone column")
-                        onToggled: function (newValue) {
-                            appSettings.scrollingAlwaysCenterSingleColumn = newValue;
-                        }
-                    }
-                }
-
-                SettingsSeparator {}
-
-                SettingsRow {
-                    title: i18n("Scroll columns with the mouse wheel")
-                    searchAnchor: "wheelFocusEnabled"
-                    description: i18n("Hold Meta or Meta+Alt and scroll to move column focus along the strip. Off, the compositor keeps those wheel shortcuts.")
-
-                    SettingsSwitch {
-                        checked: appSettings.scrollingWheelFocusEnabled
-                        accessibleName: i18n("Scroll columns with the mouse wheel")
-                        onToggled: function (newValue) {
-                            appSettings.scrollingWheelFocusEnabled = newValue;
-                        }
-                    }
-                }
-
-                SettingsRow {
-                    title: i18n("Invert wheel direction")
-                    searchAnchor: "wheelFocusInverted"
-                    description: i18n("Scrolling down focuses the previous column instead of the next one")
-                    enabled: appSettings.scrollingWheelFocusEnabled
-
-                    SettingsSwitch {
-                        checked: appSettings.scrollingWheelFocusInverted
-                        accessibleName: i18n("Invert wheel direction")
-                        onToggled: function (newValue) {
-                            appSettings.scrollingWheelFocusInverted = newValue;
-                        }
-                    }
-                }
-            }
-        }
-
-        // =================================================================
         // New Columns Card
         // =================================================================
         SettingsCard {
             id: newColumnsCard
+
             Layout.fillWidth: true
             headerText: i18n("New columns")
             searchAnchor: "newColumns"
@@ -428,20 +346,6 @@ SettingsFlickable {
                     }
                 }
             }
-        }
-
-        // =================================================================
-        // Window Handling Card (shared-shape peer of the tiling/snapping cards)
-        // =================================================================
-        ScrollingWindowHandlingCard {
-            Layout.fillWidth: true
-        }
-
-        // =================================================================
-        // Focus Card
-        // =================================================================
-        ScrollingFocusCard {
-            Layout.fillWidth: true
         }
     }
 }

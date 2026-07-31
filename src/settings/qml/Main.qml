@@ -812,8 +812,7 @@ PhosphorUi.SettingsAppWindow {
     sidebar.searchEnabled: false
     sidebar.flattenTree: !settingsController.advancedMode
     sidebar.flatTitleOverrides: ({
-            "window-appearance": flatTitleLabelsObject.windowAppearance,
-            "scrolling-behavior": flatTitleLabelsObject.scrolling
+            "window-appearance": flatTitleLabelsObject.windowAppearance
         })
 
     // Simple/advanced mode toggle, pinned at the bottom of the sidebar — it
@@ -918,12 +917,12 @@ PhosphorUi.SettingsAppWindow {
             // The inline enable toggles must stay with them.
             readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
             readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
-            // Scrolling mirrors its two siblings now: a SimpleOnly condensed
-            // leaf (scrolling-simple) in simple mode, the full Behavior leaf
-            // in advanced mode, so only one of the two ids is ever visible
-            // per mode. The bare "scrolling" arm covers the parent-row shape
-            // the same way the snapping/tiling arms do.
-            readonly property bool isScrolling: entry && (entry.pageId === "scrolling" || entry.pageId === "scrolling-behavior" || entry.pageId === "scrolling-simple")
+            // Scrolling fully mirrors its two siblings now: a SimpleOnly
+            // condensed leaf (scrolling-simple) in simple mode, and in
+            // advanced mode a real drill parent ("scrolling") over the
+            // View/Columns/Window leaves — the parent row carries the
+            // inline enable toggle, exactly like the snapping/tiling arms.
+            readonly property bool isScrolling: entry && (entry.pageId === "scrolling" || entry.pageId === "scrolling-simple")
             // The id whose dirty state this row REPRESENTS, which is not
             // always the id it renders. Simple mode condenses a whole subtree
             // down to one visible row, and that row's own dirty state covers

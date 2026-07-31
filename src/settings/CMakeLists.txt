@@ -309,10 +309,12 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/tiling/TilingBehaviorPage.qml
         qml/pages/tiling/TilingAlgorithmPage.qml
         qml/pages/scrolling/PresetListEditor.qml
+        qml/pages/scrolling/ScrollingColumnsPage.qml
         qml/pages/scrolling/ScrollingFocusCard.qml
-        qml/pages/scrolling/ScrollingPage.qml
         qml/pages/scrolling/ScrollingSimplePage.qml
+        qml/pages/scrolling/ScrollingViewPage.qml
         qml/pages/scrolling/ScrollingWindowHandlingCard.qml
+        qml/pages/scrolling/ScrollingWindowPage.qml
         qml/pages/tiling/TilingSimplePage.qml
         qml/pages/snapping/SnappingSimplePage.qml
         qml/components/GlobalTimingDefaultsCard.qml
