@@ -643,6 +643,16 @@ void TestScrollEngineSmoke::parkingAvoidsAdjacentOutputs()
     const QRect parked = engine->lastManagedRect(QStringLiteral("app|c"));
     QVERIFY2(parked.right() < 0, qPrintable(QStringLiteral("expected left park, got x=%1").arg(parked.x())));
     engine->setCrossSurfaceResolver(nullptr);
+
+    // Baseline WITHOUT a resolver: the same sequence parks c off its NATURAL
+    // right side, so an unconditional-left-park mutation cannot pass both.
+    ScrollEngine* unresolved = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    unresolved->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    unresolved->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    unresolved->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    unresolved->focusColumnFirst(QStringLiteral("S1"));
+    const QRect natural = unresolved->lastManagedRect(QStringLiteral("app|c"));
+    QVERIFY2(natural.left() > 1200, qPrintable(QStringLiteral("expected right park, got x=%1").arg(natural.x())));
 }
 
 void TestScrollEngineSmoke::modeRoundTripRestoresStripStructure()
@@ -735,8 +745,15 @@ void TestScrollEngineSmoke::minSizeSurvivesFloatRoundTrip()
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 500, 400);
     QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(500, 400));
     engine->setWindowFloat(QStringLiteral("app|a"), true, QStringLiteral("S1"));
-    engine->setWindowFloat(QStringLiteral("app|a"), false, QStringLiteral("S1"));
+    // WHILE floated the answer comes from the FloatRestore entry, so the
+    // cross-engine handoff still gets a clamp for a floated window.
     QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(500, 400));
+    // A min-size report landing mid-float writes through to the restore
+    // entry; unfloat re-applies the UPDATED clamp, not the float-time one.
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 520, 410);
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(520, 410));
+    engine->setWindowFloat(QStringLiteral("app|a"), false, QStringLiteral("S1"));
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(520, 410));
 }
 
 void TestScrollEngineSmoke::handoffReleaseClearsFloatMarker()
@@ -1020,7 +1037,9 @@ void TestScrollEngineSmoke::zoneNumbersAreViewportRelativeVisibleSlots()
     // a parked column's tiles have no number at all. visibleTiles is the
     // single source: the preview rect walk, the per-window query and the
     // Snap-to-Zone digit target all derive from it, so every visible window
-    // carries its own distinct number and they can never disagree.
+    // carries its own distinct number and every consumer addresses the same
+    // tile. (What a digit MOVES is coarser than what it addresses; that
+    // divergence lives in test_scrollengine_zonenumbers.cpp.)
     //
     // Work area is 1200 wide and the default column is 600px (the proportion is
     // gap-aware and no IScrollSettings is attached, so innerGap is 0), so
@@ -1032,19 +1051,25 @@ void TestScrollEngineSmoke::zoneNumbersAreViewportRelativeVisibleSlots()
     engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")).size(), 3);
 
-    // Exactly one of the three is parked, and the two on screen carry 1 and 2.
-    const int na = engine->visibleTileNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|a"));
-    const int nb = engine->visibleTileNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
-    const int nc = engine->visibleTileNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|c"));
-    QList<int> numbers{na, nb, nc};
-    QCOMPARE(numbers.count(-1), 1); // one parked
-    std::sort(numbers.begin(), numbers.end());
-    QCOMPARE(numbers, (QList<int>{-1, 1, 2})); // and the visible pair is 1-based
+    // Opening focuses the newest column, so the view shows [b, c] and a is
+    // the one parked off the left. Pinned PER WINDOW: a sorted multiset of
+    // {-1, 1, 2} never said WHICH window was parked, so parking the focused
+    // column instead passed.
+    QCOMPARE(engine->visibleTileNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|a")), -1);
+    QCOMPARE(engine->visibleTileNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 1);
+    QCOMPARE(engine->visibleTileNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|c")), 2);
 
     // The rect walk agrees with the per-window query: one rect per visible
-    // tile, in the same left-to-right zone-number order.
+    // tile, in the same left-to-right zone-number order — asserted as a
+    // correspondence, not just a matching size.
     const QVector<QRect> rects = engine->visibleTileRects(QStringLiteral("S1"));
+    const QVector<ScrollEngine::VisibleTile> onScreen = engine->visibleTiles(QStringLiteral("S1"));
     QCOMPARE(rects.size(), 2);
+    QCOMPARE(onScreen.size(), rects.size());
+    for (int i = 0; i < rects.size(); ++i) {
+        QCOMPARE(rects.at(i), onScreen.at(i).rect);
+        QCOMPARE(engine->visibleTileNumberForWindow(QStringLiteral("S1"), onScreen.at(i).windowId), i + 1);
+    }
 
     // An unknown window has no slot, and neither does a window on a screen the
     // engine does not manage.
@@ -1056,6 +1081,10 @@ void TestScrollEngineSmoke::zoneNumbersAreViewportRelativeVisibleSlots()
     // two columns number 1..3 — the stacked pair does NOT collapse onto a
     // shared column ordinal (per-column numbering was the old model; it
     // rendered duplicate labels in every preview).
+    // Focus pinned explicitly: consumeOrExpel acts on the ACTIVE column, and
+    // the assertions below hold only because c's column is the consumer
+    // (it pulls its left neighbour b into the stack).
+    engine->windowFocused(QStringLiteral("app|c"), QStringLiteral("S1"));
     engine->consumeOrExpelWindow(-1, QStringLiteral("S1"));
     const QVector<ScrollEngine::VisibleTile> stacked = engine->visibleTiles(QStringLiteral("S1"));
     QCOMPARE(stacked.size(), 3);
@@ -1068,6 +1097,12 @@ void TestScrollEngineSmoke::zoneNumbersAreViewportRelativeVisibleSlots()
     // single column's tile comes first, then the pair back to back.
     QVERIFY(stacked.at(0).columnIndex != stacked.at(1).columnIndex);
     QCOMPARE(stacked.at(1).columnIndex, stacked.at(2).columnIndex);
+    // Left to right: neither columnIndex nor rect.x ever decreases along the
+    // walk, so a reversed iteration fails here.
+    for (int i = 1; i < stacked.size(); ++i) {
+        QVERIFY(stacked.at(i).columnIndex >= stacked.at(i - 1).columnIndex);
+        QVERIFY(stacked.at(i).rect.x() >= stacked.at(i - 1).rect.x());
+    }
 
     // The normalized twin walks the same tiles, and every rect is inside
     // the unit square.

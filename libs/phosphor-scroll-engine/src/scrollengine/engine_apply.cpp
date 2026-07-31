@@ -23,8 +23,10 @@ namespace {
 /// gives scroll animations a believable enter/leave origin, and it is the
 /// structural fix for the stuck-off-screen-window folklore (extreme
 /// coordinates are never committed).
-// All parked rects on a side share the same x (no per-distance spread);
-// the margin just keeps them clear of edge-snap heuristics.
+// Parked rects on the RIGHT all share one x; on the LEFT each sits its own
+// width beyond the edge, so a wider column parks further out. Neither side
+// spreads by distance — the margin only keeps them clear of edge-snap
+// heuristics.
 constexpr int kParkMargin = 16;
 
 } // namespace
@@ -89,22 +91,35 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
 
 QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& screenId) const
 {
+    // The state check comes first so an unmanaged screen never pays the
+    // ScreenManager query plus context-gap-provider call for its params.
     const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
     if (!state || state->strip().isEmpty()) {
         return {};
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
-    if (!params.workArea.isValid()) {
+    return visibleTiles(screenId, layoutParamsForScreen(screenId));
+}
+
+QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& screenId,
+                                                              const ScrollLayoutParams& params) const
+{
+    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+    if (!state || state->strip().isEmpty() || !params.workArea.isValid()) {
         return {};
     }
     const ResolvedStrip resolved = state->strip().relayout(params);
     QVector<VisibleTile> out;
+    int resolvedTiles = 0;
+    for (const ResolvedColumn& column : resolved.columns) {
+        resolvedTiles += column.tiles.size();
+    }
+    out.reserve(resolvedTiles);
     // THE zone-number walk (see VisibleTile): sequential over what is on
     // screen, columns left to right, tiles top to bottom. Every consumer of
     // the number space — preview labels, Snap-to-Zone digits, the
-    // navigation OSD's per-window number — derives from this list, so a
-    // change to the walk changes all of them together and they can never
-    // disagree.
+    // navigation OSD's per-window number, the cross-mode entry window —
+    // derives from this list, so a change to the walk changes all of them
+    // together and they always address the same tiles.
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.hidden) {
@@ -151,8 +166,13 @@ QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) 
         return {};
     }
     const QRect area = params.workArea;
+    // The params are already resolved, so the walk reuses them rather than
+    // sending visibleTiles back to layoutParamsForScreen for the same values.
+    const QVector<VisibleTile> tiles = visibleTiles(screenId, params);
     QVector<QRectF> out;
-    for (const QRect& r : visibleTileRects(screenId)) {
+    out.reserve(tiles.size());
+    for (const VisibleTile& tile : tiles) {
+        const QRect& r = tile.rect;
         out.append(QRectF(
             static_cast<qreal>(r.x() - area.x()) / area.width(), static_cast<qreal>(r.y() - area.y()) / area.height(),
             static_cast<qreal>(r.width()) / area.width(), static_cast<qreal>(r.height()) / area.height()));
@@ -290,6 +310,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         }
     }
     if (arr.isEmpty()) {
+        // Unreachable today, kept as the belt: resolved.columns is non-empty
+        // by the bail above, and relayout never emits a column with no
+        // tiles, so every surviving column contributes at least one entry.
         clearTabStripsForScreen(screenId);
         return;
     }

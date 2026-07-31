@@ -413,11 +413,11 @@ void TestScrollStripOps::reconcileGuardsAndEmptyAck()
 
 void TestScrollStripOps::visibleColumnIndicesTrackTheViewport()
 {
-    // The scroll zone-number space: visible columns are numbered 1..k left
-    // to right whatever their strip positions, so the numbers always
-    // describe what is on screen. a | b | c focused on c shows [b, c]:
-    // slots 1 and 2 are strip indices 1 and 2; focusing a scrolls to
-    // [a, b] and the same slots now name strip indices 0 and 1.
+    // Viewport tracking, NOT the zone-number space (that is per-tile and
+    // lives in ScrollEngine::visibleTiles): the helper reports which STRIP
+    // indices the view currently covers, so scrolling changes the answer.
+    // a | b | c focused on c shows strip indices 1 and 2; focusing a
+    // scrolls to [a, b] and the same two viewport slots now name 0 and 1.
     const auto params = defaultParams();
     ScrollStrip strip = threeColumns(params);
     QCOMPARE(strip.visibleColumnIndices(params), QVector<int>({1, 2}));

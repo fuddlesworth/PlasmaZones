@@ -347,150 +347,153 @@
         <translation>Otwórz ściągę skrótów</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="85"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="289"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="96"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="104"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="405"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="279"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="334"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="68"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="83"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="105"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="160"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="429"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="801"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="680"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="713"/>
         <source>Scrolling</source>
         <comment>tiling mode name</comment>
         <translation>Przewijanie</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="98"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="99"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="184"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="109"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="113"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="217"/>
         <source>Snap to Zone</source>
         <translation>Przyciągnij do strefy</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="121"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="137"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="141"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="162"/>
         <source>Rotate Clockwise</source>
         <translation>Obróć zgodnie z ruchem wskazówek zegara</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="123"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="139"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="143"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="164"/>
         <source>Rotate Counterclockwise</source>
         <translation>Obróć przeciwnie do ruchu wskazówek zegara</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="125"/>
-        <source>Cycle Forward in Zone</source>
-        <translation>Przełącz do przodu w strefie</translation>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="150"/>
+        <source>Cycle Focus Forward</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="127"/>
-        <source>Cycle Backward in Zone</source>
-        <translation>Przełącz wstecz w strefie</translation>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="152"/>
+        <source>Cycle Focus Backward</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="129"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="154"/>
         <source>Swap Screen Left</source>
         <translation>Zamień ekran w lewo</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="131"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="156"/>
         <source>Swap Screen Right</source>
         <translation>Zamień ekran w prawo</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="133"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="158"/>
         <source>Swap Screen Up</source>
         <translation>Zamień ekran w górę</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="135"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="160"/>
         <source>Swap Screen Down</source>
         <translation>Zamień ekran w dół</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="152"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="177"/>
         <source>Consume Window</source>
         <translation>Wciągnij okno</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="154"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="179"/>
         <source>Expel Window</source>
         <translation>Wypchnij okno</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="160"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="185"/>
         <source>Cycle Column Width</source>
         <translation>Przełącz szerokość kolumny</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="162"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="187"/>
         <source>Cycle Column Width Back</source>
         <translation>Przełącz szerokość kolumny wstecz</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="167"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="192"/>
         <source>Expand Column</source>
         <translation>Rozszerz kolumnę</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="241"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="334"/>
         <source>Arrows</source>
         <translation>Strzałki</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="251"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="348"/>
         <source>Apply Layout 1-9</source>
         <translation>Zastosuj układ 1-9</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="252"/>
-        <source>Snap to Zone 1-9</source>
-        <translation>Przyciągnij do strefy 1-9</translation>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="353"/>
+        <source>Zone 1-9</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="256"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="357"/>
         <source>Move Window</source>
         <translation>Przenieś okno</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="261"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="362"/>
         <source>Focus Zone</source>
         <translation>Uaktywnij strefę</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="266"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="367"/>
         <source>Swap Window</source>
         <translation>Zamień okno</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="271"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="372"/>
         <source>Span Window</source>
         <translation>Rozciągnij okno</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="277"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="378"/>
         <source>Swap Screens</source>
         <translation>Zamień ekrany</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="283"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="383"/>
         <source>Consume / Expel Window</source>
         <translation>Wciągnij / wypchnij okno</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="287"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="386"/>
         <source>Consume or Expel Left / Right</source>
         <translation>Wciągnij lub wypchnij w lewo / w prawo</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="291"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
         <source>Adjust Column Width</source>
         <translation>Dostosuj szerokość kolumny</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="295"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="392"/>
         <source>Adjust Window Height</source>
         <translation>Dostosuj wysokość okna</translation>
     </message>
@@ -702,7 +705,7 @@
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="1055"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="424"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="540"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="626"/>
         <source>Could not write the export. Check that the folder is writable.</source>
         <translation>Nie udało się zapisać eksportu. Sprawdź, czy w folderze można zapisywać.</translation>
     </message>
@@ -719,7 +722,7 @@
     </message>
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="488"/>
-        <location filename="../src/editor/services/DBusLayoutService.cpp" line="39"/>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="40"/>
         <source>Layout ID cannot be empty</source>
         <translation>Identyfikator układu nie może być pusty</translation>
     </message>
@@ -729,39 +732,39 @@
         <translation>Identyfikator układu do edycji</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="166"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="232"/>
         <source>Layout Locked</source>
         <translation>Układ zablokowany</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="215"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="281"/>
         <source>Disabled on this monitor</source>
         <translation>Wyłączone na tym ekranie</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="226"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="292"/>
         <source>Desktop %1</source>
         <translation>Pulpit %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="228"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="239"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="294"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="305"/>
         <source>Disabled on %1</source>
         <translation>Wyłączone na %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="237"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="303"/>
         <source>Disabled on this activity</source>
         <translation>Wyłączone w tej aktywności</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="267"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="333"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="594"/>
         <source>No layout assigned</source>
         <translation>Nie przypisano układu</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="826"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="931"/>
         <source>Dismiss Shortcut Cheatsheet</source>
         <translation>Zamknij ściągę skrótów</translation>
     </message>
@@ -771,7 +774,7 @@
         <translation>Usługa układów nie została zainicjowana</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="139"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="205"/>
         <source>Layout: %1</source>
         <translation>Układ: %1</translation>
     </message>
@@ -912,7 +915,7 @@
         <translation>Nazwa docelowego ekranu</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="321"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="438"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="200"/>
         <source>Tiling: %1</source>
         <translation>Kafelkowanie: %1</translation>
@@ -994,22 +997,22 @@
         <translation>Numer strefy musi wynosić co najmniej 1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="280"/>
+        <location filename="../src/daemon/daemon/lifecycle.cpp" line="289"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
         <translation>Wtyczka efektu KWin dla PlasmaZones nie jest zainstalowana w miejscu, w którym KWin może ją znaleźć. Zainstaluj ponownie PlasmaZones.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="319"/>
+        <location filename="../src/daemon/daemon/lifecycle.cpp" line="328"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin.</source>
         <translation>Efekt KWin dla PlasmaZones został zbudowany dla KWin %1, ale uruchomiony jest KWin %2, więc KWin go nie wczyta. Przebuduj i zainstaluj ponownie PlasmaZones dla uruchomionego KWin.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="346"/>
+        <location filename="../src/daemon/daemon/lifecycle.cpp" line="355"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
         <translation>Efekt KWin dla PlasmaZones nie zarejestrował się w demonie, więc przeciąganie okien i skróty nie będą działać. Upewnij się, że jest włączony w Ustawieniach systemowych &gt; Efekty pulpitu, a następnie uruchom ponownie sesję Plasmy.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/lifecycle.cpp" line="365"/>
+        <location filename="../src/daemon/daemon/lifecycle.cpp" line="374"/>
         <source>Window manager integration is inactive</source>
         <translation>Integracja z menedżerem okien jest nieaktywna</translation>
     </message>
@@ -1369,7 +1372,7 @@
         <translation>Kontekst</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="189"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="222"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="96"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="38"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="101"/>
@@ -1585,14 +1588,14 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="118"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="191"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="454"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="749"/>
         <source>Snapping layout</source>
         <translation>Układ przyciągania</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="121"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="645"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="474"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="784"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/AlgorithmPreviewCard.qml.cpp" line="152"/>
         <source>Tiling algorithm</source>
         <translation>Algorytm kafelkowania</translation>
@@ -1764,13 +1767,13 @@
         <translation>Przyciąganie</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="140"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="141"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="142"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="143"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="144"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="145"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="146"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="165"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="166"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="167"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="168"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="169"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="170"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="171"/>
         <source>Autotile</source>
         <translation>Automatyczne kafelkowanie</translation>
     </message>
@@ -2466,7 +2469,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="114"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="69"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="70"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="127"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="131"/>
         <source>None</source>
         <translation>Brak</translation>
     </message>
@@ -2858,7 +2861,7 @@
         <translation>Jedna lub więcej reguł nie przeszło sprawdzenia i nie mogło zostać zapisanych. Szczegóły znajdziesz w dzienniku.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller.cpp" line="657"/>
+        <location filename="../src/settings/rules/rulecontroller.cpp" line="659"/>
         <location filename="../src/settings/stores/profilestore.cpp" line="838"/>
         <source>%1 (copy)</source>
         <translation>%1 (kopia)</translation>
@@ -4471,7 +4474,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="237"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="57"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="70"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="65"/>
         <source>Rendering backend</source>
         <translation>Silnik renderowania</translation>
     </message>
@@ -4494,7 +4497,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="458"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="736"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="761"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="510"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="501"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="58"/>
         <source>Exclude transient windows</source>
         <translation>Wyklucz okna tymczasowe</translation>
@@ -4512,7 +4515,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="308"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="578"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="569"/>
         <source>Reset</source>
         <translation>Wyzeruj</translation>
     </message>
@@ -4617,7 +4620,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="239"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="106"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="101"/>
         <source>Shader Effects</source>
         <translation>Efekty shaderów</translation>
     </message>
@@ -4847,8 +4850,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="112"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="117"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="122"/>
         <source>Frame rate</source>
         <translation>Liczba klatek na sekundę</translation>
     </message>
@@ -4856,7 +4859,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="75"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="36"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="142"/>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="186"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="234"/>
         <source>Keyboard Shortcuts</source>
         <translation>Skróty klawiszowe</translation>
     </message>
@@ -4984,13 +4987,13 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="244"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="146"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="141"/>
         <source>Audio Spectrum</source>
         <translation>Widmo dźwięku</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="246"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="154"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="149"/>
         <source>Audio spectrum</source>
         <translation>Widmo dźwięku</translation>
     </message>
@@ -5029,8 +5032,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="249"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="191"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="196"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="201"/>
         <source>Spectrum bars</source>
         <translation>Słupki widma</translation>
     </message>
@@ -5048,14 +5051,14 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="251"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="232"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="227"/>
         <source>Audio Analysis</source>
         <translation>Analiza dźwięku</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="254"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="237"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="242"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="247"/>
         <source>Noise reduction</source>
         <translation>Redukcja szumów</translation>
     </message>
@@ -5074,15 +5077,15 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="257"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="255"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="260"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="265"/>
         <source>Extra smoothing</source>
         <translation>Dodatkowe wygładzanie</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="259"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="280"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="288"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="275"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="283"/>
         <source>Automatic gain</source>
         <translation>Automatyczne wzmocnienie</translation>
     </message>
@@ -5104,15 +5107,15 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="263"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="291"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="296"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="301"/>
         <source>Sensitivity</source>
         <translation>Czułość</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="266"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="311"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="316"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="321"/>
         <source>Lowest frequency</source>
         <translation>Najniższa częstotliwość</translation>
     </message>
@@ -5129,8 +5132,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="270"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="329"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="334"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="339"/>
         <source>Highest frequency</source>
         <translation>Najwyższa częstotliwość</translation>
     </message>
@@ -5141,8 +5144,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="274"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="349"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="354"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="359"/>
         <source>Channels</source>
         <translation>Kanały</translation>
     </message>
@@ -5158,8 +5161,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="276"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="371"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="377"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="364"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="370"/>
         <source>Reverse bar order</source>
         <translation>Odwróć kolejność słupków</translation>
     </message>
@@ -5175,8 +5178,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="279"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="387"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="393"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="380"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="386"/>
         <source>Monstercat filter</source>
         <translation>Filtr Monstercat</translation>
     </message>
@@ -5188,8 +5191,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="281"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="401"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="407"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="394"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="400"/>
         <source>Wave filter</source>
         <translation>Filtr falowy</translation>
     </message>
@@ -5200,8 +5203,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="283"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="417"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="422"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="410"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="415"/>
         <source>Audio backend</source>
         <translation>Silnik dźwięku</translation>
     </message>
@@ -5223,8 +5226,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="287"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="434"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="446"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="425"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="437"/>
         <source>Audio source</source>
         <translation>Źródło dźwięku</translation>
     </message>
@@ -5235,14 +5238,14 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="292"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="473"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="464"/>
         <source>Layout assignment</source>
         <translation>Przypisanie układu</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="294"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="481"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="487"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="472"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="478"/>
         <source>Don&apos;t assign a layout by default</source>
         <translation>Nie przypisuj układu domyślnie</translation>
     </message>
@@ -6461,7 +6464,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="463"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="742"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="768"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="520"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="511"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="85"/>
         <source>Minimum window width</source>
         <translation>Minimalna szerokość okna</translation>
@@ -6479,7 +6482,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="467"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="744"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="771"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="530"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="521"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="125"/>
         <source>Minimum window height</source>
         <translation>Minimalna wysokość okna</translation>
@@ -6496,13 +6499,13 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="231"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="276"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="776"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="540"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="531"/>
         <source>Configuration</source>
         <translation>Konfiguracja</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="777"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="548"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="539"/>
         <source>Backup</source>
         <translation>Kopia zapasowa</translation>
     </message>
@@ -6520,7 +6523,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="779"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="563"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="554"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -6889,15 +6892,15 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="361"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="510"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="560"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="919"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="646"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="1137"/>
         <source>That file path is not allowed.</source>
         <translation>Ta ścieżka pliku jest niedozwolona.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="393"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="568"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="492"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="594"/>
         <source>That export path is not allowed.</source>
         <translation>Ta ścieżka eksportu jest niedozwolona.</translation>
     </message>
@@ -6917,7 +6920,7 @@
         <translation>Nie udało się zaktualizować proporcji: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="200"/>
+        <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="214"/>
         <source>Failed to apply assignment changes: %1</source>
         <translation>Nie udało się zastosować zmian przypisania: %1</translation>
     </message>
@@ -6927,11 +6930,11 @@
         <translation>Przegląd</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="87"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="88"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="89"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="90"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="91"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="98"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="99"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="100"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="101"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="102"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="98"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="304"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="385"/>
@@ -6945,26 +6948,26 @@
         <translation>Rozmieszczenie</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="103"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="104"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="105"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="106"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="107"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="108"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="109"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="110"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="111"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="112"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="113"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="114"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="116"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="117"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="118"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="119"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="120"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="121"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="122"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="123"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="124"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="125"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="126"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="127"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="128"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="130"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="131"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="132"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="133"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="140"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="142"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="149"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="151"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="326"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="396"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
@@ -6987,30 +6990,31 @@
         <translation>O programie</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="128"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="130"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="132"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="134"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="136"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="138"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="153"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="155"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="157"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="159"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="161"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="163"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="175"/>
         <source>Virtual Screens</source>
         <translation>Wirtualne ekrany</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="92"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="93"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="94"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="95"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="96"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="97"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="181"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="103"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="104"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="105"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="106"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="107"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="108"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="209"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="179"/>
         <source>Layouts</source>
         <translation>Układy</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="207"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="290"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="64"/>
         <source>Behavior</source>
         <translation>Zachowanie</translation>
@@ -7082,7 +7086,6 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="171"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="290"/>
         <source>Scrolling</source>
         <translation>Przewijanie</translation>
     </message>
@@ -7394,67 +7397,83 @@
         <translation>Nie udało się wyzerować niektórych zastąpień animacji.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="483"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="585"/>
         <source>Settings can only be exported to a local file.</source>
         <translation>Ustawienia można wyeksportować tylko do lokalnego pliku.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="524"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="610"/>
         <source>That is the settings file this app is using. Export to a different file.</source>
         <translation>To jest plik ustawień, którego używa ta aplikacja. Wyeksportuj do innego pliku.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="551"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="637"/>
         <source>Settings can only be imported from a local file.</source>
         <translation>Ustawienia można zaimportować tylko z lokalnego pliku.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="565"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="651"/>
         <source>That settings file is no longer there.</source>
         <translation>Tego pliku ustawień już tam nie ma.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="579"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="666"/>
         <source>Those are the settings this app is already using. Pick a different file to import.</source>
         <translation>To są ustawienia, których ta aplikacja już używa. Wybierz inny plik do zaimportowania.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="602"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="607"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="612"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="636"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="680"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="689"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="694"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="699"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="723"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="799"/>
         <source>That is not a settings file this app can read.</source>
         <translation>To nie jest plik ustawień, który ta aplikacja potrafi odczytać.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="652"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="745"/>
         <source>Could not back up your current settings, so nothing was imported.</source>
         <translation>Nie udało się utworzyć kopii zapasowej bieżących ustawień, więc nic nie zaimportowano.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="665"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="758"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="829"/>
+        <source>That settings file is older than the window rules this profile already has, and importing it would drop them. Set up a new settings profile and import it there.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="777"/>
         <source>Could not read that older settings file.</source>
         <translation>Nie udało się odczytać tego starszego pliku ustawień.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="672"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="785"/>
         <source>Could not read that settings file.</source>
         <translation>Nie udało się odczytać tego pliku ustawień.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="692"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="813"/>
+        <source>That settings file is from a newer version of this app.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="843"/>
         <source>Could not replace your settings with that file.</source>
         <translation>Nie udało się zastąpić ustawień tym plikiem.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="720"/>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="725"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="861"/>
+        <source>Your settings file was read but the upgrade could not be saved.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="890"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="895"/>
         <source>Your settings could not be put back. A copy is saved at %1.</source>
         <translation>Nie udało się przywrócić ustawień. Kopia jest zapisana w %1.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="768"/>
+        <location filename="../src/settings/controller/settingscontroller_session.cpp" line="940"/>
         <source>Your settings were imported, but the animation pages still show the old ones. Reopen the settings window to see the imported values.</source>
         <translation>Ustawienia zostały zaimportowane, ale strony animacji nadal pokazują stare. Otwórz ponownie okno ustawień, aby zobaczyć zaimportowane wartości.</translation>
     </message>
@@ -7585,43 +7604,43 @@
         <translation>Reguła bez nazwy</translation>
     </message>
     <message>
-        <location filename="../src/editor/services/DBusLayoutService.cpp" line="47"/>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="48"/>
         <source>Failed to load layout: %1</source>
         <translation>Nie udało się wczytać układu: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/services/DBusLayoutService.cpp" line="57"/>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="58"/>
         <source>That layout is no longer available.</source>
         <translation>Ten układ nie jest już dostępny.</translation>
     </message>
     <message>
-        <location filename="../src/editor/services/DBusLayoutService.cpp" line="66"/>
-        <location filename="../src/editor/services/DBusLayoutService.cpp" line="90"/>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="67"/>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="91"/>
         <source>Layout JSON cannot be empty</source>
         <translation>JSON układu nie może być pusty</translation>
     </message>
     <message>
-        <location filename="../src/editor/services/DBusLayoutService.cpp" line="74"/>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="75"/>
         <source>Failed to create layout: %1</source>
         <translation>Nie udało się utworzyć układu: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/services/DBusLayoutService.cpp" line="79"/>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="80"/>
         <source>Created layout but received empty ID</source>
         <translation>Utworzono układ, ale otrzymano pusty identyfikator</translation>
     </message>
     <message>
-        <location filename="../src/editor/services/DBusLayoutService.cpp" line="98"/>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="99"/>
         <source>Failed to update layout: %1</source>
         <translation>Nie udało się zaktualizować układu: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/services/DBusLayoutService.cpp" line="109"/>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="110"/>
         <source>The layout could not be saved.</source>
         <translation>Nie udało się zapisać układu.</translation>
     </message>
     <message>
-        <location filename="../src/editor/services/DBusLayoutService.cpp" line="141"/>
+        <location filename="../src/editor/services/DBusLayoutService.cpp" line="155"/>
         <source>Failed to assign layout to screen: %1</source>
         <translation>Nie udało się przypisać układu do ekranu: %1</translation>
     </message>
@@ -10176,182 +10195,182 @@
         <translation>API grafiki używane do renderowania nakładki</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="89"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="84"/>
         <source>Stop the daemon to change the rendering backend.</source>
         <translation>Zatrzymaj usługę, aby zmienić silnik renderowania.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="89"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="84"/>
         <source>Rendering backend changes take effect after restarting the daemon.</source>
         <translation>Zmiany silnika renderowania zaczynają obowiązywać po ponownym uruchomieniu usługi.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="119"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="114"/>
         <source>Target refresh rate for shader animations</source>
         <translation>Docelowa liczba klatek na sekundę dla animacji shaderów</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="156"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="151"/>
         <source>Feed audio spectrum data to shaders that support it</source>
         <translation>Przekazuj dane widma dźwięku do shaderów, które je obsługują</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="156"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="151"/>
         <source>CAVA is not installed. Install cava to enable audio visualization.</source>
         <translation>CAVA nie jest zainstalowana. Zainstaluj cava, aby włączyć wizualizację dźwięku.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="163"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="158"/>
         <source>Enable CAVA audio spectrum</source>
         <translation>Włącz widmo dźwięku CAVA</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="175"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="170"/>
         <source>CAVA is not installed. Install the &lt;b&gt;cava&lt;/b&gt; package to enable audio-reactive shader effects.</source>
         <translation>CAVA nie jest zainstalowana. Zainstaluj pakiet &lt;b&gt;cava&lt;/b&gt;, aby włączyć efekty shaderów reagujące na dźwięk.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="198"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="193"/>
         <source>Number of frequency bands in the audio visualization</source>
         <translation>Liczba pasm częstotliwości w wizualizacji dźwięku</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="244"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="239"/>
         <source>How smoothly the bars respond. Higher values are slower and calmer while lower values are fast and twitchy.</source>
         <translation>Jak płynnie reagują słupki. Wyższe wartości dają wolniejszą i spokojniejszą reakcję, a niższe szybszą i bardziej nerwową.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="262"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="257"/>
         <source>Additional smoothing applied on top of noise reduction</source>
         <translation>Dodatkowe wygładzanie stosowane po redukcji szumów</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="282"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="277"/>
         <source>Continuously adjusts sensitivity so the bars fill the available range</source>
         <translation>Stale dostosowuje czułość, aby słupki wypełniały dostępny zakres</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="298"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="293"/>
         <source>Starting gain that automatic gain adapts from</source>
         <translation>Wzmocnienie początkowe, od którego dostosowuje się automatyczne wzmocnienie</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="298"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="293"/>
         <source>Fixed gain applied to the audio signal</source>
         <translation>Stałe wzmocnienie stosowane do sygnału dźwiękowego</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="318"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="313"/>
         <source>Sounds below this frequency are ignored</source>
         <translation>Dźwięki poniżej tej częstotliwości są pomijane</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="331"/>
         <source>Sounds above this frequency are ignored</source>
         <translation>Dźwięki powyżej tej częstotliwości są pomijane</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="356"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="351"/>
         <source>Stereo shows left and right bars side by side. Mono collapses to one set of bars.</source>
         <translation>Stereo pokazuje lewe i prawe słupki obok siebie. Mono zwija je do jednego zestawu słupków.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="366"/>
         <source>Flip the frequency order of the bars</source>
         <translation>Odwróć kolejność częstotliwości słupków</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="389"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="382"/>
         <source>Spreads each bar into its neighbors for a smoother outline</source>
         <translation>Rozprzestrzenia każdy słupek na sąsiednie dla gładszego konturu</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="403"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="396"/>
         <source>Rounds the spectrum into soft waves</source>
         <translation>Zaokrągla widmo w miękkie fale</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="419"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="412"/>
         <source>Leave on Automatic unless capture fails with the detected backend</source>
         <translation>Pozostaw na Automatycznie, chyba że przechwytywanie zawiedzie z wykrytym silnikiem</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="436"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="427"/>
         <source>Capture device or monitor source. Keep &quot;auto&quot; to follow the default output.</source>
         <translation>Urządzenie przechwytujące lub źródło monitorujące. Pozostaw „auto”, aby podążać za domyślnym wyjściem.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="483"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="474"/>
         <source>Snapping and tiling stay off until you assign a layout. A rule can re-enable the default per monitor.</source>
         <translation>Przyciąganie i kafelkowanie pozostają wyłączone, dopóki nie przypiszesz układu. Reguła może ponownie włączyć wartość domyślną dla poszczególnego ekranu.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="509"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="500"/>
         <source>Skip dialogs, popups, and toolbars for snapping and tiling</source>
         <translation>Pomijaj okna dialogowe, wyskakujące i paski narzędzi przy przyciąganiu i kafelkowaniu</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="518"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="509"/>
         <source>Windows narrower than this are excluded</source>
         <translation>Okna węższe niż to są wykluczane</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="519"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="510"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="585"/>
         <source>Disabled (no width threshold)</source>
         <translation>Wyłączone (brak progu szerokości)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="528"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="519"/>
         <source>Windows shorter than this are excluded</source>
         <translation>Okna niższe niż to są wykluczane</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="529"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="520"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="595"/>
         <source>Disabled (no height threshold)</source>
         <translation>Wyłączone (brak progu wysokości)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="550"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="541"/>
         <source>Export all settings to a file</source>
         <translation>Eksportuj wszystkie ustawienia do pliku</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="553"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="610"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="544"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="601"/>
         <source>Export Settings</source>
         <translation>Eksportuj ustawienia</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="565"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="556"/>
         <source>Import settings from a previously exported file</source>
         <translation>Zaimportuj ustawienia z wcześniej wyeksportowanego pliku</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="568"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="625"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="559"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="616"/>
         <source>Import Settings</source>
         <translation>Importuj ustawienia</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="579"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="570"/>
         <source>Restore every setting on every page to its default value</source>
         <translation>Przywróć każde ustawienie na każdej stronie do wartości domyślnej</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="583"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="574"/>
         <source>Reset to Defaults</source>
         <translation>Przywróć domyślne</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="611"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="602"/>
         <source>PlasmaZones Config (*.json)</source>
         <translation>Konfiguracja PlasmaZones (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="611"/>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="626"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="602"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="617"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="505"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="532"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="548"/>
@@ -10364,17 +10383,17 @@
         <translation>Wszystkie pliki (*)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="618"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="609"/>
         <source>Settings exported</source>
         <translation>Wyeksportowano ustawienia</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="626"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="617"/>
         <source>PlasmaZones Config (*.json *.conf *.ini *.rc)</source>
         <translation>Konfiguracja PlasmaZones (*.json *.conf *.ini *.rc)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="630"/>
+        <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="621"/>
         <source>Settings imported</source>
         <translation>Zaimportowano ustawienia</translation>
     </message>
@@ -10482,13 +10501,13 @@
         <translation>Odrzuć zmiany na tej stronie</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="857"/>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="876"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="863"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="882"/>
         <source>Advanced</source>
         <translation>Zaawansowane</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="864"/>
+        <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="870"/>
         <source>Toggle advanced settings</source>
         <translation>Przełącz ustawienia zaawansowane</translation>
     </message>
@@ -10878,7 +10897,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="47"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="77"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="111"/>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="163"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="167"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="466"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
@@ -10928,37 +10947,42 @@
         <translation>Odrzucić niezapisane zmiany?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="133"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="136"/>
         <source>Disabling Snapping will discard your unsaved Snapping changes. Continue?</source>
         <translation>Wyłączenie przyciągania odrzuci niezapisane zmiany przyciągania. Kontynuować?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="133"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="136"/>
         <source>Disabling Tiling will discard your unsaved Tiling changes. Continue?</source>
         <translation>Wyłączenie kafelkowania odrzuci niezapisane zmiany kafelkowania. Kontynuować?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="133"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="136"/>
         <source>Disabling Scrolling will discard your unsaved Scrolling changes. Continue?</source>
         <translation>Wyłączenie przewijania odrzuci niezapisane zmiany przewijania. Kontynuować?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="137"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="136"/>
+        <source>Disabling this will discard your unsaved changes. Continue?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="140"/>
         <source>Discard and Disable</source>
         <translation>Odrzuć i wyłącz</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="177"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="181"/>
         <source>Stop daemon?</source>
         <translation>Zatrzymać usługę?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="178"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
         <source>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</source>
         <translation>Zatrzymanie usługi PlasmaZones wyłącza kafelkowanie i przyciąganie okien, dopóki nie uruchomisz jej ponownie.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="186"/>
         <source>Stop daemon</source>
         <translation>Zatrzymaj usługę</translation>
     </message>
@@ -12527,10 +12551,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="33"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="368"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="394"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="458"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="478"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="601"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="638"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="753"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="788"/>
         <source>Default</source>
         <translation>Domyślne</translation>
     </message>
@@ -13205,17 +13229,23 @@
         <translation>Szybkie przyciąganie %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="102"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="106"/>
         <source>No shortcut assigned</source>
         <translation>Nie przypisano skrótu</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="150"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="106"/>
+        <source>Default shortcut %1</source>
+        <comment>%1 is a keyboard shortcut such as Meta+Alt+1</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="154"/>
         <source>Clear shortcut</source>
         <translation>Wyczyść skrót</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="151"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="155"/>
         <source>Clear shortcut %1</source>
         <translation>Wyczyść skrót %1</translation>
     </message>
@@ -13861,7 +13891,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="668"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="422"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="706"/>
         <source>Placement mode</source>
         <translation>Tryb rozmieszczenia</translation>
     </message>
@@ -14283,48 +14313,77 @@
         <translation>Zresetuj ten ekran</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="259"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="310"/>
         <source>View and change the active mode and layout for each monitor.</source>
         <translation>Wyświetl i zmień aktywny tryb oraz układ dla każdego ekranu.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="278"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="329"/>
         <source>Unable to retrieve monitor state. Make sure the daemon is running.</source>
         <translation>Nie można pobrać stanu ekranu. Upewnij się, że demon jest uruchomiony.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="377"/>
-        <source>Snapping layout preview: %1</source>
-        <translation>Podgląd układu przyciągania: %1</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="612"/>
+        <source>Snapping layout preview, %1</source>
+        <comment>accessible name of the layout preview; %1 is the layout name</comment>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="377"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="612"/>
         <source>Snapping layout preview</source>
-        <translation>Podgląd układu przyciągania</translation>
+        <comment>accessible name of the layout preview when no layout name is known</comment>
+        <translation type="unfinished">Podgląd układu przyciągania</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="405"/>
-        <source>Tiling algorithm preview: %1</source>
-        <translation>Podgląd algorytmu kafelkowania: %1</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="649"/>
+        <source>Tiling algorithm preview, %1</source>
+        <comment>accessible name of the tiling preview; %1 is the algorithm name</comment>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="405"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="649"/>
         <source>Tiling algorithm preview</source>
-        <translation>Podgląd algorytmu kafelkowania</translation>
+        <comment>accessible name of the tiling preview when no algorithm name is known</comment>
+        <translation type="unfinished">Podgląd algorytmu kafelkowania</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="689"/>
+        <source>Scrolling strip preview with %n window</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="415"/>
-        <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.</source>
-        <translation>Tryb przewijania układa okna w kolumny o zmiennej szerokości na nieskończonym pasie. Nie używa układu stref.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="689"/>
+        <source>Scrolling strip preview, example strip</source>
+        <comment>accessible name of the placeholder strip preview shown when the screen is not scrolling yet</comment>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="429"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="699"/>
+        <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. The numbers show the order of the windows on screen, and Snap to Zone uses them.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="774"/>
+        <source>This monitor uses %1, which is not in your layout list.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="809"/>
+        <source>This monitor uses %1, which is not in your algorithm list.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="713"/>
         <source>Snapping</source>
         <comment>tiling mode name</comment>
         <translation>Przyciąganie</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="429"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="713"/>
         <source>Tiling</source>
         <comment>tiling mode name</comment>
         <translation>Kafelkowanie</translation>
@@ -16239,29 +16298,35 @@
         <translation>Wybierz kolor</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="151"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="199"/>
         <source>Dismiss shortcut cheatsheet</source>
         <translation>Zamknij ściągawkę skrótów</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="202"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="250"/>
         <source>No shortcuts apply in the current mode.</source>
         <translation>W bieżącym trybie nie obowiązują żadne skróty.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="283"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="307"/>
+        <source>%1 (continued)</source>
+        <comment>category heading for a section that continues from the previous column</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="331"/>
         <source>%1, %2</source>
         <comment>shortcut row: action, keys</comment>
         <translation>%1, %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="283"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="331"/>
         <source>%1, unassigned</source>
         <comment>shortcut row: action unassigned</comment>
         <translation>%1, nieprzypisany</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="384"/>
         <source>Unassigned</source>
         <translation>Nieprzypisany</translation>
     </message>
@@ -16754,7 +16819,7 @@
         <translation>Nastawy wysokości okna</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/ScrollTabStripContent.qml.cpp" line="112"/>
+        <location filename=".qml-stubs/src/ui/ScrollTabStripContent.qml.cpp" line="136"/>
         <source>Untitled window</source>
         <translation>Okno bez tytułu</translation>
     </message>

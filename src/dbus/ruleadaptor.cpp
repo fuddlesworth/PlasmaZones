@@ -198,6 +198,14 @@ bool RuleAdaptor::setRulePriority(const QString& ruleId, int priority)
     return m_store->setRulePriority(id, priority);
 }
 
+void RuleAdaptor::reloadRules()
+{
+    if (!m_store) {
+        return;
+    }
+    m_store->load();
+}
+
 void RuleAdaptor::resetManagedDefaults()
 {
     if (!m_store) {

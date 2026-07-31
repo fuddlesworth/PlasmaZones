@@ -7,6 +7,10 @@
 #include <QDBusMessage>
 #include <QDBusMetaType>
 #include <QDBusPendingCall>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonParseError>
+#include "core/platform/logging.h"
 #include "core/types/constants.h"
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -43,6 +47,56 @@ inline QDBusMessage callDaemon(const QString& interface, const QString& method, 
 inline void notifyReload()
 {
     PhosphorProtocol::ClientHelpers::reloadDaemonSettingsBlocking();
+}
+
+/// Ask the daemon to re-read rules.json.
+///
+/// reloadSettings() does NOT cover this: the daemon's rule store is borrowed by
+/// the settings surface it serves, and a borrowed store is never reloaded by the
+/// settings reload path (the owner drives reloads). An import rewrites rules.json
+/// underneath the daemon, so without this call the daemon keeps serving its
+/// pre-import rule set and the settings app's next revert or Apply fetches those
+/// stale rules back over the imported ones.
+///
+/// Synchronous for the same reason notifyReload is: the caller reloads its own
+/// in-memory state (and re-fetches rules from the daemon) immediately after, so
+/// the daemon has to have adopted the new file before that fetch is dispatched.
+inline void notifyRulesReload()
+{
+    callDaemon(QString(PhosphorProtocol::Service::Interface::Rules), QStringLiteral("reloadRules"));
+}
+
+/// Decode a daemon reply whose single argument is a JSON array string.
+///
+/// The settings app has several of these call sites and they used to disagree on
+/// whether a parse failure was reported, whether the element loop guarded on
+/// isObject, and whether the result list reserved. @p context names the caller in
+/// the warning so a malformed payload is diagnosable from the log alone.
+///
+/// Returns an empty array for a D-Bus error, an empty payload, a parse failure,
+/// or a document that is not an array. Only the last two warn: a transport error
+/// is the caller's to report (the callers word it per feature) and an empty
+/// payload is a normal "nothing to report" answer.
+inline QJsonArray replyJsonArray(const QDBusMessage& reply, QLatin1String context)
+{
+    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+        return {};
+    }
+    const QString json = reply.arguments().at(0).toString();
+    if (json.isEmpty()) {
+        return {};
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qCWarning(lcCore) << context << "reply is not valid JSON:" << parseError.errorString();
+        return {};
+    }
+    if (!doc.isArray()) {
+        qCWarning(lcCore) << context << "reply JSON is not an array";
+        return {};
+    }
+    return doc.array();
 }
 
 // The three settings-WRITE helpers that used to live here (setDaemonSettings,

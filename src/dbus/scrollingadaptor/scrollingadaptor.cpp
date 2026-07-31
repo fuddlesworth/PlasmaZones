@@ -9,6 +9,7 @@
 
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -20,6 +21,14 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
     : QDBusAbstractAdaptor(parent)
     , m_engine(engine)
 {
+    // PRECONDITION: the adaptor is constructed before the engine can push a
+    // screen set, so the empty m_lastBroadcastScreens below is a true "nothing
+    // broadcast yet" and not a gate seeded with a set we already missed. The
+    // daemon guarantees it — initEnginesAndWiring news this adaptor in the same
+    // pass that creates the engine, before updateEngineScreens runs. A
+    // late-constructed adaptor would swallow a first broadcast of the empty
+    // set, and there is no re-wire path that could reach that state (clearEngine
+    // is terminal; the next cycle deletes and re-news the whole adaptor set).
     if (!m_engine) {
         qCWarning(lcDbusScrolling) << "ScrollingAdaptor created with null engine";
         return;
@@ -59,7 +68,9 @@ void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
     // Wire-boundary validation: only the two adjacent steps are meaningful,
     // and the screen gate keeps a wheel event from a non-scrolling monitor
     // from being redirected onto the active scrolling screen by
-    // resolveOperationScreen's fallback.
+    // resolveOperationScreen's fallback. The isEmpty check is kept even though
+    // isActiveOnScreen would reject "" anyway: rejecting a malformed argument
+    // at the wire boundary should not depend on how a callee treats it.
     if (!m_engine || screenId.isEmpty() || (delta != -1 && delta != 1)) {
         return;
     }
@@ -70,17 +81,20 @@ void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
                                PhosphorEngine::NavigationContext{QString(), screenId});
 }
 
-QString ScrollingAdaptor::visibleStripJson(const QString& screenId)
+QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
 {
+    // isEmpty kept for the same wire-boundary reason as in focusColumn.
     if (!m_engine || screenId.isEmpty()) {
         return QStringLiteral("[]");
     }
     // Same screen gate as focusColumn, making the "empty for a screen that is
     // not scrolling" half of the XML contract explicit at this call site.
-    // Belt and braces rather than load-bearing today: a screen leaving the
-    // active set has its state released, so the strip below would resolve
-    // empty anyway. Stated here so the contract does not silently depend on
-    // that teardown staying eager.
+    // LOAD-BEARING, not belt and braces: setActiveScreens prunes only the
+    // CURRENT context's key, so a strip built under a sibling context (another
+    // virtual desktop or activity) survives the screen leaving the active set
+    // and resolves again the moment that context comes back (engine_core.cpp).
+    // Without this gate a screen that is no longer scrolling would answer with
+    // that surviving strip.
     if (!m_engine->isActiveOnScreen(screenId)) {
         return QStringLiteral("[]");
     }
@@ -89,14 +103,14 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId)
     for (int i = 0; i < rects.size(); ++i) {
         const QRectF& r = rects.at(i);
         QJsonObject obj;
-        obj[QLatin1String("x")] = r.x();
-        obj[QLatin1String("y")] = r.y();
-        obj[QLatin1String("width")] = r.width();
-        obj[QLatin1String("height")] = r.height();
+        obj[PhosphorZones::ZoneJsonKeys::X] = r.x();
+        obj[PhosphorZones::ZoneJsonKeys::Y] = r.y();
+        obj[PhosphorZones::ZoneJsonKeys::Width] = r.width();
+        obj[PhosphorZones::ZoneJsonKeys::Height] = r.height();
         // 1-based visible tile slot — the scroll zone number (rects arrive
         // in zone-number order per the visibleTiles contract, so the index
         // IS the number).
-        obj[QLatin1String("zoneNumber")] = i + 1;
+        obj[PhosphorZones::ZoneJsonKeys::ZoneNumber] = i + 1;
         arr.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
@@ -104,10 +118,6 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId)
 
 void ScrollingAdaptor::clearEngine()
 {
-    // Reset the dedup gate with the engine: the property read reports {}
-    // from here on, and a stale gate value could suppress the restarted
-    // session's first genuine broadcast.
-    m_lastBroadcastScreens.clear();
     if (m_engine) {
         disconnect(m_engine, &PhosphorScrollEngine::ScrollEngine::scrollingScreensChanged, this, nullptr);
         m_engine = nullptr;

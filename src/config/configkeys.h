@@ -955,6 +955,9 @@ public:
     // last-seen what's-new version. Centralised here so the CLAUDE.md "no
     // inline QStringLiteral for config keys" rule applies uniformly.
     // ═══════════════════════════════════════════════════════════════════════════
+    // Group for the window-geometry entries: the bare "x"/"y"/"width"/
+    // "height" keys collide with any other writer at the file root.
+    P_CONFIG_GROUP(settingsAppWindowGroup, "Window")
     P_CONFIG_KEY(settingsAppWindowXKey, "x")
     P_CONFIG_KEY(settingsAppWindowYKey, "y")
     P_CONFIG_KEY(settingsAppWindowWidthKey, "width")

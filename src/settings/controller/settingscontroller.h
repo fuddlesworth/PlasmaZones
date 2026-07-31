@@ -36,6 +36,10 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PlasmaZones::KZonesImporter {
+struct ImportResult;
+}
+
 namespace PhosphorSurfaceShaders {
 class SurfaceShaderRegistry;
 }
@@ -567,6 +571,17 @@ public:
     /// no strip right now (not scrolling, no windows, daemon down) — the
     /// Monitors page then falls back to a representative static strip.
     Q_INVOKABLE QVariantList getScrollingStripPreview(const QString& screenId) const;
+    /// The staged (not yet applied) assignment for the (screen × desktop ×
+    /// activity) context, as a map of only the fields that are actually staged.
+    ///
+    /// Key ABSENCE is meaningful and spans three files: staging collapses an
+    /// EMPTY id to "not staged" on the way in (StagingService maps it to
+    /// nullopt), so once an entry is staged, an absent "layoutId" or
+    /// "algorithmId" here is the echo of a staged CLEAR of that field. A
+    /// present key always carries a non-empty id, and a producer must never
+    /// insert an empty-string value expecting it to read back as a distinct
+    /// clear state — there is no such state on this map. An absent "mode"
+    /// means neither an explicit mode nor an inferable one was staged.
     Q_INVOKABLE QVariantMap getStagedAssignment(const QString& screenName, int virtualDesktop = 0,
                                                 const QString& activityId = QString()) const;
 
@@ -575,9 +590,12 @@ public:
                                           int mode, const QString& snappingLayoutId, const QString& tilingAlgorithmId);
     /// Remove any staged entry for the (screen × desktop × activity)
     /// assignment context — a true unstage: on Apply the context's
-    /// daemon-side assignment is left untouched. Used by the Monitor State
-    /// page's mode-toggle path to drop a stale opposite-mode pick without
-    /// clearing an explicit assignment the user never touched.
+    /// daemon-side assignment is left untouched.
+    ///
+    /// No QML page calls this today. It is kept as the staging surface's
+    /// inverse: stageAssignmentEntry is the only way in, and a page that stages
+    /// a pick and then wants to take it back (rather than stage the opposite)
+    /// has no other route. Deleting it would leave the surface one-way.
     Q_INVOKABLE void removeStagedAssignment(const QString& screenName, int virtualDesktop, const QString& activityId);
 
     // ── Ordering helpers (staged — flushed to settings on save) ────────────
@@ -632,7 +650,6 @@ public:
     Q_INVOKABLE void clearPerScreenGapOverride(const QString& screenName);
 
     // ── Virtual screen configuration ──────────────────────────────────────────
-    Q_INVOKABLE QStringList getPhysicalScreens() const;
     Q_INVOKABLE QVariantList getVirtualScreenConfig(const QString& physicalScreenId) const;
     Q_INVOKABLE void applyVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens);
     Q_INVOKABLE void removeVirtualScreenConfig(const QString& physicalScreenId);
@@ -875,8 +892,34 @@ private:
     // membership for "rules" (= userRulesDirty), emitting dirtyPagesChanged on a
     // change. Called on every rule-model mutation and on revert/apply completion.
     void reconcileRuleBackedDirty();
-    void refreshVirtualDesktops();
+    /// Re-read the virtual-desktop count and names from the daemon. Returns
+    /// whether BOTH reads succeeded. A failed count read falls the member back to
+    /// 1 so QML stops rendering desktop indices the daemon no longer enumerates.
+    /// That fallback is a display value: any caller that destroys state on the
+    /// strength of the count (the disabled-desktop pruner) must check this return
+    /// first, or a daemon hiccup reads as "every desktop but the first is gone".
+    bool refreshVirtualDesktops();
     void refreshActivities();
+
+    /// Adopt whatever is on disk as the session's state: reload settings and the
+    /// local rule store, re-fetch the daemon's rules into the rules page, refresh
+    /// screens and layouts, and drop every staged edit. Shared by load() (the
+    /// Discard path) and the config-import success path, which need exactly the
+    /// same thing done to the in-memory session. The whole body runs under
+    /// m_loading, and the caller owns the trailing setNeedsSave(false).
+    ///
+    /// @param treatAsyncRevertAsClean whether an animation revert refused because
+    ///        an async discard already owns the snapshot map counts as clean. True
+    ///        on Discard, where that worker IS the restore. False on import, where
+    ///        the snapshots hold pre-import content for files just rewritten.
+    /// @return whether the animation page's snapshots came back clean. False means
+    ///         the adopt only partly landed and needsSave must not be cleared.
+    bool adoptOnDiskState(bool treatAsyncRevertAsClean);
+
+    /// Shared tail of the two KZones import entry points: stash the layout to
+    /// auto-select, schedule the layout refresh, report count and message to QML,
+    /// and return the count both Q_INVOKABLEs hand back.
+    int finishKZonesImport(const KZonesImporter::ImportResult& result);
 
     /// Single Rule store shared by m_settings (disable lists) and the
     /// LayoutRegistry. Declared FIRST so it outlives all borrowers.

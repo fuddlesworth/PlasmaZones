@@ -118,9 +118,24 @@ Item {
     implicitHeight: baseHeight + _verticalChrome
     width: implicitWidth
     height: implicitHeight
+    // A bare Item is exposed with NoRole, which assistive technology skips
+    // along with any Accessible.name a host set on it. Declaring the role makes
+    // the thumbnail an announceable graphic, which is what hosts that name it
+    // are relying on.
+    // Conditional together with the card's Accessible.ignored below: a host
+    // that names the thumbnail gets a named Graphic wrapping an ignored
+    // card; an unnamed host keeps the card's own Pane announcement and this
+    // root stays out of the accessibility tree.
+    Accessible.role: root.Accessible.name !== "" ? Accessible.Graphic : Accessible.NoRole
 
     QFZCommon.LayoutCard {
         anchors.fill: parent
+        // The card carries its own Pane name (the layout's display name). When
+        // the host named the thumbnail itself, that Pane would be announced
+        // instead of the host's name, so step aside for it. Hosts that leave
+        // the thumbnail unnamed (the layout grid) still rely on the card name,
+        // so this must stay conditional.
+        Accessible.ignored: root.Accessible.name !== ""
         layoutData: root._cardData
         isSelected: root.isSelected
         isHovered: root.isHovered

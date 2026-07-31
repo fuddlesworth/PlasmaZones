@@ -339,16 +339,33 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
 QSize ScrollEngine::windowMinimumSize(const QString& rawWindowId) const
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
-    const ScrollState* state = stateForWindow(windowId);
-    if (!state) {
-        return {};
+    if (const ScrollState* state = stateForWindow(windowId)) {
+        if (state->strip().containsWindow(windowId)) {
+            // Verbatim, including one-axis clamps like 900x0: the strip
+            // answers (0, 0) only for a window it does not hold.
+            return state->strip().windowMinimumSize(windowId);
+        }
     }
-    return state->strip().windowMinimumSize(windowId);
+    // A floated (or, via the effect's minimize-as-float model, minimized)
+    // window is not a strip tile, but its clamp is not unknown — the
+    // FloatRestore entry carries it. The cross-engine handoff queries this
+    // whatever state the window is in, and answering 0x0 hands the receiving
+    // engine an unclamped window.
+    const auto it = m_floatRestore.constFind(windowId);
+    // Unknown window: invalid size, the base contract's "no answer".
+    return it != m_floatRestore.constEnd() ? QSize(it->minWidth, it->minHeight) : QSize();
 }
 
 void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth, int minHeight)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
+    // While the window floats there is no tile to write to, and unfloat
+    // re-applies the captured clamp — so without this write-through the
+    // restore puts back whatever the client reported at float time.
+    if (const auto it = m_floatRestore.find(windowId); it != m_floatRestore.end()) {
+        it->minWidth = minWidth;
+        it->minHeight = minHeight;
+    }
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
@@ -441,6 +458,12 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     const QSize minSize = state->strip().windowMinimumSize(windowId);
     restore.minWidth = minSize.width();
     restore.minHeight = minSize.height();
+    // The height intent dies with the tile too, and the minimize path rides
+    // this same round trip — without it a minimize/restore silently reset a
+    // user-set window height to Auto.
+    if (const int tileIdx = sourceColumn.indexOfWindow(windowId); tileIdx >= 0) {
+        restore.height = sourceColumn.tiles.at(tileIdx).height;
+    }
     if (sourceColumn.tiles.size() > 1) {
         restore.tileIndex = sourceColumn.indexOfWindow(windowId);
         // Anchor on a surviving sibling so the stack can be re-located even
@@ -523,6 +546,9 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         if (restore.minWidth > 0 || restore.minHeight > 0) {
             state->strip().setWindowMinimumSize(windowId, restore.minWidth, restore.minHeight);
         }
+        // Same for the height intent: every insert path builds a default
+        // (Auto) tile, so the user's height only survives if it is re-applied.
+        state->strip().setWindowHeightIntent(windowId, restore.height);
         state->strip().focusWindow(windowId, params);
     }
     m_scrollFloatedWindows.remove(windowId);

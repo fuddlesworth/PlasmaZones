@@ -101,6 +101,10 @@ void TestScrollEnginePersistence::serializedStripRestoreSurvivesIdDrift()
     engine1->windowFocused(QStringLiteral("app|u1"), QStringLiteral("S1"));
     engine1->consumeWindowIntoColumn(QStringLiteral("S1")); // u2 joins u1's stack
     engine1->toggleColumnTabbed(QStringLiteral("S1"));
+    // Show the SECOND tab before focusing away: the shown tab is per-column
+    // persisted state (StashedColumn::activeWindowId) and must survive the
+    // round trip independently of the strip-level focus.
+    engine1->windowFocused(QStringLiteral("app|u2"), QStringLiteral("S1"));
     engine1->windowFocused(QStringLiteral("other|u3"), QStringLiteral("S1"));
     const QJsonObject blob = engine1->serializeStripState();
     QVERIFY(!blob.isEmpty());
@@ -121,6 +125,10 @@ void TestScrollEnginePersistence::serializedStripRestoreSurvivesIdDrift()
     QVERIFY(state);
     QCOMPARE(state->strip().columns().at(0).display, ColumnDisplay::Tabbed);
     QCOMPARE(state->strip().columns().at(0).tiles.size(), 2);
+    // The shown TAB followed its claimed successor too: u2 was the visible
+    // tab at serialize time, so n2 must be the visible tab after restore.
+    const Column& tabbed = state->strip().columns().at(0);
+    QCOMPARE(tabbed.tiles.at(tabbed.activeTileIdx).windowId, QStringLiteral("app|n2"));
     // The stashed focus (other|u3) followed its claimed successor.
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("other|n3"));
 }

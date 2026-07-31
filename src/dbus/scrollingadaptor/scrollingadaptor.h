@@ -63,16 +63,18 @@ public Q_SLOTS:
      * @brief The strip as it currently looks on a screen, for previews
      *
      * Returns a JSON array of the visible tile rects normalized to the
-     * work area, one object per tile carrying {x, y, width, height} (0.0
-     * to 1.0 per axis, hidden tabs and parked columns excluded) plus
-     * zoneNumber, the 1-based visible column slot the rect occupies. The
-     * settings app renders it where the other modes show a layout thumbnail.
-     * Empty array when the screen has no strip or is not scrolling.
+     * work area, ONE OBJECT PER TILE carrying {x, y, width, height} (0.0
+     * to 1.0 per axis; hidden tabs, minimized tiles and parked columns
+     * excluded, partially visible columns clipped rather than dropped)
+     * plus zoneNumber, the 1-based visible tile slot the rect occupies in
+     * strip order. The settings app renders it where the other modes show
+     * a layout thumbnail. Empty array when the screen has no strip or is
+     * not scrolling.
      *
      * @param screenId Screen whose strip to describe
      * @return JSON array string
      */
-    QString visibleStripJson(const QString& screenId);
+    QString visibleStripJson(const QString& screenId) const;
 
 Q_SIGNALS:
     /**

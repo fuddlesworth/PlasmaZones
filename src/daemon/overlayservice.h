@@ -195,8 +195,10 @@ public:
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
 
     /// Scroll-mode zone model for the navigation OSD: returns one entry per
-    /// strip window ({id: windowId, zoneNumber: 1-based strip column
-    /// position}) for a scrolling screen, empty otherwise. Daemon-injected
+    /// VISIBLE strip tile ({id: windowId, zoneNumber: the tile's 1-based slot
+    /// in strip order}) for a scrolling screen, empty otherwise. A window with
+    /// no visible tile carries no entry at all, so the list is not a census of
+    /// the strip's windows. Daemon-injected
     /// (the overlay stays engine-agnostic); when it answers non-empty, the
     /// navigation OSD uses it in place of the layout's zone list so the
     /// "Zone %1" copy resolves and no snap layout is required on a

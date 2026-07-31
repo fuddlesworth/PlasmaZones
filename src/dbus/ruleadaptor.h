@@ -83,6 +83,16 @@ public Q_SLOTS:
     /// once from the strip.
     void resetManagedDefaults();
 
+    /// Re-read rules.json from disk.
+    ///
+    /// The daemon's store is borrowed by whoever owns it, and reloadSettings()
+    /// deliberately does not reload a borrowed store. An out-of-process rewrite of
+    /// rules.json — the settings app's config import is the one that matters —
+    /// therefore leaves this store serving the pre-write set until something asks
+    /// for this. load() is idempotent and emits rulesChanged only when the on-disk
+    /// content actually differs.
+    void reloadRules();
+
 Q_SIGNALS:
     /// Emitted whenever the store's rule set changes. @p persisted forwards
     /// the upstream contract: true means the change is on disk, false means

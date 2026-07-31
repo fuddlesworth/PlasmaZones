@@ -122,6 +122,11 @@ public:
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
+    /// The window's client-reported minimum, from its strip tile, falling
+    /// back to the FloatRestore entry while it is floated (or minimized —
+    /// the effect reports minimize as a float). The fallback matters at the
+    /// cross-engine handoff, which queries this whatever state the window
+    /// is in: answering 0x0 hands the receiving engine an unclamped window.
     QSize windowMinimumSize(const QString& windowId) const override;
     void onWindowResized(const QString& rawWindowId, const QRect& oldFrame, const QRect& newFrame,
                          const QString& screenId) override;
@@ -195,12 +200,23 @@ public:
     QRect lastManagedRect(const QString& rawWindowId) const override;
     QStringList managedWindowOrder(const QString& screenId) const override;
     /// One visible tile of a strip: the unit of the scroll "zone number"
-    /// space. Zone number N is visibleTiles().at(N - 1) — sequential in
-    /// strip order (columns left to right, tiles top to bottom), so every
-    /// on-screen window carries its own distinct number. Previews label
-    /// this space and the Snap-to-Zone digits target it through
-    /// moveFocusedToPosition; both MUST derive from visibleTiles so they
-    /// can never disagree.
+    /// space. Zone number N is visibleTiles(screenId).at(N - 1) —
+    /// sequential in strip order (columns left to right, tiles top to
+    /// bottom). That is the ADDRESS space, and it is single-sourced:
+    /// previews label it and the Snap-to-Zone digits resolve against it
+    /// through moveFocusedToPosition, both from this one walk, so they
+    /// always name the same tile.
+    ///
+    /// The ACTION a digit performs is COARSER than the address it resolves.
+    /// A digit naming a stack-mate of the operated window reorders that
+    /// window inside its column, but a digit naming a tile in ANOTHER
+    /// column moves the whole active COLUMN to that column's strip
+    /// position — the deliberate pre-tile-numbering behaviour, kept because
+    /// the column is the strip's unit of travel. The consequence is real
+    /// and is not a bug: stack-mates travel along, and after a cross-column
+    /// move the operated window's own number may differ from the digit
+    /// pressed (any stacked column shifts the walk, and Always/OnOverflow
+    /// centering re-derives the visible set around the new active column).
     struct VisibleTile
     {
         QString windowId;
@@ -210,14 +226,36 @@ public:
         QRect rect;
     };
     /// The visible tiles of @p screenId's current-context strip in zone-
-    /// number order (hidden tabs, minimized tiles and parked columns
-    /// excluded; partially-visible columns clipped, not dropped). Empty
-    /// when the screen has no state or no visible tile.
+    /// number order. Not every on-screen window is here: hidden tabs of a
+    /// tabbed column, minimized tiles, parked columns, and tiles whose
+    /// intersection with the work area is EMPTY (a stack whose min heights
+    /// overflow the work area resolves its tail below the bottom edge) all
+    /// carry no number and cannot be reached by a digit. Partially-visible
+    /// columns are CLIPPED, not dropped, with no minimum-visibility
+    /// threshold: an arbitrarily thin sliver still carries its own number,
+    /// because the cut-off edge is what tells the viewer the strip
+    /// continues off-screen. Empty when the screen has no state, no visible
+    /// tile, or no valid work area (unknown/removed screen, or outer gaps
+    /// that swallowed it).
+    ///
+    /// PRECONDITION, unlike the navigation verbs: this and its siblings do
+    /// NO resolveOperationScreen fallback. They answer for the screen
+    /// NAMED, so a caller passing a screen the engine does not manage gets
+    /// an empty result rather than the active screen's strip — pass the
+    /// same screen the verb will act on or the two halves of the
+    /// address/action pair can describe different outputs.
+    ///
+    /// Transient staleness: the walk relayouts WITHOUT updateViewForFocus,
+    /// so between a work-area change (resolution, panels, outer gaps) and
+    /// the next applyLayout it resolves against the pre-change view anchor.
+    /// The window is the daemon's ~400ms geometry debounce plus the queued
+    /// hop; it is self-healing (the next apply re-anchors) and reaches the
+    /// settings poll, the OSD preview and a digit press landing inside it.
     QVector<VisibleTile> visibleTiles(const QString& screenId) const;
-    /// The rects of visibleTiles. The daemon's OSD preview seam: where a
-    /// layout switch shows the layout's zones, a scrolling screen shows
-    /// what the strip actually looks like right now. Zone number = rect
-    /// index + 1.
+    /// The rects of visibleTiles — the plain absolute-pixel projection.
+    /// Zone number = rect index + 1. The daemon's OSD preview seam is the
+    /// normalized twin below; this form remains for callers that want
+    /// screen coordinates.
     QVector<QRect> visibleTileRects(const QString& screenId) const;
     /// @p windowId's 1-based visible tile slot (zone number) on
     /// @p screenId's current strip, or -1 when it is off-screen, a hidden
@@ -225,7 +263,10 @@ public:
     /// copy).
     int visibleTileNumberForWindow(const QString& screenId, const QString& windowId) const;
     /// visibleTileRects normalized to the work area (0.0–1.0 per axis) —
-    /// the shape zone previews consume. Same emptiness contract.
+    /// the shape zone previews consume, and the daemon's OSD preview seam:
+    /// where a layout switch shows the layout's zones, a scrolling screen
+    /// shows what the strip actually looks like right now. Same emptiness
+    /// contract.
     QVector<QRectF> visibleTileRectsRelative(const QString& screenId) const;
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
@@ -289,8 +330,11 @@ public:
     /// plus the un-consumed mode-round-trip stash entries, keyed
     /// "screenId|desktop|activity". Live wins on a key collision. The
     /// daemon persists this blob through the WTA KConfig layer so a login
-    /// restore rebuilds tabbed/stacked columns, focus, and the view anchor
-    /// instead of one default column per window. (engine_serialize.cpp)
+    /// restore rebuilds stacked columns (with each column's active tile,
+    /// i.e. a tabbed column's shown tab), the strip focus, and the view
+    /// anchor instead of one default column per window. Per-tile height
+    /// intents ride along; per-window minimum sizes do not — the client
+    /// re-reports those. (engine_serialize.cpp)
     QJsonObject serializeStripState() const;
     /// Load a serializeStripState blob into the stash so the EXISTING
     /// arrival-restore path (restoreFromStripStash) rebuilds each strip as
@@ -470,6 +514,11 @@ private:
     void sweepStripStash(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale);
     // engine_apply.cpp
     ScrollLayoutParams layoutParamsForScreen(const QString& screenId) const;
+    /// visibleTiles' real body, taking params the caller already resolved.
+    /// The public overload is the thin wrapper; callers that hold params
+    /// (the digit path, the normalized-rect walk) use this instead of
+    /// paying a second ScreenManager query plus context-gap-provider call.
+    QVector<VisibleTile> visibleTiles(const QString& screenId, const ScrollLayoutParams& params) const;
     /// Relayout the strip and emit the geometry batch for @p screenId's
     /// current-context state. @p focusWindowAfter activates the strip's
     /// active window after the batch (engine-driven navigation only).
@@ -488,9 +537,12 @@ private:
     /// @p swap requests the two-way exchange: a scroll→scroll crossing
     /// trades slots with the target's entry window, a different-mode target
     /// goes through the daemon's crossModeSwapRequested orchestration.
-    /// Returns true when a crossing was initiated.
+    /// Returns true when a crossing was initiated, and writes the LANDING
+    /// screen to @p landingScreen — the crossing's feedback is announced
+    /// there, matching the snap engine's destination convention (announcing
+    /// on the source paints the OSD on the output the window just left).
     bool moveActiveWindowAcrossBoundary(ScrollState* state, const QString& screenId, const QString& direction,
-                                        bool swap);
+                                        bool swap, QString* landingScreen = nullptr);
 
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
@@ -548,8 +600,17 @@ private:
         /// Client-reported minimum size at float time — the tile that held
         /// it dies with takeWindow, and dropping it would strip the
         /// relayout clamps until the compositor happens to re-report.
+        /// Kept CURRENT while the window floats: windowMinSizeUpdated has no
+        /// tile to write to then, and without the write-through the unfloat
+        /// re-applies whatever the client reported at float time.
         int minWidth = 0;
         int minHeight = 0;
+        /// The tile's height INTENT at float time. Same reasoning as the
+        /// width/display above: without it a float round trip (which the
+        /// effect's minimize machinery also drives) silently reset a
+        /// user-set window height to Auto, while a mode round trip — which
+        /// stashes the intent — preserved it.
+        WindowHeight height;
     };
     QHash<QString, FloatRestore> m_floatRestore;
     /// Windows floated BY scroll mode (mode-transition marker, ephemeral).
@@ -602,6 +663,11 @@ private:
         QVector<StashedTile> tiles;
         ColumnWidth width;
         ColumnDisplay display = ColumnDisplay::Normal;
+        /// The column's ACTIVE tile, by window id — for a Tabbed column
+        /// that is the shown tab. Carried because every insert makes the
+        /// arriving tile its column's active one, so a restore without it
+        /// shows whichever sibling happened to announce last.
+        QString activeWindowId;
     };
     /// One stashed strip: the structural columns plus the focus/view pair
     /// whose loss made every mode round trip re-anchor on an arbitrary

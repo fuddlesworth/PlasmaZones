@@ -75,7 +75,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="resetManagedDefaults">
-            <annotation name="org.gtk.GDBus.DocString" value="Reset the three managed baseline appearance/gap rules (Default borders, Default title bars, Default gaps) to their factory definitions, preserving every user-authored rule. Reloads the store from disk first, then persists the merged set, so rulesChanged may fire up to twice (reload + write). Backs the settings app's global Restore Defaults for the rule-backed appearance/gap surface."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Global Restore Defaults hook for the rule store. Window border, title bar and gap defaults live in the config store now, so this creates nothing. It reloads the store from disk (to pick up an out-of-process write such as the settings app's own reset) and then strips any stale managed appearance baseline rules an older build left behind, preserving every user-authored rule. rulesChanged may fire up to twice, once for the reload and once for the strip."/>
+        </method>
+        <method name="reloadRules">
+            <annotation name="org.gtk.GDBus.DocString" value="Re-read rules.json from disk. The daemon's rule store is borrowed, and reloadSettings does not reload a borrowed store, so an out-of-process rewrite of rules.json (a settings import, for one) leaves the daemon serving the old set until this is called. Idempotent, and rulesChanged is emitted only when the on-disk content differs from what the store already holds."/>
         </method>
         <signal name="rulesChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted whenever the store's rule set changes (add, update, remove, enable, priority, or full replace)."/>

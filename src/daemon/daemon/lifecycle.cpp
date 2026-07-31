@@ -392,6 +392,17 @@ void Daemon::stop()
     // teardown severs explicitly rather than relying on an invariant.
     m_bridgeWatchdogTimer.stop();
 
+    // The per-screen scrolling-OSD settle timers (osd.cpp keys them by
+    // objectName) accumulate one per screen id ever seen; sweep them here so
+    // a stop() leaves no pending strip-preview fire and no per-screen
+    // residue.
+    const auto settleTimers =
+        findChildren<QTimer*>(QRegularExpression(QStringLiteral("^scrollingOsdSettle:")), Qt::FindDirectChildrenOnly);
+    for (QTimer* settle : settleTimers) {
+        settle->stop();
+        settle->deleteLater();
+    }
+
     // Null the drag adaptor's borrowed pointers ABOVE the m_running gate, for
     // the same reason as the provider lambdas and QML statics below: both are
     // wired from init() (init_adaptors.cpp / init_engines.cpp), which runs

@@ -50,6 +50,10 @@ inline QLatin1String kDisplay()
 {
     return QLatin1String("display");
 }
+inline QLatin1String kActiveWindow()
+{
+    return QLatin1String("activeWindow");
+}
 inline QLatin1String kWindowId()
 {
     return QLatin1String("windowId");
@@ -196,6 +200,7 @@ QJsonObject ScrollEngine::serializeStripState() const
             c.insert(kTiles(), tiles);
             c.insert(kWidth(), widthToJson(col.width));
             c.insert(kDisplay(), static_cast<int>(col.display));
+            c.insert(kActiveWindow(), col.activeWindowId);
             columns.append(c);
         }
         QJsonObject obj;
@@ -331,6 +336,19 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
                 }
             }
             if (!col.tiles.isEmpty()) {
+                // The column's active tile (a tabbed column's shown tab) can
+                // be dropped above by the per-tile lease or the cross-key
+                // duplicate filter. A dangling id would point the tab
+                // re-assert at a window this key never stages, so clear it
+                // and let the arrival order decide, as it did before.
+                col.activeWindowId = colObj.value(kActiveWindow()).toString();
+                bool activeStaged = false;
+                for (const StashedTile& t : std::as_const(col.tiles)) {
+                    activeStaged = activeStaged || t.windowId == col.activeWindowId;
+                }
+                if (!activeStaged) {
+                    col.activeWindowId.clear();
+                }
                 stash.columns.append(col);
             }
         }

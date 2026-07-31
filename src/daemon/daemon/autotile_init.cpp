@@ -440,8 +440,13 @@ void Daemon::initializeAutotile()
                             }
                             // The toggled screen's OWN desktop, not the global
                             // current one: under per-output virtual desktops
-                            // (#648) they differ, and every sibling daemon site
-                            // passes the per-screen value.
+                            // (#648) the two differ, and this path knows which
+                            // screen was toggled. The KCM-apply sibling
+                            // (init_engines.cpp) still passes the global
+                            // current desktop because one call covers several
+                            // screens at once and the parameter takes a single
+                            // value; the per-window filter inside the service
+                            // is what keeps that case correct.
                             m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens,
                                                                                                   {screenId}, desktop);
                             armResnapOsdSuppression(1);

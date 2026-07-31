@@ -50,6 +50,64 @@ void showKdeTextOsd(const QString& icon, const QString& text)
     QDBusConnection::sessionBus().asyncCall(msg);
 }
 
+/// Push the scrolling strip preview card for @p screenId from an ALREADY
+/// RESOLVED tile-rect list, so the caller that had to probe the strip to
+/// decide whether to render at all does not pay for a second relayout and
+/// cannot render a different snapshot than the one it probed.
+///
+/// @p tileRects are work-area-relative rects in zone-number order (the
+/// visibleTiles contract: slot N is entry N - 1). Empty means the strip has
+/// no visible tile, and the card falls back to the representative sketch.
+void pushScrollingStripOsd(OverlayService* overlay, const QString& screenId, const QVector<QRectF>& tileRects)
+{
+    QVector<QRectF> rects = tileRects;
+    // The sketch stands for "a strip, currently with nothing in it", so its
+    // shapes are not tiles and carry no zone numbers: nothing on screen is
+    // addressable, and a labelled 1/2/3 would offer digit targets that do not
+    // exist. A real strip labels every tile.
+    const bool isSketch = rects.isEmpty();
+    if (isSketch) {
+        // Representative endless strip (kept in step with MonitorStatePage's
+        // scrollingFallbackZones): clipped columns at both edges read as a
+        // window onto a longer strip.
+        rects = {QRectF(0.0, 0.0, 0.1, 1.0), QRectF(0.115, 0.0, 0.5, 1.0), QRectF(0.63, 0.0, 0.37, 1.0)};
+    }
+    QVariantList zones;
+    zones.reserve(rects.size());
+    for (int i = 0; i < rects.size(); ++i) {
+        const QRectF& r = rects.at(i);
+        QVariantMap relGeo;
+        relGeo[QLatin1String("x")] = r.x();
+        relGeo[QLatin1String("y")] = r.y();
+        relGeo[QLatin1String("width")] = r.width();
+        relGeo[QLatin1String("height")] = r.height();
+        QVariantMap zoneMap;
+        // The scroll zone number is the tile's 1-based visible slot in strip
+        // order (the visibleTiles contract: the walk's index IS the number)
+        // — the same sequential space the Snap-to-Zone digits target, so the
+        // card labels exactly what the digits do.
+        zoneMap[QLatin1String("zoneNumber")] = i + 1;
+        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
+        // Namespaced, never a bare index, matching the settings app's twin
+        // (settingscontroller_session.cpp): these are render-only synthetic
+        // zones with no persisted identity, and a bare "0"/"1"/"2" is
+        // indistinguishable from a real zone id to any consumer that starts
+        // keying on zone.id. CLAUDE.md: zone IDs everywhere, never indices.
+        zoneMap[QLatin1String("id")] = QStringLiteral("strip:%1:%2").arg(screenId).arg(i);
+        zoneMap[QLatin1String("name")] = QString();
+        zoneMap[QLatin1String("useCustomColors")] = false;
+        zones.append(zoneMap);
+    }
+    // Autotile category: the renderer treats it as "generated, not
+    // editable", which is exactly what a live strip snapshot is.
+    overlay->showLayoutOsd(QString(PhosphorLayout::LayoutId::ScrollingId),
+                           PhosphorI18n::tr("Scrolling", "tiling mode name"), zones,
+                           static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId, false, false,
+                           isSketch ? QStringLiteral("none") : QStringLiteral("all"), 1);
+    qCInfo(lcDaemon) << "Showing scrolling-mode strip preview OSD: screen=" << screenId << "tiles=" << rects.size()
+                     << "sketch=" << isSketch;
+}
+
 } // namespace
 
 void Daemon::showOverlay()
@@ -299,20 +357,49 @@ void Daemon::showScrollingModeOsd(const QString& screenId)
     }
     if (style == OsdStyle::Preview && m_overlayService) {
         const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
-        if (scroll && !scroll->visibleTileRects(screenId).isEmpty()) {
-            showScrollingStripPreviewOsd(screenId);
+        // ONE strip resolve, threaded into the render: probing with a
+        // different accessor than the renderer used meant two relayouts of
+        // the same strip and two chances to disagree about whether it was
+        // empty.
+        const QVector<QRectF> rects = scroll ? scroll->visibleTileRectsRelative(screenId) : QVector<QRectF>();
+        if (!rects.isEmpty()) {
+            pushScrollingStripOsd(m_overlayService.get(), screenId, rects);
             return;
         }
         // A mode toggle announces BEFORE the effect's re-announce batch
         // lands, so at OSD time the strip is still empty. Defer one beat
         // so the adoption settles and the card shows the user's actual
         // columns; a strip that is still empty then shows the sketch.
-        QTimer::singleShot(kScrollingOsdAdoptSettleMs, this, [this, screenId]() {
-            if (shouldSuppressOsd()) {
-                return;
-            }
-            showScrollingStripPreviewOsd(screenId);
-        });
+        //
+        // One restartable timer per screen rather than a fresh singleShot per
+        // call: repeated toggles inside the settle window used to queue a
+        // card each, so the user got a burst of identical OSDs. Restarting
+        // coalesces them into the last request's beat.
+        //
+        // Everything the immediate path gated on is re-checked on dispatch,
+        // because the settle window is long enough for the user to leave the
+        // mode or change the OSD style in it — and this is the only OSD entry
+        // point whose decision and its effect are separated in time.
+        const QString timerName = QStringLiteral("scrollingOsdSettle:") + screenId;
+        auto* settle = findChild<QTimer*>(timerName, Qt::FindDirectChildrenOnly);
+        if (!settle) {
+            settle = new QTimer(this);
+            settle->setObjectName(timerName);
+            settle->setSingleShot(true);
+            connect(settle, &QTimer::timeout, this, [this, screenId]() {
+                if (shouldSuppressOsd() || !m_overlayService) {
+                    return;
+                }
+                if (currentModeFor(screenId) != PhosphorZones::AssignmentEntry::Scrolling) {
+                    return;
+                }
+                if ((m_settings ? m_settings->osdStyle() : OsdStyle::Preview) != OsdStyle::Preview) {
+                    return;
+                }
+                showScrollingStripPreviewOsd(screenId);
+            });
+        }
+        settle->start(kScrollingOsdAdoptSettleMs);
         return;
     }
     showKdeTextOsd(QStringLiteral("plasmazones"), PhosphorI18n::tr("Scrolling", "tiling mode name"));
@@ -325,41 +412,8 @@ void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
         return;
     }
     const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
-    QVector<QRectF> rects = scroll ? scroll->visibleTileRectsRelative(screenId) : QVector<QRectF>();
-    if (rects.isEmpty()) {
-        // Representative endless strip (kept in step with MonitorStatePage's
-        // scrollingFallbackZones): clipped columns at both edges read as a
-        // window onto a longer strip.
-        rects = {QRectF(0.0, 0.0, 0.1, 1.0), QRectF(0.115, 0.0, 0.5, 1.0), QRectF(0.63, 0.0, 0.37, 1.0)};
-    }
-    QVariantList zones;
-    zones.reserve(rects.size());
-    for (int i = 0; i < rects.size(); ++i) {
-        const QRectF& r = rects.at(i);
-        QVariantMap relGeo;
-        relGeo[QLatin1String("x")] = r.x();
-        relGeo[QLatin1String("y")] = r.y();
-        relGeo[QLatin1String("width")] = r.width();
-        relGeo[QLatin1String("height")] = r.height();
-        QVariantMap zoneMap;
-        // The scroll zone number is the tile's 1-based visible slot in
-        // strip order (visibleTileRects' contract: rects arrive in
-        // zone-number order) — the same sequential space the Snap-to-Zone
-        // digits target, so the card labels exactly what the digits do.
-        zoneMap[QLatin1String("zoneNumber")] = i + 1;
-        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
-        zoneMap[QLatin1String("id")] = QString::number(i);
-        zoneMap[QLatin1String("name")] = QString();
-        zoneMap[QLatin1String("useCustomColors")] = false;
-        zones.append(zoneMap);
-    }
-    // Autotile category: the renderer treats it as "generated, not
-    // editable", which is exactly what a live strip snapshot is.
-    m_overlayService->showLayoutOsd(QString(PhosphorLayout::LayoutId::ScrollingId),
-                                    PhosphorI18n::tr("Scrolling", "tiling mode name"), zones,
-                                    static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId, false,
-                                    false, QStringLiteral("all"), 1);
-    qCInfo(lcDaemon) << "Showing scrolling-mode strip preview OSD: screen=" << screenId << "tiles=" << rects.size();
+    pushScrollingStripOsd(m_overlayService.get(), screenId,
+                          scroll ? scroll->visibleTileRectsRelative(screenId) : QVector<QRectF>());
 }
 
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)

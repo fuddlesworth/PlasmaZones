@@ -410,10 +410,12 @@ void RuleController::revert()
     // dropping the staged edits.
     //
     // Tag this fetch explicitly as fromRevert=true so the reply handler
-    // emits revertFinished. SettingsController::load() listens once so
-    // it can re-add the "rules" entry to the dirty-pages set on
-    // a failed revert (its surrounding setNeedsSave(false) blanket-clears
-    // every page unconditionally). The prior counter-based tagging was
+    // emits revertFinished. SettingsController connects a PERMANENT listener
+    // to it (settingscontroller.cpp, next to the rulesLoaded and applyResult
+    // ones) which re-derives the page's dirty state from userRulesDirty, so a
+    // failed revert re-adds the "rules" entry that the surrounding
+    // setNeedsSave(false) blanket-clear had dropped, and a successful one
+    // leaves the page clean. The prior counter-based tagging was
     // spoofable by a concurrent daemon broadcast: a reload() arriving
     // mid-revert would read m_pendingRevertFetches > 0 and tag itself
     // as fromRevert, emitting a spurious revertFinished(true).

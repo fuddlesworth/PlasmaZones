@@ -6,10 +6,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <interface name="org.plasmazones.Scrolling">
-        <annotation name="org.gtk.GDBus.DocString" value="Scroll-engine-specific surface. Window lifecycle and tile-request traffic for scrolling screens rides org.plasmazones.Tiling (the shared tiling-family pipeline, which routes per screen); this interface carries only the scrolling screen set and future columnar operations."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Scroll-engine-specific surface. Window lifecycle and tile-request traffic for scrolling screens rides org.plasmazones.Tiling (the shared tiling-family pipeline, which routes per screen). This interface carries the scrolling screen set, the strip snapshot the settings app renders as its preview surface, and future columnar operations."/>
 
         <property name="scrollingScreens" type="as" access="read">
-            <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine. The KWin effect uses it to stamp Mode 'scrolling' in window rule queries."/>
+            <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine. The KWin effect uses it to stamp Mode 'scrolling' in window rule queries. Changes are announced on the scrollingScreensChanged signal below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
         </property>
 
         <method name="focusColumn">
@@ -23,7 +23,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="visibleStripJson">
-            <annotation name="org.gtk.GDBus.DocString" value="The strip as it currently looks on a screen: a JSON array of visible tile rects normalized to the work area ({x, y, width, height}, 0.0 to 1.0 per axis) plus zoneNumber, the tile's 1-based visible slot in strip order (the scroll zone number the Snap-to-Zone digits target). The settings app renders it where the other modes show a layout thumbnail. Empty array when the screen has no strip or is not scrolling."/>
+            <annotation name="org.gtk.GDBus.DocString" value="The strip as it currently looks on a screen: a JSON array of visible tile rects normalized to the work area ({x, y, width, height}, 0.0 to 1.0 per axis) plus zoneNumber, the tile's 1-based visible slot in strip order. Only what is on screen is listed. Hidden tabs of a tabbed column, minimized tiles and parked columns are left out, while a partially visible column is clipped to the work area rather than dropped. zoneNumber is the scroll zone number, and the Snap-to-Zone shortcuts cover 1 to 9, so a strip showing more than nine tiles numbers them all but only the first nine have a digit that reaches them. The settings app renders the array where the other modes show a layout thumbnail. Empty array when the screen has no strip or is not scrolling."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip to describe."/>
             </arg>

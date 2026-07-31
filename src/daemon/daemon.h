@@ -15,6 +15,7 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QHash>
+#include <QPair>
 #include <QSet>
 #include <QThreadPool>
 #include <chrono>
@@ -1171,8 +1172,13 @@ private:
     // placementChanged stream only re-resolves the per-screen tiling algorithm
     // when the count actually changes (a Field::TiledWindowCount rule keys on
     // it). Without this gate every retile (drag, resize) would re-walk the
-    // assignment cascade.
-    QHash<QString, int> m_lastTiledCountByScreen;
+    // assignment cascade. The value carries the ENGINE that recorded it: both
+    // the autotile and scrolling gates write here, and after a mode flip the
+    // incoming engine's first count must not compare against the outgoing
+    // engine's cache (an equal count would swallow the re-resolve). The key
+    // stays the bare screenId so the physical-id prune in start.cpp keeps
+    // matching.
+    QHash<QString, QPair<const void*, int>> m_lastTiledCountByScreen;
 
     // Snap-float restore entries collected by handleEngineWindowsReleased
     // (either tiling engine's windowsReleased). Cleared once per

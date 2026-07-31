@@ -95,12 +95,12 @@ bool Daemon::registerDBusService()
     qCInfo(lcDaemon) << "D-Bus service registered service=" << PhosphorProtocol::Service::Name
                      << "path=" << PhosphorProtocol::Service::ObjectPath;
 
-    // Connect overlay adaptor signals to daemon overlay control
-    // Disconnect-first on both: the two adaptors are created in
-    // initCoreAdaptors and survive a stop() -> init() cycle, so bare
-    // connects here would stack duplicate show/hide + updateGeometries
-    // handlers per cycle (same rationale as the rulesChanged sweep).
-    disconnect(m_overlayAdaptor, &OverlayAdaptor::overlayVisibilityChanged, this, nullptr);
+    // Connect overlay adaptor signals to daemon overlay control.
+    // No disconnect-first on either: initCoreAdaptors' delete preamble
+    // (init_adaptors.cpp) tears down the WHOLE previous adaptor set,
+    // m_overlayAdaptor and m_zoneDetectionAdaptor included, and re-news both
+    // before this function runs — so a stop() -> init() cycle hands us fresh
+    // objects with no connections to sweep.
     connect(m_overlayAdaptor, &OverlayAdaptor::overlayVisibilityChanged, this, [this](bool visible) {
         if (visible) {
             showOverlay();
@@ -110,7 +110,6 @@ bool Daemon::registerDBusService()
     });
 
     // Connect zone detection to overlay updates
-    disconnect(m_zoneDetectionAdaptor, &ZoneDetectionAdaptor::zoneDetected, this, nullptr);
     connect(m_zoneDetectionAdaptor, &ZoneDetectionAdaptor::zoneDetected, this,
             [this](const QString& zoneId, const PhosphorProtocol::ZoneGeometryRect& geometry) {
                 Q_UNUSED(zoneId)

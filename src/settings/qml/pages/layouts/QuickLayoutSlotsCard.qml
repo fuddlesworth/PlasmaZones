@@ -99,7 +99,11 @@ SettingsCard {
                         }
 
                         Label {
-                            text: slotDelegate.shortcutText !== "" ? slotDelegate.shortcutText : i18n("No shortcut assigned")
+                            // Named as the DEFAULT binding: the controller
+                            // returns the built-in Meta+Alt+N and cannot query
+                            // KGlobalAccel, so after a rebind the plain text
+                            // would state a shortcut the user no longer has.
+                            text: slotDelegate.shortcutText !== "" ? i18nc("%1 is a keyboard shortcut such as Meta+Alt+1", "Default shortcut %1", slotDelegate.shortcutText) : i18n("No shortcut assigned")
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                             font: Kirigami.Theme.smallFont

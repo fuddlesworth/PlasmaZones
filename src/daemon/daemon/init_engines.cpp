@@ -173,25 +173,40 @@ void Daemon::initEnginesAndWiring()
     // Scroll "zone numbers" for the navigation OSD: a strip window's zone
     // number is its 1-based VISIBLE tile slot — the same sequential
     // strip-order number the previews label and the Snap-to-Zone digits
-    // drive through moveFocusedToPosition. Off-screen windows get no
-    // entry, so the OSD falls back to direction-only copy for them. This
-    // keeps the "Zone %1" copy meaningful on scrolling screens, which
-    // have no zone layout of their own.
+    // drive through moveFocusedToPosition. A window with no visible tile
+    // gets no entry, which covers off-screen columns, the hidden tabs of a
+    // tabbed column, parked columns, and any tile whose work-area
+    // intersection comes out empty; the OSD falls back to direction-only
+    // copy for those. This keeps the "Zone %1" copy meaningful on scrolling
+    // screens, which have no zone layout of their own, for the arms that
+    // actually render zone copy — the focus, cycle and digit-success arms,
+    // each of which hands the OSD a landed window id. The move and swap
+    // arms pass an empty targetZoneId and render direction copy regardless
+    // of what this provider returns.
+    //
+    // ONE visibleTiles() walk, taken in zone-number order so the index IS
+    // the number: the previews, the digits and this list therefore derive
+    // from the same walk and cannot disagree. The ids are the engine's
+    // CANONICAL window ids, so any OSD lookup against this list must pass a
+    // canonical id too — a raw effect-side id would silently miss and drop
+    // the OSD back to direction-only copy.
+    //
+    // m_overlayService is constructed in the Daemon constructor and never
+    // reset, so it is non-null for the daemon's whole lifetime. Stated once
+    // here for this file: that is why this deref and the later ones in
+    // initEnginesAndWiring carry no null guard.
     m_overlayService->setScrollZonesProvider([this](const QString& screenId) -> QVariantList {
         const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
         if (!scroll || !scroll->isActiveOnScreen(screenId)) {
             return {};
         }
+        const QVector<PhosphorScrollEngine::ScrollEngine::VisibleTile> tiles = scroll->visibleTiles(screenId);
         QVariantList zones;
-        const QStringList order = scroll->managedWindowOrder(screenId);
-        for (const QString& windowId : order) {
-            const int slot = scroll->visibleTileNumberForWindow(screenId, windowId);
-            if (slot < 1) {
-                continue;
-            }
+        zones.reserve(tiles.size());
+        for (int i = 0; i < tiles.size(); ++i) {
             QVariantMap zone;
-            zone[QStringLiteral("id")] = windowId;
-            zone[QStringLiteral("zoneNumber")] = slot;
+            zone[QLatin1String("id")] = tiles.at(i).windowId;
+            zone[QLatin1String("zoneNumber")] = i + 1;
             zones.append(zone);
         }
         return zones;
@@ -235,9 +250,7 @@ void Daemon::initEnginesAndWiring()
     m_settingsGateAdapter = std::make_unique<DaemonSettingsGateAdapter>(m_settings.get(), m_layoutManager.get());
     m_contextResolver = std::make_unique<PhosphorContext::ContextResolver>(
         m_workspaceStateAdapter.get(), m_screenModeAdapter.get(), m_settingsGateAdapter.get());
-    if (m_overlayService) {
-        m_overlayService->setContextResolver(m_contextResolver.get());
-    }
+    m_overlayService->setContextResolver(m_contextResolver.get());
 
     // Late-bind the resolver into consumers that gate their
     // handlers on the disable/lock cascade. Each adaptor was constructed
@@ -744,11 +757,15 @@ void Daemon::initEnginesAndWiring()
             // phantom state while observing the count.
             const PhosphorEngine::IPlacementState* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
             const int count = state ? state->tiledWindowCount() : 0;
+            // Owner-tagged: a cache entry the OTHER engine wrote never
+            // suppresses this engine's first post-flip resolve.
             const auto it = m_lastTiledCountByScreen.constFind(screenId);
-            if (it != m_lastTiledCountByScreen.constEnd() && it.value() == count) {
+            if (it != m_lastTiledCountByScreen.constEnd()
+                && it.value() == qMakePair(static_cast<const void*>(m_autotileEngine.get()), count)) {
                 return; // count unchanged — nothing a count rule could key on moved
             }
-            m_lastTiledCountByScreen.insert(screenId, count);
+            m_lastTiledCountByScreen.insert(screenId,
+                                            qMakePair(static_cast<const void*>(m_autotileEngine.get()), count));
             updateEngineScreens();
             // A count rule that swaps the screen out of tiling releases its
             // windows in that recompute, and this gate has no resnap of its
@@ -758,21 +775,23 @@ void Daemon::initEnginesAndWiring()
     // Scrolling twin of the count-change gate above, so a TiledWindowCount
     // rule keys on scrolling screens too (the provider in init_services
     // consults both engines).
-    connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this,
-            [this](const QString& screenId) {
-                if (!m_scrollEngine) {
-                    return;
-                }
-                const PhosphorEngine::IPlacementState* state = std::as_const(*m_scrollEngine).stateForScreen(screenId);
-                const int count = state ? state->tiledWindowCount() : 0;
-                const auto it = m_lastTiledCountByScreen.constFind(screenId);
-                if (it != m_lastTiledCountByScreen.constEnd() && it.value() == count) {
-                    return;
-                }
-                m_lastTiledCountByScreen.insert(screenId, count);
-                updateEngineScreens();
-                flushPendingSnapZoneRestores(); // see the autotile twin above
-            });
+    connect(
+        scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, [this](const QString& screenId) {
+            if (!m_scrollEngine) {
+                return;
+            }
+            const PhosphorEngine::IPlacementState* state = std::as_const(*m_scrollEngine).stateForScreen(screenId);
+            const int count = state ? state->tiledWindowCount() : 0;
+            // Owner-tagged like the autotile twin: see daemon.h.
+            const auto it = m_lastTiledCountByScreen.constFind(screenId);
+            if (it != m_lastTiledCountByScreen.constEnd()
+                && it.value() == qMakePair(static_cast<const void*>(m_scrollEngine.get()), count)) {
+                return;
+            }
+            m_lastTiledCountByScreen.insert(screenId, qMakePair(static_cast<const void*>(m_scrollEngine.get()), count));
+            updateEngineScreens();
+            flushPendingSnapZoneRestores(); // see the autotile twin above
+        });
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines).
@@ -890,10 +909,18 @@ void Daemon::initEnginesAndWiring()
     // window registry and drives the per-screen overlay slot.
     connect(scrollEngine, &PhosphorScrollEngine::ScrollEngine::tabStripsChanged, this,
             [this](const QString& screenId, const QString& stripsJson) {
-                if (!m_overlayService) {
+                // A parse failure means we know nothing about the strips, which
+                // is not the same as "there are none": clearing on it would wipe
+                // the live tab indicators and leave the columns looking untabbed
+                // until the next relayout. Warn and leave the overlay untouched.
+                QJsonParseError parseError;
+                const QJsonDocument doc = QJsonDocument::fromJson(stripsJson.toUtf8(), &parseError);
+                if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+                    qCWarning(lcDaemon) << "Tab strips JSON unparseable, keeping previous indicators screen="
+                                        << screenId << "error=" << parseError.errorString()
+                                        << "offset=" << parseError.offset;
                     return;
                 }
-                const QJsonDocument doc = QJsonDocument::fromJson(stripsJson.toUtf8());
                 QVariantList strips;
                 const QJsonArray arr = doc.array();
                 for (const QJsonValue& stripValue : arr) {
@@ -902,7 +929,10 @@ void Daemon::initEnginesAndWiring()
                     strip.insert(QStringLiteral("x"), stripObj.value(QLatin1String("x")).toInt());
                     strip.insert(QStringLiteral("y"), stripObj.value(QLatin1String("y")).toInt());
                     strip.insert(QStringLiteral("width"), stripObj.value(QLatin1String("width")).toInt());
-                    const int activeIndex = stripObj.value(QLatin1String("activeIndex")).toInt();
+                    // -1, not 0, purely defensive: the producer always writes
+                    // the key, but a missing one must read as "no active tab"
+                    // rather than lighting up tab 0.
+                    const int activeIndex = stripObj.value(QLatin1String("activeIndex")).toInt(-1);
                     QVariantList tabs;
                     const QJsonArray tabIds = stripObj.value(QLatin1String("tabs")).toArray();
                     for (int i = 0; i < tabIds.size(); ++i) {
@@ -941,12 +971,11 @@ void Daemon::initEnginesAndWiring()
     // assignments and settings are fully committed. Separated from settingsChanged
     // handler to avoid feedback loops with autotile/snapping transitions.
     //
-    // Disconnect-first: m_layoutAdaptor is created in initCoreAdaptors and,
-    // unlike the three engine adaptors deleted above, survives a
-    // stop() -> init() cycle — a bare connect would stack a second handler
-    // (double resnap + double OSD pass per KCM apply). Same rationale as the
-    // rulesChanged sweep earlier in this function.
-    disconnect(m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this, nullptr);
+    // No disconnect-first here: initCoreAdaptors deletes and re-news
+    // m_layoutAdaptor in the same preamble that clears the engine adaptors
+    // (init_adaptors.cpp), and it always runs immediately before this
+    // function, so a stop() -> init() cycle hands us a freshly constructed
+    // adaptor that carries no connections to sweep.
     connect(
         m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this,
         [this](const QStringList& changedScreenIdsList) {
@@ -957,15 +986,30 @@ void Daemon::initEnginesAndWiring()
             const QString activity = currentActivity();
 
             // Collect ENGINE-MANAGED screens (autotile AND scrolling — both
-            // must be excluded from the snap resnap below; a scrolling
-            // screen's "scrolling:" assignment id makes mode flips visible
-            // in changedScreenIds now) and per-screen OSD data in one pass.
+            // must be excluded from the snap resnap below) and per-screen OSD
+            // data in one pass.
+            //
+            // Both keyed on the LIVE router mode rather than the raw
+            // assignment id. updateEngineScreens leaves a context-disabled
+            // scrolling or autotile assignment out of the engine set and the
+            // router downgrades that screen to Snapping, so classifying by the
+            // id alone excluded a screen snapping now owns from the resnap and
+            // then announced a mode that is inert on it. Same live-mode gate
+            // showOsdForScreens applies (osd.cpp).
             QSet<QString> engineManagedScreens;
             struct ScreenOsd
             {
                 QString screenId;
                 PhosphorZones::AssignmentEntry::Mode mode;
                 QString algoId;
+                DisabledReason disabled = DisabledReason::NotDisabled;
+                int desktop = 0;
+                // What the persisted assignment DECLARES, as opposed to the
+                // live router mode: when the two disagree the router
+                // downgraded the screen (its declared mode is disabled for
+                // this context), and the OSD must explain that rather than
+                // announce the fallback snapping layout.
+                PhosphorZones::AssignmentEntry::Mode declaredMode = PhosphorZones::AssignmentEntry::Snapping;
             };
             QVector<ScreenOsd> osdEntries;
             const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
@@ -973,24 +1017,40 @@ void Daemon::initEnginesAndWiring()
                 // Per-output virtual desktops (#648): each screen resolves its own desktop.
                 const int desktop = currentDesktopForScreen(screenId);
                 const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-                const bool isAutotileScreen = PhosphorLayout::LayoutId::isAutotile(assignmentId);
-                const bool isScrollingScreen = PhosphorLayout::LayoutId::isScrolling(assignmentId);
-                if (isAutotileScreen || isScrollingScreen) {
+                const PhosphorZones::AssignmentEntry::Mode mode = currentModeFor(screenId);
+                if (mode == PhosphorZones::AssignmentEntry::Autotile
+                    || mode == PhosphorZones::AssignmentEntry::Scrolling) {
                     engineManagedScreens.insert(screenId);
                 }
-                // Only show OSD for screens that actually changed. Three-way:
-                // a Scrolling screen must neither be announced with a snap
-                // layout nor have its lock queried against the wrong mode.
-                if (changedScreenIds.isEmpty() || changedScreenIds.contains(screenId)) {
-                    if (isAutotileScreen) {
-                        osdEntries.append({screenId, PhosphorZones::AssignmentEntry::Autotile,
-                                           PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId)});
-                    } else if (isScrollingScreen) {
-                        osdEntries.append({screenId, PhosphorZones::AssignmentEntry::Scrolling, {}});
-                    } else {
-                        osdEntries.append({screenId, PhosphorZones::AssignmentEntry::Snapping, {}});
-                    }
+                // Only show OSD for screens that actually changed.
+                if (!changedScreenIds.isEmpty() && !changedScreenIds.contains(screenId)) {
+                    continue;
                 }
+                // Disabled probe FIRST, mirroring showOsdForScreens: a
+                // disabled context has no mode or layout worth announcing, so
+                // the reason card has to win over every branch below.
+                // handleForPersisted is the right axis because this apply has
+                // already pinned the (desktop, activity) tuple while the
+                // screen's mode stays live.
+                DisabledReason why = DisabledReason::NotDisabled;
+                if (m_contextResolver) {
+                    why = toDaemonDisabledReason(m_contextResolver->disabledReason(
+                        m_contextResolver->handleForPersisted(screenId, desktop, activity)));
+                }
+                // The algorithm display name still comes from the assignment
+                // id: the router reports the MODE, not which algorithm the
+                // cascade picked for the screen. Only asked for on an autotile
+                // ID — extractAlgorithmId warns on anything else — and the
+                // other modes never read the field.
+                const QString algoId = PhosphorLayout::LayoutId::isAutotile(assignmentId)
+                    ? PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId)
+                    : QString();
+                const PhosphorZones::AssignmentEntry::Mode declared =
+                    PhosphorLayout::LayoutId::isScrolling(assignmentId)
+                    ? PhosphorZones::AssignmentEntry::Scrolling
+                    : (PhosphorLayout::LayoutId::isAutotile(assignmentId) ? PhosphorZones::AssignmentEntry::Autotile
+                                                                          : PhosphorZones::AssignmentEntry::Snapping);
+                osdEntries.append({screenId, mode, algoId, why, desktop, declared});
             }
 
             // Resnap only the snapping-mode screens whose assignments actually changed.
@@ -1002,9 +1062,22 @@ void Daemon::initEnginesAndWiring()
             // assignment change resnaps windows parked on OTHER desktops into the
             // just-assigned layout's zones — the user sees one desktop's layout
             // leak onto every desktop. Mirrors resnapIfManualMode (navigation.cpp).
-            armResnapOsdSuppression(osdEntries.size());
+            // Arm exactly 1, co-located with the resnap call below: that call
+            // produces exactly one resnap navigationFeedback (success or
+            // "no_windows_to_resnap") whatever the screen mix, and the drain
+            // in signals.cpp consumes one count per feedback. Arming a
+            // per-screen count either under-armed (all-scrolling apply: 0,
+            // letting the no-op resnap OSD fire over the mode card) or
+            // over-armed (multi-screen: surplus parked until the watchdog).
+            armResnapOsdSuppression(1);
             m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens,
                                                                                   changedScreenIds, currentDesktop());
+            // m_snapAdaptor is assigned earlier in this same function and the
+            // only path that nulls it is initCoreAdaptors' delete preamble,
+            // which always runs immediately before this function re-assigns
+            // it — so it is non-null whenever this lambda can fire. stop()
+            // only calls clearEngine() on it, and the m_snapEngine guard at
+            // the top of this lambda already refuses that state.
             m_snapAdaptor->resnapToNewLayout();
             // Restore snap-float positions for windows this KCM apply released
             // from autotile — the buffer-based resnap above cannot cover
@@ -1019,15 +1092,46 @@ void Daemon::initEnginesAndWiring()
             // pattern used for the mode-toggle locked feedback in connectShortcutSignals().
             const bool osdEnabled = m_settings && m_settings->showOsdOnLayoutSwitch();
             for (const auto& osd : std::as_const(osdEntries)) {
+                // Disabled context → announce the reason, never a layout or a
+                // mode. Bypasses showOsdOnLayoutSwitch for the same reason the
+                // locked card below does: it explains why an explicit user
+                // apply had no visible effect on this screen.
+                if (osd.disabled != DisabledReason::NotDisabled) {
+                    showContextDisabledOsd(osd.screenId, osd.desktop, activity, osd.disabled);
+                    continue;
+                }
                 // Suppressed context → no active layout; skip its OSD, mirroring
                 // the per-screen desktop-switch OSD gate in showOsdForScreens.
-                if (m_layoutManager
-                    && m_layoutManager->isContextActiveLayoutSuppressed(
-                        osd.screenId, currentDesktopForScreen(osd.screenId), activity)) {
+                if (m_layoutManager->isContextActiveLayoutSuppressed(osd.screenId, osd.desktop, activity)) {
+                    continue;
+                }
+                // Downgraded: the assignment declares scrolling/autotile but
+                // the router runs snapping because that mode is disabled for
+                // this context. The resolver probe above asked the DOWNGRADED
+                // mode and missed, so re-probe the declared mode's own lists
+                // and explain — announcing the fallback snap layout here is
+                // the misannouncement showOsdForScreens guards against.
+                if (osd.declaredMode != osd.mode && osd.declaredMode != PhosphorZones::AssignmentEntry::Snapping) {
+                    const DisabledReason declaredWhy =
+                        contextDisabledReason(m_settings.get(), osd.declaredMode, osd.screenId, osd.desktop, activity);
+                    if (declaredWhy != DisabledReason::NotDisabled) {
+                        showContextDisabledOsd(osd.screenId, osd.desktop, activity, declaredWhy);
+                    } else {
+                        showNotAssignedOsd(osd.screenId);
+                    }
                     continue;
                 }
                 if (isCurrentContextLockedForMode(osd.screenId, osd.mode)) {
-                    showLockedPreviewOsd(osd.screenId);
+                    // Only a snapping screen has a layout the lock badge can
+                    // sit on. Autotile and scrolling screens would get a
+                    // fallback SNAP layout's zones drawn under the badge,
+                    // announcing zones the mode does not have, so they take
+                    // the text card instead.
+                    if (osd.mode == PhosphorZones::AssignmentEntry::Snapping) {
+                        showLockedPreviewOsd(osd.screenId);
+                    } else {
+                        showLockedOsd(osd.screenId);
+                    }
                 } else if (!osdEnabled) {
                     continue;
                 } else if (osd.mode == PhosphorZones::AssignmentEntry::Scrolling) {
@@ -1047,9 +1151,10 @@ void Daemon::initEnginesAndWiring()
                         showLayoutOsdForAlgorithm(osd.algoId, displayName, osd.screenId);
                     }
                 } else {
-                    // Per-output virtual desktops (#648): each screen resolves its own desktop.
-                    const int desktop = currentDesktopForScreen(osd.screenId);
-                    PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
+                    // Per-output virtual desktops (#648): each screen resolves
+                    // its own desktop, captured with the entry above.
+                    PhosphorZones::Layout* layout =
+                        m_layoutManager->layoutForScreen(osd.screenId, osd.desktop, activity);
                     if (layout)
                         showLayoutOsd(layout, osd.screenId);
                 }

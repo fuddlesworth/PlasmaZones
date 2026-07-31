@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Apply / discard / reset lifecycle for SettingsController:
+//   * adoptOnDiskState() — adopt whatever is on disk as the session state
+//                   (settings, local rule store, daemon rules, screens,
+//                   layouts) and drop every staged edit. Shared by load()
+//                   and the config-import success path.
 //   * load()      — pull settings from disk, snapshot for dirty
 //                   diff, ensure schema migration, hydrate algorithm
 //                   ordering, refresh local layouts.
@@ -23,6 +27,7 @@
 #include "config/configmigration.h"
 #include "core/utils/utils.h"
 #include "settings/utils/dbusutils.h"
+#include "settingscontroller_pagekeys.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 
@@ -38,24 +43,26 @@
 
 namespace PlasmaZones {
 
-void SettingsController::load()
+bool SettingsController::adoptOnDiskState(bool treatAsyncRevertAsClean)
 {
-    m_loading = true;
-    // A full load adopts the on-disk state wholesale, which is everything a
-    // reload deferred by onExternalSettingsChanged() would have done — clear
-    // the flag so the clean transition at the end of this load doesn't
-    // schedule a redundant second reload.
-    m_pendingExternalReload = false;
+    // Hold m_loading for the whole body: every step below can fire a NOTIFY that
+    // routes through onSettingsPropertyChanged and would re-dirty the very pages
+    // this is cleaning. The caller's setNeedsSave(false) is the authoritative
+    // reset, and it runs after the flag drops.
+    const ScopedFlag loadingScope(m_loading);
+
     // Animation pages persist per-event motion overrides as separate
     // files (file-per-path under ~/.local/share/plasmazones/profiles/);
-    // m_settings.load() alone wouldn't restore them on Discard. The
-    // page controller's pre-edit snapshot rewinds those files. Shader
-    // overrides don't need this — they ride Settings::load()'s
-    // Q_PROPERTY re-emit like every other page setting.
-    // A refusal has two causes and they mean opposite things here.
+    // m_settings.load() alone wouldn't restore them. The page controller's
+    // pre-edit snapshot rewinds those files. Shader overrides don't need this —
+    // they ride Settings::load()'s Q_PROPERTY re-emit like every other page
+    // setting.
+    //
+    // A refusal has two causes and they mean opposite things, which is what
+    // @p treatAsyncRevertAsClean selects between.
     //
     // On the global Discard path this page's async revert is dispatched FIRST, so
-    // by the time the settings domain calls load() the worker already owns the
+    // by the time the settings domain gets here the worker already owns the
     // snapshot map and revertPending() refuses. That is the restore proceeding
     // normally, not a failure: the worker finishes the job and re-raises
     // pendingChangesChanged itself if it has to retain a file. Treating it as
@@ -64,37 +71,32 @@ void SettingsController::load()
     // A refusal with no worker running, or a partial restore failure, IS a page
     // that is still dirty, and forcing needsSave false there would strand the
     // snapshots for the next Discard to write back over the new state.
-    const bool animationsClean =
-        !m_animationsPage || m_animationsPage->asyncRevertInFlight() || m_animationsPage->revertPending();
-    if (!animationsClean) {
-        qCWarning(lcConfig) << "load: animation snapshots are still staged after the revert";
-    }
-    // Rules are owned by the daemon (rules.json); Discard
-    // re-fetches the daemon's authoritative set, dropping staged edits.
-    if (m_rulesPage)
-        m_rulesPage->revert();
+    const bool animationsClean = !m_animationsPage
+        || (treatAsyncRevertAsClean && m_animationsPage->asyncRevertInFlight()) || m_animationsPage->revertPending();
+
     m_settings.load();
     // m_settings borrows the shared m_localRuleStore, so Settings::load() above
     // deliberately does NOT reload it (the owner drives reloads — see the
     // borrowed-store note in Settings::load()). As that owner, re-read
-    // rules.json here so Discard reverts the store to its on-disk state.
+    // rules.json here so the store matches its on-disk state.
     // Idempotent: RuleStore::load() only emits when the content differs,
     // mirroring the daemon-rulesChanged path in reloadLocalRuleStore().
     if (m_localRuleStore)
         m_localRuleStore->load();
+    // Rules are owned by the daemon (rules.json); re-fetch the daemon's
+    // authoritative set, dropping staged edits. Async: the reply handler
+    // re-derives dirty through the permanent revertFinished listener in
+    // settingscontroller.cpp.
+    if (m_rulesPage)
+        m_rulesPage->revert();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
-    // Clear staged state BEFORE m_loading=false so any NOTIFY emits
-    // it triggers (clearing a staged assignment fires the mirrored
-    // Settings property) route through onSettingsPropertyChanged
-    // with m_loading=true and stay clean — the trailing
-    // setNeedsSave(false) is the authoritative reset.
     m_staging.clearAll();
     // Emit stagedXxxChanged only when reset() actually transitions a
     // non-empty optional to empty. Unconditional emit violates
     // CLAUDE.md's "only emit signals when value actually changes" rule
     // and re-walks every QML binding keyed on these signals on every
-    // load(), including the startup load when nothing was staged.
+    // call, including the startup load when nothing was staged.
     const bool hadStagedSnap = m_stagedSnappingOrder.has_value();
     const bool hadStagedTile = m_stagedTilingOrder.has_value();
     m_stagedSnappingOrder.reset();
@@ -103,8 +105,20 @@ void SettingsController::load()
         Q_EMIT stagedSnappingOrderChanged();
     if (hadStagedTile)
         Q_EMIT stagedTilingOrderChanged();
-    m_loading = false;
-    if (animationsClean) {
+    return animationsClean;
+}
+
+void SettingsController::load()
+{
+    // A full load adopts the on-disk state wholesale, which is everything a
+    // reload deferred by onExternalSettingsChanged() would have done — clear
+    // the flag so the clean transition at the end of this load doesn't
+    // schedule a redundant second reload.
+    m_pendingExternalReload = false;
+    const bool animationsClean = adoptOnDiskState(/*treatAsyncRevertAsClean=*/true);
+    if (!animationsClean) {
+        qCWarning(lcConfig) << "load: animation snapshots are still staged after the revert";
+    } else {
         setNeedsSave(false);
     }
 }

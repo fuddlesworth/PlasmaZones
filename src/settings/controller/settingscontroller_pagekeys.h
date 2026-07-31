@@ -37,7 +37,7 @@ namespace PlasmaZones {
 ///
 /// DEFINED HERE, not in a .cpp: it is constructed from three TUs
 /// (settingscontroller_pagestate.cpp, settingscontroller_pagereset.cpp and
-/// settingscontroller_session.cpp), and a TU-local copy in one of them only
+/// settingscontroller_lifecycle.cpp), and a TU-local copy in one of them only
 /// ever linked because CMAKE_UNITY_BUILD merged the files into one batch. Same
 /// rationale as SettingsController::DirtyEmitScope.
 class ScopedFlag

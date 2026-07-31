@@ -235,6 +235,7 @@ ScrollEngine::StashedStrip ScrollEngine::buildStashFromState(const ScrollState* 
         StashedColumn sc;
         sc.width = col.width;
         sc.display = col.display;
+        sc.activeWindowId = col.tiles.value(col.activeTileIdx).windowId;
         for (const Tile& tile : col.tiles) {
             sc.tiles.append({tile.windowId, tile.height, tile.minimized});
         }
@@ -347,6 +348,9 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         if (stashStrip.focusedWindowId == claimedCandidate) {
             stashStrip.focusedWindowId = windowId;
         }
+        if (stash[colIdx].activeWindowId == claimedCandidate) {
+            stash[colIdx].activeWindowId = windowId;
+        }
     };
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
     const StashedColumn& sc = stash.at(colIdx);
@@ -396,6 +400,13 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     }
     commitClaim();
     state->strip().setWindowHeightIntent(windowId, sc.tiles.at(tileIdx).height);
+    // Re-assert the column's stashed ACTIVE tile: every insert makes the
+    // arriving tile active, so a tabbed column's shown tab would otherwise
+    // be whichever sibling announced last.
+    if (const QString tab = stash.at(colIdx).activeWindowId;
+        !tab.isEmpty() && tab != windowId && state->strip().columnOfWindow(tab) >= 0) {
+        state->strip().focusWindow(tab, params);
+    }
     // The stashed FOCUS follows its window, not the arrival order: without
     // this the first arrival kept the focus it won on the empty strip and
     // every mode round trip re-anchored on an arbitrary window. The anchor

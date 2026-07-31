@@ -223,9 +223,11 @@ public:
     /// unchanged intent.
     bool setWindowHeightIntent(const QString& windowId, const WindowHeight& height);
 
-    /// Strip indices of the columns currently intersecting the viewport,
-    /// in strip order — the scroll "zone" space: visible columns are
-    /// numbered 1..k left to right, off-screen columns carry no number.
+    /// Strip indices of the columns currently intersecting the viewport, in
+    /// strip order — a viewport-intersection helper, NOT the zone-number
+    /// space. Zone numbers are per-TILE and live one layer up, in
+    /// ScrollEngine::visibleTiles; rotateVisibleColumns is this helper's
+    /// only consumer.
     QVector<int> visibleColumnIndices(const ScrollLayoutParams& params) const;
 
     /// Rotate the window contents of the VISIBLE columns through their
