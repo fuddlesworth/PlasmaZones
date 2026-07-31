@@ -467,21 +467,6 @@ void SettingsController::buildApplicationController()
     });
 }
 
-void SettingsController::setDismissedUpdateVersion(const QString& version)
-{
-    if (m_dismissedUpdateVersion != version) {
-        m_dismissedUpdateVersion = version;
-        QSettings appSettings;
-        appSettings.setValue(ConfigDefaults::settingsAppDismissedUpdateVersionKey(), version);
-        Q_EMIT dismissedUpdateVersionChanged();
-    }
-}
-
-void SettingsController::dismissUpdate()
-{
-    setDismissedUpdateVersion(m_updateChecker.latestVersion());
-}
-
 // Highest version among m_whatsNewEntries, using QVersionNumber so "1.10.0"
 // sorts after "1.9.0" (plain string compare gets that wrong). Entries come
 // from the bundled whatsnew.json resource in no guaranteed order.

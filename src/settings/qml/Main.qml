@@ -155,6 +155,12 @@ PhosphorUi.SettingsAppWindow {
                 window.showToast(named ? i18n("Some settings on %1 are still being saved, so it was left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so it was left unchanged. Try again in a moment."));
                 return;
             }
+            // A failed factory reset is a config WRITE failure, not a daemon
+            // problem; naming the service here would be a false explanation.
+            if (reason === "reset-not-written") {
+                window.showToast(i18n("Your settings could not be written, so nothing was reset."));
+                return;
+            }
             window.showToast(named ? i18n("Could not reach the PlasmaZones service, so %1 was left unchanged.", title) : i18n("Could not reach the PlasmaZones service, so this page was left unchanged."));
         }
 

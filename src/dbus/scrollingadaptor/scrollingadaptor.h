@@ -39,6 +39,15 @@ public:
     explicit ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, QObject* parent = nullptr);
     ~ScrollingAdaptor() override = default;
 
+    /// The scrolling screen set, sorted so a property read and a signal
+    /// payload for the same set compare equal.
+    ///
+    /// This is the RAW set. The KWin effect does not answer its Mode
+    /// discriminator from it directly: it intersects this with the
+    /// engine-managed union published on org.plasmazones.Tiling at read
+    /// time, because the two arrive as independent signals with no
+    /// ordering guarantee and this set can transiently name a screen the
+    /// union has already dropped.
     QStringList scrollingScreens() const;
 
     /// Clear the engine pointer during shutdown (same late-D-Bus-call
@@ -54,22 +63,39 @@ public Q_SLOTS:
      * the engine's own screen fallback would otherwise redirect a wheel
      * event from a non-scrolling monitor onto the active scrolling one.
      *
-     * @param screenId Screen whose strip should move (the cursor's screen)
-     * @param delta -1 focuses the column to the left, +1 to the right
+     * Every rejection is a SILENT no-op, not an error reply: an empty
+     * @p screenId, a screen the engine does not own, and any @p delta
+     * other than -1 or +1 all return without acting, so a caller cannot
+     * distinguish a refusal from a call that landed on an empty strip.
+     *
+     * @param screenId Screen whose strip should move (the cursor's screen);
+     *                 an empty string is ignored
+     * @param delta -1 focuses the column to the left, +1 to the right; any
+     *              other value is ignored
      */
     void focusColumn(const QString& screenId, int delta);
 
     /**
      * @brief The strip as it currently looks on a screen, for previews
      *
-     * Returns a JSON array of the visible tile rects normalized to the
-     * work area, ONE OBJECT PER TILE carrying {x, y, width, height} (0.0
-     * to 1.0 per axis; hidden tabs, minimized tiles and parked columns
-     * excluded, partially visible columns clipped rather than dropped)
-     * plus zoneNumber, the 1-based visible tile slot the rect occupies in
-     * strip order. The settings app renders it where the other modes show
-     * a layout thumbnail. Empty array when the screen has no strip or is
-     * not scrolling.
+     * Returns a JSON array with ONE OBJECT PER TILE carrying
+     * {x, y, width, height} plus zoneNumber, the 1-based visible tile slot
+     * the rect occupies in strip order. The rects are 0.0 to 1.0 per axis,
+     * normalized against the screen's FULL geometry — the tiles themselves
+     * are clipped to the gap-inset work area, so the fractions show the
+     * panel gap, and a consumer maps back to pixels by scaling against the
+     * screen rectangle. Same basis as the daemon's own OSD strip card.
+     *
+     * Excluded and unnumbered: hidden tabs of a tabbed column, minimized
+     * tiles, parked columns, and tiles whose intersection with the work
+     * area is EMPTY (a stack whose minimum heights overflow the work area
+     * resolves its tail below the bottom edge). Partially visible columns
+     * are clipped rather than dropped, with no minimum-visibility
+     * threshold, so an arbitrarily thin sliver still carries its number.
+     *
+     * The settings app renders it where the other modes show a layout
+     * thumbnail. Empty array when the screen has no strip or is not
+     * scrolling.
      *
      * @param screenId Screen whose strip to describe
      * @return JSON array string

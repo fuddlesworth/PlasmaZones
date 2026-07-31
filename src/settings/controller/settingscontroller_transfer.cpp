@@ -22,7 +22,6 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -40,14 +39,27 @@ namespace {
 /// over the user's settings — with the import backup already removed.
 ///
 /// An ABSENT version stamp is treated as upgradable: that is a pre-versioning
-/// (v1-era) config, exactly what the chain exists to lift.
-bool importedBlobIsUpgradable(const QJsonObject& root)
+/// (v1-era) config, exactly what the chain exists to lift. A stamp that is
+/// PRESENT but not a number is neither — it is a blob whose schema this build
+/// cannot determine, and the old "not a double ⇒ v1" reading ran the whole
+/// v1→current chain over it, which on a current-schema config with a corrupt
+/// stamp rewrites every already-migrated group and destroys it.
+enum class BlobSchema {
+    Upgradable, ///< At or below this build's schema (or unstamped, i.e. v1-era).
+    Newer, ///< Stamped above this build; cannot be migrated down.
+    Unreadable, ///< Stamp present but not a number; the schema is unknowable.
+};
+
+BlobSchema importedBlobSchema(const QJsonObject& root)
 {
-    const QJsonValue version = root.value(QLatin1String("_version"));
-    if (!version.isDouble()) {
-        return true;
+    const QJsonValue version = root.value(PlasmaZones::ConfigDefaults::versionKey());
+    if (version.isUndefined()) {
+        return BlobSchema::Upgradable;
     }
-    return version.toInt() <= PlasmaZones::ConfigSchemaVersion;
+    if (!version.isDouble()) {
+        return BlobSchema::Unreadable;
+    }
+    return version.toInt() <= PlasmaZones::ConfigSchemaVersion ? BlobSchema::Upgradable : BlobSchema::Newer;
 }
 
 /// The first schema version whose config lives alongside a rules.json store. A
@@ -59,7 +71,7 @@ constexpr int FirstRuleStoreSchemaVersion = 4;
 /// absent version stamp is a pre-versioning (v1-era) config, older than v4 too.
 bool importedBlobIsPreV4(const QJsonObject& root)
 {
-    const QJsonValue version = root.value(QLatin1String("_version"));
+    const QJsonValue version = root.value(PlasmaZones::ConfigDefaults::versionKey());
     return !version.isDouble() || version.toInt() < FirstRuleStoreSchemaVersion;
 }
 
@@ -93,10 +105,6 @@ QString canonicalIdentity(const QFileInfo& info)
     return parentCanonical + QLatin1Char('/') + info.fileName();
 }
 
-} // namespace
-
-namespace {
-
 // Drop a leading UTF-8 BOM from @p bytes. Qt's JSON parser treats a BOM as a
 // syntax error rather than skipping it, so any bytes handed to
 // QJsonDocument::fromJson have to come through here first. Shared by the import
@@ -114,6 +122,18 @@ QByteArray withoutUtf8Bom(const QByteArray& bytes)
 // Config export/import
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Write the whole settings store to @p filePath.
+///
+/// SCOPE: config.json only. The two sidecar files are NOT included:
+///   * `rules.json` — every window rule, including the per-mode disable lists
+///     and the zone assignments the v4 conversion moved out of config.json.
+///   * `quicklayouts.json` — the daemon's quick-layout slot map.
+/// Both are separate stores with their own writers (the daemon owns them), and
+/// an export that carried them would need an import that could merge two rule
+/// sets, which nothing here can do. The refusal wording in importAllSettings
+/// says the same thing in the user's words, because "set up a new profile and
+/// import there" is only honest advice if the user knows their rules and quick
+/// slots are not travelling with the file.
 bool SettingsController::exportAllSettings(const QString& filePath)
 {
     // Reachable from QML: urlToLocalFile yields an empty string for a URL that
@@ -274,8 +294,17 @@ bool SettingsController::importAllSettings(const QString& filePath)
 
     // Backup current config
     const QString backupPath = configPath + QStringLiteral(".bak");
-    if (QFile::exists(backupPath)) {
-        QFile::remove(backupPath);
+    // A stale .bak that will not go is a hard stop, not a warning. The copy
+    // below is skipped on a fresh profile (there is no config to back up), so
+    // the failure path would find that FOREIGN leftover, take it for this
+    // import's backup, and rename it over configPath — restoring some previous
+    // profile's settings as this one's.
+    if (QFile::exists(backupPath) && !QFile::remove(backupPath)) {
+        qCWarning(PlasmaZones::lcCore) << "importAllSettings: could not remove the stale backup at" << backupPath;
+        Q_EMIT settingsTransferFailed(
+            PhosphorI18n::tr("An old backup at %1 is in the way and could not be removed, so nothing was imported.")
+                .arg(backupPath));
+        return false;
     }
     if (QFile::exists(configPath) && !QFile::copy(configPath, backupPath)) {
         qCWarning(PlasmaZones::lcCore) << "Failed to backup config to:" << backupPath;
@@ -300,7 +329,9 @@ bool SettingsController::importAllSettings(const QString& filePath)
                 << "importAllSettings: refusing a legacy INI import over an existing rules.json:" << safeFilePath;
             Q_EMIT settingsTransferFailed(
                 PhosphorI18n::tr("That settings file is older than the window rules this profile already has, and "
-                                 "importing it would drop them. Set up a new settings profile and import it there."));
+                                 "importing it would drop them. Set up a new settings profile and import it there. "
+                                 "Your window rules and quick layout slots are not part of an export, so copy them "
+                                 "over by hand afterwards."));
             ok = false;
         } else {
             // Convert INI to JSON in-place using the migration module
@@ -343,7 +374,7 @@ bool SettingsController::importAllSettings(const QString& filePath)
                     << "Invalid JSON in import file:" << safeFilePath << parseErr.errorString();
                 Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
                 ok = false;
-            } else if (!importedBlobIsUpgradable(importDoc.object())) {
+            } else if (importedBlobSchema(importDoc.object()) == BlobSchema::Newer) {
                 // A blob stamped NEWER than this build cannot be migrated down,
                 // and runMigrationChain reports "success" for it (readVersion >=
                 // target breaks the loop immediately and an unchanged version
@@ -356,6 +387,17 @@ bool SettingsController::importAllSettings(const QString& filePath)
                 qCWarning(PlasmaZones::lcCore) << "Imported settings are from a newer schema:" << safeFilePath;
                 Q_EMIT settingsTransferFailed(
                     PhosphorI18n::tr("That settings file is from a newer version of this app."));
+                ok = false;
+            } else if (importedBlobSchema(importDoc.object()) == BlobSchema::Unreadable) {
+                // Separate words from the newer-schema arm because it is a
+                // different fault: the file may well be a current settings file
+                // whose version stamp was mangled. Refused rather than guessed
+                // at, since guessing "v1" re-runs the whole migration chain over
+                // an already-migrated blob and destroys it.
+                qCWarning(PlasmaZones::lcCore)
+                    << "Imported settings carry an unreadable version stamp:" << safeFilePath;
+                Q_EMIT settingsTransferFailed(
+                    PhosphorI18n::tr("That settings file does not say which version of this app wrote it."));
                 ok = false;
             } else if (importedBlobIsPreV4(importDoc.object()) && haveValidRuleStore()) {
                 // A pre-v4 blob still carries its disable lists, exclusions and
@@ -370,9 +412,11 @@ bool SettingsController::importAllSettings(const QString& filePath)
                 // at a fresh profile, where the porting rebuild does run.
                 qCWarning(PlasmaZones::lcCore)
                     << "importAllSettings: refusing a pre-v4 blob over an existing rules.json:" << safeFilePath;
-                Q_EMIT settingsTransferFailed(PhosphorI18n::tr(
-                    "That settings file is older than the window rules this profile already has, and "
-                    "importing it would drop them. Set up a new settings profile and import it there."));
+                Q_EMIT settingsTransferFailed(
+                    PhosphorI18n::tr("That settings file is older than the window rules this profile already has, and "
+                                     "importing it would drop them. Set up a new settings profile and import it there. "
+                                     "Your window rules and quick layout slots are not part of an export, so copy them "
+                                     "over by hand afterwards."));
                 ok = false;
             } else {
                 // Write the parsed bytes rather than copying the source file, so
@@ -462,8 +506,35 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // reload the daemon's borrowed rule store, so without the second call
         // the rules revert below pulls the daemon's PRE-import rule set straight
         // back over the imported rules.json.
+        //
+        // There is NO third notify for quicklayouts.json, and that is a known
+        // gap rather than an oversight. finalizeV4Conversion can rewrite that
+        // file on the fresh-rules arm above, but the daemon has no reload entry
+        // point for its quick-slot map — it holds the slots in memory and writes
+        // them back out, so its pre-import slots overwrite the imported ones at
+        // the next slot write. Closing this needs a reload method on the
+        // LayoutRegistry D-Bus surface, which is a wider change than this path.
+        // Until then an import does not carry quick-layout slots across, which
+        // is what the refusal wording above tells the user.
         DaemonDBus::notifyReload();
-        DaemonDBus::notifyRulesReload();
+        if (!DaemonDBus::notifyRulesReload()) {
+            // The config landed but the daemon is still serving its pre-import
+            // rules, and the revert inside adoptOnDiskState below is about to
+            // fetch exactly those and write them over the imported rules.json on
+            // the next Apply. Say so: silently, this looks like an import that
+            // dropped the user's rules for no reason.
+            qCWarning(PlasmaZones::lcCore) << "importAllSettings: the daemon did not reload rules.json after the "
+                                              "import; it is still serving the pre-import rule set";
+            Q_EMIT settingsTransferFailed(
+                PhosphorI18n::tr("Your settings were imported, but the window rules could not be reloaded. Restart "
+                                 "PlasmaZones before you change any rules, or the imported ones will be lost."));
+            // Report not-fully-landed for the same reason the animation-snapshot
+            // branch below does: the bool's only job is gating the General
+            // page's success toast, and that toast replaces whatever is in
+            // flight, so returning true here would overwrite the warning just
+            // emitted with "Settings imported".
+            ok = false;
+        }
         // Adopting the on-disk state is exactly what a reload deferred by
         // onExternalSettingsChanged() would have done, so drop that flag.
         m_pendingExternalReload = false;

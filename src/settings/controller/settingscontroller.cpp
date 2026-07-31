@@ -932,10 +932,9 @@ SettingsController::SettingsController(QObject* parent)
     // itself — see its constructor — so no SettingsController-side plumbing
     // is needed here.)
 
-    // Load dismissed update version from app-local settings
+    // Load the last-seen What's New version from app-local settings
     {
         QSettings appSettings;
-        m_dismissedUpdateVersion = appSettings.value(ConfigDefaults::settingsAppDismissedUpdateVersionKey()).toString();
         m_lastSeenWhatsNewVersion =
             appSettings.value(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey()).toString();
     }
@@ -1015,7 +1014,6 @@ SettingsController::SettingsController(QObject* parent)
     scheduleLayoutLoad();
     refreshVirtualDesktops();
     refreshActivities();
-    m_updateChecker.checkForUpdates();
 }
 
 SnappingZonesController* SettingsController::snappingZonesPage() const

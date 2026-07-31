@@ -99,6 +99,12 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdOpenSettings, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleCheatsheet, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleWindowFloat, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
+        // "all", not a per-mode tag, and deliberately not gated on how many
+        // modes are enabled. The row advertises the mode CYCLE, which is a
+        // hard no-op only in the one configuration where every mode but the
+        // current one is switched off — and in that configuration the honest
+        // thing is still to show the key, because what fixes it is turning a
+        // mode back on in settings, not a missing row.
         add(kIdToggleAutotile, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
         add(kIdNextLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
@@ -378,7 +384,19 @@ QVariantList ShortcutManager::cheatsheetModel() const
          PhosphorI18n::tr("Swap Screens"),
          arrowsTail},
         // The scrolling family's natural pairs collapse the same way the
-        // directional quads do, trimming the 20-row Scrolling group.
+        // directional quads do, trimming the 20-row Scrolling group. Every
+        // opposed pair in the group is here: leaving three of them out was
+        // an omission, not a judgement, and it left near-identical rows on
+        // the sheet the mechanism exists to merge.
+        scrollPair(kIdScrollFocusColumnFirst, ConfigDefaults::scrollingFocusColumnFirstShortcut(),
+                   kIdScrollFocusColumnLast, ConfigDefaults::scrollingFocusColumnLastShortcut(),
+                   PhosphorI18n::tr("Focus First / Last Column")),
+        scrollPair(kIdScrollMoveColumnToFirst, ConfigDefaults::scrollingMoveColumnToFirstShortcut(),
+                   kIdScrollMoveColumnToLast, ConfigDefaults::scrollingMoveColumnToLastShortcut(),
+                   PhosphorI18n::tr("Move Column to Start / End")),
+        scrollPair(kIdScrollCycleColumnWidth, ConfigDefaults::scrollingCycleColumnWidthShortcut(),
+                   kIdScrollCycleColumnWidthBack, ConfigDefaults::scrollingCycleColumnWidthBackShortcut(),
+                   PhosphorI18n::tr("Cycle Column Width")),
         scrollPair(kIdScrollConsumeWindow, ConfigDefaults::scrollingConsumeWindowShortcut(), kIdScrollExpelWindow,
                    ConfigDefaults::scrollingExpelWindowShortcut(), PhosphorI18n::tr("Consume / Expel Window")),
         scrollPair(kIdScrollConsumeOrExpelLeft, ConfigDefaults::scrollingConsumeOrExpelLeftShortcut(),
@@ -474,9 +492,11 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
         // under the wrong heading. Every current family is uniform on both;
         // this pins that as a requirement of the spec rather than a
         // coincidence of the table.
-        // Release pair for the Q_ASSERT: a mixed family still merges (the
-        // consequence is a row filed under the first member's mode, cosmetic)
-        // but must not do so silently.
+        // Release pair for the Q_ASSERT: a mixed family still merges rather
+        // than bailing, because the consequence is cosmetic (a row filed
+        // under the first member's mode or heading) and dropping the
+        // compression would cost the user a readable sheet over a table
+        // typo. Warn-only is the deliberate choice, not an oversight.
         for (int m = 1; m < family.ids.size(); ++m) {
             const int memberIdx = rowIndexById.value(family.ids[m], -1);
             const bool uniform = memberIdx < 0

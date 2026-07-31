@@ -164,8 +164,22 @@ QString ScrollEngine::entryWindowForCrossing(const QString& screenId, const QStr
     // enters the viewport's LEFT edge, "left" its right edge. Vertical
     // crossings have no strip edge, so the focused window stands in.
     const int wantLeftmost = (direction == QLatin1String("right")) ? 1 : (direction == QLatin1String("left")) ? -1 : 0;
+    // Params resolved once and threaded into the walks below: the public
+    // visibleTiles overload would send this back through a second
+    // ScreenManager query plus context-gap-provider call for the same values.
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
     if (wantLeftmost == 0) {
-        return state->strip().activeWindowId();
+        // Stand-in only if it is actually ON screen: a hidden tab or a parked
+        // column carries no zone number, and the contract at the tail of this
+        // function (the entry slot may never address a tile the zone numbers
+        // dropped) binds the vertical arm the same as the horizontal one.
+        const QString active = state->strip().activeWindowId();
+        for (const VisibleTile& tile : visibleTiles(screenId, params)) {
+            if (tile.windowId == active) {
+                return active;
+            }
+        }
+        return QString();
     }
     // Ranked over visibleTiles, not a private walk: one definition of
     // on-screen-ness for the whole engine (hidden tabs, parked columns and
@@ -175,14 +189,20 @@ QString ScrollEngine::entryWindowForCrossing(const QString& screenId, const QStr
     // order as the true ones.
     QString best;
     int bestEdge = 0;
-    for (const VisibleTile& tile : visibleTiles(screenId)) {
+    for (const VisibleTile& tile : visibleTiles(screenId, params)) {
         const int edge = (wantLeftmost > 0) ? tile.rect.left() : -tile.rect.right();
         if (best.isEmpty() || edge < bestEdge) {
             best = tile.windowId;
             bestEdge = edge;
         }
     }
-    return best.isEmpty() ? state->strip().activeWindowId() : best;
+    // An EMPTY walk on a non-empty strip means nothing carries a number right
+    // now (every column parked off-screen, or a work area the gaps swallowed).
+    // The comment above is the contract: the entry slot may never address a
+    // tile the zone numbers dropped, and the active window is exactly such a
+    // tile here. Answer empty and let the caller degrade the swap to a move,
+    // which is what it already does for an empty strip.
+    return best;
 }
 
 int ScrollEngine::columnIndexForWindow(const QString& screenId, const QString& windowId) const
@@ -294,12 +314,31 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
                                                              targetParams);
     }
     if (!moverInserted) {
-        targetState->strip().insertWindowAt(columnIdx, windowId, windowWidth, windowDisplay, targetParams);
+        moverInserted =
+            targetState->strip().insertWindowAt(columnIdx, windowId, windowWidth, windowDisplay, targetParams);
     }
-    targetState->strip().setWindowMinimumSize(windowId, windowMinSize.width(), windowMinSize.height());
-    targetState->strip().setWindowHeightIntent(windowId, windowHeight);
-    targetState->strip().focusWindow(windowId, targetParams);
-    m_states.setKeyForWindow(windowId, targetKey);
+    if (moverInserted) {
+        targetState->strip().setWindowMinimumSize(windowId, windowMinSize.width(), windowMinSize.height());
+        targetState->strip().setWindowHeightIntent(windowId, windowHeight);
+        targetState->strip().focusWindow(windowId, targetParams);
+        m_states.setKeyForWindow(windowId, targetKey);
+        // The mover was just taken out of the source strip and re-inserted on
+        // the target, so its retained rect belongs to the OTHER output. Left
+        // standing it can equal what the target resolves and defeat
+        // applyLayout's emit-on-change gate, so no batch would ever be issued
+        // for the window that just crossed.
+        m_lastAppliedRect.remove(windowId);
+    } else {
+        // Refused, with the window already out of the source strip: it is now
+        // held by neither side. Drop it from the reverse map too — a mapping
+        // pointing at a strip that no longer holds the window is the exact
+        // "tracked but absent" inconsistency floatWindowInternal warns about —
+        // and report failure below so the caller does not announce a crossing
+        // that did not happen. The source relayout still closes its column.
+        m_states.removeWindow(windowId);
+        qCWarning(lcScrollEngine) << "moveActiveWindowAcrossBoundary: target strip refused" << windowId << "on"
+                                  << target;
+    }
     if (!partner.isEmpty()) {
         bool partnerInserted = false;
         if (partnerLandingSlot.tileIndex >= 0) {
@@ -309,11 +348,22 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
                                                            sourceParams);
         }
         if (!partnerInserted) {
-            state->strip().insertWindowAt(qMax(0, partnerLanding), partner, partnerWidth, partnerDisplay, sourceParams);
+            partnerInserted = state->strip().insertWindowAt(qMax(0, partnerLanding), partner, partnerWidth,
+                                                            partnerDisplay, sourceParams);
         }
-        state->strip().setWindowMinimumSize(partner, partnerMinSize.width(), partnerMinSize.height());
-        state->strip().setWindowHeightIntent(partner, partnerHeight);
-        m_states.setKeyForWindow(partner, sourceKey);
+        if (partnerInserted) {
+            state->strip().setWindowMinimumSize(partner, partnerMinSize.width(), partnerMinSize.height());
+            state->strip().setWindowHeightIntent(partner, partnerHeight);
+            m_states.setKeyForWindow(partner, sourceKey);
+            m_lastAppliedRect.remove(partner); // same rationale as the mover's
+        } else {
+            // Same shape as the mover's refusal: out of the target strip,
+            // refused by the source strip, so the reverse map must not keep
+            // naming a strip that no longer holds it.
+            m_states.removeWindow(partner);
+            qCWarning(lcScrollEngine) << "moveActiveWindowAcrossBoundary: source strip refused swap partner" << partner
+                                      << "on" << screenId;
+        }
     }
     m_activeScreen = target;
 
@@ -321,7 +371,9 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     applyLayout(target, true);
     Q_EMIT placementChanged(screenId);
     Q_EMIT placementChanged(target);
-    return true;
+    // The partner's refusal (if any) is warned about above but does not gate
+    // the verdict — the MOVER's crossing is what the caller announces.
+    return moverInserted;
 }
 
 void ScrollEngine::swapFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx)
@@ -434,14 +486,20 @@ void ScrollEngine::moveFocusedToPosition(int position, const PhosphorEngine::Nav
         // operated window's own number can therefore differ from the digit
         // pressed — deliberate, and documented on the VisibleTile contract.
         moved = state->strip().moveActiveColumnTo(targetColumn, params);
-    } else if (targetColumn >= 0) {
-        // Target tile is a stack-mate: reorder the active tile onto its
-        // slot. Read the operand from the column's activeTileIdx, which is
-        // what moveActiveTile acts on — activeWindowId() falls back past a
-        // minimized active tile and would name a window the move never
-        // touches. A TABBED column cannot reach here: only its shown tab is
-        // visible, so a stack-mate digit resolves to the operated window
-        // itself and the already_at_position arm above took it.
+    } else if (targetColumn >= 0 && state->strip().columns().at(targetColumn).display != ColumnDisplay::Tabbed) {
+        // Target tile is a stack-mate of a NORMAL column: reorder the active
+        // tile onto its slot. Read the operand from the column's
+        // activeTileIdx, which is what moveActiveTile acts on —
+        // activeWindowId() falls back past a minimized active tile and would
+        // name a window the move never touches.
+        //
+        // A TABBED column is excluded by the guard above rather than assumed
+        // unreachable. Only its shown tab carries a number, so a digit
+        // landing here named that tab: when ctx names the column's own focus
+        // the already_at_position arm took it, but a ctx naming a HIDDEN tab
+        // of the same column reaches this branch, and reordering a window the
+        // user cannot see onto a slot the user cannot see is not what the
+        // digit asked for. It falls through to no_target instead.
         const Column& column = state->strip().columns().at(targetColumn);
         const int activeIdx = column.activeTileIdx;
         const int targetIdx = column.indexOfWindow(targetWindow);

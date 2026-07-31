@@ -49,20 +49,46 @@ SettingsFlickable {
             target = state ? (state.screenId || "") : "";
         }
 
-        for (var i = 0; i < screens.length; i++) {
-            if (screens[i].name === target) {
-                var w = screens[i].width || 0;
-                var h = screens[i].height || 0;
-                if (w > 0 && h > 0)
-                    return w / h;
+        if (!target)
+            return 0;
 
-                break;
-            }
+        // Same two-pass, physical-id-tolerant match _currentState uses, so the
+        // preview takes its shape from the screen whose state is on display
+        // even when the two lists name it differently (a virtual child on one
+        // side, its physical parent on the other). Exact matches win.
+        var exact = _screenAspectRatioFor(screens, target, false);
+        return exact > 0 ? exact : _screenAspectRatioFor(screens, target, true);
+    }
+
+    // Aspect ratio of the screen in `screens` matching `target`, or 0 when
+    // none does. With @p byPhysicalId the comparison runs on both sides'
+    // physical ids (extractPhysicalId is idempotent for an already-physical
+    // id, so this also matches a physical selection against a virtual child).
+    function _screenAspectRatioFor(screens, target, byPhysicalId) {
+        var wanted = byPhysicalId ? settingsController.physicalScreenId(target) : target;
+        for (var i = 0; i < screens.length; i++) {
+            var nm = screens[i].name || "";
+            var candidate = byPhysicalId ? settingsController.physicalScreenId(nm) : nm;
+            if (!candidate || candidate !== wanted)
+                continue;
+
+            var w = screens[i].width || 0;
+            var h = screens[i].height || 0;
+            if (w > 0 && h > 0)
+                return w / h;
         }
         return 0;
     }
 
+    // Re-read the per-screen states. BLOCKING D-Bus, so it is gated on
+    // visibility: the page host keeps visited pages alive and merely hides
+    // them, and the five Connections handlers below fire for events that
+    // change nothing a hidden page is showing. onVisibleChanged is the
+    // catch-up, so a page coming back is never stale.
     function _refresh() {
+        if (!visible)
+            return;
+
         _screenStates = settingsController.getScreenStates();
         _revision++;
     }
@@ -81,9 +107,18 @@ SettingsFlickable {
         // selection naming a physically-present output still resolves to the
         // state reported for one of its virtual children. Exact matches win,
         // hence the second pass.
+        //
+        // Both sides are reduced to their physical id, not just the state's:
+        // a one-sided reduction only tolerated a physical SELECTION against a
+        // virtual state, and left the mirror case (a virtual child selected
+        // while the daemon reports the physical parent) resolving to null with
+        // the "unable to retrieve monitor state" warning on a live screen.
+        // extractPhysicalId is idempotent for an already-physical id, so the
+        // symmetric compare still matches everything the one-sided one did.
+        var wanted = settingsController.physicalScreenId(target);
         for (var j = 0; j < _screenStates.length; j++) {
             var sid = _screenStates[j].screenId || "";
-            if (sid && settingsController.physicalScreenId(sid) === target)
+            if (sid && settingsController.physicalScreenId(sid) === wanted)
                 return _screenStates[j];
         }
         // The selected screen has no reported state. Return null so the
@@ -303,10 +338,14 @@ SettingsFlickable {
         // the flags from whatever survived. Same handler VirtualScreensPage
         // uses for the same reason.
         function onDirtyPagesChanged() {
-            // Visibility-gated like every other blocking read on this page:
-            // a hidden cached page re-reads on its own visible transition.
-            if (!root.visible)
-                return;
+            root._refresh();
+        }
+
+        // The daemon going away mid-session leaves the last read on screen
+        // with nothing saying it is stale, and coming back leaves it stale the
+        // other way. Either transition is worth one re-read (which _refresh
+        // skips while hidden, like every other read here).
+        function onDaemonRunningChanged() {
             root._refresh();
         }
     }
@@ -332,26 +371,48 @@ SettingsFlickable {
             showAll: false
             physicalOnly: false
             selectedScreenName: root._selectedScreen
-            onScreenPicked: name => root._selectedScreen = name
+            // An entry with no name would clear the selection, which this page
+            // reads as "no pick yet" and answers by showing the first reported
+            // state — silently moving the user to another monitor. Ignore it
+            // and keep the current pick.
+            onScreenPicked: name => {
+                if (name)
+                    root._selectedScreen = name;
+            }
         }
 
-        // Daemon offline / no screens message
+        // Nothing to configure, and nothing to blame the daemon for: the map
+        // above draws an empty area and the state warning below would
+        // misattribute it.
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Information
+            text: i18n("No monitors are connected.")
+            visible: settingsController.screens.length === 0
+        }
+
+        // Daemon offline / no state message
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Warning
             text: i18n("Unable to retrieve monitor state. Make sure the daemon is running.")
-            visible: stateView.screenState === null
+            // daemonRunning covers the daemon dying with a last good read still
+            // on screen: the states survive the death, so screenState alone
+            // would keep the page looking live.
+            visible: settingsController.screens.length > 0 && (stateView.screenState === null || !settingsController.daemonRunning)
         }
 
         // Current state for selected monitor
         ColumnLayout {
             id: stateView
 
-            // The two `void` reads are the binding's dependency declaration:
-            // _currentState() is a plain function, so QML records no
-            // dependency on the properties it reads. Touching _revision and
-            // _selectedScreen here is what makes the binding re-run when the
-            // state list is refreshed or the user picks another monitor.
+            // The two `void` reads state the binding's dependencies at the
+            // binding site. QML does capture property reads made inside a
+            // plain function the binding calls (only an INVOKABLE C++ call is
+            // opaque to it), so _currentState() already carries them; naming
+            // them here keeps the trigger visible and keeps the binding
+            // correct if the reads ever move out of that function.
+            // _revision is the refresh counter and is not read there at all.
             property var screenState: {
                 void root._revision;
                 void root._selectedScreen;
@@ -388,10 +449,21 @@ SettingsFlickable {
             // Resolved layout object for LayoutThumbnail
             property var currentLayout: root._findLayout(localLayoutId)
             // One preview box shape for all three thumbnails, and the width the
-            // explainer below them is clamped to, so the column reads as a
+            // messages below them are clamped to, so the column reads as a
             // single stack instead of three independently sized cards.
+            //
+            // The width budget is capped to what the page actually offers: the
+            // thumbnails size themselves from these bounds and are centred, not
+            // filled, so at the window's minimum width a fixed budget drew a
+            // box wider than the page and clipped it on both sides.
             readonly property real _previewHeight: Kirigami.Units.gridUnit * 14
-            readonly property real _previewMaxWidth: Kirigami.Units.gridUnit * 32
+            readonly property real _previewMaxWidth: Math.max(Kirigami.Units.gridUnit * 6, Math.min(Kirigami.Units.gridUnit * 32, content.width - _previewChromeWidth))
+            // Side padding LayoutThumbnail reserves around its preview box
+            // (1 gridUnit per side). The messages clamp to box + chrome so
+            // their edges line up with the thumbnail's, not with the box
+            // inside it.
+            readonly property real _previewChromeWidth: Kirigami.Units.gridUnit * 2
+            readonly property real _messageMaxWidth: _previewMaxWidth + _previewChromeWidth
             // Settle beat after an event-driven read came back empty, and the
             // slow beat the live preview polls on. Named so the comments below
             // can talk about them without restating the numbers.
@@ -401,10 +473,13 @@ SettingsFlickable {
             // selection context. Empty when the screen is not scrolling right
             // now (mode staged but not applied, no windows, daemon down).
             // Deliberately retained while the page is hidden rather than
-            // cleared: the thumbnail's onVisibleChanged re-reads synchronously
-            // before the preview is rendered again, so a stale array is never
-            // the thing on screen, and dropping it would only cost an extra
-            // blocking read on every hide.
+            // cleared: stripLiveRefresh's triggeredOnStart shot re-reads when
+            // the page comes back, so at worst the previous array is on
+            // screen for the one queued-event beat before that shot lands,
+            // and dropping it on hide would only cost an extra read there.
+            // onScreenStateChanged clears it whenever the selected context's
+            // daemon mode is not scrolling, so what is retained is always
+            // THIS context's last strip.
             property var scrollingStripZones: []
             // Representative endless strip: a full column mid-view with a
             // clipped column at each edge, so the sketch reads as a window
@@ -470,26 +545,58 @@ SettingsFlickable {
                 // hotplug / desktop / activity event, so without this a stack
                 // of cached Monitors pages would each block the GUI thread on
                 // events that change nothing they are showing. The live timer
-                // is the SINGLE re-read path when the page comes back: it
-                // carries triggeredOnStart, so its running transition (which
-                // includes both visibility and the mode) fires one read
-                // immediately rather than leaving the preview stale for a
-                // whole beat.
+                // is the SINGLE caller: it carries triggeredOnStart, so its
+                // running transition (which includes both visibility and the
+                // mode) fires one read immediately rather than leaving the
+                // preview stale for a whole beat, and a selection change nudges
+                // it with restart() instead of reading here a second time.
                 if (!stateView.visible)
                     return;
-                scrollingStripZones = settingsController.getScrollingStripPreview(screenState.screenId || "");
+                var fresh = settingsController.getScrollingStripPreview(screenState.screenId || "");
+                // Assign only on a real change. The reply is a fresh
+                // QVariantList every tick, so a plain assignment always signals
+                // — and the Repeater behind a JS-array model has no diffing, so
+                // every 2s beat tore down and rebuilt the whole delegate tree
+                // (four Behaviors per tile) for an identical strip.
+                if (!_stripMatches(fresh, scrollingStripZones))
+                    scrollingStripZones = fresh;
                 // The settle beat covers the case where the mode just flipped
                 // and the re-announce batch briefly reports an empty strip: one
                 // _stripSettleIntervalMs shot beats waiting out the live beat.
-                // It cannot compound — the handler passes allowRetry=false, so
-                // a retry never arms another retry, and restart() on a one-shot
+                // It cannot compound — the retry passes allowRetry=false, so a
+                // retry never arms another retry, and restart() on a one-shot
                 // Timer replaces any pending fire rather than stacking one.
                 // Gated on isScrolling as well, matching the live timer: with
                 // Snapping staged locally the thumbnail is hidden, and arming a
                 // blocking read for it is exactly the poll that gate exists to
                 // prevent.
-                if (allowRetry && stateView.isScrolling && scrollingStripZones.length === 0 && (screenState.mode || 0) === 2)
+                if (allowRetry && stateView.isScrolling && fresh.length === 0 && (screenState.mode || 0) === 2)
                     stripSettleRetry.restart();
+            }
+
+            // True when two strip replies would render identically. Compares
+            // what the thumbnail actually draws: the tile count, each tile's
+            // number, and its geometry rounded to three decimals (relative
+            // 0–1 values, so that survives D-Bus float round-trips). Same
+            // fingerprint-before-assign shape LayoutComboBox uses for its zone
+            // previews.
+            function _stripMatches(a, b) {
+                if (!a || !b || a.length !== b.length)
+                    return false;
+
+                for (var i = 0; i < a.length; i++) {
+                    if (a[i].zoneNumber !== b[i].zoneNumber)
+                        return false;
+
+                    var ga = a[i].relativeGeometry || ({});
+                    var gb = b[i].relativeGeometry || ({});
+                    if (Math.round((ga.x || 0) * 1000) !== Math.round((gb.x || 0) * 1000) || Math.round((ga.y || 0) * 1000) !== Math.round((gb.y || 0) * 1000))
+                        return false;
+
+                    if (Math.round((ga.width || 0) * 1000) !== Math.round((gb.width || 0) * 1000) || Math.round((ga.height || 0) * 1000) !== Math.round((gb.height || 0) * 1000))
+                        return false;
+                }
+                return true;
             }
 
             Timer {
@@ -513,20 +620,37 @@ SettingsFlickable {
                 // daemon scrolling and Snapping staged locally the preview
                 // thumbnail is hidden, and polling for something nobody is
                 // looking at is the one thing a blocking call must not do.
-                running: stateView.visible && stateView.isScrolling && stateView.screenState !== null && (stateView.screenState.mode || 0) === 2
+                // daemonRunning is part of the gate: with the daemon gone every
+                // tick is a 500ms timeout on the GUI thread, forever, for a
+                // preview that cannot change.
+                running: settingsController.daemonRunning && stateView.visible && stateView.isScrolling && stateView.screenState !== null && (stateView.screenState.mode || 0) === 2
                 // Fire on the running transition too, so coming back to a
                 // hidden-then-shown page (or picking Scrolling in the mode
-                // toggle) repaints from one fresh read. This is deliberately
-                // the ONLY event-driven re-read: a second path meant two
-                // blocking reads in the same frame on every such transition.
+                // toggle) repaints from one fresh read. This timer owns EVERY
+                // strip read: a second path meant two blocking reads in the
+                // same frame on every such transition, so a selection change
+                // restarts it instead of reading on its own.
                 triggeredOnStart: true
-                // allowRetry=false: the settle beat exists for EVENT-driven
-                // reads (a mode flip whose re-announce batch briefly reports an
-                // empty strip). This timer already re-reads on its own beat, so
-                // letting each tick arm a settle shot just raises the
-                // blocking-call rate for as long as the strip is legitimately
-                // empty.
-                onTriggered: stateView.refreshScrollingStrip(false)
+                // True from the moment the timer starts until the shot
+                // triggeredOnStart queues for that start has run. It marks the
+                // one tick that follows an event (a mode flip, the page coming
+                // back, a selection change) as opposed to the periodic beats,
+                // and only that tick may arm the settle retry: the settle beat
+                // exists for a re-announce batch briefly reporting an empty
+                // strip, while a legitimately empty strip would otherwise have
+                // every beat arm another blocking read.
+                //
+                // It also tells onScreenStateChanged that a start's own shot is
+                // already pending, so nudging the timer for the new context
+                // there would only queue a second read for the same frame.
+                property bool _startShotPending: false
+
+                onRunningChanged: _startShotPending = running
+                onTriggered: {
+                    var allowRetry = _startShotPending;
+                    _startShotPending = false;
+                    stateView.refreshScrollingStrip(allowRetry);
+                }
             }
 
             Layout.alignment: Qt.AlignHCenter
@@ -545,19 +669,10 @@ SettingsFlickable {
                 localAlgorithmCleared = false;
                 localLayoutTouched = false;
                 localAlgorithmTouched = false;
-                // Refresh the live strip preview with the selection context
-                // (cheap D-Bus read; [] when not scrolling). Keyed on the
-                // STATE's own screen id — before the user clicks a monitor,
-                // _selectedScreen is still empty while the shown state is the
-                // first reported one, and fetching with the empty id left the
-                // sketch up despite a live strip. allowRetry=true: this is the
-                // event-driven read the settle beat exists for.
-                refreshScrollingStrip(true);
-                // Keyed on the STATE's own screen id, for the same reason the
-                // strip refresh above is: before the user clicks a monitor,
-                // _selectedScreen is still empty while the state being shown
-                // is the first reported one, so reading the staged entry for
-                // the empty id would show the wrong monitor's pending edit.
+                // Keyed on the STATE's own screen id: before the user clicks a
+                // monitor, _selectedScreen is still empty while the state being
+                // shown is the first reported one, so reading the staged entry
+                // for the empty id would show the wrong monitor's pending edit.
                 var staged = settingsController.getStagedAssignment(screenState.screenId || "", desktop, activity);
                 if (Object.keys(staged).length > 0) {
                     // A staged entry carries the WHOLE context rule, so every
@@ -574,14 +689,41 @@ SettingsFlickable {
                     // settingscontroller.h is the authoritative statement.
                     localLayoutCleared = staged.layoutId === undefined;
                     localAlgorithmCleared = staged.algorithmId === undefined;
-                    localLayoutTouched = staged.layoutId !== undefined;
-                    localAlgorithmTouched = staged.algorithmId !== undefined;
+                    // Both slots count as touched whenever an entry is staged,
+                    // absent key or not. Deriving touched from presence made a
+                    // staged clear lose its flag on the next refresh, and the
+                    // slot then fell to _carrySibling's explicitFlag arm, which
+                    // re-pinned the daemon's resolved value — the very value
+                    // the user had just cleared. With touched set, the cleared
+                    // slot carries its own empty local id instead.
+                    localLayoutTouched = true;
+                    localAlgorithmTouched = true;
                 } else {
                     // No staged changes — use daemon state
                     localMode = screenState.mode || 0;
                     localLayoutId = screenState.layoutId || "";
                     localAlgorithmId = screenState.algorithmId || "";
                 }
+
+                // A context whose daemon mode is NOT scrolling can never be
+                // handed a fresh read (the timer's running binding needs
+                // mode 2), so the retained array from the PREVIOUS context
+                // must be dropped here or a later local "Scrolling" pick on
+                // this monitor renders the other monitor's tiles as its live
+                // strip. Not a read, so the single-read-path rule holds.
+                if ((screenState.mode || 0) !== 2)
+                    scrollingStripZones = [];
+                else
+                // Nudge the live strip preview into re-reading for the new
+                // context. Placed after the local state is initialized so the
+                // timer's own gates (isScrolling) see the mode this handler
+                // just settled, and routed through the timer rather than a
+                // direct read so there is exactly one read path. When the mode
+                // change itself started the timer, its start shot is already
+                // pending for this same context and a restart would only queue
+                // a second blocking read.
+                if (stripLiveRefresh.running && !stripLiveRefresh._startShotPending)
+                    stripLiveRefresh.restart();
             }
 
             // Layout preview (snapping)
@@ -621,6 +763,12 @@ SettingsFlickable {
                 baseHeight: stateView._previewHeight
                 maxThumbnailWidth: stateView._previewMaxWidth
                 screenAspectRatio: root._selectedScreenAspectRatio
+                fontFamily: appSettings.labelFontFamily
+                fontSizeScale: appSettings.labelFontSizeScale
+                fontWeight: appSettings.labelFontWeight
+                fontItalic: appSettings.labelFontItalic
+                fontUnderline: appSettings.labelFontUnderline
+                fontStrikeout: appSettings.labelFontStrikeout
                 Accessible.name: {
                     var name = snappingPreview.layout ? (snappingPreview.layout.displayName || "") : "";
                     return name ? i18nc("accessible name of the layout preview; %1 is the layout name", "Snapping layout preview, %1", name) : i18nc("accessible name of the layout preview when no layout name is known", "Snapping layout preview");
@@ -638,18 +786,26 @@ SettingsFlickable {
                     if (found)
                         return found;
 
-                    // Same reasoning as the snapping preview: no local pick
-                    // means "Default", which resolves to the global default
-                    // algorithm the selector's Default row already previews.
-                    if (!stateView.localAlgorithmId) {
+                    // Same reasoning AND the same predicate as the snapping
+                    // preview: an explicit "Default" pick resolves to the
+                    // global default algorithm the selector's Default row
+                    // already previews. Gated on the cleared flag, not on an
+                    // empty id, because the daemon also reports an empty
+                    // algorithmId for a context whose algorithm is suppressed,
+                    // and that screen must keep showing as unassigned.
+                    if (stateView.localAlgorithmCleared) {
                         var fallback = root._findLayout(root._autotilePrefix + root._layoutBridge.defaultAutotileAlgorithm);
                         if (fallback)
                             return fallback;
                     }
                     // getScreenStates reports the algorithm's display name, so
                     // prefer it over the raw id ("bsp") the local list missed.
+                    // category 1 badges it as an algorithm, matching the real
+                    // entries this literal stands in for — without it the card
+                    // fell back to 0 and badged the algorithm "Manual".
                     return {
                         "displayName": (stateView.screenState && stateView.screenState.algorithmName) || stateView.localAlgorithmId || i18n("Default"),
+                        "category": 1,
                         "zones": []
                     };
                 }
@@ -658,6 +814,12 @@ SettingsFlickable {
                 baseHeight: stateView._previewHeight
                 maxThumbnailWidth: stateView._previewMaxWidth
                 screenAspectRatio: root._selectedScreenAspectRatio
+                fontFamily: appSettings.labelFontFamily
+                fontSizeScale: appSettings.labelFontSizeScale
+                fontWeight: appSettings.labelFontWeight
+                fontItalic: appSettings.labelFontItalic
+                fontUnderline: appSettings.labelFontUnderline
+                fontStrikeout: appSettings.labelFontStrikeout
                 Accessible.name: {
                     var name = tilingPreview.layout ? (tilingPreview.layout.displayName || "") : "";
                     return name ? i18nc("accessible name of the tiling preview; %1 is the algorithm name", "Tiling algorithm preview, %1", name) : i18nc("accessible name of the tiling preview when no algorithm name is known", "Tiling algorithm preview");
@@ -682,10 +844,19 @@ SettingsFlickable {
                 // digit shortcuts, so a tenth visible tile is drawn with a
                 // label no key can address.
                 //
-                // No id on this literal, deliberately. Every consumer of the
-                // object is right here — LayoutCard reads displayName,
-                // category and zones — and a stable id would only invite code
-                // elsewhere to treat this throwaway snapshot as a real layout.
+                // The daemon normalizes the strip rects against the screen's
+                // FULL geometry (the tiles are clipped to the gap-inset work
+                // area, so the fractions show the panel gap), which matches
+                // this box's screen-shaped aspect. The daemon's own OSD card
+                // draws the same shapes on the same basis.
+                //
+                // No id on this literal, deliberately. LayoutCard reads
+                // displayName, category, zones and zoneNumberDisplay off it,
+                // and LayoutThumbnail reads aspectRatioClass,
+                // referenceAspectRatio, producesOverlappingZones, isAutotile,
+                // supportsMasterCount and masterCount — all absent here, all
+                // defaulting. A stable id would only invite code elsewhere to
+                // treat this throwaway snapshot as a real layout.
                 layout: ({
                         "displayName": i18nc("tiling mode name", "Scrolling"),
                         "category": 1,
@@ -701,16 +872,38 @@ SettingsFlickable {
                 baseHeight: stateView._previewHeight
                 maxThumbnailWidth: stateView._previewMaxWidth
                 screenAspectRatio: root._selectedScreenAspectRatio
+                // Every tile here is a digit target, so no tile may render
+                // without its number. ZonePreview hides the label below 16px,
+                // and the default 8px floor let a clipped edge column draw at
+                // 8px wide — numberless, but still reachable from the keyboard.
+                minZoneSize: 16
+                fontFamily: appSettings.labelFontFamily
+                fontSizeScale: appSettings.labelFontSizeScale
+                fontWeight: appSettings.labelFontWeight
+                fontItalic: appSettings.labelFontItalic
+                fontUnderline: appSettings.labelFontUnderline
+                fontStrikeout: appSettings.labelFontStrikeout
                 Accessible.name: stateView.scrollingStripZones.length > 0 ? i18np("Scrolling strip preview with %n window", "Scrolling strip preview with %n windows", stateView.scrollingStripZones.length) : i18nc("accessible name of the placeholder strip preview shown when the screen is not scrolling yet", "Scrolling strip preview, example strip")
             }
 
             // Scrolling picks neither a layout nor an algorithm, so a short
             // explanation stands in for the selector.
             Kirigami.InlineMessage {
+                // fillWidth with a maximum and an alignment, not alignment
+                // alone: an InlineMessage's implicitWidth collapses to its
+                // padding, so without fillWidth the text rendered as a sliver.
+                Layout.fillWidth: true
                 Layout.alignment: Qt.AlignHCenter
-                Layout.maximumWidth: stateView._previewMaxWidth
+                Layout.maximumWidth: stateView._messageMaxWidth
                 type: Kirigami.MessageType.Information
-                text: i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. The numbers show the order of the windows on screen, and Snap to Zone uses them.")
+                // The numbering sentence is only shown for a LIVE strip: the
+                // placeholder sketch above is deliberately unnumbered, so
+                // promising numbers over it describes something not on screen.
+                // It also promises no more than Snap to Zone delivers — nine
+                // digit shortcuts — and says windows are numbered rather than
+                // that the numbers are legible, which they are not on a tile
+                // too narrow to carry a label.
+                text: stateView.scrollingStripZones.length > 0 ? i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.") : i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.")
                 visible: stateView.isScrolling
             }
 
@@ -728,15 +921,14 @@ SettingsFlickable {
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {
                     stateView.localMode = idx;
-                    // Entering a mode drops that mode's pending "Default"
-                    // pick (the flag, not the combo's own pick — a Default
-                    // chosen IN the combo also set touched, which survives
-                    // and still carries the clear through _carrySibling's
-                    // touched arm). The SIBLING mode's cleared flag survives:
-                    // a pending Default on the mode being left is a
-                    // deliberate pick the toggle must not silently re-pin.
+                    // Nothing but the mode changes here. Neither cleared flag
+                    // is reset: arrow-key traversal activates every option it
+                    // passes through, so entering a mode is not evidence the
+                    // user meant to abandon that mode's pending "Default" pick,
+                    // and dropping the flag made the preview stop showing the
+                    // default the pick resolves to.
                     //
-                    // touched is deliberately NOT set here. A mode toggle is
+                    // touched is deliberately NOT set either. A mode toggle is
                     // not a slot pick, and _carrySibling's touched arm returns
                     // localId — which is pre-filled from the RESOLVED value —
                     // so setting it made every toggle stage the cascade
@@ -745,11 +937,6 @@ SettingsFlickable {
                     // what the daemon marked explicit, so a pure
                     // Snapping-Scrolling-Snapping round trip leaves a
                     // default-following screen following the default.
-                    if (idx === 0) {
-                        stateView.localLayoutCleared = false;
-                    } else if (idx === 1) {
-                        stateView.localAlgorithmCleared = false;
-                    }
                     root._stageCurrentState();
                 }
             }
@@ -781,8 +968,11 @@ SettingsFlickable {
             // the monitor had no layout while the preview above names one. Say
             // what is actually assigned instead of showing a blank.
             Kirigami.InlineMessage {
+                // Same fillWidth + maximum + alignment combination as the
+                // scrolling explainer above.
+                Layout.fillWidth: true
                 Layout.alignment: Qt.AlignHCenter
-                Layout.maximumWidth: stateView._previewMaxWidth
+                Layout.maximumWidth: stateView._messageMaxWidth
                 type: Kirigami.MessageType.Information
                 text: i18n("This monitor uses %1, which is not in your layout list.", (stateView.screenState && stateView.screenState.layoutName) || stateView.localLayoutId)
                 // count > 1: while a layout fetch is in flight the model is
@@ -818,8 +1008,11 @@ SettingsFlickable {
 
             // Same blank-selector case as the snapping hint above.
             Kirigami.InlineMessage {
+                // Same fillWidth + maximum + alignment combination as the
+                // scrolling explainer above.
+                Layout.fillWidth: true
                 Layout.alignment: Qt.AlignHCenter
-                Layout.maximumWidth: stateView._previewMaxWidth
+                Layout.maximumWidth: stateView._messageMaxWidth
                 type: Kirigami.MessageType.Information
                 text: i18n("This monitor uses %1, which is not in your algorithm list.", (stateView.screenState && stateView.screenState.algorithmName) || stateView.localAlgorithmId)
                 // Same in-flight-fetch guard as the snapping hint above.

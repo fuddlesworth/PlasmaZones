@@ -28,22 +28,14 @@
 #include "settingscontroller_pagekeys.h"
 
 #include "config/configdefaults.h"
-#include "config/configmigration.h"
 #include "core/platform/logging.h"
 #include "core/interfaces/settings_interfaces.h"
-#include "core/utils/utils.h"
-#include "phosphor_i18n.h"
 #include "settings/utils/dbusutils.h"
-#include "settings/utils/kzonesimporter.h"
 #include <PhosphorLayoutApi/LayoutId.h>
-#include <PhosphorRules/RuleSet.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QDBusMessage>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QFontDatabase>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -81,17 +73,28 @@ void SettingsController::stageAssignmentEntry(const QString& screenName, int vir
                                               const QString& tilingAlgorithmId)
 {
     // QML hands both of these across as bare ints and they reach the wire
-    // unchanged, so validate here. Both malformed cases are REFUSED, never
-    // clamped: m_virtualDesktopCount is a display value that falls back to 1
-    // on a failed D-Bus read, and clamping against the fallback would
-    // silently rewrite the user's stage onto desktop 1 — the same
-    // fallback-as-valid-data trap the prune gate above guards against.
+    // unchanged, so validate here. A malformed mode is REFUSED, never clamped.
     if (mode < static_cast<int>(PhosphorZones::AssignmentEntry::Snapping)
         || mode > static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
         qCWarning(lcCore) << "stageAssignmentEntry: refusing unknown mode" << mode << "for screen" << screenName;
         return;
     }
-    if (virtualDesktop < 0 || virtualDesktop > m_virtualDesktopCount) {
+    // A negative desktop is malformed on any reading, so it is refused
+    // unconditionally.
+    if (virtualDesktop < 0) {
+        qCWarning(lcCore) << "stageAssignmentEntry: refusing negative virtual desktop" << virtualDesktop << "for screen"
+                          << screenName;
+        return;
+    }
+    // The UPPER bound is only enforced against a count the daemon actually
+    // answered with. m_virtualDesktopCount falls back to 1 when the read fails,
+    // and that fallback is a DISPLAY value — the same contract the
+    // disabled-desktop pruner honours by gating on refreshVirtualDesktops()'s
+    // return. Enforcing the bound against it would refuse every legitimate
+    // stage onto desktop 2 and up for as long as the daemon was unreachable,
+    // and the refusal is silent (void, no QML feedback), so the user would see
+    // their pick simply not take.
+    if (m_virtualDesktopCountFromDaemon && virtualDesktop > m_virtualDesktopCount) {
         qCWarning(lcCore) << "stageAssignmentEntry: refusing virtual desktop" << virtualDesktop << "outside 0.."
                           << m_virtualDesktopCount << "for screen" << screenName;
         return;
@@ -151,15 +154,26 @@ void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layou
         return;
     m_staging.stageSnappingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);
+    // The staged value has no NOTIFY of its own, so without this the slot cards
+    // never re-read and the pick reverted on screen at the next model rebuild
+    // while Apply still wrote it. getQuickLayoutSlot is staging-aware, so the
+    // re-read this triggers shows the staged pick rather than the daemon's
+    // saved slot. Same emit the per-page Reset path uses.
+    Q_EMIT quickLayoutSlotsChanged();
 }
 
 QString SettingsController::getQuickLayoutShortcut(int slotNumber) const
 {
     if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
         return {};
-    // Return the default shortcut string -- the standalone cannot query KGlobalAccel
-    // since it doesn't link KF6::GlobalAccel. The shortcut is Meta+Alt+N.
-    return QStringLiteral("Meta+Alt+%1").arg(slotNumber);
+    // The quick-layout shortcuts are config-backed, so the live sequence comes
+    // from the store the user's rebind writes to — not from a hardcoded
+    // "Meta+Alt+N", which kept showing the factory binding on every slot card
+    // after a rebind. The schema registers the factory sequence as the key's
+    // default, so an untouched slot still reads back Meta+Alt+N. The getter is
+    // 0-based (it indexes the same slot array ShortcutManager walks), while
+    // slots are 1-based at every UI and D-Bus surface.
+    return m_settings.quickLayoutShortcut(slotNumber - 1);
 }
 
 QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
@@ -184,6 +198,10 @@ void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString&
         return;
     m_staging.stageTilingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);
+    // See setQuickLayoutSlot above — the staged value has no NOTIFY of its own,
+    // and getTilingQuickLayoutSlot is staging-aware, so this re-read is what
+    // keeps the pick on screen until Apply.
+    Q_EMIT quickLayoutSlotsChanged();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -198,9 +216,15 @@ bool SettingsController::refreshVirtualDesktops()
     if (countReply.type() == QDBusMessage::ReplyMessage && !countReply.arguments().isEmpty()) {
         m_virtualDesktopCount = countReply.arguments().first().toInt();
         countOk = true;
-    } else if (countReply.type() == QDBusMessage::ErrorMessage) {
+    } else {
+        // Plain `else`, deliberately: an argument-less ReplyMessage is a
+        // successful call that answered nothing, which is no more usable than a
+        // transport error and used to match NEITHER branch — leaving the stale
+        // count in place while the return said the refresh had failed.
         qCWarning(lcCore) << "refreshVirtualDesktops: getVirtualDesktopCount D-Bus call failed:"
-                          << countReply.errorMessage();
+                          << (countReply.type() == QDBusMessage::ReplyMessage
+                                  ? QStringLiteral("reply carried no arguments")
+                                  : countReply.errorMessage());
         // Mirror the refreshActivities pattern: reset to the single-
         // desktop default on error so QML doesn't render desktop indices
         // the daemon no longer enumerates. A DISPLAY fallback only: the false
@@ -208,6 +232,10 @@ bool SettingsController::refreshVirtualDesktops()
         // to one desktop" and pruning every list that names desktop 2 and up.
         m_virtualDesktopCount = 1;
     }
+    // Whether the count in hand came from the daemon or is the display
+    // fallback. Every caller that REFUSES or DESTROYS on the strength of the
+    // count reads this rather than the count itself.
+    m_virtualDesktopCountFromDaemon = countOk;
 
     bool namesOk = false;
     QDBusMessage namesReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
@@ -215,9 +243,12 @@ bool SettingsController::refreshVirtualDesktops()
     if (namesReply.type() == QDBusMessage::ReplyMessage && !namesReply.arguments().isEmpty()) {
         m_virtualDesktopNames = namesReply.arguments().first().toStringList();
         namesOk = true;
-    } else if (namesReply.type() == QDBusMessage::ErrorMessage) {
+    } else {
+        // Same reasoning as the count branch above.
         qCWarning(lcCore) << "refreshVirtualDesktops: getVirtualDesktopNames D-Bus call failed:"
-                          << namesReply.errorMessage();
+                          << (namesReply.type() == QDBusMessage::ReplyMessage
+                                  ? QStringLiteral("reply carried no arguments")
+                                  : namesReply.errorMessage());
         m_virtualDesktopNames.clear();
     }
     // Both halves have to have landed. The two calls fail independently, and a
@@ -535,12 +566,19 @@ QVariantList SettingsController::getScrollingStripPreview(const QString& screenI
     // order; no custom colors).
     QVariantList zones;
     zones.reserve(arr.size());
+    // Counts the tiles actually EMITTED, which is what the fallback numbering
+    // and the synthetic ids below are keyed on. The raw array index leaves a
+    // hole wherever an element is skipped: a four-element payload whose second
+    // element is malformed numbered its three tiles 1, 3, 4, so the thumbnail
+    // labelled slots the Snap-to-Zone digits do not address.
+    int emitted = 0;
     for (int i = 0; i < arr.size(); ++i) {
         if (!arr.at(i).isObject()) {
             // A non-object element reads back as an all-default rect and renders
             // as a zero-size zone at the origin. Skip the phantom tile.
             continue;
         }
+        ++emitted;
         const QJsonObject rect = arr.at(i).toObject();
         QVariantMap relGeo;
         relGeo[PhosphorZones::ZoneJsonKeys::X] = rect.value(PhosphorZones::ZoneJsonKeys::X).toDouble();
@@ -550,9 +588,12 @@ QVariantList SettingsController::getScrollingStripPreview(const QString& screenI
         QVariantMap zone;
         // The wire's zoneNumber is the tile's 1-based visible slot in strip
         // order — the same sequential space the Snap-to-Zone digits target,
-        // so the thumbnail labels exactly what the digits do.
+        // so the thumbnail labels exactly what the digits do. The fallback is
+        // for a payload from an older daemon that carries no zoneNumber, and it
+        // counts EMITTED tiles so a skipped malformed element does not leave a
+        // hole in the numbering.
         zone[PhosphorZones::ZoneJsonKeys::ZoneNumber] =
-            rect.value(PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(i + 1);
+            rect.value(PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(emitted);
         zone[PhosphorZones::ZoneJsonKeys::RelativeGeometry] = relGeo;
         // Namespaced, never a bare index. These are render-only synthetic
         // zones with no persisted identity, so nothing resolves them today —
@@ -560,7 +601,7 @@ QVariantList SettingsController::getScrollingStripPreview(const QString& screenI
         // any consumer that starts keying on zone.id (a delegate reuse key,
         // selection state) would collide across screens. CLAUDE.md: zone IDs
         // everywhere, never indices.
-        zone[PhosphorZones::ZoneJsonKeys::Id] = QStringLiteral("strip:%1:%2").arg(screenId).arg(i);
+        zone[PhosphorZones::ZoneJsonKeys::Id] = QStringLiteral("strip:%1:%2").arg(screenId).arg(emitted);
         // Nothing reads these two. They keep a synthetic strip zone the same
         // shape as a real one, so the thumbnail delegate takes one path.
         zone[PhosphorZones::ZoneJsonKeys::Name] = QString();
@@ -626,28 +667,38 @@ QVariantMap SettingsController::loadWindowGeometry() const
     constexpr int kMinRestoredWindowHeight = 360;
 
     // Validate against available screen geometry
-    if (w > 0 && h > 0) {
-        QRect virtualGeo;
-        for (auto* screen : QGuiApplication::screens())
-            virtualGeo = virtualGeo.united(screen->availableGeometry());
-        if (!virtualGeo.isEmpty()) {
-            w = qMin(w, virtualGeo.width());
-            h = qMin(h, virtualGeo.height());
-            // Floor after the screen clamp, and never above what the screen can
-            // actually hold.
-            w = qMax(qMin(kMinRestoredWindowWidth, virtualGeo.width()), w);
-            h = qMax(qMin(kMinRestoredWindowHeight, virtualGeo.height()), h);
-            // Check if center of saved window is on any screen
-            if (hasPosition && !virtualGeo.contains(QPoint(x + w / 2, y + h / 2))) {
-                hasPosition = false; // off-screen, let WM place it
-            }
-        }
+    QRect virtualGeo;
+    for (auto* screen : QGuiApplication::screens())
+        virtualGeo = virtualGeo.united(screen->availableGeometry());
+
+    if (w > 0 && h > 0 && !virtualGeo.isEmpty()) {
+        w = qMin(w, virtualGeo.width());
+        h = qMin(h, virtualGeo.height());
+        // Floor after the screen clamp, and never above what the screen can
+        // actually hold.
+        w = qMax(qMin(kMinRestoredWindowWidth, virtualGeo.width()), w);
+        h = qMax(qMin(kMinRestoredWindowHeight, virtualGeo.height()), h);
+    }
+
+    // Check if the centre of the saved window is on any screen. Hoisted OUT of
+    // the size block: a file carrying a position but no size (a truncated write,
+    // a hand edit) took no containment test at all, so a coordinate on a monitor
+    // that is now gone was restored verbatim and the window opened off-screen.
+    // With w and h at 0 the centre is just the saved corner, which is the right
+    // question to ask when there is no size to offset by.
+    if (hasPosition && !virtualGeo.isEmpty() && !virtualGeo.contains(QPoint(x + w / 2, y + h / 2))) {
+        hasPosition = false; // off-screen, let WM place it
     }
 
     geo[ConfigDefaults::settingsAppWindowWidthKey()] = w;
     geo[ConfigDefaults::settingsAppWindowHeightKey()] = h;
     geo[ConfigDefaults::settingsAppWindowXKey()] = x;
     geo[ConfigDefaults::settingsAppWindowYKey()] = y;
+    // Derived, not persisted: the four keys above are QSettings entries this
+    // function reads back, but "hasPosition" is this function's own verdict on
+    // them (both coordinates present AND the centre still on a screen). It is a
+    // plain map key for QML, deliberately not a ConfigDefaults accessor —
+    // nothing ever writes it to a config file.
     geo[QStringLiteral("hasPosition")] = hasPosition;
     settings.endGroup();
     return geo;

@@ -7,19 +7,25 @@
 // into page-scoped sub-controllers (EditorPageController, …) hung off this
 // class via child Q_PROPERTYs so QML reads `settingsController.<page>.<prop>`.
 //
-// FILE-SIZE EXCEPTION (sanctioned): what remains here after that split is the
-// root object QML binds to. Its Q_PROPERTY surface IS the QML contract, so
-// moving another group of properties out means either a new child controller
-// every page URL and binding has to be rewritten for, or a second root QML
-// cannot see. The implementation is already split across
+// FILE-SIZE EXCEPTION (sanctioned), CEILING 1215 LINES: what remains here after
+// that split is the root object QML binds to. Its Q_PROPERTY surface IS the QML
+// contract, so moving another group of properties out means either a new child
+// controller every page URL and binding has to be rewritten for, or a second
+// root QML cannot see. The implementation is already split across
 // settingscontroller_*.cpp by concern, same shape as daemon.h.
+//
+// The number above is a real budget, not a description of wherever the file
+// happens to sit: the exception is for the QML contract, so a new declaration
+// that pushes past it has to buy its room by removing another (a retired
+// Q_INVOKABLE, a property that moved to a child controller). It does NOT
+// license a comment block — those belong on the definition in the matching
+// settingscontroller_*.cpp when they will not fit here.
 
 #pragma once
 
 #include "config/configdefaults.h"
 #include "phosphor_i18n.h"
 #include "config/settings.h"
-#include "config/updatechecker.h"
 #include "common/daemoncontroller.h"
 #include "settings/utils/screenhelper.h"
 #include "core/types/constants.h"
@@ -113,9 +119,6 @@ class SettingsController : public QObject
     Q_PROPERTY(QString activeDirtyScope READ activeDirtyScope NOTIFY activeDirtyScopeChanged)
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
     Q_PROPERTY(DaemonController* daemonController READ daemonController CONSTANT)
-    Q_PROPERTY(UpdateChecker* updateChecker READ updateChecker CONSTANT)
-    Q_PROPERTY(QString dismissedUpdateVersion READ dismissedUpdateVersion WRITE setDismissedUpdateVersion NOTIFY
-                   dismissedUpdateVersionChanged)
 
     // What's New
     Q_PROPERTY(QString lastSeenWhatsNewVersion READ lastSeenWhatsNewVersion NOTIFY lastSeenWhatsNewVersionChanged)
@@ -325,17 +328,6 @@ public:
     {
         return &m_daemonController;
     }
-    UpdateChecker* updateChecker()
-    {
-        return &m_updateChecker;
-    }
-    QString dismissedUpdateVersion() const
-    {
-        return m_dismissedUpdateVersion;
-    }
-    void setDismissedUpdateVersion(const QString& version);
-    Q_INVOKABLE void dismissUpdate();
-
     // What's New
     QString lastSeenWhatsNewVersion() const
     {
@@ -554,10 +546,6 @@ public:
     {
         return m_cachedRunningWindows;
     }
-    Q_INVOKABLE bool runningWindowsPending() const
-    {
-        return m_runningWindowsTimeout.isActive();
-    }
 
     // ── Config export/import ────────────────────────────────────────────────
     Q_INVOKABLE bool exportAllSettings(const QString& filePath);
@@ -651,8 +639,10 @@ public:
 
     // ── Virtual screen configuration ──────────────────────────────────────────
     Q_INVOKABLE QVariantList getVirtualScreenConfig(const QString& physicalScreenId) const;
-    Q_INVOKABLE void applyVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens);
-    Q_INVOKABLE void removeVirtualScreenConfig(const QString& physicalScreenId);
+    // No immediate apply/remove pair, deliberately: every writer goes through
+    // the staging methods below, so a virtual-screen edit lands on the same
+    // Apply / Discard footer as everything else. The two direct Q_INVOKABLEs
+    // that used to sit here had no caller and bypassed the staging entirely.
     // ── Staged virtual screen configuration (flushed on Apply) ──────────────
     Q_INVOKABLE void stageVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens);
     Q_INVOKABLE void stageVirtualScreenRemoval(const QString& physicalScreenId);
@@ -679,6 +669,10 @@ public:
     /// text: i18n lives in QML in this tree.
     static constexpr QLatin1String ReasonDaemonUnreachable{"daemon-unreachable"};
     static constexpr QLatin1String ReasonOverridesNotCleared{"overrides-not-cleared"};
+    /// The cleared configuration could not be written, so nothing was reset.
+    /// Raised by the global `defaults()` with an EMPTY page id — a factory reset
+    /// is not scoped to a page.
+    static constexpr QLatin1String ReasonResetNotWritten{"reset-not-written"};
 
 Q_SIGNALS:
     void activePageChanged();
@@ -729,10 +723,6 @@ Q_SIGNALS:
     /// `ReasonOverridesNotCleared`; the branch checks `asyncRevertInFlight()`
     /// first so a benign refusal during a global async discard never emits.
     void pageDiscardFailed(const QString& page, const QString& reason);
-    /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
-    /// fails at the daemon — QML can surface the reason in a toast so the
-    /// user knows the change wasn't saved.
-    void virtualScreenConfigFailed(const QString& physicalScreenId, const QString& reason);
     void screensChanged();
     void scopeScreenNameChanged();
     /// Emitted whenever any per-screen override map changes (set or clear,
@@ -740,7 +730,6 @@ Q_SIGNALS:
     /// to refresh its per-output override dots, which a plain WRITE on an
     /// individual key can't drive on its own.
     void perScreenOverridesChanged();
-    void dismissedUpdateVersionChanged();
     void lastSeenWhatsNewVersionChanged();
 
     // Virtual desktop / activity / assignment signals
@@ -899,7 +888,21 @@ private:
     /// strength of the count (the disabled-desktop pruner) must check this return
     /// first, or a daemon hiccup reads as "every desktop but the first is gone".
     bool refreshVirtualDesktops();
+    /// Void by design, unlike its virtual-desktop twin: every failing branch
+    /// CLEARS the state it could not refresh, so the emptiness the pruner
+    /// already gates on carries the failure. A destructive caller that needs to
+    /// tell "no activities" from "could not ask" must give this a bool return.
     void refreshActivities();
+
+    /// Stage an empty layout id for every quick-layout slot of @p snappingMode
+    /// that currently holds one (a slot's default IS "no assignment"), setting
+    /// @p stagedAny to whether anything was staged. False when the daemon's slot
+    /// map could not be read, and then NOTHING is staged: an error map reads the
+    /// same as "all slots already unassigned", so reporting success would show a
+    /// clean page for a reset that never happened. Shared by per-page Reset and
+    /// defaults() — quick slots are daemon-backed, so Settings::reset() cannot
+    /// clear them.
+    bool stageQuickSlotClears(bool snappingMode, bool& stagedAny);
 
     /// Adopt whatever is on disk as the session's state: reload settings and the
     /// local rule store, re-fetch the daemon's rules into the rules page, refresh
@@ -1000,8 +1003,6 @@ private:
     std::unique_ptr<ShaderPreviewController> m_shaderPreviewController;
 
     DaemonController m_daemonController;
-    UpdateChecker m_updateChecker;
-    QString m_dismissedUpdateVersion;
     QString m_lastSeenWhatsNewVersion;
     QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;
@@ -1141,6 +1142,10 @@ private:
 
     // Virtual desktop / activity state
     int m_virtualDesktopCount = 1;
+    /// Whether m_virtualDesktopCount came from the daemon, as opposed to the
+    /// display fallback of 1 a failed read leaves behind. Any caller that
+    /// REFUSES or DESTROYS on the strength of the count must gate on this.
+    bool m_virtualDesktopCountFromDaemon = false;
     QStringList m_virtualDesktopNames;
     bool m_activitiesAvailable = false;
     QVariantList m_activities;

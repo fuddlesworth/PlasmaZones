@@ -102,7 +102,12 @@ public:
                                       std::optional<ColumnDisplay> displayOverride, const ScrollLayoutParams& params,
                                       int minWidth = 0, int minHeight = 0);
     /// Insert a restored single-tile column at @p columnIndex (clamped) —
-    /// the persistence/restore path. Does not change focus.
+    /// the persistence/restore path. Does not change focus, WITH ONE
+    /// EXCEPTION: on an EMPTY strip the new column becomes the active one,
+    /// because a strip with columns and no focus has no valid state to be
+    /// in. The asymmetry is load-bearing for the restore paths, which lean
+    /// on the first arrival taking the focus and on every later one leaving
+    /// it alone until the stashed focus is re-asserted.
     /// NOTE: carries no min-size parameters; callers that know the
     /// window's minimum must follow up with setWindowMinimumSize (the
     /// open/restore/crossing sites all do).
@@ -125,6 +130,16 @@ public:
     bool removeWindow(const QString& windowId, const ScrollLayoutParams& params);
     /// Mark a tile minimized (kept in order, excluded from layout) or restore
     /// it. Returns true when the flag actually changed.
+    ///
+    /// TEST SEAM, and the entry point to a whole test-driven domain: the
+    /// daemon models minimize as a FLOAT (the effect reports it that way),
+    /// so in production a minimized window leaves the strip entirely and
+    /// nothing here ever sets the flag. The minimized branches in relayout,
+    /// focus, move and the height budget are nonetheless real behaviour the
+    /// model owes its callers — kept, exercised by test_scrollstrip_core /
+    /// _ops, and documented as unreached rather than deleted, because the
+    /// alternative is a model that silently mislays a tile the day the
+    /// daemon does drive minimize directly.
     bool setWindowMinimized(const QString& windowId, bool minimized, const ScrollLayoutParams& params);
     bool isWindowMinimized(const QString& windowId) const;
     /// Update a tile's stored minimum size. Returns true when it changed.
@@ -179,7 +194,11 @@ public:
     bool takeWindow(const QString& windowId, const ScrollLayoutParams& params);
 
     // ── Sizing ───────────────────────────────────────────────────────────────
-    /// Set the active column's width intent.
+    /// Set the active column's width intent, verbatim. TEST SEAM: every
+    /// production width change arrives through the cycle/adjust/maximize
+    /// verbs below, which validate and re-anchor; this one is the direct
+    /// write those verbs are built on and the tests use to reach an exact
+    /// intent.
     bool setActiveColumnWidth(const ColumnWidth& width);
     /// Cycle the active column through the preset width list. @p delta -1/+1.
     /// Enters the cycle at the nearest preset when the current width is not
@@ -194,7 +213,10 @@ public:
     /// Grow the active column into the on-screen space not covered by any
     /// column at the current view (niri expand-column-to-available-width).
     bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
-    /// Set the active tile's height intent.
+    /// Set the active tile's height intent, verbatim. TEST SEAM, the height
+    /// twin of setActiveColumnWidth: production height changes come through
+    /// the cycle/adjust verbs, or through setWindowHeightIntent on the
+    /// restore paths.
     bool setActiveWindowHeight(const WindowHeight& height);
     /// Cycle the active tile through the preset height list. @p delta -1/+1.
     bool cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params);
@@ -232,12 +254,15 @@ public:
 
     /// Rotate the window contents of the VISIBLE columns through their
     /// slots (clockwise = every stack shifts one slot right, the last
-    /// visible wraps to the first). Widths and display stay with the SLOT,
-    /// like autotile's rotate through fixed zones, so the strip's geometry
-    /// does not move — only the windows do. The active column index stays
-    /// put (focus follows the slot; callers activate its new window).
-    /// Returns the number of windows rotated, 0 when fewer than two
-    /// columns are visible.
+    /// visible wraps to the first). Width and display INTENTS stay with the
+    /// SLOT, like autotile's rotate through fixed zones, so the strip's
+    /// geometry holds still for the ordinary case. It is not an absolute:
+    /// a column's resolved width also honours its tiles' min-width clamp,
+    /// so rotating a window with a large minimum into a narrow slot does
+    /// widen that slot. The anchor is re-clamped afterwards for exactly
+    /// that reason. The active column index stays put (focus follows the
+    /// slot; callers activate its new window). Returns the number of
+    /// windows rotated, 0 when fewer than two columns are visible.
     int rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& params);
 
     // ── View ─────────────────────────────────────────────────────────────────

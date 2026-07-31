@@ -3,17 +3,15 @@
 
 #pragma once
 
-#include <QDBusConnection>
+#include "core/platform/logging.h"
+
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include <QDBusMessage>
-#include <QDBusMetaType>
-#include <QDBusPendingCall>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
-#include "core/platform/logging.h"
-#include "core/types/constants.h"
-#include <PhosphorProtocol/ClientHelpers.h>
-#include <PhosphorProtocol/ServiceConstants.h>
 
 namespace PlasmaZones::DaemonDBus {
 
@@ -23,20 +21,21 @@ namespace PlasmaZones::DaemonDBus {
 /// shared cap for blocking daemon calls. Daemon settings handlers are
 /// in-memory hash lookups, so 500 ms is "definitely something is wrong"
 /// rather than an expected latency.
+///
+/// A forward to `ClientHelpers::syncCall`, not a second implementation: the
+/// service name, object path and timeout are the protocol library's to spell,
+/// and this header's own closing note is about not keeping parallel copies of
+/// wire plumbing around. The alias survives only because the settings app's
+/// call sites read better naming the daemon.
 inline QDBusMessage callDaemon(const QString& interface, const QString& method, const QVariantList& args = {})
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath), interface, method);
-    if (!args.isEmpty()) {
-        msg.setArguments(args);
-    }
-    return QDBusConnection::sessionBus().call(msg, QDBus::Block, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    return PhosphorProtocol::ClientHelpers::syncCall(interface, method, args);
 }
 
 /// Send a synchronous reloadSettings call to the daemon.
 /// Must be synchronous so the daemon processes the reload (and emits
-/// its settingsChanged D-Bus signal) before the KCM clears its
-/// m_saving guard.  An async call here races: the settingsChanged
+/// its settingsChanged D-Bus signal) before SettingsController clears
+/// its m_saving guard.  An async call here races: the settingsChanged
 /// signal can arrive after m_saving is false, triggering a spurious
 /// load() that reverts just-saved assignments.
 ///
@@ -61,9 +60,25 @@ inline void notifyReload()
 /// Synchronous for the same reason notifyReload is: the caller reloads its own
 /// in-memory state (and re-fetches rules from the daemon) immediately after, so
 /// the daemon has to have adopted the new file before that fetch is dispatched.
-inline void notifyRulesReload()
+///
+/// Returns false when the call did not reach the daemon (not started, timed
+/// out, no such interface). That is the case the caller has to care about: the
+/// re-fetch it is about to make will then answer with the daemon's PRE-import
+/// rule set and quietly overwrite the rules that were just imported. Failure is
+/// warned about here, so a caller that has no recovery of its own can ignore
+/// the return and still leave a trace in the log.
+///
+/// @return true if the daemon acknowledged the reload.
+inline bool notifyRulesReload()
 {
-    callDaemon(QString(PhosphorProtocol::Service::Interface::Rules), QStringLiteral("reloadRules"));
+    const QDBusMessage reply =
+        callDaemon(QString(PhosphorProtocol::Service::Interface::Rules), QStringLiteral("reloadRules"));
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "notifyRulesReload: the daemon did not reload rules.json —" << reply.errorMessage()
+                          << "; its rule set is now stale and a re-fetch will serve pre-import rules";
+        return false;
+    }
+    return true;
 }
 
 /// Decode a daemon reply whose single argument is a JSON array string.
@@ -74,12 +89,19 @@ inline void notifyRulesReload()
 /// the warning so a malformed payload is diagnosable from the log alone.
 ///
 /// Returns an empty array for a D-Bus error, an empty payload, a parse failure,
-/// or a document that is not an array. Only the last two warn: a transport error
-/// is the caller's to report (the callers word it per feature) and an empty
-/// payload is a normal "nothing to report" answer.
+/// or a document that is not an array. Everything but the empty payload warns —
+/// an empty payload is a normal "nothing to report" answer, while a transport
+/// error means the settings app is about to render an empty feature as though
+/// the daemon had said there was nothing there. The doc here used to defer the
+/// transport case to the callers on the grounds that they word it per feature;
+/// none of them did, so the failure was silent at every site.
 inline QJsonArray replyJsonArray(const QDBusMessage& reply, QLatin1String context)
 {
-    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCInfo(lcCore) << context << "D-Bus call failed:" << reply.errorMessage();
+        return {};
+    }
+    if (reply.arguments().isEmpty()) {
         return {};
     }
     const QString json = reply.arguments().at(0).toString();

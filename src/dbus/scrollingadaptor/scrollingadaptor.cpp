@@ -14,6 +14,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRectF>
+#include <QSet>
+#include <QVector>
 
 namespace PlasmaZones {
 
@@ -98,8 +101,23 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
     if (!m_engine->isActiveOnScreen(screenId)) {
         return QStringLiteral("[]");
     }
-    QJsonArray arr;
+    // The number comes from the engine's own walk (VisibleTile::zoneNumber),
+    // not from this loop's index. Every producer of a scroll zone number reads
+    // that field, so the numbering has exactly one definition; re-deriving it
+    // as i + 1 here would silently fork the moment the walk stops being a
+    // dense 1..N over the returned order.
+    const QVector<PhosphorScrollEngine::ScrollEngine::VisibleTile> tiles = m_engine->visibleTiles(screenId);
     const QVector<QRectF> rects = m_engine->visibleTileRectsRelative(screenId);
+    if (tiles.size() != rects.size()) {
+        // Both reads walk the same strip in the same synchronous call, so the
+        // sizes cannot legitimately disagree. If they ever do, the pairing is
+        // meaningless and a mismatched rect/number pair is worse than no
+        // preview at all.
+        qCWarning(lcDbusScrolling) << "visibleStripJson: tile/rect count mismatch on" << screenId << tiles.size()
+                                   << "vs" << rects.size();
+        return QStringLiteral("[]");
+    }
+    QJsonArray arr;
     for (int i = 0; i < rects.size(); ++i) {
         const QRectF& r = rects.at(i);
         QJsonObject obj;
@@ -107,10 +125,7 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
         obj[PhosphorZones::ZoneJsonKeys::Y] = r.y();
         obj[PhosphorZones::ZoneJsonKeys::Width] = r.width();
         obj[PhosphorZones::ZoneJsonKeys::Height] = r.height();
-        // 1-based visible tile slot — the scroll zone number (rects arrive
-        // in zone-number order per the visibleTiles contract, so the index
-        // IS the number).
-        obj[PhosphorZones::ZoneJsonKeys::ZoneNumber] = i + 1;
+        obj[PhosphorZones::ZoneJsonKeys::ZoneNumber] = tiles.at(i).zoneNumber;
         arr.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
@@ -122,6 +137,13 @@ void ScrollingAdaptor::clearEngine()
         disconnect(m_engine, &PhosphorScrollEngine::ScrollEngine::scrollingScreensChanged, this, nullptr);
         m_engine = nullptr;
     }
+    // Object-state consistency, NOT gate correctness. clearEngine is terminal
+    // (the next cycle deletes and re-news the whole adaptor set), the
+    // connection is already severed, and scrollingScreens() now answers empty,
+    // so nothing reads this member again. Leaving it holding the last live set
+    // would just mean a detached adaptor whose "last broadcast" memory
+    // contradicts every other slot it answers.
+    m_lastBroadcastScreens.clear();
 }
 
 } // namespace PlasmaZones

@@ -524,7 +524,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     syncCavaState();
 }
 
-void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId, const QString& icon)
+void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)
 {
     QQuickWindow* window = nullptr;
     PhosphorLayer::Surface* surface = nullptr;
@@ -572,9 +572,9 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     pushLayoutOsdContent(osdSlot, p);
     writeQmlProperty(osdSlot, QStringLiteral("disabled"), true);
     writeQmlProperty(osdSlot, QStringLiteral("disabledReason"), reason);
-    // Explicit either way: the slot is REUSED across shows, so a neutral
-    // announcement must not inherit a prior failure glyph or vice versa.
-    writeQmlProperty(osdSlot, QStringLiteral("disabledIcon"), icon.isEmpty() ? QStringLiteral("dialog-cancel") : icon);
+    // Written explicitly rather than left to the QML default: the slot is
+    // REUSED across shows, so the glyph must be re-stated on each one.
+    writeQmlProperty(osdSlot, QStringLiteral("disabledIcon"), QStringLiteral("dialog-cancel"));
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     sizeOsdToScreen(window, screenGeom);

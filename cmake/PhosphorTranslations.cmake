@@ -24,8 +24,8 @@ find_package(Qt6LinguistTools QUIET)
 # extraction gap this file has had. src/daemon/daemon/lifecycle.cpp lost a
 # user-facing notification when the daemon.cpp split moved it out of a listed
 # file, and src/editor/EditorGapsModel.cpp, src/editor/helpers/
-# BatchOperationScope.h, src/config/settingsvaluelabels.cpp,
-# src/config/updatechecker.cpp and src/core/utils/unifiedlayoutlist.cpp were
+# BatchOperationScope.h, src/config/settingsvaluelabels.cpp
+# and src/core/utils/unifiedlayoutlist.cpp were
 # each unreachable until someone happened to notice. Headers are included
 # because PhosphorI18n::tr() calls live in them too.
 #

@@ -1,13 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): OverlayService is the single façade every
-// overlay surface goes through — zone overlay, selector, snap assist, OSD,
-// cheatsheet, and the scroll tab strip — so its members are the per-screen
-// state and per-role wiring those surfaces share. The implementation is
-// already split by surface across daemon/overlayservice/*.cpp; splitting the
-// class DECLARATION would scatter the per-screen ownership and teardown-order
-// contract the member ordering encodes, exactly as documented on daemon.h.
+// FILE-SIZE EXCEPTION: this header is 1193 lines, over the 1150 hard ceiling.
+// The exception was granted in the same pull request that carried the file
+// past the ceiling (the scroll tab strip), so it is a live decision rather
+// than settled precedent, and it is recorded here for that reason.
+//
+// The case for it: OverlayService is the single façade every overlay surface
+// goes through — zone overlay, selector, snap assist, OSD, cheatsheet, and
+// the scroll tab strip — so its members are the per-screen state and per-role
+// wiring those surfaces share. The implementation is already split by surface
+// across daemon/overlayservice/*.cpp; splitting the class DECLARATION would
+// scatter the per-screen ownership and teardown-order contract the member
+// ordering encodes, exactly as documented on daemon.h.
 
 #pragma once
 
@@ -110,7 +115,11 @@ class OverlayService : public IOverlayService
     Q_OBJECT
 
     Q_PROPERTY(bool visible READ isVisible NOTIFY visibilityChanged)
-    Q_PROPERTY(bool zoneSelectorVisible READ isZoneSelectorVisible NOTIFY zoneSelectorVisibilityChanged)
+    // No zoneSelectorVisible property: nothing reads one. The selector is
+    // never exposed to QML as a bound property, so the property only ever
+    // wrapped IOverlayService::isZoneSelectorVisible() and its
+    // zoneSelectorVisibilityChanged notification, both of which remain and
+    // are the supported way to observe it.
 
 public:
     /// Per-screen overlay state (window pointers, physical screen references,
@@ -290,11 +299,13 @@ public:
                        bool producesOverlappingZones = false, const QString& zoneNumberDisplay = QStringLiteral("all"),
                        int masterCount = 1);
     void showLockedLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
-    /// @p icon overrides the card's overlay glyph — the default is the
-    /// failure "dialog-cancel"; a positive announcement that reuses this
-    /// card (showScrollingModeOsd) passes its own so success does not wear
-    /// the failure icon.
-    void showDisabledOsd(const QString& reason, const QString& screenId = QString(), const QString& icon = QString());
+    /// The card always wears the failure glyph "dialog-cancel". Both callers
+    /// (showContextDisabledOsd and showNotAssignedOsd) explain why a
+    /// requested change had no effect, which is what the glyph says. A
+    /// positive announcement does not belong on this card at all — the
+    /// scrolling mode switch, which briefly did reuse it, now renders its own
+    /// strip preview.
+    void showDisabledOsd(const QString& reason, const QString& screenId = QString());
 
     /**
      * @brief Pre-create the per-screen passive overlay shell for all connected

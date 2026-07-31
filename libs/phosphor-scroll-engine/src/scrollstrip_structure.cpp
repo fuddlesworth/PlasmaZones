@@ -718,12 +718,25 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
     }
     int rotated = 0;
     const int n = visible.size();
+    const int widthBefore = stripWidthPx(params);
     for (int i = 0; i < n; ++i) {
         const int from = clockwise ? (i - 1 + n) % n : (i + 1) % n;
         Column& dest = m_columns[visible.at(i)];
         dest.tiles = tiles.at(from);
         dest.activeTileIdx = activeTileIdx.at(from);
         rotated += dest.tiles.size();
+    }
+    // Width/display intents stayed with the slot, but a column's RESOLVED
+    // width also carries its tiles' min-width clamp — so a rotate that lands
+    // a wide-minimum window in a narrow slot really does change pixel widths,
+    // and the total strip width with them. Re-clamp so the view cannot be
+    // stranded past the end of a strip that just SHRANK — and only then:
+    // centerActiveColumn deliberately stores out-of-range anchors
+    // (restoreViewAnchor / updateViewForFocus document not clamping them),
+    // so an unconditional clamp here would silently undo an explicit
+    // centerColumn on a first/last column on the next rotate.
+    if (params.workArea.isValid() && stripWidthPx(params) < widthBefore) {
+        m_viewAnchor = clampedAnchor(m_viewAnchor, params);
     }
     return rotated;
 }

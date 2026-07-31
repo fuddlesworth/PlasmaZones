@@ -69,9 +69,10 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
     // with partially-applied state. QSignalBlocker suppresses emissions outright
     // (it does not queue them), so everything the batch changed must be re-emitted
     // explicitly after the blocker scope closes — see below. (This used to say the
-    // KCM's notifyReload() drives the reload; it does not — the KCM writes config
-    // in-process. Nothing in this tree calls setSettings at all; it is a published
-    // D-Bus surface for external clients.)
+    // KCM's notifyReload() drives the reload; it does not, and the writer is the
+    // settings app rather than the KCM anyway — it writes config in-process.
+    // Nothing in this tree calls setSettings at all; it is a published D-Bus
+    // surface for external clients.)
     //
     // Snapshot every registered getter first so the post-batch re-emit can fire
     // only for values that actually changed (emit-on-change rule), including

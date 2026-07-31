@@ -3,23 +3,88 @@
 
 #pragma once
 
-// Shared fixture helpers for the ScrollStrip test suite. One definition so
-// the work area / gap cannot silently diverge between the two files.
+// Shared fixture helpers for the whole PhosphorScrollEngine test suite — the
+// two strip-model files and the three engine files. One definition of the
+// 1200x800 geometry and the 10px gap, because a work area that drifts between
+// files quietly changes what every hardcoded pixel expectation means, and one
+// definition of the headless engine fixture, because its two geometry
+// providers are the seam the parking tests need to tell apart.
 
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollStrip.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
+#include <QObject>
+#include <QRect>
+#include <QSet>
+#include <QString>
+
+#include <functional>
+
 namespace ScrollTestUtils {
+
+/// The one screen geometry the whole suite fixtures against.
+inline constexpr int kScreenWidth = 1200;
+inline constexpr int kScreenHeight = 800;
+
+inline QRect defaultScreenRect()
+{
+    return QRect(0, 0, kScreenWidth, kScreenHeight);
+}
 
 inline PhosphorScrollEngine::ScrollLayoutParams defaultParams()
 {
     PhosphorScrollEngine::ScrollLayoutParams p;
-    p.workArea = QRect(0, 0, 1200, 800);
+    p.workArea = defaultScreenRect();
     p.gap = 10;
     return p;
 }
 
-inline const PhosphorScrollEngine::ColumnWidth kHalf = PhosphorScrollEngine::ColumnWidth::makeProportion(0.5);
+inline constexpr PhosphorScrollEngine::ColumnWidth kHalf = PhosphorScrollEngine::ColumnWidth::makeProportion(0.5);
+
+using GeometryFn = std::function<QRect(const QString&)>;
+
+/// A headless ScrollEngine on the geometry-provider seam (no ScreenManager,
+/// no tracking service), already active on @p screens. Only with the
+/// providers wired does the apply path resolve real rects, and only then do
+/// lastManagedRect / visibleTiles / windowsTiled have anything to say.
+///
+/// @p screenGeometry defaults to the suite's single 1200x800 output.
+/// @p availableGeometry defaults to @p screenGeometry — pass a DIFFERENT one
+/// (a panel inset) when the test needs to tell the work area apart from the
+/// screen rect, which is what the parking bounds are measured against.
+inline PhosphorScrollEngine::ScrollEngine* makeProviderEngine(QObject* parent, const QSet<QString>& screens,
+                                                              GeometryFn screenGeometry = {},
+                                                              GeometryFn availableGeometry = {})
+{
+    if (!screenGeometry) {
+        screenGeometry = [](const QString&) {
+            return defaultScreenRect();
+        };
+    }
+    if (!availableGeometry) {
+        availableGeometry = screenGeometry;
+    }
+    auto* engine = new PhosphorScrollEngine::ScrollEngine(nullptr, nullptr, parent);
+    engine->setScreenGeometryProviders(availableGeometry, screenGeometry);
+    engine->setActiveScreens(screens);
+    return engine;
+}
+
+/// The resolved tile for @p windowId, or nullptr when it is ABSENT from the
+/// resolve. The three accessors below are thin readers over this one walk.
+inline const PhosphorScrollEngine::ResolvedTile* findTile(const PhosphorScrollEngine::ResolvedStrip& resolved,
+                                                          const QString& windowId)
+{
+    for (const PhosphorScrollEngine::ResolvedColumn& rc : resolved.columns) {
+        for (const PhosphorScrollEngine::ResolvedTile& rt : rc.tiles) {
+            if (rt.windowId == windowId) {
+                return &rt;
+            }
+        }
+    }
+    return nullptr;
+}
 
 /// The tile's resolved rect, or a null QRect when the window is ABSENT
 /// from the resolve. Callers asserting on a rect property should pair it
@@ -27,14 +92,8 @@ inline const PhosphorScrollEngine::ColumnWidth kHalf = PhosphorScrollEngine::Col
 /// `!isHidden`) pass vacuously for a dropped tile.
 inline QRect rectOf(const PhosphorScrollEngine::ResolvedStrip& resolved, const QString& windowId)
 {
-    for (const PhosphorScrollEngine::ResolvedColumn& rc : resolved.columns) {
-        for (const PhosphorScrollEngine::ResolvedTile& rt : rc.tiles) {
-            if (rt.windowId == windowId) {
-                return rt.rect;
-            }
-        }
-    }
-    return {};
+    const PhosphorScrollEngine::ResolvedTile* tile = findTile(resolved, windowId);
+    return tile ? tile->rect : QRect();
 }
 
 /// True when @p windowId is resolved HIDDEN. Returns false for an ABSENT
@@ -42,27 +101,14 @@ inline QRect rectOf(const PhosphorScrollEngine::ResolvedStrip& resolved, const Q
 /// like rectOf, or a dropped tile passes them vacuously.
 inline bool isHidden(const PhosphorScrollEngine::ResolvedStrip& resolved, const QString& windowId)
 {
-    for (const PhosphorScrollEngine::ResolvedColumn& rc : resolved.columns) {
-        for (const PhosphorScrollEngine::ResolvedTile& rt : rc.tiles) {
-            if (rt.windowId == windowId) {
-                return rt.hidden;
-            }
-        }
-    }
-    return false;
+    const PhosphorScrollEngine::ResolvedTile* tile = findTile(resolved, windowId);
+    return tile && tile->hidden;
 }
 
 /// True when @p windowId appears anywhere in the resolve.
 inline bool resolveContains(const PhosphorScrollEngine::ResolvedStrip& resolved, const QString& windowId)
 {
-    for (const PhosphorScrollEngine::ResolvedColumn& rc : resolved.columns) {
-        for (const PhosphorScrollEngine::ResolvedTile& rt : rc.tiles) {
-            if (rt.windowId == windowId) {
-                return true;
-            }
-        }
-    }
-    return false;
+    return findTile(resolved, windowId) != nullptr;
 }
 
 } // namespace ScrollTestUtils

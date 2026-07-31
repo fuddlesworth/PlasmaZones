@@ -6,15 +6,20 @@
 //                   (settings, local rule store, daemon rules, screens,
 //                   layouts) and drop every staged edit. Shared by load()
 //                   and the config-import success path.
-//   * load()      — pull settings from disk, snapshot for dirty
-//                   diff, ensure schema migration, hydrate algorithm
-//                   ordering, refresh local layouts.
-//   * save()      — flush dirty settings to disk, commit per-page
-//                   stagers (animations + rules), notify the
-//                   daemon to reload, push quick-slot + assignment
-//                   state through D-Bus.
-//   * defaults()  — restore factory defaults and replay the page-
-//                   reset signal chain.
+//   * load()      — delegate the whole reload to adoptOnDiskState() and
+//                   clear the dirty state when it comes back clean. The
+//                   reload steps themselves (settings, rule store, daemon
+//                   rules, screens, layouts, staging) all live in that
+//                   shared helper, because the import path needs exactly
+//                   the same sequence.
+//   * save()      — flush dirty settings to disk, notify the daemon to
+//                   reload, and push the three staged D-Bus surfaces
+//                   (virtual screens, quick slots, assignments). Per-page
+//                   stagers (animations + rules) commit through the
+//                   framework's own domain walk, not from here.
+//   * defaults()  — restore factory defaults, stage the daemon-backed
+//                   clears the config reset cannot cover, and recompute
+//                   the dirty set.
 //   * launchEditor() — fork the zone editor process.
 //   * onSettingsPropertyChanged / onExternalSettingsChanged — the
 //     two ISettings change-tracking hooks that flow into setNeedsSave.
@@ -23,9 +28,6 @@
 
 #include "settingscontroller.h"
 
-#include "config/configdefaults.h"
-#include "config/configmigration.h"
-#include "core/utils/utils.h"
 #include "settings/utils/dbusutils.h"
 #include "settingscontroller_pagekeys.h"
 
@@ -34,10 +36,7 @@
 #include "core/platform/logging.h"
 
 #include <QCoreApplication>
-#include <QFile>
 #include <QFileInfo>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QProcess>
 #include <QTimer>
 
@@ -181,20 +180,33 @@ void SettingsController::save()
     // the Settings-
     // backed surface.
 
+    // The three D-Bus flushes below all report TRANSPORT failure and all
+    // RETAIN their staging when they fail, so `commitOk` gates the same clean
+    // transition for every one of them: the badge re-lights with the data
+    // still staged and the next Save re-sends it. Treating them as infallible
+    // cleared the staging AND the badge while the daemon had never applied
+    // the edits. Transport-level only: a daemon-side rejection inside a void
+    // adaptor slot (e.g. setQuickLayoutSlot ignoring an out-of-range slot)
+    // still replies successfully and is not caught here.
+    bool commitOk = true;
+
     // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
     // IDs exist when assignments referencing them are processed.
-    m_staging.flushVirtualScreensToDaemon();
+    if (!m_staging.flushVirtualScreensToDaemon()) {
+        commitOk = false;
+    }
 
     // Notify daemon to reload KConfig settings (before D-Bus assignment mutations)
     DaemonDBus::notifyReload();
 
     // Flush staged quick-layout slots (snapping + tiling) via D-Bus (after reload).
-    m_staging.flushQuickSlotsToDaemon();
+    if (!m_staging.flushQuickSlotsToDaemon()) {
+        commitOk = false;
+    }
 
     // Flush staged assignment changes to daemon (same batch protocol as KCM).
     // This must happen AFTER notifyReload so the reload doesn't overwrite
     // the assignment changes.
-    bool assignmentsCommitOk = true;
     if (m_staging.hasPendingAssignments()) {
         QDBusMessage batchOn = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                       QStringLiteral("setSaveBatchMode"), {true});
@@ -203,16 +215,18 @@ void SettingsController::save()
             qCWarning(lcCore)
                 << "save: setSaveBatchMode(true) failed:" << batchOn.errorMessage()
                 << "— skipping flush+apply to avoid per-assignment writes the batch was meant to coalesce";
-            assignmentsCommitOk = false;
+            commitOk = false;
         } else {
-            m_staging.flushAssignmentsToDaemon();
+            if (!m_staging.flushAssignmentsToDaemon()) {
+                commitOk = false;
+            }
             QDBusMessage apply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                         QStringLiteral("applyAssignmentChanges"));
             if (apply.type() == QDBusMessage::ErrorMessage) {
                 qCWarning(lcCore) << "save: applyAssignmentChanges failed:" << apply.errorMessage();
                 Q_EMIT layoutOperationFailed(
                     PhosphorI18n::tr("Failed to apply assignment changes: %1").arg(apply.errorMessage()));
-                assignmentsCommitOk = false;
+                commitOk = false;
             }
             // Only drop batch mode if we actually entered it. ALWAYS attempt
             // to drop — leaving the daemon in batch mode after a failure
@@ -222,7 +236,7 @@ void SettingsController::save()
                                        QStringLiteral("setSaveBatchMode"), {false});
             if (batchOff.type() == QDBusMessage::ErrorMessage) {
                 qCWarning(lcCore) << "save: setSaveBatchMode(false) failed:" << batchOff.errorMessage();
-                assignmentsCommitOk = false;
+                commitOk = false;
             }
         }
     }
@@ -251,8 +265,8 @@ void SettingsController::save()
     // applyAllComplete carries the error. SettingsController::save()
     // no longer dispatches window-rule pushes (see comment above) so
     // there is no commit-result to re-flag here.
-    if (!assignmentsCommitOk) {
-        // Surface the assignment-flush failure to the user — same shape
+    if (!commitOk) {
+        // Surface the failed daemon commit to the user — same shape
         // as the rules retry path. Without this, a failed batch
         // looks "saved" in the UI while the daemon never applied the
         // edits, so the next launch silently shows stale assignments.
@@ -261,6 +275,13 @@ void SettingsController::save()
         // re-flagging the active page would dirty whatever page the user
         // happens to be viewing at save time, not the page that actually
         // has the unsaved data. Same shape as the rules block above.
+        //
+        // "overview" is the target for all three flushes, not just
+        // assignments: it is the one page that is always registered, and the
+        // retained staging is what the badge is really reporting. The
+        // virtual-screens and quick-shortcuts pages ALSO light on their own,
+        // because their dirty state is value-based over the staging maps that
+        // the failed flush just kept.
         ExternalEditScope scope(*this, QStringLiteral("overview"));
         setNeedsSave(true);
     }
@@ -285,12 +306,24 @@ void SettingsController::defaults()
     // synchronously and the staged-order reset transitions through
     // optional<>::reset() emit NOTIFY signals — all of which route via
     // onSettingsPropertyChanged and would otherwise re-mark the active
-    // page dirty before the trailing blanket-mark below overwrites
-    // m_dirtyPages. Keeping the gate engaged for the full body matches
-    // the load()/save() pattern and gives us one clean
-    // dirtyPagesChanged emit at the end.
-    m_loading = true;
-    m_settings.reset();
+    // page dirty before the final dirty-set computation below. Keeping the
+    // gate engaged for the full body matches the load()/save() pattern and
+    // gives us one clean dirtyPagesChanged emit at the end.
+    //
+    // ScopedFlag, not a bare pair of assignments: anything below can throw
+    // (a D-Bus call, a QString allocation), and a stranded m_loading = true
+    // swallows every subsequent edit for the rest of the session.
+    ScopedFlag loadingScope(m_loading);
+
+    // Nothing below may proceed on a reset that did not land. A failed commit
+    // leaves the previous configuration on disk and in the store, so notifying
+    // the daemon, resetting its managed rules and clearing the staging would
+    // half-apply a factory reset the config itself never took.
+    if (!m_settings.reset()) {
+        qCWarning(lcConfig) << "defaults: the cleared configuration could not be written — nothing was reset";
+        Q_EMIT pageResetFailed(QString(), QString(ReasonResetNotWritten));
+        return;
+    }
 
     m_staging.clearAll();
     // Gate the staged-order NOTIFY emits on transition (same rationale
@@ -321,7 +354,33 @@ void SettingsController::defaults()
         // importAllSettings().
         qCWarning(lcConfig) << "defaults: animation snapshots are still staged after the revert (a discard is in "
                                "flight, or a restore failed)";
+        // A log line is not a result. The two sibling paths (per-page Reset and
+        // per-page Discard) both raise a signal for exactly this refusal, and
+        // without one here the animation pages silently keep their overrides
+        // while the rest of the app reports a completed factory reset.
+        Q_EMIT pageResetFailed(QStringLiteral("animations"), QString(ReasonOverridesNotCleared));
     }
+
+    // Quick-layout slots are daemon-backed (mode-keyed LayoutRegistry), so
+    // m_settings.reset() above did not touch them and clearAll() only dropped
+    // whatever was staged. Stage the clears the same way per-page Reset does —
+    // through the same helper — so "Restore Defaults" actually unassigns the
+    // slots instead of leaving the user's assignments behind on two pages.
+    // The clears flush on the next Save, which is what leaves those two pages
+    // legitimately dirty below.
+    bool quickSlotsStaged = false;
+    for (const bool snappingMode : {true, false}) {
+        bool staged = false;
+        if (!stageQuickSlotClears(snappingMode, staged)) {
+            Q_EMIT pageResetFailed(snappingMode ? QStringLiteral("snapping-shortcuts")
+                                                : QStringLiteral("tiling-shortcuts"),
+                                   QString(ReasonDaemonUnreachable));
+            continue;
+        }
+        quickSlotsStaged = quickSlotsStaged || staged;
+    }
+    if (quickSlotsStaged)
+        Q_EMIT quickLayoutSlotsChanged();
 
     // Refresh screen list — symmetric with load(), which calls this
     // immediately after m_settings.load(). reset() can change screen
@@ -339,32 +398,50 @@ void SettingsController::defaults()
     // reset on the same D-Bus connection). The window border / title bar / gap
     // values are plain config now (reset by m_settings.reset() above), so this is
     // purely about the daemon-side managed rules, not the Windows appearance page.
+    //
+    // m_localRuleStore is deliberately NOT reloaded here. resetManagedDefaults is
+    // fire-and-forget, so rules.json still holds the pre-reset content at this
+    // point and a load() now would re-read exactly what is already in memory. The
+    // daemon's rulesChanged broadcast is what carries the rewrite back, through
+    // reloadLocalRuleStore (wired in settingscontroller_dbuswire.cpp), and the
+    // RuleStoreWatcher covers the file for a session with no daemon at all — a
+    // session where this reset never reaches the daemon either.
     if (m_rulesPage) {
         m_rulesPage->resetManagedDefaults();
         m_rulesPage->revert();
     }
 
-    // Defaults is a global action — mark every valid page dirty so the
-    // unsaved indicator appears next to each of them. Guard the emit
-    // on actual change so a back-to-back `defaults()` (or one called
-    // when state already matches the post-defaults set) doesn't fire
-    // a spurious `dirtyPagesChanged`, matching the emit-on-change
-    // discipline used by `setNeedsSave` everywhere else in this file.
+    // A factory reset is APPLIED, not staged: m_settings.reset() wrote the
+    // cleared configuration to disk and reloaded from it, and the daemon has
+    // been notified. So the config pages are clean, and the blanket "mark every
+    // page dirty" this used to do was unbacked — every one of those pages
+    // reports its dirty state value-based (owned keys against the committed
+    // baseline, which reset() re-captured), so they read CLEAN no matter what
+    // m_dirtyPages says. All the mark achieved was lighting the footer over a
+    // Save that had nothing to write and a Discard that had nothing to revert.
     //
-    // "rules" is INTENTIONALLY excluded from the blanket-mark: it is rule-backed
-    // (its source of truth is the daemon's `rules.json`, not the KConfig store
-    // reset() clears). The managed baselines ARE reset above (resetManagedDefaults
-    // + revert), but that path is LIVE (daemon-persisted, model reloaded) rather
-    // than staged — so the Rules page lands clean, not dirty. Marking it here would
-    // surface a stale "unsaved changes" indicator a subsequent Save could never
-    // clear. The Windows appearance page is a plain config page now (its Windows.*
-    // / Gaps.* keys were reset by m_settings.reset()), so it stays in the blanket
-    // mark like every other config page.
-    QSet<QString> fullSet = validPageNames();
-    fullSet.remove(QStringLiteral("rules"));
-    m_loading = false;
-    if (m_dirtyPages != fullSet) {
-        m_dirtyPages = fullSet;
+    // What IS genuinely unsaved after this is the staged quick-slot clears
+    // above: they are daemon-backed and only reach the daemon on the next Save.
+    // Those two pages therefore compute dirty on their own, through the same
+    // isPageDirty the rest of the app uses — no special-casing needed here, and
+    // no exclusion list to keep in step with the page tree either (the old
+    // "rules" carve-out existed only because the blanket mark would have badged
+    // a live, daemon-persisted page it could never clear).
+    //
+    // Drop m_loading before recomputing so isPageDirty sees the settled state,
+    // and guard the emit on actual change to keep the emit-on-change discipline.
+    loadingScope.release();
+    // Start the recompute from an EMPTY set, not from the existing membership:
+    // isPageDirty falls back to m_dirtyPages for any page with no value-based
+    // rule of its own, so an entry left over from before the reset would keep
+    // re-electing itself forever.
+    const QSet<QString> before = m_dirtyPages;
+    m_dirtyPages.clear();
+    for (const QString& page : validPageNames()) {
+        if (isPageDirty(page))
+            m_dirtyPages.insert(page);
+    }
+    if (m_dirtyPages != before) {
         Q_EMIT dirtyPagesChanged();
     }
 }

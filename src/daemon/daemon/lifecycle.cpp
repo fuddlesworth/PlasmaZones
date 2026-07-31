@@ -392,15 +392,31 @@ void Daemon::stop()
     // teardown severs explicitly rather than relying on an invariant.
     m_bridgeWatchdogTimer.stop();
 
-    // The per-screen scrolling-OSD settle timers (osd.cpp keys them by
-    // objectName) accumulate one per screen id ever seen; sweep them here so
-    // a stop() leaves no pending strip-preview fire and no per-screen
-    // residue.
-    const auto settleTimers =
-        findChildren<QTimer*>(QRegularExpression(QStringLiteral("^scrollingOsdSettle:")), Qt::FindDirectChildrenOnly);
-    for (QTimer* settle : settleTimers) {
-        settle->stop();
-        settle->deleteLater();
+    // The preview-notify debounce and the resnap-suppression watchdog are
+    // both restartable from paths that outlive the teardown of what they
+    // touch (a queued preview push, a resnap feedback in flight), so they
+    // are severed here with the other timers rather than left to fire into
+    // an unregistered adaptor.
+    m_previewNotifyTimer.stop();
+    m_suppressResnapOsdWatchdog.stop();
+
+    // The per-screen scrolling-OSD settle timers accumulate one per screen
+    // id ever seen; sweep them all here so a stop() leaves no pending
+    // strip-preview fire and no per-screen residue.
+    reapScrollingOsdSettleTimers();
+
+    // The systemd PropertiesChanged subscription is a bus-level slot-table
+    // entry keyed on `this`, not a QObject connection, so nothing in the
+    // per-sender sweep below reaches it. Left in place it survives the stop
+    // as a stale entry, and queryPlasmaWorkspaceState's own disconnect-first
+    // on the next start() only covers it while the resolved unit path is
+    // unchanged. Drop it here, with the path it was registered against.
+    if (!m_plasmaWorkspaceTargetPath.isEmpty()) {
+        QDBusConnection::sessionBus().disconnect(
+            QStringLiteral("org.freedesktop.systemd1"), m_plasmaWorkspaceTargetPath,
+            QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this,
+            SLOT(onPlasmaWorkspaceTargetPropertiesChanged(QString, QVariantMap, QStringList)));
+        m_plasmaWorkspaceTargetPath.clear();
     }
 
     // Null the drag adaptor's borrowed pointers ABOVE the m_running gate, for
@@ -838,6 +854,12 @@ void Daemon::stop()
     // them out was an asymmetry in a block whose whole purpose is that reset.
     m_derivedAutotileScreens.clear();
     m_derivedScrollingScreens.clear();
+    // Per-session OSD gates. A resnap armed just before the stop leaves its
+    // outstanding count behind, and the screen-removal cooldown deadline can
+    // still be in the future — either one carried into the next start()
+    // swallows the first OSD of the new session.
+    m_suppressResnapOsd = 0;
+    m_screensSettlingUntil = {};
 
     // Release the shortcut grabs and the Portal session with the connections:
     // registerShortcuts() on the next start() lazily recreates the registry
@@ -890,8 +912,17 @@ void Daemon::stop()
         m_scriptedAlgorithmLoader->disconnect();
     }
 
-    // Hide overlay
+    // Hide the zone overlay AND the three Escape-consuming modal slots. The
+    // shortcut grabs those modals dismiss on are released just above
+    // (unregisterShortcuts), so a slot left showing has no way out; on a
+    // stop() → start() cycle the next session comes up with a stale picker
+    // or cheatsheet floating over it.
     hideOverlay();
+    if (m_overlayService) {
+        m_overlayService->hideLayoutPicker();
+        m_overlayService->hideSnapAssist();
+        m_overlayService->hideCheatsheet();
+    }
 
     // Save state
     m_layoutManager->saveLayouts();

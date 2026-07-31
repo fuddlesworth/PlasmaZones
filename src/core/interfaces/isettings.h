@@ -324,7 +324,12 @@ public:
     // `m_ownedRuleStore`.
     virtual void load() = 0;
     virtual void save() = 0;
-    virtual void reset() = 0;
+    /// Restore factory defaults. Returns false when the cleared configuration
+    /// could not be persisted, in which case the implementation must leave the
+    /// previous state intact rather than half-applying the reset. Callers that
+    /// chain further reset work (daemon notification, page bookkeeping) MUST
+    /// gate it on this result.
+    virtual bool reset() = 0;
 
 Q_SIGNALS:
     void settingsChanged();

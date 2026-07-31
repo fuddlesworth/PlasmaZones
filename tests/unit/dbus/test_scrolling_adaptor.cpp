@@ -17,8 +17,8 @@
  *     a strip belonging to a sibling desktop context OUTLIVES the screen
  *     leaving the scrolling set, so only the gate keeps the preview empty.
  *  3. visibleStripJson emits the rects the XML documents, INCLUDING
- *     zoneNumber, normalized to 0..1 per axis against the gap-inset work
- *     area, cross-checked against the engine's own rects.
+ *     zoneNumber, normalized to 0..1 per axis against the full screen
+ *     geometry, cross-checked against the engine's own rects.
  *  4. The screenId argument is load-bearing: two owned screens with
  *     different strips produce different payloads.
  *  5. Off-screen columns are excluded at the wire boundary — the payload
@@ -64,9 +64,10 @@ private Q_SLOTS:
         // Neither provider is at the origin: a (0,0) work area would let a
         // dropped origin-subtraction term pass unnoticed (x/1920 lands well
         // outside 0..1). The two rects also differ so a reader can see which
-        // one the payload derives from — the AVAILABLE geometry — though no
-        // assertion here distinguishes them (a swap normalizes against 800
-        // instead of 760 and stays inside 0..1).
+        // basis the payload normalizes against — the FULL screen geometry,
+        // with tiles clipped to the available one — though no assertion here
+        // distinguishes them (a swap normalizes against 760 instead of 800
+        // and stays inside 0..1).
         const auto available = [](const QString&) {
             return QRect(1920, 40, 1200, 760);
         };
@@ -102,11 +103,14 @@ private Q_SLOTS:
 
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
 
-        // Ownership gate (scrollingadaptor.cpp:84): the engine does not own
-        // this screen, so its strip is not described.
+        // The isActiveOnScreen ownership gate: the engine does not own this
+        // screen, so its strip is not described.
         QCOMPARE(m_adaptor->visibleStripJson(QStringLiteral("HDMI-2")), QStringLiteral("[]"));
-        // Wire-boundary argument check (scrollingadaptor.cpp:75): an empty
-        // screenId never reaches the ownership question at all.
+        // The screenId.isEmpty() wire-boundary check. Boundary hygiene, not a
+        // discriminating assertion: isActiveOnScreen would reject "" anyway,
+        // so deleting the isEmpty check keeps this green. What it pins is the
+        // documented answer for a malformed argument, which should not depend
+        // on how the callee happens to treat it.
         QCOMPARE(m_adaptor->visibleStripJson(QString()), QStringLiteral("[]"));
 
         // Positive control: the screen the engine DOES own describes a strip,
@@ -220,8 +224,17 @@ private Q_SLOTS:
         }
         QVERIFY2(stackedFailures.isEmpty(), qPrintable(stackedFailures.join(QStringLiteral("; "))));
 
-        QCOMPARE(stackedArr.at(0).toObject().value(QLatin1String("zoneNumber")).toInt(-1), 1);
-        QCOMPARE(stackedArr.at(1).toObject().value(QLatin1String("zoneNumber")).toInt(-1), 2);
+        // Against the ENGINE's numbers, not against the payload's own index.
+        // The adaptor relays VisibleTile::zoneNumber, so comparing each entry
+        // with the tile at the same position is what pins that it relays the
+        // engine's numbering rather than re-deriving one; the ordinals-are-1-
+        // and-2 claim below is the engine's contract, asserted separately.
+        for (int i = 0; i < stackedArr.size(); ++i) {
+            QCOMPARE(stackedArr.at(i).toObject().value(QLatin1String("zoneNumber")).toInt(-1),
+                     stackedTiles.at(i).zoneNumber);
+        }
+        QCOMPARE(stackedTiles.at(0).zoneNumber, 1);
+        QCOMPARE(stackedTiles.at(1).zoneNumber, 2);
     }
 
     // The screenId argument has to select the strip. With one owned screen
@@ -269,13 +282,12 @@ private Q_SLOTS:
         }
     }
 
-    // The gap regime end to end: with an outer gap the engine resolves an
-    // inset work area, and the payload must still mirror the engine's
-    // gap-aware rects field-for-field. This cannot DETECT a dropped inset
-    // (relative coordinates renormalize either way); what it pins is that
-    // the adaptor faithfully relays the gap-regime output rather than a
-    // stale or differently-derived list.
-    void testVisibleStripJson_normalizesAgainstGapInsetWorkArea()
+    // The gap regime end to end: with an outer gap the engine clips its
+    // tiles to an inset work area, and the payload must still mirror the
+    // engine's gap-aware rects field-for-field. This cannot DETECT a dropped
+    // inset on its own; what it pins is that the adaptor faithfully relays
+    // the gap-regime output rather than a stale or differently-derived list.
+    void testVisibleStripJson_relaysGapInsetTiles()
     {
         m_engine->setContextGapProvider([](const QString&) {
             return QVariantMap{{QString(PhosphorEngine::PerScreenKeys::OuterGap), 20}};
@@ -308,6 +320,9 @@ private Q_SLOTS:
         QSignalSpy activateSpy(m_engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
 
         m_adaptor->focusColumn(QStringLiteral("HDMI-2"), -1); // not ours
+        // Boundary hygiene, like the empty-screenId strip case: the ownership
+        // gate rejects "" on its own, so this arm does not discriminate the
+        // isEmpty check. It pins the documented answer, not the guard.
         m_adaptor->focusColumn(QString(), -1); // no screen at all
         m_adaptor->focusColumn(QStringLiteral("DP-1"), 0); // not a direction
         m_adaptor->focusColumn(QStringLiteral("DP-1"), 2); // not a direction either
