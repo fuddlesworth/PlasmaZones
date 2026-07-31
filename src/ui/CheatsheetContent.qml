@@ -91,30 +91,72 @@ Item {
         return byCat;
     }
 
-    /// Groups packed into `metrics.columns` buckets, greedy shortest-column
-    /// first, so every column carries a similar row count and the card has
-    /// no dead space (a naive Flow wraps whole rows of columns and leaves a
-    /// tall group's siblings floating over a gap). Groups keep their display
-    /// order within each column.
+    /// Total packing cost of all groups. A group costs its rows plus a
+    /// fixed heading + inter-group gap allowance; row units are all the
+    /// same height so counting rows is an honest proxy for pixels.
+    readonly property int totalUnits: {
+        var t = 0;
+        for (var g = 0; g < root.groups.length; g++)
+            t += root.groups[g].rows.length + 2;
+        return t;
+    }
+
+    /// Groups flowed into `metrics.columns` buckets newspaper-style, in
+    /// display order. A group that straddles a column boundary splits: its
+    /// remaining rows continue at the top of the next column under a
+    /// repeated "(continued)" heading, so one huge group (Scrolling) no
+    /// longer forces its column to tower over the others. Each bucket entry
+    /// is {name, rows, continued}. Splits never orphan fewer than
+    /// `minChunk` rows on either side of the boundary.
     readonly property var columnBuckets: {
         var n = metrics.columns;
         var buckets = [];
-        var weights = [];
-        for (var c = 0; c < n; c++) {
+        for (var c = 0; c < n; c++)
             buckets.push([]);
-            weights.push(0);
-        }
+        if (root.groups.length === 0)
+            return buckets;
+
+        var minChunk = 2;
+        // Every split repeats a heading, growing the true total by 2 units;
+        // budget for the worst case (one split per boundary) up front so the
+        // last column doesn't silently absorb the overhead.
+        var target = Math.ceil((root.totalUnits + 2 * (n - 1)) / n);
+        var col = 0;
+        var used = 0;
         for (var g = 0; g < root.groups.length; g++) {
-            var target = 0;
-            for (var k = 1; k < n; k++) {
-                if (weights[k] < weights[target])
-                    target = k;
+            var group = root.groups[g];
+            var offset = 0;
+            while (offset < group.rows.length) {
+                var rowsLeft = group.rows.length - offset;
+                var space = target - used - 2;
+                var lastCol = col === n - 1;
+                if (!lastCol && space < minChunk && used > 0) {
+                    // Not even room for a heading plus a minimal chunk:
+                    // close this column and reconsider from the next.
+                    col++;
+                    used = 0;
+                    continue;
+                }
+                var take = lastCol ? rowsLeft : Math.min(rowsLeft, Math.max(minChunk, space));
+                var remainder = rowsLeft - take;
+                if (remainder > 0 && remainder < minChunk) {
+                    // Shrink this chunk rather than orphan a sliver in the
+                    // next column; if that would make this chunk a sliver
+                    // too, keep the group whole here instead.
+                    take = rowsLeft - minChunk >= minChunk ? rowsLeft - minChunk : rowsLeft;
+                }
+                buckets[col].push({
+                    name: group.name,
+                    rows: group.rows.slice(offset, offset + take),
+                    continued: offset > 0
+                });
+                used += take + 2;
+                offset += take;
+                if (!lastCol && used >= target) {
+                    col++;
+                    used = 0;
+                }
             }
-            buckets[target].push(root.groups[g]);
-            // A group costs its rows plus a fixed heading + inter-group gap
-            // allowance; row units are all the same height so counting rows
-            // is an honest proxy for pixels.
-            weights[target] += root.groups[g].rows.length + 2;
         }
         return buckets;
     }
@@ -136,7 +178,13 @@ Item {
         readonly property int columns: {
             var avail = root.width * 0.9 - paddingSide * 2;
             var fit = Math.floor((avail + columnSpacing) / (columnWidth + columnSpacing));
-            return Math.max(1, Math.min(maxColumns, Math.min(fit, root.groups.length)));
+            // Bound by content volume, not group count: groups split across
+            // column boundaries, so one long group can legitimately span
+            // several columns. One column per started ~8 units of content
+            // keeps short sheets from spreading into slivers (the packer's
+            // min-chunk rule still guarantees no column is near-empty).
+            var worthwhile = Math.max(1, Math.ceil(root.totalUnits / 8));
+            return Math.max(1, Math.min(maxColumns, Math.min(fit, worthwhile)));
         }
         readonly property int contentWidth: columns * columnWidth + (columns - 1) * columnSpacing
         readonly property int maxContentHeight: Math.max(0, Math.round(root.height * 0.85) - paddingSide * 3 - titleLabel.height)
@@ -256,7 +304,7 @@ Item {
                                 // level-4 heading factor), tracking the
                                 // user's overlay font like rows and caps.
                                 Label {
-                                    text: groupColumn.modelData.name
+                                    text: groupColumn.modelData.continued ? i18nc("category heading for a section that continues from the previous column", "%1 (continued)", groupColumn.modelData.name) : groupColumn.modelData.name
                                     color: Kirigami.Theme.disabledTextColor
                                     // Constrain to the column and wrap: a
                                     // long translated category name grows a
