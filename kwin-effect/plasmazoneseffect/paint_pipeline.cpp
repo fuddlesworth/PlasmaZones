@@ -86,7 +86,21 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
 
-    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()) {
+    // Vertex snapping tracks the animation state (see the initRenderingAndRegistries
+    // note): None while anything animates so smooth translates keep sub-pixel
+    // precision, Round (KWin's default) at rest so permanently-redirected
+    // decorated windows stay device-pixel-aligned at fractional output scales
+    // instead of being bilinearly resampled every frame (discussion #868).
+    // `!m_shaderManager.empty()` over-includes installed-but-expired transitions;
+    // that only extends None by a frame or two, which is harmless.
+    const bool animationsInFlight = m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty();
+    if (animationsInFlight != m_vertexSnappingDisabled) {
+        setVertexSnappingMode(animationsInFlight ? KWin::RenderGeometry::VertexSnappingMode::None
+                                                 : KWin::RenderGeometry::VertexSnappingMode::Round);
+        m_vertexSnappingDisabled = animationsInFlight;
+    }
+
+    if (animationsInFlight) {
         // Windows have translation transforms that move them outside their
         // frame geometry bounds — force full compositing mode. Shader
         // transitions also need this: without

@@ -177,11 +177,37 @@ inline SurfaceCanvas surfaceCanvasFor(const QRectF& expandedOrFrame, qreal outer
     canvas.logicalGeometry = expandedOrFrame;
     canvas.logicalGeometry.adjust(-outerPadding, -outerPadding, outerPadding, outerPadding);
     canvas.captureScale = outputScale;
+    // Cap against kMaxSurfaceDim - 1 so the outward device alignment below,
+    // which can add at most one pixel per axis, still lands inside the cap.
+    // Capping against the bare limit would let a window sized exactly at it
+    // round up to kMaxSurfaceDim + 1 and blow the guard this exists to be.
+    constexpr qreal kMaxAlignedDim = kMaxSurfaceDim - 1.0;
     const qreal longestPx = qMax(canvas.logicalGeometry.width(), canvas.logicalGeometry.height()) * canvas.captureScale;
-    if (longestPx > kMaxSurfaceDim) {
-        canvas.captureScale *= kMaxSurfaceDim / longestPx;
+    if (longestPx > kMaxAlignedDim) {
+        canvas.captureScale *= kMaxAlignedDim / longestPx;
     }
-    canvas.textureSize = (canvas.logicalGeometry.size() * canvas.captureScale).toSize();
+    // DEVICE-ALIGN the canvas: snap the padded rect outward to the device
+    // pixel grid at captureScale, and size the texture from that aligned
+    // device rect. The old `(logicalSize * scale).toSize()` truncated, and the
+    // origin was never aligned at all — on a fractional scale (1.5x: any odd
+    // logical coordinate) the composite's texel grid sat a sub-pixel off the
+    // device grid AND at a slightly wrong density, so every decorated window
+    // was bilinearly resampled at present time, permanently (discussion
+    // #868). Alignment makes the capture viewport's texels 1:1 with device
+    // pixels; apply() presents the composite on this same canvasGeo, and with
+    // vertex snapping Round at rest the quad corners land exactly on the
+    // aligned device coordinates. Same lesson desktoptransitioncapture.cpp
+    // learned with deviceSize(): round the way KWin rounds, once, and carry
+    // the rounded rect everywhere — canvasGeo is the SSOT that carries it.
+    const QRect alignedDevice =
+        QRectF(canvas.logicalGeometry.x() * canvas.captureScale, canvas.logicalGeometry.y() * canvas.captureScale,
+               canvas.logicalGeometry.width() * canvas.captureScale,
+               canvas.logicalGeometry.height() * canvas.captureScale)
+            .toAlignedRect();
+    canvas.logicalGeometry =
+        QRectF(alignedDevice.x() / canvas.captureScale, alignedDevice.y() / canvas.captureScale,
+               alignedDevice.width() / canvas.captureScale, alignedDevice.height() / canvas.captureScale);
+    canvas.textureSize = alignedDevice.size();
     return canvas;
 }
 
