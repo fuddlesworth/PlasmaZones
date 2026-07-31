@@ -1,6 +1,16 @@
 {
     "releases": [
         {
+            "version": "3.3.3",
+            "date": "2026-07-31",
+            "highlights": [
+                "Fixed: on a display running at a fractional scale such as 1.5x, every window PlasmaZones draws a border on looked persistently blurry, and resizing it flickered with stretched frames (#869)",
+                "Fixed: dragging a window on a monitor that has no zone layout of its own could snap it into zones that monitor does not have, while the zone highlight lit up on the other monitor (#867)",
+                "Fixed: minimizing and unminimizing a window that had been snapped on one monitor and then moved to another teleported it back to its old zone on the first monitor (#867)",
+                "Fixed: zone shortcuts and snap assist acted on the global default layout's zones for a monitor that has no layout. Both now do nothing on such a monitor (#867)"
+            ]
+        },
+        {
             "version": "3.3.2",
             "date": "2026-07-29",
             "highlights": [
