@@ -323,15 +323,17 @@ struct WindowPlacement
 /// here while snap's reciprocal gate also stands down, stranding the window
 /// unmanaged at its stale zone rect on top of the tiled layout.
 ///
-/// SnapEngine (resolveWindowRestore's recorded-screen gate) and AutotileEngine
-/// (windowOpened's snap-defer gate) are RECIPROCAL: when a session window
-/// snapped on monitor A (snap mode) opens on monitor B (autotile mode), snap
-/// must claim it cross-screen and autotile must defer — and both engines must
-/// reach that verdict from the same record, or the window ends up
-/// both-claimed or both-skipped. Keying on the record's context (not each
-/// engine's live current desktop, which can differ under per-screen
-/// virtual-desktop overrides) plus running this ONE predicate on both sides
-/// makes the agreement hold by construction.
+/// The THREE callers are RECIPROCAL: SnapEngine (resolveWindowRestore's
+/// recorded-screen gate) claims, while AutotileEngine (windowOpened's
+/// snap-defer gate) and ScrollEngine (engine_lifecycle's twin gate) defer.
+/// When a session window snapped on monitor A (snap mode) opens on monitor B
+/// (a tiling mode), snap must claim it cross-screen and the tiling engine
+/// must stand down — and every engine must reach that verdict from the same
+/// record, or the window ends up both-claimed or both-skipped. Keying on the
+/// record's context (not each engine's live current desktop, which can differ
+/// under per-screen virtual-desktop overrides) plus running this ONE
+/// predicate on every side makes the N-way agreement hold by construction.
+/// A new tiling engine's open path must add the same defer gate.
 ///
 /// @p isSnappingMode is invoked as (screenId, virtualDesktop, activity) →
 /// bool; callers wrap their layout-manager mode lookup (and any null-manager

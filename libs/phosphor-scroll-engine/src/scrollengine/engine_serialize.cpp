@@ -213,10 +213,14 @@ QJsonObject ScrollEngine::serializeStripState() const
     // activity", not newest — so a stale stash tile could displace the
     // authoritative live one and restore the window to its old screen's slot.
     // Dropping the stale copy at WRITE time removes the ambiguity entirely.
+    // One buildStashFromState walk per state: the snapshots feed both the
+    // live-id sweep below and the output loop at the end.
     const auto& states = m_states.states();
+    QHash<PhosphorEngine::PlacementStateKey, StashedStrip> liveStrips;
+    liveStrips.reserve(states.size());
     QSet<QString> liveWindowIds;
     for (auto it = states.cbegin(); it != states.cend(); ++it) {
-        const StashedStrip live = buildStashFromState(it.value());
+        const StashedStrip& live = liveStrips.insert(it.key(), buildStashFromState(it.value())).value();
         for (const StashedColumn& col : live.columns) {
             for (const StashedTile& tile : col.tiles) {
                 liveWindowIds.insert(tile.windowId);
@@ -237,10 +241,9 @@ QJsonObject ScrollEngine::serializeStripState() const
             out.insert(keyToString(it.key()), stashToJson(pruned));
         }
     }
-    for (auto it = states.cbegin(); it != states.cend(); ++it) {
-        const StashedStrip live = buildStashFromState(it.value());
-        if (!live.isEmpty()) {
-            out.insert(keyToString(it.key()), stashToJson(live));
+    for (auto it = liveStrips.cbegin(); it != liveStrips.cend(); ++it) {
+        if (!it.value().isEmpty()) {
+            out.insert(keyToString(it.key()), stashToJson(it.value()));
         }
     }
     return out;
@@ -277,7 +280,12 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
         const QJsonObject obj = it.value().toObject();
         StashedStrip stash;
         stash.focusedWindowId = obj.value(kFocused()).toString();
-        stash.viewAnchor = obj.value(kViewAnchor()).toInt(0);
+        // Same boundary hardening as widthFromJson. The anchor is deliberately
+        // NOT clamped to the strip (restoreViewAnchor: centered anchors imply
+        // out-of-range viewX by design), so the bound is only a sanity range
+        // wide enough for any real strip — it stops a hand-edited INT_MIN/MAX
+        // from overflowing the viewX arithmetic it later feeds.
+        stash.viewAnchor = qBound(-1000000, obj.value(kViewAnchor()).toInt(0), 1000000);
         const QJsonArray columns = obj.value(kColumns()).toArray();
         for (const QJsonValue& colVal : columns) {
             if (!colVal.isObject()) {

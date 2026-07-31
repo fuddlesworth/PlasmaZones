@@ -557,7 +557,7 @@ void Daemon::initEnginesAndWiring()
         m_windowTrackingAdaptor->service()->setEngineFloatWriter(
             [screenModeForWindow, snapEnginePtr = QPointer(snapEngine)](const QString& windowId, bool floating) {
                 // Write ONLY the snap engine's authoritative float store, and
-                // only for snap-mode windows. The two engines keep INDEPENDENT
+                // only for snap-mode windows. The engines keep INDEPENDENT
                 // float state — writing the snap bit for an autotile-mode window
                 // is exactly the cross-mode leak this refactor eliminates.
                 //

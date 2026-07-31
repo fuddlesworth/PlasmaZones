@@ -131,7 +131,7 @@ public:
     void setSnapState(PhosphorSnapEngine::SnapState* state);
 
     /// The unified, engine-agnostic placement store (one WindowPlacement record
-    /// per window). Both engines reach it via this service; the WTA persists it.
+    /// per window). Every engine reaches it via this service; the WTA persists it.
     PhosphorEngine::WindowPlacementStore& placementStore() override;
     const PhosphorEngine::WindowPlacementStore& placementStore() const;
 
@@ -363,7 +363,7 @@ public:
     /// the managed-context screen untouched), this records the float geometry AND
     /// updates the record's managed `screenId` to @p screenId — carrying an engine
     /// slot so the store merge adopts the new screen. Used by the close-capture
-    /// fallback when a cross-screen move has orphaned the window from both engines,
+    /// fallback when a cross-screen move has orphaned the window from every engine,
     /// so the only authoritative source of its final screen is KWin (passed down
     /// from the effect). The existing record's per-engine slots and desktop/activity
     /// are preserved; only the screen and this screen's free geometry change.
@@ -399,7 +399,7 @@ public:
 
     void setEngineFloatResolver(EngineFloatResolver resolver);
     void setEngineFloatWriter(EngineFloatWriter writer);
-    /// Aggregates both engines' floating windows for the engine-agnostic
+    /// Aggregates every engine's floating windows for the engine-agnostic
     /// floatingWindows() enumeration. See setEngineFloatResolver rationale.
     void setEngineFloatLister(EngineFloatLister lister);
 

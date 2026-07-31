@@ -1115,10 +1115,11 @@ private:
     void releaseDecorationGl(KWin::EffectWindow* w, int outerPadding);
     /// SHARED placement-flip funnel: re-resolve a window's decoration
     /// update-or-remove in the SAME turn after its snapped / tiled /
-    /// floating state flipped. Both engines route through this (snap's
-    /// clearWindowSnapped, autotile's applyFloatCleanup) so neither can
-    /// regress into the teardown-now-rebuild-later shape that blanked
-    /// every pack at drag start. Callers flip their engine facts first.
+    /// floating state flipped. Every engine routes through this (snap's
+    /// clearWindowSnapped; the tiling handler's applyFloatCleanup, which
+    /// serves autotile and scrolling alike) so none can regress into the
+    /// teardown-now-rebuild-later shape that blanked every pack at drag
+    /// start. Callers flip their engine facts first.
     void reconcileDecorationOnPlacementFlip(const QString& windowId);
     void updateAllDecorations();
     void clearAllDecorations();

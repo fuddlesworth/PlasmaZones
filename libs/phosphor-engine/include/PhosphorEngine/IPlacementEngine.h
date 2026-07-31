@@ -234,14 +234,15 @@ public:
     /// .state, reading the engine's slot reference and the shared freeGeometryByScreen.
     ///
     /// Contract pair of capturePlacement() and the engine-agnostic entry point for a
-    /// new engine. NOTE: the built-in snap and autotile engines do NOT route through
-    /// this method — they apply restore inline in their own open paths
+    /// new engine. NOTE: NO built-in engine overrides this today — snap, autotile
+    /// and scrolling all apply restore inline in their own open paths
     /// (SnapEngine::resolveWindowRestore consults the store and returns a SnapResult
-    /// to the effect; AutotileEngine::insertWindow take()s the record and inserts at
-    /// position) because those paths carry engine-specific policy (snap's auto-snap
-    /// fallback chain; autotile's burst-insert coalescing) that a single
-    /// apply-this-record call cannot express. A minimal future engine may instead
-    /// implement only this method and have its own open path invoke it directly.
+    /// to the effect; AutotileEngine::insertWindow and the scroll engine's open path
+    /// take()/claim the record themselves) because those paths carry engine-specific
+    /// policy (snap's auto-snap fallback chain; autotile's burst-insert coalescing;
+    /// scrolling's strip-stash claim) that a single apply-this-record call cannot
+    /// express. A minimal future engine may instead implement only this method and
+    /// have its own open path invoke it directly.
     virtual bool restorePlacement(const WindowPlacement& placement, const QString& screenId)
     {
         Q_UNUSED(placement)

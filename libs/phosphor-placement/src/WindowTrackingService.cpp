@@ -647,8 +647,9 @@ bool WindowTrackingService::isWindowFloating(const QString& windowId) const
     // Per-engine answer: when the daemon has wired the resolver, the float bit
     // is the float state of the engine that owns the window's CURRENT screen
     // mode (SnapState::isFloating for Snapping, TilingState::isFloating for
-    // Autotile). A window floated in autotile is NOT floating in snap, and the
-    // converse, so the two engines never share a bit.
+    // Autotile, ScrollState's float set for Scrolling). A window floated in
+    // one engine is NOT floating in the others, so the engines never share a
+    // bit.
     if (m_engineFloatResolver) {
         return m_engineFloatResolver(windowId);
     }
