@@ -1438,6 +1438,22 @@ public:
         Q_EMIT autotileRestoreFloatedWindowsOnLoginChanged();
         Q_EMIT settingsChanged();
     }
+    // ISettings carries a defaulted getter for the scrolling twin, so leaving
+    // it unoverridden compiles and answers a constant — which makes the
+    // scrolling arm of any per-mode predicate untestable. Override it here for
+    // the same reason the snap/autotile pair is overridden.
+    bool scrollingRestoreFloatedWindowsOnLogin() const override
+    {
+        return m_scrollingRestoreFloatedWindowsOnLogin;
+    }
+    void setScrollingRestoreFloatedWindowsOnLogin(bool value) override
+    {
+        if (m_scrollingRestoreFloatedWindowsOnLogin == value)
+            return;
+        m_scrollingRestoreFloatedWindowsOnLogin = value;
+        Q_EMIT scrollingRestoreFloatedWindowsOnLoginChanged();
+        Q_EMIT settingsChanged();
+    }
     // ISettings getter/setter; the ISnapSettings bridge (unfloatFallbackToZone)
     // is defined alongside the other ISnapSettings overrides below.
     bool snapUnfloatFallbackToZone() const override
@@ -2170,6 +2186,7 @@ private:
     bool m_autoAssignAllLayouts = ConfigDefaults::autoAssignAllLayouts();
     bool m_snappingRestoreFloatedWindowsOnLogin = ConfigDefaults::snappingRestoreFloatedWindowsOnLogin();
     bool m_autotileRestoreFloatedWindowsOnLogin = ConfigDefaults::autotileRestoreFloatedWindowsOnLogin();
+    bool m_scrollingRestoreFloatedWindowsOnLogin = ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin();
     bool m_snapUnfloatFallbackToZone = ConfigDefaults::snapUnfloatFallbackToZone();
     bool m_snappingFocusNewWindows = ConfigDefaults::snappingFocusNewWindows();
     bool m_snappingFocusFollowsMouse = ConfigDefaults::snappingFocusFollowsMouse();

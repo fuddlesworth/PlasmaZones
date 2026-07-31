@@ -241,7 +241,7 @@ inline qreal clampColumnWidthForKind(qreal value, int kind)
         return qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthFixedMin(), value,
                              ConfigDefaults::scrollingDefaultColumnWidthFixedMax());
     }
-    return qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value,
+    return qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthProportionMin(), value,
                          ConfigDefaults::scrollingDefaultColumnWidthProportionMax());
 }
 

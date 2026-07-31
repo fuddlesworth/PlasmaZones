@@ -308,6 +308,113 @@ QSet<QString> hostingPageFilesOf(const QString& qmlDir, const QString& component
     return pages;
 }
 
+/// Every anchor literal declared in @p qmlPath, gated or not. The tier walk
+/// above only wants the advanced-gated subset; the catalogue↔QML existence
+/// check wants all of them.
+///
+/// Matches any `<something>Anchor:` property, not just `searchAnchor:`: the
+/// motion-set and decoration-set pages hand their anchors to a shared list
+/// component through `saveAnchor` / `importAnchor` / `savedAnchor`, and those
+/// rows are as real as a locally-declared one.
+QSet<QString> allAnchorsIn(const QString& qmlPath)
+{
+    QSet<QString> out;
+    const QString src = stripComments(readAll(qmlPath));
+    static const QRegularExpression kAnchor(QStringLiteral("\\b\\w*[Aa]nchor\\s*:\\s*\"([^\"]+)\""));
+    auto it = kAnchor.globalMatch(src);
+    while (it.hasNext()) {
+        out.insert(it.next().captured(1));
+    }
+    return out;
+}
+
+/// Top-level argument list of every `name(...)` call in @p src. Quote- and
+/// nesting-aware, because the registration calls this reads carry both
+/// (`PhosphorI18n::tr("Scrolling", "tiling mode name")` is ONE argument, and
+/// `m_page.get()` holds parens of its own).
+QList<QStringList> callArgLists(const QString& src, const QString& name)
+{
+    QList<QStringList> out;
+    const QRegularExpression kCall(QStringLiteral("\\b") + QRegularExpression::escape(name) + QStringLiteral("\\("));
+    auto it = kCall.globalMatch(src);
+    while (it.hasNext()) {
+        const int open = it.next().capturedEnd() - 1;
+        int depth = 0;
+        QStringList args;
+        QString current;
+        QChar quote;
+        for (int i = open; i < src.size(); ++i) {
+            const QChar c = src.at(i);
+            if (!quote.isNull()) {
+                current += c;
+                if (c == QLatin1Char('\\') && i + 1 < src.size()) {
+                    current += src.at(++i);
+                } else if (c == quote) {
+                    quote = QChar();
+                }
+                continue;
+            }
+            if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
+                quote = c;
+                current += c;
+                continue;
+            }
+            if (c == QLatin1Char('(')) {
+                ++depth;
+                if (depth > 1) {
+                    current += c;
+                }
+                continue;
+            }
+            if (c == QLatin1Char(')')) {
+                --depth;
+                if (depth == 0) {
+                    args << current.trimmed();
+                    break;
+                }
+                current += c;
+                continue;
+            }
+            if (c == QLatin1Char(',') && depth == 1) {
+                args << current.trimmed();
+                current.clear();
+                continue;
+            }
+            current += c;
+        }
+        out.append(args);
+    }
+    return out;
+}
+
+/// The string inside the first `QStringLiteral("...")` of @p expr, or empty.
+QString stringLiteralIn(const QString& expr)
+{
+    static const QRegularExpression kLit(QStringLiteral("QStringLiteral\\(\"([^\"]+)\"\\)"));
+    const auto m = kLit.match(expr);
+    return m.hasMatch() ? m.captured(1) : QString();
+}
+
+/// The eight `regPage` registrations name their page through a PageController
+/// member, whose id lives in that controller's constructor rather than in the
+/// registration call. Mirrored here so the (pageId, anchor) walk can resolve
+/// them; catalogueAnchorsExistOnTheirPage asserts every regPage call in the
+/// registration file is covered, so adding a ninth forces an entry.
+const QHash<QString, QString>& regPageMemberToPageId()
+{
+    static const QHash<QString, QString> kMap{
+        {QStringLiteral("m_profilesPage"), QStringLiteral("profiles")},
+        {QStringLiteral("m_generalPage"), QStringLiteral("general")},
+        {QStringLiteral("m_rulesPage"), QStringLiteral("rules")},
+        {QStringLiteral("m_editorPage"), QStringLiteral("editor")},
+        {QStringLiteral("m_snappingShadersPage"), QStringLiteral("snapping-shaders")},
+        {QStringLiteral("m_tilingBehaviorPage"), QStringLiteral("tiling-behavior")},
+        {QStringLiteral("m_tilingAlgorithmPage"), QStringLiteral("tiling-algorithm")},
+        {QStringLiteral("m_windowAppearancePage"), QStringLiteral("window-appearance")},
+    };
+    return kMap;
+}
+
 } // namespace
 
 class TestSearchCatalogTiers : public QObject
@@ -621,6 +728,156 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("%1 catalogue entries missing advancedOnly").arg(missing.size())));
         QVERIFY2(spurious.isEmpty(),
                  qPrintable(QStringLiteral("%1 catalogue entries flagged in error").arg(spurious.size())));
+    }
+
+    /// The catalogue↔QML invariant, in the direction nothing else checks.
+    /// catalogueTiersMatchTheQml compares TIERS for pairs that exist on both
+    /// sides; everyCataloguePageIdIsRegistered checks the page id alone. Neither
+    /// asks whether a catalogue entry's ANCHOR actually exists on the page it
+    /// names. A stale or mistyped anchor still produces a search hit that
+    /// navigates to the right page and then highlights nothing, with no warning
+    /// anywhere — and the anchor sets move every time a card is split or a row
+    /// moves between pages.
+    void catalogueAnchorsExistOnTheirPage()
+    {
+        const QString registration =
+            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp"));
+        QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
+        const QString regSrc = stripLineComments(registration);
+
+        // pageId → the QML file that page renders. Both registration shapes
+        // put the id first (directly, or via the controller member) and the
+        // QML file fourth.
+        QHash<QString, QString> pageIdToFile;
+        const QList<QStringList> virtualCalls = callArgLists(regSrc, QStringLiteral("regVirtual"));
+        for (const QStringList& args : virtualCalls) {
+            if (args.size() < 4) {
+                continue;
+            }
+            const QString id = stringLiteralIn(args.at(0));
+            const QString file = stringLiteralIn(args.at(3));
+            if (!id.isEmpty() && !file.isEmpty()) {
+                pageIdToFile.insert(id, QFileInfo(file).fileName());
+            }
+        }
+        QStringList uncoveredMembers;
+        const QList<QStringList> pageCalls = callArgLists(regSrc, QStringLiteral("regPage"));
+        for (const QStringList& args : pageCalls) {
+            if (args.size() < 4) {
+                continue;
+            }
+            static const QRegularExpression kMember(QStringLiteral("\\b(m_\\w+)"));
+            const auto m = kMember.match(args.at(0));
+            const QString member = m.hasMatch() ? m.captured(1) : QString();
+            if (!regPageMemberToPageId().contains(member)) {
+                uncoveredMembers << (member.isEmpty() ? args.at(0) : member);
+                continue;
+            }
+            const QString file = stringLiteralIn(args.at(3));
+            if (!file.isEmpty()) {
+                pageIdToFile.insert(regPageMemberToPageId().value(member), QFileInfo(file).fileName());
+            }
+        }
+        QVERIFY2(uncoveredMembers.isEmpty(),
+                 qPrintable(QStringLiteral("regPage registrations with no regPageMemberToPageId() entry: %1")
+                                .arg(uncoveredMembers.join(QStringLiteral(", ")))));
+        // Vacuity guard: the registration file declares dozens of pages, so a
+        // parse that collapses must fail here rather than validate nothing.
+        QVERIFY2(
+            pageIdToFile.size() > 30,
+            qPrintable(
+                QStringLiteral("registration parse yielded only %1 (pageId, qml) pairs").arg(pageIdToFile.size())));
+
+        // anchor → the page ids on which it is reachable. A page contributes
+        // its own anchors; a shared component contributes to every page that
+        // (transitively) instantiates it, which is exactly the hostingPageFilesOf
+        // walk the cross-file tier check already relies on.
+        QMultiHash<QString, QString> pageFileToIds;
+        for (auto it = pageIdToFile.cbegin(); it != pageIdToFile.cend(); ++it) {
+            pageFileToIds.insert(it.value(), it.key());
+        }
+        QHash<QString, QSet<QString>> anchorToPageIds;
+        QSet<QString> declaredAnywhere;
+        QStringList unhostedComponents;
+        const QHash<QString, QString>& index = qmlFileIndex(m_qmlDir);
+        for (auto it = index.cbegin(); it != index.cend(); ++it) {
+            const QSet<QString> anchors = allAnchorsIn(it.value());
+            if (anchors.isEmpty()) {
+                continue;
+            }
+            declaredAnywhere.unite(anchors);
+            QSet<QString> hostFiles;
+            if (it.key().endsWith(QLatin1String("Page.qml"))) {
+                hostFiles.insert(it.key());
+            } else {
+                QStringList unresolved;
+                hostFiles = hostingPageFilesOf(m_qmlDir, it.key().chopped(4), unresolved);
+                if (!unresolved.isEmpty()) {
+                    unhostedComponents << unresolved;
+                }
+            }
+            for (const QString& host : hostFiles) {
+                for (const QString& id : pageFileToIds.values(host)) {
+                    for (const QString& a : anchors) {
+                        anchorToPageIds[a].insert(id);
+                    }
+                }
+            }
+        }
+        QVERIFY2(anchorToPageIds.size() > 150,
+                 qPrintable(QStringLiteral("QML anchor scrape yielded only %1 anchors").arg(anchorToPageIds.size())));
+        if (!unhostedComponents.isEmpty()) {
+            // Informational: a component reached only through a Loader url is
+            // not a failure on its own, it just cannot contribute anchors.
+            qInfo() << "anchor-bearing components with no static host:" << unhostedComponents;
+        }
+
+        // Every (pageId, anchor) the catalogue registers.
+        const QString catalogSrc = stripLineComments(readAll(m_catalog));
+        static const QRegularExpression kCall(
+            QStringLiteral("\\badd(?:Setting|Section)\\(\\s*search\\s*,\\s*QStringLiteral\\(\"([^\"]+)\"\\)\\s*,"
+                           "\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
+        QStringList unknownAnchor;
+        QStringList wrongPage;
+        int pairs = 0;
+        auto cit = kCall.globalMatch(catalogSrc);
+        while (cit.hasNext()) {
+            const auto m = cit.next();
+            const QString pageId = m.captured(1);
+            const QString anchor = m.captured(2);
+            ++pairs;
+            const auto found = anchorToPageIds.constFind(anchor);
+            if (found == anchorToPageIds.cend()) {
+                // A dotted anchor is an event path composed at runtime from
+                // model data (AnimationEventCardList binds searchAnchor to
+                // modelData.eventPath), so no literal for it exists to find.
+                // Anything else must at least be declared SOMEWHERE: that
+                // still catches a typo or a deleted row, which is what this
+                // check is for. Page reachability is only asserted below, for
+                // the anchors whose host resolves statically — a component
+                // reached solely through a Loader url has no static host and
+                // is reported informationally above, not failed here.
+                if (!anchor.contains(QLatin1Char('.')) && !declaredAnywhere.contains(anchor)) {
+                    unknownAnchor << (pageId + QLatin1Char('/') + anchor);
+                }
+            } else if (!found->contains(pageId)) {
+                wrongPage << QStringLiteral("%1/%2 (declared on: %3)")
+                                 .arg(pageId, anchor,
+                                      QStringList(found->cbegin(), found->cend()).join(QLatin1String(", ")));
+            }
+        }
+        QVERIFY2(pairs > 200, qPrintable(QStringLiteral("catalogue parse yielded only %1 pairs").arg(pairs)));
+
+        // Reported separately: a missing anchor is a typo or a deleted row,
+        // a wrong page is a row that moved. Both land the user on a page with
+        // nothing highlighted, but the fix differs.
+        QVERIFY2(unknownAnchor.isEmpty(),
+                 qPrintable(QStringLiteral("catalogue entries whose anchor exists in no QML file: %1")
+                                .arg(unknownAnchor.join(QStringLiteral(", ")))));
+        QVERIFY2(wrongPage.isEmpty(),
+                 qPrintable(QStringLiteral("catalogue entries whose anchor is not reachable from the page they "
+                                           "name: %1")
+                                .arg(wrongPage.join(QStringLiteral("; ")))));
     }
 
     /// Every pageId the catalogue registers must be a page the app registers.

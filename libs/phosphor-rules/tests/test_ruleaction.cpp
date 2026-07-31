@@ -380,8 +380,8 @@ private Q_SLOTS:
         // test_contextrulebridge.cpp — pinning the rejection here covers
         // that exact regression.
         QJsonObject obj;
-        obj.insert(QLatin1StringView("type"), QString(ActionType::DisableEngine));
-        obj.insert(QLatin1StringView("mode"), QLatin1String("bogus"));
+        obj.insert(QStringLiteral("type"), QString(ActionType::DisableEngine));
+        obj.insert(QStringLiteral("mode"), QStringLiteral("bogus"));
         QVERIFY(!RuleAction::fromJson(obj).has_value());
     }
 
@@ -391,8 +391,8 @@ private Q_SLOTS:
         // load-side validator drops the rule. Mirrors the malformed-payload
         // guarantee documented in `ContextRuleBridge.h::makeDisableRule`.
         QJsonObject obj;
-        obj.insert(QLatin1StringView("type"), QString(ActionType::DisableEngine));
-        obj.insert(QLatin1StringView("mode"), QString());
+        obj.insert(QStringLiteral("type"), QString(ActionType::DisableEngine));
+        obj.insert(QStringLiteral("mode"), QString());
         QVERIFY(!RuleAction::fromJson(obj).has_value());
     }
 
@@ -404,8 +404,8 @@ private Q_SLOTS:
         for (QLatin1StringView token :
              {QLatin1String("snapping"), QLatin1String("autotile"), QLatin1String("scrolling")}) {
             QJsonObject obj;
-            obj.insert(QLatin1StringView("type"), QString(ActionType::DisableEngine));
-            obj.insert(QLatin1StringView("mode"), QString::fromLatin1(token.data(), token.size()));
+            obj.insert(QStringLiteral("type"), QString(ActionType::DisableEngine));
+            obj.insert(QStringLiteral("mode"), QString::fromLatin1(token.data(), token.size()));
             QVERIFY2(RuleAction::fromJson(obj).has_value(), token.data());
         }
     }
@@ -853,11 +853,24 @@ private Q_SLOTS:
 
     void testScrollingParamActions_range()
     {
-        // The six scrolling actions are the only load-time defence for a
-        // hand-edited rules.json — pin bounds and the three closed token
-        // vocabularies exactly like the tiling family above.
+        // The nine scrolling actions are the only load-time defence for a
+        // hand-edited rules.json — pin bounds and the four closed token
+        // vocabularies exactly like the tiling family above. Every accepted
+        // payload also round-trips through toJson→fromJson, so a descriptor
+        // that validates on load but serialises a shape it cannot read back
+        // (silently dropping the rule on the next daemon start) fails here.
+
+        // A payload with no `value` at all must be rejected by every action in
+        // the family — each declares allowedKeys = {Value} with value required.
+        const auto rejectsMissingValue = [](QLatin1StringView type) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+        };
+
         // SetScrollDefaultColumnWidth / OpenColumnWidth: [0.05, 1.0] fraction.
         for (QLatin1StringView type : {ActionType::SetScrollDefaultColumnWidth, ActionType::OpenColumnWidth}) {
+            rejectsMissingValue(type);
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(type));
             o.insert(QStringLiteral("value"), 0.02); // below 0.05 rejected
@@ -878,9 +891,13 @@ private Q_SLOTS:
                 ? QString(ActionSlot::ScrollDefaultColumnWidth)
                 : QString(ActionSlot::OpenColumnWidth);
             QCOMPARE(ActionRegistry::instance().slotFor(*accepted), expectedSlot);
+            const auto roundTripped = RuleAction::fromJson(accepted->toJson());
+            QVERIFY2(roundTripped.has_value(), type.data());
+            QCOMPARE(*roundTripped, *accepted);
         }
         // SetCenterFocusedColumn: closed token vocabulary.
         {
+            rejectsMissingValue(ActionType::SetCenterFocusedColumn);
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetCenterFocusedColumn));
             o.insert(QStringLiteral("value"), QStringLiteral("sometimes")); // unknown token rejected
@@ -891,10 +908,14 @@ private Q_SLOTS:
                 const auto loaded = RuleAction::fromJson(o);
                 QVERIFY2(loaded.has_value(), token.data());
                 QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::CenterFocusedColumn));
+                const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+                QVERIFY2(roundTripped.has_value(), token.data());
+                QCOMPARE(*roundTripped, *loaded);
             }
         }
         // SetScrollDefaultColumnDisplay: normal | tabbed.
         {
+            rejectsMissingValue(ActionType::SetScrollDefaultColumnDisplay);
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetScrollDefaultColumnDisplay));
             o.insert(QStringLiteral("value"), QStringLiteral("stacked")); // unknown token rejected
@@ -904,37 +925,64 @@ private Q_SLOTS:
                 const auto loaded = RuleAction::fromJson(o);
                 QVERIFY2(loaded.has_value(), token.data());
                 QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::ScrollDefaultColumnDisplay));
+                const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+                QVERIFY2(roundTripped.has_value(), token.data());
+                QCOMPARE(*roundTripped, *loaded);
             }
         }
         // OpenColumnPlacement: newColumn | consume.
         {
+            rejectsMissingValue(ActionType::OpenColumnPlacement);
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::OpenColumnPlacement));
             o.insert(QStringLiteral("value"), QStringLiteral("sideways")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), true); // bool rejected — the wire is a token string
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 1); // number rejected
             QVERIFY(!RuleAction::fromJson(o).has_value());
             for (QLatin1StringView token : {ColumnPlacementToken::NewColumn, ColumnPlacementToken::Consume}) {
                 o.insert(QStringLiteral("value"), QString::fromLatin1(token));
                 const auto loaded = RuleAction::fromJson(o);
                 QVERIFY2(loaded.has_value(), token.data());
                 QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::OpenColumnPlacement));
+                const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+                QVERIFY2(roundTripped.has_value(), token.data());
+                QCOMPARE(*roundTripped, *loaded);
             }
         }
-        // OpenTabbed: bool only.
+        // OpenTabbed: bool only. Both polarities matter — false is the
+        // per-window veto of a context-level tabbed display, so it must
+        // survive load as an explicit value rather than being read as absent.
         {
+            rejectsMissingValue(ActionType::OpenTabbed);
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::OpenTabbed));
             o.insert(QStringLiteral("value"), QStringLiteral("yes")); // non-bool rejected
             QVERIFY(!RuleAction::fromJson(o).has_value());
-            o.insert(QStringLiteral("value"), true);
-            const auto loaded = RuleAction::fromJson(o);
-            QVERIFY(loaded.has_value());
-            QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::OpenTabbed));
+            o.insert(QStringLiteral("value"), 1); // number rejected (no truthiness coercion)
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (const bool value : {true, false}) {
+                o.insert(QStringLiteral("value"), value);
+                const auto loaded = RuleAction::fromJson(o);
+                QVERIFY(loaded.has_value());
+                QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::OpenTabbed));
+                const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+                QVERIFY(roundTripped.has_value());
+                QCOMPARE(*roundTripped, *loaded);
+                QCOMPARE(roundTripped->params.value(QStringLiteral("value")).toBool(!value), value);
+            }
         }
         // SetScrollInsertPosition: the five position tokens; unknown rejected.
         {
+            rejectsMissingValue(ActionType::SetScrollInsertPosition);
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetScrollInsertPosition));
             o.insert(QStringLiteral("value"), QStringLiteral("middle")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), true); // bool rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 3); // number rejected (tokens are not ordinals)
             QVERIFY(!RuleAction::fromJson(o).has_value());
             for (QLatin1StringView token :
                  {ScrollInsertPositionToken::RightOfActive, ScrollInsertPositionToken::LeftOfActive,
@@ -944,27 +992,50 @@ private Q_SLOTS:
                 const auto loaded = RuleAction::fromJson(o);
                 QVERIFY2(loaded.has_value(), token.data());
                 QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::ScrollInsertPosition));
+                const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+                QVERIFY2(roundTripped.has_value(), token.data());
+                QCOMPARE(*roundTripped, *loaded);
             }
         }
-        // SetScrollDefaultWindowHeight / OpenWindowHeight: fraction inside
-        // the shared column-width bounds; out-of-range rejected.
+        // SetScrollDefaultWindowHeight / OpenWindowHeight: the same
+        // [0.05, 1.0] fraction as the width pair, measured against the
+        // work-area height. Mirrors the width loop's bounds and slot pin.
         for (QLatin1StringView type : {ActionType::SetScrollDefaultWindowHeight, ActionType::OpenWindowHeight}) {
+            rejectsMissingValue(type);
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), 0.02); // below 0.05 rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
             o.insert(QStringLiteral("value"), 50.0); // percent-magnitude payload rejected (wire is a fraction)
             QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("tall")); // non-numeric rejected
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 0.05); // inclusive lower bound accepted
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 1.0); // inclusive upper bound accepted
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
             o.insert(QStringLiteral("value"), 0.5);
             const auto loaded = RuleAction::fromJson(o);
             QVERIFY2(loaded.has_value(), type.data());
+            // Slot pin: same cross-wiring risk as the width pair — a swapped
+            // constantSlot passes every bounds assertion above but not this.
+            const QString expectedSlot = (type == ActionType::SetScrollDefaultWindowHeight)
+                ? QString(ActionSlot::ScrollDefaultWindowHeight)
+                : QString(ActionSlot::OpenWindowHeight);
+            QCOMPARE(ActionRegistry::instance().slotFor(*loaded), expectedSlot);
+            const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+            QVERIFY2(roundTripped.has_value(), type.data());
+            QCOMPARE(*roundTripped, *loaded);
         }
     }
 
     void testNewActions_rejectStrayKeys()
     {
-        // The new border/gap family all declare `allowedKeys = {Value}`; pin
-        // that an otherwise-valid payload carrying an unexpected extra key is
-        // rejected, so the strict-key path is exercised for this family (not
-        // just for the pre-existing SetEngineMode in testJson_rejectsInvalidParams).
+        // The Value-keyed families (border, gap, tint/layer, scrolling) all
+        // declare `allowedKeys = {Value}`; pin that an otherwise-valid payload
+        // carrying an unexpected extra key is rejected, so the strict-key path
+        // is exercised for every one of them (not just for the pre-existing
+        // SetEngineMode in testJson_rejectsInvalidParams).
         const auto rejectsStray = [](QLatin1StringView type, const QJsonValue& goodValue) {
             QJsonObject ok;
             ok.insert(QStringLiteral("type"), QString::fromLatin1(type));
@@ -985,11 +1056,14 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetTintStrength, QJsonValue(0.5));
         rejectsStray(ActionType::SetTintColor, QJsonValue(QStringLiteral("#FF0000")));
         rejectsStray(ActionType::SetOuterGapTop, QJsonValue(8));
-        // The scrolling family declares the same {Value} key set.
+        // All nine scrolling actions declare the same {Value} key set.
         rejectsStray(ActionType::SetScrollDefaultColumnWidth, QJsonValue(0.5));
         rejectsStray(ActionType::SetCenterFocusedColumn, QJsonValue(QStringLiteral("always")));
         rejectsStray(ActionType::SetScrollDefaultColumnDisplay, QJsonValue(QStringLiteral("tabbed")));
+        rejectsStray(ActionType::SetScrollInsertPosition, QJsonValue(QStringLiteral("last")));
+        rejectsStray(ActionType::SetScrollDefaultWindowHeight, QJsonValue(0.5));
         rejectsStray(ActionType::OpenColumnWidth, QJsonValue(0.5));
+        rejectsStray(ActionType::OpenWindowHeight, QJsonValue(0.5));
         rejectsStray(ActionType::OpenTabbed, QJsonValue(true));
         rejectsStray(ActionType::OpenColumnPlacement, QJsonValue(QStringLiteral("consume")));
         rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
@@ -1077,7 +1151,10 @@ private Q_SLOTS:
         QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{-1})).has_value()); // negative
         QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{1.5})).has_value()); // non-integral
         QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{QStringLiteral("1")})).has_value()); // string
-        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{65})).has_value()); // above the ordinal cap (64)
+        // Above the shared ordinal cap — named, so a future cap change moves
+        // this test with the validator (the RouteToDesktop sibling test uses
+        // MaxVirtualDesktopOrdinal the same way).
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{MaxZoneOrdinal + 1})).has_value());
         // A double far beyond int range must be rejected by the bound BEFORE any
         // narrowing cast (an out-of-range float-to-int cast is UB) — must not crash.
         QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{1e18})).has_value());
@@ -1085,7 +1162,7 @@ private Q_SLOTS:
         // Single zone, span, and the inclusive cap boundary are all accepted.
         QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1})).has_value());
         QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1, 2})).has_value());
-        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{64})).has_value());
+        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{MaxZoneOrdinal})).has_value());
 
         // A key outside allowedKeys ({zones}) is rejected.
         QJsonObject stray = withZones(QJsonArray{1});

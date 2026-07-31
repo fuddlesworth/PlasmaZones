@@ -262,7 +262,7 @@ QVariant validatePerScreenScrollingValue(const QString& key, const QVariant& val
     if (key == QLatin1String(K::DefaultColumnWidthValue)) {
         // Kind-spanning clamp, mirroring the global schema entry: the shared
         // value key serves proportion and fixed, so bound by the union.
-        return boundedDouble(value, ConfigDefaults::scrollingDefaultColumnWidthValueMin(),
+        return boundedDouble(value, ConfigDefaults::scrollingDefaultColumnWidthProportionMin(),
                              ConfigDefaults::scrollingDefaultColumnWidthFixedMax());
     }
     if (key == QLatin1String(K::DefaultColumnWidthPresetIndex)

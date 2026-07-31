@@ -78,7 +78,7 @@ inline QString insertPosition()
 /// the config read, the per-screen rule override, the per-window open rule,
 /// the preset list, and the persisted-blob boundary.
 ///
-/// KEEP IN SYNC with ConfigDefaults::scrollingDefaultColumnWidthValueMin and
+/// KEEP IN SYNC with ConfigDefaults::scrollingDefaultColumnWidthProportionMin and
 /// the rules-side PhosphorRules::MinColumnWidthRatio. Neither is reachable
 /// from here — ConfigDefaults is app-side, and PhosphorRules is a library this
 /// one does not link (the dependency runs the other way) — so the bound is

@@ -109,6 +109,17 @@ public:
     };
 
     /**
+     * Every action id in the registration table, in declaration order.
+     *
+     * The table is a file-local array with internal linkage, and
+     * cheatsheetModel() is a COMPRESSED view of it (an opposed pair collapses
+     * into a single row, so its second member has no row of its own). Neither
+     * can enumerate the registration surface, which the Shortcuts.Scrolling
+     * parity check needs in order to compare it against the config schema.
+     */
+    static QStringList staticShortcutIds();
+
+    /**
      * Pure family-compression pass over cheatsheet rows (static so tests can
      * drive it without a shortcut backend). A family collapses into one row
      * when every member is assigned, carries exactly one trigger, ends in its

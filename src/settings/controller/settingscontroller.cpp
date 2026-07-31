@@ -107,10 +107,7 @@ QVariantMap SettingsController::scrollingConstants() const
         {QStringLiteral("kindProportion"), ConfigDefaults::scrollingWidthKindProportion()},
         {QStringLiteral("kindFixed"), ConfigDefaults::scrollingWidthKindFixed()},
         {QStringLiteral("kindClientDecides"), ConfigDefaults::scrollingWidthKindClientDecides()},
-        // ValueMin is the proportion floor: the shared value key spans both
-        // kinds, and a static_assert in ConfigDefaults pins it against the
-        // proportion range rather than the fixed one.
-        {QStringLiteral("proportionMin"), ConfigDefaults::scrollingDefaultColumnWidthValueMin()},
+        {QStringLiteral("proportionMin"), ConfigDefaults::scrollingDefaultColumnWidthProportionMin()},
         {QStringLiteral("proportionMax"), ConfigDefaults::scrollingDefaultColumnWidthProportionMax()},
         {QStringLiteral("fixedMin"), ConfigDefaults::scrollingDefaultColumnWidthFixedMin()},
         {QStringLiteral("fixedMax"), ConfigDefaults::scrollingDefaultColumnWidthFixedMax()},

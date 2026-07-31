@@ -14,7 +14,21 @@
  *     toggleCheatsheetShortcut rationale in configdefaults.h).
  * Plus the scrolling enum keys' fall-back-to-default validator behaviour
  * (validIntOr, NOT clamp — an out-of-range stored value must not silently
- * become the nearest enumerator) and the preset-list numeric canonicalizer.
+ * become the nearest enumerator), the numeric-range backstops that DO clamp
+ * (preset indices, the fixed window height, the adjust-step percents), and
+ * the preset-list numeric canonicalizer.
+ *
+ * The largest family here is the default column WIDTH, whose kind and value
+ * are two independent keys with one meaning, so it needs five slots of its
+ * own: the schema-range backstop on the shared value key, the kind-aware
+ * clamp the setter applies on top of it, the kind-transition table (which
+ * flips re-seed the value and which leave it alone, and how many signals each
+ * flip may emit), and the two repair paths for a pair that reached the store
+ * without passing the setter, normalize-on-load and normalize-on-profile-
+ * staging. The default window HEIGHT deliberately has no equivalent: its value
+ * key serves one kind (Fixed) with no cross-domain pair to go inconsistent, so
+ * a plain clampDouble is the whole story and there is no height normalizer to
+ * mirror.
  */
 
 #include <QFile>
@@ -23,6 +37,7 @@
 #include <QKeySequence>
 #include <QSignalSpy>
 #include <QTest>
+#include <QtNumeric>
 
 #include <PhosphorConfig/Schema.h>
 
@@ -187,21 +202,17 @@ private Q_SLOTS:
                  ConfigDefaults::scrollingWidthKindPreset());
         QCOMPARE(kind->validator(4).toInt(), ConfigDefaults::scrollingDefaultColumnWidthKind());
 
-        const auto* widthPresetIdx = findKey(schema, group, ConfigDefaults::defaultColumnWidthPresetIndexKey());
-        QVERIFY(widthPresetIdx && widthPresetIdx->validator);
-        QCOMPARE(widthPresetIdx->validator(-1).toInt(), 0);
-        QCOMPARE(widthPresetIdx->validator(99).toInt(), ConfigDefaults::scrollingPresetIndexMax());
-
         const auto* heightKind = findKey(schema, group, ConfigDefaults::defaultWindowHeightKindKey());
         QVERIFY(heightKind && heightKind->validator);
         QCOMPARE(heightKind->validator(9).toInt(), ConfigDefaults::scrollingDefaultWindowHeightKind());
+        QCOMPARE(heightKind->validator(ConfigDefaults::scrollingHeightKindFixed()).toInt(),
+                 ConfigDefaults::scrollingHeightKindFixed());
         QCOMPARE(heightKind->validator(ConfigDefaults::scrollingHeightKindPreset()).toInt(),
                  ConfigDefaults::scrollingHeightKindPreset());
-
-        const auto* heightValue = findKey(schema, group, ConfigDefaults::defaultWindowHeightValueKey());
-        QVERIFY(heightValue && heightValue->validator);
-        QCOMPARE(heightValue->validator(1.0).toDouble(), ConfigDefaults::scrollingDefaultWindowHeightMin());
-        QCOMPARE(heightValue->validator(99999.0).toDouble(), ConfigDefaults::scrollingDefaultWindowHeightMax());
+        // 3 is the first value past the closed set {Auto, Fixed, Preset}; a
+        // clamping validator would hand it back as Preset.
+        QCOMPARE(heightKind->validator(ConfigDefaults::scrollingHeightKindPreset() + 1).toInt(),
+                 ConfigDefaults::scrollingDefaultWindowHeightKind());
 
         const auto* insertPos =
             findKey(schema, ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::insertPositionKey());
@@ -214,6 +225,51 @@ private Q_SLOTS:
         QVERIFY(display && display->validator);
         QCOMPARE(display->validator(7).toInt(), ConfigDefaults::scrollingDefaultColumnDisplay());
         QCOMPARE(display->validator(1).toInt(), 1);
+    }
+
+    /// The Scrolling group's numeric-range keys, which DO clamp (clampInt /
+    /// clampDouble) rather than falling back to the default like the enums
+    /// above: both preset indices and the fixed window height. Both ends of
+    /// every range are pinned, and the width and height twins are pinned
+    /// identically so neither can quietly lose a bound the other keeps.
+    /// The three view bools ship their ConfigDefaults default here too, since
+    /// nothing else in the group's schema declaration pins them.
+    void scrollingNumericRangesClamp()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        const QString group = ConfigDefaults::scrollingGroup();
+        // The floor is 0 by construction (an index into a list), so it has no
+        // ConfigDefaults accessor of its own. Named here anyway so the two
+        // ends of the range read symmetrically.
+        constexpr int presetIndexMin = 0;
+
+        const auto* widthPresetIdx = findKey(schema, group, ConfigDefaults::defaultColumnWidthPresetIndexKey());
+        QVERIFY(widthPresetIdx && widthPresetIdx->validator);
+        QCOMPARE(widthPresetIdx->validator(-1).toInt(), presetIndexMin);
+        QCOMPARE(widthPresetIdx->validator(99).toInt(), ConfigDefaults::scrollingPresetIndexMax());
+        QCOMPARE(widthPresetIdx->defaultValue.toInt(), ConfigDefaults::scrollingDefaultColumnWidthPresetIndex());
+
+        const auto* heightPresetIdx = findKey(schema, group, ConfigDefaults::defaultWindowHeightPresetIndexKey());
+        QVERIFY(heightPresetIdx && heightPresetIdx->validator);
+        QCOMPARE(heightPresetIdx->validator(-1).toInt(), presetIndexMin);
+        QCOMPARE(heightPresetIdx->validator(99).toInt(), ConfigDefaults::scrollingPresetIndexMax());
+        QCOMPARE(heightPresetIdx->defaultValue.toInt(), ConfigDefaults::scrollingDefaultWindowHeightPresetIndex());
+
+        const auto* heightValue = findKey(schema, group, ConfigDefaults::defaultWindowHeightValueKey());
+        QVERIFY(heightValue && heightValue->validator);
+        QCOMPARE(heightValue->validator(1.0).toDouble(), ConfigDefaults::scrollingDefaultWindowHeightMin());
+        QCOMPARE(heightValue->validator(99999.0).toDouble(), ConfigDefaults::scrollingDefaultWindowHeightMax());
+        QCOMPARE(heightValue->defaultValue.toDouble(), ConfigDefaults::scrollingDefaultWindowHeightValue());
+
+        const auto* tabStrip = findKey(schema, group, ConfigDefaults::tabStripEnabledKey());
+        QVERIFY(tabStrip);
+        QCOMPARE(tabStrip->defaultValue.toBool(), ConfigDefaults::scrollingTabStripEnabled());
+        const auto* wheelEnabled = findKey(schema, group, ConfigDefaults::wheelFocusEnabledKey());
+        QVERIFY(wheelEnabled);
+        QCOMPARE(wheelEnabled->defaultValue.toBool(), ConfigDefaults::scrollingWheelFocusEnabled());
+        const auto* wheelInverted = findKey(schema, group, ConfigDefaults::wheelFocusInvertedKey());
+        QVERIFY(wheelInverted);
+        QCOMPARE(wheelInverted->defaultValue.toBool(), ConfigDefaults::scrollingWheelFocusInverted());
     }
 
     /// Scrolling.Behavior schema guards: the sticky enum falls back to its
@@ -231,6 +287,15 @@ private Q_SLOTS:
         QCOMPARE(sticky->validator(99).toInt(), ConfigDefaults::scrollingStickyWindowHandling());
         QCOMPARE(sticky->validator(ConfigDefaults::scrollingStickyIgnoreAll()).toInt(),
                  ConfigDefaults::scrollingStickyIgnoreAll());
+        // The two enum keys' defaultValue is pinned as well as their
+        // validator: for an enum the two are independently-spelled
+        // expressions (a KeyDef literal and the validIntOr fallback), so a
+        // pasted-wrong defaultValue ships a wrong out-of-box value while the
+        // validator assertions above still pass.
+        QCOMPARE(sticky->defaultValue.toInt(), ConfigDefaults::scrollingStickyWindowHandling());
+        const auto* insertPos = findKey(schema, group, ConfigDefaults::insertPositionKey());
+        QVERIFY(insertPos);
+        QCOMPARE(insertPos->defaultValue.toInt(), ConfigDefaults::scrollingInsertPosition());
 
         const auto* widthStep = findKey(schema, group, ConfigDefaults::columnWidthStepPercentKey());
         QVERIFY(widthStep && widthStep->validator);
@@ -241,6 +306,7 @@ private Q_SLOTS:
         const auto* heightStep = findKey(schema, group, ConfigDefaults::windowHeightStepPercentKey());
         QVERIFY(heightStep && heightStep->validator);
         QCOMPARE(heightStep->validator(-5).toInt(), ConfigDefaults::scrollingStepPercentMin());
+        QCOMPARE(heightStep->validator(999).toInt(), ConfigDefaults::scrollingStepPercentMax());
         QCOMPARE(heightStep->defaultValue.toInt(), ConfigDefaults::scrollingWindowHeightStepPercent());
 
         const auto* focusNew = findKey(schema, group, ConfigDefaults::focusNewWindowsKey());
@@ -279,9 +345,14 @@ private Q_SLOTS:
         QCOMPARE(stickySpy.count(), 1);
         QCOMPARE(changedSpy.count(), 1);
         // Out-of-range write: the schema validator coerces the re-read back
-        // to the default, which IS a change from IgnoreAll.
+        // to the default, which IS a change from IgnoreAll — so it announces
+        // itself like any other change. A setter that compared the value it
+        // was HANDED (42) rather than the value the store came back with
+        // would leave the page showing IgnoreAll over a stored default.
         settings.setScrollingStickyWindowHandling(42);
         QCOMPARE(settings.scrollingStickyWindowHandling(), ConfigDefaults::scrollingStickyWindowHandling());
+        QCOMPARE(stickySpy.count(), 2);
+        QCOMPARE(changedSpy.count(), 2);
 
         QSignalSpy stepSpy(&settings, &Settings::scrollingColumnWidthStepPercentChanged);
         const int preChanged = changedSpy.count();
@@ -289,14 +360,34 @@ private Q_SLOTS:
         QCOMPARE(settings.scrollingColumnWidthStepPercent(), 25);
         QCOMPARE(stepSpy.count(), 1);
         QCOMPARE(changedSpy.count(), preChanged + 1);
-        // Clamped write: 999 stores as the max.
+        // Clamped write: 999 stores as the max, and the clamped result is a
+        // change from 25, so it announces itself too.
         settings.setScrollingColumnWidthStepPercent(999);
         QCOMPARE(settings.scrollingColumnWidthStepPercent(), ConfigDefaults::scrollingStepPercentMax());
+        QCOMPARE(stepSpy.count(), 2);
+        QCOMPARE(changedSpy.count(), preChanged + 2);
+
+        // The height step is the width step's twin and gets the same
+        // treatment: an in-range write, then a clamped one, both announced.
+        QSignalSpy heightStepSpy(&settings, &Settings::scrollingWindowHeightStepPercentChanged);
+        const int preHeightChanged = changedSpy.count();
+        settings.setScrollingWindowHeightStepPercent(30);
+        QCOMPARE(settings.scrollingWindowHeightStepPercent(), 30);
+        QCOMPARE(heightStepSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), preHeightChanged + 1);
+        settings.setScrollingWindowHeightStepPercent(-5);
+        QCOMPARE(settings.scrollingWindowHeightStepPercent(), ConfigDefaults::scrollingStepPercentMin());
+        QCOMPARE(heightStepSpy.count(), 2);
+        QCOMPARE(changedSpy.count(), preHeightChanged + 2);
     }
 
     /// Preset lists canonicalize to numeric proportions in (0, 1]: junk and
-    /// out-of-range entries are dropped so the stored value always equals
-    /// the effective one (the engine silently ignores anything else).
+    /// out-of-range entries are dropped, duplicates collapse to one entry
+    /// (comparing canonical spellings, so "0.50" and "0.5" are the same
+    /// preset), and the surviving entries keep their stored ORDER, so the
+    /// stored value always equals the effective one and a stored preset index
+    /// keeps pointing at the same preset (the engine silently ignores
+    /// anything else).
     void presetListsCanonicalizeNumerically()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
@@ -316,6 +407,19 @@ private Q_SLOTS:
         // alone, so a very narrow preset is legal here and must survive
         // rather than being dropped as sub-floor.
         QCOMPARE(widths->validator(QStringLiteral("0.01, 0.5")).toString(), QStringLiteral("0.01,0.5"));
+        // Both ends of that (0, 1] rule, which nothing else pins: 1.0 is the
+        // full-width preset and must SURVIVE, 0 is not a width at all and must
+        // be DROPPED. Widening the bounds either way passes every other row
+        // here while silently dropping every full-width preset.
+        QCOMPARE(widths->validator(QStringLiteral("0, 1.0, 0.5")).toString(), QStringLiteral("1,0.5"));
+        // Order is preserved, never sorted: the stored preset INDEX points
+        // into this list, so a sort would silently remap every user's
+        // remembered preset. Every other input here is already ascending, so
+        // this descending row is the only thing a sort regression fails.
+        QCOMPARE(widths->validator(QStringLiteral("0.5, 0.25")).toString(), QStringLiteral("0.5,0.25"));
+        // De-duplication compares CANONICAL spellings, not raw text, so two
+        // spellings of one proportion collapse to a single preset.
+        QCOMPARE(widths->validator(QStringLiteral("0.5, 0.50, 0.25")).toString(), QStringLiteral("0.5,0.25"));
 
         const auto* heights = findKey(schema, group, ConfigDefaults::presetWindowHeightsKey());
         QVERIFY(heights && heights->validator);
@@ -330,14 +434,24 @@ private Q_SLOTS:
         // must not hide behind the heights-only assertion above).
         QCOMPARE(widths->validator(QStringLiteral("")).toString(), ConfigDefaults::scrollingPresetColumnWidths());
         // Size cap: a hand-edited file must not smuggle an unbounded list
-        // past the setter path — 26 entries canonicalize to at most 16. Every
-        // entry is a legal proportion, so the cap is the only thing trimming.
+        // past the setter path — 26 entries canonicalize to at most the cap.
+        // Every entry is a legal proportion, so the cap is the only thing
+        // trimming. The expected size is spelled as presetIndexMax() + 1
+        // rather than as a bare 16: the two numbers are one decision (an index
+        // past the last entry a capped list can hold could never resolve), and
+        // raising only the list cap would otherwise leave the new slots
+        // permanently unreachable with the whole suite still green. This is
+        // the runtime half of the static_assert in settingsschema_scrolling.
         QStringList many;
         for (int i = 5; i <= 30; ++i) {
             many.append(QString::number(i / 100.0));
         }
         const QStringList capped = widths->validator(many.join(QLatin1Char(','))).toString().split(QLatin1Char(','));
-        QCOMPARE(capped.size(), 16);
+        QCOMPARE(capped.size(), ConfigDefaults::scrollingPresetIndexMax() + 1);
+        // Keep-EARLIEST, not keep-last: the survivors are the first entries of
+        // the input, so a user's leading presets outlive an over-long tail.
+        QCOMPARE(capped.first(), QStringLiteral("0.05"));
+        QCOMPARE(capped.last(), QStringLiteral("0.2"));
     }
 
     /// The width VALUE key clamps into the schema range (backstop; the
@@ -348,8 +462,13 @@ private Q_SLOTS:
         const auto* value =
             findKey(schema, ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
         QVERIFY(value && value->validator);
-        QCOMPARE(value->validator(0.001).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthValueMin());
+        QCOMPARE(value->validator(0.001).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthProportionMin());
         QCOMPARE(value->validator(99999.0).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthFixedMax());
+        // A corrupt "nan" in the config pins to the MINIMUM. qBound on NaN is
+        // unspecified (every comparison is false, so the result depends on
+        // argument order), which is why clampDouble special-cases it; reverting
+        // that special case to a plain qBound is invisible without this.
+        QCOMPARE(value->validator(qQNaN()).toDouble(), ConfigDefaults::scrollingDefaultColumnWidthProportionMin());
     }
 
     /// The kind-aware clamp in the SETTER, which the schema's wider
@@ -380,25 +499,28 @@ private Q_SLOTS:
         QCOMPARE(settings.scrollingDefaultColumnWidthValue(),
                  ConfigDefaults::scrollingDefaultColumnWidthProportionMax());
         settings.setScrollingDefaultColumnWidthValue(0.001);
-        QCOMPARE(settings.scrollingDefaultColumnWidthValue(), ConfigDefaults::scrollingDefaultColumnWidthValueMin());
+        QCOMPARE(settings.scrollingDefaultColumnWidthValue(),
+                 ConfigDefaults::scrollingDefaultColumnWidthProportionMin());
         settings.setScrollingDefaultColumnWidthValue(0.35);
         QCOMPARE(settings.scrollingDefaultColumnWidthValue(), 0.35);
     }
 
-    /// Full kind-transition table for the shared width value key. The kind
-    /// setter owns the coercion (see setScrollingDefaultColumnWidthKind):
-    /// each arm re-seeds only when the stored value cannot belong to the kind
-    /// being entered — Fixed below the pixel floor, Proportion above 1.0 —
-    /// ClientDecides leaves the value untouched, and a same-kind write is a
-    /// full no-op. A value of either kind therefore survives a ClientDecides
-    /// round trip intact. Each effective flip must emit
-    /// settingsChanged exactly ONCE — a double emit runs the engine's
-    /// refresh+retile sweep twice per user action.
+    /// Kind-transition table for the shared width value key, covering all four
+    /// legal kinds. The kind setter owns the coercion (see
+    /// setScrollingDefaultColumnWidthKind): each arm re-seeds only when the
+    /// stored value cannot belong to the kind being entered — Fixed below the
+    /// pixel floor, Proportion above 1.0 — while ClientDecides and Preset
+    /// leave the value untouched (Preset resolves through its own index key),
+    /// and a same-kind write is a full no-op. A value of either kind therefore
+    /// survives a ClientDecides or Preset round trip intact. Each effective
+    /// flip must emit settingsChanged exactly ONCE — a double emit runs the
+    /// engine's refresh+retile sweep twice per user action.
     void widthKindTransitionsCoerceAndEmitOnce()
     {
         const int kindP = ConfigDefaults::scrollingWidthKindProportion();
         const int kindF = ConfigDefaults::scrollingWidthKindFixed();
         const int kindC = ConfigDefaults::scrollingWidthKindClientDecides();
+        const int kindR = ConfigDefaults::scrollingWidthKindPreset();
         const qreal seededPx = ConfigDefaults::scrollingDefaultColumnWidthFixedPx();
         const qreal defaultProp = ConfigDefaults::scrollingDefaultColumnWidthValue();
         // Seeds deliberately DIFFER from the ConfigDefaults values (0.35 vs
@@ -420,10 +542,14 @@ private Q_SLOTS:
             int expectedKind; // scrollingDefaultColumnWidthKindChanged emits
             int expectedValueSig; // scrollingDefaultColumnWidthValueChanged emits
         };
-        // All nine kind pairs; C→P and C→F appear more than once because
-        // their outcome depends on WHAT the ClientDecides hop left stored (it
-        // deliberately leaves the value key untouched, so both a proportion
-        // and a pixel count can be sitting there). "C->F 1200px retained" is
+        // Every kind pair that carries a distinct rule, plus the pairs whose
+        // outcome depends on WHAT a value-preserving hop left stored: C→P and
+        // C→F appear more than once because ClientDecides deliberately leaves
+        // the value key untouched, so both a proportion and a pixel count can
+        // be sitting there when the next flip lands. Preset is the second
+        // value-preserving kind and gets the same treatment from the other
+        // side — into it, out of it retaining, and out of it re-seeding.
+        // "C->F 1200px retained" is
         // the pin for the Fixed arm's preservation test: a seed that differs
         // from the 800 re-seed, so an unconditional re-seed on entry to Fixed
         // fails the row. The 800px row keeps the case where the coercion is a
@@ -442,6 +568,13 @@ private Q_SLOTS:
             {"C->F 800px stored", kindF, seededPx, kindC, kindF, seededPx, 1, 1, 0},
             {"C->F 1200px retained", kindF, seedPx, kindC, kindF, seedPx, 1, 1, 0},
             {"C->C", kindP, seedProp, kindC, kindC, seedProp, 0, 0, 0},
+            // Preset, the second value-preserving kind: entering it leaves a
+            // pixel width alone, leaving it for Fixed hands that same width
+            // back, and leaving it for Proportion re-seeds because pixels
+            // cannot be a fraction.
+            {"F->Preset", kindF, seedPx, kindF, kindR, seedPx, 1, 1, 0},
+            {"Preset->F pixels retained", kindF, seedPx, kindR, kindF, seedPx, 1, 1, 0},
+            {"Preset->P pixels stored", kindF, seedPx, kindR, kindP, defaultProp, 1, 1, 1},
         };
 
         // Failures accumulate instead of QVERIFY2-ing inside the loop: an
@@ -559,6 +692,13 @@ private Q_SLOTS:
         // table's "C→F 1200px retained" row depends on surviving.
         QTest::newRow("client-decides-untouched")
             << ConfigDefaults::scrollingWidthKindClientDecides() << 800.0 << 800.0;
+        // Preset is the OTHER kind that stores no width of its own (it
+        // resolves through its index key), so it is untouched for the same
+        // reason. Its own row rather than a variation of the ClientDecides
+        // one: the two are separate arms of the normalizer's guard, and
+        // deleting the Preset arm alone re-seeds a retained pixel width while
+        // the ClientDecides row above still passes.
+        QTest::newRow("preset-untouched") << ConfigDefaults::scrollingWidthKindPreset() << 800.0 << 800.0;
     }
 
     void widthValueNormalizesOnLoad()
@@ -596,12 +736,22 @@ private Q_SLOTS:
         QCOMPARE(settings.scrollingDefaultColumnWidthValue(), expected);
 
         // Idempotent: a second load sees the already-repaired pair, so it must
-        // not write and must not re-announce. This is the Discard-reload case,
-        // where nothing about the user's view has changed.
+        // not touch the file and must not re-announce. This is the
+        // Discard-reload case, where nothing about the user's view has
+        // changed. The file bytes are compared rather than only the signal,
+        // because a repair that ran again and wrote the same value back would
+        // be silent on the signal alone.
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray beforeReload = file.readAll();
+        file.close();
         QSignalSpy valueSpy(&settings, &Settings::scrollingDefaultColumnWidthValueChanged);
         settings.load();
         QCOMPARE(settings.scrollingDefaultColumnWidthValue(), expected);
         QCOMPARE(valueSpy.count(), 0);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray afterReload = file.readAll();
+        file.close();
+        QCOMPARE(afterReload, beforeReload);
     }
 
     void widthValueNormalizesOnProfileStaging()

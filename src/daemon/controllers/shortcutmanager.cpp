@@ -808,6 +808,16 @@ bool ShortcutManager::rebindAll()
     return anyChanged;
 }
 
+QStringList ShortcutManager::staticShortcutIds()
+{
+    QStringList ids;
+    ids.reserve(static_cast<int>(std::size(kStaticEntries)));
+    for (const auto& e : kStaticEntries) {
+        ids.append(QString::fromLatin1(e.id));
+    }
+    return ids;
+}
+
 void ShortcutManager::buildEntries()
 {
     m_entries.clear();

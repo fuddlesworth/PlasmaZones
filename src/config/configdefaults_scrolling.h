@@ -119,7 +119,12 @@ public:
     {
         return 0.5;
     }
-    static constexpr qreal scrollingDefaultColumnWidthValueMin()
+    /// Proportion-kind floor, the twin of scrollingDefaultColumnWidthProportionMax
+    /// below. It doubles as the schema clampDouble's lower bound for the shared
+    /// value key, since a pixel width can never be smaller than a proportion,
+    /// but it bounds the PROPORTION range — the fixed range has its own floor
+    /// in scrollingDefaultColumnWidthFixedMin.
+    static constexpr qreal scrollingDefaultColumnWidthProportionMin()
     {
         return 0.05;
     }
@@ -519,7 +524,7 @@ public:
 // kind is Proportion), so it is checked against the proportion range; the
 // pixel seed is checked against the fixed range.
 static_assert(ConfigDefaultsScrolling::scrollingDefaultColumnWidthValue()
-                      >= ConfigDefaultsScrolling::scrollingDefaultColumnWidthValueMin()
+                      >= ConfigDefaultsScrolling::scrollingDefaultColumnWidthProportionMin()
                   && ConfigDefaultsScrolling::scrollingDefaultColumnWidthValue()
                       <= ConfigDefaultsScrolling::scrollingDefaultColumnWidthProportionMax(),
               "ConfigDefaults::scrollingDefaultColumnWidthValue() outside the declared proportion [min, max] range");
