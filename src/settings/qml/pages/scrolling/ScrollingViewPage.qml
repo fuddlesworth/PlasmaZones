@@ -13,32 +13,12 @@ import org.kde.kirigami as Kirigami
  *
  * Rows bind the app-wide `appSettings` context property directly — the
  * scrolling settings are plain Settings Q_PROPERTYs with no page
- * sub-controller. The centering policy is per-monitor overridable through
- * the card's scope chip (the View sub-domain of the per-screen scrolling
- * map); the wheel rows are app-wide (the gesture registration is one
- * compositor-side action set).
+ * sub-controller. App-wide only, matching the tiling/snapping behavior
+ * pages: per-context centering is a rules job (the SetCenterFocusedColumn
+ * context action), not a per-monitor chip.
  */
 SettingsFlickable {
     id: root
-
-    function settingValue(key, globalValue) {
-        return psHelper.settingValue(key, globalValue);
-    }
-
-    function writeSetting(key, value, globalSetter) {
-        psHelper.writeSetting(key, value, globalSetter);
-    }
-
-    PerScreenOverrideHelper {
-        id: psHelper
-
-        appSettings: settingsController
-        // Shared app-wide scope — a monitor picked on any per-monitor page
-        // stays picked here.
-        selectedScreenName: settingsController.scopeScreenName
-        getterMethod: "getPerScreenScrollingSettings"
-        setterMethod: "setPerScreenScrollingSetting"
-    }
 
     contentHeight: content.implicitHeight
     clip: true
@@ -54,10 +34,6 @@ SettingsFlickable {
             headerText: i18n("Focus and view")
             searchAnchor: "focusAndView"
             collapsible: true
-            scopeEnabled: true
-            scopeAppSettings: settingsController
-            scopeHasOverridesMethod: "hasPerScreenScrollingViewSettings"
-            scopeClearerMethod: "clearPerScreenScrollingViewSettings"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -72,10 +48,8 @@ SettingsFlickable {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Scrolling", "CenterFocusedColumn")
-                        storedValue: root.settingValue("CenterFocusedColumn", appSettings.scrollingCenterFocusedColumn)
-                        onActivated: root.writeSetting("CenterFocusedColumn", currentValue, function (v) {
-                            appSettings.scrollingCenterFocusedColumn = v;
-                        })
+                        storedValue: appSettings.scrollingCenterFocusedColumn
+                        onActivated: appSettings.scrollingCenterFocusedColumn = currentValue
                     }
                 }
 

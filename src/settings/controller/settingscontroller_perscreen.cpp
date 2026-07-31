@@ -92,36 +92,6 @@ bool SettingsController::hasPerScreenScrollingSettings(const QString& screenName
     return m_settings.hasPerScreenScrollingSettings(screenName);
 }
 
-bool SettingsController::hasPerScreenScrollingViewSettings(const QString& screenName) const
-{
-    return m_settings.hasPerScreenScrollingViewSettings(screenName);
-}
-
-void SettingsController::clearPerScreenScrollingViewSettings(const QString& screenName)
-{
-    m_settings.clearPerScreenScrollingViewSettings(screenName);
-}
-
-bool SettingsController::hasPerScreenScrollingColumnSettings(const QString& screenName) const
-{
-    return m_settings.hasPerScreenScrollingColumnSettings(screenName);
-}
-
-void SettingsController::clearPerScreenScrollingColumnSettings(const QString& screenName)
-{
-    m_settings.clearPerScreenScrollingColumnSettings(screenName);
-}
-
-bool SettingsController::hasPerScreenScrollingWindowSettings(const QString& screenName) const
-{
-    return m_settings.hasPerScreenScrollingWindowSettings(screenName);
-}
-
-void SettingsController::clearPerScreenScrollingWindowSettings(const QString& screenName)
-{
-    m_settings.clearPerScreenScrollingWindowSettings(screenName);
-}
-
 // ── Per-screen gap overrides (config-backed) ─────────────────────────────
 // A per-monitor gap override is the gap-dimension sub-domain of the per-screen
 // autotile config store (unified — one value per monitor drives both snap and

@@ -9,14 +9,13 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Simple-mode Scrolling page: the everyday decisions (view centering,
  * default column width) plus the shared Window Handling and Focus cards. The
- * advanced counterpart is ScrollingPage (scrolling-behavior); dirtiness,
- * Reset, and Discard delegate there via simplePageBackingPages.
+ * advanced counterpart is the View page (scrolling-view); dirtiness, Reset,
+ * and Discard delegate to all three advanced leaves via
+ * simplePageBackingPages.
  *
- * Global scope only, like TilingSimplePage: rows bind appSettings directly
- * and no per-monitor scope chip is offered here — per-monitor overrides are
- * advanced-mode depth. The two shared cards keep their own scope chips; they
- * read the app-wide scope, which is "All monitors" unless the user changed
- * it in advanced mode.
+ * Global scope only, like TilingSimplePage: every row binds appSettings
+ * directly and no per-monitor scope chip is offered here — per-monitor
+ * overrides (the Columns card's sizing defaults) are advanced-mode depth.
  */
 SettingsFlickable {
     id: root

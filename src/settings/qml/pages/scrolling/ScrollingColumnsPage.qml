@@ -78,10 +78,16 @@ SettingsFlickable {
             headerText: i18n("New columns")
             searchAnchor: "newColumns"
             collapsible: true
+            // The one per-monitor scrolling card, the analogue of the Tiling
+            // Algorithm card: default column/tile sizing is layout tuning a
+            // monitor legitimately owns. Everything else scrolling offers is
+            // app-wide, with rules as the per-context escape hatch. The map
+            // holds only this card's keys, so the whole-domain accessors
+            // serve as its sub-domain.
             scopeEnabled: true
             scopeAppSettings: settingsController
-            scopeHasOverridesMethod: "hasPerScreenScrollingColumnSettings"
-            scopeClearerMethod: "clearPerScreenScrollingColumnSettings"
+            scopeHasOverridesMethod: "hasPerScreenScrollingSettings"
+            scopeClearerMethod: "clearPerScreenScrollingSettings"
 
             // The kind the visible rows key off: the scoped monitor's
             // override when present, else the global.

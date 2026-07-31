@@ -91,7 +91,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     const QRect adjusted = area.adjusted(qMax(0, left), qMax(0, top), -qMax(0, right), -qMax(0, bottom));
     params.workArea = (adjusted.width() > 0 && adjusted.height() > 0) ? adjusted : QRect();
     params.gap = innerGap;
-    params.respectMinimumSize = effectiveRespectMinimumSize(screenId);
+    params.respectMinimumSize = m_respectMinimumSize;
     params.defaultWindowHeight = effectiveDefaultWindowHeight(screenId, params.workArea);
     params.presetColumnWidths = m_presetColumnWidths;
     params.presetWindowHeights = m_presetWindowHeights;

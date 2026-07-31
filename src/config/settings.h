@@ -993,14 +993,6 @@ public:
                                                   const QVariant& value) override;
     Q_INVOKABLE void clearPerScreenScrollingSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenIdOrName) const override;
-    // One sub-domain accessor pair per scope-chipped card (View / Columns /
-    // Window), same disjoint-reset rationale as the autotile sub-domains.
-    bool hasPerScreenScrollingViewSettings(const QString& screenIdOrName) const;
-    void clearPerScreenScrollingViewSettings(const QString& screenIdOrName);
-    bool hasPerScreenScrollingColumnSettings(const QString& screenIdOrName) const;
-    void clearPerScreenScrollingColumnSettings(const QString& screenIdOrName);
-    bool hasPerScreenScrollingWindowSettings(const QString& screenIdOrName) const;
-    void clearPerScreenScrollingWindowSettings(const QString& screenIdOrName);
 
     // Per-screen snapping gaps project the config-backed per-monitor gap
     // overrides (perScreenGapOverrides) — the geometry path only reads them, so

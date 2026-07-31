@@ -458,10 +458,14 @@ public:
         m_contextGapProvider = std::move(provider);
     }
 
-    // Per-context rule overrides (SetScrollDefaultColumnWidth /
-    // SetCenterFocusedColumn / SetScrollDefaultColumnDisplay), layered over
-    // the config defaults per screen. Map keys: "CenterFocusedColumn" (int),
-    // "DefaultColumnWidth" (double fraction), "DefaultColumnDisplay" (int).
+    // Per-screen overrides layered over the config defaults, one map per
+    // screen with two producer channels the daemon merges (rules win): the
+    // RULE channel (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
+    // SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
+    // SetScrollDefaultWindowHeight) and the SETTINGS channel (the per-monitor
+    // New-columns sizing trio pairs). Key spellings live in
+    // ScrollPerScreenKeys (ScrollTypes.h) — the accessor comments there are
+    // the authoritative key list.
     void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides) override;
     void clearPerScreenConfig(const QString& screenId) override;
     QVariantMap perScreenOverrides(const QString& screenId) const override
@@ -830,7 +834,6 @@ private:
     /// committed as Fixed pixels against the live work area.
     WindowHeight effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const;
     ScrollInsertPosition effectiveInsertPosition(const QString& screenId) const;
-    bool effectiveRespectMinimumSize(const QString& screenId) const;
 
     QHash<QString, QVariantMap> m_perScreenOverrides;
     std::function<void()> m_persistSaveFn;

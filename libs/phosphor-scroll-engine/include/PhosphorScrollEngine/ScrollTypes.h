@@ -64,13 +64,12 @@ inline QString defaultWindowHeightPresetIndex()
 {
     return QStringLiteral("DefaultWindowHeightPresetIndex");
 }
+/// RULE channel (SetScrollInsertPosition); the settings store deliberately
+/// does not write it — insert position is app-wide config, per-context
+/// only via rules, matching the tiling siblings' exposure.
 inline QString insertPosition()
 {
     return QStringLiteral("InsertPosition");
-}
-inline QString respectMinimumSize()
-{
-    return QStringLiteral("RespectMinimumSize");
 }
 } // namespace ScrollPerScreenKeys
 

@@ -813,16 +813,6 @@ ScrollInsertPosition ScrollEngine::effectiveInsertPosition(const QString& screen
     return m_insertPosition;
 }
 
-bool ScrollEngine::effectiveRespectMinimumSize(const QString& screenId) const
-{
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    const auto it = overrides.constFind(ScrollPerScreenKeys::respectMinimumSize());
-    if (it != overrides.constEnd()) {
-        return it->toBool();
-    }
-    return m_respectMinimumSize;
-}
-
 ColumnDisplay ScrollEngine::effectiveDefaultColumnDisplay(const QString& screenId) const
 {
     // Validate-then-fall-back, same terms as the two siblings. Reading "any
