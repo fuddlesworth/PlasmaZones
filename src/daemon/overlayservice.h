@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION: this header is 1193 lines, over the 1150 hard ceiling.
+// FILE-SIZE EXCEPTION: this header is over 1200 lines, past the 1150 hard
+// ceiling.
 // The exception was granted in the same pull request that carried the file
 // past the ceiling (the scroll tab strip), so it is a live decision rather
 // than settled precedent, and it is recorded here for that reason.
@@ -26,6 +27,7 @@
 #include <QSize>
 #include <QString>
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -423,6 +425,16 @@ public:
     /// Display-only and click-through.
     void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
 
+    /// Re-push every screen's cached strip model through
+    /// updateScrollTabStrips, whose own enabled check turns the replay into a
+    /// show (toggle on) or an animated hide (toggle off). Needed because the
+    /// engine's tabStripsChanged is change-latched and stays silent until the
+    /// next structural change, so nothing else would repaint after the toggle
+    /// moves. Called from the scrollingTabStripEnabledChanged hook and from
+    /// updateSettings, which covers the batch-setSettings case where the
+    /// per-key signal never fires.
+    void replayScrollTabStrips();
+
     /// Forwarders to the active picker slot's QML moveSelection /
     /// confirmSelection functions. Used by global-accel callbacks
     /// (registered by WindowDragAdaptor on picker show) since the
@@ -555,10 +567,12 @@ private:
     void dismissOverlayWindow(const QString& screenId);
     void updateOverlayWindow(const QString& screenId, QScreen* physScreen);
 
-    // Move a live overlay entry from oldKey to newKey. Used when the effective
-    // screen id for the same physical monitor flips between a virtual variant
-    // ("...:115107/vs:0") and the bare physical id ("...:115107"), so the
-    // existing QQuickWindow + VkSwapchainKHR is reused instead of torn down.
+    // Move a live overlay entry from oldKey to newKey, so the existing
+    // QQuickWindow + VkSwapchainKHR is reused instead of torn down. SAME
+    // FLAVOR ONLY: both keys virtual ("...:115107/vs:0" → "...:115107/vs:1")
+    // or both bare physical. A virtual↔physical flip is refused, because it
+    // changes the surface's anchor set and several compositors ignore
+    // post-attach set_anchor — the caller falls back to destroy + recreate.
     // Returns true if a rekey happened.
     bool rekeyOverlayState(const QString& oldKey, const QString& newKey);
 
@@ -686,6 +700,12 @@ private:
     // order (m_screenStates before m_shellHost) keeps reverse-destruction
     // safe even if a future change removes the explicit reset.
     QHash<QString, PerScreenOverlayState> m_screenStates;
+    std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
+
+    // Scroll tab-strip bookkeeping. Below m_shellHost deliberately: these
+    // are plain per-screen maps with no teardown dependency on either
+    // neighbour, so they must not sit between m_screenStates and m_shellHost
+    // and break up the declaration-order rationale above.
     /// Per-screen generation guard for the scroll tab-strip animated hide:
     /// bumped per updateScrollTabStrips call so a hide completion that lost
     /// the race to a newer non-empty update no-ops instead of tearing down
@@ -698,7 +718,6 @@ private:
     /// enable toggle so re-enabling the indicator can replay it (the
     /// engine's tabStripsChanged is change-latched and stays silent).
     QHash<QString, QVariantList> m_lastScrollTabStrips;
-    std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;

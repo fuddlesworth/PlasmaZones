@@ -570,17 +570,24 @@ private:
     /// the same prunes that reap context states.
     void sweepStripStash(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale);
     // engine_apply.cpp
-    /// @p suppressOuterGaps is the smart-gaps arm: the user-visible
-    /// geometry producers (applyLayout, the visibleTiles wrapper) pass true
-    /// when the strip holds exactly one column, zeroing the OUTER gaps
-    /// only. Inner gaps need no arm — with one column no inter-column gap
-    /// exists, so the pure-math callers that never suppress stay consistent
-    /// by construction.
-    ScrollLayoutParams layoutParamsForScreen(const QString& screenId, bool suppressOuterGaps = false) const;
+    /// The smart-gaps arm is resolved INSIDE, not passed in: a single-column
+    /// strip on the screen's current context zeroes the OUTER gaps for every
+    /// caller alike. It has to be every caller — the geometry producers
+    /// (applyLayout, the visibleTiles walks) and the pure-math verbs
+    /// (navigation, anchor math, the maximize compare) resolve against the
+    /// same work area, and a defaulted parameter only two of eighteen call
+    /// sites passed left the verbs computing against a gapped rect the apply
+    /// path then un-gapped: a lone column off-centre by (outerL+outerR)/2,
+    /// leftover width nobody claimed, and a maximize compare that never
+    /// matched. Inner gaps need no arm — with one column no inter-column gap
+    /// exists.
+    ScrollLayoutParams layoutParamsForScreen(const QString& screenId) const;
     /// visibleTiles' real body, taking params the caller already resolved.
     /// The public overload is the thin wrapper; callers that hold params
-    /// (the digit path, the normalized-rect walk) use this instead of
-    /// paying a second ScreenManager query plus context-gap-provider call.
+    /// (the digit path, the normalized-rect walk) use this instead of paying
+    /// a second ScreenManager query plus context-gap-provider call. The
+    /// state itself is re-resolved here (a hash lookup, unlike the params);
+    /// what the overload saves is the params resolution.
     QVector<VisibleTile> visibleTiles(const QString& screenId, const ScrollLayoutParams& params) const;
     /// Relayout the strip and emit the geometry batch for @p screenId's
     /// current-context state. @p focusWindowAfter activates the strip's

@@ -3,6 +3,7 @@
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
+#include <PhosphorEngine/GapResolution.h>
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorScreens/Manager.h>
@@ -31,7 +32,7 @@ constexpr int kParkMargin = 16;
 
 } // namespace
 
-ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, bool suppressOuterGaps) const
+ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) const
 {
     ScrollLayoutParams params;
     QRect area = m_screenManager ? m_screenManager->screenAvailableGeometry(screenId)
@@ -45,43 +46,62 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     int bottom = 0;
     int left = 0;
     int right = 0;
+    int settingsUniformOuter = 0;
     if (auto* gaps = qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings())) {
         innerGap = qMax(0, gaps->scrollingInnerGap());
+        settingsUniformOuter = gaps->scrollingOuterGap();
         if (gaps->scrollingUsePerSideOuterGap()) {
             top = gaps->scrollingOuterGapTop();
             bottom = gaps->scrollingOuterGapBottom();
             left = gaps->scrollingOuterGapLeft();
             right = gaps->scrollingOuterGapRight();
         } else {
-            top = bottom = left = right = gaps->scrollingOuterGap();
+            top = bottom = left = right = settingsUniformOuter;
         }
     }
     if (m_contextGapProvider) {
         namespace PSK = PhosphorEngine::PerScreenKeys;
+        namespace GR = PhosphorEngine::GapResolution;
         const QVariantMap overrides = m_contextGapProvider(screenId);
-        if (const auto it = overrides.constFind(PSK::InnerGap); it != overrides.constEnd()) {
-            innerGap = qMax(0, it->toInt());
+        // The shared atomic-layer resolution both sibling pipelines use (the
+        // snap-side GeometryUtils and the autotile PerScreenConfigResolver):
+        // an override map that carries outer-gap info wins WHOLESALE, and
+        // missing sides of a partial per-side map fall back to the map's own
+        // uniform OuterGap, then to the settings uniform. Scrolling consumes
+        // raw values (identity normalize) like the snapping side; the
+        // rect-inversion belt below is the only clamp.
+        const auto identity = [](int v) {
+            return v;
+        };
+        if (const auto inner = GR::gapFromOverrideMap(overrides, PSK::InnerGap, identity)) {
+            innerGap = qMax(0, *inner);
         }
-        const bool perSide = overrides.value(PSK::UsePerSideOuterGap, false).toBool();
-        if (const auto it = overrides.constFind(PSK::OuterGap); it != overrides.constEnd() && !perSide) {
-            top = bottom = left = right = it->toInt();
-        }
-        if (perSide) {
-            top = overrides.value(PSK::OuterGapTop, top).toInt();
-            bottom = overrides.value(PSK::OuterGapBottom, bottom).toInt();
-            left = overrides.value(PSK::OuterGapLeft, left).toInt();
-            right = overrides.value(PSK::OuterGapRight, right).toInt();
+        if (const auto outer = GR::outerGapsFromOverrideMap(overrides, settingsUniformOuter, identity)) {
+            top = outer->top;
+            bottom = outer->bottom;
+            left = outer->left;
+            right = outer->right;
         }
     }
-    // Smart gaps: the caller detected a single-column strip, so the outer
-    // gaps are dropped wholesale — settings values AND context-rule
-    // overrides, matching autotile's bypass of its whole gap resolve. The
-    // inner gap stays as-is: with one column nothing consumes it between
-    // columns, and stacked tiles keeping their separation matches
-    // autotile's windowCount == 1 condition (a lone column with a stack is
-    // not a lone window).
-    if (suppressOuterGaps) {
-        top = bottom = left = right = 0;
+    // Smart gaps: a single-column strip drops the outer gaps wholesale —
+    // settings values AND context-rule overrides, matching autotile's bypass
+    // of its whole gap resolve. The inner gap stays as-is: with one column
+    // nothing consumes it between columns, and stacked tiles keeping their
+    // separation matches autotile's windowCount == 1 condition (a lone
+    // column with a stack is not a lone window).
+    //
+    // Resolved HERE rather than passed in, so every consumer of these params
+    // agrees: the geometry producers and the pure-math verbs (navigation,
+    // anchor math, the maximize compare) all have to see the same work area
+    // or the strip resolves against one rect and applies another. The basis
+    // is the screen's CURRENT-context strip, which is the one applyLayout
+    // ever puts on screen; a background context resolving params for the
+    // same screen borrows that verdict rather than inventing a second one.
+    if (m_smartGaps) {
+        const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+        if (state && state->strip().columnCount() == 1) {
+            top = bottom = left = right = 0;
+        }
     }
     // Outer gaps must never invert the rect: an unknown/removed screen
     // yields a null area, and adjust() on it (or oversized gaps on a small
@@ -109,10 +129,7 @@ QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& scr
     if (!state || state->strip().isEmpty()) {
         return {};
     }
-    // Smart gaps resolved here in the wrapper (the caller holds no params
-    // yet); the params-taking overload below trusts whatever its caller
-    // resolved.
-    return visibleTiles(screenId, layoutParamsForScreen(screenId, m_smartGaps && state->strip().columnCount() == 1));
+    return visibleTiles(screenId, layoutParamsForScreen(screenId));
 }
 
 QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& screenId,
@@ -229,7 +246,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         clearTabStripsForScreen(screenId);
         return;
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(screenId, m_smartGaps && state->strip().columnCount() == 1);
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
     if (!params.workArea.isValid()) {
         // Screen went away or gaps swallowed it: the indicator must not
         // stay painted, and a scheduled-retile storm must not spam a
@@ -256,10 +273,16 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     const bool anchorMoved = state->strip().viewAnchor() != anchorBefore;
     const ResolvedStrip resolved = state->strip().relayout(params);
     if (resolved.columns.isEmpty()) {
-        // The strip just emptied (last window closed / floated / released).
-        // The tab-strip clear must still run — returning before it would
-        // leave the indicator painted on an empty screen forever.
+        // The strip just emptied (last window closed / floated / released),
+        // or every column is minimized away. The tab-strip clear must still
+        // run — returning before it would leave the indicator painted on an
+        // empty screen forever — and an anchor the re-anchor above already
+        // moved is persisted state that has to be marked dirty on this exit
+        // too, or the move is never saved.
         clearTabStripsForScreen(screenId);
+        if (anchorMoved) {
+            Q_EMIT placementChanged(screenId);
+        }
         return;
     }
 
@@ -372,6 +395,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // by the bail above, and relayout never emits a column with no
         // tiles, so every surviving column contributes at least one entry.
         clearTabStripsForScreen(screenId);
+        if (anchorMoved) {
+            Q_EMIT placementChanged(screenId);
+        }
         return;
     }
     // Emit-on-change: a relayout that resolved every window to the exact

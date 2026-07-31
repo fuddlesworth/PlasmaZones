@@ -89,12 +89,27 @@
 
 namespace PlasmaZones {
 
-QVariantMap SettingsController::scrollingWidthConstants() const
+// The scrolling kind vocabularies and value bounds, read straight from
+// ConfigDefaults — the C++ side is the single home for these numbers. The
+// scrolling pages bind this map instead of re-spelling the literals in QML,
+// which would otherwise duplicate the kind ints, the slider and spin ranges,
+// and the preset ceiling across the C++/QML boundary.
+//
+// The map covers both dimensions, not just widths: width kinds and their
+// value bounds, the height kinds and their fixed-pixel range, the editing
+// steps for each, the preset-index ceiling, and the shortcut adjust-step
+// percent bounds. Only the height kind the QML actually keys rows off is
+// exported — Auto has no row of its own (it is the fall-through when neither
+// Fixed nor Preset matches), so exporting it would be an unread entry.
+QVariantMap SettingsController::scrollingConstants() const
 {
     return {
         {QStringLiteral("kindProportion"), ConfigDefaults::scrollingWidthKindProportion()},
         {QStringLiteral("kindFixed"), ConfigDefaults::scrollingWidthKindFixed()},
         {QStringLiteral("kindClientDecides"), ConfigDefaults::scrollingWidthKindClientDecides()},
+        // ValueMin is the proportion floor: the shared value key spans both
+        // kinds, and a static_assert in ConfigDefaults pins it against the
+        // proportion range rather than the fixed one.
         {QStringLiteral("proportionMin"), ConfigDefaults::scrollingDefaultColumnWidthValueMin()},
         {QStringLiteral("proportionMax"), ConfigDefaults::scrollingDefaultColumnWidthProportionMax()},
         {QStringLiteral("fixedMin"), ConfigDefaults::scrollingDefaultColumnWidthFixedMin()},
@@ -102,19 +117,20 @@ QVariantMap SettingsController::scrollingWidthConstants() const
         {QStringLiteral("proportionStep"), ConfigDefaults::scrollingDefaultColumnWidthProportionStep()},
         {QStringLiteral("fixedStep"), ConfigDefaults::scrollingDefaultColumnWidthFixedStep()},
         // Bounds for the shortcut adjust-step percent rows (Window Handling
-        // card) — a different thing from the two editor-granularity steps
-        // above, see ConfigDefaults.
+        // card) — a different thing from the editor-granularity steps above,
+        // see ConfigDefaults.
         {QStringLiteral("stepPercentMin"), ConfigDefaults::scrollingStepPercentMin()},
         {QStringLiteral("stepPercentMax"), ConfigDefaults::scrollingStepPercentMax()},
-        // Preset default kind + index bounds, and the height trio's
-        // vocabulary and fixed-pixel range.
+        // Preset kind + the schema's stored-index ceiling. The QML spins take
+        // the smaller of this and the live list length, so a shrunk list can
+        // never leave the spin offering an index the schema would clamp.
         {QStringLiteral("kindPreset"), ConfigDefaults::scrollingWidthKindPreset()},
         {QStringLiteral("presetIndexMax"), ConfigDefaults::scrollingPresetIndexMax()},
-        {QStringLiteral("heightKindAuto"), ConfigDefaults::scrollingHeightKindAuto()},
         {QStringLiteral("heightKindFixed"), ConfigDefaults::scrollingHeightKindFixed()},
         {QStringLiteral("heightKindPreset"), ConfigDefaults::scrollingHeightKindPreset()},
         {QStringLiteral("heightFixedMin"), ConfigDefaults::scrollingDefaultWindowHeightMin()},
         {QStringLiteral("heightFixedMax"), ConfigDefaults::scrollingDefaultWindowHeightMax()},
+        {QStringLiteral("heightFixedStep"), ConfigDefaults::scrollingDefaultWindowHeightStep()},
     };
 }
 
@@ -490,6 +506,10 @@ SettingsController::SettingsController(QObject* parent)
     wirePerScreenOverrideSignal(&Settings::perScreenZoneSelectorSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenScrollingSettingsChanged);
 
+    // An external config reload parks while the user has unsaved edits, so it
+    // drains on the same signal the dirty tracking above emits.
+    connect(this, &SettingsController::dirtyPagesChanged, this, &SettingsController::maybeDrainPendingExternalReload);
+
     // Editor + fill-on-drop settings lack Q_PROPERTY on Settings, so the
     // meta-object loop above misses them. EditorPageController forwards each
     // NOTIFY to QML and emits changed() which drives dirty tracking here.
@@ -835,7 +855,6 @@ SettingsController::SettingsController(QObject* parent)
             m_rulesPage->model()->refreshLabels();
         }
     };
-    connect(this, &SettingsController::dirtyPagesChanged, this, &SettingsController::maybeDrainPendingExternalReload);
     connect(this, &SettingsController::screensChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::activitiesChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::layoutsChanged, this, refreshRuleLabels);

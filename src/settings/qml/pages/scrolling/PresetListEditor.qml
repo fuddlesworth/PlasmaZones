@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import "../../js/PresetList.js" as PresetList
 
 /**
  * @brief Editor for one scrolling preset list (column widths or window
@@ -19,7 +20,13 @@ import org.kde.kirigami as Kirigami
  * edit joins the working array and writes it through `commit`, then the
  * `presets` binding delivers back whatever the schema's canonicalizer kept
  * (dropped duplicates, the 16-entry cap, the nothing-survives default), so
- * the grid always shows the effective presets.
+ * the grid always shows the effective presets. The editor refuses the adds
+ * the canonicalizer would silently swallow instead of letting the button
+ * look like it did nothing.
+ *
+ * Accessible names arrive as whole sentences from the call site rather than
+ * being composed from a noun fragment here, so a translator sees each full
+ * string and can order its parts freely.
  */
 ColumnLayout {
     id: editor
@@ -28,18 +35,44 @@ ColumnLayout {
     required property string presets
     /// Called with the new comma-joined string on every edit.
     required property var commit
-    /// Accessible label stem, e.g. "column width preset".
-    required property string entryName
+    /// Accessible name for one preset card. Receives the percent as %1.
+    required property string cardName
+    /// Accessible name for a card's remove button. Receives the percent as %1.
+    required property string removeName
+    /// Accessible name for the add row's percentage field.
+    required property string addValueName
+    /// Accessible name for the add button.
+    required property string addName
     /// Heights preview as a vertical share of the well; widths (the
     /// default) as a horizontal one.
     property bool vertical: false
 
-    readonly property var _values: presets.length > 0 ? presets.split(",") : []
+    readonly property var _values: PresetList.values(presets)
+    /// The canonicalizer's entry cap, derived from the schema's stored-index
+    /// ceiling so the button gate cannot drift from the store's.
+    readonly property int _maxEntries: settingsController.scrollingConstants().presetIndexMax + 1
+    /// The percentages already on screen. An add that rounds onto one of
+    /// these would render a second, indistinguishable card.
+    readonly property var _shownPercents: {
+        var out = [];
+        for (var i = 0; i < editor._values.length; i++)
+            out.push(PresetList.percent(editor._values[i]));
+        return out;
+    }
+    readonly property bool _atCap: editor._values.length >= editor._maxEntries
+    readonly property bool _wouldCollide: editor._shownPercents.indexOf(addSpin.value) >= 0
 
     spacing: Kirigami.Units.smallSpacing
 
     function _commitList(list) {
         commit(list.join(","));
+    }
+
+    Kirigami.InlineMessage {
+        Layout.fillWidth: true
+        type: Kirigami.MessageType.Information
+        visible: editor._atCap || editor._wouldCollide
+        text: editor._atCap ? i18n("This list is full at %1 presets. Remove one to add another.", editor._maxEntries) : i18n("There is already a preset at this percentage.")
     }
 
     GridLayout {
@@ -58,8 +91,8 @@ ColumnLayout {
                 required property string modelData
                 required property int index
 
-                readonly property real fraction: parseFloat(presetCard.modelData)
-                readonly property int percent: Math.round(presetCard.fraction * 100)
+                readonly property real fraction: PresetList.fraction(presetCard.modelData)
+                readonly property int percent: PresetList.percent(presetCard.modelData)
                 readonly property real _cardPad: Kirigami.Units.largeSpacing
 
                 Layout.fillWidth: true
@@ -68,7 +101,10 @@ ColumnLayout {
                 color: Kirigami.Theme.backgroundColor
                 border.width: 1
                 border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-                Accessible.name: i18n("%1% %2", presetCard.percent, editor.entryName)
+                // AT-SPI clients skip items reporting NoRole, which would make
+                // the per-card percent unreadable, so the card claims a role.
+                Accessible.role: Accessible.ListItem
+                Accessible.name: editor.cardName.arg(presetCard.percent)
 
                 RowLayout {
                     id: cardRow
@@ -106,7 +142,7 @@ ColumnLayout {
 
                     Label {
                         Layout.fillWidth: true
-                        text: i18n("%1%", presetCard.percent)
+                        text: i18nc("a preset size as a percentage of the work area", "%1%", presetCard.percent)
                         font.weight: Font.Medium
                         elide: Text.ElideRight
                     }
@@ -114,17 +150,34 @@ ColumnLayout {
                     ToolButton {
                         Layout.alignment: Qt.AlignTop
                         icon.name: "edit-delete-remove"
-                        Accessible.name: i18n("Remove %1% %2", presetCard.percent, editor.entryName)
+                        Accessible.name: editor.removeName.arg(presetCard.percent)
                         display: AbstractButton.IconOnly
+                        // Removing the last entry commits an empty string and
+                        // the canonicalizer answers with the factory list, so
+                        // three cards would reappear unexplained. Floor the
+                        // button at one and leave the canonicalizer as the
+                        // backstop for values that reach the store elsewhere.
+                        enabled: editor._values.length > 1
                         onClicked: {
                             var next = editor._values.slice();
                             next.splice(presetCard.index, 1);
                             editor._commitList(next);
                         }
-                        ToolTip.text: i18n("Remove this preset")
+                        ToolTip.text: enabled ? i18n("Remove this preset") : i18n("A list needs at least one preset")
                         ToolTip.visible: hovered
                     }
                 }
+            }
+        }
+
+        // The grid materialises only as many columns as it has items, so a
+        // short list would stretch two or three cards across the full width
+        // and break the uniform card size. Spacers hold the missing cells.
+        Repeater {
+            model: Math.max(0, 4 - editor._values.length % 4) % 4
+
+            delegate: Item {
+                Layout.fillWidth: true
             }
         }
     }
@@ -139,19 +192,27 @@ ColumnLayout {
         SettingsSpinBox {
             id: addSpin
 
-            accessibleName: i18n("New %1 percent", editor.entryName)
-            unitText: "%"
+            accessibleName: editor.addValueName
+            unitText: i18nc("percent unit suffix in a spin box", "%")
             from: 1
             to: 100
-            value: 50
             stepSize: 5
+            // An imperative seed, not a `value:` binding: SettingsSpinBox
+            // writes its own `value` back on every edit, which would sever a
+            // binding here on the first keystroke.
+            Component.onCompleted: addSpin.value = 50
         }
 
         Button {
             text: i18n("Add")
             icon.name: "list-add"
             flat: true
-            Accessible.name: i18n("Add %1", editor.entryName)
+            Accessible.name: editor.addName
+            // Both refusals the canonicalizer would otherwise make silently:
+            // the entry cap, and a value that rounds onto a percentage already
+            // on a card (0.330 beside the default 0.333 would draw two cards
+            // both reading "33%").
+            enabled: !editor._atCap && !editor._wouldCollide
             onClicked: {
                 var next = editor._values.slice();
                 // Three decimals keeps 1/3-style entries distinct without

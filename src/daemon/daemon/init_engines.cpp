@@ -635,15 +635,20 @@ void Daemon::initEnginesAndWiring()
     // SnapEngine or PhosphorPlacement::WindowTrackingService and retire the back-reference.
     snapEngine->setNavigationStateProvider(m_windowTrackingAdaptor);
 
-    // Clear stale autotile-floated flag when a window is snapped. A window
-    // dragged from an autotile VS to a snap VS retains its autotileFloated
-    // marker; without this, a subsequent mode change on the autotile VS
-    // incorrectly processes the already-snapped window as autotile-managed.
+    // Clear the stale mode-specific float marker of EVERY tiling engine when
+    // a window is snapped. A window dragged from a tiling VS to a snap VS
+    // retains that engine's float marker; without this, a subsequent mode
+    // change on the tiling VS incorrectly processes the already-snapped
+    // window as engine-managed. Both engines implement the marker in their
+    // own address space and both are reachable by such a drag, so both are
+    // swept — like every other cross-engine site here.
     // Wired here (daemon) because engines must not know about each other.
     connect(snapEngine, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this,
             [this](const QString& windowId, const PhosphorProtocol::WindowStateEntry&) {
-                if (m_autotileEngine) {
-                    m_autotileEngine->clearModeSpecificFloatMarker(windowId);
+                for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.get(), m_scrollEngine.get()}) {
+                    if (engine) {
+                        engine->clearModeSpecificFloatMarker(windowId);
+                    }
                 }
             });
 
@@ -712,19 +717,21 @@ void Daemon::initEnginesAndWiring()
     // batch delivers the first windowOpened — and keep the delegate's load
     // path handing it again after any later reload (restoreStripState is
     // additive and skips adopted contexts, so the second call is safe).
-    // Both legs — snapshot write AND cross-session restore — are gated on
-    // scrollingRestoreStripsOnLogin, read live at each firing. Gating only
-    // the read would let the write keep aging the per-tile
-    // unclaimedSessions lease on data the user disabled (the 3-session cap
-    // would silently expire a snapshot they later re-enable); gating only
-    // the write would restore a stale blob once. The provider returning an
-    // empty object also overwrites the on-disk blob with empty on the next
-    // save rather than leaving it to linger. In-session mode round-trips
-    // (stashStripStructure) are deliberately NOT gated — this switch is
-    // about logins, and the stash path never goes through these lambdas.
-    m_windowTrackingAdaptor->setScrollStripStateProvider([this, engine = QPointer(scrollEngine)]() {
-        return (engine && m_settings && m_settings->scrollingRestoreStripsOnLogin()) ? engine->serializeStripState()
-                                                                                     : QJsonObject();
+    // Only the cross-session RESTORE is gated on
+    // scrollingRestoreStripsOnLogin, read live at each firing. The snapshot
+    // WRITE always runs: WTA's saveState reads an empty live provider as
+    // "this session has no strips" and deleteKey's the stored blob, so a
+    // gated provider would destroy the on-disk snapshot on the first save
+    // after the user flips the switch off — turning it back on would then
+    // have nothing to restore. Keeping the write means the switch decides
+    // whether a snapshot is USED, not whether one exists. (Aging the
+    // per-tile unclaimedSessions lease is not a reason to keep writing:
+    // the lease only ages for tiles restoreStripState staged, and with the
+    // read gated nothing is staged.) In-session mode round-trips
+    // (stashStripStructure) are deliberately NOT gated either — this switch
+    // is about logins, and the stash path never goes through these lambdas.
+    m_windowTrackingAdaptor->setScrollStripStateProvider([engine = QPointer(scrollEngine)]() {
+        return engine ? engine->serializeStripState() : QJsonObject();
     });
     if (m_settings && m_settings->scrollingRestoreStripsOnLogin()) {
         scrollEngine->restoreStripState(m_windowTrackingAdaptor->loadedScrollStripState());
@@ -790,12 +797,6 @@ void Daemon::initEnginesAndWiring()
                 onTiledCountChanged(m_scrollEngine, screenId);
             });
 
-    // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
-    // connects signals in its constructor (unified pattern for both engines).
-    // stop() → init() re-entry: the previous cycle's WHOLE adaptor set
-    // (engine and core) is deleted in one dependency-ordered preamble at the
-    // top of initCoreAdaptors(), which init() always runs immediately before
-    // this function — so these members are null here on a re-cycle.
     // Live-mode resolver for snap's capture gate: the router's
     // live-set-first answer lets a presave capture a screen the cascade
     // already flipped to a tiling mode but no engine claims yet. Cleared
@@ -803,6 +804,13 @@ void Daemon::initEnginesAndWiring()
     snapEngine->setLiveModeResolver([this](const QString& screenId) {
         return m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
     });
+
+    // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
+    // connects signals in its constructor (unified pattern for both engines).
+    // stop() → init() re-entry: the previous cycle's WHOLE adaptor set
+    // (engine and core) is deleted in one dependency-ordered preamble at the
+    // top of initCoreAdaptors(), which init() always runs immediately before
+    // this function — so these members are null here on a re-cycle.
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
     // org.plasmazones.Tiling is the engine-NEUTRAL transport shared by the
@@ -840,10 +848,19 @@ void Daemon::initEnginesAndWiring()
             [adaptor = m_tilingAdaptor](const QStringList&, bool isDesktopSwitch) {
                 adaptor->notifyEngineScreensChanged(isDesktopSwitch);
             });
-    connect(autotileEngine, &PhosphorTileEngine::AutotileEngine::enabledChanged, m_tilingAdaptor,
-            [adaptor = m_tilingAdaptor](bool) {
-                adaptor->relayEnabledChanged();
-            });
+    // No direct enabledChanged → relayEnabledChanged connect for either
+    // engine. Every enabledChanged emit is accompanied by that engine's
+    // screens-changed signal from the same call, so the coalesced announce
+    // above already relays the flip — and it relays the UNION after both
+    // engines have settled. A direct connect instead announced autotile's
+    // emptying half first, so on a single-screen tiling→scrolling flip the
+    // effect saw enabledChanged(false) a full event-loop pass before the new
+    // union and cancelled in-flight unfloat continuations mid-flip (the
+    // hazard tilingadaptor.h:100-108 documents). Anything that ever does
+    // need a direct relay must route through notifyEngineScreensChanged.
+    // Note for whoever wires one: ScrollEngine::enabledChanged carries no
+    // wasDesktopSwitch suppression, which is harmless only while it stays
+    // unconnected.
     connect(scrollEngine, &PhosphorScrollEngine::ScrollEngine::windowsTiled, m_tilingAdaptor,
             &TilingAdaptor::relayTileRequestsJson);
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,
@@ -906,54 +923,29 @@ void Daemon::initEnginesAndWiring()
     // window registry and drives the per-screen overlay slot.
     connect(scrollEngine, &PhosphorScrollEngine::ScrollEngine::tabStripsChanged, this,
             [this](const QString& screenId, const QString& stripsJson) {
+                QJsonParseError parseError;
+                const auto strips = StripZones::parseTabStripPayload(
+                    stripsJson,
+                    [this](const QString& windowId) -> QString {
+                        if (!m_windowRegistry) {
+                            return QString();
+                        }
+                        const auto meta =
+                            m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+                        return meta ? meta->title : QString();
+                    },
+                    &parseError);
                 // A parse failure means we know nothing about the strips, which
                 // is not the same as "there are none": clearing on it would wipe
                 // the live tab indicators and leave the columns looking untabbed
                 // until the next relayout. Warn and leave the overlay untouched.
-                QJsonParseError parseError;
-                const QJsonDocument doc = QJsonDocument::fromJson(stripsJson.toUtf8(), &parseError);
-                if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+                if (!strips) {
                     qCWarning(lcDaemon) << "Tab strips JSON unparseable, keeping previous indicators screen="
                                         << screenId << "error=" << parseError.errorString()
                                         << "offset=" << parseError.offset;
                     return;
                 }
-                QVariantList strips;
-                const QJsonArray arr = doc.array();
-                for (const QJsonValue& stripValue : arr) {
-                    const QJsonObject stripObj = stripValue.toObject();
-                    QVariantMap strip;
-                    strip.insert(QStringLiteral("x"), stripObj.value(QLatin1String("x")).toInt());
-                    strip.insert(QStringLiteral("y"), stripObj.value(QLatin1String("y")).toInt());
-                    strip.insert(QStringLiteral("width"), stripObj.value(QLatin1String("width")).toInt());
-                    // -1, not 0, purely defensive: the producer always writes
-                    // the key, but a missing one must read as "no active tab"
-                    // rather than lighting up tab 0.
-                    const int activeIndex = stripObj.value(QLatin1String("activeIndex")).toInt(-1);
-                    QVariantList tabs;
-                    const QJsonArray tabIds = stripObj.value(QLatin1String("tabs")).toArray();
-                    for (int i = 0; i < tabIds.size(); ++i) {
-                        const QString windowId = tabIds.at(i).toString();
-                        QString title;
-                        if (m_windowRegistry) {
-                            const auto meta =
-                                m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-                            if (meta) {
-                                title = meta->title;
-                            }
-                        }
-                        if (title.isEmpty()) {
-                            title = PhosphorIdentity::WindowId::extractAppId(windowId);
-                        }
-                        QVariantMap tab;
-                        tab.insert(QStringLiteral("title"), title);
-                        tab.insert(QStringLiteral("active"), i == activeIndex);
-                        tabs.append(tab);
-                    }
-                    strip.insert(QStringLiteral("tabs"), tabs);
-                    strips.append(strip);
-                }
-                m_overlayService->updateScrollTabStrips(screenId, strips);
+                m_overlayService->updateScrollTabStrips(screenId, *strips);
             });
 
     // Control adaptor - high-level convenience API for third-party integrations.

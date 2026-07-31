@@ -144,6 +144,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     if (openParams.tabbed) {
         display = *openParams.tabbed ? ColumnDisplay::Tabbed : ColumnDisplay::Normal;
     }
+    // Falls THROUGH on success rather than returning: the height commit at
+    // the tail of this function is the one the openWindowHeight rule lands
+    // on, and an early exit here dropped it silently for
+    // openColumnPlacement=consume while its config-driven twin (the
+    // IntoActiveColumn arm below) applied it.
+    bool inserted = false;
     if (openParams.consume && *openParams.consume && !state->strip().isEmpty()) {
         const std::optional<ColumnDisplay> displayOverride =
             openParams.tabbed ? std::optional<ColumnDisplay>(display) : std::nullopt;
@@ -153,7 +159,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             // it would let a stale entry re-position an unrelated later
             // open (the block below documents exactly that hazard).
             consumePendingInitialOrder(screenId, windowId);
-            return true;
+            inserted = true;
         }
     }
 
@@ -162,8 +168,8 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // display, heights), which is strictly stronger than the order seed's
     // position-only verdict. The seed entry is still consumed so it cannot
     // linger past the adoption.
-    bool inserted = false;
-    if (restoreFromStripStash(state, currentKeyForScreen(screenId), windowId, params, minWidth, minHeight)) {
+    if (!inserted
+        && restoreFromStripStash(state, currentKeyForScreen(screenId), windowId, params, minWidth, minHeight)) {
         inserted = true;
         consumePendingInitialOrder(screenId, windowId);
     }
@@ -176,7 +182,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // seed would re-position an unrelated later open that happens to share
     // an id with the captured list.
     const auto pendingIt = m_pendingInitialOrder.constFind(screenId);
-    if (pendingIt != m_pendingInitialOrder.constEnd()) {
+    if (!inserted && pendingIt != m_pendingInitialOrder.constEnd()) {
         const int orderIdx = pendingIt->indexOf(windowId);
         // A consumed id must not re-enter the seed branch: a later unrelated
         // open reusing the id would otherwise be re-positioned by the stale
@@ -228,7 +234,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // height, matching the width/tabbed precedence above. Committed as
         // Fixed pixels against the live work area, the same resolution the
         // adjust verbs use.
-        const qreal fraction = qBound<qreal>(0.05, *openParams.heightFraction, 1.0);
+        const qreal fraction = qBound<qreal>(MinWindowHeightFraction, *openParams.heightFraction, 1.0);
         state->strip().setWindowHeightIntent(
             windowId, WindowHeight::makeFixed(qMax(1, qRound(fraction * params.workArea.height()))));
     }
@@ -323,7 +329,13 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
             // re-float re-announces true immediately afterwards.
             Q_EMIT windowFloatingStateSynced(windowId, false, oldKey.screenId);
         }
-        scheduleRetileForScreen(oldKey.screenId);
+        // Background-context guard, the same one windowClosed and the float
+        // paths carry: a scheduled retile resolves the screen's CURRENT
+        // context, so a migration out of another desktop's state must not
+        // drive one. The switch back retiles the mutated strip.
+        if (oldKey == currentKeyForScreen(oldKey.screenId)) {
+            scheduleRetileForScreen(oldKey.screenId);
+        }
         Q_EMIT placementChanged(oldKey.screenId);
     }
 
@@ -350,11 +362,18 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // equal the one the strip resolves defeats applyLayout's emit-on-change
     // gate, so no windowsTiled batch ever fires for the re-adopted window and
     // a single-window screen sits at the geometry the OTHER mode left it in.
+    const QRect priorAppliedRect = m_lastAppliedRect.value(windowId);
     m_lastAppliedRect.remove(windowId);
     if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight)) {
         // Every insert refused (the strip already holds the window). Nothing
         // moved and nothing was adopted, so neither the geometry batch nor
-        // the dirty mark may fire.
+        // the dirty mark may fire — and the rect memory goes back, because
+        // the window is still a live tile: dropped, lastManagedRect answers
+        // null and a later float-back captures the COLUMN rect as free
+        // geometry, which is the poison this map exists to prevent.
+        if (priorAppliedRect.isValid()) {
+            m_lastAppliedRect.insert(windowId, priorAppliedRect);
+        }
         return;
     }
 
@@ -480,8 +499,11 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
     // re-applies the captured clamp — so without this write-through the
     // restore puts back whatever the client reported at float time.
     if (const auto it = m_floatRestore.find(windowId); it != m_floatRestore.end()) {
-        it->minWidth = minWidth;
-        it->minHeight = minHeight;
+        // Clamped like seedFloatRestoreForOpen: a negative floor flows from
+        // here into insertWindowIntoColumnAt and on to Tile::minWidth/
+        // minHeight, and the relayout slack math is not written for one.
+        it->minWidth = qMax(0, minWidth);
+        it->minHeight = qMax(0, minHeight);
     }
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
@@ -559,7 +581,7 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // holds it, so the emit-on-change gate would treat the corrective
     // relayout as "nothing moved" and never re-issue the rect. Drop the
     // memory and retile so the authoritative geometry is re-applied.
-    if (lastApplied.isValid() && lastApplied != newFrame) {
+    if (lastApplied != newFrame) {
         m_lastAppliedRect.remove(windowId);
         if (currentContext) {
             scheduleRetileForScreen(key.screenId);
@@ -634,7 +656,13 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     // Captured before the re-insert so the guard at the tail reads the
     // context the window actually belongs to.
     const PhosphorEngine::PlacementStateKey key = m_states.keyForWindow(windowId);
-    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    // The window's OWN context screen, the way floatWindowInternal reads
+    // key.screenId throughout: a caller that passes the operation screen
+    // instead would resolve the params and the background guard against a
+    // strip this window does not live on. The caller's value is the fallback
+    // only for a window the reverse map has no key for at all.
+    const QString contextScreen = key.screenId.isEmpty() ? screenId : key.screenId;
+    const ScrollLayoutParams params = layoutParamsForScreen(contextScreen);
     // Restore the remembered column slot (minimize/unminimize and float
     // round-trips keep their place); fall back to next-to-focus.
     const bool hadSlot = m_floatRestore.contains(windowId);
@@ -663,8 +691,8 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         inserted = state->strip().insertWindowAt(restore.column, windowId, restore.width, restore.display, params);
     }
     if (!inserted) {
-        inserted = state->strip().insertWindow(windowId, effectiveDefaultColumnWidth(screenId),
-                                               effectiveDefaultColumnDisplay(screenId), params);
+        inserted = state->strip().insertWindow(windowId, effectiveDefaultColumnWidth(contextScreen),
+                                               effectiveDefaultColumnDisplay(contextScreen), params);
     }
     if (!inserted) {
         // Every insert refused (an empty id is the only way today). The float
@@ -688,9 +716,15 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         if (restore.minWidth > 0 || restore.minHeight > 0) {
             state->strip().setWindowMinimumSize(windowId, restore.minWidth, restore.minHeight);
         }
-        // Same for the height intent: every insert path builds a default
-        // (Auto) tile, so the user's height only survives if it is re-applied.
-        state->strip().setWindowHeightIntent(windowId, restore.height);
+        // Same for the height intent, but only from an entry that captured a
+        // real tile: a SEEDED entry (seedFloatRestoreForOpen, column = -1)
+        // carries a default-constructed Auto height that never belonged to a
+        // tile, and stamping it here overwrote the context default height the
+        // fresh insert just seeded — so a window floated at open and then
+        // unfloated came back at Auto instead of the configured default.
+        if (restore.column >= 0 || restore.tileIndex >= 0) {
+            state->strip().setWindowHeightIntent(windowId, restore.height);
+        }
         state->strip().focusWindow(windowId, params);
     }
     m_scrollFloatedWindows.remove(windowId);
@@ -701,10 +735,10 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         // applyLayout resolves the screen's CURRENT context, so an unfloat on
         // another desktop's state would relayout the wrong strip. The
         // placement announcement still fires — the managed set did change.
-        if (key == currentKeyForScreen(screenId)) {
-            applyLayout(screenId, false);
+        if (key == currentKeyForScreen(contextScreen)) {
+            applyLayout(contextScreen, false);
         }
-        Q_EMIT placementChanged(screenId);
+        Q_EMIT placementChanged(contextScreen);
     }
     return inserted;
 }
@@ -800,7 +834,12 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     // tracking: the receiving engine owns the float bit from here, and a
     // stale entry would keep isModeSpecificFloated answering true.
     m_scrollFloatedWindows.remove(windowId);
-    scheduleRetileForScreen(key.screenId);
+    // Background-context guard, as windowClosed and the float paths carry: a
+    // release out of another desktop's state must not retile the strip that
+    // is on screen right now. The switch back retiles the mutated one.
+    if (key == currentKeyForScreen(key.screenId)) {
+        scheduleRetileForScreen(key.screenId);
+    }
 }
 
 void ScrollEngine::handoffReceive(const HandoffContext& ctx)
@@ -834,7 +873,11 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
             // wasFloating branch below re-announces true when it applies).
             Q_EMIT windowFloatingStateSynced(windowId, false, staleKey.screenId);
         }
-        scheduleRetileForScreen(staleKey.screenId);
+        // Background-context guard, same terms as the sibling sites: the
+        // stale context is usually NOT the one on screen.
+        if (staleKey == currentKeyForScreen(staleKey.screenId)) {
+            scheduleRetileForScreen(staleKey.screenId);
+        }
         Q_EMIT placementChanged(staleKey.screenId);
     }
     ScrollState* state = stateForKey(key, true);
@@ -904,7 +947,13 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // insert site logs its refusal; a silent one here leaves the window
     // released by the source engine and adopted by nobody, with no trace.
     qCWarning(lcScrollEngine) << "handoffReceive: insert refused for" << windowId << "on" << ctx.toScreenId
-                              << "— the window is released by its source engine and unadopted here";
+                              << "— the window is released by its source engine, unadopted here, and its"
+                              << "tracking key has been dropped";
+    // Do not leave a reverse-map key for a window no structure holds — the
+    // stale-context migration above already ran takeWindow, so the key would
+    // name a context that no longer contains it. Same removal, and the same
+    // reason, as insertOpenedWindow's refusal path.
+    m_states.removeWindow(windowId);
 }
 
 // ── Unified placement capture ───────────────────────────────────────────────

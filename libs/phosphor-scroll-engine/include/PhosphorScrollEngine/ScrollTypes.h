@@ -85,6 +85,13 @@ inline QString insertPosition()
 /// hand-mirrored, but at least it is hand-mirrored once.
 inline constexpr qreal MinColumnWidthFraction = 0.05;
 
+/// The shortest tile height this engine will accept as a proportion of the
+/// work area. The height twin of MinColumnWidthFraction, deliberately its own
+/// name: the two bounds happen to share a value today, and a caller that
+/// clamps a HEIGHT against the width constant would silently follow a later
+/// width-only change.
+inline constexpr qreal MinWindowHeightFraction = 0.05;
+
 /// Persistent view-centering policy for the focused column (niri's
 /// center-focused-column). Wire/config encoding is the int value; append only.
 enum class CenterFocusedColumn : int {
@@ -107,9 +114,6 @@ enum class ColumnDisplay : int {
     Tabbed = 1,
 };
 
-/// Column width INTENT — the source of truth the strip stores. Pixel rects are
-/// recomputed from this on every relayout against the current work area;
-/// pixels are never authoritative.
 /// Wire vocabulary of the DEFAULT-column-width KIND setting
 /// (IScrollSettings::scrollingDefaultColumnWidthKind). Deliberately
 /// distinct from ColumnWidth::Kind — this enum's 2 means "client decides"
@@ -151,6 +155,9 @@ enum class ScrollInsertPosition : int {
     IntoActiveColumn = 4,
 };
 
+/// Column width INTENT — the source of truth the strip stores. Pixel rects are
+/// recomputed from this on every relayout against the current work area;
+/// pixels are never authoritative.
 struct ColumnWidth
 {
     enum Kind : int {

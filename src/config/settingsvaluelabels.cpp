@@ -139,7 +139,7 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
         // it resolves as a trigger instead (see the descriptor table below).
         t.insert(pairKey(CD::snappingBehaviorZoneSpanGroup(), CD::modifierKey()), dragModifierLabels);
 
-        // ── Sticky window handling, declared on two independent groups ───────
+        // ── Sticky window handling, declared on three independent groups ────
         const QHash<QString, QString> stickyLabels{
             {QStringLiteral("treatAsNormal"), PhosphorI18n::tr("Treat as normal")},
             {QStringLiteral("restoreOnly"), PhosphorI18n::tr("Restore only")},
@@ -169,10 +169,11 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                  });
 
         // ── Scrolling ──
-        // DefaultColumnWidthValue carries NO descriptor on purpose: its unit
-        // is kind-dependent (a fraction under Proportion, pixels under
-        // Fixed), and a fixed pct/px declaration would mislabel one of the
-        // two. The diff view shows the raw number.
+        // DefaultColumnWidthValue is the one key in this family with no
+        // descriptor, and deliberately: its unit is kind-dependent (a fraction
+        // under Proportion, pixels under Fixed), so a fixed pct/px declaration
+        // would mislabel one of the two. The diff view shows the raw number.
+        // Its siblings all carry descriptors (see the table below).
         t.insert(pairKey(CD::scrollingGroup(), CD::centerFocusedColumnKey()),
                  {
                      {QStringLiteral("never"), PhosphorI18n::tr("Never")},
@@ -222,10 +223,16 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         const QString pct = QStringLiteral("%");
 
         const auto number = [](const QString& unit, double scale = 1.0, bool zeroOff = false) {
-            return ValueDescriptor{ValueKind::Number, unit, scale, zeroOff};
+            return ValueDescriptor{ValueKind::Number, unit, scale, 0.0, zeroOff};
+        };
+        // Stored 0-based, displayed 1-based. The offset rides the descriptor
+        // rather than the page, so the diff and profile views agree with the
+        // spin box the user set the value in.
+        const auto oneBasedIndex = [] {
+            return ValueDescriptor{ValueKind::Number, {}, 1.0, 1.0, false};
         };
         const auto idKind = [](ValueKind kind) {
-            return ValueDescriptor{kind, {}, 1.0, false};
+            return ValueDescriptor{kind, {}, 1.0, 0.0, false};
         };
 
         // ── Ratios persisted 0.0-1.0 that read as a percentage ──────────────
@@ -264,6 +271,15 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
             t.insert(pairKey(group, CD::minimumWindowWidthKey()), number(px, 1.0, true));
             t.insert(pairKey(group, CD::minimumWindowHeightKey()), number(px, 1.0, true));
         }
+
+        // ── Scrolling ───────────────────────────────────────────────────────
+        // The step percents are stored as whole percents already, so they take
+        // the unit without a scale, unlike the 0.0-1.0 ratios above.
+        t.insert(pairKey(CD::scrollingGroup(), CD::defaultWindowHeightValueKey()), number(px));
+        t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()), number(pct));
+        t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()), number(pct));
+        t.insert(pairKey(CD::scrollingGroup(), CD::defaultColumnWidthPresetIndexKey()), oneBasedIndex());
+        t.insert(pairKey(CD::scrollingGroup(), CD::defaultWindowHeightPresetIndexKey()), oneBasedIndex());
 
         // ── Ids resolved against live runtime data ──────────────────────────
         t.insert(pairKey(CD::snappingBehaviorWindowHandlingGroup(), CD::defaultLayoutIdKey()),
@@ -363,7 +379,7 @@ QString displayText(const QString& group, const QString& key, const QVariant& va
         if (descriptor.zeroMeansOff && qFuzzyIsNull(raw)) {
             return PhosphorI18n::tr("Off");
         }
-        const double scaled = raw * descriptor.displayScale;
+        const double scaled = raw * descriptor.displayScale + descriptor.displayOffset;
         // Whole numbers read as integers; a scaled ratio can land on a fraction
         // (0.335 → 33.5%), so keep one decimal rather than rounding it away.
         const QString number =
@@ -394,7 +410,7 @@ ValueDescriptor descriptorFor(const QString& group, const QString& key)
     // An enum key needs no descriptor entry of its own — carrying choices in
     // the schema is what makes it an enum.
     if (enumLabelTable().contains(pair)) {
-        return ValueDescriptor{ValueKind::Enum, {}, 1.0, false};
+        return ValueDescriptor{ValueKind::Enum, {}, 1.0, 0.0, false};
     }
     return {};
 }

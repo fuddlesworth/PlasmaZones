@@ -98,6 +98,10 @@ void TilingHandler::clearTiledTracking()
     // keeping the set let stale membership answer isAutotileScreen until the
     // next bringup reply, and left the bringup's fresh-set replacement with
     // no removed-screen delta to act on.
+    //
+    // This write takes the named teardown exemption from the
+    // scrollingScreenIntersection snapshot/compare/invalidate contract (see
+    // the header) — it is valid only while every caller is a teardown.
     m_managedScreens.clear();
 }
 
@@ -136,7 +140,13 @@ void TilingHandler::setWheelFocusEnabled(bool enabled)
 
 void TilingHandler::setWheelFocusInverted(bool inverted)
 {
+    if (m_wheelFocusInverted == inverted) {
+        return;
+    }
     m_wheelFocusInverted = inverted;
+    // No re-registration pass, unlike setWheelFocusEnabled: the flag is not
+    // part of the want predicate, only read at trigger time to pick a
+    // direction.
 }
 
 void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const QString& screenId,
@@ -162,14 +172,15 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     // geometry. On restore, all instances would get the first instance's
     // geometry — scrambling window positions on every autotile ↔ snapping toggle.
     //
-    // Use a CONST lookup for the contains-check so a guard-bail below never inserts an
-    // empty per-screen bucket (operator[] would); the bucket is created only at the
-    // genuine insertion point (below).
-    {
-        const auto screenIt = m_preTileGeometries.constFind(screenId);
-        if (screenIt != m_preTileGeometries.constEnd() && screenIt->contains(windowId)) {
-            return;
-        }
+    // ALL buckets, matching findPreTileGeometry — a per-screen check would let a
+    // re-announce on a different screen add a SECOND entry for the same window,
+    // and the reader returns whichever bucket it reaches first, so the restore
+    // could pick a rect measured in the other monitor's coordinate space.
+    // A const scan, so a guard-bail below never inserts an empty per-screen
+    // bucket (operator[] would); the bucket is created only at the genuine
+    // insertion point (below).
+    if (findPreTileGeometry(windowId).isValid()) {
+        return;
     }
     // Only save geometry for floating windows — snapped/tiled windows have zone
     // dimensions in frameGeometry(), not the original free-floating size. Storing
@@ -336,6 +347,11 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // earlier (see the m_scrollingScreensGeneration doc).
     ++m_scrollingScreensGeneration;
     if (newSet == m_scrollingScreens) {
+        // Skipping updateScrollWheelShortcuts at the tail is deliberate and
+        // stays correct only while its want predicate reads nothing but the
+        // enable flag and the set's emptiness, neither of which an identical
+        // set moves. A predicate that starts reading the set's CONTENTS would
+        // have to be re-evaluated here.
         return;
     }
     const QSet<QString> oldSet = m_scrollingScreens;

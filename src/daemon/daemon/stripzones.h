@@ -11,8 +11,13 @@
 // empty-strip sketch in step by comment alone; here they share one
 // definition of each.
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QLatin1String>
 #include <QRect>
 #include <QRectF>
@@ -20,6 +25,9 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QVector>
+
+#include <functional>
+#include <optional>
 
 namespace PlasmaZones::StripZones {
 
@@ -137,6 +145,64 @@ inline QVariantList numberMapsForTiles(const QVector<VisibleTile>& tiles)
         zones.append(zone);
     }
     return zones;
+}
+
+/// The overlay's tab-strip model, parsed from ScrollEngine's tabStripsChanged
+/// payload ({x, y, width, activeIndex, tabs: [windowId, …]} per visible tabbed
+/// column, documented on ScrollEngine.h).
+///
+/// This is the daemon's ONLY reader of that schema, so the wire format has one
+/// producer (ScrollEngine::applyLayout) and one consumer rather than a copy in
+/// the composition root that drifts from the emitter.
+///
+/// @p titleForWindow supplies each tab's display title for a canonical window
+/// id; an empty answer falls back to the id's app id, so a window the registry
+/// has not seen still labels its tab. Returns nullopt when the payload does not
+/// parse as an array — that is "we know nothing about the strips", which is not
+/// the same as "there are none", so the caller must leave the live indicators
+/// alone rather than clearing them.
+inline std::optional<QVariantList> parseTabStripPayload(const QString& stripsJson,
+                                                        const std::function<QString(const QString&)>& titleForWindow,
+                                                        QJsonParseError* parseError)
+{
+    const QJsonDocument doc = QJsonDocument::fromJson(stripsJson.toUtf8(), parseError);
+    if ((parseError && parseError->error != QJsonParseError::NoError) || !doc.isArray()) {
+        return std::nullopt;
+    }
+    QVariantList strips;
+    const QJsonArray arr = doc.array();
+    strips.reserve(arr.size());
+    for (const QJsonValue& stripValue : arr) {
+        const QJsonObject stripObj = stripValue.toObject();
+        QVariantMap strip;
+        // qRound(toDouble()), not toInt(): QJsonValue::toInt() yields 0 for any
+        // non-integral number, so a producer that ever writes a fractional
+        // coordinate would silently park the whole strip at the screen origin.
+        strip.insert(QLatin1String("x"), qRound(stripObj.value(QLatin1String("x")).toDouble()));
+        strip.insert(QLatin1String("y"), qRound(stripObj.value(QLatin1String("y")).toDouble()));
+        strip.insert(QLatin1String("width"), qRound(stripObj.value(QLatin1String("width")).toDouble()));
+        // -1, not 0, purely defensive: the producer always writes the key, but
+        // a missing one must read as "no active tab" rather than lighting up
+        // tab 0.
+        const int activeIndex = stripObj.value(QLatin1String("activeIndex")).toInt(-1);
+        QVariantList tabs;
+        const QJsonArray tabIds = stripObj.value(QLatin1String("tabs")).toArray();
+        tabs.reserve(tabIds.size());
+        for (int i = 0; i < tabIds.size(); ++i) {
+            const QString windowId = tabIds.at(i).toString();
+            QString title = titleForWindow ? titleForWindow(windowId) : QString();
+            if (title.isEmpty()) {
+                title = PhosphorIdentity::WindowId::extractAppId(windowId);
+            }
+            QVariantMap tab;
+            tab.insert(QLatin1String("title"), title);
+            tab.insert(QLatin1String("active"), i == activeIndex);
+            tabs.append(tab);
+        }
+        strip.insert(QLatin1String("tabs"), tabs);
+        strips.append(strip);
+    }
+    return strips;
 }
 
 } // namespace PlasmaZones::StripZones

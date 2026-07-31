@@ -273,9 +273,12 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     // watcher - those are the parallel-state bookkeeping the lib does
     // not know about. m_scrollTabsHideGuard is deliberately NOT erased:
     // it is a monotonic generation counter that must never restart (see
-    // its header doc). The hide-pending bit has no such requirement — it
-    // is plain state for a shell that no longer exists, so drop it.
+    // its header doc). The hide-pending bit and the cached strip model have
+    // no such requirement — they are plain state for a shell that no longer
+    // exists, and keeping the cache would grow it by one dead screen per
+    // hot-plug cycle, so drop both.
     m_scrollTabsHidePending.remove(screenId);
+    m_lastScrollTabStrips.remove(screenId);
     QObject::disconnect(it->overlayGeomConnection);
     it->overlayGeomConnection = {};
     it->overlayPhysScreen = nullptr;

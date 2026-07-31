@@ -102,13 +102,22 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("double");
 
+// Unlike the numeric macros, the colour setter can be handed a string that
+// names no colour at all. Parsing it and storing the resulting invalid QColor
+// would leave the old value in place while setSetting reported success, which
+// is the one thing its documented post-condition must not do. Reject instead:
+// a malformed hex returns false and the caller sees the write fail.
 #define REGISTER_COLOR_SETTING(keyName, getter, setter)                                                                \
     m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
         QColor color = m_settings->getter();                                                                           \
         return color.name(QColor::HexArgb);                                                                            \
     };                                                                                                                 \
     m_setters[QStringLiteral(keyName)] = [this](const QVariant& v) {                                                   \
-        m_settings->setter(QColor(v.toString()));                                                                      \
+        const QColor parsed(v.toString());                                                                             \
+        if (!parsed.isValid()) {                                                                                       \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(parsed);                                                                                    \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(keyName)] = QStringLiteral("color");
@@ -370,9 +379,10 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_STRING_SETTING("audioInputMethod", audioInputMethod, setAudioInputMethod)
     REGISTER_STRING_SETTING("audioInputSource", audioInputSource, setAudioInputSource)
 
-    // Zone settings. The shared inner/outer gaps are not exposed here: they are
+    // Zone settings. The shared inner/outer gaps have NO SETTERS here: they are
     // config-backed (the Gaps group) and consumed daemon-side by the geometry
-    // cascade, so the effect never reads them over this generic get/set map.
+    // cascade, so nothing writes them over this generic map. Read-only getters
+    // and their schemas are registered further down for the effect's benefit.
     REGISTER_INT_SETTING("adjacentThreshold", adjacentThreshold, setAdjacentThreshold)
     REGISTER_INT_SETTING("pollIntervalMs", pollIntervalMs, setPollIntervalMs)
     REGISTER_INT_SETTING("minimumZoneSizePx", minimumZoneSizePx, setMinimumZoneSizePx)
@@ -401,6 +411,14 @@ void SettingsAdaptor::initializeRegistry()
                           setSnappingRestoreFloatedWindowsOnLogin)
     REGISTER_BOOL_SETTING("autotileRestoreFloatedWindowsOnLogin", autotileRestoreFloatedWindowsOnLogin,
                           setAutotileRestoreFloatedWindowsOnLogin)
+    // The scrolling twin of the pair above, plus the tab-strip toggle. Both are
+    // ISettings virtuals with defaults, so they register through the interface
+    // like their snap / autotile counterparts rather than inside the
+    // concrete-Settings block below, where a non-Settings backend would lose
+    // the keys entirely.
+    REGISTER_BOOL_SETTING("scrollingRestoreFloatedWindowsOnLogin", scrollingRestoreFloatedWindowsOnLogin,
+                          setScrollingRestoreFloatedWindowsOnLogin)
+    REGISTER_BOOL_SETTING("scrollingTabStripEnabled", scrollingTabStripEnabled, setScrollingTabStripEnabled)
     REGISTER_BOOL_SETTING("snapUnfloatFallbackToZone", snapUnfloatFallbackToZone, setSnapUnfloatFallbackToZone)
     REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
     REGISTER_BOOL_SETTING("suppressDefaultLayoutAssignment", suppressDefaultLayoutAssignment,
@@ -590,18 +608,20 @@ void SettingsAdaptor::initializeRegistry()
     // Serialized as a JSON array string — QStringList in QDBusVariant can
     // deserialize as QDBusArgument on the receiving side, making toStringList()
     // return empty. Cached on first access since XDG dirs don't change at runtime.
-    m_getters[QString(PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths)] = []() {
-        static const QString cached = [] {
-            QStringList paths =
-                QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
-                                          QStandardPaths::LocateDirectory);
-            const QString userDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-                + QStringLiteral("/plasmazones/animations");
-            if (!paths.contains(userDir))
-                paths.append(userDir);
-            return QString::fromUtf8(QJsonDocument(QJsonArray::fromStringList(paths)).toJson(QJsonDocument::Compact));
-        }();
-        return cached;
+    m_getters[QString(PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths)] = [this]() {
+        if (!m_cachedShaderSearchPaths.isEmpty()) {
+            return m_cachedShaderSearchPaths;
+        }
+        QStringList paths =
+            QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
+                                      QStandardPaths::LocateDirectory);
+        const QString userDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QStringLiteral("/plasmazones/animations");
+        if (!paths.contains(userDir))
+            paths.append(userDir);
+        m_cachedShaderSearchPaths =
+            QString::fromUtf8(QJsonDocument(QJsonArray::fromStringList(paths)).toJson(QJsonDocument::Compact));
+        return m_cachedShaderSearchPaths;
     };
     m_schemas[QString(PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths)] =
         QStringLiteral("string");
@@ -770,7 +790,7 @@ void SettingsAdaptor::initializeRegistry()
         m_schemas[QStringLiteral("scrollingCenterFocusedColumn")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("scrollingAlwaysCenterSingleColumn", scrollingAlwaysCenterSingleColumn,
                                setScrollingAlwaysCenterSingleColumn)
-        // scrollingDefaultColumnWidthKind: enum (0=Proportion, 1=Fixed, 2=ClientDecides)
+        // scrollingDefaultColumnWidthKind: enum (0=Proportion, 1=Fixed, 2=ClientDecides, 3=Preset)
         m_getters[QStringLiteral("scrollingDefaultColumnWidthKind")] = [concrete]() {
             return concrete->scrollingDefaultColumnWidthKind();
         };
@@ -822,7 +842,7 @@ void SettingsAdaptor::initializeRegistry()
                                  setScrollingDefaultWindowHeightValue)
         REGISTER_CONCRETE_INT("scrollingDefaultWindowHeightPresetIndex", scrollingDefaultWindowHeightPresetIndex,
                               setScrollingDefaultWindowHeightPresetIndex)
-        REGISTER_CONCRETE_BOOL("scrollingTabStripEnabled", scrollingTabStripEnabled, setScrollingTabStripEnabled)
+        // scrollingTabStripEnabled is registered through ISettings above.
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusEnabled", scrollingWheelFocusEnabled, setScrollingWheelFocusEnabled)
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusInverted", scrollingWheelFocusInverted,
                                setScrollingWheelFocusInverted)
@@ -860,8 +880,7 @@ void SettingsAdaptor::initializeRegistry()
                                setScrollingRespectMinimumSize)
         REGISTER_CONCRETE_BOOL("scrollingRestoreStripsOnLogin", scrollingRestoreStripsOnLogin,
                                setScrollingRestoreStripsOnLogin)
-        REGISTER_CONCRETE_BOOL("scrollingRestoreFloatedWindowsOnLogin", scrollingRestoreFloatedWindowsOnLogin,
-                               setScrollingRestoreFloatedWindowsOnLogin)
+        // scrollingRestoreFloatedWindowsOnLogin is registered through ISettings above.
         REGISTER_CONCRETE_INT("scrollingColumnWidthStepPercent", scrollingColumnWidthStepPercent,
                               setScrollingColumnWidthStepPercent)
         REGISTER_CONCRETE_INT("scrollingWindowHeightStepPercent", scrollingWindowHeightStepPercent,

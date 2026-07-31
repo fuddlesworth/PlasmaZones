@@ -239,16 +239,21 @@ ScrollEngine::StashedStrip ScrollEngine::buildStashFromState(const ScrollState* 
         return out;
     }
     for (const Column& col : state->strip().columns()) {
+        if (col.tiles.isEmpty()) {
+            continue;
+        }
         StashedColumn sc;
         sc.width = col.width;
         sc.display = col.display;
-        sc.activeWindowId = col.tiles.value(col.activeTileIdx).windowId;
+        // Clamped, not value(): an out-of-range activeTileIdx would record an
+        // EMPTY active id and the restore's tab re-assertion would silently
+        // no-op. Every mutation site clamps today, so this is the belt — but
+        // a silent no-op is the wrong failure for the one that does not.
+        sc.activeWindowId = col.tiles.at(qBound(0, col.activeTileIdx, col.tiles.size() - 1)).windowId;
         for (const Tile& tile : col.tiles) {
             sc.tiles.append({tile.windowId, tile.height, tile.minimized});
         }
-        if (!sc.tiles.isEmpty()) {
-            out.columns.append(sc);
-        }
+        out.columns.append(sc);
     }
     // Focus and view travel with the structure: without them every round
     // trip re-anchored the strip on whichever window arrived first.
@@ -410,7 +415,10 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         return false;
     }
     commitClaim();
-    state->strip().setWindowHeightIntent(windowId, sc.tiles.at(tileIdx).height);
+    // Re-read through the container: commitClaim writes stash[colIdx], and a
+    // detach there would leave `sc` dangling (the alias hazard the fuzzy-match
+    // loop above documents). Every read past this point goes through stash.
+    state->strip().setWindowHeightIntent(windowId, stash.at(colIdx).tiles.at(tileIdx).height);
     // Re-assert the column's stashed ACTIVE tile: every insert makes the
     // arriving tile active, so a tabbed column's shown tab would otherwise
     // be whichever sibling announced last.
@@ -424,8 +432,15 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     // is restored after the focus so the user's actual view wins over the
     // focus change's centering-policy reanchor (clamped against the partial
     // strip now; later arrivals re-clamp as the strip grows).
-    if (windowId == stashStrip.focusedWindowId) {
-        state->strip().focusWindow(windowId, params);
+    //
+    // Re-asserted on EVERY arrival once the focused window is on the strip,
+    // not only on the arrival that IS it: inserts steal focus (both insert
+    // verbs above make the arriving tile active and reanchor) and so does the
+    // tab re-assertion, so a later arrival would otherwise leave the restore
+    // anchored on an arbitrary window — the regression the stash exists to
+    // fix. focusWindow is a no-op once the state already matches.
+    if (!stashStrip.focusedWindowId.isEmpty() && state->strip().containsWindow(stashStrip.focusedWindowId)) {
+        state->strip().focusWindow(stashStrip.focusedWindowId, params);
         state->strip().restoreViewAnchor(stashStrip.viewAnchor, params);
     }
     const int total = stashStrip.tileCount();
@@ -746,23 +761,43 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) c
         }
     }
     // Settings channel: the kind-aware trio from the per-screen override map.
+    // Every layer writes the trio's keys INDEPENDENTLY, so a per-screen kind
+    // beside an untouched value or preset spin is the ordinary case, not a
+    // malformed pair. Each slot therefore falls back on its own to the cached
+    // GLOBAL's matching slot; the per-screen KIND still decides. Falling back
+    // to the whole global instead discarded the per-screen kind, and reading
+    // an absent preset spin as 0 pinned the monitor to the first preset while
+    // the UI showed the inherited index.
     const auto kindIt = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidthKind());
     if (kindIt != overrides.constEnd()) {
         const int kind = kindIt->toInt();
-        const qreal value = overrides.value(ScrollPerScreenKeys::defaultColumnWidthValue()).toDouble();
-        if (kind == static_cast<int>(DefaultWidthKind::Fixed) && value >= 1.0) {
-            return ColumnWidth::makeFixed(qRound(value));
+        const auto valueIt = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidthValue());
+        const auto presetIt = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidthPresetIndex());
+        if (kind == static_cast<int>(DefaultWidthKind::Fixed)) {
+            const qreal value = valueIt != overrides.constEnd()
+                ? valueIt->toDouble()
+                : (m_defaultColumnWidth.kind == ColumnWidth::Fixed ? qreal(m_defaultColumnWidth.fixedPx) : 0.0);
+            if (value >= 1.0) {
+                return ColumnWidth::makeFixed(qRound(value));
+            }
         }
         if (kind == static_cast<int>(DefaultWidthKind::Preset)) {
-            return ColumnWidth::makePreset(
-                qBound(0, overrides.value(ScrollPerScreenKeys::defaultColumnWidthPresetIndex()).toInt(),
-                       int(m_presetColumnWidths.size()) - 1));
+            const int presetIdx = presetIt != overrides.constEnd()
+                ? presetIt->toInt()
+                : (m_defaultColumnWidth.kind == ColumnWidth::Preset ? m_defaultColumnWidth.presetIdx : 0);
+            return ColumnWidth::makePreset(qBound(0, presetIdx, int(m_presetColumnWidths.size()) - 1));
         }
-        if (kind == static_cast<int>(DefaultWidthKind::Proportion) && value >= 0.05 && value <= 1.0) {
-            return ColumnWidth::makeProportion(value);
+        if (kind == static_cast<int>(DefaultWidthKind::Proportion)) {
+            const qreal value = valueIt != overrides.constEnd()
+                ? valueIt->toDouble()
+                : (m_defaultColumnWidth.kind == ColumnWidth::Proportion ? m_defaultColumnWidth.proportion : 0.0);
+            if (value >= MinColumnWidthFraction && value <= 1.0) {
+                return ColumnWidth::makeProportion(value);
+            }
         }
-        // ClientDecides (and malformed pairs) fall through to the global —
-        // the open path handles client-decides via screenPinsWidth.
+        // ClientDecides (and a kind whose resolved value is still out of
+        // range) falls through to the global — the open path handles
+        // client-decides via screenPinsWidth.
     }
     return m_defaultColumnWidth;
 }
@@ -779,19 +814,26 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId,
             return WindowHeight::makeFixed(qMax(1, qRound(fraction * workArea.height())));
         }
     }
-    // Settings channel: the kind trio.
+    // Settings channel: the kind trio, resolved per SLOT against the cached
+    // global — see effectiveDefaultColumnWidth for why a partial trio is the
+    // ordinary case rather than a malformed pair.
     const auto kindIt = overrides.constFind(ScrollPerScreenKeys::defaultWindowHeightKind());
     if (kindIt != overrides.constEnd()) {
         const int kind = kindIt->toInt();
+        const auto valueIt = overrides.constFind(ScrollPerScreenKeys::defaultWindowHeightValue());
+        const auto presetIt = overrides.constFind(ScrollPerScreenKeys::defaultWindowHeightPresetIndex());
         if (kind == static_cast<int>(DefaultHeightKind::Fixed)) {
-            const qreal value = overrides.value(ScrollPerScreenKeys::defaultWindowHeightValue()).toDouble();
+            const qreal value = valueIt != overrides.constEnd()
+                ? valueIt->toDouble()
+                : (m_defaultWindowHeight.kind == WindowHeight::Fixed ? qreal(m_defaultWindowHeight.fixedPx) : 0.0);
             if (value >= 1.0) {
                 return WindowHeight::makeFixed(qRound(value));
             }
         } else if (kind == static_cast<int>(DefaultHeightKind::Preset)) {
-            return WindowHeight::makePreset(
-                qBound(0, overrides.value(ScrollPerScreenKeys::defaultWindowHeightPresetIndex()).toInt(),
-                       int(m_presetWindowHeights.size()) - 1));
+            const int presetIdx = presetIt != overrides.constEnd()
+                ? presetIt->toInt()
+                : (m_defaultWindowHeight.kind == WindowHeight::Preset ? m_defaultWindowHeight.presetIdx : 0);
+            return WindowHeight::makePreset(qBound(0, presetIdx, int(m_presetWindowHeights.size()) - 1));
         } else if (kind == static_cast<int>(DefaultHeightKind::Auto)) {
             return WindowHeight{};
         }

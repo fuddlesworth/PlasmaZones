@@ -63,9 +63,11 @@ public:
         return false;
     }
     /// Width-kind wire values (0 = proportion, 1 = fixed px, 2 = client
-    /// decides). Named so the settings layer's kind-aware branches read
-    /// against the vocabulary instead of raw ints; the LGPL engine keeps
-    /// its own interpretation of the same values (IScrollSettings docs).
+    /// decides, 3 = preset index — declared just below, out of numeric order
+    /// because it was appended later). Named so the settings layer's
+    /// kind-aware branches read against the vocabulary instead of raw ints;
+    /// the LGPL engine keeps its own interpretation of the same values
+    /// (IScrollSettings docs).
     static constexpr int scrollingWidthKindProportion()
     {
         return 0;
@@ -135,7 +137,7 @@ public:
     /// called from load() and from applyConfigOverlayStaged. Between them
     /// those two cover every way a value reaches the store: a hand edit, a
     /// config import, the Discard reload, and profile staging. The QML SpinBox reads
-    /// its bounds from here via SettingsController::scrollingWidthConstants().
+    /// its bounds from here via SettingsController::scrollingConstants().
     /// The engine's qMax(1, …) keeps any bypass value renderable.
     static constexpr qreal scrollingDefaultColumnWidthFixedMin()
     {
@@ -156,7 +158,7 @@ public:
         return 800.0;
     }
     /// Editing granularity for the two width controls, shipped to QML through
-    /// SettingsController::scrollingWidthConstants(). The proportion step is a
+    /// SettingsController::scrollingConstants(). The proportion step is a
     /// work-area fraction (5% per slider notch); the fixed step is whole
     /// pixels. Both are doubles so the pair travels through one QVariantMap
     /// shape alongside the min/max accessors above.
@@ -259,6 +261,13 @@ public:
     static constexpr qreal scrollingDefaultWindowHeightMax()
     {
         return 10000.0;
+    }
+    /// Editing granularity for the fixed-height spin box, in whole pixels.
+    /// Its own accessor rather than a reuse of the width step: the two
+    /// controls govern different dimensions and nothing pins them equal.
+    static constexpr qreal scrollingDefaultWindowHeightStep()
+    {
+        return 10.0;
     }
     /// Preset index the Preset height kind seeds tiles at (see
     /// scrollingPresetIndexMax for the ceiling rationale).

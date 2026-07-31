@@ -97,16 +97,19 @@ void PlasmaZonesEffect::loadCachedSettings()
     // settings used before they folded into rules. Both are re-fetched on every
     // settingsChanged, so an accent / colour-scheme change repaints accent-
     // following borders without a relog.
+    // Both reject an invalid parse: an older daemon's valid-empty reply for an
+    // unknown key builds an INVALID QColor, which would discard the live accent
+    // for the hardcoded fallback and cost a full border sweep to do it.
     loadSettingAsync(QStringLiteral("highlightColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
-        if (m_borderAccentColor != c) {
+        if (c.isValid() && m_borderAccentColor != c) {
             m_borderAccentColor = c;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("inactiveColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
-        if (m_borderInactiveColor != c) {
+        if (c.isValid() && m_borderInactiveColor != c) {
             m_borderInactiveColor = c;
             scheduleBorderSweep();
         }
@@ -166,6 +169,13 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("showWindowBorder"), [this](const QVariant& v) {
+        // Type-guard every bool loader in this file, not only the default-true
+        // ones: a reply that ARRIVES but is not a bool (an older daemon's
+        // valid-empty answer for an unknown key) coerces to false, and a
+        // default's polarity is not a contract that survives an edit.
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.showBorder != b) {
             m_windowAppearanceDefault.showBorder = b;
@@ -214,21 +224,28 @@ void PlasmaZonesEffect::loadCachedSettings()
             scheduleBorderSweep();
         }
     });
+    // Empty-reply guard — see windowBorderScope above. An empty colour maps to
+    // nullopt in decoration_appearance, so a valid-empty skew reply would drop
+    // the configured colour outright and sweep every border to do it.
     loadSettingAsync(QStringLiteral("windowBorderColorActive"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.activeColor != s) {
+        if (!s.isEmpty() && m_windowAppearanceDefault.activeColor != s) {
             m_windowAppearanceDefault.activeColor = s;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderColorInactive"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.inactiveColor != s) {
+        if (!s.isEmpty() && m_windowAppearanceDefault.inactiveColor != s) {
             m_windowAppearanceDefault.inactiveColor = s;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("hideWindowTitleBars"), [this](const QVariant& v) {
+        // Type-guard — see showWindowBorder above.
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.hideTitleBar != b) {
             m_windowAppearanceDefault.hideTitleBar = b;
@@ -246,6 +263,10 @@ void PlasmaZonesEffect::loadCachedSettings()
     // Plain opacity+tint layer (the border's opacity analogue) — same
     // change-detect + sweep pattern as the border keys above.
     loadSettingAsync(QStringLiteral("showWindowOpacityTint"), [this](const QVariant& v) {
+        // Type-guard — see showWindowBorder above.
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.showOpacityTint != b) {
             m_windowAppearanceDefault.showOpacityTint = b;
@@ -286,7 +307,8 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("windowTintColor"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.tintColor != s) {
+        // Empty-reply guard — see windowBorderColorActive above.
+        if (!s.isEmpty() && m_windowAppearanceDefault.tintColor != s) {
             m_windowAppearanceDefault.tintColor = s;
             scheduleBorderSweep();
         }
@@ -311,6 +333,10 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
+        // Type-guard — see showWindowBorder above.
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_snapAssistHandler->setEnabled(v.toBool());
     });
     // Audio-reactive surface decorations and animation packs: the same daemon
@@ -322,7 +348,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     // enable-reply could start cava on defaults and each later parameter
     // reply would immediately restart it.
     loadSettingAsync(QStringLiteral("enableAudioVisualizer"), [this](const QVariant& v) {
-        m_enableAudioVisualizer = v.toBool();
+        // Type-guard the assignment but still sync, matching loadAudioBool below:
+        // the coalesced sync has to run for the replies that DID land.
+        if (v.typeId() == QMetaType::Bool) {
+            m_enableAudioVisualizer = v.toBool();
+        }
         scheduleEffectAudioSync();
     });
     // The full CAVA parameter set (Shaders.Audio), mirrored into
@@ -418,7 +448,15 @@ void PlasmaZonesEffect::loadCachedSettings()
         // to 500ms, making shader transitions like matrix run far
         // faster than the daemon path's identical setting (the daemon
         // honours the full 2000ms range via the same constants).
-        const int d = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, v.toInt(),
+        // &ok gate like every sibling int loader: an older daemon's valid-empty
+        // reply for an unknown key coerces to 0 and would clamp to the minimum
+        // instead of leaving the seeded default alone.
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        const int d = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, raw,
                              PhosphorAnimation::Limits::MaxAnimationDurationMs);
         m_windowAnimator->setDuration(d);
         m_cachedAnimationDuration = d;
@@ -427,16 +465,38 @@ void PlasmaZonesEffect::loadCachedSettings()
         // Polymorphic curve parse — handles bare bezier, named easing,
         // and "spring:..." in one path so Spring can drive snap motion
         // end-to-end without a settings-side branch.
-        m_windowAnimator->setCurve(m_curveRegistry.create(v.toString()));
+        // Reject an empty spec (an older daemon's valid-empty answer for an
+        // unknown key): create("") yields the default Easing and would silently
+        // replace the user's configured curve, spring included, for the session.
+        const QString spec = v.toString();
+        if (spec.isEmpty()) {
+            return;
+        }
+        m_windowAnimator->setCurve(m_curveRegistry.create(spec));
     });
     loadSettingAsync(QStringLiteral("animationMinDistance"), [this](const QVariant& v) {
-        m_windowAnimator->setMinDistance(qBound(0, v.toInt(), 200));
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        m_windowAnimator->setMinDistance(qBound(0, raw, 200));
     });
     loadSettingAsync(QStringLiteral("animationSequenceMode"), [this](const QVariant& v) {
-        m_cachedAnimationSequenceMode = qBound(0, v.toInt(), 1);
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        m_cachedAnimationSequenceMode = qBound(0, raw, 1);
     });
     loadSettingAsync(QStringLiteral("animationStaggerInterval"), [this](const QVariant& v) {
-        m_cachedAnimationStaggerInterval = qBound(PhosphorAnimation::Limits::MinAnimationStaggerIntervalMs, v.toInt(),
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        m_cachedAnimationStaggerInterval = qBound(PhosphorAnimation::Limits::MinAnimationStaggerIntervalMs, raw,
                                                   PhosphorAnimation::Limits::MaxAnimationStaggerIntervalMs);
     });
 
@@ -564,21 +624,37 @@ void PlasmaZonesEffect::loadCachedSettings()
     // slotSettingsChanged callback (QDBusConnection::connect silently accepts
     // duplicates, so the connection set would grow unbounded over the effect's
     // lifetime).
+    // Type-guard — see showWindowBorder above.
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_cachedToggleActivation = v.toBool();
     });
     loadSettingAsync(QStringLiteral("autotileDragInsertToggle"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_cachedAutotileDragInsertToggle = v.toBool();
     });
     loadSettingAsync(QStringLiteral("zoneSpanToggleMode"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_cachedZoneSpanToggleMode = v.toBool();
     });
     loadSettingAsync(QStringLiteral("autotileDragBehavior"), [this](const QVariant& v) {
         // Clamp unknown values to the safe default (Float) rather than the
         // highest known value — an older effect build against a newer daemon
         // must not silently map e.g. a future `ReorderAcrossScreens=2` onto
-        // the nearest mode it happens to recognize.
-        const int raw = v.toInt();
+        // the nearest mode it happens to recognize. A non-int reply is a skew
+        // artefact rather than a mode choice, so it keeps the seeded default
+        // instead of being coerced to 0 and re-decided as Float.
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
         switch (raw) {
         case static_cast<int>(EffectAutotileDragBehavior::Float):
             m_cachedAutotileDragBehavior = EffectAutotileDragBehavior::Float;
@@ -592,6 +668,9 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     loadSettingAsync(QStringLiteral("zoneSelectorEnabled"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_cachedZoneSelectorEnabled = v.toBool();
     });
 
@@ -663,23 +742,41 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
 
+    // Type-guard — see showWindowBorder above. scrollingWheelFocusEnabled
+    // defaults to TRUE, so a non-bool reply would invert it and tear down the
+    // registered Meta+wheel QActions for the duration of the skew.
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_tilingHandler->setFocusFollowsMouse(v.toBool());
     });
 
     loadSettingAsync(QStringLiteral("scrollingFocusFollowsMouse"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_tilingHandler->setScrollingFocusFollowsMouse(v.toBool());
     });
 
     loadSettingAsync(QStringLiteral("scrollingWheelFocusEnabled"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_tilingHandler->setWheelFocusEnabled(v.toBool());
     });
 
     loadSettingAsync(QStringLiteral("scrollingWheelFocusInverted"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_tilingHandler->setWheelFocusInverted(v.toBool());
     });
 
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_snapHandler->setFocusFollowsMouse(v.toBool());
     });
 

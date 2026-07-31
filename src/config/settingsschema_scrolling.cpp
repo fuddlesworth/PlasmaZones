@@ -97,6 +97,12 @@ static_assert(ConfigDefaults::scrollingStickyIgnoreAll()
                   == static_cast<int>(PhosphorEngine::StickyWindowHandling::IgnoreAll),
               "StickyWindowHandling::IgnoreAll wire value drifted from ConfigDefaults");
 
+// The preset-index ceiling is a consequence of the preset-list length cap, not
+// an independent number: an index past the last entry a canonicalized list can
+// hold could never resolve.
+static_assert(ConfigDefaults::scrollingPresetIndexMax() == SchemaValidators::kMaxPresetEntries - 1,
+              "scrollingPresetIndexMax drifted from the preset-list length cap in settingsschema_p.h");
+
 // ─── Scrolling (Scrolling) ───────────────────────────────────────────
 // The niri-style scrolling engine's knobs. The strip reuses the shared Gaps
 // group and Tiling.Behavior focus settings; only scroll-specific values live
@@ -129,9 +135,10 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::OnOverflow), "onOverflow"_L1}})},
         {CD::alwaysCenterSingleColumnKey(), CD::scrollingAlwaysCenterSingleColumn(), QMetaType::Bool},
         // NOTE: the width-kind CONFIG space {0 proportion, 1 fixed,
-        // 2 clientDecides} deliberately does NOT map onto
-        // ColumnWidth::Kind (whose 2 is Preset) — never static_cast between
-        // them; the engine translates with explicit ifs.
+        // 2 clientDecides, 3 preset} must never be static_cast to
+        // ColumnWidth::Kind, whose 2 is Preset — the engine translates into
+        // that enum with explicit ifs. DefaultWidthKind is the enum this
+        // space does match 1:1; see the file-header note above it.
         {CD::defaultColumnWidthKindKey(),
          CD::scrollingDefaultColumnWidthKind(),
          QMetaType::Int,
@@ -174,14 +181,16 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QMetaType::QString,
          {},
          [](const QVariant& v) {
-             return canonicalProportionList(v, CD::scrollingPresetColumnWidths());
+             return canonicalProportionList(v, CD::scrollingPresetColumnWidths(),
+                                            CD::scrollingDefaultColumnWidthProportionMax());
          }},
         {CD::presetWindowHeightsKey(),
          CD::scrollingPresetWindowHeights(),
          QMetaType::QString,
          {},
          [](const QVariant& v) {
-             return canonicalProportionList(v, CD::scrollingPresetWindowHeights());
+             return canonicalProportionList(v, CD::scrollingPresetWindowHeights(),
+                                            CD::scrollingDefaultColumnWidthProportionMax());
          }},
         // Default window height trio: kind + fixed pixel value + preset
         // index. Unlike the width pair, the value key serves ONE kind

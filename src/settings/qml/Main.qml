@@ -149,7 +149,8 @@ PhosphorUi.SettingsAppWindow {
             // for unrelated reasons: one could not read the daemon's slot map,
             // the other could not clear an override while a discard still owns
             // it. Naming the daemon on the second would be a false explanation.
-            const title = settingsController.app.registry.pageData(page).title || "";
+            const resetData = settingsController.app.registry.pageData(page);
+            const title = (resetData && resetData.title) ? resetData.title : "";
             const named = title.length > 0;
             if (reason === "overrides-not-cleared") {
                 window.showToast(named ? i18n("Some settings on %1 are still being saved, so it was left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so it was left unchanged. Try again in a moment."));
@@ -169,7 +170,8 @@ PhosphorUi.SettingsAppWindow {
         // override file still being written), so there is no daemon-unreachable
         // branch to distinguish here.
         function onPageDiscardFailed(page, reason) {
-            const title = settingsController.app.registry.pageData(page).title || "";
+            const discardData = settingsController.app.registry.pageData(page);
+            const title = (discardData && discardData.title) ? discardData.title : "";
             const named = title.length > 0;
             window.showToast(named ? i18n("Some settings on %1 are still being saved, so they were left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so they were left unchanged. Try again in a moment."));
         }
@@ -259,6 +261,11 @@ PhosphorUi.SettingsAppWindow {
             // Declared inline in Main.qml, so it can reach `window` to feed the
             // page-step shortcut guard while the results dropdown is open.
             onSearchOpenChanged: window._searchOpen = searchOpen
+            // Same latch hazard the profile switcher below documents: a header
+            // delegate torn down with the dropdown open would leave the
+            // suppression flag stuck true and kill nav shortcuts for the
+            // session.
+            Component.onDestruction: window._searchOpen = false
             // App-level action results. Ids come from seedSearchCatalog
             // (searchcatalog.cpp); dispatch lives here because actions act
             // on window chrome the library knows nothing about.
@@ -429,6 +436,12 @@ PhosphorUi.SettingsAppWindow {
         // over _mainItems / _childItems for this — the framework now
         // exposes the same lookup as one Q_INVOKABLE on the controller.
         window._drillIntoActivePage();
+
+        // Seed the profile-aware Save footer. The store only emits
+        // profilesChanged on a later edit, so without this first read the
+        // footer says the generic "Unsaved changes" for the whole session
+        // when nothing touches the profile list.
+        window._refreshPendingProfileName();
     }
 
     // Drill into the deepest non-collapsible ancestor of the current
@@ -536,7 +549,7 @@ PhosphorUi.SettingsAppWindow {
             // titles list when the error array is empty (older
             // domains that don't emit per-domain text).
             if (errors && errors.length > 0)
-                window.showToast(i18n("Save did not complete: %1", errors.join("; ")));
+                window.showToast(i18n("Save did not complete. %1", errors.join(". ")));
             else if (titles.length === 0)
                 window.showToast(i18n("Save did not complete. Some pages still have unsaved changes."));
             else
@@ -550,8 +563,8 @@ PhosphorUi.SettingsAppWindow {
             // errors array, but mirror the apply-on-close guard shape
             // here so a future library refactor that loosens that
             // check can't surface a `null.join(...)` runtime error.
-            const detail = (errors && errors.length > 0) ? errors.join("; ") : i18n("(no details)");
-            window.showToast(i18n("Discard did not complete: %1", detail));
+            const detail = (errors && errors.length > 0) ? errors.join(". ") : i18n("No details were reported.");
+            window.showToast(i18n("Discard did not complete. %1", detail));
         }
 
         target: window
@@ -800,11 +813,6 @@ PhosphorUi.SettingsAppWindow {
         id: flatTitleLabelsObject
 
         readonly property string windowAppearance: i18n("Appearance")
-        // Scrolling's leaf is registered as "Behavior", which is right inside
-        // the section but wrong on the flat rail, where it sits beside
-        // "Snapping" and "Tiling" and must name the same kind of thing. The
-        // tree walk keeps the parent's title, so only the flat walk needs this.
-        readonly property string scrolling: i18nc("tiling mode name", "Scrolling")
     }
 
     // Constant, so declarative alongside its siblings rather than an

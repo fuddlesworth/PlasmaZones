@@ -92,6 +92,15 @@ inline constexpr auto kIdScrollResetWindowHeights = "scroll_reset_window_heights
 inline constexpr auto kQuickLayoutPrefix = "quick_layout_";
 inline constexpr auto kSnapToZonePrefix = "snap_to_zone_";
 
+/// How many slots each indexed family has. Both families are 1-9 (the digit
+/// row), and the number appears in the default-getter array bounds, the
+/// registration loops and the cheatsheet's expected-token lists. Exported for
+/// the same reason as the prefixes above: those sites live in two translation
+/// units, and a bare literal in each lets them drift apart silently — the
+/// cheatsheet's malformed-spec guard cannot catch it, because both sides of
+/// the comparison are built from the same local literal.
+inline constexpr int kIndexedSlotCount = 9;
+
 inline QString quickLayoutId(int slotZeroBased)
 {
     return QLatin1String(kQuickLayoutPrefix) + QString::number(slotZeroBased + 1);

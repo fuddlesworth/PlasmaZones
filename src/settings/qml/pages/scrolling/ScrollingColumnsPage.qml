@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import "../../js/PresetList.js" as PresetList
 
 /**
  * @brief Scrolling → Columns: what a fresh column and a fresh tile look
@@ -13,28 +13,28 @@ import org.kde.kirigami as Kirigami
  * scrolling leaves (View / Columns / Window).
  *
  * The New columns card is per-monitor overridable through its scope chip
- * (the Columns sub-domain of the per-screen scrolling map); the tab
- * indicator row and the preset lists are app-wide.
+ * (the Columns sub-domain of the per-screen scrolling map). The tab
+ * indicator and the preset lists are app-wide, so they sit in their own
+ * unscoped cards rather than under the scope chip.
  */
 SettingsFlickable {
     id: root
 
-    // Width kind selector values, mirroring ConfigDefaults'
-    // scrollingDefaultColumnWidthKind vocabulary and value bounds, read
-    // once from ConfigDefaults via the controller — the C++ side is the
-    // single home for these numbers (kind ints, slider range, spin range).
-    readonly property var _scrollWidthConsts: settingsController.scrollingWidthConstants()
-    readonly property int widthKindProportion: _scrollWidthConsts.kindProportion
-    readonly property int widthKindFixed: _scrollWidthConsts.kindFixed
-    readonly property int widthKindClientDecides: _scrollWidthConsts.kindClientDecides
-    readonly property int widthKindPreset: _scrollWidthConsts.kindPreset
-    readonly property int heightKindFixed: _scrollWidthConsts.heightKindFixed
-    readonly property int heightKindPreset: _scrollWidthConsts.heightKindPreset
+    // Kind vocabularies and value bounds, mirroring ConfigDefaults and read
+    // once through the controller — the C++ side is the single home for these
+    // numbers (kind ints, slider and spin ranges, the preset-index ceiling).
+    readonly property var _scrollConsts: settingsController.scrollingConstants()
+    readonly property int widthKindProportion: _scrollConsts.kindProportion
+    readonly property int widthKindFixed: _scrollConsts.kindFixed
+    readonly property int widthKindClientDecides: _scrollConsts.kindClientDecides
+    readonly property int widthKindPreset: _scrollConsts.kindPreset
+    readonly property int heightKindFixed: _scrollConsts.heightKindFixed
+    readonly property int heightKindPreset: _scrollConsts.heightKindPreset
 
-    // Largest legal preset index for the CURRENT lists (the schema caps the
-    // stored index independently; the engine clamps at relayout).
-    readonly property int widthPresetCount: appSettings.scrollingPresetColumnWidths.split(",").length
-    readonly property int heightPresetCount: appSettings.scrollingPresetWindowHeights.split(",").length
+    // Live preset counts, through the shared parse PresetListEditor also uses
+    // so the page has exactly one implementation of "how many presets".
+    readonly property int widthPresetCount: PresetList.count(appSettings.scrollingPresetColumnWidths)
+    readonly property int heightPresetCount: PresetList.count(appSettings.scrollingPresetWindowHeights)
 
     // Per-monitor override plumbing, the tiling Algorithm card's pattern:
     // rows read through settingValue (override wins over the global) and
@@ -47,6 +47,37 @@ SettingsFlickable {
     function writeSetting(key, value, globalSetter) {
         psHelper.writeSetting(key, value, globalSetter);
     }
+
+    // Largest 1-based preset number a spin may offer: the shorter of the live
+    // list and the schema's stored-index ceiling.
+    function presetSpinCeiling(count) {
+        return Math.max(1, Math.min(count, root._scrollConsts.presetIndexMax + 1));
+    }
+
+    // Gate on construction being finished: the count bindings settle while the
+    // page is built, and a write from that first evaluation would badge the
+    // page dirty before the user has touched anything.
+    property bool built: false
+
+    Component.onCompleted: root.built = true
+
+    // A preset list can shrink under a stored index. The spin would then
+    // display-clamp without firing onValueModified, leaving config holding an
+    // index the user can no longer see, so write the clamped value back.
+    function clampPresetIndex(key, count, globalValue, globalSetter) {
+        if (!root.built)
+            return;
+        var maxIndex = root.presetSpinCeiling(count) - 1;
+        if (root.settingValue(key, globalValue) > maxIndex)
+            root.writeSetting(key, maxIndex, globalSetter);
+    }
+
+    onWidthPresetCountChanged: root.clampPresetIndex("DefaultColumnWidthPresetIndex", root.widthPresetCount, appSettings.scrollingDefaultColumnWidthPresetIndex, function (v) {
+        appSettings.scrollingDefaultColumnWidthPresetIndex = v;
+    })
+    onHeightPresetCountChanged: root.clampPresetIndex("DefaultWindowHeightPresetIndex", root.heightPresetCount, appSettings.scrollingDefaultWindowHeightPresetIndex, function (v) {
+        appSettings.scrollingDefaultWindowHeightPresetIndex = v;
+    })
 
     PerScreenOverrideHelper {
         id: psHelper
@@ -89,8 +120,8 @@ SettingsFlickable {
             scopeHasOverridesMethod: "hasPerScreenScrollingSettings"
             scopeClearerMethod: "clearPerScreenScrollingSettings"
 
-            // The kind the visible rows key off: the scoped monitor's
-            // override when present, else the global.
+            // The kind the size rows key off: the scoped monitor's override
+            // when present, else the global.
             readonly property int effectiveWidthKind: root.settingValue("DefaultColumnWidthKind", appSettings.scrollingDefaultColumnWidthKind)
             readonly property int effectiveHeightKind: root.settingValue("DefaultWindowHeightKind", appSettings.scrollingDefaultWindowHeightKind)
 
@@ -114,25 +145,26 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {
-                    visible: newColumnsCard.effectiveWidthKind !== root.widthKindClientDecides
-                }
-
-                // Proportion and pixel widths share one stored value, so only
-                // the control matching the selected kind is shown. A disabled
-                // SettingsRow collapses out of the layout, which is also what
-                // hides both rows for "window decides".
+                // The three width controls share one stored value, so only the
+                // one matching the selected kind is live. They stay VISIBLE
+                // while disabled rather than taking SettingsRow's default
+                // collapse: each carries a search anchor, and a deep link that
+                // reveals nothing is worse than a greyed row that shows which
+                // kind owns it. Separator convention on this page: a dependent
+                // row hugs the row that gates it, so no separator sits between
+                // a kind combo and the controls it governs.
                 SettingsRow {
                     title: i18n("Proportion of the screen")
                     searchAnchor: "defaultColumnWidthProportion"
                     description: i18n("How much of the usable screen width a new column takes")
                     enabled: newColumnsCard.effectiveWidthKind === root.widthKindProportion
+                    visible: true
 
                     SettingsSlider {
                         accessibleName: i18n("Proportion of the screen")
-                        from: root._scrollWidthConsts.proportionMin
-                        to: root._scrollWidthConsts.proportionMax
-                        stepSize: root._scrollWidthConsts.proportionStep
+                        from: root._scrollConsts.proportionMin
+                        to: root._scrollConsts.proportionMax
+                        stepSize: root._scrollConsts.proportionStep
                         value: root.settingValue("DefaultColumnWidthValue", appSettings.scrollingDefaultColumnWidthValue)
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
@@ -150,14 +182,15 @@ SettingsFlickable {
                     searchAnchor: "defaultColumnWidthFixed"
                     description: i18n("How many pixels wide a new column is")
                     enabled: newColumnsCard.effectiveWidthKind === root.widthKindFixed
+                    visible: true
 
                     SettingsSpinBox {
                         id: fixedWidthSpin
 
                         accessibleName: i18n("Fixed column width")
-                        from: root._scrollWidthConsts.fixedMin
-                        to: root._scrollWidthConsts.fixedMax
-                        stepSize: root._scrollWidthConsts.fixedStep
+                        from: root._scrollConsts.fixedMin
+                        to: root._scrollConsts.fixedMax
+                        stepSize: root._scrollConsts.fixedStep
                         onValueModified: value => root.writeSetting("DefaultColumnWidthValue", value, function (v) {
                                 appSettings.scrollingDefaultColumnWidthValue = v;
                             })
@@ -179,13 +212,17 @@ SettingsFlickable {
                     searchAnchor: "defaultColumnWidthPresetIndex"
                     description: i18n("Which entry of the column width presets a new column opens at, counted from 1. Columns opened this way follow later preset changes.")
                     enabled: newColumnsCard.effectiveWidthKind === root.widthKindPreset
+                    visible: true
 
                     SettingsSpinBox {
                         id: widthPresetIndexSpin
 
                         accessibleName: i18n("Column width preset number")
+                        // An ordinal, not a measurement — SettingsSpinBox's
+                        // default unit would render it as pixels.
+                        unitText: ""
                         from: 1
-                        to: Math.max(1, root.widthPresetCount)
+                        to: root.presetSpinCeiling(root.widthPresetCount)
                         stepSize: 1
                         // Stored 0-based, shown 1-based to match the preset
                         // cycling OSD.
@@ -221,28 +258,10 @@ SettingsFlickable {
 
                 SettingsSeparator {}
 
-                // App-wide row on a scoped card (like the Window Handling
-                // card's global rows): the indicator is one overlay service.
-                SettingsRow {
-                    title: i18n("Tab indicator")
-                    searchAnchor: "tabStripEnabled"
-                    description: i18n("Show a pill of tabs above a tabbed column. Tabbed columns keep working without it.")
-
-                    SettingsSwitch {
-                        checked: appSettings.scrollingTabStripEnabled
-                        accessibleName: i18n("Tab indicator")
-                        onToggled: function (newValue) {
-                            appSettings.scrollingTabStripEnabled = newValue;
-                        }
-                    }
-                }
-
-                SettingsSeparator {}
-
                 SettingsRow {
                     title: i18n("Default height")
                     searchAnchor: "defaultWindowHeightKind"
-                    description: i18n("How tall a window is when it joins a column. Share the column evenly splits the remaining space with its neighbors.")
+                    description: i18n("How tall a window is when it joins a column. With Share the column evenly, a new window splits the remaining space with its neighbors.")
 
                     WideComboBox {
                         Accessible.name: i18n("Default window height")
@@ -261,14 +280,15 @@ SettingsFlickable {
                     searchAnchor: "defaultWindowHeightFixed"
                     description: i18n("How many pixels tall a new window is")
                     enabled: newColumnsCard.effectiveHeightKind === root.heightKindFixed
+                    visible: true
 
                     SettingsSpinBox {
                         id: fixedHeightSpin
 
                         accessibleName: i18n("Fixed window height")
-                        from: root._scrollWidthConsts.heightFixedMin
-                        to: root._scrollWidthConsts.heightFixedMax
-                        stepSize: root._scrollWidthConsts.fixedStep
+                        from: root._scrollConsts.heightFixedMin
+                        to: root._scrollConsts.heightFixedMax
+                        stepSize: root._scrollConsts.heightFixedStep
                         onValueModified: value => root.writeSetting("DefaultWindowHeightValue", value, function (v) {
                                 appSettings.scrollingDefaultWindowHeightValue = v;
                             })
@@ -286,13 +306,15 @@ SettingsFlickable {
                     searchAnchor: "defaultWindowHeightPresetIndex"
                     description: i18n("Which entry of the window height presets a new window opens at, counted from 1")
                     enabled: newColumnsCard.effectiveHeightKind === root.heightKindPreset
+                    visible: true
 
                     SettingsSpinBox {
                         id: heightPresetIndexSpin
 
                         accessibleName: i18n("Window height preset number")
+                        unitText: ""
                         from: 1
-                        to: Math.max(1, root.heightPresetCount)
+                        to: root.presetSpinCeiling(root.heightPresetCount)
                         stepSize: 1
                         // Stored 0-based, shown 1-based (see the width twin).
                         onValueModified: value => root.writeSetting("DefaultWindowHeightPresetIndex", value - 1, function (v) {
@@ -302,6 +324,37 @@ SettingsFlickable {
                             value: root.settingValue("DefaultWindowHeightPresetIndex", appSettings.scrollingDefaultWindowHeightPresetIndex) + 1
                             when: !heightPresetIndexSpin.editing
                             restoreMode: Binding.RestoreNone
+                        }
+                    }
+                }
+            }
+        }
+
+        // =================================================================
+        // Tabbed Columns Card
+        // =================================================================
+        // Its own card, not a row inside New columns: the indicator is one
+        // app-wide overlay service with no per-monitor form, and a global row
+        // under that card's scope chip would read as monitor-scoped.
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Tabbed columns")
+            searchAnchor: "tabbedColumns"
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Tab indicator")
+                    searchAnchor: "tabStripEnabled"
+                    description: i18n("Show a pill of tabs above a tabbed column. Tabbed columns keep working without it.")
+
+                    SettingsSwitch {
+                        checked: appSettings.scrollingTabStripEnabled
+                        accessibleName: i18n("Tab indicator")
+                        onToggled: function (newValue) {
+                            appSettings.scrollingTabStripEnabled = newValue;
                         }
                     }
                 }
@@ -334,7 +387,10 @@ SettingsFlickable {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     presets: appSettings.scrollingPresetColumnWidths
-                    entryName: i18n("column width preset")
+                    cardName: i18nc("accessible name for one preset card, %1 is a percentage", "%1% column width preset")
+                    removeName: i18nc("accessible name for a preset card's remove button, %1 is a percentage", "Remove the %1% column width preset")
+                    addValueName: i18nc("accessible name for the add-preset percentage field", "New column width preset percentage")
+                    addName: i18nc("accessible name for the add-preset button", "Add a column width preset")
                     commit: function (joined) {
                         appSettings.scrollingPresetColumnWidths = joined;
                     }
@@ -354,7 +410,10 @@ SettingsFlickable {
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.bottomMargin: Kirigami.Units.largeSpacing
                     presets: appSettings.scrollingPresetWindowHeights
-                    entryName: i18n("window height preset")
+                    cardName: i18nc("accessible name for one preset card, %1 is a percentage", "%1% window height preset")
+                    removeName: i18nc("accessible name for a preset card's remove button, %1 is a percentage", "Remove the %1% window height preset")
+                    addValueName: i18nc("accessible name for the add-preset percentage field", "New window height preset percentage")
+                    addName: i18nc("accessible name for the add-preset button", "Add a window height preset")
                     vertical: true
                     commit: function (joined) {
                         appSettings.scrollingPresetWindowHeights = joined;

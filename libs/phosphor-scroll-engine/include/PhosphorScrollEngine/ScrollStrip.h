@@ -126,6 +126,15 @@ public:
     /// @p columnIndex (float/minimize round-trip of a stacked tile), at
     /// @p tileIndex clamped into the stack. Fails when the column index is
     /// out of range — callers fall back to a fresh column.
+    ///
+    /// TAKES FOCUS, unlike insertWindowAt: the new tile becomes its column's
+    /// active one, the column becomes the strip's active column, and the view
+    /// re-anchors. That is what the unfloat path wants (the window the user
+    /// just restored is the one to look at), but it means a restore path
+    /// driving several arrivals must re-assert its own focus afterwards —
+    /// the last arrival would otherwise keep it.
+    /// The tile is seeded with @p params.defaultWindowHeight; callers with a
+    /// remembered intent overwrite it via setWindowHeightIntent.
     bool insertWindowIntoColumnAt(int columnIndex, int tileIndex, const QString& windowId,
                                   const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0);
     /// Remove @p windowId; a column left empty closes up. Keeps the view

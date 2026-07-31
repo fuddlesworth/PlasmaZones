@@ -628,6 +628,58 @@ void ActionRegistry::registerBuiltinsAppearance()
         .displayOrder = 19,
         .tags = {QString(Tag::LayoutEngine)},
     });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollInsertPosition),
+        .slotFor = constantSlot(ActionSlot::ScrollInsertPosition),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == ScrollInsertPositionToken::RightOfActive || v == ScrollInsertPositionToken::LeftOfActive
+                    || v == ScrollInsertPositionToken::First || v == ScrollInsertPositionToken::Last
+                    || v == ScrollInsertPositionToken::IntoActiveColumn;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(ScrollInsertPositionToken::RightOfActive),
+                                        QString(ScrollInsertPositionToken::LeftOfActive),
+                                        QString(ScrollInsertPositionToken::First),
+                                        QString(ScrollInsertPositionToken::Last),
+                                        QString(ScrollInsertPositionToken::IntoActiveColumn)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 23,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollDefaultWindowHeight),
+        .slotFor = constantSlot(ActionSlot::ScrollDefaultWindowHeight),
+        .validate =
+            [](const QJsonObject& p) {
+                // Same wire shape as the width pair — a work-area fraction
+                // sharing the same shared bounds (a height may take the
+                // whole column, so the 1.0 ceiling is right here too).
+                const QJsonValue v = p.value(ActionParam::Value);
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                return d >= kMinColumnWidthRatio && d <= kMaxColumnWidthRatio;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinColumnWidthPercent,
+                     .max = kMaxColumnWidthPercent,
+                     .scale = 0.01,
+                     .defaultDisplay = 50.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 24,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
 
     // ── per-window scrolling open overrides (domain Window) ──
     // Read on the open path for the matched window and layered over the context /
@@ -694,62 +746,12 @@ void ActionRegistry::registerBuiltinsAppearance()
         .tags = {QString(Tag::LayoutEngine)},
     });
     registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetScrollInsertPosition),
-        .slotFor = constantSlot(ActionSlot::ScrollInsertPosition),
-        .validate =
-            [](const QJsonObject& p) {
-                const QString v = p.value(ActionParam::Value).toString();
-                return v == ScrollInsertPositionToken::RightOfActive || v == ScrollInsertPositionToken::LeftOfActive
-                    || v == ScrollInsertPositionToken::First || v == ScrollInsertPositionToken::Last
-                    || v == ScrollInsertPositionToken::IntoActiveColumn;
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("enum"),
-                     .enumWireValues = {QString(ScrollInsertPositionToken::RightOfActive),
-                                        QString(ScrollInsertPositionToken::LeftOfActive),
-                                        QString(ScrollInsertPositionToken::First),
-                                        QString(ScrollInsertPositionToken::Last),
-                                        QString(ScrollInsertPositionToken::IntoActiveColumn)}}},
-        .category = QStringLiteral("layoutEngine"),
-        .displayOrder = 23,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetScrollDefaultWindowHeight),
-        .slotFor = constantSlot(ActionSlot::ScrollDefaultWindowHeight),
-        .validate =
-            [](const QJsonObject& p) {
-                // Same wire shape as the width pair — a work-area fraction
-                // sharing the same shared bounds (a height may take the
-                // whole column, so the 1.0 ceiling is right here too).
-                const QJsonValue v = p.value(ActionParam::Value);
-                if (!v.isDouble()) {
-                    return false;
-                }
-                const double d = v.toDouble();
-                return d >= kMinColumnWidthRatio && d <= kMaxColumnWidthRatio;
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("percent"),
-                     .min = kMinColumnWidthPercent,
-                     .max = kMaxColumnWidthPercent,
-                     .scale = 0.01,
-                     .defaultDisplay = 50.0}},
-        .category = QStringLiteral("layoutEngine"),
-        .displayOrder = 24,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
         .type = QString(ActionType::OpenWindowHeight),
         .slotFor = constantSlot(ActionSlot::OpenWindowHeight),
         .validate =
             [](const QJsonObject& p) {
+                // Same wire shape as the width slots — a work-area fraction
+                // against the shared column-width bounds, applied to the height.
                 const QJsonValue v = p.value(ActionParam::Value);
                 if (!v.isDouble()) {
                     return false;

@@ -50,13 +50,15 @@ public:
     explicit ShortcutManager(Settings* settings, QObject* parent = nullptr);
     ~ShortcutManager() override;
 
-    /// The settings object the registration table reads chords from. Public
-    /// so the table's capture-less fire lambdas (namespace scope, function
-    /// pointers) can read tunables like the scroll adjust-step percents.
-    Settings* settings() const
-    {
-        return m_settings;
-    }
+    /// The scroll adjust steps in percent of the work area, as the user tuned
+    /// them. Public because the registration table's fire lambdas are
+    /// capture-less function pointers at namespace scope and reach the manager
+    /// only through their ShortcutManager* argument; narrow read-only getters
+    /// rather than exposing the mutable Settings* the table would otherwise
+    /// need. They also hold the unreachable-null defence in one place instead
+    /// of a ternary per call site.
+    int scrollColumnWidthStepPercent() const;
+    int scrollWindowHeightStepPercent() const;
 
 public Q_SLOTS:
     void registerShortcuts();
@@ -179,7 +181,10 @@ Q_SIGNALS:
     // the generic navigation signals above; these are the scroll-specific
     // verbs. Direction deltas (consumeOrExpel, cyclePresets) carry -1 =
     // left/back, +1 = right/forward; the two ADJUST signals instead carry a
-    // signed PERCENT of the work area (±10 per keypress).
+    // signed PERCENT of the work area, one step per keypress. The step is the
+    // user-tunable scrollingColumnWidthStepPercent /
+    // scrollingWindowHeightStepPercent setting (1-50, default 10), read
+    // through the narrow getters above.
     void scrollFocusColumnEndRequested(bool last);
     void scrollMoveColumnToEndRequested(bool last);
     void scrollConsumeWindowRequested();
@@ -261,6 +266,9 @@ private:
     /// binding actually differed from the registry's stored sequence.
     bool rebindAll();
     void drainPendingAdhocOps();
+    /// Drop every queued adhoc op for @p id. Both queueing paths supersede an
+    /// earlier op for the same id (last write wins), so they share this.
+    void erasePendingAdhocOps(const QString& id);
 
     Settings* m_settings = nullptr;
 

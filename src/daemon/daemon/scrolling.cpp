@@ -12,6 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"
+#include "config/settings.h"
 #include "core/platform/logging.h"
 #include "seedorderfilter.h"
 
@@ -50,7 +51,7 @@ void Daemon::captureScrollingOrders(const QSet<QString>& scrollingScreens)
 
 void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
 {
-    if (!m_scrollEngine || !m_layoutManager) {
+    if (!m_scrollEngine || !m_layoutManager || !m_settings) {
         return;
     }
     const QString activity = currentActivity();
@@ -60,8 +61,39 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // m_lastEngineOrders. Leaving-screen capture already ran in
     // captureScrollingOrders (the shared capture phase in
     // updateEngineScreens).
+    //
+    // Loop-invariant, so resolved once: the seed's admission rule is the same
+    // as the autotile twin's — float is per mode, so non-minimized entries
+    // always seed (a snap-mode float must not make the window unmanageable as
+    // a strip column); minimized entries stay as placeholders except
+    // user-floated-then-minimized ones. See filterEngineSeedOrder's doc.
     const QSet<QString> currentScrollScreens = m_scrollEngine->activeScreens();
-    for (const QString& screenId : scrollingScreens - currentScrollScreens) {
+    const QSet<QString> enteringScreens = scrollingScreens - currentScrollScreens;
+    PhosphorPlacement::WindowTrackingService* wts =
+        m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr;
+    if (!enteringScreens.isEmpty()) {
+        if (!wts) {
+            // Fail CLOSED, like the autotile twin. filterEngineSeedOrder
+            // early-returns without a WTS, so seeding here would stage the
+            // saved order UNFILTERED and hand a user-floated-then-minimized
+            // window to the strip as a column instead of restoring its float.
+            // Only the SEED is skipped, not the whole function: the screen set
+            // and the per-screen overrides below don't depend on the WTS, and
+            // withholding them would leave scrolling screens unclaimed.
+            qCWarning(lcDaemon) << "updateScrollingScreens: no WindowTrackingService — refusing unfiltered seed";
+        } else if (!wts->windowRegistry()) {
+            // Mirror the autotile twin's registry warning: without a registry
+            // the filter cannot read minimized state, so every entry reads as
+            // non-minimized and the user-floated-then-minimized drop silently
+            // stops firing. Degrading is correct, doing it quietly is not.
+            qCWarning(lcDaemon) << "updateScrollingScreens: no WindowRegistry —"
+                                << "the minimized seed filter degrades to pass-through";
+        }
+    }
+    // No WTS means no correct seed, so the loop is skipped rather than run
+    // unfiltered; everything below it still runs (see the warning above).
+    static const QSet<QString> kNoScreens;
+    for (const QString& screenId : wts ? enteringScreens : kNoScreens) {
         // (Snap-float presave for screens entering scrolling from snapping
         // runs in updateEngineScreens' derive phase, BEFORE any engine set
         // is applied — by this point snap's capturePlacement would already
@@ -69,33 +101,17 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         const int desktop = currentDesktopForScreen(screenId);
         const auto it = m_lastEngineOrders.constFind(TilingStateKey{screenId, desktop, activity});
         if (it == m_lastEngineOrders.constEnd()) {
+            // No captured order means this context has never been in
+            // scrolling, and unlike the autotile twin there is deliberately
+            // no spatial fallback here. buildZoneOrderedWindowList orders by
+            // ZONE, which on a screen that was never tiled says nothing about
+            // strip position; the strip instead takes its first-entry order
+            // from the sequence the engine adopts windows in, which is the
+            // order the compositor announces them. Only RE-entry is
+            // order-deterministic, and that is what the capture exists for.
             continue;
         }
         QStringList order = it.value();
-        // Same admission rule as the autotile seed: float is per mode, so
-        // non-minimized entries always seed (a snap-mode float must not make
-        // the window unmanageable as a strip column); minimized entries stay
-        // as placeholders except user-floated-then-minimized ones. See
-        // filterEngineSeedOrder's doc for the rationale.
-        PhosphorPlacement::WindowTrackingService* wts =
-            m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr;
-        if (!wts) {
-            // Fail CLOSED, like the autotile twin. filterEngineSeedOrder
-            // early-returns without a WTS, so seeding here would stage the
-            // saved order UNFILTERED and hand a user-floated-then-minimized
-            // window to the strip as a column instead of restoring its float.
-            qCWarning(lcDaemon) << "updateScrollingScreens: no WindowTrackingService —"
-                                << "refusing unfiltered seed for" << screenId;
-            continue;
-        }
-        // Mirror the autotile twin's registry warning: without a registry the
-        // filter cannot read minimized state, so every entry reads as
-        // non-minimized and the user-floated-then-minimized drop silently
-        // stops firing. Degrading is correct, doing it quietly is not.
-        if (!wts->windowRegistry()) {
-            qCWarning(lcDaemon) << "updateScrollingScreens: no WindowRegistry —"
-                                << "the minimized seed filter degrades to pass-through for" << screenId;
-        }
         filterEngineSeedOrder(order, wts, wts->windowRegistry(), PhosphorEngine::WindowPlacement::scrollingEngineId());
         if (!order.isEmpty()) {
             m_scrollEngine->setInitialWindowOrder(screenId, order);

@@ -807,6 +807,7 @@ void Settings::discardKeys(const ConfigKeyList& keys)
         if (m_store->readVariant(gk.first, gk.second) != *keyIt)
             m_store->write(gk.first, gk.second, *keyIt);
     }
+    normalizeScrollingColumnWidthValue();
     if (emitChangedNotifyProperties(before))
         Q_EMIT settingsChanged();
 }
@@ -817,6 +818,7 @@ void Settings::resetKeys(const ConfigKeyList& keys)
     for (const ConfigKey& gk : keys) {
         m_store->reset(gk.first, gk.second);
     }
+    normalizeScrollingColumnWidthValue();
     if (emitChangedNotifyProperties(before))
         Q_EMIT settingsChanged();
 }

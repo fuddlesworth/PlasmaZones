@@ -1117,7 +1117,7 @@ public:
     int scrollingInsertPosition() const override;
     void setScrollingInsertPosition(int position);
     bool scrollingTabStripEnabled() const override;
-    void setScrollingTabStripEnabled(bool enabled);
+    void setScrollingTabStripEnabled(bool enabled) override;
     bool scrollingWheelFocusEnabled() const;
     void setScrollingWheelFocusEnabled(bool enabled);
     bool scrollingWheelFocusInverted() const;
@@ -1185,7 +1185,7 @@ public:
     bool scrollingRestoreStripsOnLogin() const;
     void setScrollingRestoreStripsOnLogin(bool restore);
     bool scrollingRestoreFloatedWindowsOnLogin() const override;
-    void setScrollingRestoreFloatedWindowsOnLogin(bool restore);
+    void setScrollingRestoreFloatedWindowsOnLogin(bool restore) override;
     int scrollingColumnWidthStepPercent() const;
     void setScrollingColumnWidthStepPercent(int percent);
     int scrollingWindowHeightStepPercent() const;
@@ -1356,11 +1356,20 @@ private:
     void writeLockedScreens(const QStringList& screens);
 
     /// Coerce the shared scrolling column-width VALUE into the range its
-    /// current KIND allows. Called from load() and from
-    /// applyConfigOverlayStaged — between them, every path by which a value
-    /// can reach the store without passing the kind-aware setter (hand edit,
-    /// config import, Discard reload, profile staging). See the definition
-    /// for why this is not done on read.
+    /// current KIND allows. Called from load(), from applyConfigOverlayStaged,
+    /// and from the per-page mutators discardKeys() / resetKeys() — between
+    /// them, every path by which a value can reach the store without passing
+    /// the kind-aware setter (hand edit, config import, Discard reload,
+    /// profile staging, per-page Discard and Reset).
+    ///
+    /// The per-page pair matters even though the two width keys are co-owned
+    /// by one page manifest today: relying on that co-ownership would make a
+    /// manifest split (moving the kind to another page) silently reintroduce
+    /// the inconsistent pair, and nothing enforces it. Normalizing here costs
+    /// one read and is called before the re-emit, so a coerced value is
+    /// announced by the same NOTIFY sweep.
+    ///
+    /// See the definition for why this is not done on read.
     void normalizeScrollingColumnWidthValue();
 
 public:
@@ -1805,9 +1814,20 @@ private:
     // Updates). NOT used by save() — save() iterates the schema and lets
     // purgeStaleKeys() handle cleanup.
     static QStringList managedGroupNames();
-    // Delete all per-screen override groups by prefix (ZoneSelector:*,
-    // AutotileScreen:*, and the legacy SnappingScreen:* which is no longer written
-    // but is still swept to scrub any file an older build left behind).
+    // Delete every per-screen override group, plus the container they nest
+    // under. Three things are swept:
+    //   1. Whatever PerScreenPathResolver::isPerScreenPrefix claims. The
+    //      prefixes are NOT re-spelled here — the resolver's mapping table is
+    //      the one list, so a prefix added there is swept by reset() without
+    //      touching this function. Today that covers ZoneSelector:*,
+    //      AutotileScreen:*, ScrollingScreen:*, and the legacy SnappingScreen:*
+    //      which is no longer written but is still swept to scrub any file an
+    //      older build left behind.
+    //   2. VirtualScreen:* groups, which are per-screen in the same sense but
+    //      resolve through their own group accessor rather than the resolver.
+    //   3. The resolver's reserved "PerScreen" container key, which groupList()
+    //      hides and which can survive as an empty husk once every descendant
+    //      is gone.
     static void deletePerScreenGroups(PhosphorConfig::IBackend* backend);
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();

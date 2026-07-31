@@ -162,6 +162,39 @@ QString engineModeDisplayLabel(const QString& wire)
     return wire;
 }
 
+/// The scrolling fraction params as a whole percent, or -1 when the payload
+/// is not a usable [0, 1] fraction. The editor can hold a staged action whose
+/// validator has not run yet, so a bool, a string, or an out-of-range number
+/// is reachable here; the same reject paths SetOpacity and SetTintStrength
+/// mirror, so a summary never claims a size the runtime will not apply.
+int scrollFractionPercent(const QJsonValue& raw)
+{
+    if (raw.isNull() || raw.isUndefined()) {
+        return -1;
+    }
+    const QVariant rv = raw.toVariant();
+    if (rv.typeId() == QMetaType::Bool) {
+        return -1;
+    }
+    bool ok = false;
+    const double v = rv.toDouble(&ok);
+    if (!ok || v < 0.0 || v > 1.0) {
+        return -1;
+    }
+    return qRound(v * 100.0);
+}
+
+/// True when a closed-vocabulary token failed to resolve to a label.
+/// enumOptionLabel round-trips an unrecognised token verbatim and every
+/// declared token maps to prose that differs from it, so an unchanged string
+/// is the miss. The runtime resolvers ignore such a token outright, which is
+/// why the callers render "(invalid)" rather than the raw wire word — the
+/// same contract the SetWindowLayer branch states below.
+bool isUnresolvedEnumToken(const QString& token, const QString& label)
+{
+    return token.isEmpty() || label == token;
+}
+
 /// Human label for one action ("Snapping", "Float", "Excluded"). @p
 /// snappingLayoutLookup resolves SetSnappingLayout's layoutId UUIDs;
 /// @p tilingAlgorithmLookup resolves SetTilingAlgorithm's wire tokens
@@ -406,37 +439,58 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                 .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
         }
         // ── scrolling-engine overrides ──
-        // Widths are work-area fractions on the wire, shown as a percent like
-        // SetSplitRatio. The enum actions delegate token→label to the shared
-        // enumOptionLabel, like SetInsertPosition above. OpenTabbed is a bool
-        // action and already returned by boolActionStateLabel.
+        // Widths and heights are work-area fractions on the wire, shown as a
+        // percent like SetSplitRatio and guarded through scrollFractionPercent.
+        // The enum actions delegate token→label to the shared enumOptionLabel,
+        // like SetInsertPosition above, and report an unresolved token rather
+        // than echoing it. OpenTabbed is a bool action and already returned by
+        // boolActionStateLabel.
         if (action.type == ActionType::SetScrollDefaultColumnWidth) {
-            return PhosphorI18n::tr("Column width: %1%").arg(qRound(raw.toDouble() * 100.0));
+            const int pct = scrollFractionPercent(raw);
+            return pct < 0 ? PhosphorI18n::tr("Column width (invalid)")
+                           : PhosphorI18n::tr("Column width: %1%").arg(pct);
         }
         if (action.type == ActionType::OpenColumnWidth) {
-            return PhosphorI18n::tr("Open at width: %1%").arg(qRound(raw.toDouble() * 100.0));
+            const int pct = scrollFractionPercent(raw);
+            return pct < 0 ? PhosphorI18n::tr("Open at width (invalid)")
+                           : PhosphorI18n::tr("Open at width: %1%").arg(pct);
         }
         if (action.type == ActionType::SetScrollDefaultWindowHeight) {
-            return PhosphorI18n::tr("Window height: %1%").arg(qRound(raw.toDouble() * 100.0));
+            const int pct = scrollFractionPercent(raw);
+            return pct < 0 ? PhosphorI18n::tr("Window height (invalid)")
+                           : PhosphorI18n::tr("Window height: %1%").arg(pct);
         }
         if (action.type == ActionType::OpenWindowHeight) {
-            return PhosphorI18n::tr("Open at height: %1%").arg(qRound(raw.toDouble() * 100.0));
+            const int pct = scrollFractionPercent(raw);
+            return pct < 0 ? PhosphorI18n::tr("Open at height (invalid)")
+                           : PhosphorI18n::tr("Open at height: %1%").arg(pct);
         }
         if (action.type == ActionType::SetScrollInsertPosition) {
-            return PhosphorI18n::tr("New columns: %1")
-                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            // Distinct from SetScrollDefaultColumnDisplay below: this one says
+            // where a new WINDOW's column enters the strip, that one says what
+            // a new column looks like.
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Insert new windows (invalid)")
+                                                       : PhosphorI18n::tr("Insert new windows: %1").arg(shown);
         }
         if (action.type == ActionType::SetCenterFocusedColumn) {
-            return PhosphorI18n::tr("Centering: %1")
-                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Centering (invalid)")
+                                                       : PhosphorI18n::tr("Centering: %1").arg(shown);
         }
         if (action.type == ActionType::SetScrollDefaultColumnDisplay) {
-            return PhosphorI18n::tr("New columns: %1")
-                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("New columns (invalid)")
+                                                       : PhosphorI18n::tr("New columns: %1").arg(shown);
         }
         if (action.type == ActionType::OpenColumnPlacement) {
-            return PhosphorI18n::tr("Open: %1")
-                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Open (invalid)")
+                                                       : PhosphorI18n::tr("Open: %1").arg(shown);
         }
         // ── window-management overrides ──
         if (action.type == ActionType::SetWindowLayer) {

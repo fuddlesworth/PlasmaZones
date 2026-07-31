@@ -100,6 +100,24 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     m_screenStates.erase(donor);
     auto inserted = m_screenStates.insert(newKey, std::move(state));
 
+    // The scroll tab-strip maps are keyed by screen id too, and each needs
+    // something different from the move:
+    //  - m_lastScrollTabStrips MUST follow. It is the cached model the
+    //    enable toggle replays, so left under the dead key, re-enabling the
+    //    indicator would replay nothing until the next structural strip
+    //    change.
+    //  - m_scrollTabsHidePending is an inert bit for a hide that belonged to
+    //    the old key's shell; drop it rather than carry it.
+    //  - m_scrollTabsHideGuard is deliberately abandoned. It is monotonic per
+    //    key, and the new key's counter (absent or already higher) can only
+    //    make an old in-flight completion stale-return, which is the safe
+    //    direction.
+    if (const auto stripsIt = m_lastScrollTabStrips.constFind(oldKey); stripsIt != m_lastScrollTabStrips.constEnd()) {
+        m_lastScrollTabStrips.insert(newKey, stripsIt.value());
+        m_lastScrollTabStrips.remove(oldKey);
+    }
+    m_scrollTabsHidePending.remove(oldKey);
+
     // The geometryChanged lambda captured the OLD sid by value. After the
     // state moved to newKey, the lambda's m_screenStates.find(oldSid) lookup
     // would return end() and silently drop every subsequent geometry update.
@@ -114,13 +132,17 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     if (physScreen) {
         const bool isVS = PhosphorIdentity::VirtualScreenId::isVirtual(newKey);
 
-        // Re-anchor the live layer surface to the new VS's region. The donor's
-        // anchors/margins were baked in at attach time for the old key - if the
-        // flavor flip changes the target geometry (e.g. bare-physical donor
-        // rekeyed to a sub-region VS target) the surface would otherwise keep
-        // rendering across the full monitor. wlr-layer-shell v2+ allows
-        // set_anchor / set_margin post-attach; push the corrected placement
-        // through the mutable transport handle.
+        // Re-anchor the live layer surface to the new key's region. The
+        // donor's anchors/margins were baked in at attach time for the old
+        // key, and the flavor guard above only pins the ANCHOR SET as
+        // unchanged - the region can still move, which is exactly the live
+        // case here: a VS→VS rekey onto a different sub-region of the same
+        // monitor. Without this the surface keeps rendering across the old
+        // VS's rectangle. wlr-layer-shell v2+ allows set_anchor / set_margin
+        // post-attach; push the corrected placement through the mutable
+        // transport handle. (isVS == wasVS by the guard, so the physical
+        // branch below is the both-bare-physical case, where AnchorAll
+        // already covers the whole monitor and only the margins are reset.)
         if (rekeyed.shell && rekeyed.shell->shellSurface()) {
             if (auto* handle = rekeyed.shell->shellSurface()->transport()) {
                 const QRect targetVsGeom = resolveScreenGeometry(m_screenManager, newKey);

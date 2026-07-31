@@ -138,8 +138,17 @@ bool ScrollStrip::insertWindow(const QString& windowId, const ColumnWidth& width
     if (m_preMaximizeColumnIdx >= insertAt) {
         ++m_preMaximizeColumnIdx;
     }
+    // prevIdx was captured BEFORE the insert shifted the columns at and past
+    // insertAt (m_preMaximizeColumnIdx is adjusted for the same reason just
+    // above). Left stale, the OnOverflow arm of the reanchor reads the wrong
+    // column's width as prevW — or, for a First/LeftOfActive insert, reads
+    // the column that just arrived and degrades OnOverflow to Never.
+    int shiftedPrevIdx = prevIdx;
+    if (shiftedPrevIdx >= insertAt) {
+        ++shiftedPrevIdx;
+    }
     m_activeColumnIdx = insertAt;
-    reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    reanchorAfterFocusChange(shiftedPrevIdx, oldViewX, params);
     return true;
 }
 
@@ -172,6 +181,11 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
     if (displayOverride && *displayOverride != col->display) {
         col->display = *displayOverride;
     }
+    // No re-anchor and no re-clamp, unlike every sibling insert verb: the
+    // arrival joins the column that is ALREADY active, so no column index
+    // shifts, the active column does not change, and the strip's total width
+    // is unchanged (a stack adds no width). The anchor is active-relative,
+    // so it still means exactly what it did before the append.
     Q_UNUSED(width)
     return true;
 }
@@ -189,6 +203,9 @@ bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const
     tile.windowId = windowId;
     tile.minWidth = minWidth;
     tile.minHeight = minHeight;
+    // Seeded like every other tile-creating verb; the restore callers that
+    // have a remembered intent overwrite it via setWindowHeightIntent.
+    tile.height = params.defaultWindowHeight;
     const int at = qBound(0, tileIndex, col.tiles.size());
     col.tiles.insert(at, tile);
     col.activeTileIdx = at;
@@ -669,8 +686,17 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
         if (m_preMaximizeColumnIdx >= insertAt) {
             ++m_preMaximizeColumnIdx;
         }
+        // Same stale-prevIdx shift insertWindow carries: expelling LEFT
+        // (delta < 0) inserts AT the previously-active index, so an unshifted
+        // prevIdx names the column that just arrived — prevIdx == active,
+        // which makes the OnOverflow test dead and silently degrades it to
+        // Never.
+        int shiftedPrevIdx = prevIdx;
+        if (shiftedPrevIdx >= insertAt) {
+            ++shiftedPrevIdx;
+        }
         m_activeColumnIdx = insertAt;
-        reanchorAfterFocusChange(prevIdx, oldViewX, params);
+        reanchorAfterFocusChange(shiftedPrevIdx, oldViewX, params);
         return true;
     }
 
@@ -709,15 +735,21 @@ QVector<int> ScrollStrip::visibleColumnIndices(const ScrollLayoutParams& params)
     const int viewX = viewXFor(params);
     const int workW = params.workArea.width();
     QVector<int> visible;
+    // Strip x accumulated in the walk rather than re-derived per index: the
+    // accumulation is columnStripX's own body (skip zero-width columns, else
+    // advance by width + gap), and calling it per index re-resolved every
+    // earlier column's width on every step.
+    int stripX = 0;
     for (int i = 0; i < m_columns.size(); ++i) {
         const int w = columnWidthPx(m_columns.at(i), params);
         if (w <= 0) {
             continue;
         }
-        const int x = columnStripX(i, params) - viewX;
+        const int x = stripX - viewX;
         if (x < workW && x + w > 0) {
             visible.append(i);
         }
+        stripX += w + params.gap;
     }
     return visible;
 }

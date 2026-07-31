@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -18,8 +17,6 @@ import org.kde.kirigami as Kirigami
  * context action), not a per-monitor chip.
  */
 SettingsFlickable {
-    id: root
-
     contentHeight: content.implicitHeight
     clip: true
 
@@ -74,7 +71,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Scroll columns with the mouse wheel")
                     searchAnchor: "wheelFocusEnabled"
-                    description: i18n("Hold Meta or Meta+Alt and scroll to move column focus along the strip. Off, the compositor keeps those wheel shortcuts.")
+                    description: i18n("Hold Meta or Meta+Alt and scroll to move column focus along the strip. When this is off, the compositor keeps those wheel shortcuts.")
 
                     SettingsSwitch {
                         checked: appSettings.scrollingWheelFocusEnabled
@@ -85,11 +82,16 @@ SettingsFlickable {
                     }
                 }
 
+                // Dependent row: it hugs the row that gates it (no separator
+                // between them, the page's convention) and stays visible while
+                // disabled rather than taking SettingsRow's default collapse,
+                // because it carries a search anchor a deep link must reveal.
                 SettingsRow {
                     title: i18n("Invert wheel direction")
                     searchAnchor: "wheelFocusInverted"
                     description: i18n("Scrolling down focuses the previous column instead of the next one")
                     enabled: appSettings.scrollingWheelFocusEnabled
+                    visible: true
 
                     SettingsSwitch {
                         checked: appSettings.scrollingWheelFocusInverted

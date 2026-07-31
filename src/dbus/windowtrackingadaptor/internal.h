@@ -181,25 +181,38 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // this path. Callers that DO know more pin what they know on top of the
     // query this builds. Stamping ScreenId: placementZonesByRule,
     // applyOpenDesktopRouting, applyOpenScreenRouting, applyOpenRoutingForTiling.
-    // Stamping ScreenId AND the derived Mode: shouldFloatByRule and
-    // scrollOpenRuleParams, both of which resolve UNCACHED for that reason
-    // (resolveCached is keyed on windowId and rule revision alone, so a hit
-    // discards the freshly stamped query). Each is documented at its own site.
+    // Stamping ScreenId AND the derived Mode: shouldFloatByRule,
+    // scrollOpenRuleParams and shouldRestoreSizeOnUnsnap, all three of which
+    // resolve UNCACHED for that reason (resolveCached is keyed on windowId and
+    // rule revision alone, so a hit discards the freshly stamped query). Each
+    // is documented at its own site.
     //
     // KNOWN GAP, stated so it is not mistaken for a deliberate design: no
     // resolveCached-path resolver stamps Mode. There are SIX resolveCached
     // callers in rules.cpp — four stamp ScreenId (placementZonesByRule,
     // applyOpenScreenRouting, applyOpenDesktopRouting,
     // applyOpenRoutingForTiling) and two stamp nothing at all
-    // (shouldRestoreFloatedPosition, shouldRestoreToZoneOnLogin) — so a
+    // (shouldRestoreFloatedPosition, shouldRestoreToZoneOnLogin), relying on
+    // the ordering invariant that a stamper seeds the memo first. So a
     // user-authored rule pairing `Mode == "scrolling"` (or tiling/snapping)
-    // with SnapToZone, RouteToScreen or RouteToDesktop is silently INERT on
-    // the open path, even though the rules editor offers exactly that
-    // pairing. Only the two UNCACHED resolvers carry a Mode:
-    // shouldFloatByRule DERIVES it from the window's own context, and
-    // scrollOpenRuleParams HARDCODES "scrolling" because only the scroll
-    // engine calls it. Closing the gap for the cached four means giving up
-    // their cache. Until then the failure is silent: the rule never fires.
+    // with SnapToZone, RouteToScreen or RouteToDesktop cannot resolve
+    // correctly on the open path, even though the rules editor offers exactly
+    // that pairing. Closing the gap for the cached six means giving up their
+    // shared memo.
+    //
+    // BOTH POLARITIES FAIL, and they fail differently. A POSITIVE leaf on an
+    // unstamped field (`Mode Equals scrolling`) reads the engaged empty string
+    // and evaluates FALSE, so the rule is silently inert — it never fires. A
+    // NEGATED leaf (`None{Mode Equals scrolling}`, `None{ScreenId Equals X}`)
+    // matches precisely BECAUSE its inner leaf failed, so it INVERTS and the
+    // rule fires for EVERY window — the far worse half, and one the editor
+    // lets users author as a none-group. Neither is left to the empty-value
+    // coincidence: each resolver in rules.cpp passes a structural admission
+    // test (admitScreenStamped / admitScreenAndModeStamped) that drops any
+    // rule referencing a field that resolver does not stamp, mirroring the
+    // zones-layer predicate at seven sites in
+    // layoutregistry_contextresolve.cpp. The gap above is therefore about
+    // which rules can WIN, not about a negated rule wrongly firing.
     //
     // ActiveLayout is populated only by the windowless context cascade (never
     // by either per-window query), so it is context-scoped in practice —

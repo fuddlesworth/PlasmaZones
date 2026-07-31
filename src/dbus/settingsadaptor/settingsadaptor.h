@@ -367,6 +367,12 @@ private:
     bool m_cachedAvailableShadersValid = false;
     QHash<QString, QVariantMap> m_cachedShaderInfo;
     QHash<QString, QVariantMap> m_cachedShaderDefaults;
+    /// Memoized JSON array of animation-shader search paths. A member, not a
+    /// function-local static: as a static it lived for the whole process, so a
+    /// mid-session XDG_DATA_HOME change was never picked up, it survived
+    /// detach(), and neither refreshShaders() nor invalidateShaderCaches()
+    /// could clear it. Empty means "not yet resolved".
+    QString m_cachedShaderSearchPaths;
 };
 
 } // namespace PlasmaZones

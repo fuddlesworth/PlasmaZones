@@ -23,6 +23,17 @@
 
 namespace PlasmaZones {
 
+void OverlayService::replayScrollTabStrips()
+{
+    // Load-bearing copy: updateScrollTabStrips writes m_lastScrollTabStrips
+    // (insert on a live model, remove on an empty one), so iterating the
+    // member directly would walk a container mutating underneath us.
+    const QHash<QString, QVariantList> cached = m_lastScrollTabStrips;
+    for (auto it = cached.constBegin(); it != cached.constEnd(); ++it) {
+        updateScrollTabStrips(it.key(), it.value());
+    }
+}
+
 void OverlayService::updateScrollTabStrips(const QString& screenId, const QVariantList& strips)
 {
     if (screenId.isEmpty()) {

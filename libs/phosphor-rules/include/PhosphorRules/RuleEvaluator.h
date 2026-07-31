@@ -160,6 +160,20 @@ public:
     /// is bounded — see the class doc for the eviction policy.
     ResolvedActions resolveCached(const QString& windowId, const WindowQuery& query) const;
 
+    /// Cached resolve that narrows the candidate set, combining
+    /// @ref resolveCached's `(windowId, revision)` memo with
+    /// @ref resolveFiltered's structural admission test. For resolvers that
+    /// leave a field unstamped and must therefore exclude rules referencing it
+    /// (see the resolveFiltered doc for the negation-polarity reason) but still
+    /// want the per-window memo.
+    ///
+    /// PRECONDITION: the memo is keyed on `(windowId, revision)` ALONE, so
+    /// @p admit is IGNORED on a cache hit exactly as @p query is. Every caller
+    /// sharing an evaluator must therefore pass an EQUIVALENT @p admit, or the
+    /// first caller to resolve a window decides which rules the rest see.
+    ResolvedActions resolveCachedFiltered(const QString& windowId, const WindowQuery& query,
+                                          const std::function<bool(const Rule&)>& admit) const;
+
     /// Peek the match cache without resolving: returns the cached verdict for
     /// @p windowId iff one exists at the CURRENT rule-set revision, else nullopt.
     /// Lets a hot-path caller (per-frame paint resolvers) skip building the

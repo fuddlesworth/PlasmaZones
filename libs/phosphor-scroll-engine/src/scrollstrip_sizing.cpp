@@ -255,7 +255,7 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // cannot replace this: an Auto height only gets a pixel value from the
     // full column distribution (floors, budget rebalance), so the relayout
     // IS the resolution. Shortcut-rate path, not per-frame.
-    int currentPx = workH;
+    int currentPx = -1;
     const ResolvedStrip resolved = relayout(params);
     for (const ResolvedColumn& rc : resolved.columns) {
         if (rc.columnIndex != m_activeColumnIdx) {
@@ -266,6 +266,14 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
                 currentPx = rt.rect.height();
             }
         }
+    }
+    if (currentPx < 0) {
+        // The active tile resolved to nothing — a minimized tile is dropped
+        // from the relayout entirely. Seeding the full work area instead
+        // would compute the delta from a height the window never had. Not
+        // reachable while the daemon models minimize as a float; the test
+        // seam can drive it.
+        return false;
     }
     // Clamp to the tile's own floor as well (niri clamps against the client
     // min size in the verb): without it a shrink below minHeight would

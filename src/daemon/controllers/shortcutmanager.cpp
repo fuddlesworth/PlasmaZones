@@ -369,15 +369,12 @@ const StaticEntry kStaticEntries[] = {
     {kIdScrollIncreaseColumnWidth, &ConfigDefaults::scrollingIncreaseColumnWidthShortcut,
      &Settings::scrollingIncreaseColumnWidthShortcut, QT_TRANSLATE_NOOP("plasmazones", "Increase Column Width"),
      [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollAdjustColumnWidthRequested(sm->settings() ? sm->settings()->scrollingColumnWidthStepPercent()
-                                                                    : ConfigDefaults::scrollingColumnWidthStepPercent());
+         Q_EMIT sm->scrollAdjustColumnWidthRequested(sm->scrollColumnWidthStepPercent());
      }},
     {kIdScrollDecreaseColumnWidth, &ConfigDefaults::scrollingDecreaseColumnWidthShortcut,
      &Settings::scrollingDecreaseColumnWidthShortcut, QT_TRANSLATE_NOOP("plasmazones", "Decrease Column Width"),
      [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollAdjustColumnWidthRequested(sm->settings()
-                                                         ? -sm->settings()->scrollingColumnWidthStepPercent()
-                                                         : -ConfigDefaults::scrollingColumnWidthStepPercent());
+         Q_EMIT sm->scrollAdjustColumnWidthRequested(-sm->scrollColumnWidthStepPercent());
      }},
     {kIdScrollMaximizeColumn, &ConfigDefaults::scrollingMaximizeColumnShortcut,
      &Settings::scrollingMaximizeColumnShortcut, QT_TRANSLATE_NOOP("plasmazones", "Maximize Column"),
@@ -403,16 +400,12 @@ const StaticEntry kStaticEntries[] = {
     {kIdScrollIncreaseWindowHeight, &ConfigDefaults::scrollingIncreaseWindowHeightShortcut,
      &Settings::scrollingIncreaseWindowHeightShortcut, QT_TRANSLATE_NOOP("plasmazones", "Increase Window Height"),
      [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollAdjustWindowHeightRequested(sm->settings()
-                                                          ? sm->settings()->scrollingWindowHeightStepPercent()
-                                                          : ConfigDefaults::scrollingWindowHeightStepPercent());
+         Q_EMIT sm->scrollAdjustWindowHeightRequested(sm->scrollWindowHeightStepPercent());
      }},
     {kIdScrollDecreaseWindowHeight, &ConfigDefaults::scrollingDecreaseWindowHeightShortcut,
      &Settings::scrollingDecreaseWindowHeightShortcut, QT_TRANSLATE_NOOP("plasmazones", "Decrease Window Height"),
      [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollAdjustWindowHeightRequested(sm->settings()
-                                                          ? -sm->settings()->scrollingWindowHeightStepPercent()
-                                                          : -ConfigDefaults::scrollingWindowHeightStepPercent());
+         Q_EMIT sm->scrollAdjustWindowHeightRequested(-sm->scrollWindowHeightStepPercent());
      }},
     {kIdScrollResetWindowHeights, &ConfigDefaults::scrollingResetWindowHeightsShortcut,
      &Settings::scrollingResetWindowHeightsShortcut, QT_TRANSLATE_NOOP("plasmazones", "Reset Window Heights"),
@@ -429,14 +422,14 @@ const StaticEntry kStaticEntries[] = {
 };
 
 // Indexed slot defaults — array of static accessors so the slot loop can
-// resolve defaults by index without 9 constexpr-if branches.
+// resolve defaults by index without one constexpr-if branch per slot.
 using DefaultGetter = QString (*)();
-constexpr DefaultGetter kQuickLayoutDefaults[9] = {
+constexpr DefaultGetter kQuickLayoutDefaults[kIndexedSlotCount] = {
     &ConfigDefaults::quickLayout1Shortcut, &ConfigDefaults::quickLayout2Shortcut, &ConfigDefaults::quickLayout3Shortcut,
     &ConfigDefaults::quickLayout4Shortcut, &ConfigDefaults::quickLayout5Shortcut, &ConfigDefaults::quickLayout6Shortcut,
     &ConfigDefaults::quickLayout7Shortcut, &ConfigDefaults::quickLayout8Shortcut, &ConfigDefaults::quickLayout9Shortcut,
 };
-constexpr DefaultGetter kSnapToZoneDefaults[9] = {
+constexpr DefaultGetter kSnapToZoneDefaults[kIndexedSlotCount] = {
     &ConfigDefaults::snapToZone1Shortcut, &ConfigDefaults::snapToZone2Shortcut, &ConfigDefaults::snapToZone3Shortcut,
     &ConfigDefaults::snapToZone4Shortcut, &ConfigDefaults::snapToZone5Shortcut, &ConfigDefaults::snapToZone6Shortcut,
     &ConfigDefaults::snapToZone7Shortcut, &ConfigDefaults::snapToZone8Shortcut, &ConfigDefaults::snapToZone9Shortcut,
@@ -492,6 +485,22 @@ ShortcutManager::ShortcutManager(Settings* settings, QObject* parent)
 }
 
 ShortcutManager::~ShortcutManager() = default;
+
+// The null branch is defence, not a live path: registerShortcuts() returns
+// early without m_settings and nothing nulls it afterwards, so a fire lambda
+// can only run with it set. Kept because these run from a callback the
+// backend owns, and a default step beats a crash if that ever stops holding.
+int ShortcutManager::scrollColumnWidthStepPercent() const
+{
+    return m_settings ? m_settings->scrollingColumnWidthStepPercent()
+                      : ConfigDefaults::scrollingColumnWidthStepPercent();
+}
+
+int ShortcutManager::scrollWindowHeightStepPercent() const
+{
+    return m_settings ? m_settings->scrollingWindowHeightStepPercent()
+                      : ConfigDefaults::scrollingWindowHeightStepPercent();
+}
 
 void ShortcutManager::registerShortcuts()
 {
@@ -667,6 +676,12 @@ void ShortcutManager::unregisterShortcuts()
     // drops its in-memory action table when the QActions die and the backend
     // destructor purges only transient ids, while PortalBackend releases
     // everything by closing the session.
+    //
+    // Deliberately NO cheatsheetModelChanged emit, unlike every other
+    // catalog-changing path. This runs on the daemon stop() path, where the
+    // only consumer (refreshCheatsheetIfVisible) is being torn down alongside
+    // the overlay service; announcing an empty catalog into a half-destroyed
+    // overlay buys nothing, since a live sheet goes away with it.
     m_entries.clear();
 
     // Tear down the backend so any Portal session is closed and grabs are
@@ -700,11 +715,7 @@ void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequenc
     // cancel-overlay grab (just slightly later). De-dup: any earlier
     // (un)register for the same id is superseded — last write wins.
     if (m_registrationInProgress) {
-        m_pendingAdhocOps.erase(std::remove_if(m_pendingAdhocOps.begin(), m_pendingAdhocOps.end(),
-                                               [&id](const PendingAdhocOp& op) {
-                                                   return op.id == id;
-                                               }),
-                                m_pendingAdhocOps.end());
+        erasePendingAdhocOps(id);
         m_pendingAdhocOps.push_back({PendingAdhocOp::Register, id, sequence, description, std::move(callback)});
         return;
     }
@@ -735,11 +746,7 @@ void ShortcutManager::unregisterAdhocShortcut(const QString& id)
             std::any_of(m_pendingAdhocOps.cbegin(), m_pendingAdhocOps.cend(), [&id](const PendingAdhocOp& op) {
                 return op.id == id && op.kind == PendingAdhocOp::Register;
             });
-        m_pendingAdhocOps.erase(std::remove_if(m_pendingAdhocOps.begin(), m_pendingAdhocOps.end(),
-                                               [&id](const PendingAdhocOp& op) {
-                                                   return op.id == id;
-                                               }),
-                                m_pendingAdhocOps.end());
+        erasePendingAdhocOps(id);
         // Only queue an Unregister if the id hasn't already been seen as a
         // pending Register — cancelling a never-sent register is a no-op and
         // queuing Unregister for it would send a spurious release to the
@@ -751,6 +758,15 @@ void ShortcutManager::unregisterAdhocShortcut(const QString& id)
     }
     m_registry->unbind(id);
     m_registry->flush();
+}
+
+void ShortcutManager::erasePendingAdhocOps(const QString& id)
+{
+    m_pendingAdhocOps.erase(std::remove_if(m_pendingAdhocOps.begin(), m_pendingAdhocOps.end(),
+                                           [&id](const PendingAdhocOp& op) {
+                                               return op.id == id;
+                                           }),
+                            m_pendingAdhocOps.end());
 }
 
 void ShortcutManager::drainPendingAdhocOps()
@@ -795,7 +811,7 @@ bool ShortcutManager::rebindAll()
 void ShortcutManager::buildEntries()
 {
     m_entries.clear();
-    m_entries.reserve(std::size(kStaticEntries) + 9 + 9);
+    m_entries.reserve(std::size(kStaticEntries) + 2 * kIndexedSlotCount);
 
     Settings* s = m_settings;
 
@@ -818,9 +834,9 @@ void ShortcutManager::buildEntries()
         m_entries.push_back(std::move(e));
     }
 
-    // Quick layout slots 1–9. Default getters indexed via kQuickLayoutDefaults;
+    // Quick layout slots. Default getters indexed via kQuickLayoutDefaults;
     // current getter is Settings::quickLayoutShortcut(int) keyed by slot index.
-    for (int i = 0; i < 9; ++i) {
+    for (int i = 0; i < kIndexedSlotCount; ++i) {
         Entry e;
         e.id = quickLayoutId(i);
         e.defaultSeq = parseSequence(kQuickLayoutDefaults[i](), e.id);
@@ -836,9 +852,9 @@ void ShortcutManager::buildEntries()
         m_entries.push_back(std::move(e));
     }
 
-    // Snap-to-zone slots 1–9. Mirror of quick-layout slots — separate signal,
+    // Snap-to-zone slots. Mirror of quick-layout slots — separate signal,
     // separate Settings getter, but identical structure.
-    for (int i = 0; i < 9; ++i) {
+    for (int i = 0; i < kIndexedSlotCount; ++i) {
         Entry e;
         e.id = snapToZoneId(i);
         e.defaultSeq = parseSequence(kSnapToZoneDefaults[i](), e.id);

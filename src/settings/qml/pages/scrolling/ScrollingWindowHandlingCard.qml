@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// QtQuick is load-bearing here: the Accessible attached type on the combo
+// boxes below comes from it, not from Layouts or Kirigami.
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -17,12 +18,14 @@ import org.kde.kirigami as Kirigami
  * Tiling.Gaps/SmartGaps value, so the tiling toggle governs both engines.
  */
 SettingsCard {
+    id: root
+
     headerText: i18n("Window Handling")
     searchAnchor: "scrollingWindowHandling"
     collapsible: true
 
     // Adjust-step bounds, read once from ConfigDefaults via the controller.
-    readonly property var _stepConsts: settingsController.scrollingWidthConstants()
+    readonly property var _stepConsts: settingsController.scrollingConstants()
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
@@ -79,7 +82,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Restore floated windows to their previous position")
             searchAnchor: "scrollingRestoreFloatedOnLogin"
-            description: i18n("When a floated window reopens, it returns to the position it was on instead of wherever the compositor would place it. A rule can override this either way, opting individual windows in or out.")
+            description: i18n("When a floated window reopens, it returns to the position and size it had before, rather than being placed by the compositor. A rule can override this either way, opting individual windows in or out.")
 
             SettingsSwitch {
                 checked: appSettings.scrollingRestoreFloatedWindowsOnLogin
@@ -112,12 +115,12 @@ SettingsCard {
         SettingsRow {
             title: i18n("Width adjustment step")
             searchAnchor: "scrollingColumnWidthStep"
-            description: i18n("How much of the screen width one press of the increase or decrease column width shortcut moves")
+            description: i18n("How far the increase and decrease column width shortcuts move a column per press, as a share of the screen width")
 
             SettingsSlider {
                 accessibleName: i18n("Column width adjustment step")
-                from: _stepConsts.stepPercentMin
-                to: _stepConsts.stepPercentMax
+                from: root._stepConsts.stepPercentMin
+                to: root._stepConsts.stepPercentMax
                 stepSize: 1
                 value: appSettings.scrollingColumnWidthStepPercent
                 formatValue: function (v) {
@@ -134,12 +137,12 @@ SettingsCard {
         SettingsRow {
             title: i18n("Height adjustment step")
             searchAnchor: "scrollingWindowHeightStep"
-            description: i18n("How much of the screen height one press of the increase or decrease window height shortcut moves")
+            description: i18n("How far the increase and decrease window height shortcuts resize a window per press, as a share of the screen height")
 
             SettingsSlider {
                 accessibleName: i18n("Window height adjustment step")
-                from: _stepConsts.stepPercentMin
-                to: _stepConsts.stepPercentMax
+                from: root._stepConsts.stepPercentMin
+                to: root._stepConsts.stepPercentMax
                 stepSize: 1
                 value: appSettings.scrollingWindowHeightStepPercent
                 formatValue: function (v) {

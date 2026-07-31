@@ -572,7 +572,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("master"), PhosphorI18n::tr("center"), PhosphorI18n::tr("count"),
                 PhosphorI18n::tr("number")});
 
-    // Tiling › Scrolling
+    // Placement › Scrolling. Anchors follow each page's row order. The
+    // kind-gated size rows are registered unconditionally: those rows stay
+    // visible while disabled (see ScrollingColumnsPage), so a deep link lands
+    // on something the user can see and read.
     addSection(search, QStringLiteral("scrolling-view"), QStringLiteral("focusAndView"),
                PhosphorI18n::tr("Focus and view"));
     addSetting(search, QStringLiteral("scrolling-view"), QStringLiteral("centerFocusedColumn"),
@@ -588,9 +591,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-view"), QStringLiteral("wheelFocusInverted"),
                PhosphorI18n::tr("Invert wheel direction"),
                {PhosphorI18n::tr("invert"), PhosphorI18n::tr("wheel"), PhosphorI18n::tr("direction")});
-    addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("tabStripEnabled"),
-               PhosphorI18n::tr("Tab indicator"),
-               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("indicator")});
     addSection(search, QStringLiteral("scrolling-columns"), QStringLiteral("newColumns"),
                PhosphorI18n::tr("New columns"));
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultColumnWidthKind"),
@@ -616,6 +616,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultWindowHeightPresetIndex"),
                PhosphorI18n::tr("Preset height"),
                {PhosphorI18n::tr("preset"), PhosphorI18n::tr("height"), PhosphorI18n::tr("index")});
+    addSection(search, QStringLiteral("scrolling-columns"), QStringLiteral("tabbedColumns"),
+               PhosphorI18n::tr("Tabbed columns"));
+    addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("tabStripEnabled"),
+               PhosphorI18n::tr("Tab indicator"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("indicator")});
     addSection(search, QStringLiteral("scrolling-columns"), QStringLiteral("scrollingPresets"),
                PhosphorI18n::tr("Width and height presets"));
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("presetColumnWidths"),
@@ -656,44 +661,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingFocusFollowsMouse"),
                PhosphorI18n::tr("Focus follows mouse"),
                {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("hover")});
-
-    // Simple-mode Scrolling — the condensed page's own rows plus the shared
-    // Window Handling and Focus cards it re-hosts.
-    addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingSimple"),
-               PhosphorI18n::tr("Scrolling"));
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleCenterFocusedColumn"),
-               PhosphorI18n::tr("Center the focused column"),
-               {PhosphorI18n::tr("center"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("column")});
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleDefaultColumnWidthKind"),
-               PhosphorI18n::tr("Default width"),
-               {PhosphorI18n::tr("width"), PhosphorI18n::tr("column"), PhosphorI18n::tr("proportion")});
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleDefaultColumnWidthProportion"),
-               PhosphorI18n::tr("Proportion of the screen"),
-               {PhosphorI18n::tr("width"), PhosphorI18n::tr("proportion"), PhosphorI18n::tr("percent")});
-    addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingWindowHandling"),
-               PhosphorI18n::tr("Window Handling"));
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingNewWindowPlacement"),
-               PhosphorI18n::tr("New window placement"),
-               {PhosphorI18n::tr("insert"), PhosphorI18n::tr("position"), PhosphorI18n::tr("column")});
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRespectMinimumSize"),
-               PhosphorI18n::tr("Respect minimum size"), {PhosphorI18n::tr("minimum"), PhosphorI18n::tr("size")});
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRestoreStripsOnLogin"),
-               PhosphorI18n::tr("Restore columns on login"),
-               {PhosphorI18n::tr("restore"), PhosphorI18n::tr("login"), PhosphorI18n::tr("column")});
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRestoreFloatedOnLogin"),
-               PhosphorI18n::tr("Restore floated windows to their previous position"),
-               {PhosphorI18n::tr("restore"), PhosphorI18n::tr("float"), PhosphorI18n::tr("position")});
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingStickyWindows"),
-               PhosphorI18n::tr("Sticky windows"), {PhosphorI18n::tr("sticky"), PhosphorI18n::tr("desktops")});
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingColumnWidthStep"),
-               PhosphorI18n::tr("Width adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("width")});
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingWindowHeightStep"),
-               PhosphorI18n::tr("Height adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("height")});
-    addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocus"), PhosphorI18n::tr("Focus"));
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusNewWindows"),
-               PhosphorI18n::tr("Focus new windows"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("open")});
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusFollowsMouse"),
-               PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse")});
 
     // Tiling › Window (behaviour rows)
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("alwaysReinsertOnDrag"),
@@ -752,6 +719,50 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("split"), PhosphorI18n::tr("proportion"), PhosphorI18n::tr("center")});
     addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("simpleMaxWindows"),
                PhosphorI18n::tr("Max windows"), {PhosphorI18n::tr("limit"), PhosphorI18n::tr("count")});
+
+    // Scrolling's own condensed rows plus the shared Window Handling and
+    // Focus cards it re-hosts, under the same rationale as its two siblings
+    // above.
+    addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingSimple"),
+               PhosphorI18n::tr("Scrolling"));
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleCenterFocusedColumn"),
+               PhosphorI18n::tr("Center the focused column"),
+               {PhosphorI18n::tr("center"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("column")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleDefaultColumnWidthKind"),
+               PhosphorI18n::tr("Default width"),
+               {PhosphorI18n::tr("width"), PhosphorI18n::tr("column"), PhosphorI18n::tr("proportion")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleDefaultColumnWidthProportion"),
+               PhosphorI18n::tr("Proportion of the screen"),
+               {PhosphorI18n::tr("width"), PhosphorI18n::tr("proportion"), PhosphorI18n::tr("percent")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleDefaultColumnWidthFixed"),
+               PhosphorI18n::tr("Fixed width"), {PhosphorI18n::tr("width"), PhosphorI18n::tr("pixels")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleDefaultColumnWidthPresetIndex"),
+               PhosphorI18n::tr("Preset width"),
+               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("width"), PhosphorI18n::tr("index")});
+    addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingWindowHandling"),
+               PhosphorI18n::tr("Window Handling"));
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingNewWindowPlacement"),
+               PhosphorI18n::tr("New window placement"),
+               {PhosphorI18n::tr("insert"), PhosphorI18n::tr("position"), PhosphorI18n::tr("column")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRespectMinimumSize"),
+               PhosphorI18n::tr("Respect minimum size"), {PhosphorI18n::tr("minimum"), PhosphorI18n::tr("size")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRestoreStripsOnLogin"),
+               PhosphorI18n::tr("Restore columns on login"),
+               {PhosphorI18n::tr("restore"), PhosphorI18n::tr("login"), PhosphorI18n::tr("column")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRestoreFloatedOnLogin"),
+               PhosphorI18n::tr("Restore floated windows to their previous position"),
+               {PhosphorI18n::tr("restore"), PhosphorI18n::tr("float"), PhosphorI18n::tr("position")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingStickyWindows"),
+               PhosphorI18n::tr("Sticky windows"), {PhosphorI18n::tr("sticky"), PhosphorI18n::tr("desktops")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingColumnWidthStep"),
+               PhosphorI18n::tr("Width adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("width")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingWindowHeightStep"),
+               PhosphorI18n::tr("Height adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("height")});
+    addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocus"), PhosphorI18n::tr("Focus"));
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusNewWindows"),
+               PhosphorI18n::tr("Focus new windows"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("open")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusFollowsMouse"),
+               PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse")});
 
     // The simple animations page hosts the SHARED GlobalTimingDefaultsCard,
     // which registers the same "globalAnimationDefaults" anchor the advanced

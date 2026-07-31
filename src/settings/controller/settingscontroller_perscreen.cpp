@@ -1,10 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Per-screen override accessors for SettingsController. The actual storage
-// lives in Settings; this file's Q_INVOKABLE wrappers thin-forward to it.
+// Per-screen override accessors for SettingsController: the autotile,
+// scrolling and zone-selector maps plus the gap-override pair. The actual
+// storage lives in Settings; this file's Q_INVOKABLE wrappers thin-forward to
+// it. There is no snapping wrapper here — that one is a Q_INVOKABLE on
+// Settings itself, which QML reaches directly.
 // Dirty tracking and the perScreenOverridesChanged() refresh are NOT done
-// here: Settings emits perScreen{Autotile,Snapping,ZoneSelector}SettingsChanged
+// here: Settings emits perScreen{Autotile,Scrolling,ZoneSelector}SettingsChanged
 // only when an override actually changes, and the controller constructor
 // wires those signals to onSettingsPropertyChanged() (dirty) and
 // perScreenOverridesChanged() (UI refresh). Emitting from these wrappers

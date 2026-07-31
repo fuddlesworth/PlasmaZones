@@ -313,6 +313,12 @@ public:
     /// therefore snapshot this before and compare after — otherwise a screen
     /// that enters the union AFTER being marked scrolling leaves every
     /// `Mode == "scrolling"` verdict memoised as non-matching for the session.
+    ///
+    /// ONE exemption, by name: clearTiledTracking. It is a teardown-only writer
+    /// (daemon loss and effect destruction), and neither caller has a session
+    /// left to memoise a verdict for — the daemon-loss caller invalidates the
+    /// caches itself moments later, and the destructor must not run a rule
+    /// sweep against half-destroyed members. Any NEW writer takes the pair.
     QSet<QString> scrollingScreenIntersection() const
     {
         return m_scrollingScreens & m_managedScreens;
