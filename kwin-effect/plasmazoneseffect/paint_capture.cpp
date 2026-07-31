@@ -247,7 +247,7 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // false) and its own quad handling wins.
     if (!st && !quads.isEmpty() && !m_windowDecorations.isEmpty()) {
         const auto bit = m_windowDecorations.find(getWindowId(window));
-        if (bit != m_windowDecorations.end() && bit->shaderApplied && bit->outerPadding > 0) {
+        if (bit != m_windowDecorations.end() && bit->shaderApplied) {
             QRectF textureGeo = window->expandedGeometry();
             if (textureGeo.isEmpty()) {
                 textureGeo = window->frameGeometry();
@@ -264,10 +264,24 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
             // the texture does not match. The live derivation stays as the fallback for
             // the fold's failure paths, which can erase the multipass entry.
             QRectF padded = textureGeo.adjusted(-pad, -pad, pad, pad);
+            bool haveCanvas = false;
             if (const auto psIt = m_surfaceMultipass.find(getWindowId(window)); psIt != m_surfaceMultipass.end()) {
                 if (psIt->second.canvasGeo.isValid()) {
                     padded = psIt->second.canvasGeo;
+                    haveCanvas = true;
                 }
+            }
+            // UNPADDED windows rewrite too, not just padded ones: surfaceCanvasFor
+            // device-aligns the canvas, so even at pad == 0 the composite covers the
+            // ALIGNED rect, which can exceed the expanded rect by a sub-pixel band on
+            // each side at fractional scale. Presenting that texture on KWin's natural
+            // expanded-rect quad (uv 0..1) would squeeze the canvas into the smaller
+            // rect — a whole-window sub-pixel resample, the exact blur the alignment
+            // exists to remove (discussion #868). Only the no-canvas pad == 0 fallback
+            // keeps the natural quad: there the composite was never built, so there is
+            // nothing of ours to map.
+            if (pad <= 0 && !haveCanvas) {
+                return;
             }
 
             // quad-space <-> screen-space is a pure translation at 1:1

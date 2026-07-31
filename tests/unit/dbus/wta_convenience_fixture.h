@@ -37,6 +37,8 @@
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorRules/RuleAction.h>

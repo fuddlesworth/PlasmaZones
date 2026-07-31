@@ -48,13 +48,20 @@ private Q_SLOTS:
 
     void testBypassReasonWireStringRoundTrip()
     {
-        QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::None)), DragBypassReason::None);
-        QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::EngineOwnedScreen)),
-                 DragBypassReason::EngineOwnedScreen);
-        QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::SnappingDisabled)),
-                 DragBypassReason::SnappingDisabled);
-        QCOMPARE(bypassReasonFromWireString(toWireString(DragBypassReason::ContextDisabled)),
-                 DragBypassReason::ContextDisabled);
+        const QVector<DragBypassReason> all{
+            DragBypassReason::None,
+            DragBypassReason::EngineOwnedScreen,
+            DragBypassReason::SnappingDisabled,
+            DragBypassReason::ContextDisabled,
+            DragBypassReason::LayoutSuppressed,
+        };
+        // Hand-maintained list pinned against the declared value count, so a
+        // new enumerator fails here rather than shipping without coverage in
+        // the library's own suite.
+        QCOMPARE(all.size(), DragBypassReasonCount);
+        for (auto r : all) {
+            QCOMPARE(bypassReasonFromWireString(toWireString(r)), r);
+        }
     }
 
     void testBypassReasonUnknownFallback()

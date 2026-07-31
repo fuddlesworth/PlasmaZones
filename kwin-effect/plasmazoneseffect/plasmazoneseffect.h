@@ -1183,9 +1183,14 @@ private:
     /// per-pack fold) owns the KWin::ShaderBinder, has already resolved @p pack
     /// and the border entry, and has ruled out a transition owning the slot, so
     /// this neither binds/unbinds nor re-validates the window.
-    /// @p texturePaddingLogical: outer margin (logical px) baked into the
-    /// TARGET texture's canvas — non-zero only on the padded composite path,
-    /// where the geometry uniforms must describe the inflated space.
+    /// @p canvasRect: the TARGET texture's canvas in logical coordinates —
+    /// the device-aligned rect surfaceCanvasFor produced (the fold's
+    /// logicalGeometry / SurfaceMultipassState::canvasGeo), which already
+    /// carries any outer padding. Threaded in rather than re-derived from
+    /// expandedGeometry + padding: the alignment shifts the canvas off the
+    /// raw expanded rect by a sub-pixel band, and the geometry uniforms must
+    /// describe the texture that is actually being drawn into, to the texel.
+    /// Falls back to the window's expanded/frame rect when invalid.
     /// @p timeSec: the clock the FOLD decided on, in seconds. Threaded in rather than
     /// sampled here because a chain that Decorations.Performance has paused is handed a
     /// frozen clock — see SurfaceMultipassState::pausedAtMs / timeOffsetMs. Sampling live
@@ -1197,7 +1202,7 @@ private:
     /// exact value and the shader must be given the same one.
     void pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
                             const CompiledSurfacePack& pack, qreal scale, float timeSec, const QPointF& foldCursor,
-                            qreal texturePaddingLogical = 0.0, const QString& windowId = {});
+                            const QRectF& canvasRect = {}, const QString& windowId = {});
 
     /// Advance the per-window smoothed focus value (m_focusFade) toward the
     /// hard 0/1 target and return it, so focus changes cross-fade instead of
@@ -1914,6 +1919,13 @@ private:
     // the chain, so paint/apply hooks behave plainly during the raw capture
     // pass (no morph quad deform / re-capture).
     bool m_capturingSnapshot = false;
+
+    /// True while prePaintScreen has switched vertex snapping to None for an
+    /// in-flight animation. Mirrors the mode we last set so the per-frame
+    /// toggle only calls setVertexSnappingMode on the edges. Starts false:
+    /// KWin's default is Round and the ctor leaves it there (see
+    /// initRenderingAndRegistries).
+    bool m_vertexSnappingDisabled = false;
 
     /// True while DesktopTransitionManager::compositeWindowsInto drives
     /// paintWindow DIRECTLY (outside KWin's chain walk). That is the shared tail

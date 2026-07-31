@@ -73,10 +73,43 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
     return occupiedZoneIds;
 }
 
+namespace {
+// Suppress-aware predicate shared by the zone resolvers below (#724 family).
+// Takes the desktop EXPLICITLY so every caller judges suppression on the same
+// desktop it filters occupancy by — the registry's own
+// currentVirtualDesktopForScreen is a second authority that can lag the
+// VirtualDesktopManager the callers use.
+bool activeLayoutSuppressedFor(const PhosphorZones::LayoutRegistry* registry, const QString& screenId,
+                               int virtualDesktop)
+{
+    if (!registry || screenId.isEmpty()) {
+        return false;
+    }
+    // Desktop 0 means "unknown / no desktop filter" to this function's
+    // callers, but isContextActiveLayoutSuppressed would read it as literal
+    // desktop 0 — matching no per-desktop assignment and reporting suppressed
+    // for a context that is actually covered. Resolve the real desktop
+    // instead; only a registry that cannot answer leaves it at 0.
+    const int desktop = virtualDesktop > 0 ? virtualDesktop : registry->currentVirtualDesktopForScreen(screenId);
+    return registry->isContextActiveLayoutSuppressed(screenId, desktop, registry->currentActivity());
+}
+} // namespace
+
 QString WindowTrackingService::findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId,
                                                      int desktopFilter) const
 {
     if (!layout) {
+        return QString();
+    }
+    // Suppress-aware guard lives HERE, in the shared workhorse, because the
+    // auto-snap chain (SnapEngine::snapToEmptyZone) and the unfloat fallback
+    // tier resolve the layout themselves and call straight into this function
+    // — gating only the findEmptyZone/getEmptyZones wrappers would miss them.
+    // resolveLayoutForScreen falls back to the GLOBAL default layout for an
+    // unassigned screen, so without this a screen whose default assignment is
+    // suppressed still yields zones and windows get placed into zones the
+    // screen does not have (#724 family).
+    if (activeLayoutSuppressedFor(m_layoutManager, screenId, desktopFilter)) {
         return QString();
     }
 
@@ -103,6 +136,13 @@ QString WindowTrackingService::findEmptyZone(const QString& screenId) const
 
 PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) const
 {
+    // Same guard as findEmptyZoneInLayout (this function builds its own list
+    // rather than routing through it), on the same desktop authority the
+    // occupancy filter below uses.
+    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
+    if (activeLayoutSuppressedFor(m_layoutManager, screenId, desktopFilter)) {
+        return {};
+    }
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
         return {};
@@ -156,7 +196,6 @@ PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QStri
     // same layout (same zone IDs). Without the desktop filter, windows parked on
     // other virtual desktops keep their zone occupied on the current desktop,
     // blocking snap assist (discussion #323).
-    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
     QSet<QUuid> occupied = buildOccupiedZoneSet(screenId, desktopFilter);
     int zp = m_geometryResolver ? m_geometryResolver->resolveInnerGap(layout, screenId)
                                 : PhosphorEngine::GeometryDefaults::InnerGap;

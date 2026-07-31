@@ -696,7 +696,21 @@ public:
 
     void uncommitSnap(const QString& windowId);
 
+    /// Unconfined (user-toggle) form. Also the ABI-stable signature the
+    /// installed library exported before the confinement parameter existed.
     PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
+    /// @p confineToFallbackScreen refuses (returns not-found) when the
+    /// RECORDED (raw, unresolved) home screen names a different physical
+    /// monitor than @p fallbackScreen — the comparison runs BEFORE
+    /// resolveUnfloatScreen, so a home screen that no longer resolves
+    /// (monitor unplugged) also refuses rather than degrading into snapping
+    /// a foreign layout's zone onto the live screen. True for suspension
+    /// (minimize) unfloats — the minimize round trip must never move the
+    /// window across monitors, and a cross-monitor home can only be stale
+    /// state (Discussion #724). False for user float toggles, whose
+    /// cross-monitor unfloat-to-home restore is deliberate.
+    PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen,
+                                                         bool confineToFallbackScreen) const;
 
     /// Fallback unfloat target for a window with NO pre-float zone (a never-snapped
     /// window that defaulted to floating). Returns a found result ONLY when the
@@ -995,10 +1009,21 @@ private:
     // removed — all snap commits now route through commitSnapImpl.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// @p allowRuleTarget gates the SnapToZone-rule tier: true for user float
-    /// toggles (rule stays authoritative), false for suspension (minimize)
-    /// unfloats, which must restore the pre-float zone.
-    bool unfloatToZone(const QString& windowId, const QString& screenId, bool allowRuleTarget = true);
+    /// What is asking for the unfloat — one fact driving all three tier
+    /// decisions, so callers cannot set them inconsistently (#724).
+    enum class UnfloatCause {
+        /// Explicit user action (Meta+F, D-Bus toggle): SnapToZone rule tier
+        /// allowed, cross-monitor restore to the remembered home allowed, and
+        /// the opt-in fallback-zone tier applies. Always used for a user
+        /// toggle even when the window is still classified as a suspension
+        /// float, so a refused unminimize can never dead-end the window.
+        UserToggle,
+        /// The minimize/unminimize round trip: no rule tier, confined to the
+        /// caller's physical monitor, and no fallback-zone tier — it restores
+        /// prior state or nothing.
+        Suspension,
+    };
+    bool unfloatToZone(const QString& windowId, const QString& screenId, UnfloatCause cause);
     bool applyGeometryForFloat(const QString& windowId, const QString& screenId);
     /// Float-path wrapper around applyGeometryForFloat that suppresses the
     /// geometry apply for minimize-suspension floats (registry reports the

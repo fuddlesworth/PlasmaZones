@@ -16,6 +16,7 @@ class ScreenManager;
 
 namespace PhosphorZones {
 class IZoneDetector;
+class Layout;
 class LayoutRegistry;
 }
 
@@ -111,6 +112,14 @@ Q_SIGNALS:
     void zoneDetected(const QString& zoneId, const PhosphorProtocol::ZoneGeometryRect& geometry);
 
 private:
+    /// Suppress-aware layout resolve (#724 family): returns nullptr when the
+    /// screen's context has no active zone layout because the default
+    /// assignment is suppressed, instead of resolveLayoutForScreen's
+    /// global-default fallback. Keeps this D-Bus surface consistent with the
+    /// drag pipeline and the overlay layer — external clients otherwise see
+    /// zones on a screen the daemon itself treats as zoneless.
+    PhosphorZones::Layout* resolveActiveLayoutForScreen(const QString& screenId) const;
+
     PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP)
     PhosphorZones::LayoutRegistry* m_layoutManager; // Interface type (DIP)
     PhosphorScreens::ScreenManager* m_screenManager; // For VS-aware geometry / id resolution

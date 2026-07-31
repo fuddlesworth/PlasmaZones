@@ -1,14 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+.pragma library
+
+// The pragma stays directly under the SPDX header because
+// qt6_target_qml_sources only reads the first 128 bytes when it decides
+// whether the script is shared.
+
 /**
  * @brief Color utility functions for ARGB hex string conversion
  *
  * QML's Qt.color() expects RGBA format, but we store colors in ARGB format
  * (QColor::HexArgb). These utilities handle the conversion.
  */
-
-.pragma library
 
 /**
  * @brief Transparent color constant in ARGB hex format
