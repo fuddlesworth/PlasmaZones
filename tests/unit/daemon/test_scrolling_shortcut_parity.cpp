@@ -59,10 +59,12 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 
-/// Reports no triggers for anything, which keeps cheatsheetModel()'s family
-/// compression inert: a pair collapses only when both members are assigned.
-/// The row count assertion below states that dependency rather than leaving
-/// the test silently contingent on it.
+/// A backend that grabs nothing, so the test needs no compositor.
+///
+/// It does NOT stop families from compressing: the registry reports each
+/// action's bound default, so an opposed pair with two real defaults still
+/// collapses. That is why list 2 is read from the registration table rather
+/// than from the model — see the file comment.
 class SilentBackend : public PhosphorShortcuts::IBackend
 {
     Q_OBJECT
