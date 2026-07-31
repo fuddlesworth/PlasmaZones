@@ -1,5 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
+
+.pragma library
+
+// .pragma library: stateless math, shared as one instance across every
+// importer. No QML context access, no per-component state. It stays directly
+// under the SPDX header because qt6_target_qml_sources only reads the first
+// 128 bytes when it decides whether the script is shared.
+
 // Phosphor.Widgets.ConnectorGeometry, connected-corner path math.
 //
 // Pure geometry: builds the SVG path `d` string for the connected-corner
@@ -9,10 +17,6 @@
 // BarCanvas via a PathSvg element, which parses the same SVG path grammar
 // the design mockups (docs/phosphor-shell-design/mockups/*.svg) are drawn
 // in, so the rendered shape matches the mockups command-for-command.
-//
-// .pragma library: stateless math, shared as one instance across every
-// importer. No QML context access, no per-component state.
-.pragma library
 
 // Round to 2 decimals so the generated path strings stay compact and
 // free of float noise (1.9999999 -> 2). Sub-pixel precision past this is

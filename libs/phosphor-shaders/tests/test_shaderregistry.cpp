@@ -39,7 +39,9 @@ private:
         f.write(QJsonDocument(meta).toJson());
         f.close();
         QFile frag(packDir + QStringLiteral("/effect.frag"));
-        frag.open(QIODevice::WriteOnly);
+        if (!frag.open(QIODevice::WriteOnly)) {
+            return {};
+        }
         frag.write("void main() {}\n");
         frag.close();
         return packDir;

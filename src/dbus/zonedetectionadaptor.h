@@ -16,6 +16,7 @@ class ScreenManager;
 
 namespace PhosphorZones {
 class IZoneDetector;
+class Layout;
 class LayoutRegistry;
 }
 

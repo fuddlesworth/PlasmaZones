@@ -15,6 +15,7 @@
 #include "core/utils/utils.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 namespace PlasmaZones {
 
 void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
