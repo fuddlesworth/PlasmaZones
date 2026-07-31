@@ -129,8 +129,6 @@ set(plasmazones_core_SRCS
     config/configmigration_v5.cpp
     config/colorimporter.cpp
     config/colorimporter.h
-    config/updatechecker.cpp
-    config/updatechecker.h
     dbus/dbushelpers.cpp
     dbus/layoutadaptor/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp
@@ -494,6 +492,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/init_services.cpp
     daemon/daemon/init_adaptors.cpp
     daemon/daemon/init_engines.cpp
+    daemon/daemon/init_assignment_apply.cpp
     daemon/daemon/init_dbus_service.cpp
     daemon/daemon/lifecycle.cpp
     daemon/daemon/idle.cpp
@@ -503,6 +502,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/seedorderfilter.cpp
     daemon/daemon/seedorderfilter.h
     daemon/daemon/osd.cpp
+    daemon/daemon/stripzones.h
     daemon/daemon.h
     daemon/daemon_fwd.h
     daemon/daemon/helpers.h

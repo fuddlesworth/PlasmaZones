@@ -6,6 +6,7 @@
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QJsonArray>
 #include <QVariantList>
@@ -40,12 +41,9 @@ constexpr QLatin1String SectionKey{"sectionKey"};
 constexpr QLatin1String SectionLabel{"sectionLabel"};
 constexpr QLatin1String SectionOrder{"sectionOrder"};
 
-// Per-zone
-constexpr QLatin1String X{"x"};
-constexpr QLatin1String Y{"y"};
-constexpr QLatin1String Width{"width"};
-constexpr QLatin1String Height{"height"};
-constexpr QLatin1String ZoneNumber{"zoneNumber"};
+// Per-zone keys are NOT redeclared here — the five-field zone object is the
+// zone/layout wire format, whose spellings phosphor-zones owns. See
+// PhosphorZones::ZoneJsonKeys, used directly by the two zone writers below.
 
 // Per-algorithm (flat under the same top-level object — see header comment).
 constexpr QLatin1String SupportsMasterCount{"supportsMasterCount"};
@@ -66,25 +64,27 @@ constexpr QLatin1String ZoneNumberDisplay{"zoneNumberDisplay"};
 constexpr QLatin1String MasterCount{"masterCount"};
 } // namespace K
 
+namespace ZK = PhosphorZones::ZoneJsonKeys;
+
 QJsonObject zoneJson(const QRectF& r, int zoneNumber)
 {
     QJsonObject obj;
-    obj[K::X] = r.x();
-    obj[K::Y] = r.y();
-    obj[K::Width] = r.width();
-    obj[K::Height] = r.height();
-    obj[K::ZoneNumber] = zoneNumber;
+    obj[ZK::X] = r.x();
+    obj[ZK::Y] = r.y();
+    obj[ZK::Width] = r.width();
+    obj[ZK::Height] = r.height();
+    obj[ZK::ZoneNumber] = zoneNumber;
     return obj;
 }
 
 QVariantMap zoneMap(const QRectF& r, int zoneNumber)
 {
     QVariantMap map;
-    map[K::X] = r.x();
-    map[K::Y] = r.y();
-    map[K::Width] = r.width();
-    map[K::Height] = r.height();
-    map[K::ZoneNumber] = zoneNumber;
+    map[ZK::X] = r.x();
+    map[ZK::Y] = r.y();
+    map[ZK::Width] = r.width();
+    map[ZK::Height] = r.height();
+    map[ZK::ZoneNumber] = zoneNumber;
     return map;
 }
 

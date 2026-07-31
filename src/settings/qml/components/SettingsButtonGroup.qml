@@ -39,6 +39,11 @@ Row {
     // Arrow navigation for the exclusive group: moves both the selection and
     // the active focus to `index`, so the focus ring never lags behind the
     // checked option. Callers wrap the index themselves.
+    //
+    // Walking to a distant option therefore ACTIVATES every option on the way,
+    // exactly as a native radio group does. Handlers must treat an
+    // indexChanged for an option the user only passed through as a real pick,
+    // because nothing here can tell the two apart.
     function focusOption(index) {
         const target = optionRepeater.itemAt(index);
         if (!target)
@@ -100,13 +105,16 @@ Row {
             Keys.onSpacePressed: optionDelegate.activate()
             // Left/Right walk the group the way a native radio group does,
             // wrapping at both ends. Tab still steps option by option.
-            Keys.onLeftPressed: {
+            // The Row mirrors itself under RTL but the index order does not,
+            // so the two handlers swap with it: Left must always move to the
+            // option the user sees on the left.
+            Keys.onLeftPressed: optionDelegate.step(root.LayoutMirroring.enabled ? 1 : -1)
+            Keys.onRightPressed: optionDelegate.step(root.LayoutMirroring.enabled ? -1 : 1)
+
+            // Move `delta` options along the model, wrapping at both ends.
+            function step(delta) {
                 if (optionRepeater.count > 0)
-                    root.focusOption((optionDelegate.index + optionRepeater.count - 1) % optionRepeater.count);
-            }
-            Keys.onRightPressed: {
-                if (optionRepeater.count > 0)
-                    root.focusOption((optionDelegate.index + 1) % optionRepeater.count);
+                    root.focusOption((optionDelegate.index + delta + optionRepeater.count) % optionRepeater.count);
             }
 
             function activate() {

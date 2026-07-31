@@ -17,8 +17,12 @@
 #include <PhosphorZones/ZoneDetector.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/IPlacementState.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "daemon/overlayservice/internal.h"
 #include "helpers.h"
+#include "stripzones.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -30,6 +34,7 @@
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QKeySequence>
+#include <QRegularExpression>
 #include <QScreen>
 #include <QTimer>
 #include "phosphor_i18n.h"
@@ -50,7 +55,105 @@ void showKdeTextOsd(const QString& icon, const QString& text)
     QDBusConnection::sessionBus().asyncCall(msg);
 }
 
+/// Object-name prefix of the per-screen scrolling-OSD settle timers. One
+/// restartable timer per screen, parented to the Daemon and found back by
+/// name.
+const QLatin1String kScrollingSettlePrefix("scrollingOsdSettle:");
+
+QString scrollingSettleTimerName(const QString& screenId)
+{
+    return kScrollingSettlePrefix + screenId;
+}
+
+/// The screen id a settle timer belongs to. Sliced by LENGTH, not by
+/// splitting on ':' — a virtual screen id carries its own colon
+/// ("DP-1/vs:0") and a split would hand back a truncated id.
+QString screenIdFromSettleTimerName(const QString& objectName)
+{
+    return objectName.mid(kScrollingSettlePrefix.size());
+}
+
+/// @p screenId's visible strip tiles, or empty when the scroll engine does
+/// not currently own the screen. The isActiveOnScreen gate matches the
+/// navigation-OSD zone provider (init_engines.cpp): a screen the engine has
+/// released has no strip to preview, whatever stale state its context holds.
+QVector<StripZones::VisibleTile> visibleStripTiles(const PhosphorEngine::PlacementEngineBase* engine,
+                                                   const QString& screenId)
+{
+    const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(engine);
+    if (!scroll || !scroll->isActiveOnScreen(screenId)) {
+        return {};
+    }
+    return scroll->visibleTiles(screenId);
+}
+
+/// Push the scrolling strip preview card for @p screenId from an ALREADY
+/// RESOLVED tile list, so the caller that had to probe the strip to decide
+/// whether to render at all does not pay for a second relayout and cannot
+/// render a different snapshot than the one it probed.
+///
+/// @p tiles are the engine's visible tiles in zone-number order, carrying
+/// their own zone numbers and their absolute clipped rects. Empty means the
+/// strip has no visible tile, and the card falls back to the representative
+/// sketch — as does a screen whose geometry cannot be resolved, since the
+/// rects cannot be placed in the card's full-screen-shaped box without it.
+void pushScrollingStripOsd(OverlayService* overlay, PhosphorScreens::ScreenManager* screens, const QString& screenId,
+                           const QVector<StripZones::VisibleTile>& tiles)
+{
+    if (!overlay) {
+        return;
+    }
+    // Through the shared resolver, not a bare screenGeometry(): the OSD
+    // renderer this feeds sizes its window via the same helper, whose
+    // QScreen fallback covers early startup and unmatched screen ids. A bare
+    // lookup here would bail to the sketch (with a spurious warning) in a
+    // case the renderer handles fine.
+    const QRect screenGeometry = resolveScreenGeometry(screens, screenId);
+    QVariantList zones = StripZones::zoneMapsForTiles(screenId, tiles, screenGeometry);
+    const bool isSketch = zones.isEmpty();
+    if (isSketch) {
+        if (!tiles.isEmpty()) {
+            // Tiles but no screen geometry to place them in. The card falls
+            // back to the sketch rather than drawing rects it cannot
+            // normalize, and says so here so the wrong-looking preview is
+            // traceable to the screen lookup rather than to the strip.
+            qCWarning(lcDaemon) << "Strip preview OSD: no geometry for screen=" << screenId << "tiles=" << tiles.size()
+                                << "— falling back to the sketch";
+        }
+        zones = StripZones::sketchZoneMaps(screenId);
+    }
+    // Autotile category: the renderer treats it as "generated, not
+    // editable", which is exactly what a live strip snapshot is.
+    overlay->showLayoutOsd(QString(PhosphorLayout::LayoutId::ScrollingId),
+                           PhosphorI18n::tr("Scrolling", "tiling mode name"), zones,
+                           static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId, false, false,
+                           isSketch ? QStringLiteral("none") : QStringLiteral("all"), 1);
+    qCInfo(lcDaemon) << "Showing scrolling-mode strip preview OSD: screen=" << screenId << "tiles=" << zones.size()
+                     << "sketch=" << isSketch;
+}
+
 } // namespace
+
+void Daemon::reapScrollingOsdSettleTimers(const QString& screenId)
+{
+    const auto settleTimers = findChildren<QTimer*>(
+        QRegularExpression(QLatin1Char('^') + QRegularExpression::escape(QString(kScrollingSettlePrefix))),
+        Qt::FindDirectChildrenOnly);
+    for (QTimer* settle : settleTimers) {
+        const QString timerScreenId = screenIdFromSettleTimerName(settle->objectName());
+        // samePhysical, not equality: a removed output takes every virtual
+        // sub-screen of it with it, and each of those has its own timer.
+        if (!screenId.isEmpty() && !PhosphorIdentity::VirtualScreenId::samePhysical(timerScreenId, screenId)) {
+            continue;
+        }
+        settle->stop();
+        // Clear the name BEFORE deleteLater: a deleted-but-not-yet-drained
+        // timer stays a findChild hit, so showScrollingModeOsd would adopt a
+        // zombie and start() a timer that is about to be destroyed.
+        settle->setObjectName(QString());
+        settle->deleteLater();
+    }
+}
 
 void Daemon::showOverlay()
 {
@@ -282,86 +385,114 @@ void Daemon::showNotAssignedOsd(const QString& screenId)
     qCInfo(lcDaemon) << "Showing not-assigned text OSD: screen=" << screenId;
 }
 
-void Daemon::showScrollingModeOsd(const QString& screenId)
+bool Daemon::isOsdTriggerEnabled(OsdTrigger trigger) const
+{
+    if (!m_settings) {
+        return true;
+    }
+    switch (trigger) {
+    case OsdTrigger::LayoutSwitch:
+        return m_settings->showOsdOnLayoutSwitch();
+    case OsdTrigger::DesktopSwitch:
+        return m_settings->showOsdOnDesktopSwitch();
+    }
+    return true;
+}
+
+void Daemon::showScrollingModeOsd(const QString& screenId, OsdTrigger trigger, StripSettle settle)
 {
     // The mode-switch announcement for a screen entering Scrolling. Preview
-    // style renders the strip: the engine's visible tile rects stand in for
-    // the zone list a layout switch would show, and an EMPTY strip shows
-    // the representative endless-strip sketch (a full column with clipped
-    // edge columns) — the algorithm OSD likewise previews with zero
-    // windows, and the Monitors page uses the same sketch.
+    // style renders the strip: the engine's visible tiles stand in for the
+    // zone list a layout switch would show, and an EMPTY strip shows the
+    // representative endless-strip sketch (a full column with clipped edge
+    // columns) — the algorithm OSD likewise previews with zero windows, and
+    // the Monitors page uses the same sketch.
     if (shouldSuppressOsd()) {
         return;
     }
     const OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
     if (style == OsdStyle::None) {
+        // OSDs are off now, so an armed settle timer must not fire the card
+        // the user just disabled.
+        stopScrollingOsdSettleTimer(screenId);
         return;
     }
     if (style == OsdStyle::Preview && m_overlayService) {
-        const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
-        if (scroll && !scroll->visibleTileRects(screenId).isEmpty()) {
-            showScrollingStripPreviewOsd(screenId);
+        // ONE strip resolve, threaded into the render: probing with a
+        // different accessor than the renderer used meant two relayouts of
+        // the same strip and two chances to disagree about whether it was
+        // empty.
+        const QVector<StripZones::VisibleTile> tiles = visibleStripTiles(m_scrollEngine.get(), screenId);
+        if (!tiles.isEmpty() || settle == StripSettle::Immediate) {
+            // A card is rendering NOW, so an earlier toggle's settle timer
+            // would land a second, identical card a beat later.
+            stopScrollingOsdSettleTimer(screenId);
+            pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId, tiles);
             return;
         }
         // A mode toggle announces BEFORE the effect's re-announce batch
         // lands, so at OSD time the strip is still empty. Defer one beat
         // so the adoption settles and the card shows the user's actual
         // columns; a strip that is still empty then shows the sketch.
-        QTimer::singleShot(kScrollingOsdAdoptSettleMs, this, [this, screenId]() {
-            if (shouldSuppressOsd()) {
+        //
+        // One restartable timer per screen rather than a fresh singleShot per
+        // call: repeated toggles inside the settle window used to queue a
+        // card each, so the user got a burst of identical OSDs. Restarting
+        // coalesces them into the last request's beat.
+        //
+        // Everything the immediate path gated on is re-checked on dispatch,
+        // because the settle window is long enough for the user to leave the
+        // mode or change the OSD style in it — and this is the only OSD entry
+        // point whose decision and its effect are separated in time. That
+        // includes the CALLER's own toggle, carried in @p trigger: a layout
+        // switch and a desktop switch are gated by different settings, and
+        // re-reading neither meant a toggle switched off inside the settle
+        // window still produced its card.
+        const QString timerName = scrollingSettleTimerName(screenId);
+        auto* settleTimer = findChild<QTimer*>(timerName, Qt::FindDirectChildrenOnly);
+        if (!settleTimer) {
+            settleTimer = new QTimer(this);
+            settleTimer->setObjectName(timerName);
+            settleTimer->setSingleShot(true);
+        } else {
+            // A restart re-arms for the LATEST caller, so drop the previous
+            // one's trigger along with its pending fire.
+            settleTimer->disconnect(this);
+        }
+        connect(settleTimer, &QTimer::timeout, this, [this, screenId, trigger]() {
+            if (shouldSuppressOsd() || !m_overlayService) {
+                return;
+            }
+            if (currentModeFor(screenId) != PhosphorZones::AssignmentEntry::Scrolling) {
+                return;
+            }
+            if ((m_settings ? m_settings->osdStyle() : OsdStyle::Preview) != OsdStyle::Preview) {
+                return;
+            }
+            if (!isOsdTriggerEnabled(trigger)) {
                 return;
             }
             showScrollingStripPreviewOsd(screenId);
         });
+        settleTimer->start(kScrollingOsdAdoptSettleMs);
         return;
     }
+    stopScrollingOsdSettleTimer(screenId);
     showKdeTextOsd(QStringLiteral("plasmazones"), PhosphorI18n::tr("Scrolling", "tiling mode name"));
     qCInfo(lcDaemon) << "Showing scrolling-mode text OSD: screen=" << screenId;
 }
 
 void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
 {
-    if (!m_overlayService) {
-        return;
+    pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId,
+                          visibleStripTiles(m_scrollEngine.get(), screenId));
+}
+
+void Daemon::stopScrollingOsdSettleTimer(const QString& screenId)
+{
+    if (auto* settle = findChild<QTimer*>(scrollingSettleTimerName(screenId), Qt::FindDirectChildrenOnly)) {
+        settle->stop();
     }
-    const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
-    QVector<int> columnNumbers;
-    QVector<QRectF> rects = scroll ? scroll->visibleTileRectsRelative(screenId, &columnNumbers) : QVector<QRectF>();
-    if (rects.isEmpty()) {
-        // Representative endless strip (kept in step with MonitorStatePage's
-        // scrollingFallbackZones): clipped columns at both edges read as a
-        // window onto a longer strip.
-        rects = {QRectF(0.0, 0.0, 0.1, 1.0), QRectF(0.115, 0.0, 0.5, 1.0), QRectF(0.63, 0.0, 0.37, 1.0)};
-        columnNumbers = {1, 2, 3};
-    }
-    QVariantList zones;
-    zones.reserve(rects.size());
-    for (int i = 0; i < rects.size(); ++i) {
-        const QRectF& r = rects.at(i);
-        QVariantMap relGeo;
-        relGeo[QLatin1String("x")] = r.x();
-        relGeo[QLatin1String("y")] = r.y();
-        relGeo[QLatin1String("width")] = r.width();
-        relGeo[QLatin1String("height")] = r.height();
-        QVariantMap zoneMap;
-        // The scroll zone number is the tile's 1-based VISIBLE column slot
-        // (leftmost on-screen column is 1) — the same viewport-relative
-        // coordinate the Snap-to-Zone digits drive, so the card labels
-        // exactly what is on screen.
-        zoneMap[QLatin1String("zoneNumber")] = (i < columnNumbers.size()) ? columnNumbers.at(i) : (i + 1);
-        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
-        zoneMap[QLatin1String("id")] = QString::number(i);
-        zoneMap[QLatin1String("name")] = QString();
-        zoneMap[QLatin1String("useCustomColors")] = false;
-        zones.append(zoneMap);
-    }
-    // Autotile category: the renderer treats it as "generated, not
-    // editable", which is exactly what a live strip snapshot is.
-    m_overlayService->showLayoutOsd(QString(PhosphorLayout::LayoutId::ScrollingId),
-                                    PhosphorI18n::tr("Scrolling", "tiling mode name"), zones,
-                                    static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId, false,
-                                    false, QStringLiteral("all"), 1);
-    qCInfo(lcDaemon) << "Showing scrolling-mode strip preview OSD: screen=" << screenId << "tiles=" << rects.size();
 }
 
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
@@ -437,7 +568,13 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
                 zoneMap[QLatin1String("zoneNumber")] =
                     (i < preview.zoneNumbers.size()) ? preview.zoneNumbers.at(i) : (i + 1);
                 zoneMap[QLatin1String("relativeGeometry")] = relGeo;
-                zoneMap[QLatin1String("id")] = QString::number(i);
+                // Namespaced, never a bare index, for the reason the strip
+                // and settings-app twins are (StripZones::zoneMapsForTiles):
+                // these are render-only synthetic zones with no persisted
+                // identity, and a bare "0"/"1"/"2" is indistinguishable from
+                // a real zone id to any consumer that keys on zone.id.
+                // CLAUDE.md: zone IDs everywhere, never indices.
+                zoneMap[QLatin1String("id")] = QStringLiteral("autotile:%1:%2").arg(screenId).arg(i);
                 zoneMap[QLatin1String("name")] = QString();
                 zoneMap[QLatin1String("useCustomColors")] = false;
                 zones.append(zoneMap);
@@ -719,7 +856,11 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                 // that is inert (the disabled probe above checks the
                 // DOWNGRADED mode's list and misses).
                 if (currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Scrolling) {
-                    showScrollingModeOsd(screenId);
+                    // StripSettle::Immediate: this batch exists so every
+                    // screen's card appears in the same event-loop pass, and
+                    // an empty-strip scrolling screen deferring by the settle
+                    // beat would land ~300ms after its neighbours.
+                    showScrollingModeOsd(screenId, OsdTrigger::DesktopSwitch, StripSettle::Immediate);
                     continue;
                 }
                 // Downgraded. Re-probe the SCROLLING disable lists directly

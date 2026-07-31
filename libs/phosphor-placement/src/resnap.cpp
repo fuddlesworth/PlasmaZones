@@ -10,6 +10,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorZones/Zone.h>
@@ -145,6 +146,17 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     for (const PhosphorEngine::WindowPlacement& rec : m_placementStore.records()) {
         // Canonical, matching what addCandidate inserts — see its own note.
         if (addedIds.contains(canonicalizeForLookup(rec.windowId)))
+            continue;
+        // Liveness gate: the store persists records of long-closed windows
+        // (session history), and a dead-id entry in the resnap batch is NOT
+        // inert — the compositor's appId fallback resolves it onto the one
+        // live unclaimed window of the same app and teleports it to the dead
+        // record's zone. The restart case this pass exists for survives the
+        // gate: a daemon restart keeps the compositor-issued window ids, so
+        // the re-announced live windows match their records exactly. No
+        // registry wired (test envs) keeps the historical permissive path.
+        if (m_windowRegistry
+            && !m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(rec.windowId)).has_value())
             continue;
         const PhosphorEngine::EngineSlot snapSlot = rec.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped())

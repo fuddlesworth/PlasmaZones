@@ -12,9 +12,27 @@ import org.kde.kirigami as Kirigami
 SettingsCard {
     id: root
 
+    // The settings controller. Slot reads/writes and the shortcut caption are
+    // controller invokables; `settings` is the shared Settings object the
+    // combo bridge below reads the global auto-assign toggle from.
     required property var appSettings
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
+
+    // Bridge for LayoutComboBox — exposes only what it accesses, in the shape
+    // it expects. Handing it the controller directly looked right (`layouts`
+    // lives there) but silently lost the preview's auto-assign badge:
+    // autoAssignAllLayouts lives on Settings, so the combo read undefined and
+    // the badge never lit. Same pattern as MonitorStatePage's _layoutBridge.
+    // The `layouts` binding auto-generates the layoutsChanged signal the
+    // combo's Connections target listens for. defaultLayoutId /
+    // defaultAutotileAlgorithm are deliberately absent: every combo below
+    // pins resolvedDefaultId to "" (a slot has no default layout), so the
+    // combo never reads them.
+    readonly property QtObject _comboBridge: QtObject {
+        readonly property var layouts: root.appSettings.layouts
+        readonly property bool autoAssignAllLayouts: root.appSettings.settings ? root.appSettings.settings.autoAssignAllLayouts : false
+    }
 
     // Bumped on EXTERNAL (daemon) quick-layout-slot changes. Both snapping and
     // tiling slots are daemon-backed (mode-keyed registry) and the daemon emits
@@ -28,16 +46,39 @@ SettingsCard {
     }
 
     function setSlot(slotNumber, value) {
+        // A pick that matches what the slot already holds is not an edit.
+        // Staging it anyway dirtied the whole app (footer badge, Discard
+        // offer) for re-selecting the row that was already selected, or for
+        // clearing a slot that was already empty.
+        if (getSlot(slotNumber) === value)
+            return;
+
         if (viewMode === 1)
             appSettings.setTilingQuickLayoutSlot(slotNumber, value);
         else
             appSettings.setQuickLayoutSlot(slotNumber, value);
     }
 
+    // Catch-up half of the visibility gate below: one bump when the card comes
+    // back picks up whatever changed while it was hidden, and also re-reads the
+    // shortcut captions, which have no change signal of their own.
+    onVisibleChanged: {
+        if (visible)
+            slotRevision++;
+    }
+
     Connections {
         target: root.appSettings
 
         function onQuickLayoutSlotsChanged() {
+            // A bump costs nine BLOCKING slot reads plus nine shortcut reads.
+            // The page host keeps visited pages alive and merely hides them, so
+            // an event every cached page reacts to (a global Discard) paid that
+            // once per page ever visited. Hidden cards defer to the catch-up
+            // bump above.
+            if (!root.visible)
+                return;
+
             root.slotRevision++;
         }
     }
@@ -50,6 +91,10 @@ SettingsCard {
         spacing: 0
 
         Repeater {
+            // One row per quick-layout slot. Nine is the slot count the whole
+            // stack agrees on (ConfigDefaults' QuickLayoutSlotCount, the nine
+            // Meta+Alt+digit shortcuts, and the controller's own 1..9 bounds
+            // check); a tenth row would have no key to reach it.
             model: 9
 
             delegate: ColumnLayout {
@@ -62,13 +107,17 @@ SettingsCard {
                 // slotRevision bumps on the daemon's quickLayoutSlotsChanged,
                 // the only slot-related change signal the controller exposes,
                 // so the caption re-reads alongside the slot combos. The
-                // controller currently returns the fixed default (Meta+Alt+N,
-                // it cannot query KGlobalAccel), so there is no separate
-                // shortcut-changed signal to wire.
+                // shortcut itself is config-backed and rebound on another page,
+                // and no signal ties the two, so a fresh rebind shows here on
+                // the next slot change or the next time the card is shown.
                 property string shortcutText: {
                     void root.slotRevision;
                     return root.appSettings.getQuickLayoutShortcut(slotNumber);
                 }
+                // Secondary-text dimming for the shortcut caption, and the
+                // deeper dimming the "no shortcut" state carries.
+                readonly property real _captionOpacity: 0.6
+                readonly property real _emptyCaptionOpacity: 0.35
 
                 Layout.fillWidth: true
                 spacing: 0
@@ -99,11 +148,18 @@ SettingsCard {
                         }
 
                         Label {
-                            text: slotDelegate.shortcutText !== "" ? slotDelegate.shortcutText : i18n("No shortcut assigned")
+                            // One key per slot for BOTH modes: pressing it
+                            // applies the snapping slot on a snapping monitor
+                            // and the tiling slot on a tiling one, so the
+                            // caption says which monitors this page's slot
+                            // answers for rather than implying a second key.
+                            text: slotDelegate.shortcutText !== "" ? i18nc("%1 is a keyboard shortcut such as Meta+Alt+1", "Shortcut %1, used on monitors in this mode", slotDelegate.shortcutText) : i18n("No shortcut assigned")
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                             font: Kirigami.Theme.smallFont
-                            opacity: slotDelegate.shortcutText !== "" ? 0.6 : 0.35
+                            // Dimmed as secondary text, dimmed further when it
+                            // has no shortcut to state.
+                            opacity: slotDelegate.shortcutText !== "" ? slotDelegate._captionOpacity : slotDelegate._emptyCaptionOpacity
                         }
                     }
 
@@ -123,18 +179,26 @@ SettingsCard {
 
                             Layout.fillWidth: true
                             Layout.minimumWidth: Kirigami.Units.gridUnit * 10
-                            appSettings: root.appSettings
+                            appSettings: root._comboBridge
                             noneText: i18n("None")
                             showPreview: true
                             layoutFilter: root.viewMode === 1 ? 1 : 0
                             resolvedDefaultId: ""
+                            // Nine combos would otherwise all announce the
+                            // component's generic "Layout selection", leaving
+                            // a screen-reader user no way to tell which slot
+                            // they are on.
+                            Accessible.name: root.viewMode === 1 ? i18n("Tiling algorithm for quick shortcut %1", slotDelegate.slotNumber) : i18n("Zone layout for quick shortcut %1", slotDelegate.slotNumber)
                             currentLayoutId: {
                                 void (root.slotRevision);
                                 return root.getSlot(slotDelegate.slotNumber);
                             }
                             onActivated: {
-                                // Guard against a transient index/model mismatch
-                                // (same pattern as MonitorStatePage's selectors).
+                                // Guard against a transient index/model mismatch.
+                                // MonitorStatePage's selectors read the activated
+                                // index instead; here the ComboBox has already
+                                // moved currentIndex by the time this fires, so
+                                // the two read the same row by different means.
                                 var entry = model[currentIndex];
                                 root.setSlot(slotDelegate.slotNumber, entry ? (entry.value || "") : "");
                             }
@@ -142,13 +206,18 @@ SettingsCard {
 
                         ToolButton {
                             icon.name: "edit-clear"
+                            // Nothing to clear on an empty slot, and pressing
+                            // it there staged a no-op that dirtied the app.
+                            enabled: slotLayoutCombo.currentLayoutId !== ""
                             onClicked: {
                                 root.setSlot(slotDelegate.slotNumber, "");
                                 slotLayoutCombo.clearSelection();
                             }
                             ToolTip.visible: hovered
-                            ToolTip.text: i18n("Clear shortcut")
-                            Accessible.name: i18n("Clear shortcut %1", slotDelegate.slotNumber)
+                            // The button clears the slot's LAYOUT. The shortcut
+                            // itself is not editable here.
+                            ToolTip.text: i18n("Clear layout")
+                            Accessible.name: i18n("Clear layout for quick shortcut %1", slotDelegate.slotNumber)
                         }
                     }
                 }

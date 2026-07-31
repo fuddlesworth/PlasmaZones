@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/AssignmentEntry.h>
 
 #include <QString>
@@ -23,10 +24,13 @@
 #define P_CONFIG_GROUP(name, str) P_CONFIG_KEY(name, str)
 
 // Single definition point for the per-screen group prefix spellings.
-// Shared by the *GroupPrefix accessors below (which append the ':') and
-// PerScreenPathResolver's prefix→category mapping table — a rename here
-// updates both in lockstep instead of silently desyncing the JSON path
-// resolver from the group accessors.
+// Shared by PerScreenPathResolver's prefix→category mapping table and, for two
+// of the three, a *GroupPrefix accessor below that appends the ':'
+// (zoneSelectorGroupPrefix and autotileScreenGroupPrefix; the snapping prefix
+// has no accessor, because per-monitor snapping state is unified into the
+// autotile store and nothing looks its group up by name). Defining the
+// spellings here keeps whichever consumers exist in lockstep instead of
+// silently desyncing the JSON path resolver from the group accessors.
 //
 // MIGRATION-FROZEN: configmigration.cpp's v1→v2 INI migration matches
 // per-screen groups through the live resolver (and therefore through these
@@ -86,7 +90,6 @@ public:
     P_CONFIG_GROUP(gapsGroup, "Gaps")
 
     // Snapping sub-groups
-    P_CONFIG_GROUP(snappingZonesGroup, "Snapping.Zones")
     P_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
     P_CONFIG_GROUP(snappingBehaviorZoneSpanGroup, "Snapping.Behavior.ZoneSpan")
     P_CONFIG_GROUP(snappingBehaviorSnapAssistGroup, "Snapping.Behavior.SnapAssist")
@@ -121,7 +124,6 @@ public:
     // Tiling sub-groups
     P_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
     P_CONFIG_GROUP(tilingBehaviorGroup, "Tiling.Behavior")
-    P_CONFIG_GROUP(tilingBehaviorTriggersGroup, "Tiling.Behavior.Triggers")
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
     P_CONFIG_GROUP(scrollingGroup, "Scrolling")
 
@@ -175,11 +177,10 @@ public:
 
     P_CONFIG_KEY(activeLayoutIdKey, "ActiveLayoutId")
 
-    // Snap mode — last used zone info
+    // Snap mode — last used zone info. Only the zone id is persisted (see
+    // windowtrackingadaptor/saveload.cpp); the companion screen / class /
+    // desktop keys had no reader and no writer left and are gone.
     P_CONFIG_KEY(lastUsedZoneIdKey, "LastUsedZoneId")
-    P_CONFIG_KEY(lastUsedScreenNameKey, "LastUsedScreenName")
-    P_CONFIG_KEY(lastUsedZoneClassKey, "LastUsedZoneClass")
-    P_CONFIG_KEY(lastUsedDesktopKey, "LastUsedDesktop")
 
     // User-snapped classes
     P_CONFIG_KEY(userSnappedClassesKey, "UserSnappedClasses")
@@ -496,19 +497,13 @@ public:
     // Phase 4 sub-commit 6: animation fields migrated from 5 per-field
     // keys (duration / easingCurve / minDistance / sequenceMode /
     // staggerInterval) to a single Profile JSON blob under animationProfileKey.
-    // The v1 keys are folded into the Profile blob by `migrateV1ToV2`
-    // (see `configmigration.cpp`). The v1 key accessors are retained for
-    // that migration function only; no separate backwards-compat code
-    // exists within v2. The per-field accessor surface on Settings
-    // (animationDuration / etc.) is preserved and projects through the
-    // Profile blob at read/write time for QML Q_PROPERTY binding
-    // compatibility.
+    // Those v1 spellings are folded into the Profile blob by `migrateV1ToV2`,
+    // which reads them through the frozen `v1Animation*Key` accessors in the
+    // Legacy section below, not through this one — the live per-field accessors
+    // that used to sit here had no caller at all and are gone. The per-field accessor surface on
+    // Settings (animationDuration / etc.) is unaffected: it projects through the
+    // Profile blob at read/write time for QML Q_PROPERTY binding compatibility.
     P_CONFIG_KEY(animationProfileKey, "Profile")
-    P_CONFIG_KEY(durationKey, "Duration")
-    P_CONFIG_KEY(easingCurveKey, "EasingCurve")
-    P_CONFIG_KEY(minDistanceKey, "MinDistance")
-    P_CONFIG_KEY(sequenceModeKey, "SequenceMode")
-    P_CONFIG_KEY(staggerIntervalKey, "StaggerInterval")
     // Animations.WindowFiltering knob — distinct from the snapping
     // `Exclusions` group above (which has no equivalent NotificationsAndOsd
     // axis). Consumed by `Settings::animationExcludeNotificationsAndOsd` and
@@ -531,18 +526,23 @@ public:
     P_CONFIG_KEY(toggleCheatsheetKey, "ToggleCheatsheet")
 
     // Parameterized — uses the pattern accessor to avoid duplication.
-    // 1..9 mirrors quickLayoutN() in the enum surface; out-of-range
+    // The range mirrors quickLayoutN() in the enum surface; out-of-range
     // values would round-trip as e.g. "QuickLayout100" and ghost the
     // config namespace.
     P_CONFIG_KEY(quickLayoutKeyPattern, "QuickLayout%1")
     static QString quickLayoutKey(int n)
     {
         // qFatal aborts unambiguously in both debug and release builds —
-        // the contract is "n in 1..9, no exceptions". A bare Q_ASSERT_X
+        // the contract is "n in range, no exceptions". A bare Q_ASSERT_X
         // would compile out in release and let an out-of-range value
         // silently yield "QuickLayout100" (or similar), ghosting the
         // config namespace.
-        if (n < 1 || n > 9) {
+        //
+        // Bounded by the protocol constant the daemon validates against
+        // (layoutadaptor.cpp) rather than a hardcoded 9, so raising the slot
+        // count cannot leave this guard rejecting keys the rest of the tree
+        // considers legal.
+        if (n < 1 || n > PhosphorProtocol::Service::QuickLayoutSlotCount) {
             qFatal("quickLayoutKey: n out of range: %d", n);
         }
         return quickLayoutKeyPattern().arg(n);
@@ -569,12 +569,14 @@ public:
     P_CONFIG_KEY(spanWindowDownKey, "SpanWindowDown")
 
     // Parameterized — uses the pattern accessor to avoid duplication.
-    // 1..9 mirrors snapToZoneN() in the enum surface.
+    // The range mirrors snapToZoneN() in the enum surface, which is the same
+    // digit row the quick-layout slots use.
     P_CONFIG_KEY(snapToZoneKeyPattern, "SnapToZone%1")
     static QString snapToZoneKey(int n)
     {
-        // See quickLayoutKey above for the rationale on the qFatal guard.
-        if (n < 1 || n > 9) {
+        // See quickLayoutKey above for the rationale on the qFatal guard and on
+        // bounding by the protocol constant.
+        if (n < 1 || n > PhosphorProtocol::Service::QuickLayoutSlotCount) {
             qFatal("snapToZoneKey: n out of range: %d", n);
         }
         return snapToZoneKeyPattern().arg(n);
@@ -951,27 +953,30 @@ public:
     //
     // These do NOT live in the main config JSON — they're per-organization
     // QSettings entries (~/.config/<org>/<app>.conf) for the settings UI's
-    // own ephemeral state: last window geometry, dismissed update banner,
-    // last-seen what's-new version. Centralised here so the CLAUDE.md "no
-    // inline QStringLiteral for config keys" rule applies uniformly.
+    // own ephemeral state: last window geometry and the last-seen what's-new
+    // version. Centralised here so the CLAUDE.md "no inline QStringLiteral for
+    // config keys" rule applies uniformly.
     // ═══════════════════════════════════════════════════════════════════════════
+    // Group for the window-geometry entries: the bare "x"/"y"/"width"/
+    // "height" keys collide with any other writer at the file root.
+    P_CONFIG_GROUP(settingsAppWindowGroup, "Window")
     P_CONFIG_KEY(settingsAppWindowXKey, "x")
     P_CONFIG_KEY(settingsAppWindowYKey, "y")
     P_CONFIG_KEY(settingsAppWindowWidthKey, "width")
     P_CONFIG_KEY(settingsAppWindowHeightKey, "height")
-    P_CONFIG_KEY(settingsAppDismissedUpdateVersionKey, "dismissedUpdateVersion")
     P_CONFIG_KEY(settingsAppLastSeenWhatsNewVersionKey, "lastSeenWhatsNewVersion")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Filesystem paths under XDG_DATA_HOME
     //
     // Daemon, settings app, and editor all read/write the same per-user
-    // layouts and algorithms directories. Hoisted into one accessor each so
-    // a rename only touches one site.
+    // layouts directory. Hoisted into one accessor so a rename only touches one
+    // site. The sibling "plasmazones" and "plasmazones/algorithms" spellings
+    // used to sit here for the same reason, but neither had a caller: the
+    // algorithms directory is spelled by Constants::ScriptedAlgorithmSubdir
+    // (core/types/constants.h), which is what every consumer actually uses.
     // ═══════════════════════════════════════════════════════════════════════════
-    P_CONFIG_KEY(userDataSubdir, "plasmazones")
     P_CONFIG_KEY(layoutsSubdir, "plasmazones/layouts")
-    P_CONFIG_KEY(algorithmsSubdir, "plasmazones/algorithms")
 
 private:
     // Non-instantiable

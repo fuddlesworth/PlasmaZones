@@ -9,11 +9,15 @@
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 
+#include "scrollstriptestutils.h"
+
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QtTest>
 
 using namespace PhosphorScrollEngine;
+
+using ScrollTestUtils::makeProviderEngine;
 
 class TestScrollEnginePersistence : public QObject
 {
@@ -28,17 +32,25 @@ private Q_SLOTS:
     void coTenantClaimDoesNotRenewSiblingLease();
 
 private:
-    /// Smoke-suite twin: geometry providers wired so the apply path
-    /// resolves real rects against a 1200x800 work area.
-    static ScrollEngine* makeProviderEngine(QObject* parent, const QSet<QString>& screens)
+    /// The state for a screen, or nullptr. QVERIFY'd at every call site: a
+    /// regression that drops the state would otherwise segfault the binary
+    /// and take the remaining tests' results with it.
+    static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
     {
-        auto* engine = new ScrollEngine(nullptr, nullptr, parent);
-        const auto geometry = [](const QString&) {
-            return QRect(0, 0, 1200, 800);
-        };
-        engine->setScreenGeometryProviders(geometry, geometry);
-        engine->setActiveScreens(screens);
-        return engine;
+        return static_cast<ScrollState*>(engine->stateForScreen(screenId));
+    }
+
+    /// The column index @p windowId holds on S1, asserted to be a REAL slot
+    /// first: columnIndexForWindow answers -1 for an untracked window, and a
+    /// bare `!=` between two -1s is a comparison that passes for the wrong
+    /// reason on exactly the regression these tests exist to catch.
+    static int columnOf(ScrollEngine* engine, const QString& windowId)
+    {
+        const int col = engine->columnIndexForWindow(QStringLiteral("S1"), windowId);
+        [&]() {
+            QVERIFY2(col >= 0, qPrintable(QStringLiteral("%1 holds no column").arg(windowId)));
+        }();
+        return col;
     }
 };
 
@@ -60,10 +72,14 @@ void TestScrollEnginePersistence::modeRoundTripRestoresFocusAndAnchor()
     engine->windowFocused(QStringLiteral("app|c"), QStringLiteral("S1"));
     engine->centerColumn(QStringLiteral("S1"));
 
-    auto* before = static_cast<ScrollState*>(engine->stateForScreen(QStringLiteral("S1")));
+    ScrollState* before = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(before);
     QCOMPARE(before->strip().activeWindowId(), QStringLiteral("app|c"));
     const int anchorBefore = before->strip().viewAnchor();
+    // The anchor has to be NON-default for the carry assertion at the tail to
+    // mean anything: 0 is what a strip that never carried an anchor comes back
+    // with, so centering above must genuinely have moved it.
+    QVERIFY2(anchorBefore != 0, "the centered anchor must differ from a fresh strip's, or the carry is unfalsifiable");
 
     // Mode reassignment of the SAME context: teardown stashes the strip.
     engine->setActiveScreens({});
@@ -79,7 +95,7 @@ void TestScrollEnginePersistence::modeRoundTripRestoresFocusAndAnchor()
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a")), 0);
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|c")), 1);
-    auto* after = static_cast<ScrollState*>(engine->stateForScreen(QStringLiteral("S1")));
+    ScrollState* after = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(after);
     QCOMPARE(after->strip().columns().at(0).display, ColumnDisplay::Tabbed);
     QCOMPARE(after->strip().activeWindowId(), QStringLiteral("app|c"));
@@ -101,6 +117,10 @@ void TestScrollEnginePersistence::serializedStripRestoreSurvivesIdDrift()
     engine1->windowFocused(QStringLiteral("app|u1"), QStringLiteral("S1"));
     engine1->consumeWindowIntoColumn(QStringLiteral("S1")); // u2 joins u1's stack
     engine1->toggleColumnTabbed(QStringLiteral("S1"));
+    // Show the SECOND tab before focusing away: the shown tab is per-column
+    // persisted state (StashedColumn::activeWindowId) and must survive the
+    // round trip independently of the strip-level focus.
+    engine1->windowFocused(QStringLiteral("app|u2"), QStringLiteral("S1"));
     engine1->windowFocused(QStringLiteral("other|u3"), QStringLiteral("S1"));
     const QJsonObject blob = engine1->serializeStripState();
     QVERIFY(!blob.isEmpty());
@@ -117,10 +137,19 @@ void TestScrollEnginePersistence::serializedStripRestoreSurvivesIdDrift()
     QCOMPARE(engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|n1")), 0);
     QCOMPARE(engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|n2")), 0);
     QCOMPARE(engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("other|n3")), 1);
-    auto* state = static_cast<ScrollState*>(engine2->stateForScreen(QStringLiteral("S1")));
+    ScrollState* state = stateFor(engine2, QStringLiteral("S1"));
     QVERIFY(state);
+    QVERIFY(!state->strip().columns().isEmpty());
     QCOMPARE(state->strip().columns().at(0).display, ColumnDisplay::Tabbed);
     QCOMPARE(state->strip().columns().at(0).tiles.size(), 2);
+    // The shown TAB followed its claimed successor too: u2 was the visible
+    // tab at serialize time, so n2 must be the visible tab after restore.
+    const Column& tabbed = state->strip().columns().at(0);
+    // Bounds-checked before the indexed read: activeTileIdx is model state,
+    // and a regression that leaves it out of range would abort the whole
+    // binary here instead of failing one assertion.
+    QVERIFY(tabbed.activeTileIdx >= 0 && tabbed.activeTileIdx < tabbed.tiles.size());
+    QCOMPARE(tabbed.tiles.at(tabbed.activeTileIdx).windowId, QStringLiteral("app|n2"));
     // The stashed focus (other|u3) followed its claimed successor.
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("other|n3"));
 }
@@ -143,13 +172,22 @@ void TestScrollEnginePersistence::pruneSweepsStashedTilesForClosedWindows()
 
     // Leave Scrolling: the teardown stashes all three tiles.
     engine->setActiveScreens({});
+    // Substring probes over the serialized blob, and safe here ONLY because
+    // these ids are mutually non-prefixing: "app|a", "app|b" and "app|c" are
+    // whole, distinct tokens. Add an id that is a prefix of another and these
+    // assertions start reading each other's tiles — pick disjoint names or
+    // parse the JSON.
     const QByteArray stashed = QJsonDocument(engine->serializeStripState()).toJson();
     QVERIFY2(stashed.contains("app|b"), "precondition: the stash holds all three tiles");
 
     // One window closes while the screen is in another mode. The context is
     // untouched, so the context-keyed sweeps cannot reach this stash and only
-    // pruneStaleWindows can.
-    engine->pruneStaleWindows({QStringLiteral("app|a"), QStringLiteral("app|c")});
+    // pruneStaleWindows can. The return counts TRACKED windows dropped, and
+    // there are none — the mode exit already handed all three back — so 0 is
+    // the right answer and the stash sweep is deliberately not reflected in
+    // it. Asserted rather than discarded so the day the return does start
+    // counting stash tiles, this test says so.
+    QCOMPARE(engine->pruneStaleWindows({QStringLiteral("app|a"), QStringLiteral("app|c")}), 0);
 
     // Asserted while the screen is STILL out of Scrolling, deliberately: once
     // the context goes live again its strip wins the serialize key and would
@@ -199,13 +237,15 @@ void TestScrollEnginePersistence::pruneSpareStashStagedFromPersistence()
 
     // The login-order prune, with THIS session's ids. None of them matches a
     // staged tile, which is the normal and expected case.
-    engine2->pruneStaleWindows({QStringLiteral("app|n1"), QStringLiteral("app|n2"), QStringLiteral("other|n3")});
+    QCOMPARE(
+        engine2->pruneStaleWindows({QStringLiteral("app|n1"), QStringLiteral("app|n2"), QStringLiteral("other|n3")}),
+        0);
 
     engine2->windowOpened(QStringLiteral("app|n1"), QStringLiteral("S1"), 0, 0);
     engine2->windowOpened(QStringLiteral("app|n2"), QStringLiteral("S1"), 0, 0);
     engine2->windowOpened(QStringLiteral("other|n3"), QStringLiteral("S1"), 0, 0);
 
-    auto* state = static_cast<ScrollState*>(engine2->stateForScreen(QStringLiteral("S1")));
+    ScrollState* state = stateFor(engine2, QStringLiteral("S1"));
     QVERIFY(state);
     QVERIFY2(state->strip().columns().size() == 2,
              "the persisted structure must survive the bringup prune, not collapse to one column per window");
@@ -214,38 +254,44 @@ void TestScrollEnginePersistence::pruneSpareStashStagedFromPersistence()
     QCOMPARE(state->strip().columns().at(0).tiles.size(), 2);
     QCOMPARE(engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("other|n3")), 1);
 
-    // The exemption is not permanent: once a tile has been claimed the entry
-    // is anchored in this session's id space, so a later prune sweeps it
-    // normally. Without the flag clear, a stash tile for a window that closes
-    // mid-session would become immortal again.
+    // The exemption is PER TILE, and a claim on one tile must not expose its
+    // co-tenant's. Both stashed tiles name last session's ids; claiming the
+    // first anchors THAT tile in this session, but the second still names an
+    // id no alive set can ever contain, so a prune in between must leave it
+    // alone. An entry-wide lift on the first claim let this very sequence
+    // erase the second slot — the case the per-tile unclaimedSessions lease
+    // exists to age out over three logins instead of destroying on sight.
     //
     // Asserted BEHAVIOURALLY, on the strip, with the screen still active.
     // Reading serializeStripState here would prove nothing: taking the screen
     // out of scrolling to expose the stash runs stashStripStructure, which
-    // REPLACES the entry wholesale from the live strip, so the staged tile is
-    // gone regardless of whether the flag was ever cleared.
+    // REPLACES the entry wholesale from the live strip.
     ScrollEngine* engine3 = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine3->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
     engine3->restoreStripState(blob);
-    // app|m1 claims app|u1's tile in the stashed tabbed column, which clears
-    // the persistence exemption for the whole entry.
+    // app|m1 claims app|u1's tile in the stashed tabbed column.
     engine3->windowOpened(QStringLiteral("app|m1"), QStringLiteral("S1"), 0, 0);
-    // The prune now APPLIES: app|u2's tile names a window that is not alive,
-    // so it is swept out of the entry.
-    engine3->pruneStaleWindows({QStringLiteral("app|m1")});
-    // With the sweep applied, app|n2 has no stashed slot left to claim and
-    // opens in its own column. With the exemption stuck, it claims app|u2's
-    // surviving slot and stacks into app|m1's column instead.
+    // A prune lands between the two arrivals — the daemon really does run one
+    // at bringup. No TRACKED window dies (app|m1 is alive), so the count is 0
+    // and everything this asserts is about the stash.
+    QCOMPARE(engine3->pruneStaleWindows({QStringLiteral("app|m1")}), 0);
+    // app|u2's slot survived, so the second arrival still stacks into the
+    // rebuilt column. With the exemption lifted entry-wide by the first
+    // claim, the prune above erased that slot and this lands in its own
+    // column instead.
     engine3->windowOpened(QStringLiteral("app|n2"), QStringLiteral("S1"), 0, 0);
-    const int m1Col = engine3->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|m1"));
-    const int n2Col = engine3->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|n2"));
-    QVERIFY2(m1Col != n2Col,
-             "after a claim the sweep must apply again, so the dead stashed tile cannot capture a later arrival");
+    const int m1Col = columnOf(engine3, QStringLiteral("app|m1"));
+    const int n2Col = columnOf(engine3, QStringLiteral("app|n2"));
+    QVERIFY2(m1Col == n2Col,
+             "a claim on one staged tile must not expose its unclaimed co-tenant's slot to the aliveness sweep");
 
-    // Positive control for the arm above: identical sequence WITHOUT the
-    // post-claim prune. The second arrival claims app|u2's surviving slot and
-    // stacks into the first claimant's column, proving the separate-columns
-    // assertion really measures the sweep and not a broken claim path.
+    // Control for the arm above: the identical sequence WITHOUT the
+    // intervening prune reaches the same stacking (the prune must be
+    // invisible), and then a THIRD same-app arrival lands in its OWN column.
+    // The third arrival is what gives the control discriminating power: both
+    // staged tiles are consumed by now, so a claim path that stacked same-app
+    // arrivals unconditionally would pass the equality yet fail here — the
+    // stacking really is the staged slots and nothing else.
     ScrollEngine* engine4 = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine4->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
     engine4->restoreStripState(blob);
@@ -253,6 +299,10 @@ void TestScrollEnginePersistence::pruneSpareStashStagedFromPersistence()
     engine4->windowOpened(QStringLiteral("app|n2"), QStringLiteral("S1"), 0, 0);
     QCOMPARE(engine4->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|n2")),
              engine4->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|m1")));
+    engine4->windowOpened(QStringLiteral("app|p3"), QStringLiteral("S1"), 0, 0);
+    QVERIFY2(engine4->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|p3"))
+                 != engine4->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|m1")),
+             "with every staged tile consumed, a same-app arrival must open plainly, not stack");
 }
 
 void TestScrollEnginePersistence::unclaimedStashTilesExpireAfterThreeSessions()
@@ -283,6 +333,11 @@ void TestScrollEnginePersistence::unclaimedStashTilesExpireAfterThreeSessions()
         e->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
         e->restoreStripState(blob);
         blob = e->serializeStripState();
+        // Re-asserted every pass: an empty blob would carry the loop to the
+        // end just as well, and the expiry assertion at the tail would then
+        // pass because there was nothing left to claim rather than because
+        // the lease ran out.
+        QVERIFY2(!blob.isEmpty(), qPrintable(QStringLiteral("session %1 wrote an empty snapshot").arg(session)));
     }
 
     // Control first, with the SECOND-to-last blob (ages 2): the lease is not
@@ -293,8 +348,7 @@ void TestScrollEnginePersistence::unclaimedStashTilesExpireAfterThreeSessions()
     control->restoreStripState(penultimate);
     control->windowOpened(QStringLiteral("app|c1"), QStringLiteral("S1"), 0, 0);
     control->windowOpened(QStringLiteral("app|c2"), QStringLiteral("S1"), 0, 0);
-    QCOMPARE(control->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|c1")),
-             control->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|c2")));
+    QCOMPARE(columnOf(control, QStringLiteral("app|c1")), columnOf(control, QStringLiteral("app|c2")));
 
     // The last blob carries age 3: restore drops both tiles, so the arrivals
     // find no staged slots and open plainly, one column each.
@@ -303,8 +357,8 @@ void TestScrollEnginePersistence::unclaimedStashTilesExpireAfterThreeSessions()
     engine5->restoreStripState(blob);
     engine5->windowOpened(QStringLiteral("app|x1"), QStringLiteral("S1"), 0, 0);
     engine5->windowOpened(QStringLiteral("app|x2"), QStringLiteral("S1"), 0, 0);
-    const int x1Col = engine5->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|x1"));
-    const int x2Col = engine5->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|x2"));
+    const int x1Col = columnOf(engine5, QStringLiteral("app|x1"));
+    const int x2Col = columnOf(engine5, QStringLiteral("app|x2"));
     QVERIFY2(x1Col != x2Col, "an expired stash tile must not capture a later same-app arrival");
 }
 
@@ -338,8 +392,21 @@ void TestScrollEnginePersistence::coTenantClaimDoesNotRenewSiblingLease()
         e->restoreStripState(blob);
         const QString claimant = QStringLiteral("app|m%1").arg(session);
         e->windowOpened(claimant, QStringLiteral("S1"), 0, 0);
+        // Positive control, every pass: the arrival really did CLAIM a
+        // stashed slot rather than open a plain column. The stashed column is
+        // Tabbed and the plain open path is Normal, so the display is the
+        // discriminator — and without it the whole test would still pass if
+        // the restore had staged nothing at all.
+        ScrollState* claimed = stateFor(e, QStringLiteral("S1"));
+        QVERIFY(claimed);
+        QVERIFY2(!claimed->strip().columns().isEmpty(),
+                 qPrintable(QStringLiteral("session %1 claimant built no column").arg(session)));
+        QVERIFY2(
+            claimed->strip().columns().at(0).display == ColumnDisplay::Tabbed,
+            qPrintable(QStringLiteral("session %1 claimant did not land in the stashed tabbed column").arg(session)));
         e->windowClosed(claimant);
         blob = e->serializeStripState();
+        QVERIFY2(!blob.isEmpty(), qPrintable(QStringLiteral("session %1 wrote an empty snapshot").arg(session)));
     }
 
     // The sibling's lease expired on the final restore; only the claimed
@@ -351,8 +418,8 @@ void TestScrollEnginePersistence::coTenantClaimDoesNotRenewSiblingLease()
     engine5->restoreStripState(blob);
     engine5->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     engine5->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
-    const int aCol = engine5->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a"));
-    const int bCol = engine5->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
+    const int aCol = columnOf(engine5, QStringLiteral("app|a"));
+    const int bCol = columnOf(engine5, QStringLiteral("app|b"));
     QVERIFY2(aCol != bCol, "a returning co-tenant's claim must not renew the dead sibling tile's lease");
 }
 

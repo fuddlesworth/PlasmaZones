@@ -1,19 +1,33 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Headless ScrollEngine smoke test: tracking, ordering, float state,
-// capture, and handoff semantics with null daemon dependencies (the engine
-// tolerates a missing screen manager / tracking service; geometry emission
-// is covered by the strip-model tests, not here).
+// Headless ScrollEngine smoke test: tracking, ordering, float state, capture,
+// context teardown, and handoff semantics.
+//
+// The engine tolerates a missing ScreenManager and tracking service, so most
+// fixtures here pass none. That is not the same as "no dependencies": the
+// tests that need real rects (parking, the emit-on-change gate, the scheduled
+// retile) wire the geometry-provider seam instead, and the strip geometry they
+// assert on is the engine's own, not the strip model's.
+//
+// Two siblings carry the rest of the suite, both split off at this file's size
+// ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
+// and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
+// zone-number walk and the verbs that address it.
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 
+#include "scrollstriptestutils.h"
+
 #include <QSignalSpy>
 #include <QtTest>
 
 using namespace PhosphorScrollEngine;
+
+using ScrollTestUtils::defaultScreenRect;
+using ScrollTestUtils::makeProviderEngine;
 
 class TestScrollEngineSmoke : public QObject
 {
@@ -50,11 +64,6 @@ private Q_SLOTS:
     void floatedOpenConsumesSeed();
     void migrateOutAnnouncesDroppedFloat();
     void contextSwitchFlagRidesChangedScreenSets();
-    void zoneNumbersAreViewportRelativeVisibleSlots();
-    void centeredColumnKeepsNeighboursFullRects();
-    // Strip persistence (stash focus/anchor, serialize/restore) is covered
-    // by test_scrollengine_persistence.cpp — this file is at the size split
-    // point.
 
 private:
     // NOTE: windowOpened's cross-screen snap-restore defer gate
@@ -71,18 +80,12 @@ private:
         return engine;
     }
 
-    /// makeEngine's twin with the geometry-provider seam wired, for the tests
-    /// that need the apply path to resolve real rects (only then does
-    /// m_lastAppliedRect populate, and only then does windowsTiled fire).
-    static ScrollEngine* makeProviderEngine(QObject* parent, const QSet<QString>& screens)
+    /// The state for a screen, or nullptr. QVERIFY'd at every call site: a
+    /// regression that drops the state segfaults the whole binary otherwise,
+    /// taking the remaining tests' results with it.
+    static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
     {
-        auto* engine = new ScrollEngine(nullptr, nullptr, parent);
-        const auto geometry = [](const QString&) {
-            return QRect(0, 0, 1200, 800);
-        };
-        engine->setScreenGeometryProviders(geometry, geometry);
-        engine->setActiveScreens(screens);
-        return engine;
+        return static_cast<ScrollState*>(engine->stateForScreen(screenId));
     }
 };
 
@@ -101,7 +104,13 @@ void TestScrollEngineSmoke::screensSetLifecycle()
     // The wire payload is SORTED (consumers compare successive payloads).
     QCOMPARE(screensSpy.last().at(0).toStringList(), (QStringList{QStringLiteral("S1"), QStringLiteral("S2")}));
     QCOMPARE(enabledSpy.count(), 1);
-    engine->setActiveScreens({QStringLiteral("S1")}); // genuine shrink → emit 2
+    // A genuine shrink emits — asserted AT the shrink, not inferred from the
+    // count two blocks later: with the emit-on-change gate inverted, the
+    // identical-set assertion below would read this missing emission as the
+    // no-op it is testing for and pass.
+    engine->setActiveScreens({QStringLiteral("S1")});
+    QCOMPARE(screensSpy.count(), 2);
+    QCOMPARE(screensSpy.last().at(0).toStringList(), (QStringList{QStringLiteral("S1")}));
 
     // Identical non-empty set WITHOUT a preceding desktop/activity switch:
     // NO re-emit. A no-op re-push (updateEngineScreens re-derive) must not
@@ -371,11 +380,19 @@ void TestScrollEngineSmoke::floatRestoresDisplayIntent()
     engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
     engine->toggleColumnTabbed(QStringLiteral("S1"));
 
+    // The state is re-acquired per call (a float round trip can rebuild it)
+    // and reported as Normal when it is gone, so a regression that drops the
+    // state fails the display assertion instead of dereferencing null and
+    // taking the rest of the binary with it.
     auto columnDisplayOf = [engine](const QString& windowId) {
-        auto* state = static_cast<ScrollState*>(engine->stateForScreen(QStringLiteral("S1")));
+        ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+        if (!state) {
+            return ColumnDisplay::Normal;
+        }
         const int col = state->strip().columnOfWindow(windowId);
         return col >= 0 ? state->strip().columns().at(col).display : ColumnDisplay::Normal;
     };
+    QVERIFY(stateFor(engine, QStringLiteral("S1")));
     QCOMPARE(columnDisplayOf(QStringLiteral("app|b")), ColumnDisplay::Tabbed);
 
     engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
@@ -464,14 +481,19 @@ void TestScrollEngineSmoke::stackedTileFloatRoundTripRestoresSlot()
     engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
     engine->consumeOrExpelWindow(-1, QStringLiteral("S1")); // b joins a's column
 
-    auto* state = static_cast<ScrollState*>(engine->stateForScreen(QStringLiteral("S1")));
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
     QCOMPARE(state->strip().columnCount(), 1);
     QCOMPARE(state->strip().columns().at(0).tiles.at(1).windowId, QStringLiteral("app|b"));
 
     engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
+    state = stateFor(engine, QStringLiteral("S1")); // re-acquired: a float can rebuild the state
+    QVERIFY(state);
     QCOMPARE(state->strip().columns().at(0).tiles.size(), 1);
     engine->setWindowFloat(QStringLiteral("app|b"), false, QStringLiteral("S1"));
     // b re-enters ITS slot in a's column, not a fresh column.
+    state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
     QCOMPARE(state->strip().columnCount(), 1);
     QCOMPARE(state->strip().columns().at(0).tiles.size(), 2);
     QCOMPARE(state->strip().columns().at(0).tiles.at(1).windowId, QStringLiteral("app|b"));
@@ -482,6 +504,8 @@ void TestScrollEngineSmoke::stackedTileFloatRoundTripRestoresSlot()
     engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
     engine->windowClosed(QStringLiteral("app|a"));
     engine->setWindowFloat(QStringLiteral("app|b"), false, QStringLiteral("S1"));
+    state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
     const int bCol = state->strip().columnOfWindow(QStringLiteral("app|b"));
     const int cCol = state->strip().columnOfWindow(QStringLiteral("app|c"));
     QVERIFY(bCol >= 0);
@@ -508,9 +532,11 @@ void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
     QCoreApplication::processEvents(); // drain the open's own apply
 
     QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
-    // A 900px minimum outgrows the default half-width column (595px on this
-    // work area — the proportion is gap-aware), so the retile MUST move the
-    // rect and emit.
+    // A 900px minimum outgrows the default half-width column (600px here:
+    // the proportion is gap-aware, and this fixture attaches no
+    // IScrollSettings so the inner gap is 0 — the 595px figure belongs to
+    // the strip-ops fixture, which sets a 10px gap), so the retile MUST move
+    // the rect and emit.
     engine->windowMinSizeUpdated(QStringLiteral("app|a"), 900, 0);
     QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(900, 0));
     QCOMPARE(tiledSpy.count(), 0); // nothing applied yet: the retile is queued
@@ -619,6 +645,13 @@ void TestScrollEngineSmoke::parkingAvoidsAdjacentOutputs()
     // visibly ON that monitor and KWin reassigns the window's output (the
     // dolphin-on-the-second-monitor bug). With a right neighbour, the park
     // must fall to the free LEFT side instead.
+    //
+    // The two geometries are deliberately DIFFERENT here: a 100px panel on
+    // each side makes the work area 100..1100 while the screen stays
+    // 0..1200. Parking bounds come from the SCREEN rect, because a rect just
+    // outside the work area would still sit on-screen over the panel — and
+    // with one shared geometry, swapping the two provider arguments changed
+    // nothing and the claim was unpinned. Every bound below is the screen's.
     struct RightNeighbourResolver : PhosphorEngine::ICrossSurfaceResolver
     {
         QString neighborOutputInDirection(const QString&, const QString& direction) const override
@@ -631,8 +664,15 @@ void TestScrollEngineSmoke::parkingAvoidsAdjacentOutputs()
         }
     } resolver;
 
+    const auto screenGeometry = [](const QString&) {
+        return defaultScreenRect();
+    };
+    const auto panelInsetGeometry = [](const QString&) {
+        return defaultScreenRect().adjusted(100, 0, -100, 0);
+    };
+
     QObject owner;
-    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, screenGeometry, panelInsetGeometry);
     engine->setCrossSurfaceResolver(&resolver);
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
@@ -641,8 +681,26 @@ void TestScrollEngineSmoke::parkingAvoidsAdjacentOutputs()
     // would naturally park off the RIGHT edge — occupied, so it parks left.
     engine->focusColumnFirst(QStringLiteral("S1"));
     const QRect parked = engine->lastManagedRect(QStringLiteral("app|c"));
-    QVERIFY2(parked.right() < 0, qPrintable(QStringLiteral("expected left park, got x=%1").arg(parked.x())));
+    // Clear of the SCREEN's left edge, not merely of the work area's: a park
+    // measured against the work area would sit at x < 100 and still be
+    // visible over the panel.
+    QVERIFY2(parked.right() < defaultScreenRect().left(),
+             qPrintable(QStringLiteral("expected a park clear of the screen's left edge, got x=%1, right=%2")
+                            .arg(parked.x())
+                            .arg(parked.right())));
     engine->setCrossSurfaceResolver(nullptr);
+
+    // Baseline WITHOUT a resolver: the same sequence parks c off its NATURAL
+    // right side, so an unconditional-left-park mutation cannot pass both.
+    // Same panel inset, same reasoning about which edge the bound comes from.
+    ScrollEngine* unresolved = makeProviderEngine(&owner, {QStringLiteral("S1")}, screenGeometry, panelInsetGeometry);
+    unresolved->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    unresolved->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    unresolved->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    unresolved->focusColumnFirst(QStringLiteral("S1"));
+    const QRect natural = unresolved->lastManagedRect(QStringLiteral("app|c"));
+    QVERIFY2(natural.left() > defaultScreenRect().right(),
+             qPrintable(QStringLiteral("expected a park clear of the screen's right edge, got x=%1").arg(natural.x())));
 }
 
 void TestScrollEngineSmoke::modeRoundTripRestoresStripStructure()
@@ -735,8 +793,15 @@ void TestScrollEngineSmoke::minSizeSurvivesFloatRoundTrip()
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 500, 400);
     QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(500, 400));
     engine->setWindowFloat(QStringLiteral("app|a"), true, QStringLiteral("S1"));
-    engine->setWindowFloat(QStringLiteral("app|a"), false, QStringLiteral("S1"));
+    // WHILE floated the answer comes from the FloatRestore entry, so the
+    // cross-engine handoff still gets a clamp for a floated window.
     QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(500, 400));
+    // A min-size report landing mid-float writes through to the restore
+    // entry; unfloat re-applies the UPDATED clamp, not the float-time one.
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 520, 410);
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(520, 410));
+    engine->setWindowFloat(QStringLiteral("app|a"), false, QStringLiteral("S1"));
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(520, 410));
 }
 
 void TestScrollEngineSmoke::handoffReleaseClearsFloatMarker()
@@ -1009,114 +1074,6 @@ void TestScrollEngineSmoke::contextSwitchFlagRidesChangedScreenSets()
     QCOMPARE(screensSpy.last().at(1).toBool(), true);
     engine->setActiveScreens({QStringLiteral("S1")});
     QCOMPARE(screensSpy.count(), 4);
-}
-
-void TestScrollEngineSmoke::zoneNumbersAreViewportRelativeVisibleSlots()
-{
-    // Zone numbers are VIEWPORT-relative visible slots, not strip indices: the
-    // leftmost on-screen column is 1 regardless of how many columns are parked
-    // off-screen to its left, and a parked column has no number at all. This is
-    // the engine-side half of the numbering (visibleColumnNumberForWindow plus
-    // the ordinal walk that fills visibleTileRects' columnNumbers out-param);
-    // the strip primitive it rests on is pinned separately in the ops suite.
-    //
-    // Work area is 1200 wide and the default column is 600px (the proportion is
-    // gap-aware and no IScrollSettings is attached, so innerGap is 0), so
-    // exactly two columns fit and a third must be off-screen.
-    QObject owner;
-    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
-    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
-    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")).size(), 3);
-
-    // Exactly one of the three is parked, and the two on screen carry 1 and 2.
-    const int na = engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|a"));
-    const int nb = engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
-    const int nc = engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|c"));
-    QList<int> numbers{na, nb, nc};
-    QCOMPARE(numbers.count(-1), 1); // one parked
-    std::sort(numbers.begin(), numbers.end());
-    QCOMPARE(numbers, (QList<int>{-1, 1, 2})); // and the visible pair is 1-based
-
-    // The rect walk agrees with the per-window query: one rect per visible
-    // tile, numbered in the same left-to-right order starting at 1.
-    QVector<int> columnNumbers;
-    const QVector<QRect> rects = engine->visibleTileRects(QStringLiteral("S1"), &columnNumbers);
-    QCOMPARE(rects.size(), 2);
-    QCOMPARE(columnNumbers, (QVector<int>{1, 2}));
-
-    // An unknown window has no slot, and neither does a window on a screen the
-    // engine does not manage.
-    QCOMPARE(engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|nope")), -1);
-    QCOMPARE(engine->visibleColumnNumberForWindow(QStringLiteral("S9"), QStringLiteral("app|a")), -1);
-
-    // Stacking two windows into ONE column must not consume two numbers: the
-    // ordinal advances per COLUMN, so a stacked pair beside a single column
-    // yields {1, 1, 2} across three rects. This is the part a naive
-    // one-ordinal-per-rect walk gets wrong.
-    engine->consumeOrExpelWindow(-1, QStringLiteral("S1"));
-    QVector<int> stackedNumbers;
-    const QVector<QRect> stackedRects = engine->visibleTileRects(QStringLiteral("S1"), &stackedNumbers);
-    QCOMPARE(stackedRects.size(), stackedNumbers.size());
-    QVERIFY(!stackedNumbers.isEmpty());
-    // Numbers are non-decreasing, start at 1, and every step is 0 (same column)
-    // or exactly 1 (next column) — never a skip.
-    QCOMPARE(stackedNumbers.first(), 1);
-    for (int i = 1; i < stackedNumbers.size(); ++i) {
-        const int step = stackedNumbers.at(i) - stackedNumbers.at(i - 1);
-        QVERIFY2(step == 0 || step == 1, "column ordinals must not skip or go backwards");
-    }
-    // Three rects across two visible columns, and the stacked pair SHARES
-    // ordinal 2: {1, 2, 2}. A naive one-ordinal-per-rect walk would say
-    // {1, 2, 3} and hand the user a zone number no column has.
-    QCOMPARE(stackedRects.size(), 3);
-    QCOMPARE(stackedNumbers, (QVector<int>{1, 2, 2}));
-
-    // The normalized twin reports the same numbering (it delegates), and every
-    // rect is inside the unit square.
-    QVector<int> relativeNumbers;
-    const QVector<QRectF> relative = engine->visibleTileRectsRelative(QStringLiteral("S1"), &relativeNumbers);
-    QCOMPARE(relativeNumbers, stackedNumbers);
-    QCOMPARE(relative.size(), stackedRects.size());
-    for (const QRectF& r : relative) {
-        QVERIFY(r.left() >= 0.0 && r.top() >= 0.0);
-        QVERIFY(r.right() <= 1.0 + 1e-9 && r.bottom() <= 1.0 + 1e-9);
-    }
-}
-
-void TestScrollEngineSmoke::centeredColumnKeepsNeighboursFullRects()
-{
-    // Centering the active column pushes its neighbours PARTLY off both edges
-    // of the viewport. The engine must commit their TRUE rects, overhang
-    // included: clamping the geometry to the work area was tried and rejected
-    // (it resized the windows). The overhang is prevented from rendering on
-    // the neighbouring output by the compositor effect, which skips strip
-    // windows in foreign outputs' paint passes (paint_pipeline.cpp) — the
-    // window keeps its full size and its drawing stops at the monitor edge.
-    //
-    // Work area is 1200 wide with 600px columns: centering the middle one
-    // puts it at 300..900, leaving the outer two at -300..300 and 900..1500.
-    QObject owner;
-    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
-    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
-    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
-
-    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
-    engine->centerColumn(QStringLiteral("S1"));
-
-    const QRect left = engine->lastManagedRect(QStringLiteral("app|a"));
-    const QRect middle = engine->lastManagedRect(QStringLiteral("app|b"));
-    const QRect right = engine->lastManagedRect(QStringLiteral("app|c"));
-
-    // The centred column is fully on screen.
-    QCOMPARE(middle, QRect(300, 0, 600, 800));
-
-    // The neighbours keep their FULL 600px width, straddling the edges. A
-    // clamped left of (0, 0, 300, 800) is exactly the rejected resize.
-    QCOMPARE(left, QRect(-300, 0, 600, 800));
-    QCOMPARE(right, QRect(900, 0, 600, 800));
 }
 
 // GUILESS (not APPLESS): a QCoreApplication provides the event

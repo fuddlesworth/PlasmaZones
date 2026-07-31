@@ -15,6 +15,7 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QHash>
+#include <QPair>
 #include <QSet>
 #include <QThreadPool>
 #include <chrono>
@@ -142,15 +143,30 @@ public:
     /// the mode is selected but nothing is assigned, instead of silently showing
     /// no OSD.
     void showNotAssignedOsd(const QString& screenId);
+    /// Which user-facing OSD toggle a caller gated its announcement on.
+    /// Carried into the deferred strip-preview dispatch so it re-reads the
+    /// SAME setting the caller checked: the two are gated differently, and
+    /// the settle window is long enough to turn either off inside it.
+    enum class OsdTrigger {
+        LayoutSwitch,
+        DesktopSwitch,
+    };
+    /// Whether an empty strip may defer its card by the settle beat
+    /// (@ref kScrollingOsdAdoptSettleMs) or must render the sketch now.
+    /// Immediate is for the batched multi-screen show, where one deferred
+    /// screen would land ~300 ms after the rest.
+    enum class StripSettle {
+        Defer,
+        Immediate,
+    };
     /// Mode-switch OSD for a screen entering Scrolling. Preview style shows
     /// the live strip (deferred one beat when the toggle races the strip
-    /// adoption); Text style shows a text card.
-    void showScrollingModeOsd(const QString& screenId);
-    /// The preview card itself: live visible-tile rects, or the
-    /// representative endless-strip sketch when the strip is empty.
-    void showScrollingStripPreviewOsd(const QString& screenId);
-    /// How long a mode toggle's OSD waits for the effect's re-announce
-    /// batch to land in the scroll engine before rendering the card.
+    /// adoption, unless @p settle forbids it); Text style shows a text card.
+    void showScrollingModeOsd(const QString& screenId, OsdTrigger trigger, StripSettle settle = StripSettle::Defer);
+    /// How long an OSD waits for the effect's re-announce batch to land in
+    /// the scroll engine before rendering the card. Serves every caller that
+    /// can announce Scrolling ahead of adoption: the mode-toggle shortcut,
+    /// the KCM assignment apply, and the desktop-switch batch.
     static constexpr int kScrollingOsdAdoptSettleMs = 300;
 
     // Shortcut cheatsheet overlay (impls in daemon/osd.cpp).
@@ -182,6 +198,22 @@ private:
      * responsibility. The osdStyle setting controls visual style.
      */
     void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId);
+    /// The scrolling strip preview card itself: live visible-tile rects, or
+    /// the representative endless-strip sketch when the strip is empty.
+    /// Carries NO gates of its own, so it stays private and reachable only
+    /// through showScrollingModeOsd, which applies them (and re-applies them
+    /// on the settle dispatch that calls back in here).
+    void showScrollingStripPreviewOsd(const QString& screenId);
+    /// True when the setting @p trigger names is on.
+    bool isOsdTriggerEnabled(OsdTrigger trigger) const;
+    /// Stop @p screenId's armed strip-preview settle timer, if any. Called
+    /// from every showScrollingModeOsd arm that does NOT arm it, so a toggle
+    /// followed by a reconcile cannot land a duplicate card a beat later.
+    void stopScrollingOsdSettleTimer(const QString& screenId);
+    /// Destroy the per-screen strip-preview settle timers. An empty
+    /// @p screenId reaps all of them (stop()); a screen id reaps that
+    /// output's, including every virtual sub-screen of it (screenRemoved).
+    void reapScrollingOsdSettleTimers(const QString& screenId = QString());
     void clearHighlight();
 
     /**
@@ -352,6 +384,11 @@ private:
     void handleIncreaseMasterCount();
     void handleDecreaseMasterCount();
     void handleRetile();
+    /// The mode-toggle shortcut's handler (autotile_init.cpp): cycles the
+    /// cursor's screen Snapping → Tiling → Scrolling → Snapping, skipping
+    /// modes whose master switch is off, and carries the leaving mode's
+    /// window order and snap state across the flip.
+    void handleTilingModeToggle();
     void handleSwapVirtualScreen(NavigationDirection direction);
     void handleRotateVirtualScreens(bool clockwise);
 
@@ -361,7 +398,12 @@ private:
     /** @brief Handle cycle-layout shortcut (previous or next) */
     void handleCycleLayout(const QString& screenId, bool forward);
 
-    // Start-up sub-methods (definitions split across start.cpp and signals.cpp).
+    // Start-up sub-methods. Definitions are split by concern across
+    // start.cpp (screen / desktop / activity wiring), signals.cpp (unified
+    // controller, layout and overlay wiring), shortcuts_wiring.cpp
+    // (connectShortcutSignals), autotile_init.cpp (initializeAutotile),
+    // scrolling_init.cpp (connectScrollingShortcuts) and scrolling.cpp
+    // (the two per-recompute scrolling helpers).
     void connectScreenSignals();
     void connectDesktopActivity();
     void connectShortcutSignals();
@@ -546,6 +588,18 @@ private:
      * apply so a later rule edit doesn't falsely re-resnap those screens.
      */
     QSet<QString> diffActiveAssignments();
+
+    /**
+     * @brief The KCM assignment-apply pass (init_assignment_apply.cpp).
+     *
+     * Runs on LayoutAdaptor::assignmentChangesApplied, AFTER the KCM's batch
+     * save has committed every assignment and setting. Classifies each
+     * effective screen by LIVE router mode, resnaps the snapping ones in
+     * @p changedScreenIdsList, and announces the outcome per screen (disabled
+     * / not-assigned / locked / mode / layout). An empty list means "every
+     * screen may have changed".
+     */
+    void handleAssignmentChangesApplied(const QStringList& changedScreenIdsList);
 
     /**
      * @brief Respond to a PhosphorScreens::ScreenManager VS cache change for a physical screen
@@ -1133,13 +1187,12 @@ private:
     // between swap and rotate is not a user pattern.
     QElapsedTimer m_virtualScreenDebounce;
     /// Per-start connections outside stop()'s per-sender sweep and outside
-    /// m_restartScopedConnections: the m_settings→this autotile-enabled
-    /// cheatsheet refilter. m_settings is swept only by teardownIdleConnections,
-    /// whose ctor/init connections must survive, so this per-start one is
-    /// severed here by handle. The WTA-to-drag-adaptor fan-out is instead kept
-    /// unique with Qt::UniqueConnection, and the layout/overlay connections are
-    /// tracked in m_restartScopedConnections and cleared at the top of
-    /// connectLayoutSignals().
+    /// m_restartScopedConnections: the two m_settings→this cheatsheet
+    /// refilters, on autotileEnabled and scrollingEnabled. m_settings is
+    /// swept only by teardownIdleConnections, whose ctor/init connections
+    /// must survive, so these per-start ones are severed here by handle. The WTA-to-drag-adaptor fan-out is instead
+    /// kept unique with Qt::UniqueConnection, and the layout/overlay connections are tracked in
+    /// m_restartScopedConnections and cleared at the top of connectLayoutSignals().
     QVector<QMetaObject::Connection> m_perStartConnections;
 
     // Last TILING-FAMILY window order per (screen, desktop, activity),
@@ -1171,8 +1224,13 @@ private:
     // placementChanged stream only re-resolves the per-screen tiling algorithm
     // when the count actually changes (a Field::TiledWindowCount rule keys on
     // it). Without this gate every retile (drag, resize) would re-walk the
-    // assignment cascade.
-    QHash<QString, int> m_lastTiledCountByScreen;
+    // assignment cascade. The value carries the ENGINE that recorded it: both
+    // the autotile and scrolling gates write here, and after a mode flip the
+    // incoming engine's first count must not compare against the outgoing
+    // engine's cache (an equal count would swallow the re-resolve). The key
+    // stays the bare screenId so the physical-id prune in start.cpp keeps
+    // matching.
+    QHash<QString, QPair<const void*, int>> m_lastTiledCountByScreen;
 
     // Snap-float restore entries collected by handleEngineWindowsReleased
     // (either tiling engine's windowsReleased). Cleared once per

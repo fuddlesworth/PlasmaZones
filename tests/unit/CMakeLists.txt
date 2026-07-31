@@ -890,6 +890,14 @@ target_link_libraries(test_scrolling_adaptor PRIVATE Qt6::Test Qt6::Core Qt6::DB
                                                      PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_scrolling_adaptor COMMAND test_scrolling_adaptor)
 
+# RuleAdaptor's refusals are refusals to OVERWRITE the persisted rule set, so
+# a guard that quietly stops working loses user data rather than a feature.
+# The contract-sync test only checks the XML's shape; this pins the behaviour.
+add_executable(test_rule_adaptor dbus/test_rule_adaptor.cpp)
+target_link_libraries(test_rule_adaptor PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                PhosphorRules::PhosphorRules)
+add_test(NAME test_rule_adaptor COMMAND test_rule_adaptor)
+
 add_executable(test_wta_scroll_strips dbus/test_wta_scroll_strips.cpp)
 target_link_libraries(test_wta_scroll_strips PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_scroll_strips COMMAND test_wta_scroll_strips)

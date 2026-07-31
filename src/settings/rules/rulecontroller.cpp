@@ -17,10 +17,9 @@
 #include <QDBusConnection>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QHash>
-#include <QSet>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QUuid>
 
 #include <limits>
@@ -73,12 +72,10 @@ RuleController::RuleController(QObject* parent)
     // both through `rulesChangedSubscriptionArgs()` makes that
     // symmetry mechanical: a future rename of the signal touches the
     // tuple in one place and connect+disconnect track each other.
-    const bool subscribed = subscribeRulesChanged();
-    if (!subscribed) {
+    if (!subscribeRulesChanged()) {
         qCWarning(lcConfig) << "RuleController: failed to subscribe to org.plasmazones.Rules.rulesChanged "
                                "— will retry when the daemon becomes reachable";
     }
-    m_rulesChangedSubscribed = subscribed;
     // Kick off the initial fetch immediately — the call is asynchronous
     // (QDBusPendingCallWatcher), so the constructor returns without
     // blocking and the settings page can finish loading. The reply
@@ -106,8 +103,13 @@ RuleController::RulesChangedSubscription RuleController::rulesChangedSubscriptio
 bool RuleController::subscribeRulesChanged()
 {
     const auto args = rulesChangedSubscriptionArgs();
-    return QDBusConnection::sessionBus().connect(args.service, args.objectPath, args.interface, args.signalName, this,
-                                                 SLOT(reload()));
+    // Owns the flag rather than leaving each caller to assign it, which is how
+    // unsubscribeRulesChanged already works. Two callers hand-assigning a
+    // member that mirrors this function's own result is one edit away from a
+    // subscription the retry path thinks is attached.
+    m_rulesChangedSubscribed = QDBusConnection::sessionBus().connect(args.service, args.objectPath, args.interface,
+                                                                     args.signalName, this, SLOT(reload()));
+    return m_rulesChangedSubscribed;
 }
 
 void RuleController::unsubscribeRulesChanged()
@@ -188,11 +190,8 @@ void RuleController::setDaemonReachable(bool reachable)
     // the initial subscribe() in the ctor returned false, but once the
     // daemon arrives the next setDaemonReachable(true) reattaches the
     // signal so subsequent daemon-side writes refresh the page.
-    if (reachable && !m_rulesChangedSubscribed) {
-        if (subscribeRulesChanged()) {
-            m_rulesChangedSubscribed = true;
-            qCInfo(lcConfig) << "RuleController: rulesChanged subscription attached after daemon became reachable";
-        }
+    if (reachable && !m_rulesChangedSubscribed && subscribeRulesChanged()) {
+        qCInfo(lcConfig) << "RuleController: rulesChanged subscription attached after daemon became reachable";
     }
     Q_EMIT daemonReachableChanged();
 }
@@ -226,43 +225,75 @@ bool RuleController::pushToDaemonAsync(const QList<Rule>& rules)
     // Flip the in-flight guard now so an asyncCommit re-entry during
     // the wire round-trip rejects rather than dispatching a second
     // setAllRules. Cleared in the reply lambda below before every
-    // applyResult emit.
+    // applyResult emit. Snapshot the conflict flag at dispatch: a flag
+    // that was ALREADY latched belongs to a real foreign write and must
+    // survive a failed push (the daemon still holds the foreign set), while
+    // one latched during the wire round-trip is this save's own echo and
+    // must not block the retry.
     m_asyncCommitInFlight = true;
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, rules](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        m_asyncCommitInFlight = false;
-        QDBusPendingReply<bool> reply = *w;
-        if (reply.isError()) {
-            setDaemonReachable(false);
-            qCWarning(lcConfig) << "RuleController::pushToDaemonAsync: setAllRules failed —" << reply.error().message();
-            Q_EMIT applyResult(false, reply.error().message());
-            return;
-        }
-        setDaemonReachable(true);
-        // The daemon's bool reply tells us whether it accepted every
-        // rule; treat anything other than `true` as a partial-drop
-        // failure so the page can stay dirty for retry.
-        const bool ok = reply.value();
-        if (!ok) {
-            Q_EMIT applyResult(false, PhosphorI18n::tr("The daemon rejected one or more rules."));
-            return;
-        }
-        // Re-baseline to the set we actually PUSHED (not m_model.rules(), which
-        // may carry a CRUD edit that landed during the wire round-trip and was
-        // NOT persisted). Baselining the pushed set keeps such an in-flight edit
-        // correctly dirty (the applyResult → reconcile re-marks it).
-        //
-        // `rules` equals what the daemon persisted: pushToDaemonAsync above
-        // pre-validated with the SAME PhosphorRules::Rule::fromJson the daemon's
-        // setAllRules uses and bailed unless every rule was accepted, so the
-        // daemon cannot silently drop one (no client/daemon schema skew). As a
-        // backstop, the daemon's rulesChanged broadcast drives reload() →
-        // fetchAndLoad, which re-baselines from the daemon's authoritative set.
-        m_savedRules = rules;
-        setDirty(false);
-        setDaemonChangedWhileDirty(false);
-        Q_EMIT applyResult(true, QString());
-    });
+    m_reloadSkippedDuringCommit = false;
+    const bool conflictAtDispatch = m_daemonChangedWhileDirty;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, rules, conflictAtDispatch](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                m_asyncCommitInFlight = false;
+                const bool skippedReload = m_reloadSkippedDuringCommit;
+                m_reloadSkippedDuringCommit = false;
+                QDBusPendingReply<bool> reply = *w;
+                // A failed push leaves the page dirty for retry. Restore the conflict
+                // flag to what the DISPATCH knew, plus any signal reload() skipped
+                // while we were in flight: a failed push changes nothing daemon-side,
+                // so a skipped signal cannot be our echo — it is a foreign write the
+                // retry must be warned about. What this must NOT do is clear a
+                // pre-existing conflict just because the (forced) push failed, nor
+                // keep a latch the round-trip echo raised.
+                if (reply.isError()) {
+                    setDaemonReachable(false);
+                    setDaemonChangedWhileDirty(conflictAtDispatch || skippedReload);
+                    qCWarning(lcConfig) << "RuleController::pushToDaemonAsync: setAllRules failed —"
+                                        << reply.error().message();
+                    Q_EMIT applyResult(false, reply.error().message());
+                    return;
+                }
+                setDaemonReachable(true);
+                // The daemon's bool reply tells us whether it accepted every
+                // rule; treat anything other than `true` as a partial-drop
+                // failure so the page can stay dirty for retry.
+                const bool ok = reply.value();
+                if (!ok) {
+                    setDaemonChangedWhileDirty(conflictAtDispatch || skippedReload);
+                    Q_EMIT applyResult(false, PhosphorI18n::tr("The daemon rejected one or more rules."));
+                    return;
+                }
+                // Re-baseline to the set we actually PUSHED (not m_model.rules(), which
+                // may carry a CRUD edit that landed during the wire round-trip and was
+                // NOT persisted). Baselining the pushed set keeps such an in-flight edit
+                // correctly dirty (the applyResult → reconcile re-marks it).
+                //
+                // `rules` equals what the daemon persisted — but NOT because the two
+                // filters coincide. The daemon side is strictly STRICTER: its parse
+                // path (RuleSet::fromJson → Rule::fromJson → RuleAction::fromJson)
+                // enforces the descriptor's `allowedKeys` strict-key rejection BEFORE
+                // its ActionRegistry::validate call, while the client-side
+                // Rule::isValid check pushToDaemonAsync ran (via RuleSet::setRules)
+                // calls only validate() and never inspects param keys. A Rule whose
+                // action carried an undeclared param key would pass here and be
+                // dropped on arrival. That skew is unreachable today only because
+                // every in-memory Rule originates from RuleAction::fromJson (already
+                // key-filtered) or from the rule builder, which writes only declared
+                // keys — a provenance guarantee, not a shared-predicate one, and a
+                // new Rule producer that synthesizes params by hand would break it.
+                // (Both sides also drop duplicate ids, and the accepted-count bail
+                // above refuses the push on any shortfall, so a duplicate cannot
+                // slip through either.) As a backstop, a divergence is not silent
+                // forever: the daemon's rulesChanged broadcast drives
+                // reload() → fetchAndLoad, which re-baselines from the daemon's
+                // authoritative set.
+                m_savedRules = rules;
+                setDirty(false);
+                setDaemonChangedWhileDirty(false);
+                Q_EMIT applyResult(true, QString());
+            });
     return true;
 }
 
@@ -294,7 +325,18 @@ void RuleController::fetchAndLoad(bool fromRevert)
         const QString json = reply.value();
         RuleSet set;
         bool jsonOk = true;
-        if (!json.isEmpty()) {
+        if (json.isEmpty()) {
+            // An empty payload is NOT an empty rule set. getAllRules serialises
+            // a RuleSet, and even a set with no rules comes back as a JSON
+            // object carrying `_version` and an empty `rules` array — so an
+            // empty string means the daemon could not produce its store at all.
+            // Decoding it as "no rules" stomped both the model and the saved
+            // snapshot with an empty set, and the user's rules then looked
+            // deleted. Treat it exactly like malformed JSON below: leave the
+            // model alone and let the user retry.
+            qCWarning(lcConfig) << "RuleController::fetchAndLoad: daemon returned an empty rule payload";
+            jsonOk = false;
+        } else {
             QJsonParseError err;
             const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &err);
             if (err.error == QJsonParseError::NoError && doc.isObject()) {
@@ -351,6 +393,22 @@ void RuleController::reload()
     // staged edits, re-fetching would stomp them — skip the refresh and keep
     // the staged set. The explicit revert() path calls fetchAndLoad()
     // directly so it bypasses this guard.
+    if (m_asyncCommitInFlight) {
+        // Almost always our OWN write echoing back: the daemon emits
+        // rulesChanged while it handles setAllRules, so the echo can land
+        // before the reply that clears m_dirty — and the guard below would
+        // then read it as "the daemon changed the rules while you were
+        // editing" and latch daemonChangedWhileDirty over a conflict that
+        // never happened. Don't act on it here; record that a signal was
+        // skipped and let the reply lambda decide. On a successful push D-Bus
+        // FIFO ordering makes the skip safe (any signal ordered before our
+        // reply is either the echo or a write our push superseded, and a
+        // later foreign write's signal arrives after the reply clears the
+        // guard). On a FAILED push the skipped signal is a real foreign
+        // write, and the lambda re-latches the conflict flag from this flag.
+        m_reloadSkippedDuringCommit = true;
+        return;
+    }
     if (m_dirty) {
         // The staged set is now divergent from the daemon's newer rules. Flag
         // it so the page can warn the user before a save silently
@@ -410,10 +468,12 @@ void RuleController::revert()
     // dropping the staged edits.
     //
     // Tag this fetch explicitly as fromRevert=true so the reply handler
-    // emits revertFinished. SettingsController::load() listens once so
-    // it can re-add the "rules" entry to the dirty-pages set on
-    // a failed revert (its surrounding setNeedsSave(false) blanket-clears
-    // every page unconditionally). The prior counter-based tagging was
+    // emits revertFinished. SettingsController connects a PERMANENT listener
+    // to it (settingscontroller.cpp, next to the rulesLoaded and applyResult
+    // ones) which re-derives the page's dirty state from userRulesDirty, so a
+    // failed revert re-adds the "rules" entry that the surrounding
+    // setNeedsSave(false) blanket-clear had dropped, and a successful one
+    // leaves the page clean. The prior counter-based tagging was
     // spoofable by a concurrent daemon broadcast: a reload() arriving
     // mid-revert would read m_pendingRevertFetches > 0 and tag itself
     // as fromRevert, emitting a spurious revertFinished(true).
@@ -505,14 +565,26 @@ int RuleController::bandSeededInsertIndex(const Rule& rule) const
     // anywhere afterwards.
     const int band = bandBaseForSection(RuleModel::sectionFor(rule));
     const QList<Rule>& rules = m_model.rules();
+    // Where the managed block starts, if there is one. Managed rules are SKIPPED
+    // by the band walk rather than ending it: they carry a pinned INT_MIN
+    // priority that puts them below every user rule whatever their list
+    // position, so their band says nothing about where a new rule belongs. The
+    // old early return meant a single managed rule dragged to row 0 made every
+    // new rule of every section insert at the top.
+    int firstManaged = -1;
     for (int i = 0; i < rules.size(); ++i) {
         const Rule& r = rules.at(i);
-        if (r.managed)
-            return i;
+        if (r.managed) {
+            if (firstManaged < 0)
+                firstManaged = i;
+            continue;
+        }
         if (bandBaseForSection(RuleModel::sectionFor(r)) < band)
             return i;
     }
-    return rules.size();
+    // No lower band among the user rules: land above the managed block if there
+    // is one (that was the point of the old early return), otherwise at the end.
+    return firstManaged >= 0 ? firstManaged : rules.size();
 }
 
 QVariantMap RuleController::newEmptyRule(const QString& subject) const

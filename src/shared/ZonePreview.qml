@@ -179,6 +179,11 @@ Item {
                     if (!root.showZoneNumbers)
                         return false;
 
+                    // 16px legibility floor. Coupled by value to the hosts
+                    // that must keep every zone number visible — the
+                    // scrolling strip preview raises LayoutThumbnail's
+                    // minZoneSize to this same 16 (MonitorStatePage.qml) —
+                    // so a change here must move those hosts with it.
                     if (parent.width < 16 || parent.height < 16)
                         return false;
 

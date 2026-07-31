@@ -916,7 +916,7 @@ P_STORE_SET_BOOL(setShowNavigationOsd, snappingEffectsGroup, navigationOsdKey, s
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 
-void Settings::reset()
+bool Settings::reset()
 {
     // Delete all managed groups (reset nukes everything). The explicit
     // "Updates" sweep scrubs the retired legacy group from configs written by
@@ -947,7 +947,7 @@ void Settings::reset()
         // file and the rule store were never touched, so there is nothing else
         // to undo.
         load();
-        return;
+        return false;
     }
     if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
         qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
@@ -1049,6 +1049,7 @@ void Settings::reset()
     }
 
     qCInfo(lcConfig) << "Settings reset to defaults";
+    return true;
 }
 
 } // namespace PlasmaZones

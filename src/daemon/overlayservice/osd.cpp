@@ -17,6 +17,8 @@
 #include <QGuiApplication>
 #include <QPalette>
 
+#include <optional>
+
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
 #include "phosphor_roles.h"
@@ -522,7 +524,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     syncCavaState();
 }
 
-void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId, const QString& icon)
+void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)
 {
     QQuickWindow* window = nullptr;
     PhosphorLayer::Surface* surface = nullptr;
@@ -570,9 +572,9 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     pushLayoutOsdContent(osdSlot, p);
     writeQmlProperty(osdSlot, QStringLiteral("disabled"), true);
     writeQmlProperty(osdSlot, QStringLiteral("disabledReason"), reason);
-    // Explicit either way: the slot is REUSED across shows, so a neutral
-    // announcement must not inherit a prior failure glyph or vice versa.
-    writeQmlProperty(osdSlot, QStringLiteral("disabledIcon"), icon.isEmpty() ? QStringLiteral("dialog-cancel") : icon);
+    // Written explicitly rather than left to the QML default: the slot is
+    // REUSED across shows, so the glyph must be re-stated on each one.
+    writeQmlProperty(osdSlot, QStringLiteral("disabledIcon"), QStringLiteral("dialog-cancel"));
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     sizeOsdToScreen(window, screenGeom);
@@ -742,12 +744,24 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // engine emitted them for.
     const bool needsLayout = success && !noLayoutActions.contains(action);
     // Scrolling screens have no zone layout of their own; the daemon-injected
-    // provider supplies the strip's window→column-number model instead, so
+    // provider supplies the strip's visible-tile-number model instead, so
     // "Zone %1" copy resolves and the missing-layout bail below must not
     // swallow the feedback.
-    const QVariantList scrollZones = m_scrollZonesProvider ? m_scrollZonesProvider(effectiveId) : QVariantList();
+    //
+    // Resolved lazily and memoised. What the laziness actually saves is ONE
+    // path: the ensurePassiveShellFor bail below, which returns before the
+    // zones are written. Every OSD that renders — failures and no-layout
+    // actions included — still reaches the zones write and pays the walk
+    // once, because skipping it there would change the zones QML receives.
+    std::optional<QVariantList> scrollZonesCache;
+    const auto scrollZonesFor = [this, &scrollZonesCache, &effectiveId]() -> const QVariantList& {
+        if (!scrollZonesCache.has_value()) {
+            scrollZonesCache = m_scrollZonesProvider ? m_scrollZonesProvider(effectiveId) : QVariantList();
+        }
+        return *scrollZonesCache;
+    };
     PhosphorZones::Layout* screenLayout = resolveScreenLayout(effectiveId);
-    if (needsLayout && scrollZones.isEmpty() && (!screenLayout || screenLayout->zones().isEmpty())) {
+    if (needsLayout && scrollZonesFor().isEmpty() && (!screenLayout || screenLayout->zones().isEmpty())) {
         qCDebug(lcOverlay) << "No layout or zones for navigation OSD: screen=" << effectiveId
                            << "layout=" << (screenLayout ? screenLayout->name() : QStringLiteral("null"))
                            << "zones=" << (screenLayout ? screenLayout->zones().size() : 0) << "action=" << action;
@@ -815,7 +829,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // lookup (only need zoneId and zoneNumber, not name/appearance). Pass
     // navScreenGeom so fixed-mode zones normalize against the navigated-to
     // screen rather than Layout::lastRecalcGeometry().
-    QVariantList zonesList = scrollZones;
+    QVariantList zonesList = scrollZonesFor();
     if (zonesList.isEmpty()) {
         zonesList = PhosphorZones::LayoutUtils::zonesToVariantList(screenLayout, PhosphorZones::ZoneField::Minimal,
                                                                    QRectF(navScreenGeom));

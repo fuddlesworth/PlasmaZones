@@ -15,6 +15,8 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
+#include <algorithm>
+
 namespace PhosphorScrollEngine {
 
 namespace {
@@ -49,6 +51,10 @@ inline QLatin1String kTiles()
 inline QLatin1String kDisplay()
 {
     return QLatin1String("display");
+}
+inline QLatin1String kActiveWindow()
+{
+    return QLatin1String("activeWindow");
 }
 inline QLatin1String kWindowId()
 {
@@ -161,7 +167,12 @@ bool keyFromString(const QString& s, PhosphorEngine::PlacementStateKey* out)
     }
     bool ok = false;
     const int desktop = s.mid(deskSep + 1, actSep - deskSep - 1).toInt(&ok);
-    if (!ok || s.left(deskSep).isEmpty()) {
+    // Persisted config is user-writable, so this is a system boundary and the
+    // desktop is bounded like every other numeric read in this file. Virtual
+    // desktops are 1-based (0 means "unset" in the context tracker); a
+    // negative one names a key nothing can ever resolve to, so the entry
+    // would sit in the stash forever.
+    if (!ok || desktop < 0 || s.left(deskSep).isEmpty()) {
         return false;
     }
     out->screenId = s.left(deskSep);
@@ -196,6 +207,7 @@ QJsonObject ScrollEngine::serializeStripState() const
             c.insert(kTiles(), tiles);
             c.insert(kWidth(), widthToJson(col.width));
             c.insert(kDisplay(), static_cast<int>(col.display));
+            c.insert(kActiveWindow(), col.activeWindowId);
             columns.append(c);
         }
         QJsonObject obj;
@@ -229,17 +241,44 @@ QJsonObject ScrollEngine::serializeStripState() const
     }
     // Stash entries first (mode-round-trip structure not yet re-adopted),
     // live strips second so a live strip also wins its own key.
-    for (auto it = m_stripStash.cbegin(); it != m_stripStash.cend(); ++it) {
-        StashedStrip pruned = it.value();
+    //
+    // The live sweep above only resolves stash-vs-LIVE. Two STASH entries can
+    // name the same window as well — a window that left mode A on one screen
+    // and later left mode A on another — and restoreStripState's reader-side
+    // dedup is first-wins in QJsonObject key order, i.e. alphabetical by
+    // "screen|desktop|activity", which has nothing to do with recency. So the
+    // stashes are walked NEWEST FIRST and a window is written at most once:
+    // the entry that saw it last is the one whose structure it belongs to.
+    QList<PhosphorEngine::PlacementStateKey> stashKeys = m_stripStash.keys();
+    std::sort(stashKeys.begin(), stashKeys.end(),
+              [this](const PhosphorEngine::PlacementStateKey& a, const PhosphorEngine::PlacementStateKey& b) {
+                  const quint64 seqA = m_stripStash.value(a).sequence;
+                  const quint64 seqB = m_stripStash.value(b).sequence;
+                  if (seqA != seqB) {
+                      return seqA > seqB;
+                  }
+                  // Persisted entries all carry stamp 0 — break the tie by key
+                  // so the written order is deterministic across runs.
+                  return keyToString(a) < keyToString(b);
+              });
+    QSet<QString> writtenWindowIds;
+    for (const PhosphorEngine::PlacementStateKey& key : std::as_const(stashKeys)) {
+        StashedStrip pruned = m_stripStash.value(key);
         for (auto colIt = pruned.columns.begin(); colIt != pruned.columns.end();) {
-            colIt->tiles.removeIf([&liveWindowIds](const StashedTile& tile) {
-                return liveWindowIds.contains(tile.windowId);
+            colIt->tiles.removeIf([&liveWindowIds, &writtenWindowIds](const StashedTile& tile) {
+                return liveWindowIds.contains(tile.windowId) || writtenWindowIds.contains(tile.windowId);
             });
             colIt = colIt->tiles.isEmpty() ? pruned.columns.erase(colIt) : std::next(colIt);
         }
-        if (!pruned.isEmpty()) {
-            out.insert(keyToString(it.key()), stashToJson(pruned));
+        if (pruned.isEmpty()) {
+            continue;
         }
+        for (const StashedColumn& col : std::as_const(pruned.columns)) {
+            for (const StashedTile& tile : col.tiles) {
+                writtenWindowIds.insert(tile.windowId);
+            }
+        }
+        out.insert(keyToString(key), stashToJson(pruned));
     }
     for (auto it = liveStrips.cbegin(); it != liveStrips.cend(); ++it) {
         if (!it.value().isEmpty()) {
@@ -331,6 +370,19 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
                 }
             }
             if (!col.tiles.isEmpty()) {
+                // The column's active tile (a tabbed column's shown tab) can
+                // be dropped above by the per-tile lease or the cross-key
+                // duplicate filter. A dangling id would point the tab
+                // re-assert at a window this key never stages, so clear it
+                // and let the arrival order decide, as it did before.
+                col.activeWindowId = colObj.value(kActiveWindow()).toString();
+                bool activeStaged = false;
+                for (const StashedTile& t : std::as_const(col.tiles)) {
+                    activeStaged = activeStaged || t.windowId == col.activeWindowId;
+                }
+                if (!activeStaged) {
+                    col.activeWindowId.clear();
+                }
                 stash.columns.append(col);
             }
         }
@@ -362,10 +414,16 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
                 stash.focusedWindowId = stash.columns.first().tiles.first().windowId;
             }
         }
-        // Mark the entry as staged-from-persistence so pruneStaleWindows'
-        // aliveness sweep leaves it alone until a tile is actually claimed.
-        // These ids are last session's; no live alive-set can contain them.
-        stash.stagedFromPersistence = true;
+        // Recency stamp 0, NOT ++m_stashSequence: persisted entries must rank
+        // below every in-session stash, and restoreStripState can run again
+        // after in-session stashes exist (the persistence delegate calls it
+        // from every loadState()). A counter stamp taken then would be HIGHER
+        // than a genuinely newer mode-exit stash and win the newest-first
+        // cross-key dedup — the exact inversion the stamp exists to prevent.
+        // serializeStripState treats equal stamps as key-ordered, which is
+        // fine here: the write side already deduped windows across the keys
+        // of one snapshot.
+        stash.sequence = 0;
         m_stripStash.insert(key, stash);
         m_stripStashConsumed.remove(key);
         ++restored;
