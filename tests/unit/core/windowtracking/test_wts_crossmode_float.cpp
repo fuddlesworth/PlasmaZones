@@ -18,14 +18,14 @@
  *    leak into the other mode
  *
  * Cross-MONITOR variants (Discussion #724): a window floated on monitor A then
- * moved to monitor B must not re-snap to A's stale zone when later unfloated
- * (e.g. via the snap minimize->unminimize float driver):
+ * moved to monitor B keeps its remembered home for a USER float toggle, but the
+ * minimize->unminimize driver must NOT restore across monitors (see 10-13):
  * 5. crossMonitorFloatHandoffPreservesHomeZone: the cross-engine handoff re-homes
  *    the floating window onto the destination monitor while PRESERVING the
  *    source-monitor pre-float zone/screen (the home zone).
- * 6. unfloatRestoresAcrossMonitorsToHomeZone: cross-monitor restore is allowed —
- *    unfloat returns the window to its remembered home zone regardless of the
- *    monitor it is currently on.
+ * 6. unfloatRestoresAcrossMonitorsToHomeZone: cross-monitor restore is allowed
+ *    for USER float toggles — unfloat returns the window to its remembered home
+ *    zone regardless of the monitor it is currently on.
  * 7. unfloatRestoresWithinSamePhysicalMonitorAcrossIdForms: an id-form difference
  *    (virtual vs bare) of the same monitor still restores.
  * 8. migrateWindowToScreen_movesSnapStateAndReverseMap: the per-monitor migration
@@ -35,9 +35,22 @@
  * Phase 4 (per-(screen,desktop,activity) last-used):
  * 9. lastUsedZoneIsPerScreen: last-used zone is tracked per store, so recording it
  *    for a window on monitor A does not disturb monitor B's last-used.
+ *
+ * Suspension (minimize) unfloats — the exception to 6, added for the 3.3.x
+ * recurrence of #724. These are confined to the window's live monitor:
+ * 10. suspensionUnfloatConfinedToLiveMonitor: refuses the cross-monitor home,
+ *     keeps refusing across the effect's retries, and still lets a USER toggle
+ *     restore the preserved home.
+ * 11. suspensionUnfloatSameMonitorStillRestores: a same-monitor round trip is
+ *     unaffected.
+ * 12. suspensionUnfloatSamePhysicalMonitorAcrossIdForms: the confinement is a
+ *     physical-monitor test, so a per-VS home id restores against the bare id.
+ * 13. suspensionUnfloatWithFallbackSettingOnStillRefuses: the unconfined
+ *     fallback-zone tier must not rescue a refused suspension unfloat.
  */
 
 #include <QTest>
+#include <QSignalSpy>
 #include <QString>
 #include <QStringList>
 #include <QSet>
@@ -47,6 +60,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include "config/configbackends.h"
@@ -75,6 +89,28 @@ using StubZoneDetectorCrossModeFloat = StubZoneDetector;
 class TestWtsCrossModeFloat : public QObject
 {
     Q_OBJECT
+
+private:
+    // Snap on @p fromScreen, float out (capturing the home zone/screen), then
+    // hand the floating window to @p toScreen — the state a cross-monitor move
+    // that bypassed windowScreenChanged leaves behind, and the shared preamble
+    // of every cross-monitor test here.
+    void seedFloatedThenMovedToOtherMonitor(const QString& windowId, const QString& zoneId, const QString& fromScreen,
+                                            const QString& toScreen)
+    {
+        m_service->assignWindowToZone(windowId, zoneId, fromScreen, 1);
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        QCOMPARE(m_service->preFloatScreen(windowId), fromScreen);
+
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = toScreen;
+        ctx.fromEngineId = PhosphorEngine::WindowPlacement::snapEngineId();
+        ctx.wasFloating = true;
+        m_engine->handoffReceive(ctx);
+        QCOMPARE(m_engine->screenForTrackedWindow(windowId), toScreen);
+    }
 
 private Q_SLOTS:
     void init()
@@ -116,6 +152,18 @@ private Q_SLOTS:
         m_testLayout = nullptr;
         m_zoneIds.clear();
         m_guard.reset();
+    }
+
+    // Fixture sanity: several slots below gate their load-bearing assertions
+    // on a real QScreen being available (zone geometry cannot resolve without
+    // one). Pin that precondition explicitly so those gates can never turn
+    // into silent no-op passes — mirrors testFixture_zoneGeometryIsValid in
+    // the sibling test_snap_unfloat_fallback.cpp.
+    void testFixture_zoneGeometryIsValid()
+    {
+        QVERIFY2(!QGuiApplication::screens().isEmpty(), "the screen-gated assertions below require a real QScreen");
+        QVERIFY2(m_service->zoneGeometry(m_zoneIds[0], QStringLiteral("DP-1")).isValid(),
+                 "fixture must resolve valid zone geometry, or the gated assertions are meaningless");
     }
 
     // =====================================================================
@@ -322,12 +370,11 @@ private Q_SLOTS:
     // onto the destination monitor's store.
     //
     // A window snapped on monitor A, floated (drag-out), then moved to monitor
-    // B while floating must restore to its remembered home zone, not to a stale
-    // target, when unfloated ON B (the snap minimize->unminimize float driver
-    // unfloats on restore). Under the per-monitor model the handoff re-homes the
-    // window onto B's store and keeps the pre-float zone/screen that names A, so an
-    // unfloat on ANY monitor restores the home zone (cross-monitor restore is
-    // allowed; there is no refusal guard).
+    // B while floating keeps its remembered home zone. Under the per-monitor
+    // model the handoff re-homes the window onto B's store and PRESERVES the
+    // pre-float zone/screen naming A, so a USER float toggle on any monitor
+    // restores it. (The minimize->unminimize driver is the exception: it is
+    // confined to the live monitor — see tests 10-13.)
     // =====================================================================
     void testCrossMonitorFloatHandoffPreservesHomeZone()
     {
@@ -348,7 +395,7 @@ private Q_SLOTS:
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = monitorB;
-        ctx.fromEngineId = QStringLiteral("snap");
+        ctx.fromEngineId = PhosphorEngine::WindowPlacement::snapEngineId();
         ctx.wasFloating = true;
         m_engine->handoffReceive(ctx);
 
@@ -425,12 +472,15 @@ private Q_SLOTS:
     // Test 6 (Discussion #724): resolveUnfloatGeometry restores to the HOME zone
     // across monitors, resolving against the surviving pre-float zone/screen.
     //
-    // Cross-monitor restore is now ALLOWED (Discussion #724 follow-up): unfloat
-    // returns the window to its remembered HOME zone regardless of the monitor it
-    // is currently on, resolving the zone on the pre-float (home) screen. The old
-    // cross-monitor refusal guard was removed because it depended on the daemon
-    // knowing the window's exact current monitor, which is unreliable for
-    // identical-model monitors.
+    // Cross-monitor restore is ALLOWED for USER float toggles (Discussion #724
+    // follow-up): unfloat returns the window to its remembered HOME zone
+    // regardless of the monitor it is currently on, resolving the zone on the
+    // pre-float (home) screen. The original blanket refusal guard was removed
+    // because it depended on the daemon's own (unreliable for identical-model
+    // monitors) idea of the window's current screen. The guard that returned
+    // for SUSPENSION unfloats does not inherit that weakness: it compares
+    // against the screen the EFFECT threads in as the authoritative live
+    // output (see SnapEngine::setWindowFloat), not a tracked association.
     // =====================================================================
     void testUnfloatRestoresAcrossMonitorsToHomeZone()
     {
@@ -485,6 +535,139 @@ private Q_SLOTS:
             // zone, not merely produce some result.
             QCOMPARE(samePhysMonitor.zoneIds, QStringList{m_zoneIds[0]});
         }
+    }
+
+    // =====================================================================
+    // Test 10 (Discussion #724, 3.3.x regression): a SUSPENSION (minimize)
+    // unfloat is confined to the window's live monitor. A window snapped on
+    // monitor A, floated, moved to monitor B, then minimized and unminimized
+    // ON B must NOT teleport back to A's zone — the minimize round trip puts
+    // the window back where it was, and its remembered home on A is stale
+    // state for that round trip. The home is PRESERVED, though: a later USER
+    // unfloat (float toggle) still restores it cross-monitor.
+    // =====================================================================
+    void testSuspensionUnfloatConfinedToLiveMonitor()
+    {
+        const QString windowId = QStringLiteral("kate|aaaaaaaa-0000-0000-0000-000000000010");
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        // Snap on A, float out, then move to B while floating — the stale-home
+        // state the confinement defends against.
+        seedFloatedThenMovedToOtherMonitor(windowId, m_zoneIds[0], monitorA, monitorB);
+
+        // Minimize classifies the float as a suspension; the unminimize unfloat
+        // on B must refuse the cross-monitor home and keep the window floating
+        // exactly where it is.
+        m_service->markSuspensionFloat(windowId);
+        m_engine->setWindowFloat(windowId, false, monitorB);
+        QVERIFY2(m_engine->isFloating(windowId),
+                 "a suspension unfloat must not restore a home zone on another monitor — keep floating");
+        QVERIFY2(m_engine->stateForWindow(windowId)->zonesForWindow(windowId).isEmpty(),
+                 "the suspension unfloat must not have assigned any zone");
+
+        // RETRY INVARIANT: the effect re-drives the unminimize unfloat (up to
+        // three times, 250 ms apart) whenever the window still reads floating.
+        // Every retry must refuse identically — a retry that ran unconfined
+        // would teleport the window a quarter-second after the unminimize,
+        // which is exactly how this defect survived its first fix.
+        for (int retry = 0; retry < 3; ++retry) {
+            m_engine->setWindowFloat(windowId, false, monitorB);
+            QVERIFY2(m_engine->isFloating(windowId), "every suspension unfloat retry must keep refusing");
+            QVERIFY2(m_engine->stateForWindow(windowId)->zonesForWindow(windowId).isEmpty(),
+                     "no retry may assign a cross-monitor zone");
+        }
+
+        // The home capture survives the refusal for a later user float toggle.
+        QCOMPARE(m_service->preFloatScreen(windowId), monitorA);
+        QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
+
+        // A USER unfloat (suspension cleared) keeps the deliberate
+        // cross-monitor unfloat-to-home restore, driven through the real
+        // setWindowFloat gate — this is the only place the
+        // confineToScreen=suspension wiring is pinned in its FALSE direction,
+        // so a regression that confined unconditionally fails here. The
+        // emitted geometry request is the discriminator: a refusal returns
+        // before any commit and emits nothing, while a restore commits the
+        // snap and emits the zone's geometry. (State assertions are avoided
+        // on this leg: the seed floats through the WTS facade while the
+        // restore commits into the destination screen's per-key store, so the
+        // two live in different stores in this reduced fixture.)
+        m_service->clearSuspensionFloat(windowId);
+        QSignalSpy applySpy(m_engine, &SnapEngine::applyGeometryRequested);
+        m_engine->setWindowFloat(windowId, false, monitorB);
+        QCOMPARE(applySpy.count(), 1);
+        QCOMPARE(applySpy.first().at(5).toString(), m_zoneIds[0]);
+    }
+
+    // =====================================================================
+    // Test 11 (Discussion #724): the suspension confinement only blocks CROSS-
+    // monitor restores — a same-monitor minimize/unminimize round trip still
+    // restores the pre-float zone.
+    // =====================================================================
+    void testSuspensionUnfloatSameMonitorStillRestores()
+    {
+        const QString windowId = QStringLiteral("kate|bbbbbbbb-0000-0000-0000-000000000011");
+        const QString monitorA = QStringLiteral("DP-1");
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[1], monitorA, 1);
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        m_service->markSuspensionFloat(windowId);
+
+        m_engine->setWindowFloat(windowId, false, monitorA);
+        QVERIFY2(!m_engine->isFloating(windowId), "a same-monitor suspension unfloat must restore the pre-float zone");
+        QCOMPARE(m_engine->stateForWindow(windowId)->zonesForWindow(windowId), QStringList{m_zoneIds[1]});
+    }
+
+    // =====================================================================
+    // Test 12 (Discussion #724): the confinement is a PHYSICAL-monitor test,
+    // not a string compare — a per-virtual-screen home id restores against the
+    // bare physical id of the same monitor. Without this, every same-monitor
+    // unminimize on a VS-subdivided screen would be refused.
+    // =====================================================================
+    void testSuspensionUnfloatSamePhysicalMonitorAcrossIdForms()
+    {
+        const QString windowId = QStringLiteral("kate|cccccccc-0000-0000-0000-000000000012");
+        const QString virtualId = QStringLiteral("DP-1/vs:0");
+        const QString physicalId = QStringLiteral("DP-1");
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[1], virtualId, 1);
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        QCOMPARE(m_service->preFloatScreen(windowId), virtualId);
+        m_service->markSuspensionFloat(windowId);
+
+        m_engine->setWindowFloat(windowId, false, physicalId);
+        QVERIFY2(!m_engine->isFloating(windowId),
+                 "a virtual-vs-bare id difference on ONE monitor must not read as cross-monitor");
+        QCOMPARE(m_engine->stateForWindow(windowId)->zonesForWindow(windowId), QStringList{m_zoneIds[1]});
+    }
+
+    // =====================================================================
+    // Test 13 (Discussion #724): the suspension refusal must hold even when
+    // the unfloat-fallback setting is on. The fallback tier resolves against
+    // the window's TRACKED screen and is unconfined, so a suspension unfloat
+    // that fell through to it would snap the window into a fallback zone —
+    // a different route to the same cross-monitor teleport.
+    // =====================================================================
+    void testSuspensionUnfloatWithFallbackSettingOnStillRefuses()
+    {
+        const QString windowId = QStringLiteral("kate|dddddddd-0000-0000-0000-000000000013");
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        m_settings->setSnapUnfloatFallbackToZone(true);
+        seedFloatedThenMovedToOtherMonitor(windowId, m_zoneIds[0], monitorA, monitorB);
+
+        m_service->markSuspensionFloat(windowId);
+        m_engine->setWindowFloat(windowId, false, monitorB);
+
+        QVERIFY2(m_engine->isFloating(windowId),
+                 "the fallback tier must not rescue a refused suspension unfloat — keep floating");
+        QVERIFY2(m_engine->stateForWindow(windowId)->zonesForWindow(windowId).isEmpty(),
+                 "a suspension unfloat must never acquire a fallback zone");
+        m_settings->setSnapUnfloatFallbackToZone(false);
     }
 
     // =====================================================================

@@ -99,6 +99,16 @@ public:
         Q_UNUSED(windowId)
         return false;
     }
+    /// Drop the suspension classification. The adaptor owns it on the
+    /// minimize/unminimize edges, but an engine-side USER unfloat (the float
+    /// shortcut) also ends the suspension and never crosses that boundary —
+    /// without this the bit strands and every later capture takes the
+    /// minimize-preserve path. No-op for implementations that do not track
+    /// the classification.
+    virtual void clearSuspensionFloat(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
     virtual void setWindowFloating(const QString& windowId, bool floating) = 0;
     virtual void unsnapForFloat(const QString& windowId) = 0;
     virtual bool clearFloatingForSnap(const QString& windowId) = 0;

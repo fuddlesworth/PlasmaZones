@@ -34,6 +34,16 @@ ZoneDetectionAdaptor::ZoneDetectionAdaptor(PhosphorZones::IZoneDetector* detecto
     Q_ASSERT(settings);
 }
 
+PhosphorZones::Layout* ZoneDetectionAdaptor::resolveActiveLayoutForScreen(const QString& screenId) const
+{
+    if (!screenId.isEmpty()
+        && m_layoutManager->isContextActiveLayoutSuppressed(
+            screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_layoutManager->currentActivity())) {
+        return nullptr;
+    }
+    return m_layoutManager->resolveLayoutForScreen(screenId);
+}
+
 QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
 {
     // Determine which screen contains (x,y), fall back to primary
@@ -49,7 +59,7 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
     QString screenId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(x, y), screen);
 
     // Use per-screen layout resolution instead of global activeLayout
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    auto* layout = resolveActiveLayoutForScreen(screenId);
     if (!layout) {
         return QString();
     }
@@ -130,7 +140,7 @@ QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenId)
 
     // Use per-screen layout (falls back to activeLayout if no assignment)
     QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
-    auto* layout = m_layoutManager->resolveLayoutForScreen(resolvedId);
+    auto* layout = resolveActiveLayoutForScreen(resolvedId);
     if (!layout) {
         return zoneIds;
     }
@@ -159,9 +169,9 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
     // Resolve to effective (virtual) screen ID at the cursor position
     QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(x, y), screen);
 
-    auto* layout = m_layoutManager->resolveLayoutForScreen(effectiveId);
+    auto* layout = resolveActiveLayoutForScreen(effectiveId);
     if (!layout) {
-        qCWarning(lcDbus) << "detectMultiZone: no layout for screen" << screen->name();
+        qCDebug(lcDbus) << "detectMultiZone: no layout for screen" << screen->name();
         return zoneIds;
     }
 
@@ -253,7 +263,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
 
     // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
     QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
-    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(resolvedId);
+    PhosphorZones::Layout* layout = resolveActiveLayoutForScreen(resolvedId);
     if (!layout || layout->zones().isEmpty()) {
         return QString();
     }
@@ -289,7 +299,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
 QString ZoneDetectionAdaptor::getZoneByNumber(int zoneNumber, const QString& screenId)
 {
     QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
-    auto* layout = m_layoutManager->resolveLayoutForScreen(resolvedId);
+    auto* layout = resolveActiveLayoutForScreen(resolvedId);
     if (!layout) {
         return QString();
     }
@@ -307,7 +317,7 @@ PhosphorProtocol::NamedZoneGeometryList ZoneDetectionAdaptor::getAllZoneGeometri
     PhosphorProtocol::NamedZoneGeometryList result;
 
     QString resolvedScreenId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
-    auto* layout = m_layoutManager->resolveLayoutForScreen(resolvedScreenId);
+    auto* layout = resolveActiveLayoutForScreen(resolvedScreenId);
     if (!layout) {
         return result;
     }

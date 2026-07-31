@@ -38,10 +38,8 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         return;
     }
 
-    // Pre-parse triggers to avoid QVariantMap unboxing on every dragMoved tick
-    m_cachedActivationTriggers = parseTriggers(m_settings->dragActivationTriggers());
-    m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
-    m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
+    // Trigger caches are populated unconditionally by beginDrag (bypass and
+    // snap paths alike), so they are already current here — no re-parse.
     // Ensure no stale preview carries over from a prior drag.
     cancelDragInsertIfActive();
 
@@ -107,8 +105,6 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // the next tick will recreate it fresh.
     m_zoneSelectorShown = false;
     m_zoneSelectorShownOn.clear();
-    m_lastCursorX = 0;
-    m_lastCursorY = 0;
 
     // Note: KWin Quick Tile override is now handled permanently by Daemon
     // (using kwriteconfig6 + KWin.reconfigure()) instead of per-drag toggling
@@ -133,7 +129,15 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
             QString screenId = effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
             if (screenId.isEmpty())
                 screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-            auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+            // Suppressed context: the resolve below would hand back the global
+            // default layout for a screen that has no zones, and a window that
+            // happens to match one of its rects would be misread as snapped
+            // (#724). No layout means nothing to geometry-match against. The
+            // guard scopes the matcher block (not a function-wide return) so
+            // code appended to dragStarted later still runs.
+            auto* layout = isActiveLayoutSuppressedForScreen(screenId)
+                ? nullptr
+                : m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
                 PhosphorZones::LayoutComputeService::recalculateSync(
                     layout, GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, screenId));
@@ -195,6 +199,39 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
             m_overlayShown = false;
         }
         m_overlayIdled = false;
+        return nullptr;
+    }
+
+    // Skip overlay and zone detection on a screen whose context has no active
+    // zone layout (default assignment suppressed). resolveLayoutForScreen
+    // below would fall back to the GLOBAL default layout for such a screen, so
+    // without this gate a drag crossing onto it mid-drag hit-tests and snaps
+    // into zones the screen was never assigned (#724). beginDrag's policy gate
+    // covers drags STARTING here; this covers mid-drag crossings, which reach
+    // this per-tick path without a fresh beginDrag.
+    //
+    // Deliberately NOT the disabled branch's destructive hide(): a
+    // layout-suppressed secondary monitor is a normal configuration, so this
+    // fires on every crossing onto it and hide() routes through the Vulkan
+    // overlay destroy (QRhi teardown — the NVIDIA multi-second-stall path the
+    // trigger-release flow avoids for the same reason). Warm-idle instead:
+    // windows stay alive and blanked, refreshFromIdle repopulates on the next
+    // active-screen tick, and its inactive-context gate keeps the idle from
+    // re-lighting a suppressed screen.
+    if (isActiveLayoutSuppressedForScreen(outScreenId)) {
+        if (m_overlayShown && m_overlayService) {
+            // Forget the remembered screen unconditionally: this gate returns
+            // before showAtPosition ever runs, so the service would otherwise
+            // keep pointing at the last ACTIVE screen and a later
+            // refreshFromIdle would re-light it for a tick (the #724
+            // wrong-screen flash), including after a crossing back onto a
+            // different active screen.
+            m_overlayService->forgetCurrentScreen();
+            if (!m_overlayIdled) {
+                m_overlayService->setIdleForDragPause();
+                m_overlayIdled = true;
+            }
+        }
         return nullptr;
     }
 
@@ -564,8 +601,6 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 if (targetIdx >= 0) {
                     m_autotileEngine->updateDragInsertPreview(targetIdx);
                 }
-                m_lastCursorX = cursorX;
-                m_lastCursorY = cursorY;
                 return;
             }
         } else if (previewActive) {
@@ -596,9 +631,6 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             return; // Trigger released but not yet re-pressed
         }
     }
-
-    m_lastCursorX = cursorX;
-    m_lastCursorY = cursorY;
 
     // Update mouse position for shader effects
     if (m_overlayService && m_overlayShown) {
@@ -634,7 +666,15 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // the overlay. refreshFromIdle() is cheap when inputs are unchanged —
     // L2's labels-texture hash cache skips the sparse glyph-tile payload
     // rebuild, and the QVariantList zones push is small.
-    if (activationActive && m_overlayIdled && m_overlayService) {
+    // Not on a layout-suppressed cursor screen: prepareHandlerContext idles
+    // the overlay for those, and un-idling here first would fight it — a
+    // refresh/idle ping-pong every tick at the cursor rate, with each refresh
+    // briefly re-lighting the LAST ACTIVE screen's overlay while the cursor
+    // sits on the suppressed one (the #724 wrong-screen highlight, recreated).
+    // The suppression read is memoized per drag, so this costs a string
+    // compare on the hot path.
+    if (activationActive && m_overlayIdled && m_overlayService
+        && !isActiveLayoutSuppressedForScreen(effectiveScreenIdAt(cursorX, cursorY))) {
         m_overlayService->refreshFromIdle();
         m_overlayIdled = false;
     }

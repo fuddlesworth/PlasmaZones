@@ -73,6 +73,14 @@ public:
     // zones again.
     virtual void setIdleForDragPause() = 0;
 
+    // Forget the last-shown screen. Pair with setIdleForDragPause() when the
+    // cursor moves onto a screen that has no snapping context (disabled, or
+    // its zone layout suppressed): the drag pipeline gates such screens out
+    // before showAtPosition is ever called, so without this the service keeps
+    // pointing at the PREVIOUSLY shown screen and the next refreshFromIdle()
+    // re-lights it — zones flashing on the wrong monitor (#724).
+    virtual void forgetCurrentScreen() = 0;
+
     // Counterpart to setIdleForDragPause(): re-push the current zone data to
     // overlay windows so the shader starts drawing zones again. Cheap because
     // the labels-texture build path is hash-cached on unchanged inputs.

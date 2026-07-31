@@ -450,6 +450,15 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
         return;
     }
 
+    // Layout-suppressed screens get NO selector (#724). It is tempting to
+    // carve them out — the selector is a "pick a layout" UI and a committed
+    // pick assigns one — but the commit lives inside dragStopped, which a
+    // LayoutSuppressed drag never reaches (its policy is a dead drag that
+    // returns NoOp from endDrag). Showing the popup there would discard the
+    // user's pick on release and leave the window on screen, so the coherent
+    // answer is not to offer it. Assigning a layout to such a monitor is done
+    // from the settings app or the layout-picker shortcut.
+
     // Resolve effective (virtual-aware) screen ID for disabled-monitor check
     auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
     QString selectorScreenId = resolved.screenId;
@@ -464,11 +473,20 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     // one `handleFor` snapshot so all three axes agree, override the mode
     // in place via the layout manager's per-(desktop, activity) lookup,
     // then gate via `isDisabled`.
-    if (screen && m_contextResolver && m_layoutManager) {
-        PhosphorContext::ContextHandle selectorCtx = m_contextResolver->handleFor(selectorScreenId);
-        selectorCtx.mode =
-            m_layoutManager->modeForScreen(selectorScreenId, selectorCtx.virtualDesktop, selectorCtx.activity);
-        if (m_contextResolver->isDisabled(selectorCtx)) {
+    // Suppression is evaluated on its own, NOT nested in the resolver-dependent
+    // block below: a wired layout manager with no context resolver would
+    // otherwise skip the whole gate and show the selector on a screen that
+    // cannot host it.
+    const bool selectorSuppressed = isActiveLayoutSuppressedForScreen(selectorScreenId);
+    if (screen && (selectorSuppressed || (m_contextResolver && m_layoutManager))) {
+        bool refuse = selectorSuppressed;
+        if (!refuse && m_contextResolver && m_layoutManager) {
+            PhosphorContext::ContextHandle selectorCtx = m_contextResolver->handleFor(selectorScreenId);
+            selectorCtx.mode =
+                m_layoutManager->modeForScreen(selectorScreenId, selectorCtx.virtualDesktop, selectorCtx.activity);
+            refuse = m_contextResolver->isDisabled(selectorCtx);
+        }
+        if (refuse) {
             if (m_zoneSelectorShown) {
                 m_zoneSelectorShown = false;
                 m_zoneSelectorShownOn.clear();
@@ -763,6 +781,14 @@ void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, const Q
 
 void WindowDragAdaptor::onLayoutChanged()
 {
+    // An assignment write can flip a screen's suppression verdict, so the
+    // per-drag memo must not outlive it (#724). Cleared unconditionally: the
+    // signal also fires between drags, where the memo is stale by definition.
+    m_suppressMemoScreenId.clear();
+    m_suppressMemoDesktop = 0;
+    m_suppressMemoActivity.clear();
+    m_suppressMemoValue = false;
+
     // Clear cached zone state when layout changes mid-drag to prevent stale geometry
     // This handles the case where user changes layout via hotkey/GUI while dragging
     // On next dragMoved(), fresh geometry will be calculated from the new layout

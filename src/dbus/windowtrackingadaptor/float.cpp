@@ -15,7 +15,6 @@
 #include "core/utils/utils.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
-
 namespace PlasmaZones {
 
 void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
@@ -123,6 +122,14 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
         return;
     }
     // Suspension classification — see WindowTrackingService::isSuspensionFloat.
+    // Unlike setWindowFloatingForScreen below, the clear here is UNCONDITIONAL
+    // and happens before the write: this writer delegates to WTS, whose
+    // engine-float writer sets the raw float bit and never routes through
+    // SnapEngine::setWindowFloat, so there is no suspension gate downstream to
+    // poison and nothing to preserve the classification for. Gating it instead
+    // would strand the bit on any window the registry still reports minimized
+    // at the moment of a genuine user unfloat (the registry lags the
+    // unminimize edge by design).
     if (floating && m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
         m_service->markSuspensionFloat(windowId);
     } else if (!floating) {
@@ -168,13 +175,19 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
 QStringList WindowTrackingAdaptor::getFloatingWindows()
 {
     // USER floats only — suspension floats (minimize-as-float) are filtered
-    // out. The sole caller is the effect's daemon-bringup re-seed of its
-    // FloatingCache; seeding a minimize-float there makes the effect's
-    // restart claim sweep read it as a user float and skip adopting it into
-    // minimize-float ownership, leaving an unowned float that never re-tiles
-    // on unminimize. The effect's own claim paths (batch claim at daemon
-    // ready, claimAlreadyMinimizedAsFloated) are the owners of suspension
-    // floats and re-establish their state without this reply.
+    // out, and consumers re-seeding float state from this list therefore
+    // never adopt a suspension float (the same contract the D-Bus XML
+    // annotation states). Known consumers: the effect's daemon-bringup
+    // re-seed of its FloatingCache, and PhosphorCompositor::DaemonClient's
+    // queryFloatingWindows relay. Seeding a minimize-float into the effect's
+    // cache makes its restart claim sweep read it as a user float and skip
+    // adopting it into minimize-float ownership, leaving an unowned float
+    // that never re-tiles on unminimize. The effect's own claim paths (batch
+    // claim at daemon ready, claimAlreadyMinimizedAsFloated) are the owners
+    // of suspension floats and re-establish their state without this reply.
+    // A REFUSED suspension unfloat keeps its classification (see
+    // setWindowFloatingForScreen), so a still-floating window on the
+    // unminimize path stays filtered here too.
     QStringList result = m_service->floatingWindows();
     result.removeIf([this](const QString& windowId) {
         return m_service->isSuspensionFloat(windowId);
@@ -184,6 +197,11 @@ QStringList WindowTrackingAdaptor::getFloatingWindows()
 
 bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const QString& screenId)
 {
+    // CALLER CONTRACT: callers must guarantee a non-minimized window. Unlike
+    // the snap engine's applyFloatGeometryUnlessMinimized twin, this method
+    // has no minimize guard — it is not exposed on D-Bus, and its sole caller
+    // (Daemon::syncAutotileFloatState) is the user-toggle path whose passive
+    // sync twin deliberately skips it for exactly this reason.
     auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     if (geo) {
         qCInfo(lcDbusWindow) << "applyGeometryForFloat: windowId=" << windowId << "geo=" << *geo
@@ -254,14 +272,18 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
                          << "screen=" << effectiveScreenId;
 
     // Classify BEFORE routing so any capture the write triggers synchronously
-    // already sees the suspension bit (minimize state is fresh here — the
-    // effect pushes metadata ahead of float traffic on the same edge).
-    if (m_service) {
-        if (floating && m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
-            m_service->markSuspensionFloat(windowId);
-        } else if (!floating) {
-            m_service->clearSuspensionFloat(windowId);
-        }
+    // already sees the suspension bit. The minimize-edge caller pushes fresh
+    // metadata ahead of float traffic on the same edge; the effect's mode-swap
+    // and re-minimize RE-ASSERT callers arrive later and rely on the registry
+    // bit still being set from that edge.
+    // DECLASSIFY (the unfloat side) only AFTER routing, and only
+    // conditionally: the SNAP engine's setWindowFloat reads isSuspensionFloat
+    // to gate the suspension unfloat contract (no SnapToZone rule target, no
+    // cross-monitor restore, no fallback zone — Discussion #724), and
+    // clearing the bit before the routed call turned that gate into a
+    // constant false — every suspension unfloat ran as a user float toggle.
+    if (floating && m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
+        m_service->markSuspensionFloat(windowId);
     }
 
     // Route to the correct engine based on screen mode. Both directions go
@@ -338,13 +360,48 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         }
     }
 
-    if (dest) {
-        // Thread the effect's authoritative live screen so the engine resolves
-        // this float/unfloat against the window's REAL current monitor, not its
-        // (possibly stale) tracked association. Without this, unfloating a window
-        // that drifted to another monitor while floating non-deterministically
-        // teleports it back to its source-monitor zone (Discussion #724).
-        dest->setWindowFloat(windowId, floating, effectiveScreenId);
+    // dest is provably non-null here: the routing chain above returns when
+    // neither engine is wired.
+    // Thread the effect's authoritative live screen so the engine resolves
+    // this float/unfloat against the window's REAL current monitor, not its
+    // (possibly stale) tracked association. Without this, unfloating a window
+    // that drifted to another monitor while floating non-deterministically
+    // teleports it back to its source-monitor zone (Discussion #724).
+    dest->setWindowFloat(windowId, floating, effectiveScreenId);
+
+    // Declassify only after the routed engine call above has consumed the
+    // suspension bit, and — on the SNAP destination — only when the unfloat
+    // actually landed. A REFUSED suspension unfloat (the engine's
+    // cross-monitor confinement kept the window floating in place) must stay
+    // classified: the effect retries the unminimize unfloat on a timer, and an
+    // unconditional clear here made every retry run as an unconfined USER
+    // unfloat — reinstating the Discussion #724 teleport 250 ms late.
+    //
+    // The question is asked of the SNAP ENGINE directly, not through
+    // WTS::isWindowFloating: that facade answers through the mode lens of the
+    // window's TRACKED screen, while this function routed by the caller's
+    // live screen, so mid-mode-flip it can report the OTHER engine's bit (see
+    // the KNOWN ASYMMETRY note on isWindowFloating). Only the snap engine
+    // implements the suspension contract; an autotile destination never reads
+    // the bit, so it declassifies unconditionally as before.
+    // The clear lands before the recapture below so that capture reads the
+    // window's real post-unfloat state instead of taking the minimize-preserve
+    // path. (The commitSnap-wired capture that fires INSIDE the routed call,
+    // while the bit is still set, stays correct for a different reason: it
+    // passes fromStateChange=true, which bypasses that guard entirely.)
+    if (!floating) {
+        const bool snapSlotDest = m_snapEngine && dest == m_snapEngine.data();
+        if (snapSlotDest && !m_cachedSnapEngine) {
+            // Reduced wiring (a non-SnapEngine in the snap slot): the
+            // suspension contract cannot be evaluated, so the clear degrades
+            // to unconditional. Say so rather than degrading silently.
+            qCDebug(lcDbusWindow) << "setWindowFloatingForScreen: snap slot holds a non-SnapEngine for" << windowId
+                                  << "— declassifying unconditionally";
+        }
+        const bool stillFloating = snapSlotDest && m_cachedSnapEngine && m_cachedSnapEngine->isFloating(windowId);
+        if (!stillFloating) {
+            m_service->clearSuspensionFloat(windowId);
+        }
     }
     if (recaptureAfterFloatWrite) {
         // Snap-dest unfloat: re-anchor the live placement record after the
