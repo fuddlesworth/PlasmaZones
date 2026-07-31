@@ -542,6 +542,12 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // handle it via screenId lookup inside buildEmptyZoneList itself.
     QScreen* releaseScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
 
+    // Suppressed context: resolveLayoutForScreen falls back to the global
+    // default layout for an unassigned screen, so snap assist would offer
+    // zones the release screen does not have (#724).
+    if (isActiveLayoutSuppressedForScreen(screenId)) {
+        return;
+    }
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
         return;

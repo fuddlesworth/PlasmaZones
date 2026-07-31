@@ -245,6 +245,52 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Active layout suppressed on a normal snap screen (default assignment
+    // suppressed, screen has no layout of its own). Dead drag — without the
+    // gate the drag path's layout resolution falls back to the global
+    // default layout and snaps windows into zones the screen was never
+    // assigned (#724). bypassReason = "layout_suppressed", every flag false.
+    // ─────────────────────────────────────────────────────────────────────
+    void layoutSuppressed_onNormalScreen_bypass()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/true);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::LayoutSuppressed);
+        QVERIFY(!p.streamDragMoved);
+        QVERIFY(!p.showOverlay);
+        QVERIFY(!p.grabKeyboard);
+        QVERIFY(!p.captureGeometry);
+        QVERIFY(!p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Precedence: global snapping-off outranks layout suppression, so the
+    // reason string stays stable when both coincide.
+    // ─────────────────────────────────────────────────────────────────────
+    void layoutSuppressedWithSnapDisabled_snapDisabledWins()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = false;
+        auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/true);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::SnappingDisabled);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Snapping disabled BUT the drag is on an autotile screen. Autotile
     // takes precedence — the engine still owns placement regardless of the
     // snap-mode setting. bypassReason = "autotile_screen".

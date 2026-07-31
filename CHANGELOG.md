@@ -9,6 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Dragging a window on a monitor that has no zone layout no longer snaps it**: with the default layout assignment suppressed, a monitor without a layout of its own still hit-tested drags against the global default layout, so dragging there could snap the window into zones the monitor does not have while the zone highlight lit up on the other monitor. Drags on such a monitor now move the window freely, and the highlight stays off ([#724](https://github.com/fuddlesworth/PlasmaZones/discussions/724)).
 - **Unminimizing a window no longer snaps it back to a zone on another monitor**: a window snapped on one monitor and then moved to another kept its old zone on record, and minimizing and unminimizing it teleported it back into that zone. This was most visible with snapping disabled on the destination monitor by a rule, where the stale record was never refreshed. The minimize round trip now always keeps the window on the monitor it is actually on. The manual float toggle still returns a window to its remembered zone across monitors ([#724](https://github.com/fuddlesworth/PlasmaZones/discussions/724)).
 
 ## [3.3.2] - 2026-07-29

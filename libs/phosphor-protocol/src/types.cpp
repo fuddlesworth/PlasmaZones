@@ -16,6 +16,7 @@ namespace {
 constexpr QLatin1String kBypassAutotileScreen("autotile_screen");
 constexpr QLatin1String kBypassSnappingDisabled("snapping_disabled");
 constexpr QLatin1String kBypassContextDisabled("context_disabled");
+constexpr QLatin1String kBypassLayoutSuppressed("layout_suppressed");
 } // namespace
 
 QString toWireString(DragBypassReason r)
@@ -29,6 +30,8 @@ QString toWireString(DragBypassReason r)
         return kBypassSnappingDisabled;
     case DragBypassReason::ContextDisabled:
         return kBypassContextDisabled;
+    case DragBypassReason::LayoutSuppressed:
+        return kBypassLayoutSuppressed;
     }
     return {};
 }
@@ -46,6 +49,9 @@ DragBypassReason bypassReasonFromWireString(const QString& s)
     }
     if (s == kBypassContextDisabled) {
         return DragBypassReason::ContextDisabled;
+    }
+    if (s == kBypassLayoutSuppressed) {
+        return DragBypassReason::LayoutSuppressed;
     }
     qWarning() << "bypassReasonFromWireString: unknown wire value" << s << "— mapping to None";
     return DragBypassReason::None;
@@ -187,6 +193,9 @@ QDebug operator<<(QDebug debug, DragBypassReason r)
         break;
     case DragBypassReason::ContextDisabled:
         debug << "DragBypassReason::ContextDisabled";
+        break;
+    case DragBypassReason::LayoutSuppressed:
+        debug << "DragBypassReason::LayoutSuppressed";
         break;
     }
     return debug;

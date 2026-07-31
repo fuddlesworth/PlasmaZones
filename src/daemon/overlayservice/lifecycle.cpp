@@ -84,6 +84,18 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         if (cursorScreen && m_settings) {
             QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), cursorScreen);
             if (isSnappingContextInactive(effectiveId)) {
+                // Idle every live overlay and forget the last-shown screen
+                // before bailing. A bare return left m_currentOverlayScreenId
+                // pointing at the PREVIOUSLY shown screen with its overlay
+                // still un-idled, and the next drag tick's refreshFromIdle()
+                // re-lit that stale screen while the cursor sat here — dragging
+                // on a layout-suppressed monitor highlighted zones on the other
+                // one (#724). applyIdleStateForCursor's empty-id contract is
+                // exactly this "cursor sits on an inactive VS" case.
+                if (m_visible) {
+                    m_currentOverlayScreenId.clear();
+                    applyIdleStateForCursor(QString(), false);
+                }
                 return;
             }
         }

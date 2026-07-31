@@ -133,6 +133,13 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
             QString screenId = effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
             if (screenId.isEmpty())
                 screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
+            // Suppressed context: the resolve below would hand back the global
+            // default layout for a screen that has no zones, and a window that
+            // happens to match one of its rects would be misread as snapped
+            // (#724). No layout means nothing to geometry-match against.
+            if (isActiveLayoutSuppressedForScreen(screenId)) {
+                return;
+            }
             auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
                 PhosphorZones::LayoutComputeService::recalculateSync(
@@ -190,6 +197,23 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
 
     // Skip overlay and zone detection on autotile-managed screens
     if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(outScreenId)) {
+        if (m_overlayShown && m_overlayService) {
+            m_overlayService->hide();
+            m_overlayShown = false;
+        }
+        m_overlayIdled = false;
+        return nullptr;
+    }
+
+    // Skip overlay and zone detection on a screen whose context has no active
+    // zone layout (default assignment suppressed). resolveLayoutForScreen
+    // below would fall back to the GLOBAL default layout for such a screen, so
+    // without this gate a drag crossing onto it mid-drag hit-tests and snaps
+    // into zones the screen was never assigned (#724). beginDrag's policy gate
+    // covers drags STARTING here; this covers mid-drag crossings, which reach
+    // this per-tick path without a fresh beginDrag. Same overlay teardown as
+    // the disabled branch above.
+    if (isActiveLayoutSuppressedForScreen(outScreenId)) {
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;

@@ -395,8 +395,8 @@ public:
      * dragPolicyChanged during cross-VS cursor crossings.
      *
      * Precedence: context_disabled → autotile_screen → snapping_disabled →
-     * snap path (canonical). First match wins so the bypassReason string is
-     * stable across coincidental disables.
+     * layout_suppressed → snap path (canonical). First match wins so the
+     * bypassReason string is stable across coincidental disables.
      *
      * @param settings Settings interface (snappingEnabled, zone-span triggers, etc.)
      * @param autotileEngine May be nullptr in tests that don't exercise autotile
@@ -407,12 +407,19 @@ public:
      *        (desktop, activity, Snapping-mode) tuple used for the
      *        context-disabled check. nullptr disables the disable gate
      *        (matches the historical `settings == nullptr` fallback).
+     * @param activeLayoutSuppressed Whether the screen's context has NO active
+     *        zone layout because the default assignment is suppressed
+     *        (LayoutRegistry::isContextActiveLayoutSuppressed — resolved by the
+     *        caller, like reorderMode, since the static can't reach the
+     *        registry). True → dead drag: the drag path's layout resolution
+     *        would otherwise fall back to the global default layout and snap
+     *        windows into zones the screen was never assigned (#724).
      */
     static PhosphorProtocol::DragPolicy computeDragPolicy(const ISettings* settings,
                                                           const PhosphorEngine::IPlacementEngine* autotileEngine,
                                                           const QString& windowId, const QString& screenId,
                                                           const PhosphorContext::IContextResolver* resolver,
-                                                          bool reorderMode);
+                                                          bool reorderMode, bool activeLayoutSuppressed = false);
 
 private:
     /// Whether reorder (drag-to-swap) mode is effective for @p screenId: a matched
@@ -420,6 +427,13 @@ private:
     /// `autotileDragBehavior` setting. Resolves through m_layoutManager (which the
     /// static computeDragPolicy can't reach), so callers pass the result in.
     bool effectiveReorderMode(const QString& screenId) const;
+
+    /// Whether @p screenId's context has no active zone layout because the
+    /// default assignment is suppressed (the computeDragPolicy
+    /// activeLayoutSuppressed input, resolved on the current desktop/activity
+    /// like effectiveReorderMode). Also gates the per-tick drag paths, which a
+    /// mid-drag monitor crossing reaches without a fresh beginDrag (#724).
+    bool isActiveLayoutSuppressedForScreen(const QString& screenId) const;
 
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;

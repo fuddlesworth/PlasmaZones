@@ -31,6 +31,7 @@ enum class DragBypassReason : int {
     AutotileScreen = 1, ///< drag started/ended on an autotile screen — engine owns placement
     SnappingDisabled = 2, ///< snap mode off globally — dead drag
     ContextDisabled = 3, ///< monitor/desktop/activity excluded in settings — dead drag
+    LayoutSuppressed = 4, ///< screen has no zone layout (default assignment suppressed) — dead drag
 };
 
 /// Convert to the legacy wire-format string. Returns an empty QString for None.

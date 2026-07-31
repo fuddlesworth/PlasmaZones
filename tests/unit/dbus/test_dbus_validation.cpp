@@ -377,9 +377,10 @@ private Q_SLOTS:
     void dragBypassReason_wireRoundTrip_all()
     {
         // Every enum value must round-trip through the wire format.
-        for (auto r : {PhosphorProtocol::DragBypassReason::None, PhosphorProtocol::DragBypassReason::AutotileScreen,
-                       PhosphorProtocol::DragBypassReason::SnappingDisabled,
-                       PhosphorProtocol::DragBypassReason::ContextDisabled}) {
+        for (auto r :
+             {PhosphorProtocol::DragBypassReason::None, PhosphorProtocol::DragBypassReason::AutotileScreen,
+              PhosphorProtocol::DragBypassReason::SnappingDisabled, PhosphorProtocol::DragBypassReason::ContextDisabled,
+              PhosphorProtocol::DragBypassReason::LayoutSuppressed}) {
             QCOMPARE(bypassReasonFromWireString(toWireString(r)), r);
         }
     }

@@ -26,7 +26,8 @@ namespace PlasmaZones {
 PhosphorProtocol::DragPolicy
 WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEngine::IPlacementEngine* autotileEngine,
                                      const QString& windowId, const QString& screenId,
-                                     const PhosphorContext::IContextResolver* resolver, bool reorderMode)
+                                     const PhosphorContext::IContextResolver* resolver, bool reorderMode,
+                                     bool activeLayoutSuppressed)
 {
     PhosphorProtocol::DragPolicy policy;
     policy.screenId = screenId;
@@ -79,7 +80,20 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
         return policy;
     }
 
-    // 4) Snap path — canonical case. Plugin streams cursor updates, daemon
+    // 4) No active zone layout on this screen: the default-layout assignment
+    //    is suppressed for this context (SuppressDefaultLayoutAssignment, or a
+    //    per-context override). Dead drag — the drag path's per-tick layout
+    //    resolution (resolveLayoutForScreen) falls back to the GLOBAL default
+    //    layout for an unassigned screen, so without this gate a drag on such
+    //    a screen hit-tests and snaps into zones the screen was never
+    //    assigned, while the overlay layer (which consults the suppress-aware
+    //    predicate) correctly shows nothing there (#724).
+    if (activeLayoutSuppressed) {
+        policy.bypassReason = PhosphorProtocol::DragBypassReason::LayoutSuppressed;
+        return policy;
+    }
+
+    // 5) Snap path — canonical case. Plugin streams cursor updates, daemon
     //    runs overlay / zone detection / snap assist. Activation-trigger
     //    gating still happens locally in the plugin against the current
     //    modifier state (input-event optimization, not policy).
@@ -105,6 +119,19 @@ bool WindowDragAdaptor::effectiveReorderMode(const QString& screenId) const
         }
     }
     return m_settings && m_settings->autotileDragBehavior() == AutotileDragBehavior::Reorder;
+}
+
+bool WindowDragAdaptor::isActiveLayoutSuppressedForScreen(const QString& screenId) const
+{
+    // Mirrors OverlayService::isSnappingContextInactive's suppress leg: same
+    // predicate, same (current desktop, current activity) axes, so the drag
+    // pipeline and the overlay layer can never disagree about whether this
+    // screen has zones (#724).
+    if (!m_layoutManager || screenId.isEmpty()) {
+        return false;
+    }
+    const int vd = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+    return m_layoutManager->isContextActiveLayoutSuppressed(screenId, vd, m_layoutManager->currentActivity());
 }
 
 PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int frameY,
@@ -160,7 +187,8 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     // resolve, and the reorder-fallback branch below needs the same answer.
     const bool startReorderMode = effectiveReorderMode(startScreenId);
     const PhosphorProtocol::DragPolicy policy =
-        computeDragPolicy(m_settings, m_autotileEngine, windowId, startScreenId, m_contextResolver, startReorderMode);
+        computeDragPolicy(m_settings, m_autotileEngine, windowId, startScreenId, m_contextResolver, startReorderMode,
+                          isActiveLayoutSuppressedForScreen(startScreenId));
 
     // Reusable mutable copy — the reorder fallback path below may need to
     // restore immediateFloatOnStart that computeDragPolicy proactively cleared.
@@ -547,7 +575,8 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
         const bool reorderMode = m_autotileEngine && m_autotileEngine->isActiveOnScreen(cursorScreenId)
             && effectiveReorderMode(cursorScreenId);
         const PhosphorProtocol::DragPolicy candidate =
-            computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, m_contextResolver, reorderMode);
+            computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, m_contextResolver, reorderMode,
+                              isActiveLayoutSuppressedForScreen(cursorScreenId));
         if (candidate != m_currentDragPolicy) {
             // Log both bypass reason and screenId on each side so same-reason
             // flips (snap→snap or autotile→autotile cross-VS) aren't opaque in
