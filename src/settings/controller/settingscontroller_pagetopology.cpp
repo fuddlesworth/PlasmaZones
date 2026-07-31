@@ -369,6 +369,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingBehaviorGroup(), CD::stickyWindowHandlingKey()},
              {CD::scrollingBehaviorGroup(), CD::respectMinimumSizeKey()},
              {CD::scrollingBehaviorGroup(), CD::restoreOnLoginKey()},
+             {CD::scrollingBehaviorGroup(), CD::restoreFloatedOnLoginKey()},
              {CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()},
              {CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()},
          }},

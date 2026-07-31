@@ -358,12 +358,16 @@ public:
     {
         return true;
     }
-    // NOTE: there is deliberately no scrollingRestoreFloatedWindowsOnLogin.
-    // Scroll floats ride the shared WTS float model (free geometry restored
-    // by the common layer / effect float-cache seed), so a scroll-specific
-    // toggle has no seam to gate — see the DELIBERATE SCOPE NOTE in
-    // enginewiring.cpp. If scroll restore semantics ever diverge, the
-    // ScrollEngine hook lands first and the setting follows.
+    /// Restore a scroll-FLOATED window to its previous position on reopen.
+    /// The scroll twin of autotileRestoreFloatedWindowsOnLogin, gating the
+    /// engine's geometry move on the floating-reopen branch (the float flag
+    /// itself is never gated). The literal matches the autotile canonical's
+    /// value (it lives in the leaf configdefaults.h, which this chain link
+    /// cannot reference).
+    static constexpr bool scrollingRestoreFloatedWindowsOnLogin()
+    {
+        return true;
+    }
     /// Percent of the work-area extent one increase/decrease shortcut press
     /// moves a column width or window height. Daemon-side only: the engine
     /// receives an already-computed delta, so these never enter

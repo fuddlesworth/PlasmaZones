@@ -306,6 +306,19 @@ public:
         m_floatPredicate = std::move(predicate);
     }
 
+    /// Predicate gating the float-POSITION restore on the floating-reopen
+    /// branch: the window is marked floating unconditionally, only the
+    /// geometry move onto the recorded free spot is gated. Mirrors
+    /// AutotileEngine::RestorePositionPredicate (daemon-wired
+    /// scrollingRestoreFloatedWindowsOnLogin setting + the per-window
+    /// RestorePosition rule); unset (tests / no daemon) means the move
+    /// always fires, preserving historical behaviour.
+    using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
+    void setRestorePositionPredicate(RestorePositionPredicate predicate)
+    {
+        m_restorePositionPredicate = std::move(predicate);
+    }
+
     /// Resolver for the per-window open-behaviour rule overrides. Same
     /// injection contract as the float predicate. Takes the OPENING screen
     /// as well as the window: the open-behaviour rules a user authors are
@@ -686,6 +699,7 @@ private:
     std::function<void()> m_persistSaveFn;
     std::function<void()> m_persistLoadFn;
     FloatPredicate m_floatPredicate;
+    RestorePositionPredicate m_restorePositionPredicate{};
     OpenParamsResolver m_openParamsResolver;
     SnappingModeResolver m_snappingModeResolver;
     ContextGapProvider m_contextGapProvider;

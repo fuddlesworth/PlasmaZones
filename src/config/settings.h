@@ -388,6 +388,8 @@ public:
                    NOTIFY scrollingRespectMinimumSizeChanged)
     Q_PROPERTY(bool scrollingRestoreStripsOnLogin READ scrollingRestoreStripsOnLogin WRITE
                    setScrollingRestoreStripsOnLogin NOTIFY scrollingRestoreStripsOnLoginChanged)
+    Q_PROPERTY(bool scrollingRestoreFloatedWindowsOnLogin READ scrollingRestoreFloatedWindowsOnLogin WRITE
+                   setScrollingRestoreFloatedWindowsOnLogin NOTIFY scrollingRestoreFloatedWindowsOnLoginChanged)
     Q_PROPERTY(int scrollingColumnWidthStepPercent READ scrollingColumnWidthStepPercent WRITE
                    setScrollingColumnWidthStepPercent NOTIFY scrollingColumnWidthStepPercentChanged)
     Q_PROPERTY(int scrollingWindowHeightStepPercent READ scrollingWindowHeightStepPercent WRITE
@@ -1190,6 +1192,8 @@ public:
     void setScrollingRespectMinimumSize(bool respect);
     bool scrollingRestoreStripsOnLogin() const;
     void setScrollingRestoreStripsOnLogin(bool restore);
+    bool scrollingRestoreFloatedWindowsOnLogin() const override;
+    void setScrollingRestoreFloatedWindowsOnLogin(bool restore);
     int scrollingColumnWidthStepPercent() const;
     void setScrollingColumnWidthStepPercent(int percent);
     int scrollingWindowHeightStepPercent() const;

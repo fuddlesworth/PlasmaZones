@@ -94,6 +94,22 @@ SettingsCard {
         SettingsSeparator {}
 
         SettingsRow {
+            title: i18n("Restore floated windows to their previous position")
+            searchAnchor: "scrollingRestoreFloatedOnLogin"
+            description: i18n("When a floated window reopens, it returns to the position it was on instead of wherever the compositor would place it. A rule can override this either way, opting individual windows in or out.")
+
+            SettingsSwitch {
+                checked: appSettings.scrollingRestoreFloatedWindowsOnLogin
+                accessibleName: i18n("Restore floated windows to their previous position")
+                onToggled: function (newValue) {
+                    appSettings.scrollingRestoreFloatedWindowsOnLogin = newValue;
+                }
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
             title: i18n("Sticky windows")
             searchAnchor: "scrollingStickyWindows"
             description: i18n("How to handle windows that are shown on all virtual desktops")

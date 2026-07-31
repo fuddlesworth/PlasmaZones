@@ -38,11 +38,12 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
 {
     // m_settings is a hard ctor dependency (qFatal on null), so it is non-null
     // here — deref unguarded like every other method in this class. The global
-    // default is per-engine (snap-floated vs autotile-floated); the RestorePosition
-    // rule override below is engine-neutral.
+    // default is per-engine (snap- vs autotile- vs scroll-floated); the
+    // RestorePosition rule override below is engine-neutral.
     const bool globalDefault = mode == PhosphorZones::AssignmentEntry::Mode::Autotile
         ? m_settings->autotileRestoreFloatedWindowsOnLogin()
-        : m_settings->snappingRestoreFloatedWindowsOnLogin();
+        : mode == PhosphorZones::AssignmentEntry::Mode::Scrolling ? m_settings->scrollingRestoreFloatedWindowsOnLogin()
+                                                                  : m_settings->snappingRestoreFloatedWindowsOnLogin();
 
     // No rule store / metadata → the global setting is the whole policy.
     if (!m_ruleStore) {

@@ -255,6 +255,9 @@ private Q_SLOTS:
         const auto* restore = findKey(schema, group, ConfigDefaults::restoreOnLoginKey());
         QVERIFY(restore);
         QCOMPARE(restore->defaultValue.toBool(), ConfigDefaults::scrollingRestoreStripsOnLogin());
+        const auto* restoreFloated = findKey(schema, group, ConfigDefaults::restoreFloatedOnLoginKey());
+        QVERIFY(restoreFloated);
+        QCOMPARE(restoreFloated->defaultValue.toBool(), ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin());
     }
 
     /// Behavior setters follow the standard emit-once contract: an

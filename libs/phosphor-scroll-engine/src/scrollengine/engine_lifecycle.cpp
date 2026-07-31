@@ -61,6 +61,20 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 // this engine's own — marked like the rule-float exit above.
                 m_scrollFloatedWindows.insert(windowId);
                 consumePendingInitialOrder(screenId, windowId); // same rationale as the rule-float exit
+                // The window is marked floating unconditionally above; only
+                // the geometry MOVE onto the recorded free spot is gated
+                // (daemon-wired scrollingRestoreFloatedWindowsOnLogin
+                // setting + per-window RestorePosition rule) — the autotile
+                // shape, insert.cpp. SCREEN-LOCAL recorded position only,
+                // for autotile's documented reason: a rect captured on a
+                // different screen would teleport the window while the
+                // float tracking points elsewhere.
+                const QString restoreScreen = record->screenId.isEmpty() ? screenId : record->screenId;
+                const QRect freeGeo = record->freeGeometryFor(restoreScreen);
+                const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
+                if (freeGeo.isValid() && restorePosition) {
+                    Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+                }
                 Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
                 return;
             }

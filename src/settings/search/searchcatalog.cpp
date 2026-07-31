@@ -631,6 +631,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Restore columns on login"),
                {PhosphorI18n::tr("restore"), PhosphorI18n::tr("login"), PhosphorI18n::tr("session"),
                 PhosphorI18n::tr("column")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingRestoreFloatedOnLogin"),
+               PhosphorI18n::tr("Restore floated windows to their previous position"),
+               {PhosphorI18n::tr("restore"), PhosphorI18n::tr("float"), PhosphorI18n::tr("position")});
     addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingStickyWindows"),
                PhosphorI18n::tr("Sticky windows"),
                {PhosphorI18n::tr("sticky"), PhosphorI18n::tr("all"), PhosphorI18n::tr("desktops")});
@@ -672,6 +675,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRestoreStripsOnLogin"),
                PhosphorI18n::tr("Restore columns on login"),
                {PhosphorI18n::tr("restore"), PhosphorI18n::tr("login"), PhosphorI18n::tr("column")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingRestoreFloatedOnLogin"),
+               PhosphorI18n::tr("Restore floated windows to their previous position"),
+               {PhosphorI18n::tr("restore"), PhosphorI18n::tr("float"), PhosphorI18n::tr("position")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingStickyWindows"),
                PhosphorI18n::tr("Sticky windows"), {PhosphorI18n::tr("sticky"), PhosphorI18n::tr("desktops")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingColumnWidthStep"),

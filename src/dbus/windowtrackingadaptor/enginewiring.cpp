@@ -411,18 +411,23 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);
         if (auto* scroll = m_cachedScrollEngine.data()) {
-            // DELIBERATE SCOPE NOTE: the scroll engine takes only the float
-            // predicate + open-params resolver — it has no
-            // setRestorePositionPredicate / setManagedRestorePredicate /
+            // DELIBERATE SCOPE NOTE: the scroll engine takes the float
+            // predicate, the open-params resolver, and the float-position
+            // restore predicate — but no setManagedRestorePredicate /
             // setExclusionQueryProvider twins BY DESIGN. Scroll floats ride
             // the shared WTS float model (free geometry lives in the unified
-            // placement record, restored by the common layer), and window
-            // exclusion is enforced effect-side before a scroll screen ever
-            // sees the open. If scroll-specific restore semantics ever
-            // diverge from the shared path, the hooks get added to
-            // ScrollEngine first and wired here second.
+            // placement record), with the engine's own gated geometry move
+            // on the floating-reopen branch, and window exclusion is
+            // enforced effect-side before a scroll screen ever sees the
+            // open.
             scroll->setFloatPredicate([this](const QString& windowId, const QString& screenId) -> bool {
                 return shouldFloatByRule(windowId, screenId);
+            });
+            // Float-position restore gate, the autotile shape: resolves the
+            // scrollingRestoreFloatedWindowsOnLogin global plus the
+            // per-window RestorePosition rule override.
+            scroll->setRestorePositionPredicate([this](const QString& windowId) -> bool {
+                return shouldRestoreFloatedPosition(windowId, PhosphorZones::AssignmentEntry::Mode::Scrolling);
             });
             scroll->setOpenParamsResolver(
                 [this](const QString& windowId, const QString& screenId) -> PhosphorScrollEngine::ScrollOpenParams {

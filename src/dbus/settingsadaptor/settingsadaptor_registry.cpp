@@ -860,6 +860,8 @@ void SettingsAdaptor::initializeRegistry()
                                setScrollingRespectMinimumSize)
         REGISTER_CONCRETE_BOOL("scrollingRestoreStripsOnLogin", scrollingRestoreStripsOnLogin,
                                setScrollingRestoreStripsOnLogin)
+        REGISTER_CONCRETE_BOOL("scrollingRestoreFloatedWindowsOnLogin", scrollingRestoreFloatedWindowsOnLogin,
+                               setScrollingRestoreFloatedWindowsOnLogin)
         REGISTER_CONCRETE_INT("scrollingColumnWidthStepPercent", scrollingColumnWidthStepPercent,
                               setScrollingColumnWidthStepPercent)
         REGISTER_CONCRETE_INT("scrollingWindowHeightStepPercent", scrollingWindowHeightStepPercent,

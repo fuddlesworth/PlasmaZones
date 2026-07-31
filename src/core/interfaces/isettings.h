@@ -280,6 +280,14 @@ public:
         return true;
     }
 
+    /// Float-position restore for scroll-floated windows. Virtual with an
+    /// always-on default so the WindowTrackingAdaptor's restore predicate
+    /// can resolve it through the interface, like its snap/autotile twins.
+    virtual bool scrollingRestoreFloatedWindowsOnLogin() const
+    {
+        return true;
+    }
+
     virtual QVariantMap getPerScreenScrollingSettings(const QString& /*screenIdOrName*/) const
     {
         return {};
@@ -654,6 +662,7 @@ Q_SIGNALS:
     void scrollingStickyWindowHandlingChanged();
     void scrollingRespectMinimumSizeChanged();
     void scrollingRestoreStripsOnLoginChanged();
+    void scrollingRestoreFloatedWindowsOnLoginChanged();
     void scrollingColumnWidthStepPercentChanged();
     void scrollingWindowHeightStepPercentChanged();
 

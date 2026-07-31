@@ -243,6 +243,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
                      {CD::scrollingStickyIgnoreAll(), "ignoreAll"_L1}})},
         {CD::respectMinimumSizeKey(), CD::scrollingRespectMinimumSize(), QMetaType::Bool},
         {CD::restoreOnLoginKey(), CD::scrollingRestoreStripsOnLogin(), QMetaType::Bool},
+        {CD::restoreFloatedOnLoginKey(), CD::scrollingRestoreFloatedWindowsOnLogin(), QMetaType::Bool},
         {CD::columnWidthStepPercentKey(),
          CD::scrollingColumnWidthStepPercent(),
          QMetaType::Int,
