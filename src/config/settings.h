@@ -361,6 +361,12 @@ public:
                    setScrollingDefaultWindowHeightPresetIndex NOTIFY scrollingDefaultWindowHeightPresetIndexChanged)
     Q_PROPERTY(int scrollingInsertPosition READ scrollingInsertPosition WRITE setScrollingInsertPosition NOTIFY
                    scrollingInsertPositionChanged)
+    Q_PROPERTY(bool scrollingTabStripEnabled READ scrollingTabStripEnabled WRITE setScrollingTabStripEnabled NOTIFY
+                   scrollingTabStripEnabledChanged)
+    Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
+                   NOTIFY scrollingWheelFocusEnabledChanged)
+    Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
+                   NOTIFY scrollingWheelFocusInvertedChanged)
     // QML-facing STRING facade: the Q_PROPERTY shares its name with the
     // C++ QStringList accessor (the IScrollSettings surface the engine
     // consumes). Deliberate — QML edits the raw comma-joined text while the
@@ -1116,6 +1122,12 @@ public:
     void setScrollingDefaultWindowHeightPresetIndex(int index);
     int scrollingInsertPosition() const override;
     void setScrollingInsertPosition(int position);
+    bool scrollingTabStripEnabled() const override;
+    void setScrollingTabStripEnabled(bool enabled);
+    bool scrollingWheelFocusEnabled() const;
+    void setScrollingWheelFocusEnabled(bool enabled);
+    bool scrollingWheelFocusInverted() const;
+    void setScrollingWheelFocusInverted(bool inverted);
     // Preset lists: comma-joined string on disk (canonicalProportionList
     // schema validator — a numeric filter, not the plain comma-list),
     // QStringList through IScrollSettings, raw string for QML.

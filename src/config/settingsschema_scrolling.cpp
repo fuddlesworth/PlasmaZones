@@ -206,6 +206,9 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(0, CD::scrollingPresetIndexMax())},
+        {CD::tabStripEnabledKey(), CD::scrollingTabStripEnabled(), QMetaType::Bool},
+        {CD::wheelFocusEnabledKey(), CD::scrollingWheelFocusEnabled(), QMetaType::Bool},
+        {CD::wheelFocusInvertedKey(), CD::scrollingWheelFocusInverted(), QMetaType::Bool},
     };
 
     // ─── Scrolling behavior (Scrolling.Behavior) ─────────────────────────

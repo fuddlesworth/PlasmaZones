@@ -230,6 +230,12 @@ public:
     void setScrollingFocusFollowsMouse(bool enabled);
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
+    // Meta+wheel column focus configuration. Disabling genuinely releases
+    // the axis chords back to the compositor (updateScrollWheelShortcuts'
+    // want predicate); inverting flips the wheel direction.
+    void setWheelFocusEnabled(bool enabled);
+    void setWheelFocusInverted(bool inverted);
+
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
     bool isManagedScreen(const QString& screenId) const;
 
@@ -735,6 +741,9 @@ private:
     // over the union of managed screens.
     bool m_focusFollowsMouse = false;
     bool m_scrollingFocusFollowsMouse = false;
+    // ── Meta+wheel column focus ──
+    bool m_wheelFocusEnabled = true;
+    bool m_wheelFocusInverted = false;
     // ── Border state — uses shared BorderState from compositor-common ──
     BorderState m_border;
 };

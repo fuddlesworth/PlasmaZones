@@ -68,6 +68,18 @@ void OverlayService::setSettings(ISettings* settings)
                     &OverlayService::recreateOverlayWindowsOnTypeMismatch);
 
             connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
+
+            // Tab-strip enable toggle: replay each screen's cached strip
+            // model through updateScrollTabStrips — its own enabled check
+            // turns the replay into a show (toggle on) or an animated hide
+            // (toggle off). Hiding must run, not just skipping future
+            // updates, or a live strip stays painted after the switch flips.
+            connect(m_settings, &ISettings::scrollingTabStripEnabledChanged, this, [this]() {
+                const auto cached = m_lastScrollTabStrips;
+                for (auto it = cached.constBegin(); it != cached.constEnd(); ++it) {
+                    updateScrollTabStrips(it.key(), it.value());
+                }
+            });
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
             // The full CAVA analysis parameter set (Shaders.Audio). Every knob

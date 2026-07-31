@@ -671,6 +671,14 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_tilingHandler->setScrollingFocusFollowsMouse(v.toBool());
     });
 
+    loadSettingAsync(QStringLiteral("scrollingWheelFocusEnabled"), [this](const QVariant& v) {
+        m_tilingHandler->setWheelFocusEnabled(v.toBool());
+    });
+
+    loadSettingAsync(QStringLiteral("scrollingWheelFocusInverted"), [this](const QVariant& v) {
+        m_tilingHandler->setWheelFocusInverted(v.toBool());
+    });
+
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {
         m_snapHandler->setFocusFollowsMouse(v.toBool());
     });

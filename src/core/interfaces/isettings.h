@@ -272,6 +272,14 @@ public:
         return false;
     }
 
+    /// Tab-indicator strip over tabbed scrolling columns. Virtual with an
+    /// always-on default so the overlay service can gate through the
+    /// interface (the zoneSelectorEnabled pattern).
+    virtual bool scrollingTabStripEnabled() const
+    {
+        return true;
+    }
+
     virtual QVariantMap getPerScreenScrollingSettings(const QString& /*screenIdOrName*/) const
     {
         return {};
@@ -634,6 +642,10 @@ Q_SIGNALS:
     void scrollingDefaultWindowHeightPresetIndexChanged();
     void scrollingPresetColumnWidthsChanged();
     void scrollingPresetWindowHeightsChanged();
+
+    void scrollingTabStripEnabledChanged();
+    void scrollingWheelFocusEnabledChanged();
+    void scrollingWheelFocusInvertedChanged();
 
     // Scrolling behavior settings
     void scrollingInsertPositionChanged();

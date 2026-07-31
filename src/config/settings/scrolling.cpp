@@ -248,6 +248,16 @@ P_STORE_SET_STRING(setScrollingPresetWindowHeights, scrollingGroup, presetWindow
 P_STORE_GET(int, scrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, int)
 P_STORE_SET_INT(setScrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, scrollingInsertPositionChanged)
 
+P_STORE_GET(bool, scrollingTabStripEnabled, scrollingGroup, tabStripEnabledKey, bool)
+P_STORE_SET_BOOL(setScrollingTabStripEnabled, scrollingGroup, tabStripEnabledKey, scrollingTabStripEnabledChanged)
+
+P_STORE_GET(bool, scrollingWheelFocusEnabled, scrollingGroup, wheelFocusEnabledKey, bool)
+P_STORE_SET_BOOL(setScrollingWheelFocusEnabled, scrollingGroup, wheelFocusEnabledKey, scrollingWheelFocusEnabledChanged)
+
+P_STORE_GET(bool, scrollingWheelFocusInverted, scrollingGroup, wheelFocusInvertedKey, bool)
+P_STORE_SET_BOOL(setScrollingWheelFocusInverted, scrollingGroup, wheelFocusInvertedKey,
+                 scrollingWheelFocusInvertedChanged)
+
 P_STORE_GET(bool, scrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey, bool)
 P_STORE_SET_BOOL(setScrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey,
                  scrollingFocusNewWindowsChanged)

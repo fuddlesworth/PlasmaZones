@@ -354,6 +354,9 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingGroup(), CD::defaultWindowHeightKindKey()},
              {CD::scrollingGroup(), CD::defaultWindowHeightValueKey()},
              {CD::scrollingGroup(), CD::defaultWindowHeightPresetIndexKey()},
+             {CD::scrollingGroup(), CD::tabStripEnabledKey()},
+             {CD::scrollingGroup(), CD::wheelFocusEnabledKey()},
+             {CD::scrollingGroup(), CD::wheelFocusInvertedKey()},
              // Scrolling.Behavior — the strip's window-handling and focus
              // knobs. Smart gaps is deliberately absent: scrolling forwards
              // the shared Tiling.Gaps/SmartGaps value, whose (group, key)

@@ -201,6 +201,24 @@ public:
     {
         return QStringLiteral("0.333,0.5,0.667");
     }
+    /// Tab-indicator strip over tabbed columns. Off, the indicator hides and
+    /// stays hidden until re-enabled (tabbed columns still work; they just
+    /// carry no on-screen pill).
+    static constexpr bool scrollingTabStripEnabled()
+    {
+        return true;
+    }
+    /// Meta+wheel column focus in the KWin effect. Off, the axis chords are
+    /// genuinely released back to the compositor (KWin's zoom effect can
+    /// reclaim Meta+wheel). Inverted flips the scroll direction.
+    static constexpr bool scrollingWheelFocusEnabled()
+    {
+        return true;
+    }
+    static constexpr bool scrollingWheelFocusInverted()
+    {
+        return false;
+    }
     /// DefaultWindowHeightKind wire values — the engine's WindowHeight::Kind
     /// vocabulary 1:1 (0 = auto split, 1 = fixed px, 2 = preset index); the
     /// schema static_asserts the pair via DefaultHeightKind.

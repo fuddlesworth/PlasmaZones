@@ -681,6 +681,10 @@ private:
     /// Screens with a hide in flight; the show path treats these as not
     /// visible so a mid-hide repopulation re-runs beginShow.
     QSet<QString> m_scrollTabsHidePending;
+    /// Last non-empty strip model per screen, cached regardless of the
+    /// enable toggle so re-enabling the indicator can replay it (the
+    /// engine's tabStripsChanged is change-latched and stays silent).
+    QHash<QString, QVariantList> m_lastScrollTabStrips;
     std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
 
     QPointer<PhosphorZones::Layout> m_layout;

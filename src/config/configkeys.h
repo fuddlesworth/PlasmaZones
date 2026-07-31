@@ -408,6 +408,9 @@ public:
     P_CONFIG_KEY(defaultWindowHeightKindKey, "DefaultWindowHeightKind")
     P_CONFIG_KEY(defaultWindowHeightValueKey, "DefaultWindowHeightValue")
     P_CONFIG_KEY(defaultWindowHeightPresetIndexKey, "DefaultWindowHeightPresetIndex")
+    P_CONFIG_KEY(tabStripEnabledKey, "TabStripEnabled")
+    P_CONFIG_KEY(wheelFocusEnabledKey, "WheelFocusEnabled")
+    P_CONFIG_KEY(wheelFocusInvertedKey, "WheelFocusInverted")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Behavior

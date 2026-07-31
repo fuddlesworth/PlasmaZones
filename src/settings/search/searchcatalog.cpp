@@ -570,6 +570,15 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("alwaysCenterSingleColumn"),
                PhosphorI18n::tr("Center a lone column"),
                {PhosphorI18n::tr("center"), PhosphorI18n::tr("single"), PhosphorI18n::tr("column")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("wheelFocusEnabled"),
+               PhosphorI18n::tr("Scroll columns with the mouse wheel"),
+               {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("scroll")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("wheelFocusInverted"),
+               PhosphorI18n::tr("Invert wheel direction"),
+               {PhosphorI18n::tr("invert"), PhosphorI18n::tr("wheel"), PhosphorI18n::tr("direction")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("tabStripEnabled"),
+               PhosphorI18n::tr("Tab indicator"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("indicator")});
     addSection(search, QStringLiteral("scrolling-behavior"), QStringLiteral("newColumns"),
                PhosphorI18n::tr("New columns"));
     addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("defaultColumnWidthKind"),

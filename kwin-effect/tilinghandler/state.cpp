@@ -123,6 +123,22 @@ void TilingHandler::setScrollingFocusFollowsMouse(bool enabled)
     }
 }
 
+void TilingHandler::setWheelFocusEnabled(bool enabled)
+{
+    if (m_wheelFocusEnabled == enabled) {
+        return;
+    }
+    m_wheelFocusEnabled = enabled;
+    // Re-evaluate registration immediately: the flag is part of the want
+    // predicate, and no screen-set change will fire on a settings save.
+    updateScrollWheelShortcuts();
+}
+
+void TilingHandler::setWheelFocusInverted(bool inverted)
+{
+    m_wheelFocusInverted = inverted;
+}
+
 void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const QString& screenId,
                                                  KWin::EffectWindow* w, const QRectF& frameIn, bool knownFreeFloating)
 {
@@ -370,7 +386,10 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
 
 void TilingHandler::updateScrollWheelShortcuts()
 {
-    const bool want = !m_scrollingScreens.isEmpty();
+    // The enable setting folds into the want predicate so turning it off
+    // genuinely releases the axis chords back to the compositor (KWin's
+    // zoom effect can reclaim Meta+wheel), rather than swallowing them.
+    const bool want = m_wheelFocusEnabled && !m_scrollingScreens.isEmpty();
     if (want == !m_scrollWheelActions.isEmpty()) {
         return;
     }
@@ -425,6 +444,9 @@ void TilingHandler::wheelFocusColumn(int delta)
 {
     if (!m_effect->m_daemonGate.serviceRegistered) {
         return;
+    }
+    if (m_wheelFocusInverted) {
+        delta = -delta;
     }
     // The strip that moves is the one under the CURSOR (Meta+wheel is a
     // pointer gesture, not a focus verb): resolve the cursor's effective

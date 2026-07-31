@@ -118,6 +118,37 @@ SettingsFlickable {
                         }
                     }
                 }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Scroll columns with the mouse wheel")
+                    searchAnchor: "wheelFocusEnabled"
+                    description: i18n("Hold Meta or Meta+Alt and scroll to move column focus along the strip. Off, the compositor keeps those wheel shortcuts.")
+
+                    SettingsSwitch {
+                        checked: appSettings.scrollingWheelFocusEnabled
+                        accessibleName: i18n("Scroll columns with the mouse wheel")
+                        onToggled: function (newValue) {
+                            appSettings.scrollingWheelFocusEnabled = newValue;
+                        }
+                    }
+                }
+
+                SettingsRow {
+                    title: i18n("Invert wheel direction")
+                    searchAnchor: "wheelFocusInverted"
+                    description: i18n("Scrolling down focuses the previous column instead of the next one")
+                    enabled: appSettings.scrollingWheelFocusEnabled
+
+                    SettingsSwitch {
+                        checked: appSettings.scrollingWheelFocusInverted
+                        accessibleName: i18n("Invert wheel direction")
+                        onToggled: function (newValue) {
+                            appSettings.scrollingWheelFocusInverted = newValue;
+                        }
+                    }
+                }
             }
         }
 
@@ -262,6 +293,24 @@ SettingsFlickable {
                         onActivated: root.writeSetting("DefaultColumnDisplay", currentValue, function (v) {
                             appSettings.scrollingDefaultColumnDisplay = v;
                         })
+                    }
+                }
+
+                SettingsSeparator {}
+
+                // App-wide row on a scoped card (like the Window Handling
+                // card's global rows): the indicator is one overlay service.
+                SettingsRow {
+                    title: i18n("Tab indicator")
+                    searchAnchor: "tabStripEnabled"
+                    description: i18n("Show a pill of tabs above a tabbed column. Tabbed columns keep working without it.")
+
+                    SettingsSwitch {
+                        checked: appSettings.scrollingTabStripEnabled
+                        accessibleName: i18n("Tab indicator")
+                        onToggled: function (newValue) {
+                            appSettings.scrollingTabStripEnabled = newValue;
+                        }
                     }
                 }
 

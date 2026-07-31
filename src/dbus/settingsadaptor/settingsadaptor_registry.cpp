@@ -822,6 +822,10 @@ void SettingsAdaptor::initializeRegistry()
                                  setScrollingDefaultWindowHeightValue)
         REGISTER_CONCRETE_INT("scrollingDefaultWindowHeightPresetIndex", scrollingDefaultWindowHeightPresetIndex,
                               setScrollingDefaultWindowHeightPresetIndex)
+        REGISTER_CONCRETE_BOOL("scrollingTabStripEnabled", scrollingTabStripEnabled, setScrollingTabStripEnabled)
+        REGISTER_CONCRETE_BOOL("scrollingWheelFocusEnabled", scrollingWheelFocusEnabled, setScrollingWheelFocusEnabled)
+        REGISTER_CONCRETE_BOOL("scrollingWheelFocusInverted", scrollingWheelFocusInverted,
+                               setScrollingWheelFocusInverted)
 
         // Scrolling behavior settings
         // scrollingInsertPosition: enum (0=RightOfActive .. 4=IntoActiveColumn)
