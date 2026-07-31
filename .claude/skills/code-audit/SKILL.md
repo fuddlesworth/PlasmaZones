@@ -125,7 +125,7 @@ At the start of every pass ≥ 2, re-read it and echo one line before doing anyt
 LOOP STATE: pass N of ≤8 · P partitions · X findings open · next: step 9 fresh read · DO NOT YIELD (Rule 0)
 ```
 
-The step 1.5 inventory is the coverage checklist for steps 9 and 12. Every file here MUST be read fully and analyzed. Skipping any file is a skill failure.
+This list is the coverage checklist for steps 9 and 12. Every file here MUST be read fully and analyzed. Skipping any file is a skill failure.
 
 ### 2. Read Project Rules
 
@@ -233,6 +233,8 @@ Severity levels:
 
 ### 5. Fix ALL Findings
 
+> **This step is PHASE B.** See "PHASE SPLIT: AUDIT, THEN REMEDIATE" below. Audit passes are read-only; nothing in this step runs until Phase A has closed and the tree is still byte-identical to the recorded `baseline`. If you are mid-audit, do not start fixing.
+
 **Fix every finding at every severity level. Do not ask permission. Do not skip LOW or NIT.**
 
 **A finding raised in THIS pass may not be descoped.** Descoping is available only for a carry-over — a finding raised in an earlier pass and re-flagged — and only per step 11's rules, with the reason written into `audit-state.json`. Deciding a fresh finding is "out of scope," "pre-existing," "shared with other code," "riskier than it's worth," or "better as a follow-up" is not a descope; it is skipping a finding, and the CLEAN verdict is then false.
@@ -250,6 +252,45 @@ When a finding offers two legitimate remedies (the finding itself says "either X
 - **NEEDS USER INPUT**: Requires a design decision — ask the user, wait, then apply.
 
 **Before changing any function signature, return type, or public API:** use Grep to find ALL call sites, consumers, and references. Update every one of them. Do not rely on the build to catch missed callers — some may be in dynamic code, templates, or test files that survive compilation with stale signatures.
+
+#### VERIFY BEFORE WRITE (BINDING)
+
+**Never write a call to an API you have not read the declaration of in this session.** Not "recall", not "it's obviously named that" — read it.
+
+Before an edit that calls a function, method, constant, enumerator, logging category, or CMake function you have not already opened here, Grep or Read its declaration first. One command:
+
+```
+grep -rn 'bool contains'  libs/.../Registry.h        # does this method exist?
+grep -nE '^\s+[A-Za-z_].* [a-z][A-Za-z]*\(' <header>  # what IS the API surface?
+```
+
+Then check the SEMANTICS, not just the spelling: `hasOverride` vs `hasDirectOverride` differ in whether inherited entries are included, and picking the wrong one silently changes behaviour rather than failing to compile.
+
+This exists because it is the single most common way this skill produces broken code. Real examples from one run: `Registry::contains` (does not exist), `ShaderProfileTree::hasDirectOverride` (does not exist — the real name is `hasOverride`), `lcRegistryLoader` (no such logging category in that TU). Each cost a full rebuild cycle to discover. The rebuild is 20 minutes; the grep is two seconds.
+
+**Compile-gate in small batches.** Build after roughly every 5 edits, not every 15. A failure in a 15-edit batch cannot be attributed without bisecting, and a long rebuild tempts you to stack more edits while it runs — which is how "green" claims drift ahead of reality.
+
+#### VERIFY THE MECHANISM, NOT THE STORY (BINDING)
+
+VERIFY BEFORE WRITE stops you calling an API that does not exist. This rule stops you calling one that exists and does something *other than what the finding assumed*. That is the failure mode that produces fixes strictly worse than the bug, and it passes both the compiler and the test suite.
+
+**A finding's causal story is a HYPOTHESIS until you have read the mechanism yourself.** This applies with full force to findings from your own reviewer agents: a specialist writing "the root cause is X, fix it by calling Y" has given you a lead, not a verified diagnosis. Reviewers read; they do not run. Confidence in their prose is not evidence.
+
+Before an edit whose correctness depends on what a callee *does*, three obligations:
+
+1. **Read the callee's body, not just its signature**, whenever the fix relies on how it touches shared state — order of writes, what it copies vs. moves, what it clears, what it leaves behind. A name that sounds like the operation you want is not a contract.
+2. **Trace one full real-world cycle**, not one invocation. If the operation is driven by a compositor, a timer, a retry budget, or a per-frame tick, follow it through the *repeat*: second call, retry N, next tick, next drag. Fixes that are correct exactly once are a recurring shape here.
+3. **Ask what the next actor does with the state you just set.** A flag you set on this tick is read by something on the next one. Find that reader before you change the writer.
+
+**Your tests are not independent evidence when you wrote them from the same model as the fix.** If the fix assumes one invocation, a single-invocation test confirms the assumption, not the behaviour. When a fix depends on a repeat, the test must drive the repeat; when it depends on an edge (unminimize, mode flip, screen crossing), the test must cross that edge. A green suite built on the fix's own premises tells you nothing about the premise.
+
+Real examples from one run, each shipped green and each caught only by a confirmation pass:
+
+- A reviewer named the "root cause" as a missing re-home before a state capture. Implemented as described, unread. The re-home carried the window's *zone* across while rewriting its *screen*, so the capture recorded monitor A's zone paired with monitor B — the guard the whole commit existed to add could no longer fire. Reading `migrateWindowTo` would have taken thirty seconds.
+- A suspension flag was cleared unconditionally after a routed call. Correct for the first call; the compositor retries that call three times at 250 ms, and retries 2-4 ran with the flag already gone, reinstating the exact bug. The tests drove the call once.
+- A branch was changed to warm-idle instead of tearing down. The very next tick's handler un-idled it, producing a per-tick ping-pong that recreated the original user-visible symptom. The next-tick reader was never opened.
+
+If you cannot afford to read the mechanism, you cannot afford to make the edit. Downgrade the finding to NEEDS USER INPUT rather than guessing.
 
 List each fix: `file:line` — what changed.
 
@@ -273,11 +314,65 @@ If anything looks wrong, fix it before proceeding.
 For PR or branch scope: stage, commit (`fix(audit): pass N — <summary>`), push.
 For uncommitted local scope: skip — leave fixes uncommitted.
 
+#### VERIFY THE MESSAGE AGAINST THE DIFF (BINDING)
+
+**Every claim in the commit message must be grepped against the staged diff before committing.** A commit message is a factual assertion about what the commit contains. Writing one from your intent rather than from the diff produces a false record in permanent history, and it is worse than any bug the audit fixes — a bug is visible in the code, a false message actively misleads the next reader.
+
+For each substantive claim, confirm it:
+
+```
+git diff --cached -- <file> | grep -F '<the changed line>'   # is the change actually staged?
+git diff --cached --stat                                     # do the touched files match the story?
+```
+
+Any claim you cannot find in the diff must be deleted from the message or fixed in the code before committing. Both are fine; shipping the claim is not.
+
+This exists because it happened. A run claimed "clearFieldOnPaths reported a PARTIAL failure as -1 … -1 now means only 'refused, nothing attempted'" while the diff of that file touched only three unrelated things — the edit had silently never landed, the message was written from intent, and two reviewers in the NEXT pass had to discover that the pushed history was lying. Grepping one line would have caught it.
+
+**Never `--no-verify`.** The pre-commit hooks are part of the gate. Skipping them is how a formatter-clean local tree becomes a red CI run.
+
+**Commit at the END of every pass, as soon as build and tests are green.** Do not roll into the next pass with work uncommitted: two passes of uncommitted work with no fallback is a real failure mode, not a hypothetical one.
+
+---
+
+## PHASE SPLIT: AUDIT, THEN REMEDIATE (BINDING)
+
+**Audit passes are READ-ONLY. All fixing happens afterwards, once, against a frozen ledger.** Do not interleave them.
+
+The audit runs in two phases with a hard boundary:
+
+### Phase A — AUDIT (read-only, N passes)
+
+1. Record the baseline commit: `git rev-parse HEAD` → write it into `audit-state.json` as `baseline`.
+2. Run the partition reviewers per step 8.5. **Make no edits of any kind** — not code, not comments, not tests, not CMake. Reviewers are read/grep/ast-grep only (plus, at most, a single-file compiled probe against one header, which is legitimately how subtle guard bugs get found).
+3. Merge each pass's reports into ONE ranked ledger in `audit-state.json`, deduplicated, ordered CRITICAL → NIT.
+4. Additional Phase A passes are for COVERAGE, not for re-checking your own work: a second pass exists to find what the first missed, and because the tree has not changed, anything it reports is a genuine miss rather than fresh damage.
+
+**Phase A ends when a pass adds no new findings, or at the pass cap.** The tree is byte-identical to `baseline` throughout — verify with `git diff --quiet` before leaving Phase A, and say so.
+
+### Phase B — REMEDIATE (fix once, verify once)
+
+5. Fix the ledger in severity order, applying VERIFY BEFORE WRITE and compile-gating in small batches.
+6. Build green, full test suite green.
+7. A confirmation pass over the files you actually changed — not the whole inventory — to catch damage the remediation itself introduced. Fix what it finds, rebuild, retest.
+8. **Confirmation repeats until a round is clean.** If a confirmation round found anything at HIGH or above, the fixes for it are themselves unverified remediation and get their own round, scoped to that delta. Stop when a round returns nothing above LOW, or at 3 rounds. This is not the Phase A pass cap and does not consume it.
+9. Commit, verifying the message against the diff, and push.
+
+### Why this is binding
+
+The interleaved design has a specific pathology: **each pass's findings are dominated by the previous pass's fixes, so the loop measures its own churn rather than converging.** In one real run, pass 6's most serious findings were all pass-5 regressions — a symlink escape introduced while fixing a different symlink escape, a permanently-latching cache introduced while fixing a redundant one, and a test made *fully* vacuous by an assertion added to make it less vacuous. None of those defects existed in the code being audited. They were manufactured by the audit.
+
+A frozen baseline removes the feedback loop at the source. You cannot damage what you are not editing, and a reviewer reading an unchanging tree reports real defects instead of your last hour's mistakes.
+
+**Consequence for step 11's decision:** "no new findings" in Phase A means the audit is complete, not that the code is fixed. Do not emit a CLEAN verdict until Phase B's confirmation rounds are also green.
+
+**The confirmation pass is where remediation damage is caught, so treat its yield as a measurement of the remediation, not as noise.** In one real run the first confirmation round returned six regressions the remediation had introduced — including a "root cause" fix that made the guard it shipped alongside structurally unable to fire — and the round that fixed those introduced two more. A confirmation round that comes back heavy is telling you the fixes were written from stories rather than mechanisms; the answer is another round plus VERIFY THE MECHANISM, not a verdict.
+
 ---
 
 ## LOOP: Repeat Until Clean (up to 8 passes)
 
-**After every fix pass, you MUST re-read and re-analyze. Do not skip this.**
+**Within Phase A, after every audit pass, you MUST re-read and re-analyze. Do not skip this.** (Under the phase split there are no "fix passes" to re-analyze after — remediation is a single Phase B step with its own confirmation pass.)
 
 ### 8.5 Pass Definition (BINDING)
 
@@ -311,9 +406,10 @@ Each of those is a cost-shortcut, not a value judgement. Token budgeting is the 
 - "The turn is getting long / a lot has happened"
 - "I'll ask whether to keep going, to be safe"
 - "I'll note this as out of scope and mention it in the summary"
-- "The last pass mostly found problems my own fixes caused, so maybe I should stop and surface that"
 
-That last one is the trap that catches most often. **A pass whose findings are mostly your previous pass's damage is the loop working exactly as designed.** It is the single strongest reason to run another pass, not a reason to stop. Fixes introduce defects; that is why re-analysis exists.
+**On "the last pass mostly found problems my own fixes caused":** under the phase split above this should no longer happen, because Phase A does not edit. If you are seeing it, you have interleaved fixing into an audit pass — stop, note the violation, and finish Phase A read-only.
+
+It is still never a reason to yield. Damage you caused is damage that ships, so it must be fixed before the verdict either way. The difference is that the answer is now "go back to a frozen baseline", not "run another interleaved pass and hope it converges."
 
 None of these is caution. Each is you replacing the skill's termination predicate with your own comfort. Keep going.
 
@@ -380,22 +476,22 @@ Evaluate in order. This predicate is the ONLY thing that may end the loop — no
 
 Before writing the final report, answer each question explicitly:
 
-1. **Rule 0 audit.** Did I end a turn anywhere between step 4 and here — to ask permission, present options, report progress, or confirm the next pass? If yes, that was a violation. Note it plainly in the final report's Summary rather than hiding it; the user needs to know the loop ran discontinuously and why.
+0a. **Rule 0 audit.** Did I end a turn anywhere between step 4 and here — to ask permission, present options, report progress, or confirm the next pass? If yes, that was a violation. Note it plainly in the final report's Summary rather than hiding it; the user needs to know the loop ran discontinuously and why.
 
-2. **State-file audit.** Does `audit-state.json` contain any finding with `status: "open"`? If yes, I am not at step 11.5 — return to step 4. Does every `descoped` entry carry a `descope_reason` AND a `raised_pass` at least two passes old? A fresh finding marked `descoped` is a skipped finding, and the verdict cannot be CLEAN.
+0b. **State-file audit.** Does `audit-state.json` contain any finding with `status: "open"`? If yes, I am not at step 11.5 — return to step 4. Does every `descoped` entry carry a `descope_reason` AND a `raised_pass` at least two passes old? A fresh finding marked `descoped` is a skipped finding, and the verdict cannot be CLEAN.
 
-3. **Pass-count audit.** For every pass N ≥ 2, count the agent dispatches. Did I dispatch the SAME number of partition reviewers that step 2.5 established for Pass 1? If any pass was partial (fewer agents, a focused verifier, a single re-check, a grep-only walk in place of agent dispatch) — that pass is INVALID per step 8.5. Re-run the missing partitions and continue the loop before writing the final report. Do NOT classify a partial pass as "clean" — partial passes have no verdict at all.
+0. **Pass-count audit.** For every pass N ≥ 2, count the agent dispatches. Did I dispatch the SAME number of partition reviewers that step 2.5 established for Pass 1? If any pass was partial (fewer agents, a focused verifier, a single re-check, a grep-only walk in place of agent dispatch) — that pass is INVALID per step 8.5. Re-run the missing partitions and continue the loop before writing the final report. Do NOT classify a partial pass as "clean" — partial passes have no verdict at all.
 
-4. Did I read every file in the inventory FULLY? (Compare step 1.5 inventory to actual Read calls.)
-5. Did I analyze every file against every step-3 dimension — not just the dimensions where I expected findings? Including refactor-completeness, comment-code synchronization, defensive-code pair audit, side-effect completeness?
-6. For partitioned scopes: did every reviewer agent return concrete findings (or explicitly "none")? If any agent crashed, returned generic boilerplate, or covered fewer files than its partition listed, that partition was not audited.
-7. Did I assume prior pass coverage instead of re-reading? (Anti-trust rule from step 1.)
-8. Are the file counts in step 12's `Files in Scope` and `Files Fully Read` going to match? If not, I have not finished.
-9. For every refactor-shape finding I raised (introduced an accessor, renamed an API, extracted a helper), did I `ast-grep` / `grep` the WHOLE repo for the old pattern and either fix or descope every match — not just the matches inside my partition?
-10. For every numeric or named claim in any comment I edited or left in place this pass ("WHY ONLY THESE FOUR", "the other nine", "see ::engineFor"), did I verify the claim against current code? Stale comment counts and dangling method references in the diff are findings I'm supposed to catch.
-11. For every `Q_ASSERT` / runtime-guard / late-bound dependency I touched, did I verify the release-build pair? Asymmetric guard coverage = real LOW (sometimes MEDIUM) finding I should have raised.
-12. For every store mutation in this PR that affects rendered output, did I trace forward to confirm a corresponding repaint / damage / update signal? "It works because the next frame happens to re-paint" is not a verification.
-13. For every new or non-trivially modified public function in this PR, did I `ast-grep` / `grep` for callers? Dead helpers introduced by a fix are real findings.
+1. Did I read every file in the inventory FULLY? (Compare step 1.5 inventory to actual Read calls.)
+2. Did I analyze every file against every step-3 dimension — not just the dimensions where I expected findings? Including refactor-completeness, comment-code synchronization, defensive-code pair audit, side-effect completeness?
+3. For partitioned scopes: did every reviewer agent return concrete findings (or explicitly "none")? If any agent crashed, returned generic boilerplate, or covered fewer files than its partition listed, that partition was not audited.
+4. Did I assume prior pass coverage instead of re-reading? (Anti-trust rule from step 1.)
+5. Are the file counts in step 12's `Files in Scope` and `Files Fully Read` going to match? If not, I have not finished.
+6. For every refactor-shape finding I raised (introduced an accessor, renamed an API, extracted a helper), did I `ast-grep` / `grep` the WHOLE repo for the old pattern and either fix or descope every match — not just the matches inside my partition?
+7. For every numeric or named claim in any comment I edited or left in place this pass ("WHY ONLY THESE FOUR", "the other nine", "see ::engineFor"), did I verify the claim against current code? Stale comment counts and dangling method references in the diff are findings I'm supposed to catch.
+8. For every `Q_ASSERT` / runtime-guard / late-bound dependency I touched, did I verify the release-build pair? Asymmetric guard coverage = real LOW (sometimes MEDIUM) finding I should have raised.
+9. For every store mutation in this PR that affects rendered output, did I trace forward to confirm a corresponding repaint / damage / update signal? "It works because the next frame happens to re-paint" is not a verification.
+10. For every new or non-trivially modified public function in this PR, did I `ast-grep` / `grep` for callers? Dead helpers introduced by a fix are real findings.
 
 If any answer is "no," "skipped," "I assumed," or "partially," return to step 9 and complete the missing work. Only proceed to step 12 when every answer is "yes."
 
