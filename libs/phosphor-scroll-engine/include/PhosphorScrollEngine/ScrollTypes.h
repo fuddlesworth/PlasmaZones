@@ -19,6 +19,9 @@ inline QString centerFocusedColumn()
 {
     return QStringLiteral("CenterFocusedColumn");
 }
+/// RULE channel: a bare work-area fraction (SetScrollDefaultColumnWidth).
+/// Outranks the settings-channel kind trio below — rule > per-screen
+/// setting > global. The settings app never writes this key.
 inline QString defaultColumnWidth()
 {
     return QStringLiteral("DefaultColumnWidth");
@@ -26,6 +29,48 @@ inline QString defaultColumnWidth()
 inline QString defaultColumnDisplay()
 {
     return QStringLiteral("DefaultColumnDisplay");
+}
+/// SETTINGS channel: the per-screen override map mirrors the config's
+/// kind-aware width trio so a monitor can pin Fixed pixels or a preset
+/// index, which the rule channel's bare fraction cannot express.
+inline QString defaultColumnWidthKind()
+{
+    return QStringLiteral("DefaultColumnWidthKind");
+}
+inline QString defaultColumnWidthValue()
+{
+    return QStringLiteral("DefaultColumnWidthValue");
+}
+inline QString defaultColumnWidthPresetIndex()
+{
+    return QStringLiteral("DefaultColumnWidthPresetIndex");
+}
+/// RULE channel for the default window height: a bare work-area fraction
+/// (resolved against the live work area at relayout, committed as Fixed).
+inline QString defaultWindowHeight()
+{
+    return QStringLiteral("DefaultWindowHeight");
+}
+/// SETTINGS channel height trio (kind / fixed px / preset index).
+inline QString defaultWindowHeightKind()
+{
+    return QStringLiteral("DefaultWindowHeightKind");
+}
+inline QString defaultWindowHeightValue()
+{
+    return QStringLiteral("DefaultWindowHeightValue");
+}
+inline QString defaultWindowHeightPresetIndex()
+{
+    return QStringLiteral("DefaultWindowHeightPresetIndex");
+}
+inline QString insertPosition()
+{
+    return QStringLiteral("InsertPosition");
+}
+inline QString respectMinimumSize()
+{
+    return QStringLiteral("RespectMinimumSize");
 }
 } // namespace ScrollPerScreenKeys
 

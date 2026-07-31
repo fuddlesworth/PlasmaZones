@@ -416,6 +416,16 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         if (action.type == ActionType::OpenColumnWidth) {
             return PhosphorI18n::tr("Open at width: %1%").arg(qRound(raw.toDouble() * 100.0));
         }
+        if (action.type == ActionType::SetScrollDefaultWindowHeight) {
+            return PhosphorI18n::tr("Window height: %1%").arg(qRound(raw.toDouble() * 100.0));
+        }
+        if (action.type == ActionType::OpenWindowHeight) {
+            return PhosphorI18n::tr("Open at height: %1%").arg(qRound(raw.toDouble() * 100.0));
+        }
+        if (action.type == ActionType::SetScrollInsertPosition) {
+            return PhosphorI18n::tr("New columns: %1")
+                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+        }
         if (action.type == ActionType::SetCenterFocusedColumn) {
             return PhosphorI18n::tr("Centering: %1")
                 .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));

@@ -64,7 +64,8 @@ PickerCategory actionCategory(const QString& type)
             return {PhosphorI18n::tr("Tiling") + QStringLiteral("/") + PhosphorI18n::tr("Behavior"), 3};
         }
         if (type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::SetCenterFocusedColumn
-            || type == ActionType::SetScrollDefaultColumnDisplay) {
+            || type == ActionType::SetScrollDefaultColumnDisplay || type == ActionType::SetScrollInsertPosition
+            || type == ActionType::SetScrollDefaultWindowHeight) {
             return {PhosphorI18n::tr("Scrolling", "tiling mode name"), 4};
         }
         // The per-app open actions are WINDOW-domain: they must sit in the
@@ -73,7 +74,7 @@ PickerCategory actionCategory(const QString& type)
         // and would render window actions above the divider). Nested under
         // Window as a Scrolling submenu for discoverability.
         if (type == ActionType::OpenColumnWidth || type == ActionType::OpenTabbed
-            || type == ActionType::OpenColumnPlacement) {
+            || type == ActionType::OpenColumnPlacement || type == ActionType::OpenWindowHeight) {
             // Order 9, NOT 8: sharing Window's order would keep the two
             // categories contiguous only while their displayOrder ranges
             // happen to stay disjoint — a future windowManagement action
@@ -434,8 +435,17 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetScrollDefaultColumnDisplay) {
         return PhosphorI18n::tr("Set default column display");
     }
+    if (type == ActionType::SetScrollInsertPosition) {
+        return PhosphorI18n::tr("Set new column position");
+    }
+    if (type == ActionType::SetScrollDefaultWindowHeight) {
+        return PhosphorI18n::tr("Set default window height");
+    }
     if (type == ActionType::OpenColumnWidth) {
         return PhosphorI18n::tr("Open at column width");
+    }
+    if (type == ActionType::OpenWindowHeight) {
+        return PhosphorI18n::tr("Open at window height");
     }
     if (type == ActionType::OpenTabbed) {
         return PhosphorI18n::tr("Open in a tabbed column");

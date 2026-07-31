@@ -394,6 +394,19 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
             },
         };
     }
+    if (category == QLatin1String("scrolling")) {
+        return PerScreenDispatch{
+            [settings](const QString& id) {
+                return settings->getPerScreenScrollingSettings(id);
+            },
+            [settings](const QString& id, const QString& k, const QVariant& v) {
+                settings->setPerScreenScrollingSetting(id, k, v);
+            },
+            [settings](const QString& id) {
+                settings->clearPerScreenScrollingSettings(id);
+            },
+        };
+    }
     if (category == QLatin1String("snapping")) {
         // Per-screen snapping gaps are a read-only projection of the config
         // per-monitor gap overrides; there is no separate snapping writer surface.

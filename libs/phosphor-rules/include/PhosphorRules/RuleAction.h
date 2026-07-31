@@ -519,6 +519,13 @@ inline constexpr QLatin1StringView SetCenterFocusedColumn{"setCenterFocusedColum
 /// How a newly-opened column displays its windows: side by side, or stacked as
 /// tabs. Closed enum token (`ActionParam::Value`, ColumnDisplayToken).
 inline constexpr QLatin1StringView SetScrollDefaultColumnDisplay{"setScrollDefaultColumnDisplay"};
+/// Where a fresh-opened window's new column enters the strip. Closed enum
+/// token (`ActionParam::Value`, ScrollInsertPositionToken).
+inline constexpr QLatin1StringView SetScrollInsertPosition{"setScrollInsertPosition"};
+/// Height a newly-opened window takes inside its column, as a fraction of the
+/// work-area height (numeric `ActionParam::Value`, edited as a percent;
+/// committed as a fixed pixel intent against the live work area).
+inline constexpr QLatin1StringView SetScrollDefaultWindowHeight{"setScrollDefaultWindowHeight"};
 
 // ── Per-window scrolling open overrides (domain Window) ──
 // Read on the open path for the matched window, layered over the context /
@@ -534,6 +541,11 @@ inline constexpr QLatin1StringView OpenTabbed{"openTabbed"};
 /// Whether the opening window starts its own column or is consumed into the
 /// focused one. Closed enum token (`ActionParam::Value`, ColumnPlacementToken).
 inline constexpr QLatin1StringView OpenColumnPlacement{"openColumnPlacement"};
+/// Height the opening window takes inside its column, as a fraction of the
+/// work-area height. Numeric `ActionParam::Value` (stored fraction, edited as
+/// a percent). Applies after every insert path, outranking remembered and
+/// default heights the way OpenColumnWidth outranks the width defaults.
+inline constexpr QLatin1StringView OpenWindowHeight{"openWindowHeight"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -678,6 +690,18 @@ inline constexpr QLatin1StringView NewColumn{"newColumn"}; ///< open in a column
 inline constexpr QLatin1StringView Consume{"consume"}; ///< consume into the focused column
 } // namespace ColumnPlacementToken
 
+/// Wire tokens for SetScrollInsertPosition's `value` param — where a fresh
+/// column enters the strip. Ints match the scrolling engine's
+/// ScrollInsertPosition (rightOfActive 0 … intoActiveColumn 4); the schema
+/// side pins the same spellings (settingsschema_scrolling.cpp intChoices).
+namespace ScrollInsertPositionToken {
+inline constexpr QLatin1StringView RightOfActive{"rightOfActive"};
+inline constexpr QLatin1StringView LeftOfActive{"leftOfActive"};
+inline constexpr QLatin1StringView First{"first"};
+inline constexpr QLatin1StringView Last{"last"};
+inline constexpr QLatin1StringView IntoActiveColumn{"intoActiveColumn"};
+} // namespace ScrollInsertPositionToken
+
 /// Wire tokens for SetWindowLayer's `value` param — the closed vocabulary the
 /// descriptor validator, the KWin-effect consumer (resolveWindowLayer), and the
 /// settings label layers all read from this single source. The tokens map onto
@@ -779,12 +803,15 @@ inline constexpr QLatin1StringView AlgorithmParams{"algorithm-params"};
 inline constexpr QLatin1StringView ScrollDefaultColumnWidth{"scroll-default-column-width"};
 inline constexpr QLatin1StringView CenterFocusedColumn{"center-focused-column"};
 inline constexpr QLatin1StringView ScrollDefaultColumnDisplay{"scroll-default-column-display"};
+inline constexpr QLatin1StringView ScrollInsertPosition{"scroll-insert-position"};
+inline constexpr QLatin1StringView ScrollDefaultWindowHeight{"scroll-default-window-height"};
 // Per-window scrolling open slots (one per property so independent rules
 // cascade per-property). Filled by OpenColumnWidth / OpenTabbed /
 // OpenColumnPlacement, read on the open path by the scrolling engine.
 inline constexpr QLatin1StringView OpenColumnWidth{"open-column-width"};
 inline constexpr QLatin1StringView OpenTabbed{"open-tabbed"};
 inline constexpr QLatin1StringView OpenColumnPlacement{"open-column-placement"};
+inline constexpr QLatin1StringView OpenWindowHeight{"open-window-height"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader

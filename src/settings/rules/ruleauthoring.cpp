@@ -396,6 +396,23 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Consume into focused column");
         }
     }
+    if (type == ActionType::SetScrollInsertPosition && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::RightOfActive) {
+            return PhosphorI18n::tr("Right of the focused column");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::LeftOfActive) {
+            return PhosphorI18n::tr("Left of the focused column");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::First) {
+            return PhosphorI18n::tr("Start of the strip");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::Last) {
+            return PhosphorI18n::tr("End of the strip");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::IntoActiveColumn) {
+            return PhosphorI18n::tr("Into the focused column");
+        }
+    }
     if (type == ActionType::SetWindowLayer && key == ActionParam::Value) {
         if (wireValue == PhosphorRules::WindowLayerToken::Above) {
             return PhosphorI18n::tr("Above other windows");

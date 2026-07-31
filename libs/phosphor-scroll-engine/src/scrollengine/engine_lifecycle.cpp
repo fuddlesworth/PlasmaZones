@@ -79,8 +79,12 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // while the global kind was ClientDecides, with no diagnostic. (The
     // per-WINDOW open rule below is applied after this block and wins over
     // both, which is the intended precedence.)
-    const bool screenPinsWidth =
-        m_perScreenOverrides.value(screenId).contains(ScrollPerScreenKeys::defaultColumnWidth());
+    // Any width key counts — the rule channel's bare fraction OR the
+    // settings channel's kind trio; a per-screen kind=Preset would otherwise
+    // be silently overridden by the global ClientDecides.
+    const QVariantMap screenOverrides = m_perScreenOverrides.value(screenId);
+    const bool screenPinsWidth = screenOverrides.contains(ScrollPerScreenKeys::defaultColumnWidth())
+        || screenOverrides.contains(ScrollPerScreenKeys::defaultColumnWidthKind());
     if (m_defaultWidthClientDecides && m_windowTracker && !screenPinsWidth) {
         // Open at the client's own size when one is on record; the first
         // client resize reconciles it afterwards.
@@ -168,16 +172,25 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // a lost slot. IntoActiveColumn routes through the consume verb
         // (same shape as the openColumnPlacement rule) and falls through to
         // a positional insert on an empty strip.
-        if (m_insertPosition == ScrollInsertPosition::IntoActiveColumn && !state->strip().isEmpty()) {
+        const ScrollInsertPosition insertPos = effectiveInsertPosition(screenId);
+        if (insertPos == ScrollInsertPosition::IntoActiveColumn && !state->strip().isEmpty()) {
             inserted =
                 state->strip().insertWindowIntoActiveColumn(windowId, width, std::nullopt, params, minWidth, minHeight);
         }
         if (!inserted) {
-            inserted = state->strip().insertWindow(windowId, width, display, params, minWidth, minHeight,
-                                                   m_insertPosition == ScrollInsertPosition::IntoActiveColumn
-                                                       ? ScrollInsertPosition::RightOfActive
-                                                       : m_insertPosition);
+            inserted = state->strip().insertWindow(
+                windowId, width, display, params, minWidth, minHeight,
+                insertPos == ScrollInsertPosition::IntoActiveColumn ? ScrollInsertPosition::RightOfActive : insertPos);
         }
+    }
+    if (inserted && openParams.heightFraction && params.workArea.height() > 0) {
+        // Per-window open rule wins over every default and remembered
+        // height, matching the width/tabbed precedence above. Committed as
+        // Fixed pixels against the live work area, the same resolution the
+        // adjust verbs use.
+        const qreal fraction = qBound<qreal>(0.05, *openParams.heightFraction, 1.0);
+        state->strip().setWindowHeightIntent(
+            windowId, WindowHeight::makeFixed(qMax(1, qRound(fraction * params.workArea.height()))));
     }
     if (!inserted) {
         qCWarning(lcScrollEngine) << "insertOpenedWindow: duplicate window" << windowId;

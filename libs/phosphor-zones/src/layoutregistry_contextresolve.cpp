@@ -813,6 +813,28 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
             params.defaultColumnDisplay = 1;
         }
     }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollInsertPosition))) {
+        // Wire token → the ScrollInsertPosition int the engine consumes.
+        const QString token = action->params.value(PWR::ActionParam::Value).toString();
+        if (token == PWR::ScrollInsertPositionToken::RightOfActive) {
+            params.insertPosition = 0;
+        } else if (token == PWR::ScrollInsertPositionToken::LeftOfActive) {
+            params.insertPosition = 1;
+        } else if (token == PWR::ScrollInsertPositionToken::First) {
+            params.insertPosition = 2;
+        } else if (token == PWR::ScrollInsertPositionToken::Last) {
+            params.insertPosition = 3;
+        } else if (token == PWR::ScrollInsertPositionToken::IntoActiveColumn) {
+            params.insertPosition = 4;
+        }
+    }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollDefaultWindowHeight))) {
+        // Same defense-in-depth clamp as the width slot; the height fraction
+        // shares the width pair's bounds.
+        params.defaultWindowHeight =
+            qBound(PWR::MinColumnWidthRatio, action->params.value(PWR::ActionParam::Value).toDouble(),
+                   PWR::MaxColumnWidthRatio);
+    }
     return params;
 }
 

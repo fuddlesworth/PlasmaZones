@@ -272,6 +272,22 @@ public:
         return false;
     }
 
+    virtual QVariantMap getPerScreenScrollingSettings(const QString& /*screenIdOrName*/) const
+    {
+        return {};
+    }
+    virtual void setPerScreenScrollingSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
+                                              const QVariant& /*value*/)
+    {
+    }
+    virtual void clearPerScreenScrollingSettings(const QString& /*screenIdOrName*/)
+    {
+    }
+    virtual bool hasPerScreenScrollingSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
+    }
+
     virtual QVariantMap getPerScreenZoneSelectorSettings(const QString& /*screenIdOrName*/) const
     {
         return {};
@@ -429,6 +445,7 @@ Q_SIGNALS:
     void perScreenZoneSelectorSettingsChanged();
     void perScreenAutotileSettingsChanged();
     void perScreenSnappingSettingsChanged();
+    void perScreenScrollingSettingsChanged();
     // Rendering
     void renderingBackendChanged();
     // Window decoration appearance (border + title bar)

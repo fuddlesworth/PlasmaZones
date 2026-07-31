@@ -38,6 +38,7 @@
 #define P_PER_SCREEN_PREFIX_ZONE_SELECTOR "ZoneSelector"
 #define P_PER_SCREEN_PREFIX_AUTOTILE "AutotileScreen"
 #define P_PER_SCREEN_PREFIX_SNAPPING "SnappingScreen"
+#define P_PER_SCREEN_PREFIX_SCROLLING "ScrollingScreen"
 
 namespace PlasmaZones {
 
@@ -703,6 +704,7 @@ public:
 
     P_CONFIG_GROUP(zoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_ZONE_SELECTOR ":")
     P_CONFIG_GROUP(autotileScreenGroupPrefix, P_PER_SCREEN_PREFIX_AUTOTILE ":")
+    P_CONFIG_GROUP(scrollingScreenGroupPrefix, P_PER_SCREEN_PREFIX_SCROLLING ":")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1/v2/v3/v4 accessors — used ONLY by migration code.

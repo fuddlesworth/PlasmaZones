@@ -77,6 +77,8 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetScrollDefaultColumnWidth,
     ActionType::SetCenterFocusedColumn,
     ActionType::SetScrollDefaultColumnDisplay,
+    ActionType::SetScrollInsertPosition,
+    ActionType::SetScrollDefaultWindowHeight,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -117,6 +119,7 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::OpenColumnWidth,
     ActionType::OpenTabbed,
     ActionType::OpenColumnPlacement,
+    ActionType::OpenWindowHeight,
 };
 } // namespace
 
@@ -926,6 +929,33 @@ private Q_SLOTS:
             const auto loaded = RuleAction::fromJson(o);
             QVERIFY(loaded.has_value());
             QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::OpenTabbed));
+        }
+        // SetScrollInsertPosition: the five position tokens; unknown rejected.
+        {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetScrollInsertPosition));
+            o.insert(QStringLiteral("value"), QStringLiteral("middle")); // unknown token rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (QLatin1StringView token :
+                 {ScrollInsertPositionToken::RightOfActive, ScrollInsertPositionToken::LeftOfActive,
+                  ScrollInsertPositionToken::First, ScrollInsertPositionToken::Last,
+                  ScrollInsertPositionToken::IntoActiveColumn}) {
+                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
+                const auto loaded = RuleAction::fromJson(o);
+                QVERIFY2(loaded.has_value(), token.data());
+                QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::ScrollInsertPosition));
+            }
+        }
+        // SetScrollDefaultWindowHeight / OpenWindowHeight: fraction inside
+        // the shared column-width bounds; out-of-range rejected.
+        for (QLatin1StringView type : {ActionType::SetScrollDefaultWindowHeight, ActionType::OpenWindowHeight}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), 50.0); // percent-magnitude payload rejected (wire is a fraction)
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 0.5);
+            const auto loaded = RuleAction::fromJson(o);
+            QVERIFY2(loaded.has_value(), type.data());
         }
     }
 

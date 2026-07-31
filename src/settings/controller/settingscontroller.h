@@ -624,6 +624,20 @@ public:
     Q_INVOKABLE bool hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenAutotileAlgorithmSettings(const QString& screenName);
 
+    // ── Per-screen scrolling overrides ───────────────────────────────────────
+    Q_INVOKABLE QVariantMap getPerScreenScrollingSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenScrollingSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenScrollingSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenName) const;
+    // One sub-domain pair per scope-chipped scrolling card (View / Columns /
+    // Window), so each chip's dot and reset only touch its own keys.
+    Q_INVOKABLE bool hasPerScreenScrollingViewSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenScrollingViewSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenScrollingColumnSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenScrollingColumnSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenScrollingWindowSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenScrollingWindowSettings(const QString& screenName);
+
     // Per-screen gaps are config-backed: a per-monitor override is the gap-
     // dimension sub-domain of the per-screen autotile store (unified snap+tile).
     // The Gaps card's monitor scope chip drives these; the gap controls

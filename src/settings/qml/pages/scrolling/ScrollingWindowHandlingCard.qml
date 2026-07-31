@@ -15,12 +15,27 @@ import org.kde.kirigami as Kirigami
  * Tiling.Gaps/SmartGaps value, so the tiling toggle governs both engines.
  */
 SettingsCard {
+    id: card
+
     headerText: i18n("Window Handling")
     searchAnchor: "scrollingWindowHandling"
     collapsible: true
+    scopeEnabled: true
+    scopeAppSettings: settingsController
+    // The Window sub-domain of the per-screen scrolling map (InsertPosition +
+    // RespectMinimumSize) — the other rows on this card are app-wide only.
+    scopeHasOverridesMethod: "hasPerScreenScrollingWindowSettings"
+    scopeClearerMethod: "clearPerScreenScrollingWindowSettings"
 
     // Adjust-step bounds, read once from ConfigDefaults via the controller.
     readonly property var _stepConsts: settingsController.scrollingWidthConstants()
+
+    property PerScreenOverrideHelper psHelper: PerScreenOverrideHelper {
+        appSettings: settingsController
+        selectedScreenName: settingsController.scopeScreenName
+        getterMethod: "getPerScreenScrollingSettings"
+        setterMethod: "setPerScreenScrollingSetting"
+    }
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
@@ -35,8 +50,10 @@ SettingsCard {
                 textRole: "text"
                 valueRole: "value"
                 model: settingsController.valueOptions("Scrolling.Behavior", "InsertPosition")
-                storedValue: appSettings.scrollingInsertPosition
-                onActivated: appSettings.scrollingInsertPosition = currentValue
+                storedValue: card.psHelper.settingValue("InsertPosition", appSettings.scrollingInsertPosition)
+                onActivated: card.psHelper.writeSetting("InsertPosition", currentValue, function (v) {
+                    appSettings.scrollingInsertPosition = v;
+                })
             }
         }
 
@@ -48,10 +65,12 @@ SettingsCard {
             description: i18n("Keep columns at least as wide and tall as their windows' minimum size, which can push other windows off screen")
 
             SettingsSwitch {
-                checked: appSettings.scrollingRespectMinimumSize
+                checked: card.psHelper.settingValue("RespectMinimumSize", appSettings.scrollingRespectMinimumSize)
                 accessibleName: i18n("Respect window minimum size")
                 onToggled: function (newValue) {
-                    appSettings.scrollingRespectMinimumSize = newValue;
+                    card.psHelper.writeSetting("RespectMinimumSize", newValue, function (v) {
+                        appSettings.scrollingRespectMinimumSize = v;
+                    });
                 }
             }
         }

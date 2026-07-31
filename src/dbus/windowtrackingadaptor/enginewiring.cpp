@@ -431,6 +431,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                     if (const auto it = raw.constFind(ScrollOpenKeys::widthFraction()); it != raw.constEnd()) {
                         params.widthFraction = it->toDouble();
                     }
+                    if (const auto it = raw.constFind(ScrollOpenKeys::heightFraction()); it != raw.constEnd()) {
+                        params.heightFraction = it->toDouble();
+                    }
                     if (const auto it = raw.constFind(ScrollOpenKeys::tabbed()); it != raw.constEnd()) {
                         params.tabbed = it->toBool();
                     }

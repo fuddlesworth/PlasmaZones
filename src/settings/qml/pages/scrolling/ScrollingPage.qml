@@ -36,6 +36,31 @@ SettingsFlickable {
     readonly property int widthPresetCount: appSettings.scrollingPresetColumnWidths.split(",").length
     readonly property int heightPresetCount: appSettings.scrollingPresetWindowHeights.split(",").length
 
+    // Per-monitor override plumbing, the tiling Algorithm card's pattern:
+    // rows read through settingValue (override wins over the global) and
+    // write through writeSetting (routes to the per-screen setter when a
+    // monitor is scoped). Each card's chip reports/resets only its own
+    // sub-domain (View / Columns / Window — disjoint key subsets of the one
+    // per-screen scrolling map).
+    function settingValue(key, globalValue) {
+        return psHelper.settingValue(key, globalValue);
+    }
+
+    function writeSetting(key, value, globalSetter) {
+        psHelper.writeSetting(key, value, globalSetter);
+    }
+
+    PerScreenOverrideHelper {
+        id: psHelper
+
+        appSettings: settingsController
+        // Shared app-wide scope — a monitor picked on any per-monitor page
+        // stays picked here.
+        selectedScreenName: settingsController.scopeScreenName
+        getterMethod: "getPerScreenScrollingSettings"
+        setterMethod: "setPerScreenScrollingSetting"
+    }
+
     contentHeight: content.implicitHeight
     clip: true
 
@@ -53,6 +78,10 @@ SettingsFlickable {
             headerText: i18n("Focus and view")
             searchAnchor: "focusAndView"
             collapsible: true
+            scopeEnabled: true
+            scopeAppSettings: settingsController
+            scopeHasOverridesMethod: "hasPerScreenScrollingViewSettings"
+            scopeClearerMethod: "clearPerScreenScrollingViewSettings"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -67,8 +96,10 @@ SettingsFlickable {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Scrolling", "CenterFocusedColumn")
-                        storedValue: appSettings.scrollingCenterFocusedColumn
-                        onActivated: appSettings.scrollingCenterFocusedColumn = currentValue
+                        storedValue: root.settingValue("CenterFocusedColumn", appSettings.scrollingCenterFocusedColumn)
+                        onActivated: root.writeSetting("CenterFocusedColumn", currentValue, function (v) {
+                            appSettings.scrollingCenterFocusedColumn = v;
+                        })
                     }
                 }
 
@@ -94,10 +125,20 @@ SettingsFlickable {
         // New Columns Card
         // =================================================================
         SettingsCard {
+            id: newColumnsCard
             Layout.fillWidth: true
             headerText: i18n("New columns")
             searchAnchor: "newColumns"
             collapsible: true
+            scopeEnabled: true
+            scopeAppSettings: settingsController
+            scopeHasOverridesMethod: "hasPerScreenScrollingColumnSettings"
+            scopeClearerMethod: "clearPerScreenScrollingColumnSettings"
+
+            // The kind the visible rows key off: the scoped monitor's
+            // override when present, else the global.
+            readonly property int effectiveWidthKind: root.settingValue("DefaultColumnWidthKind", appSettings.scrollingDefaultColumnWidthKind)
+            readonly property int effectiveHeightKind: root.settingValue("DefaultWindowHeightKind", appSettings.scrollingDefaultWindowHeightKind)
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -112,13 +153,15 @@ SettingsFlickable {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Scrolling", "DefaultColumnWidthKind")
-                        storedValue: appSettings.scrollingDefaultColumnWidthKind
-                        onActivated: appSettings.scrollingDefaultColumnWidthKind = currentValue
+                        storedValue: newColumnsCard.effectiveWidthKind
+                        onActivated: root.writeSetting("DefaultColumnWidthKind", currentValue, function (v) {
+                            appSettings.scrollingDefaultColumnWidthKind = v;
+                        })
                     }
                 }
 
                 SettingsSeparator {
-                    visible: appSettings.scrollingDefaultColumnWidthKind !== root.widthKindClientDecides
+                    visible: newColumnsCard.effectiveWidthKind !== root.widthKindClientDecides
                 }
 
                 // Proportion and pixel widths share one stored value, so only
@@ -129,19 +172,21 @@ SettingsFlickable {
                     title: i18n("Proportion of the screen")
                     searchAnchor: "defaultColumnWidthProportion"
                     description: i18n("How much of the usable screen width a new column takes")
-                    enabled: appSettings.scrollingDefaultColumnWidthKind === root.widthKindProportion
+                    enabled: newColumnsCard.effectiveWidthKind === root.widthKindProportion
 
                     SettingsSlider {
                         accessibleName: i18n("Proportion of the screen")
                         from: root._scrollWidthConsts.proportionMin
                         to: root._scrollWidthConsts.proportionMax
                         stepSize: root._scrollWidthConsts.proportionStep
-                        value: appSettings.scrollingDefaultColumnWidthValue
+                        value: root.settingValue("DefaultColumnWidthValue", appSettings.scrollingDefaultColumnWidthValue)
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
                         onMoved: function (newValue) {
-                            appSettings.scrollingDefaultColumnWidthValue = newValue;
+                            root.writeSetting("DefaultColumnWidthValue", newValue, function (v) {
+                                appSettings.scrollingDefaultColumnWidthValue = v;
+                            });
                         }
                     }
                 }
@@ -150,7 +195,7 @@ SettingsFlickable {
                     title: i18n("Fixed width")
                     searchAnchor: "defaultColumnWidthFixed"
                     description: i18n("How many pixels wide a new column is")
-                    enabled: appSettings.scrollingDefaultColumnWidthKind === root.widthKindFixed
+                    enabled: newColumnsCard.effectiveWidthKind === root.widthKindFixed
 
                     SettingsSpinBox {
                         id: fixedWidthSpin
@@ -159,14 +204,16 @@ SettingsFlickable {
                         from: root._scrollWidthConsts.fixedMin
                         to: root._scrollWidthConsts.fixedMax
                         stepSize: root._scrollWidthConsts.fixedStep
-                        onValueModified: value => appSettings.scrollingDefaultColumnWidthValue = value
+                        onValueModified: value => root.writeSetting("DefaultColumnWidthValue", value, function (v) {
+                                appSettings.scrollingDefaultColumnWidthValue = v;
+                            })
                         // Fed through a guarded Binding rather than a plain
                         // `value:` one: SettingsSpinBox echoes each edit back
                         // into its own `value`, which would destroy a plain
                         // binding after the first edit and strand every later
                         // config-side change.
                         Binding on value {
-                            value: Math.round(appSettings.scrollingDefaultColumnWidthValue)
+                            value: Math.round(root.settingValue("DefaultColumnWidthValue", appSettings.scrollingDefaultColumnWidthValue))
                             when: !fixedWidthSpin.editing
                             restoreMode: Binding.RestoreNone
                         }
@@ -177,7 +224,7 @@ SettingsFlickable {
                     title: i18n("Preset width")
                     searchAnchor: "defaultColumnWidthPresetIndex"
                     description: i18n("Which entry of the column width presets a new column opens at, counted from 1. Columns opened this way follow later preset changes.")
-                    enabled: appSettings.scrollingDefaultColumnWidthKind === root.widthKindPreset
+                    enabled: newColumnsCard.effectiveWidthKind === root.widthKindPreset
 
                     SettingsSpinBox {
                         id: widthPresetIndexSpin
@@ -188,9 +235,11 @@ SettingsFlickable {
                         stepSize: 1
                         // Stored 0-based, shown 1-based to match the preset
                         // cycling OSD.
-                        onValueModified: value => appSettings.scrollingDefaultColumnWidthPresetIndex = value - 1
+                        onValueModified: value => root.writeSetting("DefaultColumnWidthPresetIndex", value - 1, function (v) {
+                                appSettings.scrollingDefaultColumnWidthPresetIndex = v;
+                            })
                         Binding on value {
-                            value: appSettings.scrollingDefaultColumnWidthPresetIndex + 1
+                            value: root.settingValue("DefaultColumnWidthPresetIndex", appSettings.scrollingDefaultColumnWidthPresetIndex) + 1
                             when: !widthPresetIndexSpin.editing
                             restoreMode: Binding.RestoreNone
                         }
@@ -209,8 +258,10 @@ SettingsFlickable {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Scrolling", "DefaultColumnDisplay")
-                        storedValue: appSettings.scrollingDefaultColumnDisplay
-                        onActivated: appSettings.scrollingDefaultColumnDisplay = currentValue
+                        storedValue: root.settingValue("DefaultColumnDisplay", appSettings.scrollingDefaultColumnDisplay)
+                        onActivated: root.writeSetting("DefaultColumnDisplay", currentValue, function (v) {
+                            appSettings.scrollingDefaultColumnDisplay = v;
+                        })
                     }
                 }
 
@@ -226,8 +277,10 @@ SettingsFlickable {
                         textRole: "text"
                         valueRole: "value"
                         model: settingsController.valueOptions("Scrolling", "DefaultWindowHeightKind")
-                        storedValue: appSettings.scrollingDefaultWindowHeightKind
-                        onActivated: appSettings.scrollingDefaultWindowHeightKind = currentValue
+                        storedValue: newColumnsCard.effectiveHeightKind
+                        onActivated: root.writeSetting("DefaultWindowHeightKind", currentValue, function (v) {
+                            appSettings.scrollingDefaultWindowHeightKind = v;
+                        })
                     }
                 }
 
@@ -235,7 +288,7 @@ SettingsFlickable {
                     title: i18n("Fixed height")
                     searchAnchor: "defaultWindowHeightFixed"
                     description: i18n("How many pixels tall a new window is")
-                    enabled: appSettings.scrollingDefaultWindowHeightKind === root.heightKindFixed
+                    enabled: newColumnsCard.effectiveHeightKind === root.heightKindFixed
 
                     SettingsSpinBox {
                         id: fixedHeightSpin
@@ -244,10 +297,12 @@ SettingsFlickable {
                         from: root._scrollWidthConsts.heightFixedMin
                         to: root._scrollWidthConsts.heightFixedMax
                         stepSize: root._scrollWidthConsts.fixedStep
-                        onValueModified: value => appSettings.scrollingDefaultWindowHeightValue = value
+                        onValueModified: value => root.writeSetting("DefaultWindowHeightValue", value, function (v) {
+                                appSettings.scrollingDefaultWindowHeightValue = v;
+                            })
                         // Same guarded-binding rationale as the fixed width.
                         Binding on value {
-                            value: Math.round(appSettings.scrollingDefaultWindowHeightValue)
+                            value: Math.round(root.settingValue("DefaultWindowHeightValue", appSettings.scrollingDefaultWindowHeightValue))
                             when: !fixedHeightSpin.editing
                             restoreMode: Binding.RestoreNone
                         }
@@ -258,7 +313,7 @@ SettingsFlickable {
                     title: i18n("Preset height")
                     searchAnchor: "defaultWindowHeightPresetIndex"
                     description: i18n("Which entry of the window height presets a new window opens at, counted from 1")
-                    enabled: appSettings.scrollingDefaultWindowHeightKind === root.heightKindPreset
+                    enabled: newColumnsCard.effectiveHeightKind === root.heightKindPreset
 
                     SettingsSpinBox {
                         id: heightPresetIndexSpin
@@ -268,9 +323,11 @@ SettingsFlickable {
                         to: Math.max(1, root.heightPresetCount)
                         stepSize: 1
                         // Stored 0-based, shown 1-based (see the width twin).
-                        onValueModified: value => appSettings.scrollingDefaultWindowHeightPresetIndex = value - 1
+                        onValueModified: value => root.writeSetting("DefaultWindowHeightPresetIndex", value - 1, function (v) {
+                                appSettings.scrollingDefaultWindowHeightPresetIndex = v;
+                            })
                         Binding on value {
-                            value: appSettings.scrollingDefaultWindowHeightPresetIndex + 1
+                            value: root.settingValue("DefaultWindowHeightPresetIndex", appSettings.scrollingDefaultWindowHeightPresetIndex) + 1
                             when: !heightPresetIndexSpin.editing
                             restoreMode: Binding.RestoreNone
                         }

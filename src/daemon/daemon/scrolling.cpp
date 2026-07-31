@@ -17,6 +17,7 @@
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -101,14 +102,26 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         }
     }
 
-    // Per-context rule overrides (slot ?? config): resolve the scrolling
-    // params for each active context and layer them onto the engine BEFORE
-    // setActiveScreens retiles entering screens.
+    // Three-way precedence, collapsed daemon-side exactly like autotile's
+    // updateEngineScreens: per-screen SETTINGS seed the map first, per-context
+    // RULES overwrite where a slot is filled, and the engine's effective*
+    // readers keep the final two-way `override ?? global-config` fallback.
+    // The settings map is engine-spelled (PerScreenScrollingKey ==
+    // ScrollPerScreenKeys settings channel), so the seed is a plain copy;
+    // rules write their own channel keys (bare-fraction width/height plus the
+    // shared int keys), which the engine reads first.
     for (const QString& screenId : scrollingScreens) {
+        QVariantMap overrides = m_settings->getPerScreenScrollingSettings(screenId);
+        if (overrides.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+            // Virtual→physical fallback, mirroring autotile: a virtual
+            // screen without its own overrides inherits its physical
+            // parent's.
+            overrides = m_settings->getPerScreenScrollingSettings(
+                PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+        }
         const int desktop = currentDesktopForScreen(screenId);
         const PhosphorZones::ContextScrollingParams params =
             m_layoutManager->resolveContextScrollingParams(screenId, desktop, activity);
-        QVariantMap overrides;
         if (params.centerFocusedColumn) {
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::centerFocusedColumn(),
                              *params.centerFocusedColumn);
@@ -120,6 +133,13 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         if (params.defaultColumnDisplay) {
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultColumnDisplay(),
                              *params.defaultColumnDisplay);
+        }
+        if (params.insertPosition) {
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::insertPosition(), *params.insertPosition);
+        }
+        if (params.defaultWindowHeight) {
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultWindowHeight(),
+                             *params.defaultWindowHeight);
         }
         if (overrides.isEmpty()) {
             m_scrollEngine->clearPerScreenConfig(screenId);

@@ -178,6 +178,114 @@ const QLatin1String kPerScreenGapDimensionKeys[] = {
 // literal or its length.
 constexpr QLatin1String kAutotilePrefix{"Autotile"};
 
+// Per-screen scrolling override keys. NO prefix asymmetry (the autotile
+// "Autotile" prefix exists only for v4-migration history): disk, memory, QML,
+// and the engine's ScrollPerScreenKeys settings channel all use one spelling,
+// so the daemon merge is a plain copy.
+const QLatin1String kPerScreenScrollingKeys[] = {
+    QLatin1String(PerScreenScrollingKey::CenterFocusedColumn),
+    QLatin1String(PerScreenScrollingKey::DefaultColumnWidthKind),
+    QLatin1String(PerScreenScrollingKey::DefaultColumnWidthValue),
+    QLatin1String(PerScreenScrollingKey::DefaultColumnWidthPresetIndex),
+    QLatin1String(PerScreenScrollingKey::DefaultColumnDisplay),
+    QLatin1String(PerScreenScrollingKey::DefaultWindowHeightKind),
+    QLatin1String(PerScreenScrollingKey::DefaultWindowHeightValue),
+    QLatin1String(PerScreenScrollingKey::DefaultWindowHeightPresetIndex),
+    QLatin1String(PerScreenScrollingKey::InsertPosition),
+    QLatin1String(PerScreenScrollingKey::RespectMinimumSize),
+};
+
+// Three disjoint sub-domains, one per scope-chipped card, so each card's
+// reset clears only its own keys (same data-loss rationale as the autotile
+// sub-domains above):
+//   1. View (Focus and view card) — CenterFocusedColumn.
+//   2. Columns (New columns card) — the width/display/height default keys.
+//   3. Window (Window Handling card) — InsertPosition + RespectMinimumSize.
+bool isPerScreenScrollingViewKey(const QString& key)
+{
+    return key == QLatin1String(PerScreenScrollingKey::CenterFocusedColumn);
+}
+
+bool isPerScreenScrollingWindowKey(const QString& key)
+{
+    return key == QLatin1String(PerScreenScrollingKey::InsertPosition)
+        || key == QLatin1String(PerScreenScrollingKey::RespectMinimumSize);
+}
+
+bool isPerScreenScrollingColumnKey(const QString& key)
+{
+    return !isPerScreenScrollingViewKey(key) && !isPerScreenScrollingWindowKey(key);
+}
+
+QVariant validatePerScreenScrollingValue(const QString& key, const QVariant& value)
+{
+    namespace K = PerScreenScrollingKey;
+    if (key == QLatin1String(K::CenterFocusedColumn)) {
+        const int v = value.toInt();
+        return ConfigDefaults::isValidScrollingCenterFocusedColumn(v) ? QVariant(v) : QVariant();
+    }
+    if (key == QLatin1String(K::DefaultColumnWidthKind)) {
+        const int v = value.toInt();
+        return ConfigDefaults::isValidScrollingWidthKind(v) ? QVariant(v) : QVariant();
+    }
+    if (key == QLatin1String(K::DefaultColumnWidthValue)) {
+        // Kind-spanning clamp, mirroring the global schema entry: the shared
+        // value key serves proportion and fixed, so bound by the union.
+        return boundedDouble(value, ConfigDefaults::scrollingDefaultColumnWidthValueMin(),
+                             ConfigDefaults::scrollingDefaultColumnWidthFixedMax());
+    }
+    if (key == QLatin1String(K::DefaultColumnWidthPresetIndex)
+        || key == QLatin1String(K::DefaultWindowHeightPresetIndex)) {
+        return boundedInt(value, 0, ConfigDefaults::scrollingPresetIndexMax());
+    }
+    if (key == QLatin1String(K::DefaultColumnDisplay)) {
+        const int v = value.toInt();
+        return ConfigDefaults::isValidScrollingColumnDisplay(v) ? QVariant(v) : QVariant();
+    }
+    if (key == QLatin1String(K::DefaultWindowHeightKind)) {
+        const int v = value.toInt();
+        return ConfigDefaults::isValidScrollingHeightKind(v) ? QVariant(v) : QVariant();
+    }
+    if (key == QLatin1String(K::DefaultWindowHeightValue)) {
+        return boundedDouble(value, ConfigDefaults::scrollingDefaultWindowHeightMin(),
+                             ConfigDefaults::scrollingDefaultWindowHeightMax());
+    }
+    if (key == QLatin1String(K::InsertPosition)) {
+        const int v = value.toInt();
+        return ConfigDefaults::isValidScrollingInsertPosition(v) ? QVariant(v) : QVariant();
+    }
+    if (key == QLatin1String(K::RespectMinimumSize)) {
+        return QVariant(value.toBool());
+    }
+    return QVariant();
+}
+
+QVariant readPerScreenScrollingEntry(PhosphorConfig::IGroup& group, const QString& key)
+{
+    namespace K = PerScreenScrollingKey;
+    if (key == QLatin1String(K::CenterFocusedColumn))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingCenterFocusedColumn()));
+    if (key == QLatin1String(K::DefaultColumnWidthKind))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingDefaultColumnWidthKind()));
+    if (key == QLatin1String(K::DefaultColumnWidthValue))
+        return QVariant(group.readDouble(key, ConfigDefaults::scrollingDefaultColumnWidthValue()));
+    if (key == QLatin1String(K::DefaultColumnWidthPresetIndex))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingDefaultColumnWidthPresetIndex()));
+    if (key == QLatin1String(K::DefaultColumnDisplay))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingDefaultColumnDisplay()));
+    if (key == QLatin1String(K::DefaultWindowHeightKind))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingDefaultWindowHeightKind()));
+    if (key == QLatin1String(K::DefaultWindowHeightValue))
+        return QVariant(group.readDouble(key, ConfigDefaults::scrollingDefaultWindowHeightValue()));
+    if (key == QLatin1String(K::DefaultWindowHeightPresetIndex))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingDefaultWindowHeightPresetIndex()));
+    if (key == QLatin1String(K::InsertPosition))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingInsertPosition()));
+    if (key == QLatin1String(K::RespectMinimumSize))
+        return QVariant(group.readBool(key, ConfigDefaults::scrollingRespectMinimumSize()));
+    return QVariant();
+}
+
 // Strip the "Autotile" prefix to the short in-memory key form, returning the
 // key unchanged when it carries no prefix (e.g. the unprefixed Animation keys).
 QString stripAutotilePrefix(const QString& key)
@@ -463,6 +571,11 @@ void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
     // Normalize autotile keys from disk format ("AutotileAlgorithm") to short format
     // ("Algorithm") that QML uses for lookup via PerScreenOverrideHelper.settingValue().
     normalizeAutotileKeys(m_perScreenAutotileSettings);
+    // Scrolling keys carry no prefix asymmetry: disk form IS the in-memory
+    // form, so no normalize/expand pair.
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::scrollingScreenGroupPrefix(), kPerScreenScrollingKeys,
+                       std::size(kPerScreenScrollingKeys), readPerScreenScrollingEntry, validatePerScreenScrollingValue,
+                       m_perScreenScrollingSettings);
     // No separate per-screen snapping group to load: per-monitor gaps are unified
     // and live in the per-screen autotile store loaded above.
     // Per-screen change signals are emitted by the caller (Settings::load()),
@@ -515,6 +628,7 @@ void Settings::saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend)
     // Expand short keys back to disk format before saving
     savePerScreenOverrides(backend, ConfigDefaults::autotileScreenGroupPrefix(),
                            expandAutotileKeys(m_perScreenAutotileSettings));
+    savePerScreenOverrides(backend, ConfigDefaults::scrollingScreenGroupPrefix(), m_perScreenScrollingSettings);
     // No separate per-screen snapping group to save: per-monitor gaps are unified
     // and persisted in the per-screen autotile store above.
 }
@@ -888,6 +1002,93 @@ void Settings::clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOr
     if (clearPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenAutotileAlgorithmKey,
                                 /*clearGaps=*/true)) {
         Q_EMIT perScreenAutotileSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+// ── Per-Screen Scrolling Config ──────────────────────────────────────────────
+
+QVariantMap Settings::getPerScreenScrollingSettings(const QString& screenIdOrName) const
+{
+    auto it = findPerScreenEntry(m_perScreenScrollingSettings, screenIdOrName);
+    return (it != m_perScreenScrollingSettings.constEnd()) ? it.value() : QVariantMap();
+}
+
+void Settings::setPerScreenScrollingSetting(const QString& screenIdOrName, const QString& key, const QVariant& value)
+{
+    if (screenIdOrName.isEmpty() || key.isEmpty()) {
+        return;
+    }
+    QVariant validated = validatePerScreenScrollingValue(key, value);
+    if (!validated.isValid()) {
+        // DEBUG, value not echoed — same session-bus log-flood rationale as
+        // the autotile twin.
+        qCDebug(lcConfig) << "Rejected per-screen scrolling setting" << key;
+        return;
+    }
+    if (applyPerScreenSetting(m_perScreenScrollingSettings, screenIdOrName, key, validated)) {
+        Q_EMIT perScreenScrollingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::clearPerScreenScrollingSettings(const QString& screenIdOrName)
+{
+    if (removePerScreenEntry(m_perScreenScrollingSettings, screenIdOrName)) {
+        Q_EMIT perScreenScrollingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenScrollingSettings(const QString& screenIdOrName) const
+{
+    return findPerScreenEntry(m_perScreenScrollingSettings, screenIdOrName) != m_perScreenScrollingSettings.constEnd();
+}
+
+// Sub-domain accessors — one per scope-chipped card (View / Columns /
+// Window), so each card's chip reports and resets only its own keys.
+
+bool Settings::hasPerScreenScrollingViewSettings(const QString& screenIdOrName) const
+{
+    return hasPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingViewKey,
+                                 /*wantGaps=*/true);
+}
+
+void Settings::clearPerScreenScrollingViewSettings(const QString& screenIdOrName)
+{
+    if (clearPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingViewKey,
+                                /*clearGaps=*/true)) {
+        Q_EMIT perScreenScrollingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenScrollingColumnSettings(const QString& screenIdOrName) const
+{
+    return hasPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingColumnKey,
+                                 /*wantGaps=*/true);
+}
+
+void Settings::clearPerScreenScrollingColumnSettings(const QString& screenIdOrName)
+{
+    if (clearPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingColumnKey,
+                                /*clearGaps=*/true)) {
+        Q_EMIT perScreenScrollingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenScrollingWindowSettings(const QString& screenIdOrName) const
+{
+    return hasPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingWindowKey,
+                                 /*wantGaps=*/true);
+}
+
+void Settings::clearPerScreenScrollingWindowSettings(const QString& screenIdOrName)
+{
+    if (clearPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingWindowKey,
+                                /*clearGaps=*/true)) {
+        Q_EMIT perScreenScrollingSettingsChanged();
         Q_EMIT settingsChanged();
     }
 }

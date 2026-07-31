@@ -976,6 +976,22 @@ public:
     bool hasPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName) const;
     void clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName);
 
+    // Per-screen scrolling config (override > global fallback). Keys are the
+    // PerScreenScrollingKey namespace — engine-spelled, no prefix asymmetry.
+    Q_INVOKABLE QVariantMap getPerScreenScrollingSettings(const QString& screenIdOrName) const override;
+    Q_INVOKABLE void setPerScreenScrollingSetting(const QString& screenIdOrName, const QString& key,
+                                                  const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenScrollingSettings(const QString& screenIdOrName) override;
+    Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenIdOrName) const override;
+    // One sub-domain accessor pair per scope-chipped card (View / Columns /
+    // Window), same disjoint-reset rationale as the autotile sub-domains.
+    bool hasPerScreenScrollingViewSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingViewSettings(const QString& screenIdOrName);
+    bool hasPerScreenScrollingColumnSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingColumnSettings(const QString& screenIdOrName);
+    bool hasPerScreenScrollingWindowSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingWindowSettings(const QString& screenIdOrName);
+
     // Per-screen snapping gaps project the config-backed per-monitor gap
     // overrides (perScreenGapOverrides) — the geometry path only reads them, so
     // this is the sole accessor; writes go through setPerScreenAutotileSetting /
@@ -1949,6 +1965,7 @@ private:
 
     // Per-screen autotile overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;
+    QHash<QString, QVariantMap> m_perScreenScrollingSettings;
 
     // Per-monitor gaps are unified (one value per monitor drives both snap and
     // tile) and live in the map above; the gap-dimension sub-domain is projected

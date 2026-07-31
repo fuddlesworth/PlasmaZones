@@ -1131,6 +1131,8 @@ CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QString& sc
 ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const
 {
     const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    // Rule channel first (rule > per-screen setting > global): the bare
+    // fraction key is written only by the rule cascade.
     const auto it = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidth());
     if (it != overrides.constEnd()) {
         const qreal fraction = it->toDouble();
@@ -1138,7 +1140,82 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) c
             return ColumnWidth::makeProportion(fraction);
         }
     }
+    // Settings channel: the kind-aware trio from the per-screen override map.
+    const auto kindIt = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidthKind());
+    if (kindIt != overrides.constEnd()) {
+        const int kind = kindIt->toInt();
+        const qreal value = overrides.value(ScrollPerScreenKeys::defaultColumnWidthValue()).toDouble();
+        if (kind == static_cast<int>(DefaultWidthKind::Fixed) && value >= 1.0) {
+            return ColumnWidth::makeFixed(qRound(value));
+        }
+        if (kind == static_cast<int>(DefaultWidthKind::Preset)) {
+            return ColumnWidth::makePreset(
+                qBound(0, overrides.value(ScrollPerScreenKeys::defaultColumnWidthPresetIndex()).toInt(),
+                       int(m_presetColumnWidths.size()) - 1));
+        }
+        if (kind == static_cast<int>(DefaultWidthKind::Proportion) && value >= 0.05 && value <= 1.0) {
+            return ColumnWidth::makeProportion(value);
+        }
+        // ClientDecides (and malformed pairs) fall through to the global —
+        // the open path handles client-decides via screenPinsWidth.
+    }
     return m_defaultColumnWidth;
+}
+
+WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const
+{
+    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    // Rule channel: a bare work-area fraction, committed as Fixed pixels
+    // against the CURRENT work area (same resolution the adjust verbs use).
+    const auto it = overrides.constFind(ScrollPerScreenKeys::defaultWindowHeight());
+    if (it != overrides.constEnd() && workArea.height() > 0) {
+        const qreal fraction = it->toDouble();
+        if (fraction > 0.0 && fraction <= 1.0) {
+            return WindowHeight::makeFixed(qMax(1, qRound(fraction * workArea.height())));
+        }
+    }
+    // Settings channel: the kind trio.
+    const auto kindIt = overrides.constFind(ScrollPerScreenKeys::defaultWindowHeightKind());
+    if (kindIt != overrides.constEnd()) {
+        const int kind = kindIt->toInt();
+        if (kind == static_cast<int>(DefaultHeightKind::Fixed)) {
+            const qreal value = overrides.value(ScrollPerScreenKeys::defaultWindowHeightValue()).toDouble();
+            if (value >= 1.0) {
+                return WindowHeight::makeFixed(qRound(value));
+            }
+        } else if (kind == static_cast<int>(DefaultHeightKind::Preset)) {
+            return WindowHeight::makePreset(
+                qBound(0, overrides.value(ScrollPerScreenKeys::defaultWindowHeightPresetIndex()).toInt(),
+                       int(m_presetWindowHeights.size()) - 1));
+        } else if (kind == static_cast<int>(DefaultHeightKind::Auto)) {
+            return WindowHeight{};
+        }
+    }
+    return m_defaultWindowHeight;
+}
+
+ScrollInsertPosition ScrollEngine::effectiveInsertPosition(const QString& screenId) const
+{
+    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    const auto it = overrides.constFind(ScrollPerScreenKeys::insertPosition());
+    if (it != overrides.constEnd()) {
+        const int pos = it->toInt();
+        if (pos >= static_cast<int>(ScrollInsertPosition::RightOfActive)
+            && pos <= static_cast<int>(ScrollInsertPosition::IntoActiveColumn)) {
+            return static_cast<ScrollInsertPosition>(pos);
+        }
+    }
+    return m_insertPosition;
+}
+
+bool ScrollEngine::effectiveRespectMinimumSize(const QString& screenId) const
+{
+    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    const auto it = overrides.constFind(ScrollPerScreenKeys::respectMinimumSize());
+    if (it != overrides.constEnd()) {
+        return it->toBool();
+    }
+    return m_respectMinimumSize;
 }
 
 ColumnDisplay ScrollEngine::effectiveDefaultColumnDisplay(const QString& screenId) const

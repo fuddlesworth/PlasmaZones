@@ -256,6 +256,16 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
             out.insert(ScrollOpenKeys::widthFraction(), fraction);
         }
     }
+    if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenWindowHeight))) {
+        // Same reject-not-clamp policy as the width slot above; the height
+        // fraction shares the width pair's bounds.
+        const auto value = action->params.value(QString(PhosphorRules::ActionParam::Value));
+        const double fraction = value.toDouble(0.0);
+        if (value.isDouble() && fraction >= PhosphorRules::MinColumnWidthRatio
+            && fraction <= PhosphorRules::MaxColumnWidthRatio) {
+            out.insert(ScrollOpenKeys::heightFraction(), fraction);
+        }
+    }
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenTabbed))) {
         out.insert(ScrollOpenKeys::tabbed(), action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool());
     }

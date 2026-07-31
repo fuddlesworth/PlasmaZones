@@ -336,10 +336,17 @@ struct ContextScrollingParams
     std::optional<int> centerFocusedColumn;
     /// How a newly-opened column lays its windows out (0 = normal, 1 = tabbed).
     std::optional<int> defaultColumnDisplay;
+    /// Where a fresh-opened window's column enters the strip
+    /// (ScrollInsertPosition ints, right-of-active 0 … into-active-column 4).
+    std::optional<int> insertPosition;
+    /// Height a newly-opened window takes, as a fraction of the work-area
+    /// height (0.05-1.0); the engine commits it as fixed pixels at relayout.
+    std::optional<double> defaultWindowHeight;
 
     bool isEmpty() const
     {
-        return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay;
+        return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay && !insertPosition
+            && !defaultWindowHeight;
     }
 };
 

@@ -44,6 +44,9 @@ namespace PhosphorScrollEngine {
 struct ScrollOpenParams
 {
     std::optional<qreal> widthFraction;
+    /// Work-area height fraction (openWindowHeight rule), committed as a
+    /// Fixed pixel intent against the live work area after the insert.
+    std::optional<qreal> heightFraction;
     std::optional<bool> tabbed;
     /// True: join the focused column instead of opening a new one.
     std::optional<bool> consume;
@@ -673,6 +676,11 @@ private:
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
     ColumnWidth effectiveDefaultColumnWidth(const QString& screenId) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QString& screenId) const;
+    /// Height needs the work area: the rule channel's bare fraction is
+    /// committed as Fixed pixels against the live work area.
+    WindowHeight effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const;
+    ScrollInsertPosition effectiveInsertPosition(const QString& screenId) const;
+    bool effectiveRespectMinimumSize(const QString& screenId) const;
 
     QHash<QString, QVariantMap> m_perScreenOverrides;
     std::function<void()> m_persistSaveFn;

@@ -249,6 +249,10 @@ inline QString consume()
 {
     return QStringLiteral("consume");
 }
+inline QString heightFraction()
+{
+    return QStringLiteral("heightFraction");
+}
 } // namespace ScrollOpenKeys
 
 } // namespace PlasmaZones

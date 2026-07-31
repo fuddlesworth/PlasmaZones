@@ -488,6 +488,7 @@ SettingsController::SettingsController(QObject* parent)
     wirePerScreenOverrideSignal(&Settings::perScreenAutotileSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenSnappingSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenZoneSelectorSettingsChanged);
+    wirePerScreenOverrideSignal(&Settings::perScreenScrollingSettingsChanged);
 
     // Editor + fill-on-drop settings lack Q_PROPERTY on Settings, so the
     // meta-object loop above misses them. EditorPageController forwards each
