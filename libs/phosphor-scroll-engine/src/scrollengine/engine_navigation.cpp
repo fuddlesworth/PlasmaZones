@@ -276,16 +276,44 @@ void ScrollEngine::moveFocusedToPosition(int position, const PhosphorEngine::Nav
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), ctx.windowId, QString(), screen);
         return;
     }
-    // Position N addresses the Nth VISIBLE column slot (the zone-number
-    // space the previews label): the strip may extend far off-screen, but
-    // the digits act on what the user can see.
-    const QVector<int> visible = state->strip().visibleColumnIndices(params);
-    if (visible.isEmpty()) {
+    // Position N addresses the Nth VISIBLE tile (the zone-number space the
+    // previews label — visibleTiles is the single source for both, so the
+    // digit and the on-screen number can never disagree): the strip may
+    // extend far off-screen, but the digits act on what the user can see.
+    const QVector<VisibleTile> tiles = visibleTiles(screen);
+    if (tiles.isEmpty()) {
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
         return;
     }
-    const int target = visible.at(qBound(0, position - 1, visible.size() - 1));
-    const bool moved = state->strip().moveActiveColumnTo(target, params);
+    const VisibleTile& target = tiles.at(qBound(0, position - 1, tiles.size() - 1));
+    bool moved = false;
+    if (target.columnIndex != state->strip().activeColumnIndex()) {
+        // Target tile lives in another column: the active column travels to
+        // that column's strip position (the pre-tile-numbering behaviour).
+        moved = state->strip().moveActiveColumnTo(target.columnIndex, params);
+    } else {
+        // Target tile is a stack-mate: reorder the active tile onto the
+        // target's slot. Delta counts VISIBLE tiles between them, which is
+        // exactly the minimized-skipping step space moveActiveTile walks.
+        const QString active = state->strip().activeWindowId();
+        int activeSlot = -1;
+        int targetSlot = -1;
+        int slot = 0;
+        for (const VisibleTile& tile : tiles) {
+            if (tile.columnIndex != target.columnIndex) {
+                continue;
+            }
+            if (tile.windowId == active) {
+                activeSlot = slot;
+            }
+            if (tile.windowId == target.windowId) {
+                targetSlot = slot;
+            }
+            ++slot;
+        }
+        moved = (activeSlot >= 0 && targetSlot >= 0 && activeSlot != targetSlot)
+            && state->strip().moveActiveTile(targetSlot - activeSlot);
+    }
     if (moved) {
         applyLayout(screen, true);
         Q_EMIT placementChanged(screen);

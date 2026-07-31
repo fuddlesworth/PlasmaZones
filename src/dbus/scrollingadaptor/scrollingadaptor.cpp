@@ -85,8 +85,7 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId)
         return QStringLiteral("[]");
     }
     QJsonArray arr;
-    QVector<int> columnNumbers;
-    const QVector<QRectF> rects = m_engine->visibleTileRectsRelative(screenId, &columnNumbers);
+    const QVector<QRectF> rects = m_engine->visibleTileRectsRelative(screenId);
     for (int i = 0; i < rects.size(); ++i) {
         const QRectF& r = rects.at(i);
         QJsonObject obj;
@@ -94,8 +93,10 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId)
         obj[QLatin1String("y")] = r.y();
         obj[QLatin1String("width")] = r.width();
         obj[QLatin1String("height")] = r.height();
-        // 1-based visible column slot — the scroll zone number.
-        obj[QLatin1String("zoneNumber")] = (i < columnNumbers.size()) ? columnNumbers.at(i) : (i + 1);
+        // 1-based visible tile slot — the scroll zone number (rects arrive
+        // in zone-number order per the visibleTiles contract, so the index
+        // IS the number).
+        obj[QLatin1String("zoneNumber")] = i + 1;
         arr.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));

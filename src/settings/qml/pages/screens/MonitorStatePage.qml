@@ -559,9 +559,9 @@ SettingsFlickable {
                         stateView.refreshScrollingStrip();
                 }
                 // category 1 renders the "Dynamic" badge (a live strip
-                // snapshot is generated, not editable). Zone numbers are the
-                // 1-based VISIBLE column slots the Snap-to-Zone digits
-                // target, so they label exactly what is on screen.
+                // snapshot is generated, not editable). Tiles are numbered
+                // sequentially in strip order so every visible window gets
+                // its own distinct label.
                 layout: ({
                         "displayName": i18nc("tiling mode name", "Scrolling"),
                         "category": 1,

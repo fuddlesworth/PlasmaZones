@@ -185,7 +185,7 @@ CatalogMeta catalogMetaForId(const QString& id)
     }
     if (id.startsWith(QLatin1String("snap_to_zone_"))) {
         // Every engine implements moveFocusedToPosition: zone N in
-        // snapping, layout slot N in tiling, visible column slot N in
+        // snapping, layout slot N in tiling, visible tile slot N in
         // scrolling.
         return {QT_TRANSLATE_NOOP("plasmazones", "Snap to Zone"), 3, "all"};
     }

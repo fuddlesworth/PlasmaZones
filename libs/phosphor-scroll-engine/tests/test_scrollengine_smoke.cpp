@@ -1013,12 +1013,14 @@ void TestScrollEngineSmoke::contextSwitchFlagRidesChangedScreenSets()
 
 void TestScrollEngineSmoke::zoneNumbersAreViewportRelativeVisibleSlots()
 {
-    // Zone numbers are VIEWPORT-relative visible slots, not strip indices: the
-    // leftmost on-screen column is 1 regardless of how many columns are parked
-    // off-screen to its left, and a parked column has no number at all. This is
-    // the engine-side half of the numbering (visibleColumnNumberForWindow plus
-    // the ordinal walk that fills visibleTileRects' columnNumbers out-param);
-    // the strip primitive it rests on is pinned separately in the ops suite.
+    // Zone numbers are VIEWPORT-relative visible TILE slots, not strip
+    // indices: tiles are numbered sequentially in strip order (columns left
+    // to right, tiles top to bottom), the leftmost on-screen tile is 1
+    // regardless of how many columns are parked off-screen to its left, and
+    // a parked column's tiles have no number at all. visibleTiles is the
+    // single source: the preview rect walk, the per-window query and the
+    // Snap-to-Zone digit target all derive from it, so every visible window
+    // carries its own distinct number and they can never disagree.
     //
     // Work area is 1200 wide and the default column is 600px (the proportion is
     // gap-aware and no IScrollSettings is attached, so innerGap is 0), so
@@ -1031,54 +1033,46 @@ void TestScrollEngineSmoke::zoneNumbersAreViewportRelativeVisibleSlots()
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")).size(), 3);
 
     // Exactly one of the three is parked, and the two on screen carry 1 and 2.
-    const int na = engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|a"));
-    const int nb = engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
-    const int nc = engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|c"));
+    const int na = engine->visibleTileNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|a"));
+    const int nb = engine->visibleTileNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
+    const int nc = engine->visibleTileNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|c"));
     QList<int> numbers{na, nb, nc};
     QCOMPARE(numbers.count(-1), 1); // one parked
     std::sort(numbers.begin(), numbers.end());
     QCOMPARE(numbers, (QList<int>{-1, 1, 2})); // and the visible pair is 1-based
 
     // The rect walk agrees with the per-window query: one rect per visible
-    // tile, numbered in the same left-to-right order starting at 1.
-    QVector<int> columnNumbers;
-    const QVector<QRect> rects = engine->visibleTileRects(QStringLiteral("S1"), &columnNumbers);
+    // tile, in the same left-to-right zone-number order.
+    const QVector<QRect> rects = engine->visibleTileRects(QStringLiteral("S1"));
     QCOMPARE(rects.size(), 2);
-    QCOMPARE(columnNumbers, (QVector<int>{1, 2}));
 
     // An unknown window has no slot, and neither does a window on a screen the
     // engine does not manage.
-    QCOMPARE(engine->visibleColumnNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|nope")), -1);
-    QCOMPARE(engine->visibleColumnNumberForWindow(QStringLiteral("S9"), QStringLiteral("app|a")), -1);
+    QCOMPARE(engine->visibleTileNumberForWindow(QStringLiteral("S1"), QStringLiteral("app|nope")), -1);
+    QCOMPARE(engine->visibleTileNumberForWindow(QStringLiteral("S9"), QStringLiteral("app|a")), -1);
 
-    // Stacking two windows into ONE column must not consume two numbers: the
-    // ordinal advances per COLUMN, so a stacked pair beside a single column
-    // yields {1, 1, 2} across three rects. This is the part a naive
-    // one-ordinal-per-rect walk gets wrong.
+    // Stacking two windows into ONE column: every visible tile still gets
+    // its own distinct number, in strip order. Three visible tiles across
+    // two columns number 1..3 — the stacked pair does NOT collapse onto a
+    // shared column ordinal (per-column numbering was the old model; it
+    // rendered duplicate labels in every preview).
     engine->consumeOrExpelWindow(-1, QStringLiteral("S1"));
-    QVector<int> stackedNumbers;
-    const QVector<QRect> stackedRects = engine->visibleTileRects(QStringLiteral("S1"), &stackedNumbers);
-    QCOMPARE(stackedRects.size(), stackedNumbers.size());
-    QVERIFY(!stackedNumbers.isEmpty());
-    // Numbers are non-decreasing, start at 1, and every step is 0 (same column)
-    // or exactly 1 (next column) — never a skip.
-    QCOMPARE(stackedNumbers.first(), 1);
-    for (int i = 1; i < stackedNumbers.size(); ++i) {
-        const int step = stackedNumbers.at(i) - stackedNumbers.at(i - 1);
-        QVERIFY2(step == 0 || step == 1, "column ordinals must not skip or go backwards");
+    const QVector<ScrollEngine::VisibleTile> stacked = engine->visibleTiles(QStringLiteral("S1"));
+    QCOMPARE(stacked.size(), 3);
+    // Tile numbers are the list order, so pin the per-window query to it:
+    // each visible window's number is its 1-based index in the walk.
+    for (int i = 0; i < stacked.size(); ++i) {
+        QCOMPARE(engine->visibleTileNumberForWindow(QStringLiteral("S1"), stacked.at(i).windowId), i + 1);
     }
-    // Three rects across two visible columns, and the stacked pair SHARES
-    // ordinal 2: {1, 2, 2}. A naive one-ordinal-per-rect walk would say
-    // {1, 2, 3} and hand the user a zone number no column has.
-    QCOMPARE(stackedRects.size(), 3);
-    QCOMPARE(stackedNumbers, (QVector<int>{1, 2, 2}));
+    // The stacked pair shares a column, and the walk is column-major: the
+    // single column's tile comes first, then the pair back to back.
+    QVERIFY(stacked.at(0).columnIndex != stacked.at(1).columnIndex);
+    QCOMPARE(stacked.at(1).columnIndex, stacked.at(2).columnIndex);
 
-    // The normalized twin reports the same numbering (it delegates), and every
-    // rect is inside the unit square.
-    QVector<int> relativeNumbers;
-    const QVector<QRectF> relative = engine->visibleTileRectsRelative(QStringLiteral("S1"), &relativeNumbers);
-    QCOMPARE(relativeNumbers, stackedNumbers);
-    QCOMPARE(relative.size(), stackedRects.size());
+    // The normalized twin walks the same tiles, and every rect is inside
+    // the unit square.
+    const QVector<QRectF> relative = engine->visibleTileRectsRelative(QStringLiteral("S1"));
+    QCOMPARE(relative.size(), stacked.size());
     for (const QRectF& r : relative) {
         QVERIFY(r.left() >= 0.0 && r.top() >= 0.0);
         QVERIFY(r.right() <= 1.0 + 1e-9 && r.bottom() <= 1.0 + 1e-9);

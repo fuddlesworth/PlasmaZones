@@ -97,24 +97,19 @@ private Q_SLOTS:
         QCOMPARE(m_adaptor->visibleStripJson(QStringLiteral("DP-1")), QStringLiteral("[]"));
     }
 
-    // The documented payload: normalized rects, each carrying the 1-based
-    // visible column slot. zoneNumber is the field a consumer needs to map a
-    // rect back to a scroll zone, and it is the one the DocString used to
-    // omit.
+    // The documented payload: normalized rects, each carrying the tile's
+    // 1-based visible slot in strip order. zoneNumber is the field a
+    // consumer needs to map a rect back to a scroll zone, and it is the one
+    // the DocString used to omit.
     void testVisibleStripJson_shapeAndZoneNumbers()
     {
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
         m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
 
-        // Cross-check against the engine, so the payload is compared with an
-        // INDEPENDENT source rather than with itself. The adaptor falls back
-        // to `i + 1` when columnNumbers is shorter than rects, so asserting
-        // only "the ordinals ascend" would still pass if the engine regressed
-        // to supplying no column numbers at all.
-        QVector<int> engineColumns;
-        const QVector<QRectF> engineRects = m_engine->visibleTileRectsRelative(QStringLiteral("DP-1"), &engineColumns);
+        // Cross-check the rect count against the engine, so the payload is
+        // compared with an INDEPENDENT source rather than with itself.
+        const QVector<QRectF> engineRects = m_engine->visibleTileRectsRelative(QStringLiteral("DP-1"));
         QCOMPARE(engineRects.size(), 2);
-        QCOMPARE(engineColumns.size(), engineRects.size());
 
         const QJsonDocument doc = QJsonDocument::fromJson(m_adaptor->visibleStripJson(QStringLiteral("DP-1")).toUtf8());
         QVERIFY(doc.isArray());
@@ -142,39 +137,34 @@ private Q_SLOTS:
                 }
             }
             const int zoneNumber = obj.value(QLatin1String("zoneNumber")).toInt(-1);
-            if (zoneNumber != engineColumns.at(i)) {
-                failures.append(QStringLiteral("rect %1: zoneNumber %2 != engine %3")
-                                    .arg(i)
-                                    .arg(zoneNumber)
-                                    .arg(engineColumns.at(i)));
+            if (zoneNumber != i + 1) {
+                failures.append(QStringLiteral("rect %1: zoneNumber %2 != slot %3").arg(i).arg(zoneNumber).arg(i + 1));
             }
         }
         QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
 
-        // The two-adjacent-columns fixture above yields ordinals {1, 2},
-        // which is exactly `i + 1` — so it cannot tell the real column
-        // numbers from the adaptor's index fallback. Stack both windows into
-        // ONE column: two rects now share column ordinal 1, and any
-        // regression to `i + 1` reports {1, 2} and fails here.
+        // Stack both windows into ONE column: tile numbering is sequential
+        // in strip order, so the stacked pair still reports {1, 2} — every
+        // visible window keeps its own distinct zone number (per-column
+        // ordinals were the old model; they rendered duplicate labels).
         // Focus the LEFT column first: consume pulls the neighbour to its
         // right into the active column, so with the last-opened window active
         // there is nothing to its right and the call is a no-op.
         m_engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("DP-1"));
         m_engine->consumeWindowIntoColumn(QStringLiteral("DP-1"));
 
-        QVector<int> stackedColumns;
-        const QVector<QRectF> stackedRects =
-            m_engine->visibleTileRectsRelative(QStringLiteral("DP-1"), &stackedColumns);
+        const QVector<QRectF> stackedRects = m_engine->visibleTileRectsRelative(QStringLiteral("DP-1"));
         QCOMPARE(stackedRects.size(), 2);
-        QCOMPARE(stackedColumns, (QVector<int>{1, 1}));
+        // Same column: the two rects split one column height between them.
+        QVERIFY(qFuzzyCompare(stackedRects.at(0).x(), stackedRects.at(1).x()));
 
         const QJsonDocument stackedDoc =
             QJsonDocument::fromJson(m_adaptor->visibleStripJson(QStringLiteral("DP-1")).toUtf8());
         const QJsonArray stackedArr = stackedDoc.array();
         QCOMPARE(stackedArr.size(), 2);
         QCOMPARE(stackedArr.at(0).toObject().value(QLatin1String("zoneNumber")).toInt(-1), 1);
-        QVERIFY2(stackedArr.at(1).toObject().value(QLatin1String("zoneNumber")).toInt(-1) == 1,
-                 "both tiles of one column must report that column's ordinal, not their rect index");
+        QVERIFY2(stackedArr.at(1).toObject().value(QLatin1String("zoneNumber")).toInt(-1) == 2,
+                 "stacked tiles must keep distinct sequential zone numbers");
     }
 
     // focusColumn's own doc: gated on the engine owning the screen, because

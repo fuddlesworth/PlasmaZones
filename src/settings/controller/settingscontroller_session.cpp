@@ -912,6 +912,9 @@ QVariantList SettingsController::getScrollingStripPreview(const QString& screenI
         relGeo[QStringLiteral("width")] = rect.value(QLatin1String("width")).toDouble();
         relGeo[QStringLiteral("height")] = rect.value(QLatin1String("height")).toDouble();
         QVariantMap zone;
+        // The wire's zoneNumber is the tile's 1-based visible slot in strip
+        // order — the same sequential space the Snap-to-Zone digits target,
+        // so the thumbnail labels exactly what the digits do.
         zone[QStringLiteral("zoneNumber")] = rect.value(QLatin1String("zoneNumber")).toInt(i + 1);
         zone[QStringLiteral("relativeGeometry")] = relGeo;
         // Namespaced, never a bare index. These are render-only synthetic

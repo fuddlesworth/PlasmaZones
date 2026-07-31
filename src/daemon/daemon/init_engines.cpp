@@ -171,8 +171,8 @@ void Daemon::initEnginesAndWiring()
     });
 
     // Scroll "zone numbers" for the navigation OSD: a strip window's zone
-    // number is its 1-based VISIBLE column slot — the same viewport-
-    // relative coordinate the previews label and the Snap-to-Zone digits
+    // number is its 1-based VISIBLE tile slot — the same sequential
+    // strip-order number the previews label and the Snap-to-Zone digits
     // drive through moveFocusedToPosition. Off-screen windows get no
     // entry, so the OSD falls back to direction-only copy for them. This
     // keeps the "Zone %1" copy meaningful on scrolling screens, which
@@ -185,7 +185,7 @@ void Daemon::initEnginesAndWiring()
         QVariantList zones;
         const QStringList order = scroll->managedWindowOrder(screenId);
         for (const QString& windowId : order) {
-            const int slot = scroll->visibleColumnNumberForWindow(screenId, windowId);
+            const int slot = scroll->visibleTileNumberForWindow(screenId, windowId);
             if (slot < 1) {
                 continue;
             }

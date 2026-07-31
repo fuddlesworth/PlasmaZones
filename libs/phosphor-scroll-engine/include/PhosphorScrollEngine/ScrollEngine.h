@@ -194,25 +194,39 @@ public:
     QString screenForTrackedWindow(const QString& windowId) const override;
     QRect lastManagedRect(const QString& rawWindowId) const override;
     QStringList managedWindowOrder(const QString& screenId) const override;
-    /// Visible-tile rects of @p screenId's current-context strip in strip
-    /// order, clipped to the work area (hidden tabs and parked columns
-    /// excluded). The daemon's OSD preview seam: where a layout switch
-    /// shows the layout's zones, a scrolling screen shows what the strip
-    /// actually looks like right now. Empty when the screen has no state
-    /// or no visible tile.
-    /// @p columnNumbers, when given, receives one entry per returned rect:
-    /// the tile's 1-based VISIBLE column slot (leftmost on-screen column is
-    /// 1) — the scroll "zone number" the Snap-to-Zone digits target — so
-    /// previews label exactly what is on screen. Off-screen columns carry
-    /// no number by design.
-    QVector<QRect> visibleTileRects(const QString& screenId, QVector<int>* columnNumbers = nullptr) const;
-    /// @p windowId's 1-based visible column slot on @p screenId's current
-    /// strip, or -1 when its column is off-screen or untracked (the
-    /// navigation OSD then shows direction-only copy).
-    int visibleColumnNumberForWindow(const QString& screenId, const QString& windowId) const;
+    /// One visible tile of a strip: the unit of the scroll "zone number"
+    /// space. Zone number N is visibleTiles().at(N - 1) — sequential in
+    /// strip order (columns left to right, tiles top to bottom), so every
+    /// on-screen window carries its own distinct number. Previews label
+    /// this space and the Snap-to-Zone digits target it through
+    /// moveFocusedToPosition; both MUST derive from visibleTiles so they
+    /// can never disagree.
+    struct VisibleTile
+    {
+        QString windowId;
+        /// Strip index of the owning column.
+        int columnIndex = -1;
+        /// Absolute pixel rect, clipped to the work area.
+        QRect rect;
+    };
+    /// The visible tiles of @p screenId's current-context strip in zone-
+    /// number order (hidden tabs, minimized tiles and parked columns
+    /// excluded; partially-visible columns clipped, not dropped). Empty
+    /// when the screen has no state or no visible tile.
+    QVector<VisibleTile> visibleTiles(const QString& screenId) const;
+    /// The rects of visibleTiles. The daemon's OSD preview seam: where a
+    /// layout switch shows the layout's zones, a scrolling screen shows
+    /// what the strip actually looks like right now. Zone number = rect
+    /// index + 1.
+    QVector<QRect> visibleTileRects(const QString& screenId) const;
+    /// @p windowId's 1-based visible tile slot (zone number) on
+    /// @p screenId's current strip, or -1 when it is off-screen, a hidden
+    /// tab, or untracked (the navigation OSD then shows direction-only
+    /// copy).
+    int visibleTileNumberForWindow(const QString& screenId, const QString& windowId) const;
     /// visibleTileRects normalized to the work area (0.0–1.0 per axis) —
     /// the shape zone previews consume. Same emptiness contract.
-    QVector<QRectF> visibleTileRectsRelative(const QString& screenId, QVector<int>* columnNumbers = nullptr) const;
+    QVector<QRectF> visibleTileRectsRelative(const QString& screenId) const;
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 

@@ -325,14 +325,12 @@ void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
         return;
     }
     const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
-    QVector<int> columnNumbers;
-    QVector<QRectF> rects = scroll ? scroll->visibleTileRectsRelative(screenId, &columnNumbers) : QVector<QRectF>();
+    QVector<QRectF> rects = scroll ? scroll->visibleTileRectsRelative(screenId) : QVector<QRectF>();
     if (rects.isEmpty()) {
         // Representative endless strip (kept in step with MonitorStatePage's
         // scrollingFallbackZones): clipped columns at both edges read as a
         // window onto a longer strip.
         rects = {QRectF(0.0, 0.0, 0.1, 1.0), QRectF(0.115, 0.0, 0.5, 1.0), QRectF(0.63, 0.0, 0.37, 1.0)};
-        columnNumbers = {1, 2, 3};
     }
     QVariantList zones;
     zones.reserve(rects.size());
@@ -344,11 +342,11 @@ void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
         relGeo[QLatin1String("width")] = r.width();
         relGeo[QLatin1String("height")] = r.height();
         QVariantMap zoneMap;
-        // The scroll zone number is the tile's 1-based VISIBLE column slot
-        // (leftmost on-screen column is 1) — the same viewport-relative
-        // coordinate the Snap-to-Zone digits drive, so the card labels
-        // exactly what is on screen.
-        zoneMap[QLatin1String("zoneNumber")] = (i < columnNumbers.size()) ? columnNumbers.at(i) : (i + 1);
+        // The scroll zone number is the tile's 1-based visible slot in
+        // strip order (visibleTileRects' contract: rects arrive in
+        // zone-number order) — the same sequential space the Snap-to-Zone
+        // digits target, so the card labels exactly what the digits do.
+        zoneMap[QLatin1String("zoneNumber")] = i + 1;
         zoneMap[QLatin1String("relativeGeometry")] = relGeo;
         zoneMap[QLatin1String("id")] = QString::number(i);
         zoneMap[QLatin1String("name")] = QString();
