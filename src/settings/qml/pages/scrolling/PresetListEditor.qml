@@ -8,19 +8,20 @@ import org.kde.kirigami as Kirigami
 
 /**
  * @brief Editor for one scrolling preset list (column widths or window
- * heights): a compact band of removable percent chips plus an inline add
- * control, sized to sit as a SettingsRow's right-aligned control. Chips
- * read left to right in cycle order (new entries append); the chip recipe
- * follows MetadataChip, and the remove affordance follows the filter-chip
- * convention.
+ * heights), following the Virtual Screens page's preset-card convention: a
+ * uniform card grid where each preset draws its share as a highlight band
+ * inside a screen-shaped thumbnail well (horizontal share for widths,
+ * vertical for heights), with a per-card remove button and an add row
+ * beneath the grid. Cards read left to right, top to bottom in cycle
+ * order; new entries append.
  *
  * The stored value stays the canonical comma-joined fraction string. Every
  * edit joins the working array and writes it through `commit`, then the
  * `presets` binding delivers back whatever the schema's canonicalizer kept
  * (dropped duplicates, the 16-entry cap, the nothing-survives default), so
- * the band always shows the effective presets.
+ * the grid always shows the effective presets.
  */
-Flow {
+ColumnLayout {
     id: editor
 
     /// Canonical comma-joined fraction string (bind an appSettings property).
@@ -29,60 +30,99 @@ Flow {
     required property var commit
     /// Accessible label stem, e.g. "column width preset".
     required property string entryName
+    /// Heights preview as a vertical share of the well; widths (the
+    /// default) as a horizontal one.
+    property bool vertical: false
 
     readonly property var _values: presets.length > 0 ? presets.split(",") : []
 
-    // Wrap inside a bounded band: SettingsRow's control container is a plain
-    // Row (no width imposed on children), so an unconstrained Flow would lay
-    // every chip on one line and overflow the row's control share. Capping
-    // the width folds long lists onto extra lines instead.
-    width: Math.min(implicitWidth, Kirigami.Units.gridUnit * 22)
     spacing: Kirigami.Units.smallSpacing
 
     function _commitList(list) {
         commit(list.join(","));
     }
 
-    Repeater {
-        model: editor._values
+    GridLayout {
+        Layout.fillWidth: true
+        columns: 4
+        uniformCellWidths: true
+        columnSpacing: Kirigami.Units.smallSpacing
+        rowSpacing: Kirigami.Units.smallSpacing
 
-        delegate: Rectangle {
-            id: chip
+        Repeater {
+            model: editor._values
 
-            required property string modelData
-            required property int index
+            delegate: Rectangle {
+                id: presetCard
 
-            readonly property int percent: Math.round(parseFloat(chip.modelData) * 100)
+                required property string modelData
+                required property int index
 
-            implicitWidth: chipContent.implicitWidth + Kirigami.Units.largeSpacing
-            implicitHeight: chipContent.implicitHeight + Kirigami.Units.smallSpacing
-            radius: Kirigami.Units.smallSpacing
-            color: Kirigami.Theme.alternateBackgroundColor
-            border.width: 1
-            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                readonly property real fraction: parseFloat(presetCard.modelData)
+                readonly property int percent: Math.round(presetCard.fraction * 100)
+                readonly property real _cardPad: Kirigami.Units.largeSpacing
 
-            RowLayout {
-                id: chipContent
+                Layout.fillWidth: true
+                implicitHeight: cardRow.implicitHeight + presetCard._cardPad * 2
+                radius: Kirigami.Units.smallSpacing * 1.5
+                color: Kirigami.Theme.backgroundColor
+                border.width: 1
+                border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                Accessible.name: i18n("%1% %2", presetCard.percent, editor.entryName)
 
-                anchors.centerIn: parent
-                spacing: Kirigami.Units.smallSpacing / 2
+                RowLayout {
+                    id: cardRow
 
-                Label {
-                    text: i18n("%1%", chip.percent)
-                    font: Kirigami.Theme.smallFont
-                }
+                    anchors.fill: parent
+                    anchors.margins: presetCard._cardPad
+                    spacing: Kirigami.Units.largeSpacing
 
-                ToolButton {
-                    icon.name: "window-close-symbolic"
-                    icon.width: Kirigami.Units.iconSizes.small
-                    icon.height: Kirigami.Units.iconSizes.small
-                    implicitWidth: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
-                    implicitHeight: implicitWidth
-                    Accessible.name: i18n("Remove %1% %2", chip.percent, editor.entryName)
-                    onClicked: {
-                        var next = editor._values.slice();
-                        next.splice(chip.index, 1);
-                        editor._commitList(next);
+                    // Thumbnail: an inset screen-shaped well with the preset's
+                    // share drawn as an accent band — the same visual grammar
+                    // as the Virtual Screens preset thumbnails.
+                    Rectangle {
+                        id: thumbnail
+
+                        readonly property real innerPad: Kirigami.Units.smallSpacing
+
+                        Layout.preferredHeight: Kirigami.Units.gridUnit * 2.5
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 2.5 * 16 / 9
+                        Layout.alignment: Qt.AlignVCenter
+                        radius: Kirigami.Units.smallSpacing
+                        color: Kirigami.Theme.alternateBackgroundColor
+                        border.width: 1
+                        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: editor.vertical ? parent.width - thumbnail.innerPad * 2 : Math.max(2, (parent.width - thumbnail.innerPad * 2) * presetCard.fraction)
+                            height: editor.vertical ? Math.max(2, (parent.height - thumbnail.innerPad * 2) * presetCard.fraction) : parent.height - thumbnail.innerPad * 2
+                            radius: Kirigami.Units.smallSpacing / 2
+                            color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.25)
+                            border.width: 1
+                            border.color: Kirigami.Theme.highlightColor
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: i18n("%1%", presetCard.percent)
+                        font.weight: Font.Medium
+                        elide: Text.ElideRight
+                    }
+
+                    ToolButton {
+                        Layout.alignment: Qt.AlignTop
+                        icon.name: "edit-delete-remove"
+                        Accessible.name: i18n("Remove %1% %2", presetCard.percent, editor.entryName)
+                        display: AbstractButton.IconOnly
+                        onClicked: {
+                            var next = editor._values.slice();
+                            next.splice(presetCard.index, 1);
+                            editor._commitList(next);
+                        }
+                        ToolTip.text: i18n("Remove this preset")
+                        ToolTip.visible: hovered
                     }
                 }
             }
@@ -91,6 +131,10 @@ Flow {
 
     RowLayout {
         spacing: Kirigami.Units.smallSpacing
+
+        Label {
+            text: i18n("Add preset:")
+        }
 
         SettingsSpinBox {
             id: addSpin
@@ -103,8 +147,10 @@ Flow {
             stepSize: 5
         }
 
-        ToolButton {
+        Button {
+            text: i18n("Add")
             icon.name: "list-add"
+            flat: true
             Accessible.name: i18n("Add %1", editor.entryName)
             onClicked: {
                 var next = editor._values.slice();

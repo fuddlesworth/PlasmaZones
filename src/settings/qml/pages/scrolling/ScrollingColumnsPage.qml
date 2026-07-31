@@ -320,17 +320,23 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
+                // Section header + full-width card grid, the Virtual Screens
+                // presets shape: the rows carry the titles, the editors get
+                // the card content width with the page's standard margins.
                 SettingsRow {
                     title: i18n("Column widths")
                     searchAnchor: "presetColumnWidths"
                     description: i18n("Percentages of the work area width, cycled in this order by the preset shortcuts")
+                }
 
-                    PresetListEditor {
-                        presets: appSettings.scrollingPresetColumnWidths
-                        entryName: i18n("column width preset")
-                        commit: function (joined) {
-                            appSettings.scrollingPresetColumnWidths = joined;
-                        }
+                PresetListEditor {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    presets: appSettings.scrollingPresetColumnWidths
+                    entryName: i18n("column width preset")
+                    commit: function (joined) {
+                        appSettings.scrollingPresetColumnWidths = joined;
                     }
                 }
 
@@ -340,13 +346,18 @@ SettingsFlickable {
                     title: i18n("Window heights")
                     searchAnchor: "presetWindowHeights"
                     description: i18n("Percentages of the work area height, cycled in this order by the preset shortcuts")
+                }
 
-                    PresetListEditor {
-                        presets: appSettings.scrollingPresetWindowHeights
-                        entryName: i18n("window height preset")
-                        commit: function (joined) {
-                            appSettings.scrollingPresetWindowHeights = joined;
-                        }
+                PresetListEditor {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    Layout.bottomMargin: Kirigami.Units.largeSpacing
+                    presets: appSettings.scrollingPresetWindowHeights
+                    entryName: i18n("window height preset")
+                    vertical: true
+                    commit: function (joined) {
+                        appSettings.scrollingPresetWindowHeights = joined;
                     }
                 }
             }
