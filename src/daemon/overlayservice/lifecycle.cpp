@@ -84,17 +84,27 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         if (cursorScreen && m_settings) {
             QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), cursorScreen);
             if (isSnappingContextInactive(effectiveId)) {
-                // Idle every live overlay and forget the last-shown screen
-                // before bailing. A bare return left m_currentOverlayScreenId
-                // pointing at the PREVIOUSLY shown screen with its overlay
-                // still un-idled, and the next drag tick's refreshFromIdle()
-                // re-lit that stale screen while the cursor sat here — dragging
-                // on a layout-suppressed monitor highlighted zones on the other
-                // one (#724). applyIdleStateForCursor's empty-id contract is
-                // exactly this "cursor sits on an inactive VS" case.
-                if (m_visible) {
-                    m_currentOverlayScreenId.clear();
-                    applyIdleStateForCursor(QString(), false);
+                // Warm-idle every live overlay and forget the last-shown
+                // screen before bailing. A bare return left
+                // m_currentOverlayScreenId pointing at the PREVIOUSLY shown
+                // screen with its overlay still un-idled, and the next drag
+                // tick's refreshFromIdle() re-lit that stale screen while the
+                // cursor sat here — dragging on a layout-suppressed monitor
+                // highlighted zones on the other one (#724).
+                // setIdleForDragPause (not a bare applyIdleStateForCursor) so
+                // the slots are also BLANKED, the idle flag is set, and the
+                // quiesce timer winds the render loop + CAVA down while the
+                // cursor stays on the inactive screen — the same full
+                // sequence every other idle path performs.
+                //
+                // The id clear is UNCONDITIONAL: the two actions have
+                // different preconditions. An overlay already idled (trigger
+                // released mid-drag) still holds the previously shown screen
+                // id, and leaving it set is exactly the stale-id hole this
+                // branch exists to close.
+                m_currentOverlayScreenId.clear();
+                if (m_visible && !m_overlayIdled) {
+                    setIdleForDragPause();
                 }
                 return;
             }
@@ -149,6 +159,11 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         QQuickItem* cursorMainOverlay = cursorVsHasWindow ? cursorIt->mainOverlaySlot() : nullptr;
         const bool cursorSlotVisible =
             cursorMainOverlay != nullptr && !qFuzzyCompare(cursorMainOverlay->opacity(), 0.0);
+        // The m_excludedScreens clause only does real work when
+        // showOnAllMonitors is true: with it false, every excluded (active
+        // autotile) screen is already intercepted above by the
+        // isSnappingContextInactive early return, whose autotile leg covers
+        // the same set.
         if ((cursorVsHasWindow && cursorSlotVisible) || m_excludedScreens.contains(cursorEffectiveId)) {
             m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
             if (m_overlayIdled) {
@@ -323,7 +338,14 @@ void OverlayService::refreshFromIdle()
     // m_currentOverlayScreenId updated via showAtPosition, so this
     // reflects the last VS the cursor was observed on.
     const bool showOnAllMonitors = !m_settings || m_settings->showZonesOnAllMonitors();
-    applyIdleStateForCursor(m_currentOverlayScreenId, showOnAllMonitors);
+    // Never re-light a screen whose snapping context is inactive: the
+    // remembered id can be stale relative to the cursor (a drag can start on
+    // an inactive screen before any showAtPosition tick has updated it), and
+    // un-idling it would flash the OTHER monitor's zones for a tick — the
+    // #724 wrong-screen highlight. Idle everything instead; the first tick on
+    // an active screen re-applies the correct cursor idle state.
+    const QString activeId = isSnappingContextInactive(m_currentOverlayScreenId) ? QString() : m_currentOverlayScreenId;
+    applyIdleStateForCursor(activeId, showOnAllMonitors);
 }
 
 void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, bool showOnAllMonitors)

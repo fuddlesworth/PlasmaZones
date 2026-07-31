@@ -46,7 +46,9 @@ private Q_SLOTS:
     void dragOutcome_actionOutOfRange_rejected()
     {
         PhosphorProtocol::DragOutcome o;
-        o.action = 999;
+        // Simulates a garbled/out-of-range wire value; the typed field forces
+        // the cast the unmarshal boundary performs.
+        o.action = static_cast<PhosphorProtocol::DragOutcome::Action>(999);
         o.windowId = QStringLiteral("win-1");
         const QString err = o.validationError();
         QVERIFY(!err.isEmpty());
@@ -56,7 +58,7 @@ private Q_SLOTS:
     void dragOutcome_negativeAction_rejected()
     {
         PhosphorProtocol::DragOutcome o;
-        o.action = -1;
+        o.action = static_cast<PhosphorProtocol::DragOutcome::Action>(-1);
         const QString err = o.validationError();
         QVERIFY(!err.isEmpty());
         QVERIFY(err.contains(QStringLiteral("out of range")));
@@ -377,12 +379,44 @@ private Q_SLOTS:
     void dragBypassReason_wireRoundTrip_all()
     {
         // Every enum value must round-trip through the wire format.
-        for (auto r :
-             {PhosphorProtocol::DragBypassReason::None, PhosphorProtocol::DragBypassReason::AutotileScreen,
-              PhosphorProtocol::DragBypassReason::SnappingDisabled, PhosphorProtocol::DragBypassReason::ContextDisabled,
-              PhosphorProtocol::DragBypassReason::LayoutSuppressed}) {
+        const QVector<PhosphorProtocol::DragBypassReason> all{
+            PhosphorProtocol::DragBypassReason::None,
+            PhosphorProtocol::DragBypassReason::AutotileScreen,
+            PhosphorProtocol::DragBypassReason::SnappingDisabled,
+            PhosphorProtocol::DragBypassReason::ContextDisabled,
+            PhosphorProtocol::DragBypassReason::LayoutSuppressed,
+        };
+        // Coverage guard: this list is hand-maintained, so pin it against the
+        // declared value count — a new enumerator then fails here instead of
+        // silently shipping without round-trip coverage.
+        QCOMPARE(all.size(), PhosphorProtocol::DragBypassReasonCount);
+        for (auto r : all) {
             QCOMPARE(bypassReasonFromWireString(toWireString(r)), r);
         }
+    }
+
+    void dragBypassReason_wireStrings_arePinned()
+    {
+        // The wire strings are the daemon↔plugin contract. A round-trip alone
+        // still passes if a value's string is typo'd (both directions use the
+        // same constant), so pin the literals themselves.
+        QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::None), QString());
+        QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::AutotileScreen), QStringLiteral("autotile_screen"));
+        QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::SnappingDisabled),
+                 QStringLiteral("snapping_disabled"));
+        QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::ContextDisabled), QStringLiteral("context_disabled"));
+        QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::LayoutSuppressed),
+                 QStringLiteral("layout_suppressed"));
+    }
+
+    void dragPolicy_layoutSuppressedEmptyScreen_tolerated()
+    {
+        // Same tolerance as the other non-autotile bypass reasons: beginDrag
+        // called with an empty startScreenId may emit one.
+        PhosphorProtocol::DragPolicy p;
+        p.bypassReason = PhosphorProtocol::DragBypassReason::LayoutSuppressed;
+        p.screenId = QString();
+        QVERIFY(p.validationError().isEmpty());
     }
 
     void dragBypassReason_unknownWire_mapsToNone()

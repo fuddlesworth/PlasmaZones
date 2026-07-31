@@ -197,7 +197,7 @@ public Q_SLOTS:
      * decisions on the plugin side. Covers the full dispatch matrix:
      *
      *   - autotile_screen bypass → ApplyFloat at the release cursor
-     *   - snapping_disabled / context_disabled bypass → NoOp
+     *   - snapping_disabled / context_disabled / layout_suppressed bypass → NoOp
      *   - snap path → delegates to legacy dragStopped and packages its
      *     out-params into the outcome (ApplySnap / RestoreSize / NoOp /
      *     with snap-assist empty zones if requested)
@@ -370,7 +370,7 @@ private:
     void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
                      int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
                      QString& releaseScreenIdOut, bool& restoreSizeOnly, bool& snapAssistRequested,
-                     PhosphorProtocol::EmptyZoneList& emptyZonesOut, QString& resolvedZoneIdOut);
+                     QString& resolvedZoneIdOut);
 
     // Promote the pending snap-path drag (stashed by beginDrag) to an
     // active drag by running the legacy dragStarted setup. Called from
@@ -419,7 +419,7 @@ public:
                                                           const PhosphorEngine::IPlacementEngine* autotileEngine,
                                                           const QString& windowId, const QString& screenId,
                                                           const PhosphorContext::IContextResolver* resolver,
-                                                          bool reorderMode, bool activeLayoutSuppressed = false);
+                                                          bool reorderMode, bool activeLayoutSuppressed);
 
 private:
     /// Whether reorder (drag-to-swap) mode is effective for @p screenId: a matched
@@ -433,7 +433,13 @@ private:
     /// activeLayoutSuppressed input, resolved on the current desktop/activity
     /// like effectiveReorderMode). Also gates the per-tick drag paths, which a
     /// mid-drag monitor crossing reaches without a fresh beginDrag (#724).
+    /// Memoized per drag on the last screen id (see the definition); beginDrag
+    /// clears the memo.
     bool isActiveLayoutSuppressedForScreen(const QString& screenId) const;
+    /// Uncached desktop-explicit form for snapshot-desktop callers (the
+    /// deferred snap-assist build must judge the drop-time desktop, not a
+    /// live read).
+    bool isActiveLayoutSuppressedForScreen(const QString& screenId, int virtualDesktop) const;
 
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
@@ -560,9 +566,15 @@ private:
     // can detect cursor-crosses-VS-while-still-near-edge and re-show on the
     // new VS instead of leaving the old one stuck visible.
     QString m_zoneSelectorShownOn;
-    int m_lastCursorX = 0;
-    int m_lastCursorY = 0;
     bool m_wasSnapped = false; // True if window was snapped to a zone when drag started
+
+    // Per-drag memo for isActiveLayoutSuppressedForScreen (see its
+    // definition), keyed on (screen, desktop). mutable: the predicate is
+    // logically const and sits on the ~30 Hz dragMoved path. beginDrag and
+    // onLayoutChanged clear it.
+    mutable QString m_suppressMemoScreenId;
+    mutable int m_suppressMemoDesktop = 0;
+    mutable bool m_suppressMemoValue = false;
 
     // Multi-zone state
     QVector<QUuid>
@@ -578,7 +590,8 @@ private:
     // via the PhosphorShortcuts Registry for the snap-assist phase and layout
     // picker — no QAction member needed (the Registry owns everything).
 
-    // Pre-parsed trigger caches (populated on dragStarted, used on every dragMoved tick)
+    // Pre-parsed trigger caches (populated on beginDrag for every drag,
+    // bypass or snap; used on every dragMoved tick)
     QVector<ParsedTrigger> m_cachedActivationTriggers;
     QVector<ParsedTrigger> m_cachedZoneSpanTriggers;
     QVector<ParsedTrigger> m_cachedAutotileDragInsertTriggers;

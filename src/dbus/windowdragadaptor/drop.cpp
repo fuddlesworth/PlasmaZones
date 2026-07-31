@@ -27,7 +27,7 @@ namespace PlasmaZones {
 void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons,
                                     int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
                                     QString& releaseScreenIdOut, bool& restoreSizeOnlyOut, bool& snapAssistRequestedOut,
-                                    PhosphorProtocol::EmptyZoneList& emptyZonesOut, QString& resolvedZoneIdOut)
+                                    QString& resolvedZoneIdOut)
 {
     // Initialize output parameters
     // shouldApplyGeometry: true = KWin should set window to (snapX, snapY, snapWidth, snapHeight)
@@ -45,7 +45,6 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     releaseScreenIdOut.clear();
     restoreSizeOnlyOut = false;
     snapAssistRequestedOut = false;
-    emptyZonesOut.clear();
     resolvedZoneIdOut.clear();
 
     if (windowId != m_draggedWindowId) {
@@ -131,6 +130,16 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // The autotile engine manages window placement on these screens; allowing a
     // manual drag-snap would conflict with the engine's layout.
     if (useOverlayZone && releaseScreen && m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId)) {
+        useOverlayZone = false;
+    }
+
+    // Release on a layout-suppressed screen: do not snap to overlay zone.
+    // This is the drop-time commit authority, and the per-tick gates upstream
+    // cannot fully cover it — captured zone state can survive a mid-drag
+    // crossing (the #511 stale-geometry guard compares PHYSICAL screens only,
+    // so two virtual-screen halves of one monitor pass it). The screen has no
+    // zones; nothing may commit one (#724).
+    if (useOverlayZone && isActiveLayoutSuppressedForScreen(releaseScreenId)) {
         useOverlayZone = false;
     }
 
@@ -540,14 +549,27 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // back to the physScreen path if no valid virtual-screen geometry is
     // found, so we pass nullptr when we can't match — the VS path will
     // handle it via screenId lookup inside buildEmptyZoneList itself.
-    QScreen* releaseScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
+    // Use the drop-time snapshot, not a live read: a user who changed
+    // virtual desktops between endDrag and this deferred fire would
+    // otherwise see snap-assist describing the NEW desktop's occupancy.
+    // Falls back to a live read only when the snapshot is missing (0,
+    // pre-snapshot codepath or invalid pending state).
+    // m_layoutManager non-null is guaranteed by the early-return above; the
+    // earlier ternary was dead-defensive.
+    const int desktopFilter =
+        desktopAtDrop > 0 ? desktopAtDrop : m_layoutManager->currentVirtualDesktopForScreen(screenId);
 
     // Suppressed context: resolveLayoutForScreen falls back to the global
     // default layout for an unassigned screen, so snap assist would offer
-    // zones the release screen does not have (#724).
-    if (isActiveLayoutSuppressedForScreen(screenId)) {
+    // zones the release screen does not have (#724). Judged on the SNAPSHOT
+    // desktop, like the occupancy filter below — a live read here could
+    // describe a different desktop than the occupancy it gates. Hoisted above
+    // the QScreen lookup so the suppressed path pays no discarded resolve.
+    if (isActiveLayoutSuppressedForScreen(screenId, desktopFilter)) {
         return;
     }
+
+    QScreen* releaseScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
         return;
@@ -559,16 +581,6 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // #323) — even though SnapAssistHandler::buildCandidates() already excludes
     // other-desktop windows from the candidate list. Matches the filtering done
     // by PhosphorPlacement::WindowTrackingService::getEmptyZones()/calculateSnapAllWindows().
-    //
-    // Use the drop-time snapshot, not a live read: a user who changed
-    // virtual desktops between endDrag and this deferred fire would
-    // otherwise see snap-assist describing the NEW desktop's occupancy.
-    // Falls back to a live read only when the snapshot is missing (0,
-    // pre-snapshot codepath or invalid pending state).
-    // m_layoutManager non-null is guaranteed by the early-return above; the
-    // earlier ternary was dead-defensive.
-    const int desktopFilter =
-        desktopAtDrop > 0 ? desktopAtDrop : m_layoutManager->currentVirtualDesktopForScreen(screenId);
     QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(screenId, desktopFilter);
     PhosphorProtocol::EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(
         m_screenManager, layout, screenId, releaseScreen, m_settings,

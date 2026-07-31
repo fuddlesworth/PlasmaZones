@@ -73,10 +73,37 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
     return occupiedZoneIds;
 }
 
+namespace {
+// Suppress-aware predicate shared by the zone resolvers below (#724 family).
+// Takes the desktop EXPLICITLY so every caller judges suppression on the same
+// desktop it filters occupancy by — the registry's own
+// currentVirtualDesktopForScreen is a second authority that can lag the
+// VirtualDesktopManager the callers use.
+bool activeLayoutSuppressedFor(const PhosphorZones::LayoutRegistry* registry, const QString& screenId,
+                               int virtualDesktop)
+{
+    if (!registry || screenId.isEmpty()) {
+        return false;
+    }
+    return registry->isContextActiveLayoutSuppressed(screenId, virtualDesktop, registry->currentActivity());
+}
+} // namespace
+
 QString WindowTrackingService::findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId,
                                                      int desktopFilter) const
 {
     if (!layout) {
+        return QString();
+    }
+    // Suppress-aware guard lives HERE, in the shared workhorse, because the
+    // auto-snap chain (SnapEngine::snapToEmptyZone) and the unfloat fallback
+    // tier resolve the layout themselves and call straight into this function
+    // — gating only the findEmptyZone/getEmptyZones wrappers would miss them.
+    // resolveLayoutForScreen falls back to the GLOBAL default layout for an
+    // unassigned screen, so without this a screen whose default assignment is
+    // suppressed still yields zones and windows get placed into zones the
+    // screen does not have (#724 family).
+    if (activeLayoutSuppressedFor(m_layoutManager, screenId, desktopFilter)) {
         return QString();
     }
 
@@ -103,6 +130,13 @@ QString WindowTrackingService::findEmptyZone(const QString& screenId) const
 
 PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) const
 {
+    // Same guard as findEmptyZoneInLayout (this function builds its own list
+    // rather than routing through it), on the same desktop authority.
+    const int suppressDesktop =
+        m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
+    if (activeLayoutSuppressedFor(m_layoutManager, screenId, suppressDesktop)) {
+        return {};
+    }
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
         return {};

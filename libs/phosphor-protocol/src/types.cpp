@@ -7,16 +7,30 @@
 
 #include <QDebug>
 #include <QLatin1String>
+#include <QLoggingCategory>
 
 namespace PhosphorProtocol {
 
 namespace {
-// Wire-format strings for DragBypassReason. Kept as a single source of truth
-// so toWireString() and bypassReasonFromWireString() can never drift.
+// Wire-format strings for DragBypassReason. Kept as named constants so THIS
+// enum's two converters (toWireString / bypassReasonFromWireString) can never
+// drift from each other. (Other wire sentinels in this file — REJECTED, the
+// stacking directions — are validated inline against literals defined at
+// their producer sites; unifying those is a separate, wider change.)
 constexpr QLatin1String kBypassAutotileScreen("autotile_screen");
 constexpr QLatin1String kBypassSnappingDisabled("snapping_disabled");
 constexpr QLatin1String kBypassContextDisabled("context_disabled");
 constexpr QLatin1String kBypassLayoutSuppressed("layout_suppressed");
+
+// File-local category sharing the library's "phosphor.protocol" name (same
+// name = same filter rules). ClientHelpers' accessor lives in the
+// DBus-linked sibling target, which this QtCore-only types target cannot
+// reach.
+const QLoggingCategory& lcProtocolTypes()
+{
+    static const QLoggingCategory category("phosphor.protocol", QtInfoMsg);
+    return category;
+}
 } // namespace
 
 QString toWireString(DragBypassReason r)
@@ -53,7 +67,10 @@ DragBypassReason bypassReasonFromWireString(const QString& s)
     if (s == kBypassLayoutSuppressed) {
         return DragBypassReason::LayoutSuppressed;
     }
-    qWarning() << "bypassReasonFromWireString: unknown wire value" << s << "— mapping to None";
+    // Categorized and expected under version skew: an old effect .so (not
+    // reloaded until logout) decodes any newer reason string through here on
+    // every policy carrying it.
+    qCWarning(lcProtocolTypes()) << "bypassReasonFromWireString: unknown wire value" << s << "— mapping to None";
     return DragBypassReason::None;
 }
 
@@ -118,10 +135,11 @@ QString DragPolicy::validationError() const
 {
     // The only strong invariant: an AutotileScreen bypass must carry the
     // autotile screen id, because the effect uses it to scope retroactive
-    // bypass state and the post-drag float target. Other bypass reasons
-    // (SnappingDisabled, ContextDisabled) may be emitted with an empty
-    // screenId when beginDrag was called with an empty startScreenId —
-    // the producer code in drag_protocol.cpp deliberately tolerates that.
+    // bypass state and the post-drag float target. Every other bypass reason
+    // (SnappingDisabled, ContextDisabled, LayoutSuppressed) may be emitted
+    // with an empty screenId when beginDrag was called with an empty
+    // startScreenId — the producer code in drag_protocol.cpp deliberately
+    // tolerates that.
     if (bypassReason == DragBypassReason::AutotileScreen && screenId.isEmpty()) {
         return QStringLiteral("DragPolicy: AutotileScreen bypass requires non-empty screenId");
     }
@@ -130,15 +148,17 @@ QString DragPolicy::validationError() const
 
 QString DragOutcome::validationError() const
 {
-    // action enum range check — catches memory corruption or protocol
-    // drift from a peer built at a different revision.
+    // Wire-boundary range check: the unmarshal path casts a raw int into the
+    // typed Action field, so this defends against a peer built at a different
+    // revision (or memory corruption) — local misassignment is prevented by
+    // the field's type.
     if (action < NoOp || action > NotifyDragOutUnsnap) {
-        return QStringLiteral("DragOutcome: action out of range: %1").arg(action);
+        return QStringLiteral("DragOutcome: action out of range: %1").arg(static_cast<int>(action));
     }
 
     // windowId is required for every action that does real work.
     if (action != NoOp && windowId.isEmpty()) {
-        return QStringLiteral("DragOutcome: windowId required for action=%1").arg(action);
+        return QStringLiteral("DragOutcome: windowId required for action=%1").arg(static_cast<int>(action));
     }
 
     switch (action) {

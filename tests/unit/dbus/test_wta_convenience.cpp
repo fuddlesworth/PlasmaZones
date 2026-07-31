@@ -30,6 +30,8 @@
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorRules/RuleAction.h>
@@ -1121,7 +1123,7 @@ private Q_SLOTS:
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = monitorB;
-        ctx.fromEngineId = QStringLiteral("snap");
+        ctx.fromEngineId = PhosphorEngine::WindowPlacement::snapEngineId();
         ctx.wasFloating = true;
         m_snapEngine->handoffReceive(ctx);
 
@@ -1143,8 +1145,55 @@ private Q_SLOTS:
                  "the suspension unfloat must keep the window floating on its live monitor");
         QVERIFY2(m_snapEngine->stateForWindow(windowId)->zonesForWindow(windowId).isEmpty(),
                  "the suspension unfloat must not re-snap the stale home zone");
+        QVERIFY2(m_wta->service()->isSuspensionFloat(windowId),
+                 "a REFUSED unfloat must retain the suspension classification — the effect retries, and a "
+                 "declassified retry would run unconfined and teleport the window");
+
+        // The effect's retry: it observes the window still floating after the
+        // unminimize and re-drives the same call (up to three times, 250 ms
+        // apart). Every retry must behave identically. Clearing the suspension
+        // bit unconditionally on the first call made retry #1 an unconfined
+        // USER unfloat, which is how the original fix was defeated.
+        for (int retry = 0; retry < 3; ++retry) {
+            m_wta->setWindowFloatingForScreen(windowId, monitorB, false);
+            QVERIFY2(m_snapEngine->isFloating(windowId), "every unminimize retry must keep the window floating on B");
+            QVERIFY2(m_snapEngine->stateForWindow(windowId)->zonesForWindow(windowId).isEmpty(),
+                     "no retry may re-snap the stale cross-monitor home zone");
+        }
+
+        m_wta->setWindowRegistry(nullptr);
+    }
+
+    // Companion to the test above: when the unfloat SUCCEEDS (same-monitor
+    // round trip), the suspension classification must be dropped, otherwise
+    // the window stays permanently filtered out of getFloatingWindows and
+    // every capture takes the minimize-preserve path.
+    void testSetWindowFloatingForScreen_successfulSuspensionUnfloatDeclassifies()
+    {
+        const QString instanceId = QStringLiteral("724-declassify-inst");
+        const QString windowId = QStringLiteral("kate|") + instanceId;
+
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("kate");
+        meta.isMinimized = false;
+        registry->upsert(instanceId, meta);
+
+        m_wta->service()->assignWindowToZone(windowId, m_zoneIds[0], m_screenId, 1);
+
+        meta.isMinimized = true;
+        registry->upsert(instanceId, meta);
+        m_wta->setWindowFloatingForScreen(windowId, m_screenId, true);
+        QVERIFY(m_wta->service()->isSuspensionFloat(windowId));
+
+        meta.isMinimized = false;
+        registry->upsert(instanceId, meta);
+        m_wta->setWindowFloatingForScreen(windowId, m_screenId, false);
+
+        QVERIFY2(!m_snapEngine->isFloating(windowId), "a same-monitor suspension unfloat must land");
         QVERIFY2(!m_wta->service()->isSuspensionFloat(windowId),
-                 "the unfloat edge must declassify the suspension after the routed engine call");
+                 "a LANDED unfloat must declassify the suspension float");
 
         m_wta->setWindowRegistry(nullptr);
     }
