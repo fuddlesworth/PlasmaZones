@@ -221,6 +221,40 @@ P_STORE_GET(QString, scrollingPresetWindowHeightsString, scrollingGroup, presetW
 P_STORE_SET_STRING(setScrollingPresetWindowHeights, scrollingGroup, presetWindowHeightsKey,
                    scrollingPresetWindowHeightsChanged)
 
+// ── Scrolling behavior (Scrolling.Behavior) ─────────────────────────────────
+// Shared leaf key names under the scrolling behavior group; the schema
+// validators own enum validation (validIntOr snaps a bad sticky value back
+// to the default on read, like every other stored enum) and range clamping
+// (clampInt on the step percents).
+
+P_STORE_GET(bool, scrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey, bool)
+P_STORE_SET_BOOL(setScrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey,
+                 scrollingFocusNewWindowsChanged)
+
+P_STORE_GET(bool, scrollingFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey, bool)
+P_STORE_SET_BOOL(setScrollingFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey,
+                 scrollingFocusFollowsMouseChanged)
+
+P_STORE_GET(int, scrollingStickyWindowHandling, scrollingBehaviorGroup, stickyWindowHandlingKey, int)
+P_STORE_SET_INT(setScrollingStickyWindowHandling, scrollingBehaviorGroup, stickyWindowHandlingKey,
+                scrollingStickyWindowHandlingChanged)
+
+P_STORE_GET(bool, scrollingRespectMinimumSize, scrollingBehaviorGroup, respectMinimumSizeKey, bool)
+P_STORE_SET_BOOL(setScrollingRespectMinimumSize, scrollingBehaviorGroup, respectMinimumSizeKey,
+                 scrollingRespectMinimumSizeChanged)
+
+P_STORE_GET(bool, scrollingRestoreStripsOnLogin, scrollingBehaviorGroup, restoreOnLoginKey, bool)
+P_STORE_SET_BOOL(setScrollingRestoreStripsOnLogin, scrollingBehaviorGroup, restoreOnLoginKey,
+                 scrollingRestoreStripsOnLoginChanged)
+
+P_STORE_GET(int, scrollingColumnWidthStepPercent, scrollingBehaviorGroup, columnWidthStepPercentKey, int)
+P_STORE_SET_INT(setScrollingColumnWidthStepPercent, scrollingBehaviorGroup, columnWidthStepPercentKey,
+                scrollingColumnWidthStepPercentChanged)
+
+P_STORE_GET(int, scrollingWindowHeightStepPercent, scrollingBehaviorGroup, windowHeightStepPercentKey, int)
+P_STORE_SET_INT(setScrollingWindowHeightStepPercent, scrollingBehaviorGroup, windowHeightStepPercentKey,
+                scrollingWindowHeightStepPercentChanged)
+
 // ── Scrolling shortcuts ─────────────────────────────────────────────────────
 
 P_STORE_GET(QString, scrollingFocusColumnFirstShortcut, shortcutsScrollingGroup, focusColumnFirstKey, QString)

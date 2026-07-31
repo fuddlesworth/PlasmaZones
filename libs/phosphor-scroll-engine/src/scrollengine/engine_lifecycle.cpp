@@ -24,7 +24,15 @@ void ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     const bool oversized =
         params.workArea.isValid() && (minWidth > params.workArea.width() || minHeight > params.workArea.height());
     const bool ruleFloated = m_floatPredicate && m_floatPredicate(windowId, screenId);
-    if (oversized || ruleFloated) {
+    // Sticky handling gates insertion only: RestoreOnly and IgnoreAll both
+    // keep sticky windows out of the strip, because insertion is active
+    // management (autotile's shouldTileWindow makes the same collapse). The
+    // desktop-pin logic in updateStickyScreenPins stays unconditional — with
+    // sticky windows floated, the all-sticky managed set never forms and the
+    // pin degrades correctly on its own.
+    const bool stickyExcluded = m_stickyWindowHandling != PhosphorEngine::StickyWindowHandling::TreatAsNormal
+        && m_windowTracker && m_windowTracker->isWindowSticky(windowId);
+    if (oversized || ruleFloated || stickyExcluded) {
         state->addFloating(windowId);
         // Engine-decided float, so it carries the mode marker like every
         // other float this engine makes: isModeSpecificFloated has to answer

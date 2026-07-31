@@ -803,6 +803,31 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_STRING("scrollingPresetWindowHeights", scrollingPresetWindowHeightsString,
                                  setScrollingPresetWindowHeights)
 
+        // Scrolling behavior settings
+        REGISTER_CONCRETE_BOOL("scrollingFocusNewWindows", scrollingFocusNewWindows, setScrollingFocusNewWindows)
+        REGISTER_CONCRETE_BOOL("scrollingFocusFollowsMouse", scrollingFocusFollowsMouse, setScrollingFocusFollowsMouse)
+        // scrollingStickyWindowHandling: enum (0=TreatAsNormal, 1=RestoreOnly, 2=IgnoreAll)
+        m_getters[QStringLiteral("scrollingStickyWindowHandling")] = [concrete]() {
+            return concrete->scrollingStickyWindowHandling();
+        };
+        m_setters[QStringLiteral("scrollingStickyWindowHandling")] = [concrete](const QVariant& v) {
+            const int handling = v.toInt();
+            if (!ConfigDefaults::isValidScrollingStickyWindowHandling(handling)) {
+                return false;
+            }
+            concrete->setScrollingStickyWindowHandling(handling);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingStickyWindowHandling")] = QStringLiteral("int");
+        REGISTER_CONCRETE_BOOL("scrollingRespectMinimumSize", scrollingRespectMinimumSize,
+                               setScrollingRespectMinimumSize)
+        REGISTER_CONCRETE_BOOL("scrollingRestoreStripsOnLogin", scrollingRestoreStripsOnLogin,
+                               setScrollingRestoreStripsOnLogin)
+        REGISTER_CONCRETE_INT("scrollingColumnWidthStepPercent", scrollingColumnWidthStepPercent,
+                              setScrollingColumnWidthStepPercent)
+        REGISTER_CONCRETE_INT("scrollingWindowHeightStepPercent", scrollingWindowHeightStepPercent,
+                              setScrollingWindowHeightStepPercent)
+
         // Scrolling shortcuts
         REGISTER_CONCRETE_STRING("scrollingFocusColumnFirstShortcut", scrollingFocusColumnFirstShortcut,
                                  setScrollingFocusColumnFirstShortcut)

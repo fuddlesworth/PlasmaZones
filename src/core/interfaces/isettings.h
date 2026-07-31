@@ -614,6 +614,15 @@ Q_SIGNALS:
     void scrollingPresetColumnWidthsChanged();
     void scrollingPresetWindowHeightsChanged();
 
+    // Scrolling behavior settings
+    void scrollingFocusNewWindowsChanged();
+    void scrollingFocusFollowsMouseChanged();
+    void scrollingStickyWindowHandlingChanged();
+    void scrollingRespectMinimumSizeChanged();
+    void scrollingRestoreStripsOnLoginChanged();
+    void scrollingColumnWidthStepPercentChanged();
+    void scrollingWindowHeightStepPercentChanged();
+
     // Scrolling shortcuts
     void scrollingFocusColumnFirstShortcutChanged();
     void scrollingFocusColumnLastShortcutChanged();

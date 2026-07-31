@@ -41,6 +41,16 @@ inline auto clampDouble(double minVal, double maxVal)
     };
 }
 
+/// Range clamp for numeric int keys (NOT enums — see validIntOr below for
+/// why clamping an enum is wrong). Hoisted here so settingsschema.cpp and
+/// settingsschema_scrolling.cpp share one definition.
+inline auto clampInt(int minVal, int maxVal)
+{
+    return [minVal, maxVal](const QVariant& v) -> QVariant {
+        return qBound(minVal, v.toInt(), maxVal);
+    };
+}
+
 /// Snap-to-default enum validator: accept a value only if it appears in the
 /// explicit valid set, otherwise return @p fallback. Used for enums where
 /// qBound would silently reinterpret out-of-range values as the nearest

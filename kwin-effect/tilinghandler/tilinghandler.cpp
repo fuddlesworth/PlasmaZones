@@ -68,7 +68,7 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
     // naming a pre-event cursor position, and swallow the first move within
     // the resume radius once the condition cleared. Same reasoning as the
     // clears in setFocusFollowsMouse(false) and onDaemonReady.
-    if (!m_focusFollowsMouse || m_managedScreens.isEmpty()) {
+    if ((!m_focusFollowsMouse && !m_scrollingFocusFollowsMouse) || m_managedScreens.isEmpty()) {
         m_ffmSuppressPending = false;
         return;
     }
@@ -89,8 +89,16 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
         return;
     }
 
-    // Only act on autotile screens (screenId already resolved by caller)
+    // Only act on managed screens (screenId already resolved by caller)
     if (screenId.isEmpty() || !m_managedScreens.contains(screenId)) {
+        return;
+    }
+
+    // Per-mode routing: the screen's own engine decides which FFM flag
+    // governs it. A plain return (no latch disarm), like the screen gate
+    // above — a screen whose mode has FFM off must not clear a latch a
+    // managed screen of the other mode still relies on.
+    if (isScrollingScreen(screenId) ? !m_scrollingFocusFollowsMouse : !m_focusFollowsMouse) {
         return;
     }
 

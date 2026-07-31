@@ -147,6 +147,7 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
         };
         t.insert(pairKey(CD::snappingBehaviorWindowHandlingGroup(), CD::stickyWindowHandlingKey()), stickyLabels);
         t.insert(pairKey(CD::tilingBehaviorGroup(), CD::stickyWindowHandlingKey()), stickyLabels);
+        t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::stickyWindowHandlingKey()), stickyLabels);
 
         // ── Tiling. "float" appears under two keys meaning different things,
         //    which is why this table is keyed by (group, key) and not token. ──

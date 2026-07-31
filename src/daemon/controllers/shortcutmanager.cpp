@@ -369,12 +369,15 @@ const StaticEntry kStaticEntries[] = {
     {kIdScrollIncreaseColumnWidth, &ConfigDefaults::scrollingIncreaseColumnWidthShortcut,
      &Settings::scrollingIncreaseColumnWidthShortcut, QT_TRANSLATE_NOOP("plasmazones", "Increase Column Width"),
      [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollAdjustColumnWidthRequested(10);
+         Q_EMIT sm->scrollAdjustColumnWidthRequested(sm->settings() ? sm->settings()->scrollingColumnWidthStepPercent()
+                                                                    : ConfigDefaults::scrollingColumnWidthStepPercent());
      }},
     {kIdScrollDecreaseColumnWidth, &ConfigDefaults::scrollingDecreaseColumnWidthShortcut,
      &Settings::scrollingDecreaseColumnWidthShortcut, QT_TRANSLATE_NOOP("plasmazones", "Decrease Column Width"),
      [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollAdjustColumnWidthRequested(-10);
+         Q_EMIT sm->scrollAdjustColumnWidthRequested(sm->settings()
+                                                         ? -sm->settings()->scrollingColumnWidthStepPercent()
+                                                         : -ConfigDefaults::scrollingColumnWidthStepPercent());
      }},
     {kIdScrollMaximizeColumn, &ConfigDefaults::scrollingMaximizeColumnShortcut,
      &Settings::scrollingMaximizeColumnShortcut, QT_TRANSLATE_NOOP("plasmazones", "Maximize Column"),
@@ -394,12 +397,16 @@ const StaticEntry kStaticEntries[] = {
     {kIdScrollIncreaseWindowHeight, &ConfigDefaults::scrollingIncreaseWindowHeightShortcut,
      &Settings::scrollingIncreaseWindowHeightShortcut, QT_TRANSLATE_NOOP("plasmazones", "Increase Window Height"),
      [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollAdjustWindowHeightRequested(10);
+         Q_EMIT sm->scrollAdjustWindowHeightRequested(sm->settings()
+                                                          ? sm->settings()->scrollingWindowHeightStepPercent()
+                                                          : ConfigDefaults::scrollingWindowHeightStepPercent());
      }},
     {kIdScrollDecreaseWindowHeight, &ConfigDefaults::scrollingDecreaseWindowHeightShortcut,
      &Settings::scrollingDecreaseWindowHeightShortcut, QT_TRANSLATE_NOOP("plasmazones", "Decrease Window Height"),
      [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollAdjustWindowHeightRequested(-10);
+         Q_EMIT sm->scrollAdjustWindowHeightRequested(sm->settings()
+                                                          ? -sm->settings()->scrollingWindowHeightStepPercent()
+                                                          : -ConfigDefaults::scrollingWindowHeightStepPercent());
      }},
     {kIdScrollResetWindowHeights, &ConfigDefaults::scrollingResetWindowHeightsShortcut,
      &Settings::scrollingResetWindowHeightsShortcut, QT_TRANSLATE_NOOP("plasmazones", "Reset Window Heights"),

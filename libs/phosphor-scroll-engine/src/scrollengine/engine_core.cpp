@@ -1060,6 +1060,14 @@ void ScrollEngine::refreshConfigFromSettings()
     const int display = settings->scrollingDefaultColumnDisplay();
     m_defaultColumnDisplay = (display == 1) ? ColumnDisplay::Tabbed : ColumnDisplay::Normal;
 
+    const int sticky = settings->scrollingStickyWindowHandling();
+    m_stickyWindowHandling = (sticky >= static_cast<int>(PhosphorEngine::StickyWindowHandling::TreatAsNormal)
+                              && sticky <= static_cast<int>(PhosphorEngine::StickyWindowHandling::IgnoreAll))
+        ? static_cast<PhosphorEngine::StickyWindowHandling>(sticky)
+        : PhosphorEngine::StickyWindowHandling::TreatAsNormal;
+    m_respectMinimumSize = settings->scrollingRespectMinimumSize();
+    m_smartGaps = settings->scrollingSmartGaps();
+
     // Re-resolve every active strip against the new parameters.
     for (const QString& screenId : std::as_const(m_scrollingScreens)) {
         scheduleRetileForScreen(screenId);

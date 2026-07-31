@@ -306,7 +306,9 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/snapping/SnappingWindowBehaviorPage.qml
         qml/pages/tiling/TilingBehaviorPage.qml
         qml/pages/tiling/TilingAlgorithmPage.qml
+        qml/pages/scrolling/ScrollingFocusCard.qml
         qml/pages/scrolling/ScrollingPage.qml
+        qml/pages/scrolling/ScrollingWindowHandlingCard.qml
         qml/pages/tiling/TilingSimplePage.qml
         qml/pages/snapping/SnappingSimplePage.qml
         qml/components/GlobalTimingDefaultsCard.qml

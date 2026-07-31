@@ -101,6 +101,11 @@ QVariantMap SettingsController::scrollingWidthConstants() const
         {QStringLiteral("fixedMax"), ConfigDefaults::scrollingDefaultColumnWidthFixedMax()},
         {QStringLiteral("proportionStep"), ConfigDefaults::scrollingDefaultColumnWidthProportionStep()},
         {QStringLiteral("fixedStep"), ConfigDefaults::scrollingDefaultColumnWidthFixedStep()},
+        // Bounds for the shortcut adjust-step percent rows (Window Handling
+        // card) — a different thing from the two editor-granularity steps
+        // above, see ConfigDefaults.
+        {QStringLiteral("stepPercentMin"), ConfigDefaults::scrollingStepPercentMin()},
+        {QStringLiteral("stepPercentMax"), ConfigDefaults::scrollingStepPercentMax()},
     };
 }
 

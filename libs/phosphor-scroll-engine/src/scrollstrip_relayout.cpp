@@ -55,9 +55,11 @@ int ScrollStrip::columnWidthPx(const Column& c, const ScrollLayoutParams& params
         return 0;
     }
     int px = resolveColumnWidthPx(c.width, params);
-    for (const Tile& tile : c.tiles) {
-        if (!tile.minimized && tile.minWidth > px) {
-            px = tile.minWidth;
+    if (params.respectMinimumSize) {
+        for (const Tile& tile : c.tiles) {
+            if (!tile.minimized && tile.minWidth > px) {
+                px = tile.minWidth;
+            }
         }
     }
     return qMin(px, params.workArea.width());
@@ -346,46 +348,51 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             // even the floors overflow the column, the overflow stands and
             // the trailing tiles lay out below the work area (no float-out
             // policy exists for this case — the open-time oversized check
-            // is the only min-size-driven float).
-            for (int vi = 0; vi < n; ++vi) {
-                const Tile& t = col.tiles.at(visible.at(vi));
-                if (t.minHeight > 0 && heights[vi] < t.minHeight) {
-                    heights[vi] = qMin(t.minHeight, availH);
-                }
-            }
-            // The clamp can push the stack past availH again (it has no
-            // budget of its own). Rebalance by shrinking tiles that still
-            // have slack above their own floor, proportionally to that
-            // slack; when every tile sits at its floor the overflow stands
-            // and the caller's cannot-fit policy applies.
-            if (n > 1) {
-                int total = 0;
+            // is the only min-size-driven float). The whole clamp (and the
+            // rebalance it necessitates) is the respect-minimum-size arm:
+            // off, the distributed heights stand and the compositor's own
+            // min-size enforcement decides what overhangs.
+            if (params.respectMinimumSize) {
                 for (int vi = 0; vi < n; ++vi) {
-                    total += heights[vi];
+                    const Tile& t = col.tiles.at(visible.at(vi));
+                    if (t.minHeight > 0 && heights[vi] < t.minHeight) {
+                        heights[vi] = qMin(t.minHeight, availH);
+                    }
                 }
-                int excess = total - availH;
-                while (excess > 0) {
-                    int slackTotal = 0;
+                // The clamp can push the stack past availH again (it has no
+                // budget of its own). Rebalance by shrinking tiles that still
+                // have slack above their own floor, proportionally to that
+                // slack; when every tile sits at its floor the overflow stands
+                // and the caller's cannot-fit policy applies.
+                if (n > 1) {
+                    int total = 0;
                     for (int vi = 0; vi < n; ++vi) {
-                        const Tile& t = col.tiles.at(visible.at(vi));
-                        slackTotal += qMax(0, heights[vi] - qMax(1, t.minHeight));
+                        total += heights[vi];
                     }
-                    if (slackTotal <= 0) {
-                        break;
-                    }
-                    for (int vi = 0; vi < n && excess > 0; ++vi) {
-                        const Tile& t = col.tiles.at(visible.at(vi));
-                        const int slack = qMax(0, heights[vi] - qMax(1, t.minHeight));
-                        if (slack <= 0) {
-                            continue;
+                    int excess = total - availH;
+                    while (excess > 0) {
+                        int slackTotal = 0;
+                        for (int vi = 0; vi < n; ++vi) {
+                            const Tile& t = col.tiles.at(visible.at(vi));
+                            slackTotal += qMax(0, heights[vi] - qMax(1, t.minHeight));
                         }
-                        const int cut =
-                            qMin(slack, qMax(1, static_cast<int>(static_cast<qint64>(excess) * slack / slackTotal)));
-                        heights[vi] -= cut;
-                        excess -= cut;
+                        if (slackTotal <= 0) {
+                            break;
+                        }
+                        for (int vi = 0; vi < n && excess > 0; ++vi) {
+                            const Tile& t = col.tiles.at(visible.at(vi));
+                            const int slack = qMax(0, heights[vi] - qMax(1, t.minHeight));
+                            if (slack <= 0) {
+                                continue;
+                            }
+                            const int cut = qMin(
+                                slack, qMax(1, static_cast<int>(static_cast<qint64>(excess) * slack / slackTotal)));
+                            heights[vi] -= cut;
+                            excess -= cut;
+                        }
                     }
                 }
-            }
+            } // respectMinimumSize
 
             int y = area.y();
             for (int vi = 0; vi < n; ++vi) {

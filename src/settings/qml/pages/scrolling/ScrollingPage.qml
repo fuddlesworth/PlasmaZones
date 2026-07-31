@@ -257,5 +257,19 @@ SettingsFlickable {
                 }
             }
         }
+
+        // =================================================================
+        // Window Handling Card (shared-shape peer of the tiling/snapping cards)
+        // =================================================================
+        ScrollingWindowHandlingCard {
+            Layout.fillWidth: true
+        }
+
+        // =================================================================
+        // Focus Card
+        // =================================================================
+        ScrollingFocusCard {
+            Layout.fillWidth: true
+        }
     }
 }

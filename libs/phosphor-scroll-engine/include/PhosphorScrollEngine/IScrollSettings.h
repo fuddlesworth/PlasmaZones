@@ -26,9 +26,21 @@ public:
     virtual int scrollingOuterGapBottom() const = 0;
     virtual int scrollingOuterGapLeft() const = 0;
     virtual int scrollingOuterGapRight() const = 0;
-    /// Whether newly opened windows take focus (shared Tiling.Behavior
-    /// value, forwarded like the gaps).
+    /// Whether newly opened windows take focus (Scrolling.Behavior).
     virtual bool scrollingFocusNewWindows() const = 0;
+    /// StickyWindowHandling as int (0 = treat as normal, 1 = restore only,
+    /// 2 = ignore all) — the shared PhosphorEngine enum's wire values.
+    /// RestoreOnly and IgnoreAll both keep sticky windows out of the strip
+    /// (insertion is active management); the engine's desktop-pin logic is
+    /// deliberately not gated on this.
+    virtual int scrollingStickyWindowHandling() const = 0;
+    /// Whether the strip's layout math honours client minimum sizes (column
+    /// width floor, tile height floor, interactive-resize floor). The
+    /// work-area-oversized float escape ignores this and always fires.
+    virtual bool scrollingRespectMinimumSize() const = 0;
+    /// Zero the outer gaps when the strip holds a single column (shared
+    /// Tiling.Gaps/SmartGaps value, forwarded like the gaps).
+    virtual bool scrollingSmartGaps() const = 0;
 
     /// CenterFocusedColumn as int (0 = never, 1 = always, 2 = on-overflow).
     virtual int scrollingCenterFocusedColumn() const = 0;

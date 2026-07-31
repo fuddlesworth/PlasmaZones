@@ -361,6 +361,22 @@ public:
     Q_PROPERTY(QString scrollingPresetWindowHeights READ scrollingPresetWindowHeightsString WRITE
                    setScrollingPresetWindowHeights NOTIFY scrollingPresetWindowHeightsChanged)
 
+    // Scrolling Behavior Settings (Scrolling.Behavior)
+    Q_PROPERTY(bool scrollingFocusNewWindows READ scrollingFocusNewWindows WRITE setScrollingFocusNewWindows NOTIFY
+                   scrollingFocusNewWindowsChanged)
+    Q_PROPERTY(bool scrollingFocusFollowsMouse READ scrollingFocusFollowsMouse WRITE setScrollingFocusFollowsMouse
+                   NOTIFY scrollingFocusFollowsMouseChanged)
+    Q_PROPERTY(int scrollingStickyWindowHandling READ scrollingStickyWindowHandling WRITE
+                   setScrollingStickyWindowHandling NOTIFY scrollingStickyWindowHandlingChanged)
+    Q_PROPERTY(bool scrollingRespectMinimumSize READ scrollingRespectMinimumSize WRITE setScrollingRespectMinimumSize
+                   NOTIFY scrollingRespectMinimumSizeChanged)
+    Q_PROPERTY(bool scrollingRestoreStripsOnLogin READ scrollingRestoreStripsOnLogin WRITE
+                   setScrollingRestoreStripsOnLogin NOTIFY scrollingRestoreStripsOnLoginChanged)
+    Q_PROPERTY(int scrollingColumnWidthStepPercent READ scrollingColumnWidthStepPercent WRITE
+                   setScrollingColumnWidthStepPercent NOTIFY scrollingColumnWidthStepPercentChanged)
+    Q_PROPERTY(int scrollingWindowHeightStepPercent READ scrollingWindowHeightStepPercent WRITE
+                   setScrollingWindowHeightStepPercent NOTIFY scrollingWindowHeightStepPercentChanged)
+
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
     Q_PROPERTY(int animationDuration READ animationDuration WRITE setAnimationDuration NOTIFY animationDurationChanged)
@@ -1101,10 +1117,33 @@ public:
     {
         return outerGapRight();
     }
-    bool scrollingFocusNewWindows() const override
+    // Smart gaps stays a forward: the gaps model is shared, so the tiling
+    // toggle governs both engines (IScrollSettings documents this).
+    bool scrollingSmartGaps() const override
     {
-        return autotileFocusNewWindows();
+        return autotileSmartGaps();
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling Behavior Settings (Scrolling.Behavior group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Store-backed scalars under Scrolling.Behavior; shared leaf key names
+    // (FocusNewWindows, StickyWindowHandling, …) disambiguated by group.
+    bool scrollingFocusNewWindows() const override;
+    void setScrollingFocusNewWindows(bool focus);
+    bool scrollingFocusFollowsMouse() const;
+    void setScrollingFocusFollowsMouse(bool follows);
+    int scrollingStickyWindowHandling() const override;
+    void setScrollingStickyWindowHandling(int handling);
+    bool scrollingRespectMinimumSize() const override;
+    void setScrollingRespectMinimumSize(bool respect);
+    bool scrollingRestoreStripsOnLogin() const;
+    void setScrollingRestoreStripsOnLogin(bool restore);
+    int scrollingColumnWidthStepPercent() const;
+    void setScrollingColumnWidthStepPercent(int percent);
+    int scrollingWindowHeightStepPercent() const;
+    void setScrollingWindowHeightStepPercent(int percent);
 
     // Scrolling Shortcuts — PhosphorConfig::Store-backed.
     QString scrollingFocusColumnFirstShortcut() const;

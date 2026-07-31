@@ -50,6 +50,14 @@ public:
     explicit ShortcutManager(Settings* settings, QObject* parent = nullptr);
     ~ShortcutManager() override;
 
+    /// The settings object the registration table reads chords from. Public
+    /// so the table's capture-less fire lambdas (namespace scope, function
+    /// pointers) can read tunables like the scroll adjust-step percents.
+    Settings* settings() const
+    {
+        return m_settings;
+    }
+
 public Q_SLOTS:
     void registerShortcuts();
     /// Re-applies current sequences after a settings save; returns true when

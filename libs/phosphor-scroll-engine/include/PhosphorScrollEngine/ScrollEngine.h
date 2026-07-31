@@ -455,7 +455,13 @@ private:
     /// the same prunes that reap context states.
     void sweepStripStash(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale);
     // engine_apply.cpp
-    ScrollLayoutParams layoutParamsForScreen(const QString& screenId) const;
+    /// @p suppressOuterGaps is the smart-gaps arm: the two user-visible
+    /// geometry producers (applyLayout, visibleTileRects) pass true when the
+    /// strip holds exactly one column, zeroing the OUTER gaps only. Inner
+    /// gaps need no arm — with one column no inter-column gap exists, so
+    /// the pure-math callers that never suppress stay consistent by
+    /// construction.
+    ScrollLayoutParams layoutParamsForScreen(const QString& screenId, bool suppressOuterGaps = false) const;
     /// Relayout the strip and emit the geometry batch for @p screenId's
     /// current-context state. @p focusWindowAfter activates the strip's
     /// active window after the batch (engine-driven navigation only).
@@ -508,6 +514,13 @@ private:
     /// "Client decides" default width: open at the client's initial size.
     bool m_defaultWidthClientDecides = false;
     ColumnDisplay m_defaultColumnDisplay = ColumnDisplay::Normal;
+    /// Scrolling.Behavior tunables (refreshConfigFromSettings). Sticky
+    /// handling gates INSERTION only — the desktop-pin logic in
+    /// updateStickyScreenPins stays unconditional, matching autotile.
+    PhosphorEngine::StickyWindowHandling m_stickyWindowHandling = PhosphorEngine::StickyWindowHandling::TreatAsNormal;
+    bool m_respectMinimumSize = true;
+    /// Shared Tiling.Gaps/SmartGaps value (IScrollSettings forward).
+    bool m_smartGaps = true;
 
     /// The exact rect last APPLIED per window while strip-managed (float-back
     /// poison guard; see PlacementEngineBase::lastManagedRect).

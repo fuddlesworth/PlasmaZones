@@ -189,6 +189,81 @@ private Q_SLOTS:
         QCOMPARE(display->validator(1).toInt(), 1);
     }
 
+    /// Scrolling.Behavior schema guards: the sticky enum falls back to its
+    /// default (validIntOr, matching the file's enum convention), the two
+    /// adjust-step percents clamp into their declared range (clampInt — a
+    /// numeric range, not an enum), and every key ships the ConfigDefaults
+    /// default.
+    void scrollingBehaviorSchemaValidates()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        const QString group = ConfigDefaults::scrollingBehaviorGroup();
+
+        const auto* sticky = findKey(schema, group, ConfigDefaults::stickyWindowHandlingKey());
+        QVERIFY(sticky && sticky->validator);
+        QCOMPARE(sticky->validator(99).toInt(), ConfigDefaults::scrollingStickyWindowHandling());
+        QCOMPARE(sticky->validator(ConfigDefaults::scrollingStickyIgnoreAll()).toInt(),
+                 ConfigDefaults::scrollingStickyIgnoreAll());
+
+        const auto* widthStep = findKey(schema, group, ConfigDefaults::columnWidthStepPercentKey());
+        QVERIFY(widthStep && widthStep->validator);
+        QCOMPARE(widthStep->validator(0).toInt(), ConfigDefaults::scrollingStepPercentMin());
+        QCOMPARE(widthStep->validator(999).toInt(), ConfigDefaults::scrollingStepPercentMax());
+        QCOMPARE(widthStep->defaultValue.toInt(), ConfigDefaults::scrollingColumnWidthStepPercent());
+
+        const auto* heightStep = findKey(schema, group, ConfigDefaults::windowHeightStepPercentKey());
+        QVERIFY(heightStep && heightStep->validator);
+        QCOMPARE(heightStep->validator(-5).toInt(), ConfigDefaults::scrollingStepPercentMin());
+        QCOMPARE(heightStep->defaultValue.toInt(), ConfigDefaults::scrollingWindowHeightStepPercent());
+
+        const auto* focusNew = findKey(schema, group, ConfigDefaults::focusNewWindowsKey());
+        QVERIFY(focusNew);
+        QCOMPARE(focusNew->defaultValue.toBool(), ConfigDefaults::scrollingFocusNewWindows());
+        const auto* ffm = findKey(schema, group, ConfigDefaults::focusFollowsMouseKey());
+        QVERIFY(ffm);
+        QCOMPARE(ffm->defaultValue.toBool(), ConfigDefaults::scrollingFocusFollowsMouse());
+        const auto* respectMin = findKey(schema, group, ConfigDefaults::respectMinimumSizeKey());
+        QVERIFY(respectMin);
+        QCOMPARE(respectMin->defaultValue.toBool(), ConfigDefaults::scrollingRespectMinimumSize());
+        const auto* restore = findKey(schema, group, ConfigDefaults::restoreOnLoginKey());
+        QVERIFY(restore);
+        QCOMPARE(restore->defaultValue.toBool(), ConfigDefaults::scrollingRestoreStripsOnLogin());
+    }
+
+    /// Behavior setters follow the standard emit-once contract: an
+    /// effective change fires the property NOTIFY plus settingsChanged
+    /// exactly once each, and a same-value write is a full no-op.
+    void behaviorSettersEmitOnce()
+    {
+        TestHelpers::IsolatedConfigGuard guard;
+        Settings settings;
+
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+        QSignalSpy stickySpy(&settings, &Settings::scrollingStickyWindowHandlingChanged);
+
+        settings.setScrollingStickyWindowHandling(ConfigDefaults::scrollingStickyIgnoreAll());
+        QCOMPARE(stickySpy.count(), 1);
+        QCOMPARE(changedSpy.count(), 1);
+        // Same value again: no emit.
+        settings.setScrollingStickyWindowHandling(ConfigDefaults::scrollingStickyIgnoreAll());
+        QCOMPARE(stickySpy.count(), 1);
+        QCOMPARE(changedSpy.count(), 1);
+        // Out-of-range write: the schema validator coerces the re-read back
+        // to the default, which IS a change from IgnoreAll.
+        settings.setScrollingStickyWindowHandling(42);
+        QCOMPARE(settings.scrollingStickyWindowHandling(), ConfigDefaults::scrollingStickyWindowHandling());
+
+        QSignalSpy stepSpy(&settings, &Settings::scrollingColumnWidthStepPercentChanged);
+        const int preChanged = changedSpy.count();
+        settings.setScrollingColumnWidthStepPercent(25);
+        QCOMPARE(settings.scrollingColumnWidthStepPercent(), 25);
+        QCOMPARE(stepSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), preChanged + 1);
+        // Clamped write: 999 stores as the max.
+        settings.setScrollingColumnWidthStepPercent(999);
+        QCOMPARE(settings.scrollingColumnWidthStepPercent(), ConfigDefaults::scrollingStepPercentMax());
+    }
+
     /// Preset lists canonicalize to numeric proportions in (0, 1]: junk and
     /// out-of-range entries are dropped so the stored value always equals
     /// the effective one (the engine silently ignores anything else).

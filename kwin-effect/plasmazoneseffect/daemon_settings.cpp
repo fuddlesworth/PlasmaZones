@@ -667,6 +667,10 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_tilingHandler->setFocusFollowsMouse(v.toBool());
     });
 
+    loadSettingAsync(QStringLiteral("scrollingFocusFollowsMouse"), [this](const QVariant& v) {
+        m_tilingHandler->setScrollingFocusFollowsMouse(v.toBool());
+    });
+
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {
         m_snapHandler->setFocusFollowsMouse(v.toBool());
     });

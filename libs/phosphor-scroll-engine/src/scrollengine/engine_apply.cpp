@@ -29,7 +29,7 @@ constexpr int kParkMargin = 16;
 
 } // namespace
 
-ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) const
+ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, bool suppressOuterGaps) const
 {
     ScrollLayoutParams params;
     QRect area = m_screenManager ? m_screenManager->screenAvailableGeometry(screenId)
@@ -71,6 +71,16 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
             right = overrides.value(PSK::OuterGapRight, right).toInt();
         }
     }
+    // Smart gaps: the caller detected a single-column strip, so the outer
+    // gaps are dropped wholesale — settings values AND context-rule
+    // overrides, matching autotile's bypass of its whole gap resolve. The
+    // inner gap stays as-is: with one column nothing consumes it between
+    // columns, and stacked tiles keeping their separation matches
+    // autotile's windowCount == 1 condition (a lone column with a stack is
+    // not a lone window).
+    if (suppressOuterGaps) {
+        top = bottom = left = right = 0;
+    }
     // Outer gaps must never invert the rect: an unknown/removed screen
     // yields a null area, and adjust() on it (or oversized gaps on a small
     // screen) would drive the width/height negative. Downstream consumers
@@ -79,6 +89,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
     const QRect adjusted = area.adjusted(qMax(0, left), qMax(0, top), -qMax(0, right), -qMax(0, bottom));
     params.workArea = (adjusted.width() > 0 && adjusted.height() > 0) ? adjusted : QRect();
     params.gap = innerGap;
+    params.respectMinimumSize = m_respectMinimumSize;
     params.presetColumnWidths = m_presetColumnWidths;
     params.presetWindowHeights = m_presetWindowHeights;
     params.centerFocusedColumn = effectiveCenterFocusedColumn(screenId);
@@ -96,7 +107,7 @@ QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId, QVector<i
     if (!state || state->strip().isEmpty()) {
         return {};
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId, m_smartGaps && state->strip().columnCount() == 1);
     if (!params.workArea.isValid()) {
         return {};
     }
@@ -188,7 +199,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         clearTabStripsForScreen(screenId);
         return;
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId, m_smartGaps && state->strip().columnCount() == 1);
     if (!params.workArea.isValid()) {
         // Screen went away or gaps swallowed it: the indicator must not
         // stay painted, and a scheduled-retile storm must not spam a

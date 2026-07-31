@@ -707,19 +707,32 @@ void Daemon::initEnginesAndWiring()
     // batch delivers the first windowOpened — and keep the delegate's load
     // path handing it again after any later reload (restoreStripState is
     // additive and skips adopted contexts, so the second call is safe).
-    m_windowTrackingAdaptor->setScrollStripStateProvider([engine = QPointer(scrollEngine)]() {
-        return engine ? engine->serializeStripState() : QJsonObject();
+    // Both legs — snapshot write AND cross-session restore — are gated on
+    // scrollingRestoreStripsOnLogin, read live at each firing. Gating only
+    // the read would let the write keep aging the per-tile
+    // unclaimedSessions lease on data the user disabled (the 3-session cap
+    // would silently expire a snapshot they later re-enable); gating only
+    // the write would restore a stale blob once. The provider returning an
+    // empty object also overwrites the on-disk blob with empty on the next
+    // save rather than leaving it to linger. In-session mode round-trips
+    // (stashStripStructure) are deliberately NOT gated — this switch is
+    // about logins, and the stash path never goes through these lambdas.
+    m_windowTrackingAdaptor->setScrollStripStateProvider([this, engine = QPointer(scrollEngine)]() {
+        return (engine && m_settings && m_settings->scrollingRestoreStripsOnLogin()) ? engine->serializeStripState()
+                                                                                     : QJsonObject();
     });
-    scrollEngine->restoreStripState(m_windowTrackingAdaptor->loadedScrollStripState());
+    if (m_settings && m_settings->scrollingRestoreStripsOnLogin()) {
+        scrollEngine->restoreStripState(m_windowTrackingAdaptor->loadedScrollStripState());
+    }
     scrollEngine->setPersistenceDelegate(
         [wta = QPointer(m_windowTrackingAdaptor)]() {
             if (wta)
                 wta->saveState();
         },
-        [wta = QPointer(m_windowTrackingAdaptor), engine = QPointer(scrollEngine)]() {
+        [this, wta = QPointer(m_windowTrackingAdaptor), engine = QPointer(scrollEngine)]() {
             if (wta)
                 wta->loadState();
-            if (wta && engine)
+            if (wta && engine && m_settings && m_settings->scrollingRestoreStripsOnLogin())
                 engine->restoreStripState(wta->loadedScrollStripState());
         });
 

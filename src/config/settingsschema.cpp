@@ -55,16 +55,10 @@ PhosphorConfig::Schema buildSettingsSchema()
 // TU shares live in settingsschema_p.h; the rest are local to this file.
 
 using SchemaValidators::clampDouble;
+using SchemaValidators::clampInt;
 using SchemaValidators::validIntOr;
 
 namespace {
-auto clampInt(int minVal, int maxVal)
-{
-    return [minVal, maxVal](const QVariant& v) -> QVariant {
-        return qBound(minVal, v.toInt(), maxVal);
-    };
-}
-
 /// Fall back to @p fallback when the value is an invalid color. Defaults
 /// in the schema are already valid, so this mostly protects against
 /// garbage in the on-disk file.

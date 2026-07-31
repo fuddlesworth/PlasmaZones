@@ -9,6 +9,7 @@
 
 #include "settingsschema.h"
 
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "settingsschemachoices.h"
@@ -22,6 +23,7 @@ namespace PlasmaZones {
 
 using SchemaValidators::canonicalProportionList;
 using SchemaValidators::clampDouble;
+using SchemaValidators::clampInt;
 using SchemaValidators::validIntOr;
 
 // The config-space enum vocabulary in ConfigDefaults and the engine's own
@@ -58,6 +60,15 @@ static_assert(ConfigDefaults::scrollingWidthKindFixed()
 static_assert(ConfigDefaults::scrollingWidthKindClientDecides()
                   == static_cast<int>(PhosphorScrollEngine::DefaultWidthKind::ClientDecides),
               "DefaultWidthKind::ClientDecides wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingStickyTreatAsNormal()
+                  == static_cast<int>(PhosphorEngine::StickyWindowHandling::TreatAsNormal),
+              "StickyWindowHandling::TreatAsNormal wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingStickyRestoreOnly()
+                  == static_cast<int>(PhosphorEngine::StickyWindowHandling::RestoreOnly),
+              "StickyWindowHandling::RestoreOnly wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingStickyIgnoreAll()
+                  == static_cast<int>(PhosphorEngine::StickyWindowHandling::IgnoreAll),
+              "StickyWindowHandling::IgnoreAll wire value drifted from ConfigDefaults");
 
 // ─── Scrolling (Scrolling) ───────────────────────────────────────────
 // The niri-style scrolling engine's knobs. The strip reuses the shared Gaps
@@ -139,6 +150,38 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          [](const QVariant& v) {
              return canonicalProportionList(v, CD::scrollingPresetWindowHeights());
          }},
+    };
+
+    // ─── Scrolling behavior (Scrolling.Behavior) ─────────────────────────
+    // Window-handling and focus knobs, the peers of Tiling.Behavior and
+    // Snapping.Behavior.WindowHandling. Shared leaf key names under the
+    // scrolling group; smart gaps is deliberately absent (scrolling forwards
+    // the shared Tiling.Gaps/SmartGaps value, see IScrollSettings).
+    schema.groups[CD::scrollingBehaviorGroup()] = {
+        {CD::focusNewWindowsKey(), CD::scrollingFocusNewWindows(), QMetaType::Bool},
+        {CD::focusFollowsMouseKey(), CD::scrollingFocusFollowsMouse(), QMetaType::Bool},
+        {CD::stickyWindowHandlingKey(),
+         CD::scrollingStickyWindowHandling(),
+         QMetaType::Int,
+         {},
+         validIntOr(
+             {CD::scrollingStickyTreatAsNormal(), CD::scrollingStickyRestoreOnly(), CD::scrollingStickyIgnoreAll()},
+             CD::scrollingStickyWindowHandling()),
+         intChoices({{CD::scrollingStickyTreatAsNormal(), "treatAsNormal"_L1},
+                     {CD::scrollingStickyRestoreOnly(), "restoreOnly"_L1},
+                     {CD::scrollingStickyIgnoreAll(), "ignoreAll"_L1}})},
+        {CD::respectMinimumSizeKey(), CD::scrollingRespectMinimumSize(), QMetaType::Bool},
+        {CD::restoreOnLoginKey(), CD::scrollingRestoreStripsOnLogin(), QMetaType::Bool},
+        {CD::columnWidthStepPercentKey(),
+         CD::scrollingColumnWidthStepPercent(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingStepPercentMin(), CD::scrollingStepPercentMax())},
+        {CD::windowHeightStepPercentKey(),
+         CD::scrollingWindowHeightStepPercent(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingStepPercentMin(), CD::scrollingStepPercentMax())},
     };
 }
 

@@ -592,6 +592,32 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("presetWindowHeights"),
                PhosphorI18n::tr("Window heights"),
                {PhosphorI18n::tr("preset"), PhosphorI18n::tr("height"), PhosphorI18n::tr("cycle")});
+    addSection(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingWindowHandling"),
+               PhosphorI18n::tr("Window Handling"));
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingRespectMinimumSize"),
+               PhosphorI18n::tr("Respect minimum size"),
+               {PhosphorI18n::tr("minimum"), PhosphorI18n::tr("size"), PhosphorI18n::tr("resize")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingRestoreStripsOnLogin"),
+               PhosphorI18n::tr("Restore columns on login"),
+               {PhosphorI18n::tr("restore"), PhosphorI18n::tr("login"), PhosphorI18n::tr("session"),
+                PhosphorI18n::tr("column")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingStickyWindows"),
+               PhosphorI18n::tr("Sticky windows"),
+               {PhosphorI18n::tr("sticky"), PhosphorI18n::tr("all"), PhosphorI18n::tr("desktops")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingColumnWidthStep"),
+               PhosphorI18n::tr("Width adjustment step"),
+               {PhosphorI18n::tr("step"), PhosphorI18n::tr("width"), PhosphorI18n::tr("shortcut")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingWindowHeightStep"),
+               PhosphorI18n::tr("Height adjustment step"),
+               {PhosphorI18n::tr("step"), PhosphorI18n::tr("height"), PhosphorI18n::tr("shortcut")});
+    addSection(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingFocus"),
+               PhosphorI18n::tr("Focus"));
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingFocusNewWindows"),
+               PhosphorI18n::tr("Focus new windows"),
+               {PhosphorI18n::tr("focus"), PhosphorI18n::tr("new"), PhosphorI18n::tr("open")});
+    addSetting(search, QStringLiteral("scrolling-behavior"), QStringLiteral("scrollingFocusFollowsMouse"),
+               PhosphorI18n::tr("Focus follows mouse"),
+               {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("hover")});
 
     // Tiling › Window (behaviour rows)
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("alwaysReinsertOnDrag"),

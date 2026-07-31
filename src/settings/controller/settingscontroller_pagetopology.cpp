@@ -350,6 +350,17 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingGroup(), CD::defaultColumnDisplayKey()},
              {CD::scrollingGroup(), CD::presetColumnWidthsKey()},
              {CD::scrollingGroup(), CD::presetWindowHeightsKey()},
+             // Scrolling.Behavior — the strip's window-handling and focus
+             // knobs. Smart gaps is deliberately absent: scrolling forwards
+             // the shared Tiling.Gaps/SmartGaps value, whose (group, key)
+             // pair is owned by tiling-behavior.
+             {CD::scrollingBehaviorGroup(), CD::focusNewWindowsKey()},
+             {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseKey()},
+             {CD::scrollingBehaviorGroup(), CD::stickyWindowHandlingKey()},
+             {CD::scrollingBehaviorGroup(), CD::respectMinimumSizeKey()},
+             {CD::scrollingBehaviorGroup(), CD::restoreOnLoginKey()},
+             {CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()},
+             {CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()},
          }},
         // Only the GLOBAL Windows.* / Gaps.* keys are listed. Per-monitor gap
         // overrides live in the per-screen autotile store (AutotileScreen:*), not

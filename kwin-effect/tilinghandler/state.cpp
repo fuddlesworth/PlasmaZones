@@ -104,11 +104,21 @@ void TilingHandler::clearTiledTracking()
 void TilingHandler::setFocusFollowsMouse(bool enabled)
 {
     m_focusFollowsMouse = enabled;
-    if (!enabled) {
+    if (!m_focusFollowsMouse && !m_scrollingFocusFollowsMouse) {
         // handleCursorMoved bails before the suppression latch while FFM is
-        // off, so a latch set just before the setting was turned off would
-        // survive with a long-stale anchor and swallow the first move after
-        // it is turned back on.
+        // off everywhere, so a latch set just before the setting was turned
+        // off would survive with a long-stale anchor and swallow the first
+        // move after it is turned back on. With the per-mode split the
+        // latch is shared, so it clears only when BOTH flags drop.
+        m_ffmSuppressPending = false;
+    }
+}
+
+void TilingHandler::setScrollingFocusFollowsMouse(bool enabled)
+{
+    m_scrollingFocusFollowsMouse = enabled;
+    if (!m_focusFollowsMouse && !m_scrollingFocusFollowsMouse) {
+        // Same shared-latch reasoning as setFocusFollowsMouse.
         m_ffmSuppressPending = false;
     }
 }

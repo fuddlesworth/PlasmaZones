@@ -180,6 +180,91 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling behavior (Scrolling.Behavior)
+    //
+    // The strip's window-handling and focus knobs, the peers of the
+    // Tiling.Behavior and Snapping.Behavior.WindowHandling families. Key
+    // NAMES are the shared leaf spellings (FocusNewWindows, StickyWindowHandling,
+    // …) under the Scrolling.Behavior group. Defaults deliberately match the
+    // autotile canonical so a screen flipped between the two engines starts
+    // from identical behavior.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static constexpr bool scrollingFocusNewWindows()
+    {
+        return true;
+    }
+    static bool scrollingFocusFollowsMouse()
+    {
+        return false;
+    }
+    /// StickyWindowHandling wire values, the shared PhosphorEngine enum's
+    /// spelling (0 = treat as normal, 1 = restore only, 2 = ignore all).
+    /// Named for the same reason as the CenterFocusedColumn values above;
+    /// settingsschema_scrolling.cpp static_asserts them against the engine
+    /// enumerators.
+    static constexpr int scrollingStickyTreatAsNormal()
+    {
+        return 0;
+    }
+    static constexpr int scrollingStickyRestoreOnly()
+    {
+        return 1;
+    }
+    static constexpr int scrollingStickyIgnoreAll()
+    {
+        return 2;
+    }
+    static constexpr int scrollingStickyWindowHandling()
+    {
+        return scrollingStickyTreatAsNormal();
+    }
+    /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
+    static constexpr bool isValidScrollingStickyWindowHandling(int v)
+    {
+        return v == scrollingStickyTreatAsNormal() || v == scrollingStickyRestoreOnly()
+            || v == scrollingStickyIgnoreAll();
+    }
+    static constexpr bool scrollingRespectMinimumSize()
+    {
+        return true;
+    }
+    /// Restore the persisted strip snapshot (column order, widths, tab
+    /// stacks, focus) when windows reopen after a restart. Gates only the
+    /// cross-session restore; in-session mode round-trips always restore.
+    static constexpr bool scrollingRestoreStripsOnLogin()
+    {
+        return true;
+    }
+    // NOTE: there is deliberately no scrollingRestoreFloatedWindowsOnLogin.
+    // Scroll floats ride the shared WTS float model (free geometry restored
+    // by the common layer / effect float-cache seed), so a scroll-specific
+    // toggle has no seam to gate — see the DELIBERATE SCOPE NOTE in
+    // enginewiring.cpp. If scroll restore semantics ever diverge, the
+    // ScrollEngine hook lands first and the setting follows.
+    /// Percent of the work-area extent one increase/decrease shortcut press
+    /// moves a column width or window height. Daemon-side only: the engine
+    /// receives an already-computed delta, so these never enter
+    /// IScrollSettings. Distinct from the DefaultColumnWidth*Step editor
+    /// granularity accessors above, which size QML control notches.
+    static constexpr int scrollingColumnWidthStepPercent()
+    {
+        return 10;
+    }
+    static constexpr int scrollingWindowHeightStepPercent()
+    {
+        return 10;
+    }
+    static constexpr int scrollingStepPercentMin()
+    {
+        return 1;
+    }
+    static constexpr int scrollingStepPercentMax()
+    {
+        return 50;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Scrolling Shortcuts
     //
     // Anchored on Meta+Alt to stay clear of stock Plasma and the Meta+Shift /
@@ -311,5 +396,18 @@ static_assert(
 static_assert(
     ConfigDefaultsScrolling::isValidScrollingColumnDisplay(ConfigDefaultsScrolling::scrollingDefaultColumnDisplay()),
     "ConfigDefaults::scrollingDefaultColumnDisplay() is not in its own closed set");
+static_assert(ConfigDefaultsScrolling::isValidScrollingStickyWindowHandling(
+                  ConfigDefaultsScrolling::scrollingStickyWindowHandling()),
+              "ConfigDefaults::scrollingStickyWindowHandling() is not in its own closed set");
+static_assert(ConfigDefaultsScrolling::scrollingColumnWidthStepPercent()
+                      >= ConfigDefaultsScrolling::scrollingStepPercentMin()
+                  && ConfigDefaultsScrolling::scrollingColumnWidthStepPercent()
+                      <= ConfigDefaultsScrolling::scrollingStepPercentMax(),
+              "ConfigDefaults::scrollingColumnWidthStepPercent() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingWindowHeightStepPercent()
+                      >= ConfigDefaultsScrolling::scrollingStepPercentMin()
+                  && ConfigDefaultsScrolling::scrollingWindowHeightStepPercent()
+                      <= ConfigDefaultsScrolling::scrollingStepPercentMax(),
+              "ConfigDefaults::scrollingWindowHeightStepPercent() outside the declared [min, max] range");
 
 } // namespace PlasmaZones

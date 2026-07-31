@@ -124,6 +124,7 @@ public:
     P_CONFIG_GROUP(tilingBehaviorTriggersGroup, "Tiling.Behavior.Triggers")
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
     P_CONFIG_GROUP(scrollingGroup, "Scrolling")
+    P_CONFIG_GROUP(scrollingBehaviorGroup, "Scrolling.Behavior")
 
     // Decorations — per-surface decoration tree (DecorationProfileTree:
     // shader-pack chain + per-pack parameters, keyed on a dot-path surface
@@ -402,6 +403,16 @@ public:
     P_CONFIG_KEY(defaultColumnDisplayKey, "DefaultColumnDisplay")
     P_CONFIG_KEY(presetColumnWidthsKey, "PresetColumnWidths")
     P_CONFIG_KEY(presetWindowHeightsKey, "PresetWindowHeights")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.Behavior
+    // (also uses focusNewWindowsKey, focusFollowsMouseKey,
+    // respectMinimumSizeKey, stickyWindowHandlingKey, restoreOnLoginKey —
+    // shared leaf names, disambiguated by group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(columnWidthStepPercentKey, "ColumnWidthStepPercent")
+    P_CONFIG_KEY(windowHeightStepPercentKey, "WindowHeightStepPercent")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Behavior

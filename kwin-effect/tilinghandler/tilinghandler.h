@@ -223,8 +223,11 @@ public:
     /// pair this with DecorationManager::restoreAll().
     void clearTiledTracking();
 
-    // Focus follows mouse: focus autotile window under cursor
+    // Focus follows mouse: focus the managed window under the cursor.
+    // Autotile and scrolling screens carry independent flags (per-mode
+    // settings); handleCursorMoved routes per screen.
     void setFocusFollowsMouse(bool enabled);
+    void setScrollingFocusFollowsMouse(bool enabled);
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
@@ -725,7 +728,13 @@ private:
     QSet<QString> m_monocleMaximizedWindows;
     int m_suppressMaximizeChanged = 0;
     // ── Focus follows mouse ──
+    // Per-mode pair: m_focusFollowsMouse is the autotile flag
+    // (autotileFocusFollowsMouse), m_scrollingFocusFollowsMouse the
+    // scrolling one. handleCursorMoved picks per screen via
+    // isScrollingScreen — one shared boolean made the two settings fight
+    // over the union of managed screens.
     bool m_focusFollowsMouse = false;
+    bool m_scrollingFocusFollowsMouse = false;
     // ── Border state — uses shared BorderState from compositor-common ──
     BorderState m_border;
 };

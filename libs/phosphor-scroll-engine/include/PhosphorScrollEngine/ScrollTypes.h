@@ -246,6 +246,13 @@ struct ScrollLayoutParams
     QList<qreal> presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0};
     CenterFocusedColumn centerFocusedColumn = CenterFocusedColumn::Never;
     bool alwaysCenterSingleColumn = false;
+    /// Whether the strip's layout math honours client minimum sizes (the
+    /// column-width floor, the tile-height floor and its rebalance, and the
+    /// interactive-resize floor). Off, the resolved rects obey the user's
+    /// intents and the compositor's own min-size enforcement decides what
+    /// overhangs. The open-time work-area-oversized float escape ignores
+    /// this flag.
+    bool respectMinimumSize = true;
     /// The context's default column width — the un-maximize fallback for a
     /// full-width column with no stored pre-maximize intent.
     ColumnWidth defaultColumnWidth = ColumnWidth::makeProportion(0.5);
