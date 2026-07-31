@@ -169,6 +169,7 @@ public:
 
     // Mid-drag idle / resume - see IOverlayService for rationale.
     void setIdleForDragPause() override;
+    void forgetCurrentScreen() override;
     void refreshFromIdle() override;
 
     // Additional methods

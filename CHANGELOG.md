@@ -16,6 +16,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Breaking D-Bus interface split**: the shared engine transport moved from org.plasmazones.Autotile to the engine-neutral org.plasmazones.Tiling interface, which serves every tiling-family engine. The moved surface covers the window lifecycle calls (windowOpened, windowsOpenedBatch, windowClosed, windowMinSizeUpdated, notifyWindowFocused), the tile-request and float signals (windowsTileRequested, focusWindowRequested, windowFloatingChanged, tilingChanged, windowsReleasedFromTiling), the retile methods, the enabled property with its change signal, and the screen set, now published as the union property managedScreens. The org.plasmazones.Autotile name still exists but is narrower now, carrying algorithm selection, master operations, focus cycling, and autotile configuration beside the new org.plasmazones.Scrolling interface. Check any external script against the new interface files before relying on it ([#852](https://github.com/fuddlesworth/PlasmaZones/pull/852)).
 
+## [3.3.3] - 2026-07-31
+
+### Fixed
+
+- **Windows are no longer blurry on a fractionally scaled display**: on an output running at a scale like 1.5x, every window PlasmaZones draws a border on looked persistently soft, and resizing it flickered with stretched frames. The offscreen surface those windows are drawn through was sized and positioned off the display's pixel grid, and it was resampled with vertex snapping turned off at all times rather than only while an animation is playing ([#868](https://github.com/fuddlesworth/PlasmaZones/discussions/868), [#869](https://github.com/fuddlesworth/PlasmaZones/pull/869)).
+- **Dragging a window on a monitor that has no zone layout no longer snaps it**: with the default layout assignment suppressed, a monitor without a layout of its own still hit-tested drags against the global default layout, so dragging there could snap the window into zones the monitor does not have while the zone highlight lit up on the other monitor. Drags on such a monitor now move the window freely, and the highlight stays off ([#724](https://github.com/fuddlesworth/PlasmaZones/discussions/724), [#867](https://github.com/fuddlesworth/PlasmaZones/pull/867)).
+- **Unminimizing a window no longer snaps it back to a zone on another monitor**: a window snapped on one monitor and then moved to another kept its old zone on record, and minimizing and unminimizing it teleported it back into that zone. The minimize round trip now always keeps the window on the monitor it is actually on. The manual float toggle still returns a window to its remembered zone across monitors ([#724](https://github.com/fuddlesworth/PlasmaZones/discussions/724), [#867](https://github.com/fuddlesworth/PlasmaZones/pull/867)).
+- **Zone shortcuts and snap assist skip a monitor with no zone layout**: moving a window to an adjacent zone, or the picker offered after a snap, could still act on the global default layout's zones for a monitor that has none. Both now do nothing on such a monitor ([#724](https://github.com/fuddlesworth/PlasmaZones/discussions/724), [#867](https://github.com/fuddlesworth/PlasmaZones/pull/867)).
+
 ## [3.3.2] - 2026-07-29
 
 ### Fixed
@@ -1779,7 +1788,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.2...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.3...HEAD
+[3.3.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.2...v3.3.3
 [3.3.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.1...v3.3.2
 [3.3.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.0...v3.3.1
 [3.3.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.2.7...v3.3.0

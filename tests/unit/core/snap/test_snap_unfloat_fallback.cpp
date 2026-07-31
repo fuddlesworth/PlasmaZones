@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// ON-success coverage for SnapEngine::resolveFallbackUnfloatGeometry (the
-// unfloatFallbackToZone feature). The sibling test_snap_engine.cpp is
+// The QTEST_MAIN (real-QScreen) home for the unfloat resolvers: the
+// unfloatFallbackToZone tier (resolveFallbackUnfloatGeometry), the
+// SnapToZone-rule and placement-record tiers, and the suspension
+// cross-monitor confinement. The sibling test_snap_engine.cpp is
 // QTEST_GUILESS_MAIN, where QGuiApplication::primaryScreen() is null so
 // WindowTrackingService::zoneGeometry() always returns an invalid QRect — the
 // resolver therefore can never produce a found result there (it can only
@@ -545,6 +547,142 @@ private Q_SLOTS:
         const PhosphorEngine::UnfloatResult r =
             engine.resolveUnfloatGeometry(QStringLiteral("app|norec"), QStringLiteral("DP-1"));
         QVERIFY2(!r.found, "no live capture and no record → not-found (caller falls to the fallback-zone path)");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // Suspension confinement (Discussion #724, 3.3.x regression): with
+    // confineToFallbackScreen=true (a minimize/unminimize round trip), a
+    // placement record whose screen names a DIFFERENT physical monitor than
+    // the live screen is stale cross-monitor state and must NOT supply the
+    // unfloat target — the caller keeps the window floating where it is.
+    void testResolveUnfloat_confined_recordOnOtherMonitor_staysNotFound()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|suspended");
+
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                           QStringLiteral("HDMI-1"));
+
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
+        QVERIFY2(!r.found, "a suspension unfloat must refuse a record home on another monitor");
+
+        // The same record restores unconfined (a user float toggle keeps its
+        // deliberate cross-monitor unfloat-to-home behaviour), resolved on the
+        // record's home screen — the screen is the point of the feature, so
+        // pin it rather than only the zone.
+        const PhosphorEngine::UnfloatResult unconfined = engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"));
+        QVERIFY2(unconfined.found, "a user unfloat must still restore the cross-monitor home from the record");
+        QCOMPARE(unconfined.zoneIds, QStringList{homeZone});
+        m_wts->setSnapState(nullptr);
+    }
+
+    // The confinement compares PHYSICAL monitors: a per-virtual-screen home id
+    // and the bare id of the same monitor are the same monitor, so the restore
+    // proceeds. Without this, every same-monitor unminimize on a VS-subdivided
+    // screen would be refused.
+    void testResolveUnfloat_confined_virtualIdFormSameMonitor_restores()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|vsform");
+
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                           QStringLiteral("DP-1/vs:0"));
+
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
+        QVERIFY2(r.found, "a virtual-vs-bare id difference on ONE monitor must not read as cross-monitor");
+        QCOMPARE(r.zoneIds, QStringList{homeZone});
+        m_wts->setSnapState(nullptr);
+    }
+
+    // The confinement's emptiness guard: a record with NO screen id cannot
+    // name another monitor, so it must not be refused — resolveUnfloatScreen
+    // degrades it to the caller's live screen, a same-monitor restore.
+    void testResolveUnfloat_confined_emptyRecordScreen_restoresOnLiveScreen()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|noscreen");
+
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone}, QString());
+
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
+        QVERIFY2(r.found, "an empty record screen cannot be cross-monitor — it must restore on the live screen");
+        QCOMPARE(r.screenId, QStringLiteral("DP-1"));
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveUnfloat_confined_recordScreenGone_refuses()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|goneconfined");
+
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                           QStringLiteral("PZTEST-UNPLUGGED-1"));
+
+        // Deliberate divergence from the UNCONFINED twin
+        // (testResolveUnfloat_recordScreenGone_degradesToFallbackScreen): a
+        // suspension unfloat compares the RAW recorded home before
+        // resolveUnfloatScreen can degrade it, so a home monitor unplugged
+        // while the window was minimized refuses instead of silently snapping
+        // the window into a foreign layout's zone on the live screen.
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
+        QVERIFY2(!r.found, "a home screen that no longer exists must refuse under confinement, not degrade");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // Confinement is a cross-monitor refusal ONLY: a record on the SAME
+    // monitor still restores under confinement — this is the restart-while-
+    // minimized recovery the record fallback exists for.
+    void testResolveUnfloat_confined_recordSameMonitor_restores()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().last()->id().toString();
+        const QString w = QStringLiteral("app|samescreen");
+
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        // Screen passed explicitly (not left to the helper's default) so the
+        // "same monitor" premise of this test is visible in the test body,
+        // symmetrical with the cross-monitor twin above.
+        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                           QStringLiteral("DP-1"));
+
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
+        QVERIFY2(r.found, "a same-monitor record must restore even under suspension confinement");
+        QCOMPARE(r.zoneIds, QStringList{homeZone});
+        QCOMPARE(r.screenId, QStringLiteral("DP-1"));
+        QVERIFY(r.geometry.isValid());
         m_wts->setSnapState(nullptr);
     }
 

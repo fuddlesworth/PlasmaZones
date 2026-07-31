@@ -1,6 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+.pragma library
+
+// The pragma stays directly under the SPDX header because
+// qt6_target_qml_sources only reads the first 128 bytes when it decides
+// whether the script is shared, and warns when it does not see it there.
+
 /**
  * Path-grouping for the profile diff (see ProfileDiffView.qml).
  *
@@ -13,7 +19,6 @@
  * exercised on its own — the connector geometry depends on `depth` and
  * `ancestors` being exactly right, and those are easy to get subtly wrong.
  */
-.pragma library
 
 /// Group @p rows into a tree by shared path prefix, then flatten depth-first.
 /// Each result row is `{ label, depth, ancestors, entries, hasChildren,

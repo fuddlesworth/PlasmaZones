@@ -428,7 +428,7 @@ public:
      */
     bool isSuspensionFloat(const QString& windowId) const override;
     void markSuspensionFloat(const QString& windowId);
-    void clearSuspensionFloat(const QString& windowId);
+    void clearSuspensionFloat(const QString& windowId) override;
 
     /**
      * @brief Set window floating state

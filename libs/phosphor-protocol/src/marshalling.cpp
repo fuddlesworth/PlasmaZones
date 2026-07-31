@@ -351,7 +351,7 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, DragPolicy& p)
 QDBusArgument& operator<<(QDBusArgument& arg, const DragOutcome& o)
 {
     arg.beginStructure();
-    arg << o.action << o.windowId << o.targetScreenId << o.x << o.y << o.width << o.height << o.zoneId
+    arg << static_cast<int>(o.action) << o.windowId << o.targetScreenId << o.x << o.y << o.width << o.height << o.zoneId
         << o.skipAnimation << o.requestSnapAssist << o.emptyZones;
     arg.endStructure();
     return arg;
@@ -360,8 +360,13 @@ QDBusArgument& operator<<(QDBusArgument& arg, const DragOutcome& o)
 const QDBusArgument& operator>>(const QDBusArgument& arg, DragOutcome& o)
 {
     arg.beginStructure();
-    arg >> o.action >> o.windowId >> o.targetScreenId >> o.x >> o.y >> o.width >> o.height >> o.zoneId
-        >> o.skipAnimation >> o.requestSnapAssist >> o.emptyZones;
+    // The wire carries a plain int; cast into the typed Action field. An
+    // out-of-range value from a peer at a different revision is caught by
+    // DragOutcome::validationError at every unmarshal site.
+    int action = 0;
+    arg >> action >> o.windowId >> o.targetScreenId >> o.x >> o.y >> o.width >> o.height >> o.zoneId >> o.skipAnimation
+        >> o.requestSnapAssist >> o.emptyZones;
+    o.action = static_cast<DragOutcome::Action>(action);
     arg.endStructure();
     return arg;
 }

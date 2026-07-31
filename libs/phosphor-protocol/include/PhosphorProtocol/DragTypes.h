@@ -21,11 +21,16 @@ namespace PhosphorProtocol {
 /// the free-form `QString bypassReason` that carried `""` / `"autotile_screen"`
 /// / `"snapping_disabled"` / `"context_disabled"` as magic strings.
 ///
-/// Wire format: unchanged — serialized as the same legacy string via
-/// toWireString()/fromWireString() inside the DragPolicy marshaller, so no
-/// ApiVersion bump is required. Unknown wire values parse to None (matches
-/// the old behavior where unrecognized strings didn't match the autotile
-/// branch and fell through to the canonical snap path).
+/// Wire format: serialized as a legacy string via toWireString()/
+/// fromWireString() inside the DragPolicy marshaller, so no ApiVersion bump
+/// is required. Unknown wire values parse to None. NOTE what that costs when
+/// a NEW enumerator is added (the effect .so is not reloaded until logout, so
+/// daemon-new/effect-old skew persists for a whole session after an upgrade):
+/// the old effect decodes the new reason as None with every behaviour bool
+/// false — a combination the canonical snap path never produced. That
+/// degrades safely today because the effect gates its work on the bools and
+/// on explicit AutotileScreen comparisons, never on "None means snap path" —
+/// preserve that property when touching the effect's policy handling.
 enum class DragBypassReason : int {
     None = 0, ///< canonical snap path — drag flows through the snap pipeline
     EngineOwnedScreen = 1, ///< drag started/ended on a screen owned by a tiling-family
@@ -36,7 +41,14 @@ enum class DragBypassReason : int {
                            ///< engines this value covers.
     SnappingDisabled = 2, ///< snap mode off globally — dead drag
     ContextDisabled = 3, ///< monitor/desktop/activity excluded in settings — dead drag
+    LayoutSuppressed = 4, ///< screen has no zone layout (default assignment suppressed) — dead drag
 };
+
+/// Number of DragBypassReason values. Bump alongside a new enumerator — the
+/// wire round-trip tests assert their coverage against this so a new value
+/// cannot ship untested (no trailing Count sentinel, which would pollute
+/// -Wswitch exhaustiveness in every switch over the enum).
+inline constexpr int DragBypassReasonCount = 5;
 
 /// Convert to the legacy wire-format string. Returns an empty QString for None.
 PHOSPHORPROTOCOLTYPES_EXPORT QString toWireString(DragBypassReason r);
@@ -98,7 +110,12 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT DragOutcome
         NotifyDragOutUnsnap = 5 ///< drag ended without activation trigger on a previously-snapped window
     };
 
-    int action = NoOp;
+    /// Typed as Action (not int) so every switch over it is
+    /// exhaustiveness-checked by -Wswitch and a local misassignment cannot
+    /// compile; the wire boundary casts through int and the runtime range
+    /// check in validationError() defends against a peer at a different
+    /// revision.
+    Action action = NoOp;
     QString windowId;
     QString targetScreenId;
     int x = 0;

@@ -51,13 +51,18 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 // clocks block documents is preserved within initRenderingAndRegistries().
 void PlasmaZonesEffect::initRenderingAndRegistries()
 {
-    // Sub-pixel vertex precision. KWin's default snapping rounds quad
-    // vertex positions to integer pixels before rasterising, which is
-    // fine for static / pixel-aligned windows but quantises smooth
-    // animations into 1px steps — visible judder at low translate
-    // velocities (the end of a bounce as it eases to rest, slow drag
-    // snaps). MagicLamp uses the same setting for its quad deformation.
-    setVertexSnappingMode(KWin::RenderGeometry::VertexSnappingMode::None);
+    // Vertex snapping stays at KWin's default (Round) here and is toggled
+    // per frame by prePaintScreen: None only while an animation or shader
+    // transition is in flight, Round the rest of the time. None exists for
+    // sub-pixel animation smoothness (KWin's Round quantises smooth
+    // translates into 1px steps — visible judder at low velocities; MagicLamp
+    // uses None for its quad deformation for the same reason). But the mode
+    // is effect-global and every decorated window is PERMANENTLY redirected
+    // (reconcileDecorationShader), so a blanket None resampled every static
+    // decorated window on a half-pixel grid at fractional output scales —
+    // steady-state blur on every 1.25x/1.5x desktop (discussion #868). The
+    // per-frame toggle keeps both properties: crisp at rest, smooth in
+    // motion.
 
     // Single-worker pool for off-loading user-texture loads. See the
     // header docstring for `m_shaderManager.m_textureLoaderPool` for the rationale —

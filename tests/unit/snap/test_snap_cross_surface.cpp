@@ -161,6 +161,7 @@ public:
     void recordFreeGeometry(const QString&, const QString&, const QRect&, bool) override
     {
     }
+    using PhosphorEngine::IWindowTrackingService::clearFreeGeometry;
     void clearFreeGeometry(const QString&) override
     {
     }
