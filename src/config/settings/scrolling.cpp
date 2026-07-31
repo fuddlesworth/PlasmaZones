@@ -329,6 +329,9 @@ P_STORE_SET_STRING(setScrollingExpandColumnShortcut, shortcutsScrollingGroup, ex
 P_STORE_GET(QString, scrollingCycleWindowHeightShortcut, shortcutsScrollingGroup, cycleWindowHeightKey, QString)
 P_STORE_SET_STRING(setScrollingCycleWindowHeightShortcut, shortcutsScrollingGroup, cycleWindowHeightKey,
                    scrollingCycleWindowHeightShortcutChanged)
+P_STORE_GET(QString, scrollingCycleWindowHeightBackShortcut, shortcutsScrollingGroup, cycleWindowHeightBackKey, QString)
+P_STORE_SET_STRING(setScrollingCycleWindowHeightBackShortcut, shortcutsScrollingGroup, cycleWindowHeightBackKey,
+                   scrollingCycleWindowHeightBackShortcutChanged)
 P_STORE_GET(QString, scrollingIncreaseWindowHeightShortcut, shortcutsScrollingGroup, increaseWindowHeightKey, QString)
 P_STORE_SET_STRING(setScrollingIncreaseWindowHeightShortcut, shortcutsScrollingGroup, increaseWindowHeightKey,
                    scrollingIncreaseWindowHeightShortcutChanged)

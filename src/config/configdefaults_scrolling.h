@@ -458,6 +458,13 @@ public:
     {
         return QStringLiteral("Meta+Alt+Shift+R");
     }
+    static QString scrollingCycleWindowHeightBackShortcut()
+    {
+        // Deliberately unbound, like scrollingCycleColumnWidthBackShortcut:
+        // the reverse cycle is a niche refinement and free chords near
+        // Meta+Alt+Shift+R are scarce. Bindable via the Shortcuts KCM.
+        return QString();
+    }
     static QString scrollingIncreaseWindowHeightShortcut()
     {
         // NOT Meta+Alt+Shift+= — Shift+symbol chords never fire on Wayland

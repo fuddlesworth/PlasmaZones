@@ -257,7 +257,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
 // Called from appendShortcutsSchema so the whole Shortcuts.* family is still
 // declared by one entry point.
 //
-// These 20 chords are bindable via the system Shortcuts KCM, because
+// These 21 chords are bindable via the system Shortcuts KCM, because
 // ShortcutManager registers them like every other action. The settings app has
 // no page of its own for them, and the Snapping / Tiling quick-shortcut pages
 // are not a counter-example: those assign layouts and algorithms to the
@@ -285,6 +285,7 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::maximizeColumnKey(), CD::scrollingMaximizeColumnShortcut(), QMetaType::QString},
         {CD::expandColumnKey(), CD::scrollingExpandColumnShortcut(), QMetaType::QString},
         {CD::cycleWindowHeightKey(), CD::scrollingCycleWindowHeightShortcut(), QMetaType::QString},
+        {CD::cycleWindowHeightBackKey(), CD::scrollingCycleWindowHeightBackShortcut(), QMetaType::QString},
         {CD::increaseWindowHeightKey(), CD::scrollingIncreaseWindowHeightShortcut(), QMetaType::QString},
         {CD::decreaseWindowHeightKey(), CD::scrollingDecreaseWindowHeightShortcut(), QMetaType::QString},
         {CD::resetWindowHeightsKey(), CD::scrollingResetWindowHeightsShortcut(), QMetaType::QString},

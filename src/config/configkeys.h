@@ -632,6 +632,7 @@ public:
     P_CONFIG_KEY(maximizeColumnKey, "MaximizeColumn")
     P_CONFIG_KEY(expandColumnKey, "ExpandColumn")
     P_CONFIG_KEY(cycleWindowHeightKey, "CycleWindowHeight")
+    P_CONFIG_KEY(cycleWindowHeightBackKey, "CycleWindowHeightBack")
     P_CONFIG_KEY(increaseWindowHeightKey, "IncreaseWindowHeight")
     P_CONFIG_KEY(decreaseWindowHeightKey, "DecreaseWindowHeight")
     P_CONFIG_KEY(resetWindowHeightsKey, "ResetWindowHeights")

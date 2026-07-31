@@ -489,6 +489,8 @@ public:
                    setScrollingExpandColumnShortcut NOTIFY scrollingExpandColumnShortcutChanged)
     Q_PROPERTY(QString scrollingCycleWindowHeightShortcut READ scrollingCycleWindowHeightShortcut WRITE
                    setScrollingCycleWindowHeightShortcut NOTIFY scrollingCycleWindowHeightShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleWindowHeightBackShortcut READ scrollingCycleWindowHeightBackShortcut WRITE
+                   setScrollingCycleWindowHeightBackShortcut NOTIFY scrollingCycleWindowHeightBackShortcutChanged)
     Q_PROPERTY(QString scrollingIncreaseWindowHeightShortcut READ scrollingIncreaseWindowHeightShortcut WRITE
                    setScrollingIncreaseWindowHeightShortcut NOTIFY scrollingIncreaseWindowHeightShortcutChanged)
     Q_PROPERTY(QString scrollingDecreaseWindowHeightShortcut READ scrollingDecreaseWindowHeightShortcut WRITE
@@ -1216,6 +1218,8 @@ public:
     void setScrollingExpandColumnShortcut(const QString& shortcut);
     QString scrollingCycleWindowHeightShortcut() const;
     void setScrollingCycleWindowHeightShortcut(const QString& shortcut);
+    QString scrollingCycleWindowHeightBackShortcut() const;
+    void setScrollingCycleWindowHeightBackShortcut(const QString& shortcut);
     QString scrollingIncreaseWindowHeightShortcut() const;
     void setScrollingIncreaseWindowHeightShortcut(const QString& shortcut);
     QString scrollingDecreaseWindowHeightShortcut() const;

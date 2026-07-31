@@ -191,7 +191,7 @@ Q_SIGNALS:
     void scrollAdjustColumnWidthRequested(int deltaPercent);
     void scrollMaximizeColumnRequested();
     void scrollExpandColumnRequested();
-    void scrollCycleWindowHeightRequested();
+    void scrollCycleWindowHeightRequested(int delta);
     void scrollAdjustWindowHeightRequested(int deltaPercent);
     void scrollResetWindowHeightsRequested();
 

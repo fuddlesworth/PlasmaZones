@@ -168,7 +168,10 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdScrollMaximizeColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
         add(kIdScrollExpandColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Expand Column"));
-        add(kIdScrollCycleWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
+        add(kIdScrollCycleWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height"));
+        add(kIdScrollCycleWindowHeightBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height Back"));
         add(kIdScrollIncreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
         add(kIdScrollDecreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
         add(kIdScrollResetWindowHeights, kScrollingCategory.source, 10, "scrolling", kModeNameContext);

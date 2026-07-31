@@ -161,15 +161,13 @@ void Daemon::connectScrollingShortcuts()
                                                       scroll->expandColumnToAvailableWidth(screenId);
                                                   }
                                               });
-    // Parameterless: only a forward chord ships (no CycleWindowHeightBack
-    // sibling), so a delta here would be a constant.
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(),
-                                              &ShortcutManager::scrollCycleWindowHeightRequested, this, [engineFor]() {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->cycleWindowPresetHeight(1, screenId);
-                                                  }
-                                              });
+    m_scrollingShortcutConnections << connect(
+        m_shortcutManager.get(), &ShortcutManager::scrollCycleWindowHeightRequested, this, [engineFor](int delta) {
+            QString screenId;
+            if (auto* scroll = engineFor(&screenId)) {
+                scroll->cycleWindowPresetHeight(delta, screenId);
+            }
+        });
     m_scrollingShortcutConnections << connect(m_shortcutManager.get(),
                                               &ShortcutManager::scrollAdjustWindowHeightRequested, this,
                                               [engineFor](int deltaPercent) {
