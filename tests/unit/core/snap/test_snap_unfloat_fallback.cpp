@@ -548,6 +548,61 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
+    // Suspension confinement (Discussion #724, 3.3.x regression): with
+    // confineToFallbackScreen=true (a minimize/unminimize round trip), a
+    // placement record whose screen names a DIFFERENT physical monitor than
+    // the live screen is stale cross-monitor state and must NOT supply the
+    // unfloat target — the caller keeps the window floating where it is.
+    void testResolveUnfloat_confined_recordOnOtherMonitor_staysNotFound()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|suspended");
+
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                           QStringLiteral("HDMI-1"));
+
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
+        QVERIFY2(!r.found, "a suspension unfloat must refuse a record home on another monitor");
+
+        // The same record restores unconfined (a user float toggle keeps its
+        // deliberate cross-monitor unfloat-to-home behaviour).
+        const PhosphorEngine::UnfloatResult unconfined = engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"));
+        QVERIFY2(unconfined.found, "a user unfloat must still restore the cross-monitor home from the record");
+        QCOMPARE(unconfined.zoneIds, QStringList{homeZone});
+        m_wts->setSnapState(nullptr);
+    }
+
+    // Confinement is a cross-monitor refusal ONLY: a record on the SAME
+    // monitor still restores under confinement — this is the restart-while-
+    // minimized recovery the record fallback exists for.
+    void testResolveUnfloat_confined_recordSameMonitor_restores()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().last()->id().toString();
+        const QString w = QStringLiteral("app|samescreen");
+
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone});
+
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
+        QVERIFY2(r.found, "a same-monitor record must restore even under suspension confinement");
+        QCOMPARE(r.zoneIds, QStringList{homeZone});
+        QVERIFY(r.geometry.isValid());
+        m_wts->setSnapState(nullptr);
+    }
+
     // The record fallback consumes EXACT-windowId records only. A same-app
     // SIBLING's record (different instance, same appId FIFO bucket) must never
     // supply the unfloat target — without the accept predicate, peek's

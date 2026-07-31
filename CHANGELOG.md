@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Unminimizing a window no longer snaps it back to a zone on another monitor**: a window snapped on one monitor and then moved to another kept its old zone on record, and minimizing and unminimizing it teleported it back into that zone. This was most visible with snapping disabled on the destination monitor by a rule, where the stale record was never refreshed. The minimize round trip now always keeps the window on the monitor it is actually on. The manual float toggle still returns a window to its remembered zone across monitors ([#724](https://github.com/fuddlesworth/PlasmaZones/discussions/724)).
+
 ## [3.3.2] - 2026-07-29
 
 ### Fixed

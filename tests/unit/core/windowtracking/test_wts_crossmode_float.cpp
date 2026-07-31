@@ -23,14 +23,17 @@
  * 5. crossMonitorFloatHandoffPreservesHomeZone: the cross-engine handoff re-homes
  *    the floating window onto the destination monitor while PRESERVING the
  *    source-monitor pre-float zone/screen (the home zone).
- * 6. unfloatRestoresAcrossMonitorsToHomeZone: cross-monitor restore is allowed —
- *    unfloat returns the window to its remembered home zone regardless of the
- *    monitor it is currently on.
+ * 6. unfloatRestoresAcrossMonitorsToHomeZone: cross-monitor restore is allowed
+ *    for USER float toggles — unfloat returns the window to its remembered home
+ *    zone regardless of the monitor it is currently on.
  * 7. unfloatRestoresWithinSamePhysicalMonitorAcrossIdForms: an id-form difference
  *    (virtual vs bare) of the same monitor still restores.
  * 8. migrateWindowToScreen_movesSnapStateAndReverseMap: the per-monitor migration
  *    mechanism moves a window's snap state and reverse-map entry to the destination
  *    monitor's store.
+ * 10/11. suspension (minimize) unfloats are the exception to 6: confined to the
+ *    live monitor (the 3.3.x #724 regression), while same-monitor round trips
+ *    still restore.
  *
  * Phase 4 (per-(screen,desktop,activity) last-used):
  * 9. lastUsedZoneIsPerScreen: last-used zone is tracked per store, so recording it
@@ -485,6 +488,87 @@ private Q_SLOTS:
             // zone, not merely produce some result.
             QCOMPARE(samePhysMonitor.zoneIds, QStringList{m_zoneIds[0]});
         }
+    }
+
+    // =====================================================================
+    // Test 10 (Discussion #724, 3.3.x regression): a SUSPENSION (minimize)
+    // unfloat is confined to the window's live monitor. A window snapped on
+    // monitor A, floated, moved to monitor B, then minimized and unminimized
+    // ON B must NOT teleport back to A's zone — the minimize round trip puts
+    // the window back where it was, and its remembered home on A is stale
+    // state for that round trip. The home is PRESERVED, though: a later USER
+    // unfloat (float toggle) still restores it cross-monitor.
+    // =====================================================================
+    void testSuspensionUnfloatConfinedToLiveMonitor()
+    {
+        const QString windowId = QStringLiteral("kate|aaaaaaaa-0000-0000-0000-000000000010");
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        // Snap on A, then float (drag-out) — captures the home zone/screen on A.
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], monitorA, 1);
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        QCOMPARE(m_service->preFloatScreen(windowId), monitorA);
+
+        // The floating window moves to monitor B via the cross-engine handoff.
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = monitorB;
+        ctx.fromEngineId = QStringLiteral("snap");
+        ctx.wasFloating = true;
+        m_engine->handoffReceive(ctx);
+        QCOMPARE(m_engine->screenForTrackedWindow(windowId), monitorB);
+
+        // Minimize classifies the float as a suspension; the unminimize unfloat
+        // on B must refuse the cross-monitor home and keep the window floating
+        // exactly where it is.
+        m_service->markSuspensionFloat(windowId);
+        m_engine->setWindowFloat(windowId, false, monitorB);
+        QVERIFY2(m_engine->isFloating(windowId),
+                 "a suspension unfloat must not restore a home zone on another monitor — keep floating");
+        QVERIFY2(m_engine->stateForWindow(windowId)->zonesForWindow(windowId).isEmpty(),
+                 "the suspension unfloat must not have assigned any zone");
+
+        // The home capture survives the refusal for a later user float toggle.
+        QCOMPARE(m_service->preFloatScreen(windowId), monitorA);
+        QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
+
+        // A USER unfloat (suspension cleared) keeps the deliberate
+        // cross-monitor unfloat-to-home restore: the unconfined resolver still
+        // finds the preserved home zone (asserted at the resolver level, like
+        // Test 6 — this reduced fixture's commit bookkeeping is not the
+        // subject here). Geometry needs a real QScreen, so gate on it.
+        m_service->clearSuspensionFloat(windowId);
+        const UnfloatResult userRestore = m_engine->resolveUnfloatGeometry(windowId, monitorB);
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(userRestore.found, "a user unfloat must still find the preserved cross-monitor home");
+            QCOMPARE(userRestore.zoneIds, QStringList{m_zoneIds[0]});
+        }
+    }
+
+    // =====================================================================
+    // Test 11 (Discussion #724): the suspension confinement only blocks CROSS-
+    // monitor restores — a same-monitor minimize/unminimize round trip still
+    // restores the pre-float zone.
+    // =====================================================================
+    void testSuspensionUnfloatSameMonitorStillRestores()
+    {
+        const QString windowId = QStringLiteral("kate|bbbbbbbb-0000-0000-0000-000000000011");
+        const QString monitorA = QStringLiteral("DP-1");
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[1], monitorA, 1);
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        m_service->markSuspensionFloat(windowId);
+
+        m_engine->setWindowFloat(windowId, false, monitorA);
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(!m_engine->isFloating(windowId),
+                     "a same-monitor suspension unfloat must restore the pre-float zone");
+            QCOMPARE(m_engine->stateForWindow(windowId)->zonesForWindow(windowId), QStringList{m_zoneIds[1]});
+        }
+        m_service->clearSuspensionFloat(windowId);
     }
 
     // =====================================================================

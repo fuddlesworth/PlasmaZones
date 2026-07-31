@@ -256,12 +256,14 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     // Classify BEFORE routing so any capture the write triggers synchronously
     // already sees the suspension bit (minimize state is fresh here — the
     // effect pushes metadata ahead of float traffic on the same edge).
-    if (m_service) {
-        if (floating && m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
-            m_service->markSuspensionFloat(windowId);
-        } else if (!floating) {
-            m_service->clearSuspensionFloat(windowId);
-        }
+    // DECLASSIFY (the unfloat side) AFTER routing, not here: the engine's
+    // setWindowFloat reads isSuspensionFloat to gate the suspension unfloat
+    // contract (no SnapToZone rule target, no cross-monitor restore —
+    // Discussion #724), and clearing the bit before the routed call turned
+    // that gate into a constant false — every suspension unfloat ran as a
+    // user float toggle.
+    if (m_service && floating && m_windowRegistry && m_windowRegistry->minimizedState(windowId).value_or(false)) {
+        m_service->markSuspensionFloat(windowId);
     }
 
     // Route to the correct engine based on screen mode. Both directions go
@@ -345,6 +347,13 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         // that drifted to another monitor while floating non-deterministically
         // teleports it back to its source-monitor zone (Discussion #724).
         dest->setWindowFloat(windowId, floating, effectiveScreenId);
+    }
+    // Declassify only after the routed engine call above has consumed the
+    // suspension bit (see the classification comment). Cleared before the
+    // recapture below so that capture reads the window's real post-unfloat
+    // state instead of taking the minimize-preserve path.
+    if (m_service && !floating) {
+        m_service->clearSuspensionFloat(windowId);
     }
     if (recaptureAfterFloatWrite) {
         // Snap-dest unfloat: re-anchor the live placement record after the

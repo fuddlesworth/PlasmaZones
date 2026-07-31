@@ -1088,6 +1088,67 @@ private Q_SLOTS:
         QCOMPARE(spy.at(1).at(1).toBool(), false);
     }
 
+    // End-to-end regression for Discussion #724 (the 3.3.x recurrence): a
+    // window snapped on monitor A, floated, moved to monitor B, then minimized
+    // and unminimized ON B must stay on B — the suspension unfloat must not
+    // restore the stale home zone on A. Exercises the
+    // setWindowFloatingForScreen ordering contract: the suspension bit is
+    // marked before the routed engine call on the minimize edge and
+    // declassified only AFTER it on the unminimize edge (clearing it before
+    // routing turned the engine's suspension gate into a constant false, which
+    // is exactly what let the cross-monitor restore fire).
+    void testSetWindowFloatingForScreen_suspensionUnfloatStaysOnLiveMonitor()
+    {
+        const QString instanceId = QStringLiteral("724-suspend-inst");
+        const QString windowId = QStringLiteral("kate|") + instanceId;
+        const QString monitorA = QStringLiteral("DP-1");
+        const QString monitorB = QStringLiteral("HDMI-1");
+
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        PhosphorEngine::WindowMetadata meta;
+        meta.appId = QStringLiteral("kate");
+        meta.isMinimized = false;
+        registry->upsert(instanceId, meta);
+
+        // Snap on A, float out (captures the home zone on A), move to B while
+        // floating via the cross-engine handoff — the state the real drag
+        // routes leave behind.
+        m_wta->service()->assignWindowToZone(windowId, m_zoneIds[0], monitorA, 1);
+        m_wta->service()->unsnapForFloat(windowId);
+        m_wta->service()->setWindowFloating(windowId, true);
+        QCOMPARE(m_wta->service()->preFloatScreen(windowId), monitorA);
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = monitorB;
+        ctx.fromEngineId = QStringLiteral("snap");
+        ctx.wasFloating = true;
+        m_snapEngine->handoffReceive(ctx);
+
+        // Minimize edge: metadata first (the effect pushes it ahead of float
+        // traffic), then the suspension float write.
+        meta.isMinimized = true;
+        registry->upsert(instanceId, meta);
+        m_wta->setWindowFloatingForScreen(windowId, monitorB, true);
+        QVERIFY2(m_wta->service()->isSuspensionFloat(windowId),
+                 "the minimize-edge float write must classify the float as a suspension");
+
+        // Unminimize edge: the suspension unfloat on B must keep the window
+        // floating on B, not teleport it into A's zone.
+        meta.isMinimized = false;
+        registry->upsert(instanceId, meta);
+        m_wta->setWindowFloatingForScreen(windowId, monitorB, false);
+
+        QVERIFY2(m_snapEngine->isFloating(windowId),
+                 "the suspension unfloat must keep the window floating on its live monitor");
+        QVERIFY2(m_snapEngine->stateForWindow(windowId)->zonesForWindow(windowId).isEmpty(),
+                 "the suspension unfloat must not re-snap the stale home zone");
+        QVERIFY2(!m_wta->service()->isSuspensionFloat(windowId),
+                 "the unfloat edge must declassify the suspension after the routed engine call");
+
+        m_wta->setWindowRegistry(nullptr);
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;

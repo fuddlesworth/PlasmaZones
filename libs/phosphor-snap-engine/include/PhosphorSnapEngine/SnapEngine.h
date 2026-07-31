@@ -658,7 +658,14 @@ public:
 
     void uncommitSnap(const QString& windowId);
 
-    PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
+    /// @p confineToFallbackScreen refuses (returns not-found) when the resolved
+    /// home screen names a different physical monitor than @p fallbackScreen.
+    /// True for suspension (minimize) unfloats — the minimize round trip must
+    /// never move the window across monitors, and a cross-monitor home can only
+    /// be stale state (Discussion #724). False (default) for user float
+    /// toggles, whose cross-monitor unfloat-to-home restore is deliberate.
+    PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen,
+                                                         bool confineToFallbackScreen = false) const;
 
     /// Fallback unfloat target for a window with NO pre-float zone (a never-snapped
     /// window that defaulted to floating). Returns a found result ONLY when the
@@ -960,7 +967,13 @@ private:
     /// @p allowRuleTarget gates the SnapToZone-rule tier: true for user float
     /// toggles (rule stays authoritative), false for suspension (minimize)
     /// unfloats, which must restore the pre-float zone.
-    bool unfloatToZone(const QString& windowId, const QString& screenId, bool allowRuleTarget = true);
+    /// @p confineToScreen threads resolveUnfloatGeometry's
+    /// confineToFallbackScreen: true for suspension (minimize) unfloats — the
+    /// minimize round trip puts the window back where it was, never across
+    /// monitors (Discussion #724) — false for user float toggles, whose
+    /// cross-monitor unfloat-to-home restore is deliberate.
+    bool unfloatToZone(const QString& windowId, const QString& screenId, bool allowRuleTarget = true,
+                       bool confineToScreen = false);
     bool applyGeometryForFloat(const QString& windowId, const QString& screenId);
     /// Float-path wrapper around applyGeometryForFloat that suppresses the
     /// geometry apply for minimize-suspension floats (registry reports the

@@ -4,6 +4,7 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/Layout.h>
@@ -108,9 +109,14 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
         applyFloatGeometryUnlessMinimized(windowId, screenId);
     } else {
         // Suspension (minimize-as-float) unfloats restore the pre-float zone,
-        // never a SnapToZone rule target — see unfloatToZone's gate.
+        // never a SnapToZone rule target — see unfloatToZone's gate. They are
+        // also confined to the window's live monitor: the round trip exists to
+        // put the window back where it was before the minimize, and a restore
+        // target on another monitor can only come from stale state (a pre-float
+        // capture or placement record left behind by an earlier cross-monitor
+        // move — Discussion #724).
         const bool suspension = m_windowTracker && m_windowTracker->isSuspensionFloat(windowId);
-        if (!unfloatToZone(windowId, screenId, /*allowRuleTarget=*/!suspension)) {
+        if (!unfloatToZone(windowId, screenId, /*allowRuleTarget=*/!suspension, /*confineToScreen=*/suspension)) {
             // No pre-float zone to restore to — keep the window floating rather than
             // leaving it in a limbo state (not floating, not snapped to any zone).
             qCDebug(PhosphorSnapEngine::lcSnapEngine)
@@ -124,7 +130,8 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
 // Private helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId, bool allowRuleTarget)
+bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId, bool allowRuleTarget,
+                               bool confineToScreen)
 {
     // Highest-priority un-float target: a matched SnapToZone rule. Toggling a
     // window out of float lands it in the rule's zones, not a stale pre-float
@@ -160,7 +167,7 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId,
         }
     }
 
-    UnfloatResult unfloat = resolveUnfloatGeometry(windowId, screenId);
+    UnfloatResult unfloat = resolveUnfloatGeometry(windowId, screenId, confineToScreen);
     if (!unfloat.found) {
         // No pre-float zone (a never-snapped window that defaulted to floating).
         // With the unfloatFallbackToZone setting on, snap it to a fallback zone
@@ -274,7 +281,8 @@ QString SnapEngine::resolveUnfloatScreen(const QString& primaryScreen, const QSt
     return screen;
 }
 
-UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const
+UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen,
+                                                 bool confineToFallbackScreen) const
 {
     UnfloatResult result;
 
@@ -320,14 +328,33 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         return result;
     }
 
-    // Cross-monitor restore is ALLOWED (Discussion #724 follow-up): unfloat returns
-    // the window to its remembered home zone regardless of which monitor it is
-    // currently on. resolveUnfloatScreen prefers the pre-float (home) screen, so the
-    // zone resolves on the monitor the window was snapped on and the window goes
-    // home. This is deterministic and, unlike a cross-monitor refusal guard, does
-    // not depend on the daemon knowing the window's exact current monitor — which is
-    // unreliable for identical-model monitors whose per-window screen the compositor
-    // and daemon can resolve differently.
+    // Cross-monitor restore is ALLOWED for user float toggles (Discussion #724
+    // follow-up): unfloat returns the window to its remembered home zone
+    // regardless of which monitor it is currently on. resolveUnfloatScreen
+    // prefers the pre-float (home) screen, so the zone resolves on the monitor
+    // the window was snapped on and the window goes home.
+    //
+    // A SUSPENSION (minimize) unfloat is confined to the caller's screen
+    // instead (Discussion #724, the 3.3.x regression): the minimize round trip
+    // exists to put the window back where it was before the minimize, so a
+    // home screen naming a different physical monitor can only be stale state
+    // — a pre-float capture or placement-record snap slot left behind by a
+    // cross-monitor move that bypassed windowScreenChanged (drag routes) and
+    // handoffRelease (which deliberately preserves the capture). Restoring it
+    // would teleport the unminimized window across monitors. Refuse — the
+    // caller keeps the window floating where it is. The comparison uses the
+    // RAW home screen, not resolveUnfloatScreen's output: for a suspension
+    // unfloat the caller's screen is the effect's authoritative live output,
+    // and a home screen that no longer resolves must also refuse rather than
+    // degrade into snapping a foreign layout's zone onto the live screen.
+    if (confineToFallbackScreen && !preFloatScreenId.isEmpty() && !fallbackScreen.isEmpty()
+        && !PhosphorIdentity::VirtualScreenId::samePhysical(preFloatScreenId, fallbackScreen)) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine)
+            << "resolveUnfloatGeometry:" << windowId << "suspension home screen" << preFloatScreenId
+            << "is a different monitor than the live screen" << fallbackScreen
+            << "— not restoring across monitors, keeping the window floating";
+        return result;
+    }
     const QString restoreScreen = resolveUnfloatScreen(preFloatScreenId, fallbackScreen);
 
     QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
@@ -505,8 +532,10 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
 
     const int currentDesktop = ctx.toDesktop > 0 ? ctx.toDesktop : currentVirtualDesktopForScreen(ctx.toScreenId);
     // Re-homing already happened at the top of the function (it must cover the
-    // zone-resolved branches too); an unfloat on any monitor restores the home
-    // zone, and cross-monitor restore is allowed (there is no refusal guard).
+    // zone-resolved branches too); a USER unfloat on any monitor restores the
+    // home zone (cross-monitor restore is allowed for float toggles; only
+    // suspension unfloats carry the cross-monitor refusal — see
+    // resolveUnfloatGeometry).
     if (!ctx.wasFloating) {
         // Explicit cross-mode MOVE of a MANAGED window whose source zones did
         // not resolve on this screen (foreign zone ids after a layout change).
