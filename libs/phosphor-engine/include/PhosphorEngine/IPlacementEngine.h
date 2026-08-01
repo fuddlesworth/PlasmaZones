@@ -313,6 +313,34 @@ public:
     // OPTIONAL: Drag insert preview (override if engine supports drag-to-insert)
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// Where a drag-insert preview should place the dragged window, in the
+    /// TARGET ENGINE's slot vocabulary. A flat int cannot address the strip's
+    /// two-axis drop space ("column 3, tile 1" vs "a new column between 2 and
+    /// 3"), so the drag-insert verbs speak this struct; each engine documents
+    /// its own field meaning.
+    ///
+    /// - Autotile: `primary` is the TILED-ONLY insert index (the unit
+    ///   updateDragInsertPreview clamps against tiledWindowCount — NOT the
+    ///   raw window-order index HandoffContext::insertIndex carries).
+    ///   `secondary` and `newSlot` are unused.
+    /// - Scrolling: `primary` is the COLUMN index. With `newSlot` true the
+    ///   drop opens a NEW column at `primary` (existing columns from
+    ///   `primary` shift right); otherwise the window joins the column at
+    ///   `primary` as a tile at `secondary` (clamped into the stack;
+    ///   -1 appends at the bottom).
+    struct DragInsertTarget
+    {
+        int primary = -1;
+        int secondary = -1;
+        bool newSlot = false;
+
+        bool isValid() const
+        {
+            return primary >= 0;
+        }
+        bool operator==(const DragInsertTarget& other) const = default;
+    };
+
     virtual bool hasDragInsertPreview() const
     {
         return false;
@@ -535,19 +563,19 @@ public:
         return {};
     }
 
-    /// Compute the insert index for a cursor position on a managed screen.
-    /// Returns -1 if the screen has no active state.
-    virtual int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const
+    /// Compute the drop target for a cursor position on a managed screen.
+    /// Returns an invalid target when the screen has no active state.
+    virtual DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const
     {
         Q_UNUSED(screenId)
         Q_UNUSED(cursorPos)
-        return -1;
+        return {};
     }
 
-    /// Update the target insert index for an active drag-insert preview.
-    virtual void updateDragInsertPreview(int insertIndex)
+    /// Update the drop target for an active drag-insert preview.
+    virtual void updateDragInsertPreview(const DragInsertTarget& target)
     {
-        Q_UNUSED(insertIndex)
+        Q_UNUSED(target)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

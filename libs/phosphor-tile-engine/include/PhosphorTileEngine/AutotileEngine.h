@@ -1055,8 +1055,24 @@ public:
      * Moves the dragged window within PhosphorTiles::TilingState to the new index (clamped
      * to [0, tiledWindowCount()-1]) and retiles. No-op if the index hasn't
      * changed from the last update.
+     *
+     * Engine-local int form — autotile's native slot vocabulary IS a flat
+     * tiled-only index, so internal callers and tests keep the honest unit.
+     * The IPlacementEngine struct override below delegates here.
      */
-    void updateDragInsertPreview(int insertIndex) override;
+    void updateDragInsertPreview(int insertIndex);
+
+    /**
+     * @brief IPlacementEngine drop-target form: `primary` is the tiled-only
+     * insert index; `secondary`/`newSlot` are meaningless for a flat stack
+     * and ignored.
+     */
+    void updateDragInsertPreview(const DragInsertTarget& target) override
+    {
+        if (target.isValid()) {
+            updateDragInsertPreview(target.primary);
+        }
+    }
 
     /**
      * @brief Commit the active drag-insert preview.
@@ -1089,8 +1105,22 @@ public:
      * test: cursor-over-own-zone returns its current index (stable identity),
      * preventing an oscillating shuffle where moving to a neighbour slot
      * immediately re-matches under the cursor every dragMoved tick.
+     *
+     * Engine-local int form (see updateDragInsertPreview); the struct
+     * override below wraps it for IPlacementEngine callers.
      */
-    int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
+    int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const;
+
+    /**
+     * @brief IPlacementEngine drop-target form: wraps the flat index into
+     * DragInsertTarget::primary (invalid when the screen has no state).
+     */
+    DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const override
+    {
+        DragInsertTarget target;
+        target.primary = computeDragInsertIndexAtPoint(screenId, cursorPos);
+        return target;
+    }
 
     /**
      * @brief Query whether a drag-insert preview is currently active.

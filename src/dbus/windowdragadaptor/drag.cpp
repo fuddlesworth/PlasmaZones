@@ -600,10 +600,10 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             }
             if (m_autotileEngine->hasDragInsertPreview()
                 && m_autotileEngine->dragInsertPreviewScreenId() == autotileScreenId) {
-                const int targetIdx =
-                    m_autotileEngine->computeDragInsertIndexAtPoint(autotileScreenId, QPoint(cursorX, cursorY));
-                if (targetIdx >= 0) {
-                    m_autotileEngine->updateDragInsertPreview(targetIdx);
+                const PhosphorEngine::IPlacementEngine::DragInsertTarget target =
+                    m_autotileEngine->computeDragInsertTargetAtPoint(autotileScreenId, QPoint(cursorX, cursorY));
+                if (target.isValid()) {
+                    m_autotileEngine->updateDragInsertPreview(target);
                 }
                 return;
             }
