@@ -24,7 +24,10 @@ using PhosphorRules::RuleAction;
 
 /// Group an action type into a picker category. Most categories derive
 /// straight from the descriptor's `category` field, so a new action in an
-/// existing category needs no change here. The exception is `layoutEngine`,
+/// existing category needs no change here. Two categories are exceptions and
+/// carry hand-written per-type dispatch: `tabIndicator` (whose per-window tab
+/// colours must leave the Scrolling bucket so it stays single-domain) and
+/// `layoutEngine`,
 /// which is split by action type into Engine, Snapping, Tiling (the last
 /// with Algorithm and Behavior submenus via a `/` in the label), a
 /// top-level Scrolling (the context-domain scroll knobs), and a
@@ -90,13 +93,25 @@ PickerCategory actionCategory(const QString& type)
         return {PhosphorI18n::tr("Engine"), 1};
     }
     if (cat == QLatin1String("tabIndicator")) {
+        // The three per-window tab colours go to the WINDOW bucket, not the
+        // Scrolling one, for the same reason the open-action branch above
+        // exists: CategoryMenuButton takes a top-level bucket's context/window
+        // group from the first item to create it in sorted order, and draws
+        // the divider from that single group. A mixed-domain bucket therefore
+        // renders some of its actions on the wrong side of the divider — and
+        // because the sort is over TRANSLATED labels, which side breaks is
+        // locale-dependent.
+        //
+        // Co-locating all sixteen under Scrolling reads better as one idea,
+        // but it is not worth silently corrupting the divider for the five
+        // pre-existing context scroll knobs that share the bucket.
+        if (type == ActionType::TabColorActive || type == ActionType::TabColorInactive
+            || type == ActionType::TabColorUrgent) {
+            return {PhosphorI18n::tr("Window") + QStringLiteral("/") + PhosphorI18n::tr("Tab indicator"), 8};
+        }
         // Nested under Scrolling, sharing its order 4 so the whole Scrolling
         // bucket stays put (CategoryMenuButton buckets by the top-level
         // segment and orders buckets by the smallest order in the bucket).
-        // The three per-window TabColor* actions live here too rather than
-        // under Window/Scrolling: a user reaches for "tab colours" as one
-        // idea, and splitting them by domain would hide the per-window pair
-        // in a different menu from the context pair it overrides.
         return {PhosphorI18n::tr("Scrolling", "tiling mode name") + QStringLiteral("/")
                     + PhosphorI18n::tr("Tab indicator"),
                 4};

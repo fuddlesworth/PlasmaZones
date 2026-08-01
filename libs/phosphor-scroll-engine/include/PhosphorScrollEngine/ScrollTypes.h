@@ -205,7 +205,9 @@ struct TabIndicatorParams
     qreal lengthProportion = 0.5;
     TabIndicatorPosition position = TabIndicatorPosition::Left;
 
-    /// Pixels this indicator takes out of the column's short axis when
+    /// Pixels this indicator takes out of the column along the indicator's
+    /// THICKNESS axis (the column's width for a left/right indicator, its
+    /// height for top/bottom) when
     /// @c placeWithinColumn is set, and 0 otherwise. Floored at 0 so a
     /// negative gap large enough to cancel the thickness cannot GROW the
     /// column. @p tileCount lets the single-tab skip suppress the

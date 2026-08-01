@@ -100,8 +100,8 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     m_screenStates.erase(donor);
     auto inserted = m_screenStates.insert(newKey, std::move(state));
 
-    // The scroll tab-strip maps are keyed by screen id too, and each needs
-    // something different from the move:
+    // The FIVE scroll tab-strip maps are keyed by screen id too, and each
+    // needs something different from the move:
     //  - m_lastScrollTabStrips MUST follow. It is the cached model the
     //    enable toggle replays, so left under the dead key, re-enabling the
     //    indicator would replay nothing until the next structural strip
@@ -112,9 +112,29 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     //    key, and the new key's counter (absent or already higher) can only
     //    make an old in-flight completion stale-return, which is the safe
     //    direction.
+    //  - m_scrollTabInputRegions MUST follow. The rekey preserves the live
+    //    surface, so the slot can still be visible; left under the dead key,
+    //    syncPassiveShellSurfaceState(newKey) would read an empty region and
+    //    the indicator would be UNCLICKABLE until the next strip update.
+    //  - m_scrollTabIndicatorOverrides MUST follow. Otherwise the screen's
+    //    context-rule paint overrides silently fall back to the config values
+    //    until the next updateScrollingScreens pass re-pushes them.
+    // The last two also have no other removal path for the old key (the
+    // rekeyed key never reaches unwirePassiveShellSlots), so failing to move
+    // them leaks an entry per rekey rather than merely misbehaving once.
     if (const auto stripsIt = m_lastScrollTabStrips.constFind(oldKey); stripsIt != m_lastScrollTabStrips.constEnd()) {
         m_lastScrollTabStrips.insert(newKey, stripsIt.value());
         m_lastScrollTabStrips.remove(oldKey);
+    }
+    if (const auto regionIt = m_scrollTabInputRegions.constFind(oldKey);
+        regionIt != m_scrollTabInputRegions.constEnd()) {
+        m_scrollTabInputRegions.insert(newKey, regionIt.value());
+        m_scrollTabInputRegions.remove(oldKey);
+    }
+    if (const auto overrideIt = m_scrollTabIndicatorOverrides.constFind(oldKey);
+        overrideIt != m_scrollTabIndicatorOverrides.constEnd()) {
+        m_scrollTabIndicatorOverrides.insert(newKey, overrideIt.value());
+        m_scrollTabIndicatorOverrides.remove(oldKey);
     }
     m_scrollTabsHidePending.remove(oldKey);
 

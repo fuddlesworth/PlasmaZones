@@ -781,9 +781,10 @@ void ActionRegistry::registerBuiltinsAppearance()
     // ScrollPerScreenKeys::tabIndicator* keys); the PAINT half never reaches
     // that library and is applied to the overlay daemon-side.
     //
-    // Their own category, not layoutEngine: thirteen more rows would swamp
-    // that group's list, and the indicator is one coherent feature a user
-    // reaches for as a unit.
+    // Their own category, not layoutEngine: sixteen more rows (the thirteen
+    // context knobs below plus the three per-window tab colours further down)
+    // would swamp that group's list, and the indicator is one coherent feature
+    // a user reaches for as a unit.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetTabIndicatorEnabled),
         .slotFor = constantSlot(ActionSlot::TabIndicatorEnabled),
@@ -881,7 +882,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("pixels"),
+                     .kind = QStringLiteral("number"),
                      .min = kMinTabIndicatorGap,
                      .max = kMaxTabIndicatorGap,
                      .defaultDisplay = 5.0}},
@@ -900,7 +901,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("pixels"),
+                     .kind = QStringLiteral("number"),
                      .min = kMinTabIndicatorWidth,
                      .max = kMaxTabIndicatorWidth,
                      .defaultDisplay = 4.0}},
@@ -941,7 +942,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("pixels"),
+                     .kind = QStringLiteral("number"),
                      .min = 0.0,
                      .max = kMaxTabIndicatorGap,
                      .defaultDisplay = 0.0}},
@@ -963,7 +964,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("pixels"),
+                     .kind = QStringLiteral("number"),
                      .min = kTabIndicatorCornerRadiusPill,
                      .max = kMaxTabIndicatorCornerRadius,
                      // Square, the shipped default. The pill sentinel is a
@@ -973,12 +974,19 @@ void ActionRegistry::registerBuiltinsAppearance()
         .displayOrder = 10,
         .tags = {QString(Tag::LayoutEngine)},
     });
+    // HEX ONLY, no accent sentinel — the same contract the overlay colour
+    // actions carry and for the same reason: no consumer on either the context
+    // or the per-window path resolves the token. Both readColor helpers
+    // (layoutregistry_contextresolve.cpp, windowtrackingadaptor/rules.cpp) pass
+    // the string through verbatim to a QML colour property, so an accepted
+    // "accent" would reach the overlay as an unparseable colour. Only the
+    // border/tint family has a resolver for it.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetTabIndicatorActiveColor),
         .slotFor = constantSlot(ActionSlot::TabIndicatorActiveColor),
         .validate =
             [](const QJsonObject& p) {
-                return hasHexColorOrAccent(p, ActionParam::Value);
+                return hasHexColor(p, ActionParam::Value);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -993,7 +1001,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .slotFor = constantSlot(ActionSlot::TabIndicatorInactiveColor),
         .validate =
             [](const QJsonObject& p) {
-                return hasHexColorOrAccent(p, ActionParam::Value);
+                return hasHexColor(p, ActionParam::Value);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -1008,7 +1016,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .slotFor = constantSlot(ActionSlot::TabIndicatorUrgentColor),
         .validate =
             [](const QJsonObject& p) {
-                return hasHexColorOrAccent(p, ActionParam::Value);
+                return hasHexColor(p, ActionParam::Value);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -1029,7 +1037,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .slotFor = constantSlot(ActionSlot::TabColorActive),
         .validate =
             [](const QJsonObject& p) {
-                return hasHexColorOrAccent(p, ActionParam::Value);
+                return hasHexColor(p, ActionParam::Value);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -1044,7 +1052,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .slotFor = constantSlot(ActionSlot::TabColorInactive),
         .validate =
             [](const QJsonObject& p) {
-                return hasHexColorOrAccent(p, ActionParam::Value);
+                return hasHexColor(p, ActionParam::Value);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -1059,7 +1067,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .slotFor = constantSlot(ActionSlot::TabColorUrgent),
         .validate =
             [](const QJsonObject& p) {
-                return hasHexColorOrAccent(p, ActionParam::Value);
+                return hasHexColor(p, ActionParam::Value);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},

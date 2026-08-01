@@ -928,9 +928,12 @@ TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QString& screenId) 
     if (lengthIt != overrides.constEnd()) {
         bool ok = false;
         const qreal v = lengthIt->toDouble(&ok);
-        // Clamped here, unlike the ints: the rule channel has no schema in
-        // front of it, and a zero or negative proportion would resolve the
-        // indicator to a sliver while every setting still reports it on.
+        // A belt at the library boundary. The rule cascade DOES range-check
+        // this upstream (layoutregistry_contextresolve.cpp checks it against
+        // the same Min/MaxTabIndicatorLengthRatio the descriptor validates),
+        // but this library is public API and an embedder can hand it an
+        // override map directly, where a zero or negative proportion would
+        // resolve the indicator to a sliver while every setting reports it on.
         if (ok && v > 0.0) {
             params.lengthProportion = qMin(v, qreal(1.0));
         }

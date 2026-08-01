@@ -483,7 +483,8 @@ Q_SIGNALS:
     /// identical-set re-emit contract on desktop/activity switches.
     void scrollingScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
     void enabledChanged(bool enabled);
-    /// Tab-indicator model for @p screenId, emitted after every relayout: a
+    /// Tab-indicator model for @p screenId, emitted when the resolved model
+    /// changes (a relayout that produces an identical payload stays silent): a
     /// JSON array with one entry per VISIBLE tabbed column that actually
     /// resolves an indicator —
     /// {x, y, width, height (the INDICATOR's absolute px rect, not the

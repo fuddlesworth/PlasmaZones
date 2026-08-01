@@ -224,7 +224,13 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // the flag first. Deriving both from one branch here keeps them from
     // disagreeing — a disagreement means either a dead control or the daemon
     // eating the desktop's clicks.
-    const bool wantPartial = !anyInputGrabbing && !partialInputRegion.isEmpty();
+    // anyVisible is part of the derivation, not just of the show/hide above: a
+    // region installed on a surface with nothing visible is an invisible click
+    // trap. Under keepMappedOnHide the hide() at the top of this function sets
+    // WindowTransparentForInput, and without this term the partial branch would
+    // immediately clear it again and install a region over a surface the user
+    // cannot see.
+    const bool wantPartial = anyVisible && !anyInputGrabbing && !partialInputRegion.isEmpty();
     const bool wantTransparent = !anyInputGrabbing && !wantPartial;
     if (s.m_shellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
         s.m_shellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
@@ -235,14 +241,18 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // applies). An EMPTY mask means "no mask" to Qt, i.e. the whole surface —
     // which is exactly what the modal and click-through cases want, since the
     // flag decides those.
-    // Set UNCONDITIONALLY, with no compare against the current mask. QWindow
-    // remembers whatever we last handed it, so the compare answers "already
-    // applied" even when the surface no longer carries the region — and it
-    // stops carrying it whenever the window is re-created or the transparent
-    // -for-input flag round trips, both of which happen outside this call.
-    // The compare therefore turned a recoverable state into a stuck one. The
-    // cost of re-asserting is one wl_region per call on a path that runs on
-    // structural changes, not per frame.
+    // Set UNCONDITIONALLY, with no compare at this layer. The re-assert exists
+    // for one case: a re-created platform window starts with an empty mask,
+    // and a compare against the QWindow-side value we last handed it would
+    // answer "already applied" and leave the new surface with no input region
+    // at all.
+    //
+    // It costs nothing when the region is unchanged — QWaylandWindow::setMask
+    // early-returns on an equal mask, and updateInputRegion de-dupes again
+    // before touching the compositor, so no wl_region is created. A flag round
+    // trip needs no re-assert either (setWindowFlags re-derives the surface
+    // region from the still-held mask), which is why this is about window
+    // re-creation specifically and not about the flag.
     s.m_shellWindow->setMask(wantPartial ? partialInputRegion : QRegion());
 }
 

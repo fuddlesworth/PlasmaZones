@@ -364,8 +364,9 @@ struct ContextScrollingParams
     std::optional<QString> tabIndicatorInactiveColor;
     std::optional<QString> tabIndicatorUrgentColor;
 
-    /// True when no tab-indicator slot resolved, so the daemon can skip the
-    /// whole indicator-override path rather than testing thirteen optionals.
+    /// True when at least one tab-indicator slot resolved, so the daemon can
+    /// skip the whole indicator-override path when it is false rather than
+    /// testing thirteen optionals.
     bool hasTabIndicatorOverrides() const
     {
         return tabIndicatorEnabled || tabIndicatorHideWhenSingleTab || tabIndicatorPlaceWithinColumn || tabIndicatorGap

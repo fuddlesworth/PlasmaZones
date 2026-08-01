@@ -57,12 +57,14 @@ inline bool hasNumberInRange(const QJsonObject& params, QLatin1StringView key, d
 }
 
 /// Validates that @p params has a number in [@p minValue, @p maxValue] at
-/// @p key. The signed twin of hasNumberInRange above, for the slots whose
-/// range genuinely extends below zero — the tab indicator's gap (a negative
-/// gap draws the indicator over the window) and its corner radius (-1 is the
-/// "fully rounded" sentinel). Everything else should keep using the
-/// zero-floored helper, so a stray negative stays a validation failure rather
-/// than silently reaching a consumer that assumes non-negative.
+/// @p key. The explicit-floor twin of hasNumberInRange above, for slots whose
+/// floor is not zero — whether below it (the tab indicator's gap, where a
+/// negative draws the indicator over the window, and its corner radius, where
+/// -1 is the "fully rounded" sentinel) or above it (its width and length,
+/// which must reject 0 as well as negatives). Slots that genuinely floor at
+/// zero should keep using hasNumberInRange, so a stray negative stays a
+/// validation failure rather than silently reaching a consumer that assumes
+/// non-negative.
 inline bool hasNumberInSignedRange(const QJsonObject& params, QLatin1StringView key, double minValue, double maxValue)
 {
     const QJsonValue v = params.value(key);

@@ -89,8 +89,10 @@ Window {
     /// Shortcuts can't fire here.
     readonly property alias cheatsheetSlotItem: cheatsheetSlot
     /// Scroll tab-strip slot Item — per-screen tab indicators for tabbed
-    /// scrolling columns. Display-only and click-through; content updates
-    /// are plain property writes (no per-update re-instantiation).
+    /// scrolling columns. Each tab is a click target that activates its
+    /// window; the surface is click-through everywhere OUTSIDE the indicator
+    /// rects, which is what the daemon's per-screen input region gives it.
+    /// Content updates are plain property writes (no re-instantiation).
     readonly property alias scrollTabsSlotItem: scrollTabsSlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
@@ -689,9 +691,12 @@ Window {
     Item {
         id: scrollTabsSlot
 
-        // Tab-strip model — C++ writes a list of strip entries, each a map
-        // with x / y / width (shell-window coordinates) and tabs
-        // (list of {title, active}).
+        // Tab-indicator model — C++ writes a list of strip entries.
+        // Each entry: {x, y, width, height (shell-window coordinates),
+        // position (0 left, 1 right, 2 top, 3 bottom), tabs: [{windowId,
+        // title, active, urgent, colors?}]}. `position` decides the whole
+        // vertical/horizontal branch in the content item, and `windowId` is
+        // what a tab click relays back.
         property var strips: []
         // Content lifecycle gate, toggled by C++ on show/hide. Unlike the
         // OSD-style slots the content is NOT re-instantiated per update —

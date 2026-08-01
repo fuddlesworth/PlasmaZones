@@ -160,21 +160,25 @@ public:
     /// interactable beneath non-modal slots (OSDs, main overlay, zone
     /// selector during drag).
     ///
-    /// @p partialInputRegion - window-local rects that should take pointer
-    /// input while NO modal slot is up. Empty (the default) keeps the historic
-    /// all-or-nothing behaviour.
+    /// @p partialInputRegion - the sub-area of the surface that should take
+    /// pointer input, in WINDOW-LOCAL logical (device-independent) coordinates.
+    /// Handed to the compositor as the surface's input region, so clicks
+    /// outside it fall through to whatever is beneath as if the surface were
+    /// not there. Empty (the default) keeps the historic all-or-nothing
+    /// behaviour.
     ///
-    /// This exists because every kbd-None slot shares one screen-sized shell
-    /// surface, so before it the only choices were "eat every click on the
-    /// screen" and "take none". A slot that draws a small interactive control
-    /// (the scrolling tab indicator) needs neither: it needs input exactly
-    /// where it draws. The region is handed to the compositor as the surface's
-    /// input region, so clicks outside it fall through to the windows beneath
-    /// as if the overlay were not there.
+    /// Contract:
+    ///  - IGNORED while @p anyInputGrabbing is true. A modal grab outranks it
+    ///    and takes the whole surface, being entitled to the clicks it covers.
+    ///  - IGNORED while @p anyVisible is false. A region on a surface nobody
+    ///    can see is an invisible click trap, not a feature.
+    ///  - A region larger than the surface, or wholly outside it, is clipped by
+    ///    the compositor and degrades to taking no clicks.
     ///
-    /// PRECEDENCE: a modal grab outranks the region — @p anyInputGrabbing true
-    /// takes the whole surface, because a modal is entitled to the clicks it
-    /// is covering. The region only shapes the non-modal case.
+    /// It exists because every kbd-None slot shares one screen-sized shell
+    /// surface, so the only prior choices were "eat every click on the screen"
+    /// and "take none"; a slot drawing a small interactive control needs input
+    /// exactly where it draws.
     ///
     /// No-op when the shell surface or window is not yet up.
     void syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing,

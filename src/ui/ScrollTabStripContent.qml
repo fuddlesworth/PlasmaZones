@@ -4,33 +4,37 @@
 /**
  * Tab indicators for tabbed scrolling columns.
  *
- * Display-only and click-through: one indicator per tabbed column, drawn in
- * the rect the scrolling engine resolved for it. The model arrives from C++ as
- * `strips` — a list of maps with x / y / width / height (shell-window
- * coordinates), `position` (0 left, 1 right, 2 top, 3 bottom) and `tabs` (list
- * of {title, active, urgent}). Updates are plain property writes; the component
- * is not re-instantiated per relayout.
+ * One indicator per tabbed column, drawn in the rect the scrolling engine
+ * resolved for it. The model arrives from C++ as `strips` — a list of maps with
+ * x / y / width / height (shell-window coordinates), `position` (0 left,
+ * 1 right, 2 top, 3 bottom) and `tabs` (list of
+ * {windowId, title, active, urgent, colors?}). Updates are plain property
+ * writes; the component is not re-instantiated per relayout.
+ *
+ * BOTH STYLES FILL THE RESOLVED RECT EXACTLY, on both axes, and divide it
+ * evenly between the tabs. That is not cosmetic: the engine reserves exactly
+ * this many pixels out of the column when `place within column` is set, so an
+ * indicator that sized itself to its own content would draw over the window;
+ * and the daemon hands the compositor this same rect as the surface's input
+ * region, so any part of it that is not a tab would swallow clicks. Content
+ * that does not fit is clipped rather than allowed to overflow.
  *
  * TWO STYLES, chosen by `style`:
  *
- *  - Chips (0): a pill listing the tabs by title, the indicator PlasmaZones
- *    shipped before the settings family existed. It SELF-SIZES on its short
- *    axis, so the engine's `width` acts as a floor rather than a ceiling and
- *    the chips stay legible at any thickness. On its long axis it is clamped
- *    to the resolved rect and scrolls just far enough to keep the ACTIVE chip
- *    inside, clipping whichever chips fall outside with no "+N" affordance:
- *    the highlight is what the indicator exists to show, so it is the one chip
- *    that always stays visible.
+ *  - Chips (0): a pill listing the tabs by title. A PlasmaZones addition; niri
+ *    has no equivalent. Titles elide against each tab's share of the rect.
  *
- *  - Bar (1): niri's thin run of coloured segments, one per tab, filling the
- *    resolved rect exactly. No titles, so it costs no room and reads at a
- *    glance. Segments split the long axis evenly.
+ *  - Bar (1): niri's thin run of coloured segments, one per tab, and the
+ *    shipped default. No titles, so it reads at a glance at a few pixels thick.
  *
  * Both honour the resolved rect's ORIENTATION: a left/right indicator stacks
- * its tabs down the column, a top/bottom one lays them across.
+ * its tabs down the column and rotates chip titles to run with them; a
+ * top/bottom one lays them across.
  *
- * The strip carries no accessible surface because it is click-through by
- * design.
+ * INPUT: each tab is a click target that activates its window. The surface is
+ * click-through everywhere OUTSIDE the indicator rects — the daemon's input
+ * region covers only what is drawn here — so clicks elsewhere reach the
+ * windows beneath as if the overlay were not present.
  */
 
 import QtQuick
@@ -133,8 +137,10 @@ Item {
 
             required property var modelData
 
-            // The rect the engine resolved. The chips style may exceed it on
-            // the short axis (see the file doc); the bar style fills it.
+            // The rect the engine resolved. BOTH styles fill it exactly — the
+            // engine reserves this many pixels out of the column when `place
+            // within column` is set, so anything that drew outside it would
+            // overlap the window.
             readonly property int slotX: modelData.x
             readonly property int slotY: modelData.y
             readonly property int slotWidth: modelData.width
@@ -153,6 +159,13 @@ Item {
             y: slotY
             width: slotWidth
             height: slotHeight
+            // The bar's segments floor at 1px each, so a rect too short for its
+            // tab count produces a run LONGER than the rect. Without this the
+            // tail segments paint outside the reserved band and over the
+            // neighbouring window, while staying unclickable (the daemon's
+            // input region is exactly this rect). The chips pill clips for the
+            // same reason.
+            clip: true
 
             // ── Segment bar ─────────────────────────────────────────────
             // Fills the resolved rect exactly: each segment takes an equal
@@ -169,8 +182,14 @@ Item {
                     // Floored at 1 so a bar too short for its tab count still
                     // paints every segment rather than silently dropping the
                     // tail to zero-width.
-                    readonly property int segmentLength: Math.max(1, Math.floor((indicator.longExtent - root.gapsBetweenTabs * (indicator.tabCount - 1)) / indicator.tabCount))
-                    readonly property int offset: index * (segmentLength + root.gapsBetweenTabs)
+                    readonly property int baseLength: Math.max(1, Math.floor((indicator.longExtent - root.gapsBetweenTabs * (indicator.tabCount - 1)) / indicator.tabCount))
+                    readonly property int offset: index * (baseLength + root.gapsBetweenTabs)
+                    // The LAST segment absorbs the floor remainder, so the run
+                    // ends exactly on the rect's edge. Without this up to
+                    // tabCount-1 px of the input region belongs to no tab, and
+                    // a click there is taken by the overlay and dropped rather
+                    // than reaching either a tab or the window beneath.
+                    readonly property int segmentLength: index === indicator.tabCount - 1 ? Math.max(1, indicator.longExtent - offset) : baseLength
 
                     x: indicator.vertical ? 0 : offset
                     y: indicator.vertical ? offset : 0
@@ -190,16 +209,21 @@ Item {
                     // Top-left is the leading corner and bottom-right the
                     // trailing one in BOTH orientations, so those two need no
                     // branch; only the other diagonal swaps.
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.tabActivated(segment.modelData.windowId)
-                    }
-
                     topLeftRadius: squareLeading ? 0 : radius
                     topRightRadius: (indicator.vertical ? squareLeading : squareTrailing) ? 0 : radius
                     bottomLeftRadius: (indicator.vertical ? squareTrailing : squareLeading) ? 0 : radius
                     bottomRightRadius: squareTrailing ? 0 : radius
+
+                    // A bar segment carries no visible text, so the accessible
+                    // name is the only thing identifying which window this
+                    // target switches to.
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        Accessible.role: Accessible.Button
+                        Accessible.name: segment.modelData.title || i18n("Untitled window")
+                        onClicked: root.tabActivated(segment.modelData.windowId)
+                    }
                 }
             }
 
@@ -250,6 +274,11 @@ Item {
                 /// choice anyway, and this makes the strip say so.
                 readonly property int longExtent: indicator.vertical ? height : width
                 readonly property int chipLongBudget: Math.max(1, Math.floor((longExtent - chipInset * 2 - root.gapsBetweenTabs * Math.max(0, indicator.tabCount - 1)) / Math.max(1, indicator.tabCount)))
+                /// The LAST chip's share, absorbing the division remainder so
+                /// the run ends flush with the pill's inner edge instead of
+                /// leaving up to tabCount-1 px that belongs to no tab. The bar
+                /// style does the same for its final segment.
+                readonly property int chipTrailingBudget: Math.max(1, longExtent - chipInset * 2 - (chipLongBudget + root.gapsBetweenTabs) * Math.max(0, indicator.tabCount - 1))
 
                 radius: root.tabRadius(shortExtent)
                 color: Qt.alpha(Kirigami.Theme.backgroundColor, 0.85)
@@ -264,19 +293,27 @@ Item {
                 Grid {
                     id: tabFlow
 
-                    // Anchored at the inset, NOT centred or scrolled. The
-                    // chips divide the indicator evenly (see chipLongBudget),
-                    // so the run always fills the pill exactly and there is
-                    // never anything to centre or scroll into view.
+                    // Anchored at the inset, NOT centred or scrolled. The chips
+                    // divide the indicator evenly (see chipLongBudget), so the
+                    // run spans the pill and there is nothing to centre or
+                    // scroll into view.
                     //
                     // The old content-sized run needed both, and needing them
                     // was the symptom of a real bug: the daemon hands the
                     // compositor the whole indicator rect as its input region,
-                    // but only the chips carried click handlers, so every
-                    // click in the leftover space was SWALLOWED by the overlay
-                    // and did nothing. Dividing evenly makes the region and
-                    // the tabs the same shape, so every point that takes a
-                    // click belongs to exactly one tab.
+                    // but only the chips carried click handlers, so a click in
+                    // the leftover space was SWALLOWED by the overlay and did
+                    // nothing. Dividing evenly closes the large gaps.
+                    //
+                    // Two small dead zones remain BY DESIGN, and they are
+                    // accepted rather than overlooked: the chipInset frame
+                    // around the run, and the inter-tab gaps when
+                    // `gapsBetweenTabs` is non-zero. Both are a few pixels and
+                    // both are places the user can see there is no tab. The
+                    // last chip absorbs the division remainder (see
+                    // chipTrailingBudget) so no dead strip accumulates at the
+                    // end, which is the one case that would NOT look like a
+                    // gap.
                     x: pill.chipInset
                     y: pill.chipInset
 
@@ -297,6 +334,7 @@ Item {
                             id: chip
 
                             required property var modelData
+                            required property int index
 
                             readonly property bool isActive: modelData.active === true
                             readonly property bool isUrgent: modelData.urgent === true
@@ -315,8 +353,9 @@ Item {
                             // tab swallows clicks silently. Equal shares leave
                             // no such gap. It also stops one long title from
                             // starving its siblings, which is what a row of
-                            // content-sized chips does.
-                            readonly property int alongAxis: pill.chipLongBudget
+                            // content-sized chips does. The last chip takes the
+                            // remainder so the run ends flush.
+                            readonly property int alongAxis: index === indicator.tabCount - 1 ? pill.chipTrailingBudget : pill.chipLongBudget
 
                             // ACROSS the axis every chip takes the pill's full
                             // inner thickness, so the run reads as one column
@@ -334,6 +373,8 @@ Item {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
+                                Accessible.role: Accessible.Button
+                                Accessible.name: chip.modelData.title || i18n("Untitled window")
                                 onClicked: root.tabActivated(chip.modelData.windowId)
                             }
 

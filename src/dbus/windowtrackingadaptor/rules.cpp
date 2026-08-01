@@ -314,11 +314,34 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    // Cached, unlike scrollOpenRuleParams: with nothing extra stamped onto the
-    // query this IS the plain (windowId, ruleSet revision) resolve the cache is
-    // keyed on, so it can share the cache instead of poisoning it. That matters
-    // here in a way it does not there — this runs per tab per relayout.
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    // READ the shared memo, never SEED it. Both halves of that matter, and an
+    // earlier revision of this function got both wrong by calling
+    // resolveCached:
+    //
+    //  - resolveCached forwards an EMPTY admit filter, and the memo key is
+    //    (windowId, revision) with the filter deliberately NOT part of it
+    //    (ruleevaluator.cpp). So an empty-filter verdict lands under the same
+    //    key the six admitScreenStamped callers read, admitting rules those
+    //    callers exclude. Per the negation guard in internal.h that is not
+    //    merely a superset: a `None{Mode Equals scrolling}` group matches
+    //    BECAUSE its inner leaf fails on an unstamped query, so one poisoned
+    //    entry makes such a SnapToZone / RouteToScreen rule fire for every
+    //    window.
+    //  - even with the right filter, SEEDING from here would break the
+    //    ordering invariant documented above shouldRestoreFloatedPosition:
+    //    the two existing unstamped readers only run on the open path, after a
+    //    stamper. This one runs per tab on every relayout, including the first
+    //    resolve after a rules save bumps the revision, so it could seed an
+    //    empty screenId and silently stop every ScreenId-scoped rule from
+    //    firing for that window.
+    //
+    // resolveCachedIfPresent is a revision-gated, NON-INSERTING peek, so a hit
+    // costs nothing and a miss cannot corrupt the ordering. The miss path pays
+    // one uncached resolve per tab until a stamper seeds the window, which is
+    // the price of not being a seeder.
+    std::optional<PhosphorRules::ResolvedActions> cached = m_ruleEvaluator->resolveCachedIfPresent(windowId);
+    const PhosphorRules::ResolvedActions resolved =
+        cached ? *cached : m_ruleEvaluator->resolveFiltered(*query, admitScreenStamped);
     const auto readColor = [&resolved, &out](QLatin1StringView slot, const QString& key) {
         const auto action = resolved.slot(QString(slot));
         if (!action) {

@@ -277,9 +277,14 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     // its header doc). The hide-pending bit and the cached strip model have
     // no such requirement — they are plain state for a shell that no longer
     // exists, and keeping the cache would grow it by one dead screen per
-    // hot-plug cycle, so drop both.
+    // hot-plug cycle, so drop them. The input region and the paint overrides
+    // are the same shape and are dropped for the same reason: both are
+    // rebuilt from the next strip update for a live screen, and retaining
+    // them would leak one QRegion and one QVariantMap per hot-plug cycle.
     m_scrollTabsHidePending.remove(screenId);
     m_lastScrollTabStrips.remove(screenId);
+    m_scrollTabInputRegions.remove(screenId);
+    m_scrollTabIndicatorOverrides.remove(screenId);
     QObject::disconnect(it->overlayGeomConnection);
     it->overlayGeomConnection = {};
     it->overlayPhysScreen = nullptr;

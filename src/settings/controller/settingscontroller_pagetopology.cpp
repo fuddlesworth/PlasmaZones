@@ -484,8 +484,8 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
     // per-algorithm slots from Algorithm, plus the whole window-handling
     // card (placement, drag and overflow behaviour, sticky handling, smart
     // gaps, restore-on-login) and focus from Window. scrolling-simple surfaces
-    // view centering and the default column width from View and Columns, the
-    // tab indicator's enable / style / position from Tabs, plus the whole
+    // the default column width from Columns, the tab indicator's enable /
+    // style / position from Tabs, plus view centering and the whole
     // window-handling and focus cards from Window.
     // They deliberately have NO pageOwnedConfigKeys
     // entry — the one-owner invariant there forbids listing a key twice —

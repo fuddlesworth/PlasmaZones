@@ -96,6 +96,22 @@ static_assert(ConfigDefaults::scrollingStickyRestoreOnly()
 static_assert(ConfigDefaults::scrollingStickyIgnoreAll()
                   == static_cast<int>(PhosphorEngine::StickyWindowHandling::IgnoreAll),
               "StickyWindowHandling::IgnoreAll wire value drifted from ConfigDefaults");
+// TabIndicatorPosition. The engine static_casts the stored int straight into
+// this enum after a range check (engine_core.cpp), so a drift would silently
+// place the indicator on the wrong edge rather than failing to build. Two
+// comments already CLAIMED this pinning existed before it did.
+static_assert(ConfigDefaults::scrollingTabIndicatorPositionLeft()
+                  == static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Left),
+              "TabIndicatorPosition::Left wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingTabIndicatorPositionRight()
+                  == static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Right),
+              "TabIndicatorPosition::Right wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingTabIndicatorPositionTop()
+                  == static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Top),
+              "TabIndicatorPosition::Top wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingTabIndicatorPositionBottom()
+                  == static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Bottom),
+              "TabIndicatorPosition::Bottom wire value drifted from ConfigDefaults");
 
 // The preset-index ceiling is a consequence of the preset-list length cap, not
 // an independent number: an index past the last entry a canonicalized list can

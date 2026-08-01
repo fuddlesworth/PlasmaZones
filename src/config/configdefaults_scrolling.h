@@ -282,7 +282,7 @@ public:
     /// usually want Top with it, since a title reads better across than down.
     static constexpr int scrollingTabIndicatorPosition()
     {
-        return scrollingTabIndicatorPositionTop();
+        return scrollingTabIndicatorPositionLeft();
     }
     /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
     static constexpr bool isValidScrollingTabIndicatorPosition(int v)

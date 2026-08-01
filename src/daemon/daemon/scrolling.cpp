@@ -232,6 +232,13 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // live set by now, so the schedule is refused instead of queueing a no-op.
     for (const QString& screenId : currentScrollScreens - scrollingScreens) {
         m_scrollEngine->clearPerScreenConfig(screenId);
+        // The overlay's PAINT overrides need the same treatment for the same
+        // reason — they are the other half of the same context resolve, and a
+        // screen that left scrolling would otherwise keep them until it
+        // re-entered and something re-resolved.
+        if (m_overlayService) {
+            m_overlayService->setScrollTabIndicatorOverrides(screenId, {});
+        }
     }
 
     // setActiveScreens retiles only ADDED screens on a changed set (the

@@ -1,11 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Scroll tab-strip indicators — per-screen, display-only pills marking the
-// tabs of tabbed scrolling columns. Unlike the cheatsheet/picker this slot
-// is NOT a daemon-level singleton (every scrolling screen can carry strips
-// concurrently), grabs no input, and updates by plain property writes
-// because the model refreshes on every strip relayout.
+// Scroll tab indicators — per-screen markers for the tabs of tabbed scrolling
+// columns. Unlike the cheatsheet/picker this slot is NOT a daemon-level
+// singleton (every scrolling screen can carry strips concurrently), and it
+// updates by plain property writes because the model refreshes on every strip
+// relayout.
+//
+// It takes input ONLY where it draws: this file builds a per-screen QRegion of
+// the indicator rects and hands it to the shell, so a click on a tab activates
+// that window while a click anywhere else falls through to the window beneath.
+// That is a middle state the shell gained for this slot — every other kbd-None
+// slot is still all-or-nothing.
 
 #include "internal.h"
 #include "daemon/overlayservice.h"
@@ -81,15 +87,18 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     // hide, so one entry point serves both directions.
     if (strips.isEmpty()) {
         m_lastScrollTabStrips.remove(screenId);
-        // Drop the input region with the strips: a stale region would keep the
-        // shell taking clicks over a patch of screen with nothing drawn on it.
-        m_scrollTabInputRegions.remove(screenId);
     } else {
         m_lastScrollTabStrips.insert(screenId, strips);
     }
     const bool stripEnabled = !m_settings || m_settings->scrollingTabIndicatorEnabled();
 
     if (strips.isEmpty() || !stripEnabled) {
+        // Drop the input region on BOTH no-indicator paths, not just the
+        // empty-strips one. Switching the indicator off with strips still live
+        // takes this branch too, and the hide is ANIMATED — so a region left
+        // installed keeps the fading pills eating clicks for the length of the
+        // animation, and keeps the entry for the whole disabled period.
+        m_scrollTabInputRegions.remove(screenId);
         // Hide-and-unload without creating a shell for a screen that never
         // showed strips.
         auto it = m_screenStates.find(screenId);

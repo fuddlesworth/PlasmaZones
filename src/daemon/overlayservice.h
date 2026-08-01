@@ -422,8 +422,12 @@ public:
     /// Tab indicators for tabbed scrolling columns on @p screenId (per
     /// screen, NOT a singleton). @p strips is a list of maps with x / y /
     /// width / height (absolute px, converted to shell coordinates here),
-    /// position, and tabs ({title, active, urgent} list); empty hides the
-    /// screen's indicators. Display-only and click-through.
+    /// position, and tabs ({windowId, title, active, urgent, colors?} list);
+    /// empty hides the screen's indicators. `windowId` is load-bearing — it is
+    /// what a tab click relays back to focus that window.
+    ///
+    /// Each tab is a click target; the surface stays click-through outside the
+    /// indicator rects via the per-screen input region built here.
     void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
 
     /// Per-context PAINT overrides for @p screenId's tab indicator, resolved
