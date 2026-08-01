@@ -128,6 +128,16 @@ struct PHOSPHORRULES_EXPORT ParamSchema
 // field edit; no consumer call-site changes. Tags compose via intersection:
 // e.g. the animation-override actions (the 3 Override* actions, NOT
 // ExcludeAnimations) are exactly Tag::Animation ∩ Tag::Effect.
+//
+// RETAINED PUBLIC API: Tag::Border, Tag::Gap, Tag::LayoutEngine and
+// Tag::Overlay currently have no in-tree reader, and `typesWithTag()` has no
+// in-tree call site (tests included) — every consumer that could use them
+// happens to filter by slot instead. They stay for the same reason
+// PhosphorZones::LayoutAssignmentKey does (AssignmentEntry.h): this is an
+// installed LGPL library header whose point is third-party linkage, the tag
+// vocabulary is the documented classification of the action set, and removing
+// an exported constant or query is a source break for consumers we do not
+// control. Deliberately kept, not overlooked.
 namespace Tag {
 /// Actions consumed by the KWin effect's rule set (shader manager +
 /// border appearance + window stacking layer). ExcludeAnimations
@@ -203,8 +213,9 @@ struct PHOSPHORRULES_EXPORT ActionDescriptor
     /// UI grouping category for the action-type picker. Actions with the
     /// same category are clustered together; empty means uncategorized.
     QString category{};
-    /// Sort key within a category (lower = earlier). Actions with the same
-    /// displayOrder are sorted by type string.
+    /// Intended sort key within a category (lower = earlier). Advisory only
+    /// today: the shipped picker sorts within a category alphabetically by
+    /// label and no consumer reads this field.
     int displayOrder = 0;
     /// Behavioural tags for consumer-side filtering. Values are from the
     /// `Tag::` namespace constants. Use `ActionRegistry::hasTag()` /
@@ -395,10 +406,12 @@ inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 /// action: true forces the window's previous floated position (and original
 /// monitor) to be restored, false suppresses it. Engine-neutral — overrides the
 /// per-engine `snappingRestoreFloatedWindowsOnLogin` /
-/// `autotileRestoreFloatedWindowsOnLogin` settings for matched windows. Resolved
-/// by the daemon-injected restore-position predicate and consulted inside both
-/// SnapEngine::resolveWindowRestore and AutotileEngine::insertWindow. Domain
-/// Window (matches window properties).
+/// `autotileRestoreFloatedWindowsOnLogin` / `scrollingRestoreFloatedWindowsOnLogin`
+/// settings for matched windows. Resolved by the daemon-injected
+/// restore-position predicate, which all THREE placement engines take:
+/// consulted inside SnapEngine::resolveWindowRestore,
+/// AutotileEngine::insertWindow and the scroll engine's floating-reopen branch.
+/// Domain Window (matches window properties).
 inline constexpr QLatin1StringView RestorePosition{"restorePosition"};
 
 /// Per-window override for the "restore snapped windows to their zone on login"
@@ -519,6 +532,13 @@ inline constexpr QLatin1StringView SetCenterFocusedColumn{"setCenterFocusedColum
 /// How a newly-opened column displays its windows: side by side, or stacked as
 /// tabs. Closed enum token (`ActionParam::Value`, ColumnDisplayToken).
 inline constexpr QLatin1StringView SetScrollDefaultColumnDisplay{"setScrollDefaultColumnDisplay"};
+/// Where a fresh-opened window's new column enters the strip. Closed enum
+/// token (`ActionParam::Value`, ScrollInsertPositionToken).
+inline constexpr QLatin1StringView SetScrollInsertPosition{"setScrollInsertPosition"};
+/// Height a newly-opened window takes inside its column, as a fraction of the
+/// work-area height (numeric `ActionParam::Value`, edited as a percent;
+/// committed as a fixed pixel intent against the live work area).
+inline constexpr QLatin1StringView SetScrollDefaultWindowHeight{"setScrollDefaultWindowHeight"};
 
 // ── Per-window scrolling open overrides (domain Window) ──
 // Read on the open path for the matched window, layered over the context /
@@ -534,6 +554,11 @@ inline constexpr QLatin1StringView OpenTabbed{"openTabbed"};
 /// Whether the opening window starts its own column or is consumed into the
 /// focused one. Closed enum token (`ActionParam::Value`, ColumnPlacementToken).
 inline constexpr QLatin1StringView OpenColumnPlacement{"openColumnPlacement"};
+/// Height the opening window takes inside its column, as a fraction of the
+/// work-area height. Numeric `ActionParam::Value` (stored fraction, edited as
+/// a percent). Applies after every insert path, outranking remembered and
+/// default heights the way OpenColumnWidth outranks the width defaults.
+inline constexpr QLatin1StringView OpenWindowHeight{"openWindowHeight"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -546,16 +571,23 @@ inline constexpr QLatin1StringView OpenColumnPlacement{"openColumnPlacement"};
 // A future rename (e.g. `effectId` → `effect_id`) updates one entry here and
 // flows everywhere instead of being hard-coded at four call sites.
 namespace ActionParam {
-// OverrideAnimation{Shader,Timing,Curve} family.
+// OverrideAnimation{Shader,Timing,Curve} family. `Params` is the exception:
+// it is the shared nested-payload key for every action carrying a free-form
+// uniform / parameter blob, so it is also read by SetOverlayShader,
+// OverrideDecorationChain and SetAlgorithmParam.
 inline constexpr QLatin1StringView Event{"event"};
 inline constexpr QLatin1StringView EffectId{"effectId"};
 inline constexpr QLatin1StringView Params{"params"};
 inline constexpr QLatin1StringView Curve{"curve"};
 inline constexpr QLatin1StringView DurationMs{"durationMs"};
-// SetOpacity payload — the wire-encoded opacity is a [0.0, 1.0] double. Also the
-// single colour param key for SetBorderColorActive / SetBorderColorInactive: a
-// `#AARRGGBB` hex string OR the `BorderColorToken::Accent` sentinel, which the
-// consumer resolves to the live system accent.
+// The shared SINGLE-PAYLOAD key: any action whose whole payload is one scalar
+// stores it here, across the appearance, overlay, gap, engine-parameter and
+// per-window-override families. The wire type follows the action's descriptor
+// kind — a [0.0, 1.0] double for the opacity and fraction actions, an integer
+// for the gap and border-metric actions, a bool for the on/off overrides, a
+// `#AARRGGBB` hex string (or the `BorderColorToken::Accent` sentinel, resolved
+// to the live system accent) for the colour actions, and an enum wire token for
+// the token-valued ones.
 inline constexpr QLatin1StringView Value{"value"};
 // SetEngineMode / DisableEngine engine-token key — the wire token vocabulary
 // is `PhosphorZones::modeToWireString(Mode)` (snapping / autotile / scrolling).
@@ -600,13 +632,18 @@ inline constexpr int MaxZoneOrdinal = 64;
 inline constexpr double MaxBorderWidth = 10.0;
 inline constexpr double MaxBorderRadius = 20.0;
 
-/// Bounds for a `SetScrollDefaultColumnWidth` / `OpenColumnWidth` fraction of
-/// the work-area width. Shared for the same lockstep reason as the border
-/// bounds above: the load-time descriptor validator (via the private percent
-/// pair in ruleaction_builtins_p.h), the zones-layer context resolver
-/// (layoutregistry_contextresolve.cpp), and the per-window open-params
-/// consumer (windowtrackingadaptor/rules.cpp) all validate against these — a
-/// private copy in any of them would drift by hand-mirroring. A column may
+/// Bounds for a scrolling-engine work-area FRACTION, width or height. The pair
+/// is named for the column-width action it was introduced with, but it now
+/// bounds four actions across both axes: `SetScrollDefaultColumnWidth` and
+/// `OpenColumnWidth` against the work-area WIDTH, `SetScrollDefaultWindowHeight`
+/// and `OpenWindowHeight` against its HEIGHT. One pair, because the axes share
+/// the same "at least a sliver, at most the whole work area" policy. Shared for
+/// the same lockstep reason as the border bounds above: the load-time
+/// descriptor validators (via the private percent pair in
+/// ruleaction_builtins_p.h), the zones-layer context resolver
+/// (layoutregistry_contextresolve.cpp), and the per-window open-params consumer
+/// (windowtrackingadaptor/rules.cpp) all validate against these — a private
+/// copy in any of them would drift by hand-mirroring. A column or window may
 /// legitimately take the whole work area, so the upper bound is 1.0.
 inline constexpr double MinColumnWidthRatio = 0.05;
 inline constexpr double MaxColumnWidthRatio = 1.0;
@@ -677,6 +714,18 @@ namespace ColumnPlacementToken {
 inline constexpr QLatin1StringView NewColumn{"newColumn"}; ///< open in a column of its own
 inline constexpr QLatin1StringView Consume{"consume"}; ///< consume into the focused column
 } // namespace ColumnPlacementToken
+
+/// Wire tokens for SetScrollInsertPosition's `value` param — where a fresh
+/// column enters the strip. Ints match the scrolling engine's
+/// ScrollInsertPosition (rightOfActive 0 … intoActiveColumn 4); the schema
+/// side pins the same spellings (settingsschema_scrolling.cpp intChoices).
+namespace ScrollInsertPositionToken {
+inline constexpr QLatin1StringView RightOfActive{"rightOfActive"};
+inline constexpr QLatin1StringView LeftOfActive{"leftOfActive"};
+inline constexpr QLatin1StringView First{"first"};
+inline constexpr QLatin1StringView Last{"last"};
+inline constexpr QLatin1StringView IntoActiveColumn{"intoActiveColumn"};
+} // namespace ScrollInsertPositionToken
 
 /// Wire tokens for SetWindowLayer's `value` param — the closed vocabulary the
 /// descriptor validator, the KWin-effect consumer (resolveWindowLayer), and the
@@ -773,18 +822,23 @@ inline constexpr QLatin1StringView DragBehavior{"drag-behavior"};
 inline constexpr QLatin1StringView AlgorithmParams{"algorithm-params"};
 // Per-context scrolling parameter slots (one per param). Filled by
 // SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
-// SetScrollDefaultColumnDisplay, read by
+// SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
+// SetScrollDefaultWindowHeight, read by
 // LayoutRegistry::resolveContextScrollingParams and layered onto the scrolling
 // engine's per-screen config the way the autotile params are.
 inline constexpr QLatin1StringView ScrollDefaultColumnWidth{"scroll-default-column-width"};
 inline constexpr QLatin1StringView CenterFocusedColumn{"center-focused-column"};
 inline constexpr QLatin1StringView ScrollDefaultColumnDisplay{"scroll-default-column-display"};
+inline constexpr QLatin1StringView ScrollInsertPosition{"scroll-insert-position"};
+inline constexpr QLatin1StringView ScrollDefaultWindowHeight{"scroll-default-window-height"};
 // Per-window scrolling open slots (one per property so independent rules
 // cascade per-property). Filled by OpenColumnWidth / OpenTabbed /
-// OpenColumnPlacement, read on the open path by the scrolling engine.
+// OpenColumnPlacement / OpenWindowHeight, read on the open path by the
+// scrolling engine.
 inline constexpr QLatin1StringView OpenColumnWidth{"open-column-width"};
 inline constexpr QLatin1StringView OpenTabbed{"open-tabbed"};
 inline constexpr QLatin1StringView OpenColumnPlacement{"open-column-placement"};
+inline constexpr QLatin1StringView OpenWindowHeight{"open-window-height"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader

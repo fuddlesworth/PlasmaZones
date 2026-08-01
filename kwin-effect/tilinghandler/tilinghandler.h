@@ -223,9 +223,18 @@ public:
     /// pair this with DecorationManager::restoreAll().
     void clearTiledTracking();
 
-    // Focus follows mouse: focus autotile window under cursor
+    // Focus follows mouse: focus the managed window under the cursor.
+    // Autotile and scrolling screens carry independent flags (per-mode
+    // settings); handleCursorMoved routes per screen.
     void setFocusFollowsMouse(bool enabled);
+    void setScrollingFocusFollowsMouse(bool enabled);
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
+
+    // Meta+wheel column focus configuration. Disabling genuinely releases
+    // the axis chords back to the compositor (updateScrollWheelShortcuts'
+    // want predicate); inverting flips the wheel direction.
+    void setWheelFocusEnabled(bool enabled);
+    void setWheelFocusInverted(bool inverted);
 
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
     bool isManagedScreen(const QString& screenId) const;
@@ -304,6 +313,12 @@ public:
     /// therefore snapshot this before and compare after — otherwise a screen
     /// that enters the union AFTER being marked scrolling leaves every
     /// `Mode == "scrolling"` verdict memoised as non-matching for the session.
+    ///
+    /// ONE exemption, by name: clearTiledTracking. It is a teardown-only writer
+    /// (daemon loss and effect destruction), and neither caller has a session
+    /// left to memoise a verdict for — the daemon-loss caller invalidates the
+    /// caches itself moments later, and the destructor must not run a rule
+    /// sweep against half-destroyed members. Any NEW writer takes the pair.
     QSet<QString> scrollingScreenIntersection() const
     {
         return m_scrollingScreens & m_managedScreens;
@@ -725,7 +740,16 @@ private:
     QSet<QString> m_monocleMaximizedWindows;
     int m_suppressMaximizeChanged = 0;
     // ── Focus follows mouse ──
+    // Per-mode pair: m_focusFollowsMouse is the autotile flag
+    // (autotileFocusFollowsMouse), m_scrollingFocusFollowsMouse the
+    // scrolling one. handleCursorMoved picks per screen via
+    // isScrollingScreen — one shared boolean made the two settings fight
+    // over the union of managed screens.
     bool m_focusFollowsMouse = false;
+    bool m_scrollingFocusFollowsMouse = false;
+    // ── Meta+wheel column focus ──
+    bool m_wheelFocusEnabled = true;
+    bool m_wheelFocusInverted = false;
     // ── Border state — uses shared BorderState from compositor-common ──
     BorderState m_border;
 };

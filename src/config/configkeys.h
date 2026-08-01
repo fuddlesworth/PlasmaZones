@@ -24,11 +24,15 @@
 #define P_CONFIG_GROUP(name, str) P_CONFIG_KEY(name, str)
 
 // Single definition point for the per-screen group prefix spellings.
-// Shared by PerScreenPathResolver's prefix→category mapping table and, for two
-// of the three, a *GroupPrefix accessor below that appends the ':'
-// (zoneSelectorGroupPrefix and autotileScreenGroupPrefix; the snapping prefix
-// has no accessor, because per-monitor snapping state is unified into the
-// autotile store and nothing looks its group up by name). Defining the
+// All four are rows in PerScreenPathResolver's prefix→category mapping table,
+// which is what makes their groups resolve to a nested path under the
+// "PerScreen" container instead of falling back to a dot-path orphan at the
+// JSON root. Three of the four also carry a *GroupPrefix accessor below that
+// appends the ':' (zoneSelectorGroupPrefix, autotileScreenGroupPrefix,
+// scrollingScreenGroupPrefix); the snapping prefix has none, because
+// per-monitor snapping state is unified into the autotile store and nothing
+// looks its group up by name — it stays in the resolver table so an older
+// build's leftover groups still resolve and can be swept. Defining the
 // spellings here keeps whichever consumers exist in lockstep instead of
 // silently desyncing the JSON path resolver from the group accessors.
 //
@@ -42,6 +46,7 @@
 #define P_PER_SCREEN_PREFIX_ZONE_SELECTOR "ZoneSelector"
 #define P_PER_SCREEN_PREFIX_AUTOTILE "AutotileScreen"
 #define P_PER_SCREEN_PREFIX_SNAPPING "SnappingScreen"
+#define P_PER_SCREEN_PREFIX_SCROLLING "ScrollingScreen"
 
 namespace PlasmaZones {
 
@@ -126,6 +131,7 @@ public:
     P_CONFIG_GROUP(tilingBehaviorGroup, "Tiling.Behavior")
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
     P_CONFIG_GROUP(scrollingGroup, "Scrolling")
+    P_CONFIG_GROUP(scrollingBehaviorGroup, "Scrolling.Behavior")
 
     // Decorations — per-surface decoration tree (DecorationProfileTree:
     // shader-pack chain + per-pack parameters, keyed on a dot-path surface
@@ -403,6 +409,24 @@ public:
     P_CONFIG_KEY(defaultColumnDisplayKey, "DefaultColumnDisplay")
     P_CONFIG_KEY(presetColumnWidthsKey, "PresetColumnWidths")
     P_CONFIG_KEY(presetWindowHeightsKey, "PresetWindowHeights")
+    P_CONFIG_KEY(defaultColumnWidthPresetIndexKey, "DefaultColumnWidthPresetIndex")
+    P_CONFIG_KEY(defaultWindowHeightKindKey, "DefaultWindowHeightKind")
+    P_CONFIG_KEY(defaultWindowHeightValueKey, "DefaultWindowHeightValue")
+    P_CONFIG_KEY(defaultWindowHeightPresetIndexKey, "DefaultWindowHeightPresetIndex")
+    P_CONFIG_KEY(tabStripEnabledKey, "TabStripEnabled")
+    P_CONFIG_KEY(wheelFocusEnabledKey, "WheelFocusEnabled")
+    P_CONFIG_KEY(wheelFocusInvertedKey, "WheelFocusInverted")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.Behavior
+    // (also uses focusNewWindowsKey, focusFollowsMouseKey,
+    // respectMinimumSizeKey, stickyWindowHandlingKey, insertPositionKey,
+    // restoreOnLoginKey, restoreFloatedOnLoginKey — shared leaf names,
+    // disambiguated by group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(columnWidthStepPercentKey, "ColumnWidthStepPercent")
+    P_CONFIG_KEY(windowHeightStepPercentKey, "WindowHeightStepPercent")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Behavior
@@ -618,6 +642,7 @@ public:
     P_CONFIG_KEY(maximizeColumnKey, "MaximizeColumn")
     P_CONFIG_KEY(expandColumnKey, "ExpandColumn")
     P_CONFIG_KEY(cycleWindowHeightKey, "CycleWindowHeight")
+    P_CONFIG_KEY(cycleWindowHeightBackKey, "CycleWindowHeightBack")
     P_CONFIG_KEY(increaseWindowHeightKey, "IncreaseWindowHeight")
     P_CONFIG_KEY(decreaseWindowHeightKey, "DecreaseWindowHeight")
     P_CONFIG_KEY(resetWindowHeightsKey, "ResetWindowHeights")
@@ -690,6 +715,7 @@ public:
 
     P_CONFIG_GROUP(zoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_ZONE_SELECTOR ":")
     P_CONFIG_GROUP(autotileScreenGroupPrefix, P_PER_SCREEN_PREFIX_AUTOTILE ":")
+    P_CONFIG_GROUP(scrollingScreenGroupPrefix, P_PER_SCREEN_PREFIX_SCROLLING ":")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1/v2/v3/v4 accessors — used ONLY by migration code.

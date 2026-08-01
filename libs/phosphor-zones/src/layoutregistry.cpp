@@ -63,6 +63,14 @@ void LayoutRegistry::initCommon()
 
     // One evaluation model — bound to the store's live rule set. The store
     // owns the set's lifetime; the evaluator holds a reference to it.
+    //
+    // A rule store is a HARD construction precondition, not an optional
+    // dependency: the evaluator is built here and never reset, so every
+    // resolver derefs m_evaluator unguarded. Fatal on a null store rather than
+    // dereferencing it one line down, matching the subdirectory checks above.
+    if (m_ruleStore == nullptr) {
+        qFatal("LayoutRegistry: a rule store is required — every context resolver evaluates against it");
+    }
     m_evaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
 
     // Forward the detailed layoutsChanged signal into the unified

@@ -398,6 +398,26 @@ add_executable(test_scrolling_settings config/settings/test_scrolling_settings.c
 target_link_libraries(test_scrolling_settings PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_scrolling_settings COMMAND test_scrolling_settings)
 
+# Per-monitor scrolling overrides: the settings-store half of the channel
+# (validator, kind/value joint repair on both the setter and the load path,
+# save/load round trip, clear/has). Same explicit Qt6::Gui link as
+# test_scrolling_settings, and for the same reason: it constructs Settings.
+add_executable(test_settings_perscreen_scrolling config/settings/test_settings_perscreen_scrolling.cpp)
+target_link_libraries(test_settings_perscreen_scrolling PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_perscreen_scrolling COMMAND test_settings_perscreen_scrolling)
+
+# Ownership invariants for SettingsController's per-page config manifest.
+# Compiles the topology TU directly (SettingsController lives in the settings
+# executable, not a library) and only ever calls its static accessors, so no
+# moc/vtable for the class itself is needed.
+add_executable(test_page_owned_config_keys
+    settings/test_page_owned_config_keys.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/controller/settingscontroller_pagetopology.cpp
+)
+target_link_libraries(test_page_owned_config_keys PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
+    PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
+add_test(NAME test_page_owned_config_keys COMMAND test_page_owned_config_keys)
+
 # Binds the schema's declared choices to their user-facing labels.
 add_executable(test_settingsvaluelabels config/settings/test_settingsvaluelabels.cpp)
 target_link_libraries(test_settingsvaluelabels
@@ -519,6 +539,19 @@ add_executable(test_cheatsheet_compression
 target_link_libraries(test_cheatsheet_compression
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
 add_test(NAME test_cheatsheet_compression COMMAND test_cheatsheet_compression)
+
+# Shortcuts.Scrolling four-list parity (schema / registration / catalog /
+# D-Bus registry). Same daemon-source compilation as the two neighbours,
+# and it drives a real ShortcutManager, so it needs a Settings instance and
+# an injected backend at runtime.
+add_executable(test_scrolling_shortcut_parity
+    daemon/test_scrolling_shortcut_parity.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_catalog.cpp
+)
+target_link_libraries(test_scrolling_shortcut_parity
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
+add_test(NAME test_scrolling_shortcut_parity COMMAND test_scrolling_shortcut_parity)
 
 # Shortcut teardown contract (discussion #851): unregisterShortcuts() must not
 # purge persistent bindings from the backend. Same daemon-source compilation

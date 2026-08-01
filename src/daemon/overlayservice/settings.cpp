@@ -68,6 +68,11 @@ void OverlayService::setSettings(ISettings* settings)
                     &OverlayService::recreateOverlayWindowsOnTypeMismatch);
 
             connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
+
+            // Tab-strip enable toggle. Hiding must RUN, not just skip future
+            // updates, or a live strip stays painted after the switch flips.
+            connect(m_settings, &ISettings::scrollingTabStripEnabledChanged, this,
+                    &OverlayService::replayScrollTabStrips);
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
             // The full CAVA analysis parameter set (Shaders.Audio). Every knob

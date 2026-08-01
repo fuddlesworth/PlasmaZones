@@ -95,6 +95,28 @@ inline constexpr const char AnimationDuration[] = "AnimationDuration";
 inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
 } // namespace PerScreenAutotileKey
 
+/**
+ * Per-screen scrolling override key constants. Unprefixed on disk AND in
+ * memory (no autotile-style "Autotile" asymmetry — that exists only for v4
+ * migration history), and spelled exactly like the engine's
+ * ScrollPerScreenKeys settings channel so the daemon merge is a plain copy.
+ *
+ * Deliberately ONLY the New-columns card's sizing defaults (the analogue of
+ * the tiling Algorithm card's per-monitor tuning). Scrolling's behavior and
+ * view settings stay app-wide like their tiling/snapping siblings — the
+ * per-context variants are the rule actions, which use the engine's rule
+ * channel rather than this store.
+ */
+namespace PerScreenScrollingKey {
+inline constexpr const char DefaultColumnWidthKind[] = "DefaultColumnWidthKind";
+inline constexpr const char DefaultColumnWidthValue[] = "DefaultColumnWidthValue";
+inline constexpr const char DefaultColumnWidthPresetIndex[] = "DefaultColumnWidthPresetIndex";
+inline constexpr const char DefaultColumnDisplay[] = "DefaultColumnDisplay";
+inline constexpr const char DefaultWindowHeightKind[] = "DefaultWindowHeightKind";
+inline constexpr const char DefaultWindowHeightValue[] = "DefaultWindowHeightValue";
+inline constexpr const char DefaultWindowHeightPresetIndex[] = "DefaultWindowHeightPresetIndex";
+} // namespace PerScreenScrollingKey
+
 // Per-screen snapping overrides carry only the gap keys, spelled by the shared
 // PhosphorEngine::PerScreenKeys namespace (InnerGap / OuterGap / per-side).
 // Snap-assist and the zone-selector enable switch are global-only

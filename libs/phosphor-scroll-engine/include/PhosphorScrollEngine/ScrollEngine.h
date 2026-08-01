@@ -44,6 +44,9 @@ namespace PhosphorScrollEngine {
 struct ScrollOpenParams
 {
     std::optional<qreal> widthFraction;
+    /// Work-area height fraction (openWindowHeight rule), committed as a
+    /// Fixed pixel intent against the live work area after the insert.
+    std::optional<qreal> heightFraction;
     std::optional<bool> tabbed;
     /// True: join the focused column instead of opening a new one.
     std::optional<bool> consume;
@@ -393,6 +396,19 @@ public:
         m_floatPredicate = std::move(predicate);
     }
 
+    /// Predicate gating the float-POSITION restore on the floating-reopen
+    /// branch: the window is marked floating unconditionally, only the
+    /// geometry move onto the recorded free spot is gated. Mirrors
+    /// AutotileEngine::RestorePositionPredicate (daemon-wired
+    /// scrollingRestoreFloatedWindowsOnLogin setting + the per-window
+    /// RestorePosition rule); unset (tests / no daemon) means the move
+    /// always fires, preserving historical behaviour.
+    using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
+    void setRestorePositionPredicate(RestorePositionPredicate predicate)
+    {
+        m_restorePositionPredicate = std::move(predicate);
+    }
+
     /// Resolver for the per-window open-behaviour rule overrides. Same
     /// injection contract as the float predicate. Takes the OPENING screen
     /// as well as the window: the open-behaviour rules a user authors are
@@ -442,10 +458,14 @@ public:
         m_contextGapProvider = std::move(provider);
     }
 
-    // Per-context rule overrides (SetScrollDefaultColumnWidth /
-    // SetCenterFocusedColumn / SetScrollDefaultColumnDisplay), layered over
-    // the config defaults per screen. Map keys: "CenterFocusedColumn" (int),
-    // "DefaultColumnWidth" (double fraction), "DefaultColumnDisplay" (int).
+    // Per-screen overrides layered over the config defaults, one map per
+    // screen with two producer channels the daemon merges (rules win): the
+    // RULE channel (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
+    // SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
+    // SetScrollDefaultWindowHeight) and the SETTINGS channel (the per-monitor
+    // New-columns sizing trio pairs). Key spellings live in
+    // ScrollPerScreenKeys (ScrollTypes.h) — the accessor comments there are
+    // the authoritative key list.
     void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides) override;
     void clearPerScreenConfig(const QString& screenId) override;
     QVariantMap perScreenOverrides(const QString& screenId) const override
@@ -550,11 +570,24 @@ private:
     /// the same prunes that reap context states.
     void sweepStripStash(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale);
     // engine_apply.cpp
+    /// The smart-gaps arm is resolved INSIDE, not passed in: a single-column
+    /// strip on the screen's current context zeroes the OUTER gaps for every
+    /// caller alike. It has to be every caller — the geometry producers
+    /// (applyLayout, the visibleTiles walks) and the pure-math verbs
+    /// (navigation, anchor math, the maximize compare) resolve against the
+    /// same work area, and a defaulted parameter only two of eighteen call
+    /// sites passed left the verbs computing against a gapped rect the apply
+    /// path then un-gapped: a lone column off-centre by (outerL+outerR)/2,
+    /// leftover width nobody claimed, and a maximize compare that never
+    /// matched. Inner gaps need no arm — with one column no inter-column gap
+    /// exists.
     ScrollLayoutParams layoutParamsForScreen(const QString& screenId) const;
     /// visibleTiles' real body, taking params the caller already resolved.
     /// The public overload is the thin wrapper; callers that hold params
-    /// (the digit path, the normalized-rect walk) use this instead of
-    /// paying a second ScreenManager query plus context-gap-provider call.
+    /// (the digit path, the normalized-rect walk) use this instead of paying
+    /// a second ScreenManager query plus context-gap-provider call. The
+    /// state itself is re-resolved here (a hash lookup, unlike the params);
+    /// what the overload saves is the params resolution.
     QVector<VisibleTile> visibleTiles(const QString& screenId, const ScrollLayoutParams& params) const;
     /// Relayout the strip and emit the geometry batch for @p screenId's
     /// current-context state. @p focusWindowAfter activates the strip's
@@ -624,6 +657,18 @@ private:
     /// "Client decides" default width: open at the client's initial size.
     bool m_defaultWidthClientDecides = false;
     ColumnDisplay m_defaultColumnDisplay = ColumnDisplay::Normal;
+    /// Scrolling.Behavior tunables (refreshConfigFromSettings). Sticky
+    /// handling gates INSERTION only — the desktop-pin logic in
+    /// updateStickyScreenPins stays unconditional, matching autotile.
+    PhosphorEngine::StickyWindowHandling m_stickyWindowHandling = PhosphorEngine::StickyWindowHandling::TreatAsNormal;
+    bool m_respectMinimumSize = true;
+    /// Shared Tiling.Gaps/SmartGaps value (IScrollSettings forward).
+    bool m_smartGaps = true;
+    /// Default height intent for fresh tiles (Auto = historical even split).
+    WindowHeight m_defaultWindowHeight{};
+    /// Where a fresh open's column enters the strip (config default; the
+    /// openColumnPlacement rule and remembered positions outrank it).
+    ScrollInsertPosition m_insertPosition = ScrollInsertPosition::RightOfActive;
 
     /// The exact rect last APPLIED per window while strip-managed (float-back
     /// poison guard; see PlacementEngineBase::lastManagedRect).
@@ -792,11 +837,16 @@ private:
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
     ColumnWidth effectiveDefaultColumnWidth(const QString& screenId) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QString& screenId) const;
+    /// Height needs the work area: the rule channel's bare fraction is
+    /// committed as Fixed pixels against the live work area.
+    WindowHeight effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const;
+    ScrollInsertPosition effectiveInsertPosition(const QString& screenId) const;
 
     QHash<QString, QVariantMap> m_perScreenOverrides;
     std::function<void()> m_persistSaveFn;
     std::function<void()> m_persistLoadFn;
     FloatPredicate m_floatPredicate;
+    RestorePositionPredicate m_restorePositionPredicate{};
     OpenParamsResolver m_openParamsResolver;
     SnappingModeResolver m_snappingModeResolver;
     ContextGapProvider m_contextGapProvider;

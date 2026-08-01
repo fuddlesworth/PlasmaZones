@@ -217,8 +217,8 @@ public:
     static const QHash<QString, QStringList>& simplePageBackingPages();
     /// Parent name → set of leaf child page names. Covers the top-level sidebar
     /// categories AND the mid-level virtual parents nested beneath them (among
-    /// them snapping / tiling under placement, and the animations-* parents
-    /// whose children don't share their name prefix). See the definition for
+    /// them snapping / tiling / scrolling under placement, and the animations-*
+    /// parents whose children don't share their prefix). See the definition for
     /// the full classification rather than trusting a list here to stay
     /// current. Drives dirty-state propagation in `isPageDirty`.
     static const QHash<QString, QSet<QString>>& pageGroupChildren();
@@ -246,15 +246,14 @@ public:
     /// Gaps.* keys are plain config), the ordering pages (drop the custom order),
     /// the shortcuts pages (unassign every quick slot), the virtual screens page
     /// (unsplit every monitor), the animation pages (clear overrides + reset
-    /// animation keys), the decoration pages (clear their surface root), and the
-    /// condensed simple pages (delegate to their backing pages).
+    /// animation keys), the decoration pages (clear their surface root), the
+    /// condensed simple pages (delegate to their backing pages), and the parent
+    /// categories (reset every resettable leaf of the group), which simple mode
+    /// reaches through activeDirtyScope.
     Q_INVOKABLE bool pageSupportsReset(const QString& page) const;
 
-    /// True when @p page can discard its own unsaved edits: every page
-    /// pageSupportsReset accepts, plus the parent categories, which discardPage
-    /// handles by walking their discardable leaves and Reset has no equivalent
-    /// for. Kept as a separate query so the kebab can show the two items
-    /// independently.
+    /// True when @p page can discard its own unsaved edits. Byte-identical to
+    /// pageSupportsReset today; kept separate so the two kebab items can diverge.
     Q_INVOKABLE bool pageSupportsDiscard(const QString& page) const;
     /// The id whose dirty state @p pageId REPRESENTS, which for a condensed
     /// `SimpleOnly` page is the group it stands in for, so a badge covers the
@@ -274,8 +273,8 @@ public:
     /// virtual-screens / animation / decoration pages reset through their own
     /// staged machinery; a condensed simple page delegates to each backing page,
     /// which resets those pages' FULL key sets (wider than the subset the simple
-    /// page shows — see the rationale at the pageSupportsReset definition).
-    /// No-op only for a page with none of those.
+    /// page shows — see the pageSupportsReset definition); a parent category
+    /// resets its group's resettable leaves. No-op for a page with none of those.
     Q_INVOKABLE void resetPage(const QString& page);
 
     /// Revert every config key owned by @p page to the committed baseline,
@@ -359,12 +358,9 @@ public:
     /// Empty list + warning for a key with no declared choices.
     Q_INVOKABLE QVariantList valueOptions(const QString& group, const QString& key) const;
 
-    /// The scrolling width-kind vocabulary and value bounds, from
-    /// ConfigDefaults — the C++ home for these numbers. The Scrolling page
-    /// binds to this map instead of re-spelling the literals in QML (the
-    /// kind ints, the proportion slider range, and the pixel spin range
-    /// would otherwise be duplicated across the C++/QML boundary).
-    Q_INVOKABLE QVariantMap scrollingWidthConstants() const;
+    /// The scrolling kind vocabularies and value bounds, from ConfigDefaults.
+    /// See the definition for what the map carries and why.
+    Q_INVOKABLE QVariantMap scrollingConstants() const;
 
     // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
     // Loads the on-disk layouts via an in-process LayoutRegistry +
@@ -629,6 +625,14 @@ public:
     // card's scope chip dot/reset only touches its own keys.
     Q_INVOKABLE bool hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenAutotileAlgorithmSettings(const QString& screenName);
+
+    // ── Per-screen scrolling overrides ───────────────────────────────────────
+    Q_INVOKABLE QVariantMap getPerScreenScrollingSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenScrollingSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenScrollingSettings(const QString& screenName);
+    // No sub-domain split: the scrolling map carries only the New-columns
+    // card's sizing keys, so the whole-domain pair is that card's chip.
+    Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenName) const;
 
     // Per-screen gaps are config-backed: a per-monitor override is the gap-
     // dimension sub-domain of the per-screen autotile store (unified snap+tile).
@@ -1184,12 +1188,12 @@ private:
     //
     // Declared as a unique_ptr (rather than QObject child of `this`) AFTER the
     // page sub-controllers above so reverse-order member destruction tears down
-    // m_app FIRST: its PageRegistry holds raw PageController* refs to the
-    // m_tilingAlgorithmPage / m_snappingShadersPage unique_ptrs (and the
-    // PageAdapter QObject children of `this`). A QObject-child raw pointer
-    // would defer m_app's destruction to ~QObject, which runs AFTER the page
-    // unique_ptrs reset — leaving the registry briefly holding dangling refs
-    // any queued event-loop tick could trip on.
+    // m_app FIRST, while every page it tracks is still alive. Nothing here
+    // dangles either way — the PageRegistry holds QPointer<PageController> and
+    // ApplicationController null-compacts its domain list, and ~SettingsController
+    // already destroys m_profilesPage with m_app up. The ordering is for
+    // determinism: m_app unregisters its tracked domains against live objects
+    // instead of leaving the teardown order to self-nulling handles.
     std::unique_ptr<PhosphorControl::ApplicationController> m_app;
 
     void buildApplicationController();

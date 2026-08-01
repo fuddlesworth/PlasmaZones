@@ -272,6 +272,63 @@ public:
         return false;
     }
 
+    // The two defaults below are spelled `true` rather than calling their
+    // ConfigDefaults twins, because this interface header deliberately does
+    // not depend on the config layer. A stub answering the opposite of what
+    // the real Settings would is a silent behaviour split, so the pair is
+    // pinned from the other side: settings/scrolling.cpp — a TU that sees both
+    // — static_asserts ConfigDefaults::scrollingTabStripEnabled() and
+    // ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin() against the
+    // literals here, and names this comment. Change either default and fix
+    // both places.
+
+    /// Tab-indicator strip over tabbed scrolling columns. Virtual with an
+    /// always-on default so the overlay service can gate through the
+    /// interface (the zoneSelectorEnabled pattern).
+    virtual bool scrollingTabStripEnabled() const
+    {
+        return true;
+    }
+
+    /// Writer for the toggle above. Virtual with a no-op default (the
+    /// per-screen-accessor pattern) so the D-Bus settings registry can register
+    /// the key through the interface rather than only on the concrete Settings
+    /// — otherwise a non-Settings backend silently loses the key entirely.
+    virtual void setScrollingTabStripEnabled(bool /*enabled*/)
+    {
+    }
+
+    /// Float-position restore for scroll-floated windows. Virtual with an
+    /// always-on default so the WindowTrackingAdaptor's restore predicate
+    /// can resolve it through the interface, like its snap/autotile twins.
+    virtual bool scrollingRestoreFloatedWindowsOnLogin() const
+    {
+        return true;
+    }
+
+    /// Writer for the toggle above, same no-op-default rationale as
+    /// setScrollingTabStripEnabled. The snap/autotile twins are pure virtuals
+    /// on ISnappingSettings; this pair carries defaults because its getters do.
+    virtual void setScrollingRestoreFloatedWindowsOnLogin(bool /*restore*/)
+    {
+    }
+
+    virtual QVariantMap getPerScreenScrollingSettings(const QString& /*screenIdOrName*/) const
+    {
+        return {};
+    }
+    virtual void setPerScreenScrollingSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
+                                              const QVariant& /*value*/)
+    {
+    }
+    virtual void clearPerScreenScrollingSettings(const QString& /*screenIdOrName*/)
+    {
+    }
+    virtual bool hasPerScreenScrollingSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
+    }
+
     virtual QVariantMap getPerScreenZoneSelectorSettings(const QString& /*screenIdOrName*/) const
     {
         return {};
@@ -291,11 +348,14 @@ public:
     // NOTE: snapping exposes only the getter — `getPerScreenSnappingSettings`
     // is the lone snapping accessor declared on
     // PhosphorEngine::IGeometrySettings (consumed by the geometry
-    // pipeline). Per-screen snapping gaps are rule-backed now, so there
-    // is no set/clear/has triplet: the getter reads the resolved gap
-    // rules and there is no per-screen snapping writer surface (unlike
-    // the autotile + zone-selector blocks above, which still carry
-    // ISettings-only set/clear/has writers).
+    // pipeline). It is a PROJECTION, not a store of its own: since the gaps
+    // unification the per-monitor gap dimensions are config-backed and live in
+    // the per-screen AUTOTILE map (one value per monitor drives both snap and
+    // tile), and this getter surfaces that map's gap subset. Hence no
+    // set/clear/has triplet, unlike the autotile + zone-selector blocks above:
+    // writes go through setPerScreenAutotileSetting and the perScreenGap*
+    // accessors, and a snapping-side writer would just be a second door onto
+    // the same keys.
     QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const override
     {
         return {};
@@ -434,6 +494,7 @@ Q_SIGNALS:
     void perScreenZoneSelectorSettingsChanged();
     void perScreenAutotileSettingsChanged();
     void perScreenSnappingSettingsChanged();
+    void perScreenScrollingSettingsChanged();
     // Rendering
     void renderingBackendChanged();
     // Window decoration appearance (border + title bar)
@@ -616,8 +677,27 @@ Q_SIGNALS:
     void scrollingDefaultColumnWidthKindChanged();
     void scrollingDefaultColumnWidthValueChanged();
     void scrollingDefaultColumnDisplayChanged();
+    void scrollingDefaultColumnWidthPresetIndexChanged();
+    void scrollingDefaultWindowHeightKindChanged();
+    void scrollingDefaultWindowHeightValueChanged();
+    void scrollingDefaultWindowHeightPresetIndexChanged();
     void scrollingPresetColumnWidthsChanged();
     void scrollingPresetWindowHeightsChanged();
+
+    void scrollingTabStripEnabledChanged();
+    void scrollingWheelFocusEnabledChanged();
+    void scrollingWheelFocusInvertedChanged();
+
+    // Scrolling behavior settings
+    void scrollingInsertPositionChanged();
+    void scrollingFocusNewWindowsChanged();
+    void scrollingFocusFollowsMouseChanged();
+    void scrollingStickyWindowHandlingChanged();
+    void scrollingRespectMinimumSizeChanged();
+    void scrollingRestoreStripsOnLoginChanged();
+    void scrollingRestoreFloatedWindowsOnLoginChanged();
+    void scrollingColumnWidthStepPercentChanged();
+    void scrollingWindowHeightStepPercentChanged();
 
     // Scrolling shortcuts
     void scrollingFocusColumnFirstShortcutChanged();
@@ -637,6 +717,7 @@ Q_SIGNALS:
     void scrollingMaximizeColumnShortcutChanged();
     void scrollingExpandColumnShortcutChanged();
     void scrollingCycleWindowHeightShortcutChanged();
+    void scrollingCycleWindowHeightBackShortcutChanged();
     void scrollingIncreaseWindowHeightShortcutChanged();
     void scrollingDecreaseWindowHeightShortcutChanged();
     void scrollingResetWindowHeightsShortcutChanged();

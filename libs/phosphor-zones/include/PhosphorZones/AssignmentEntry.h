@@ -319,7 +319,8 @@ struct ContextTilingParams
  *
  * Each field is set only when a matching context rule fills the corresponding
  * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
- * SetScrollDefaultColumnDisplay); an unset field means "use the config value".
+ * SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
+ * SetScrollDefaultWindowHeight); an unset field means "use the config value".
  * Consumed daemon-side: the values are layered onto the scrolling engine's
  * per-screen parameters (config stays the base, the rule wins where present),
  * the same way @ref ContextTilingParams is layered onto the autotile override
@@ -336,10 +337,17 @@ struct ContextScrollingParams
     std::optional<int> centerFocusedColumn;
     /// How a newly-opened column lays its windows out (0 = normal, 1 = tabbed).
     std::optional<int> defaultColumnDisplay;
+    /// Where a fresh-opened window's column enters the strip
+    /// (ScrollInsertPosition ints, right-of-active 0 … into-active-column 4).
+    std::optional<int> insertPosition;
+    /// Height a newly-opened window takes, as a fraction of the work-area
+    /// height (0.05-1.0); the engine commits it as fixed pixels at relayout.
+    std::optional<double> defaultWindowHeight;
 
     bool isEmpty() const
     {
-        return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay;
+        return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay && !insertPosition
+            && !defaultWindowHeight;
     }
 };
 

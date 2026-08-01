@@ -224,6 +224,12 @@ void RuleEvaluator::evictCache(quint64 currentRevision) const
 
 ResolvedActions RuleEvaluator::resolveCached(const QString& windowId, const WindowQuery& query) const
 {
+    return resolveCachedFiltered(windowId, query, {});
+}
+
+ResolvedActions RuleEvaluator::resolveCachedFiltered(const QString& windowId, const WindowQuery& query,
+                                                     const std::function<bool(const Rule&)>& admit) const
+{
     const quint64 revision = m_ruleSet.revision();
 
     const auto it = m_cache.constFind(windowId);
@@ -231,7 +237,7 @@ ResolvedActions RuleEvaluator::resolveCached(const QString& windowId, const Wind
         return it->actions;
     }
 
-    ResolvedActions result = resolve(query);
+    ResolvedActions result = resolveFiltered(query, admit);
     m_cache.insert(windowId, CacheEntry{revision, m_cacheInsertSeq++, result});
     evictCache(revision);
     return result;

@@ -15,50 +15,24 @@ namespace PlasmaZones {
 // spans both kinds' ranges and so cannot reject a value that is out of range
 // for the kind actually in force. Two places apply it: the hand-written value
 // setter below, and normalizeScrollingColumnWidthValue for anything that
-// reached the store without passing that setter.
+// reached the store without passing that setter. Both go through the shared
+// clamp/reseed pair in settings_detail.h, which the per-monitor width pair in
+// settings/perscreen.cpp uses too — one set of thresholds for every repair
+// site.
 
-namespace {
-/// Clamp into the kind's range. What the SETTER applies: a user dragging a
-/// slider or typing in the SpinBox wants the nearest legal value, not a jump
-/// back to a default.
-qreal clampColumnWidthForKind(qreal value, bool isFixed)
-{
-    return isFixed ? qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthFixedMin(), value,
-                                   ConfigDefaults::scrollingDefaultColumnWidthFixedMax())
-                   : qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthValueMin(), value,
-                                   ConfigDefaults::scrollingDefaultColumnWidthProportionMax());
-}
+using settings_detail::clampColumnWidthForKind;
+using settings_detail::reseedColumnWidthForKind;
 
-/// Repair a value that cannot belong to @p isFixed at all, the way the KIND
-/// setter's arms do: re-seed rather than clamp.
-///
-/// Clamping is wrong for this case and quietly produces the exact failure the
-/// kind setter exists to avoid. A proportion of 0.5 left behind under Fixed
-/// clamps to the 100px floor; worse, a pixel count of 800 left behind under
-/// Proportion clamps to 1.0, which opens every column at 100% of the work
-/// area. The two repair paths have to agree, or the same broken pair heals
-/// differently depending on whether a kind flip or a config load found it.
-qreal reseedColumnWidthForKind(qreal value, bool isFixed)
-{
-    if (isFixed && value < ConfigDefaults::scrollingDefaultColumnWidthFixedMin()) {
-        return ConfigDefaults::scrollingDefaultColumnWidthFixedPx();
-    }
-    if (!isFixed && value > ConfigDefaults::scrollingDefaultColumnWidthProportionMax()) {
-        return ConfigDefaults::scrollingDefaultColumnWidthValue();
-    }
-    // In-kind but out of range: a clamp is the right repair, since the value
-    // is the right SORT of thing.
-    //
-    // UNREACHABLE in practice, and deliberately kept as defence rather than
-    // removed: the schema's clampDouble(ValueMin, FixedMax) validator runs on
-    // the READ path too, so both callers receive an already-bounded value and
-    // this tail is an identity. It only starts mattering if that clamp is
-    // widened for a future kind, or if a caller ever reads the raw backend.
-    // Not unit-testable through either caller for the same reason — see the
-    // note in test_scrolling_settings.cpp's data table.
-    return clampColumnWidthForKind(value, isFixed);
-}
-} // namespace
+// ISettings gives these two scrolling getters a defaulted body returning a
+// hardcoded `true`, so a stub or a partial implementer answers without
+// reaching a Settings instance. That header cannot call ConfigDefaults (the
+// interface layer does not depend on the config layer), so the agreement is
+// pinned here, in a TU that sees both. See the note above the two defaults in
+// isettings.h.
+static_assert(ConfigDefaults::scrollingTabStripEnabled(),
+              "ISettings::scrollingTabStripEnabled defaults to true — update it with this default");
+static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
+              "ISettings::scrollingRestoreFloatedWindowsOnLogin defaults to true — update it with this default");
 
 P_STORE_GET(bool, scrollingEnabled, scrollingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabledChanged)
@@ -113,7 +87,7 @@ void Settings::setScrollingDefaultColumnWidthKind(int value)
         // already sitting there (the user's retained width across a
         // Fixed→ClientDecides→Fixed round trip) is left alone.
         setScrollingDefaultColumnWidthValue(ConfigDefaults::scrollingDefaultColumnWidthFixedPx());
-    } else if (isProportion && stored > 1.0) {
+    } else if (isProportion && stored > ConfigDefaults::scrollingDefaultColumnWidthProportionMax()) {
         // Entering Proportion with pixels stored — whether directly from
         // Fixed or via a ClientDecides hop (ClientDecides ignores the value
         // and deliberately leaves it untouched, so pixels can arrive here
@@ -140,10 +114,11 @@ P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, scrollingGroup, defaultColu
 //
 // SCOPE: called from Settings::load, so it catches whatever the reparse
 // brought in — a hand-edited config, a config import, the Discard reload —
-// and from applyConfigOverlayStaged, which writes the store through
-// importFromJson without a load(). Profile staging needs it just as much: a
-// shared blob carrying kind=Fixed with value 0.5 would otherwise make the
-// engine open every column ONE PIXEL wide for the whole session.
+// from applyConfigOverlayStaged, which writes the store through importFromJson
+// without a load(), and from the per-page discardKeys/resetKeys, which write
+// the store key by key from a page manifest. Profile staging needs it just as
+// much: a shared blob carrying kind=Fixed with value 0.5 would otherwise make
+// the engine open every column ONE PIXEL wide for the whole session.
 //
 // Read-time coercion is deliberately NOT how this is done: the kind setter
 // announces the flip BEFORE coercing the value, and a clamping getter would
@@ -152,22 +127,24 @@ P_STORE_GET(qreal, scrollingDefaultColumnWidthValue, scrollingGroup, defaultColu
 void Settings::normalizeScrollingColumnWidthValue()
 {
     const int kind = scrollingDefaultColumnWidthKind();
-    // ClientDecides stores no width of its own — it deliberately leaves
-    // whatever the previous kind wrote in place, so there is nothing to
-    // validate against.
-    if (kind == ConfigDefaults::scrollingWidthKindClientDecides()) {
-        return;
-    }
     const qreal stored = scrollingDefaultColumnWidthValue();
-    const qreal coerced = reseedColumnWidthForKind(stored, kind == ConfigDefaults::scrollingWidthKindFixed());
+    // ClientDecides and Preset store no width of their own — both
+    // deliberately leave whatever the previous kind wrote in place (Preset
+    // resolves through its index key), so there is nothing to validate
+    // against. reseedColumnWidthForKind returns those two untouched, which is
+    // why the early return that used to sit here is gone: the kind dispatch
+    // belongs in the shared helper, where the per-monitor repair path gets it
+    // for free.
+    const qreal coerced = reseedColumnWidthForKind(stored, kind);
     if (qFuzzyCompare(1.0 + stored, 1.0 + coerced)) {
         return;
     }
     qCWarning(lcConfig) << "scrolling: stored column width" << stored << "is out of range for the current kind" << kind
                         << "— using" << coerced << "in memory; it reaches disk on the next save";
     m_store->write(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey(), coerced);
-    // NO Q_EMIT here. BOTH callers — load() and applyConfigOverlayStaged —
-    // snapshot every Q_PROPERTY before mutating the store and re-emit each
+    // NO Q_EMIT here. EVERY caller — load(), applyConfigOverlayStaged, and the
+    // per-page discardKeys/resetKeys —
+    // snapshots every Q_PROPERTY before mutating the store and re-emits each
     // changed NOTIFY after this returns. Emitting here would double-fire on
     // a coercing load or a coercing staged apply, and
     // fire spuriously on a Discard reload where the in-memory value was
@@ -178,11 +155,12 @@ void Settings::normalizeScrollingColumnWidthValue()
 // Hand-written value setter: kind-aware clamp (Proportion values live in
 // [ValueMin, ProportionMax]; Fixed in pixels with a FixedMin floor, rounded
 // to whole pixels by the engine on load) — the schema clamp alone spans
-// both ranges.
+// both ranges. Under ClientDecides and Preset the clamp is an identity, so a
+// D-Bus write while one of those kinds is in force cannot collapse the pixel
+// width a later Fixed round trip is meant to get back.
 void Settings::setScrollingDefaultColumnWidthValue(qreal value)
 {
-    value =
-        clampColumnWidthForKind(value, scrollingDefaultColumnWidthKind() == ConfigDefaults::scrollingWidthKindFixed());
+    value = clampColumnWidthForKind(value, scrollingDefaultColumnWidthKind());
     const qreal before =
         m_store->read<double>(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey());
     m_store->write(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey(), value);
@@ -198,6 +176,22 @@ void Settings::setScrollingDefaultColumnWidthValue(qreal value)
 P_STORE_GET(int, scrollingDefaultColumnDisplay, scrollingGroup, defaultColumnDisplayKey, int)
 P_STORE_SET_INT(setScrollingDefaultColumnDisplay, scrollingGroup, defaultColumnDisplayKey,
                 scrollingDefaultColumnDisplayChanged)
+
+P_STORE_GET(int, scrollingDefaultColumnWidthPresetIndex, scrollingGroup, defaultColumnWidthPresetIndexKey, int)
+P_STORE_SET_INT(setScrollingDefaultColumnWidthPresetIndex, scrollingGroup, defaultColumnWidthPresetIndexKey,
+                scrollingDefaultColumnWidthPresetIndexChanged)
+
+// Height trio: unlike the width pair, the value key serves one kind (Fixed)
+// so the schema clamp is the whole story and the plain macros suffice.
+P_STORE_GET(int, scrollingDefaultWindowHeightKind, scrollingGroup, defaultWindowHeightKindKey, int)
+P_STORE_SET_INT(setScrollingDefaultWindowHeightKind, scrollingGroup, defaultWindowHeightKindKey,
+                scrollingDefaultWindowHeightKindChanged)
+P_STORE_GET(qreal, scrollingDefaultWindowHeightValue, scrollingGroup, defaultWindowHeightValueKey, double)
+P_STORE_SET_DOUBLE(setScrollingDefaultWindowHeightValue, scrollingGroup, defaultWindowHeightValueKey,
+                   scrollingDefaultWindowHeightValueChanged)
+P_STORE_GET(int, scrollingDefaultWindowHeightPresetIndex, scrollingGroup, defaultWindowHeightPresetIndexKey, int)
+P_STORE_SET_INT(setScrollingDefaultWindowHeightPresetIndex, scrollingGroup, defaultWindowHeightPresetIndexKey,
+                scrollingDefaultWindowHeightPresetIndexChanged)
 
 // Preset lists: comma-joined QString on disk, QStringList through
 // IScrollSettings (the engine parses the decimals), raw string for QML.
@@ -220,6 +214,60 @@ QStringList Settings::scrollingPresetWindowHeights() const
 P_STORE_GET(QString, scrollingPresetWindowHeightsString, scrollingGroup, presetWindowHeightsKey, QString)
 P_STORE_SET_STRING(setScrollingPresetWindowHeights, scrollingGroup, presetWindowHeightsKey,
                    scrollingPresetWindowHeightsChanged)
+
+// View knobs, on the Scrolling group with the sizing defaults above rather
+// than on Scrolling.Behavior: they describe how the strip is drawn, not how
+// windows are handled.
+P_STORE_GET(bool, scrollingTabStripEnabled, scrollingGroup, tabStripEnabledKey, bool)
+P_STORE_SET_BOOL(setScrollingTabStripEnabled, scrollingGroup, tabStripEnabledKey, scrollingTabStripEnabledChanged)
+
+P_STORE_GET(bool, scrollingWheelFocusEnabled, scrollingGroup, wheelFocusEnabledKey, bool)
+P_STORE_SET_BOOL(setScrollingWheelFocusEnabled, scrollingGroup, wheelFocusEnabledKey, scrollingWheelFocusEnabledChanged)
+
+P_STORE_GET(bool, scrollingWheelFocusInverted, scrollingGroup, wheelFocusInvertedKey, bool)
+P_STORE_SET_BOOL(setScrollingWheelFocusInverted, scrollingGroup, wheelFocusInvertedKey,
+                 scrollingWheelFocusInvertedChanged)
+
+// ── Scrolling behavior (Scrolling.Behavior) ─────────────────────────────────
+// Shared leaf key names under the scrolling behavior group; the schema
+// validators own enum validation (validIntOr snaps a bad sticky value back
+// to the default on read, like every other stored enum) and range clamping
+// (clampInt on the step percents).
+
+P_STORE_GET(int, scrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, int)
+P_STORE_SET_INT(setScrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, scrollingInsertPositionChanged)
+
+P_STORE_GET(bool, scrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey, bool)
+P_STORE_SET_BOOL(setScrollingFocusNewWindows, scrollingBehaviorGroup, focusNewWindowsKey,
+                 scrollingFocusNewWindowsChanged)
+
+P_STORE_GET(bool, scrollingFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey, bool)
+P_STORE_SET_BOOL(setScrollingFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey,
+                 scrollingFocusFollowsMouseChanged)
+
+P_STORE_GET(int, scrollingStickyWindowHandling, scrollingBehaviorGroup, stickyWindowHandlingKey, int)
+P_STORE_SET_INT(setScrollingStickyWindowHandling, scrollingBehaviorGroup, stickyWindowHandlingKey,
+                scrollingStickyWindowHandlingChanged)
+
+P_STORE_GET(bool, scrollingRespectMinimumSize, scrollingBehaviorGroup, respectMinimumSizeKey, bool)
+P_STORE_SET_BOOL(setScrollingRespectMinimumSize, scrollingBehaviorGroup, respectMinimumSizeKey,
+                 scrollingRespectMinimumSizeChanged)
+
+P_STORE_GET(bool, scrollingRestoreStripsOnLogin, scrollingBehaviorGroup, restoreOnLoginKey, bool)
+P_STORE_SET_BOOL(setScrollingRestoreStripsOnLogin, scrollingBehaviorGroup, restoreOnLoginKey,
+                 scrollingRestoreStripsOnLoginChanged)
+
+P_STORE_GET(bool, scrollingRestoreFloatedWindowsOnLogin, scrollingBehaviorGroup, restoreFloatedOnLoginKey, bool)
+P_STORE_SET_BOOL(setScrollingRestoreFloatedWindowsOnLogin, scrollingBehaviorGroup, restoreFloatedOnLoginKey,
+                 scrollingRestoreFloatedWindowsOnLoginChanged)
+
+P_STORE_GET(int, scrollingColumnWidthStepPercent, scrollingBehaviorGroup, columnWidthStepPercentKey, int)
+P_STORE_SET_INT(setScrollingColumnWidthStepPercent, scrollingBehaviorGroup, columnWidthStepPercentKey,
+                scrollingColumnWidthStepPercentChanged)
+
+P_STORE_GET(int, scrollingWindowHeightStepPercent, scrollingBehaviorGroup, windowHeightStepPercentKey, int)
+P_STORE_SET_INT(setScrollingWindowHeightStepPercent, scrollingBehaviorGroup, windowHeightStepPercentKey,
+                scrollingWindowHeightStepPercentChanged)
 
 // ── Scrolling shortcuts ─────────────────────────────────────────────────────
 
@@ -274,6 +322,9 @@ P_STORE_SET_STRING(setScrollingExpandColumnShortcut, shortcutsScrollingGroup, ex
 P_STORE_GET(QString, scrollingCycleWindowHeightShortcut, shortcutsScrollingGroup, cycleWindowHeightKey, QString)
 P_STORE_SET_STRING(setScrollingCycleWindowHeightShortcut, shortcutsScrollingGroup, cycleWindowHeightKey,
                    scrollingCycleWindowHeightShortcutChanged)
+P_STORE_GET(QString, scrollingCycleWindowHeightBackShortcut, shortcutsScrollingGroup, cycleWindowHeightBackKey, QString)
+P_STORE_SET_STRING(setScrollingCycleWindowHeightBackShortcut, shortcutsScrollingGroup, cycleWindowHeightBackKey,
+                   scrollingCycleWindowHeightBackShortcutChanged)
 P_STORE_GET(QString, scrollingIncreaseWindowHeightShortcut, shortcutsScrollingGroup, increaseWindowHeightKey, QString)
 P_STORE_SET_STRING(setScrollingIncreaseWindowHeightShortcut, shortcutsScrollingGroup, increaseWindowHeightKey,
                    scrollingIncreaseWindowHeightShortcutChanged)

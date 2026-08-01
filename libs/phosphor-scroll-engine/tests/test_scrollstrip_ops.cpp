@@ -79,6 +79,8 @@ private Q_SLOTS:
     void centeringPolicySurvivesCollapseAndConsume();
     void takeWindowLeavesFocusPolicyAlone();
     void onOverflowIgnoresShiftedPrevIdxOnRemoval();
+    void onOverflowAnchorsLeftOfActiveInsertAgainstTheShiftedPrevIdx();
+    void firstInsertAnchorsAtTheStripHead();
 };
 
 void TestScrollStripOps::consumePullsNextColumnsWindow()
@@ -1097,6 +1099,68 @@ void TestScrollStripOps::onOverflowIgnoresShiftedPrevIdxOnRemoval()
     // (x == 0 already excludes the OnOverflow centering, which would land
     // at (workW - width) / 2.)
     QCOMPARE(cAfter.x(), 0);
+}
+
+void TestScrollStripOps::onOverflowAnchorsLeftOfActiveInsertAgainstTheShiftedPrevIdx()
+{
+    // insertWindow's prevIdx fixup, on the position that makes it observable.
+    // A LeftOfActive insert lands AT the old active index, so every column
+    // from there on shifts right by one: the previously-focused column is now
+    // at prevIdx + 1. Left unshifted, prevIdx names the column that just
+    // arrived — which IS the active one, so the OnOverflow arm is skipped
+    // entirely and the policy silently degrades to Never.
+    //
+    // Two wide neighbours put the new column far enough into the strip that
+    // centering genuinely scrolls the view; at the strip head the centered
+    // anchor and the left-edge pin coincide and the two outcomes cannot be
+    // told apart (see firstInsertAnchorsAtTheStripHead).
+    auto params = defaultParams();
+    params.centerFocusedColumn = CenterFocusedColumn::OnOverflow;
+    ScrollStrip strip;
+    const ColumnWidth wide = ColumnWidth::makeProportion(0.9);
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), wide, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), wide, ColumnDisplay::Normal, params));
+    QCOMPARE(strip.activeColumnIndex(), 1);
+
+    QVERIFY(strip.insertWindow(QStringLiteral("n"), ColumnWidth::makeProportion(0.5), ColumnDisplay::Normal, params, 0,
+                               0, ScrollInsertPosition::LeftOfActive));
+    // The insert lands between a and b and takes focus.
+    QCOMPARE(strip.windowsInOrder(), (QStringList{QStringLiteral("a"), QStringLiteral("n"), QStringLiteral("b")}));
+    QCOMPARE(strip.activeColumnIndex(), 1);
+
+    const ResolvedStrip after = strip.relayout(params);
+    QVERIFY(resolveContains(after, QStringLiteral("n")));
+    const QRect nRect = rectOf(after, QStringLiteral("n"));
+    // n plus a gap plus the previously-focused b overflows the work area, so
+    // OnOverflow centers n. With a stale prevIdx the arm is dead and n would
+    // keep the entering-edge pin instead.
+    QCOMPARE(nRect.x(), (params.workArea.width() - nRect.width()) / 2);
+}
+
+void TestScrollStripOps::firstInsertAnchorsAtTheStripHead()
+{
+    // The companion position. First had no behavioural coverage at all, so
+    // this pins what it actually does: the new column heads the strip and
+    // takes focus. Index 0 is not a special case for the anchor — the new
+    // column overflows against its neighbour exactly like the LeftOfActive
+    // row above, so OnOverflow centers it rather than pinning it flush left.
+    auto params = defaultParams();
+    params.centerFocusedColumn = CenterFocusedColumn::OnOverflow;
+    ScrollStrip strip;
+    const ColumnWidth wide = ColumnWidth::makeProportion(0.9);
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), wide, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), wide, ColumnDisplay::Normal, params));
+
+    QVERIFY(strip.insertWindow(QStringLiteral("n"), ColumnWidth::makeProportion(0.5), ColumnDisplay::Normal, params, 0,
+                               0, ScrollInsertPosition::First));
+    QCOMPARE(strip.windowsInOrder(), (QStringList{QStringLiteral("n"), QStringLiteral("a"), QStringLiteral("b")}));
+    QCOMPARE(strip.activeColumnIndex(), 0);
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("n"));
+
+    const ResolvedStrip after = strip.relayout(params);
+    QVERIFY(resolveContains(after, QStringLiteral("n")));
+    const QRect nRect = rectOf(after, QStringLiteral("n"));
+    QCOMPARE(nRect.x(), (params.workArea.width() - nRect.width()) / 2);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripOps)

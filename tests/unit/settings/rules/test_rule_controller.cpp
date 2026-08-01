@@ -531,7 +531,10 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setTilingAlgorithm"), -1), 3); // Tiling (context)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setAlgorithmParam"), -1), 3); // Tiling (context)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setCenterFocusedColumn"), -1), 4); // Scrolling (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed"), -1), 9); // Window/Scrolling (window)
+    // Window/Scrolling shares Window's order 8: the picker buckets by
+    // top-level segment and orders by the minimum categoryOrder, so a
+    // sub-category never carries its own distinct number.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed"), -1), 8); // Window/Scrolling (window)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("overrideOverlayShader"), -1), 5); // Overlay (context)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations"), -1), 6); // Animation (window)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity"), -1), 7); // Appearance (window)

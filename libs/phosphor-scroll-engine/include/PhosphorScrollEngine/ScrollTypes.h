@@ -19,6 +19,9 @@ inline QString centerFocusedColumn()
 {
     return QStringLiteral("CenterFocusedColumn");
 }
+/// RULE channel: a bare work-area fraction (SetScrollDefaultColumnWidth).
+/// Outranks the settings-channel kind trio below — rule > per-screen
+/// setting > global. The settings app never writes this key.
 inline QString defaultColumnWidth()
 {
     return QStringLiteral("DefaultColumnWidth");
@@ -27,6 +30,47 @@ inline QString defaultColumnDisplay()
 {
     return QStringLiteral("DefaultColumnDisplay");
 }
+/// SETTINGS channel: the per-screen override map mirrors the config's
+/// kind-aware width trio so a monitor can pin Fixed pixels or a preset
+/// index, which the rule channel's bare fraction cannot express.
+inline QString defaultColumnWidthKind()
+{
+    return QStringLiteral("DefaultColumnWidthKind");
+}
+inline QString defaultColumnWidthValue()
+{
+    return QStringLiteral("DefaultColumnWidthValue");
+}
+inline QString defaultColumnWidthPresetIndex()
+{
+    return QStringLiteral("DefaultColumnWidthPresetIndex");
+}
+/// RULE channel for the default window height: a bare work-area fraction
+/// (resolved against the live work area at relayout, committed as Fixed).
+inline QString defaultWindowHeight()
+{
+    return QStringLiteral("DefaultWindowHeight");
+}
+/// SETTINGS channel height trio (kind / fixed px / preset index).
+inline QString defaultWindowHeightKind()
+{
+    return QStringLiteral("DefaultWindowHeightKind");
+}
+inline QString defaultWindowHeightValue()
+{
+    return QStringLiteral("DefaultWindowHeightValue");
+}
+inline QString defaultWindowHeightPresetIndex()
+{
+    return QStringLiteral("DefaultWindowHeightPresetIndex");
+}
+/// RULE channel (SetScrollInsertPosition); the settings store deliberately
+/// does not write it — insert position is app-wide config, per-context
+/// only via rules, matching the tiling siblings' exposure.
+inline QString insertPosition()
+{
+    return QStringLiteral("InsertPosition");
+}
 } // namespace ScrollPerScreenKeys
 
 /// The narrowest column width this engine will accept as a proportion of the
@@ -34,12 +78,19 @@ inline QString defaultColumnDisplay()
 /// the config read, the per-screen rule override, the per-window open rule,
 /// the preset list, and the persisted-blob boundary.
 ///
-/// KEEP IN SYNC with ConfigDefaults::scrollingDefaultColumnWidthValueMin and
+/// KEEP IN SYNC with ConfigDefaults::scrollingDefaultColumnWidthProportionMin and
 /// the rules-side PhosphorRules::MinColumnWidthRatio. Neither is reachable
 /// from here — ConfigDefaults is app-side, and PhosphorRules is a library this
 /// one does not link (the dependency runs the other way) — so the bound is
 /// hand-mirrored, but at least it is hand-mirrored once.
 inline constexpr qreal MinColumnWidthFraction = 0.05;
+
+/// The shortest tile height this engine will accept as a proportion of the
+/// work area. The height twin of MinColumnWidthFraction, deliberately its own
+/// name: the two bounds happen to share a value today, and a caller that
+/// clamps a HEIGHT against the width constant would silently follow a later
+/// width-only change.
+inline constexpr qreal MinWindowHeightFraction = 0.05;
 
 /// Persistent view-centering policy for the focused column (niri's
 /// center-focused-column). Wire/config encoding is the int value; append only.
@@ -63,9 +114,6 @@ enum class ColumnDisplay : int {
     Tabbed = 1,
 };
 
-/// Column width INTENT — the source of truth the strip stores. Pixel rects are
-/// recomputed from this on every relayout against the current work area;
-/// pixels are never authoritative.
 /// Wire vocabulary of the DEFAULT-column-width KIND setting
 /// (IScrollSettings::scrollingDefaultColumnWidthKind). Deliberately
 /// distinct from ColumnWidth::Kind — this enum's 2 means "client decides"
@@ -75,8 +123,41 @@ enum class DefaultWidthKind : int {
     Proportion = 0,
     Fixed = 1,
     ClientDecides = 2,
+    /// New columns open at a preset-list index (ColumnWidth::makePreset), so
+    /// they reflow with preset-list changes. Appended as 3 — 2 is taken by
+    /// ClientDecides and stored configs rely on it.
+    Preset = 3,
 };
 
+/// Wire vocabulary of the DEFAULT-window-height KIND setting. Unlike the
+/// width pair above, this one IS the model enum's vocabulary
+/// (WindowHeight::Kind values match 1:1 — Auto/Fixed/Preset, no
+/// "client decides" wrinkle on the height axis), so the engine may cast the
+/// config value directly after a range guard.
+enum class DefaultHeightKind : int {
+    Auto = 0,
+    Fixed = 1,
+    Preset = 2,
+};
+
+/// Where a fresh-opened window's new column enters the strip (config
+/// default; the openColumnPlacement window rule outranks it). Wire/config
+/// encoding is the int value; append only. RightOfActive must stay 0 so an
+/// absent key preserves the historical behavior.
+enum class ScrollInsertPosition : int {
+    RightOfActive = 0,
+    LeftOfActive = 1,
+    /// Leftmost column of the strip.
+    First = 2,
+    /// Rightmost column of the strip (niri's append).
+    Last = 3,
+    /// Stack into the focused column instead of opening a new one.
+    IntoActiveColumn = 4,
+};
+
+/// Column width INTENT — the source of truth the strip stores. Pixel rects are
+/// recomputed from this on every relayout against the current work area;
+/// pixels are never authoritative.
 struct ColumnWidth
 {
     enum Kind : int {
@@ -258,6 +339,18 @@ struct ScrollLayoutParams
     QList<qreal> presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0};
     CenterFocusedColumn centerFocusedColumn = CenterFocusedColumn::Never;
     bool alwaysCenterSingleColumn = false;
+    /// Whether the strip's layout math honours client minimum sizes (the
+    /// column-width floor, the tile-height floor and its rebalance, and the
+    /// interactive-resize floor). Off, the resolved rects obey the user's
+    /// intents and the compositor's own min-size enforcement decides what
+    /// overhangs. The open-time work-area-oversized float escape ignores
+    /// this flag.
+    bool respectMinimumSize = true;
+    /// The context's default window height intent, seeded onto every
+    /// fresh-created tile (restore paths overwrite it via
+    /// setWindowHeightIntent). Default-constructed = Auto weight 1, the
+    /// historical even split.
+    WindowHeight defaultWindowHeight{};
     /// The context's default column width — the un-maximize fallback for a
     /// full-width column with no stored pre-maximize intent.
     ColumnWidth defaultColumnWidth = ColumnWidth::makeProportion(0.5);

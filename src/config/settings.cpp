@@ -246,12 +246,14 @@ void Settings::load()
     // so per-monitor gaps never take effect on save (discussion #661).
     const QHash<QString, QVariantMap> perScreenZoneSelectorBefore = m_perScreenZoneSelectorSettings;
     const QHash<QString, QVariantMap> perScreenAutotileBefore = m_perScreenAutotileSettings;
+    const QHash<QString, QVariantMap> perScreenScrollingBefore = m_perScreenScrollingSettings;
 
     loadPerScreenOverrides(m_configBackend);
     loadVirtualScreenConfigs(m_configBackend);
 
     const bool perScreenZoneSelectorChanged = perScreenZoneSelectorBefore != m_perScreenZoneSelectorSettings;
     const bool perScreenAutotileChanged = perScreenAutotileBefore != m_perScreenAutotileSettings;
+    const bool perScreenScrollingChanged = perScreenScrollingBefore != m_perScreenScrollingSettings;
     // Per-monitor gaps are config-backed and live in the per-screen autotile store.
     // A gap change must resnap already-snapped windows, the same way a global gap
     // change or a context gap rule does; the daemon binds that resnap to
@@ -260,7 +262,7 @@ void Settings::load()
     // gap resnap.
     const bool perScreenGapChanged =
         Settings::perScreenGapDimensionsDiffer(perScreenAutotileBefore, m_perScreenAutotileSettings);
-    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged;
+    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged || perScreenScrollingChanged;
 
     if (useSystemColors()) {
         // The derive routes through the public color setters. Squelch their
@@ -318,6 +320,8 @@ void Settings::load()
         Q_EMIT perScreenZoneSelectorSettingsChanged();
     if (perScreenAutotileChanged)
         Q_EMIT perScreenAutotileSettingsChanged();
+    if (perScreenScrollingChanged)
+        Q_EMIT perScreenScrollingSettingsChanged();
     if (perScreenGapChanged)
         Q_EMIT perScreenSnappingSettingsChanged();
 
@@ -803,6 +807,7 @@ void Settings::discardKeys(const ConfigKeyList& keys)
         if (m_store->readVariant(gk.first, gk.second) != *keyIt)
             m_store->write(gk.first, gk.second, *keyIt);
     }
+    normalizeScrollingColumnWidthValue();
     if (emitChangedNotifyProperties(before))
         Q_EMIT settingsChanged();
 }
@@ -813,6 +818,7 @@ void Settings::resetKeys(const ConfigKeyList& keys)
     for (const ConfigKey& gk : keys) {
         m_store->reset(gk.first, gk.second);
     }
+    normalizeScrollingColumnWidthValue();
     if (emitChangedNotifyProperties(before))
         Q_EMIT settingsChanged();
 }

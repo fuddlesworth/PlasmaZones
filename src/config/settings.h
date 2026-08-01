@@ -351,6 +351,22 @@ public:
                    setScrollingDefaultColumnWidthValue NOTIFY scrollingDefaultColumnWidthValueChanged)
     Q_PROPERTY(int scrollingDefaultColumnDisplay READ scrollingDefaultColumnDisplay WRITE
                    setScrollingDefaultColumnDisplay NOTIFY scrollingDefaultColumnDisplayChanged)
+    Q_PROPERTY(int scrollingDefaultColumnWidthPresetIndex READ scrollingDefaultColumnWidthPresetIndex WRITE
+                   setScrollingDefaultColumnWidthPresetIndex NOTIFY scrollingDefaultColumnWidthPresetIndexChanged)
+    Q_PROPERTY(int scrollingDefaultWindowHeightKind READ scrollingDefaultWindowHeightKind WRITE
+                   setScrollingDefaultWindowHeightKind NOTIFY scrollingDefaultWindowHeightKindChanged)
+    Q_PROPERTY(qreal scrollingDefaultWindowHeightValue READ scrollingDefaultWindowHeightValue WRITE
+                   setScrollingDefaultWindowHeightValue NOTIFY scrollingDefaultWindowHeightValueChanged)
+    Q_PROPERTY(int scrollingDefaultWindowHeightPresetIndex READ scrollingDefaultWindowHeightPresetIndex WRITE
+                   setScrollingDefaultWindowHeightPresetIndex NOTIFY scrollingDefaultWindowHeightPresetIndexChanged)
+    Q_PROPERTY(int scrollingInsertPosition READ scrollingInsertPosition WRITE setScrollingInsertPosition NOTIFY
+                   scrollingInsertPositionChanged)
+    Q_PROPERTY(bool scrollingTabStripEnabled READ scrollingTabStripEnabled WRITE setScrollingTabStripEnabled NOTIFY
+                   scrollingTabStripEnabledChanged)
+    Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
+                   NOTIFY scrollingWheelFocusEnabledChanged)
+    Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
+                   NOTIFY scrollingWheelFocusInvertedChanged)
     // QML-facing STRING facade: the Q_PROPERTY shares its name with the
     // C++ QStringList accessor (the IScrollSettings surface the engine
     // consumes). Deliberate — QML edits the raw comma-joined text while the
@@ -360,6 +376,24 @@ public:
                    setScrollingPresetColumnWidths NOTIFY scrollingPresetColumnWidthsChanged)
     Q_PROPERTY(QString scrollingPresetWindowHeights READ scrollingPresetWindowHeightsString WRITE
                    setScrollingPresetWindowHeights NOTIFY scrollingPresetWindowHeightsChanged)
+
+    // Scrolling Behavior Settings (Scrolling.Behavior)
+    Q_PROPERTY(bool scrollingFocusNewWindows READ scrollingFocusNewWindows WRITE setScrollingFocusNewWindows NOTIFY
+                   scrollingFocusNewWindowsChanged)
+    Q_PROPERTY(bool scrollingFocusFollowsMouse READ scrollingFocusFollowsMouse WRITE setScrollingFocusFollowsMouse
+                   NOTIFY scrollingFocusFollowsMouseChanged)
+    Q_PROPERTY(int scrollingStickyWindowHandling READ scrollingStickyWindowHandling WRITE
+                   setScrollingStickyWindowHandling NOTIFY scrollingStickyWindowHandlingChanged)
+    Q_PROPERTY(bool scrollingRespectMinimumSize READ scrollingRespectMinimumSize WRITE setScrollingRespectMinimumSize
+                   NOTIFY scrollingRespectMinimumSizeChanged)
+    Q_PROPERTY(bool scrollingRestoreStripsOnLogin READ scrollingRestoreStripsOnLogin WRITE
+                   setScrollingRestoreStripsOnLogin NOTIFY scrollingRestoreStripsOnLoginChanged)
+    Q_PROPERTY(bool scrollingRestoreFloatedWindowsOnLogin READ scrollingRestoreFloatedWindowsOnLogin WRITE
+                   setScrollingRestoreFloatedWindowsOnLogin NOTIFY scrollingRestoreFloatedWindowsOnLoginChanged)
+    Q_PROPERTY(int scrollingColumnWidthStepPercent READ scrollingColumnWidthStepPercent WRITE
+                   setScrollingColumnWidthStepPercent NOTIFY scrollingColumnWidthStepPercentChanged)
+    Q_PROPERTY(int scrollingWindowHeightStepPercent READ scrollingWindowHeightStepPercent WRITE
+                   setScrollingWindowHeightStepPercent NOTIFY scrollingWindowHeightStepPercentChanged)
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
@@ -463,6 +497,8 @@ public:
                    setScrollingExpandColumnShortcut NOTIFY scrollingExpandColumnShortcutChanged)
     Q_PROPERTY(QString scrollingCycleWindowHeightShortcut READ scrollingCycleWindowHeightShortcut WRITE
                    setScrollingCycleWindowHeightShortcut NOTIFY scrollingCycleWindowHeightShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleWindowHeightBackShortcut READ scrollingCycleWindowHeightBackShortcut WRITE
+                   setScrollingCycleWindowHeightBackShortcut NOTIFY scrollingCycleWindowHeightBackShortcutChanged)
     Q_PROPERTY(QString scrollingIncreaseWindowHeightShortcut READ scrollingIncreaseWindowHeightShortcut WRITE
                    setScrollingIncreaseWindowHeightShortcut NOTIFY scrollingIncreaseWindowHeightShortcutChanged)
     Q_PROPERTY(QString scrollingDecreaseWindowHeightShortcut READ scrollingDecreaseWindowHeightShortcut WRITE
@@ -950,6 +986,14 @@ public:
     bool hasPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName) const;
     void clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName);
 
+    // Per-screen scrolling config (override > global fallback). Keys are the
+    // PerScreenScrollingKey namespace — engine-spelled, no prefix asymmetry.
+    Q_INVOKABLE QVariantMap getPerScreenScrollingSettings(const QString& screenIdOrName) const override;
+    Q_INVOKABLE void setPerScreenScrollingSetting(const QString& screenIdOrName, const QString& key,
+                                                  const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenScrollingSettings(const QString& screenIdOrName) override;
+    Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenIdOrName) const override;
+
     // Per-screen snapping gaps project the config-backed per-monitor gap
     // overrides (perScreenGapOverrides) — the geometry path only reads them, so
     // this is the sole accessor; writes go through setPerScreenAutotileSetting /
@@ -1062,6 +1106,22 @@ public:
     void setScrollingDefaultColumnWidthValue(qreal value);
     int scrollingDefaultColumnDisplay() const override;
     void setScrollingDefaultColumnDisplay(int display);
+    int scrollingDefaultColumnWidthPresetIndex() const override;
+    void setScrollingDefaultColumnWidthPresetIndex(int index);
+    int scrollingDefaultWindowHeightKind() const override;
+    void setScrollingDefaultWindowHeightKind(int kind);
+    qreal scrollingDefaultWindowHeightValue() const override;
+    void setScrollingDefaultWindowHeightValue(qreal value);
+    int scrollingDefaultWindowHeightPresetIndex() const override;
+    void setScrollingDefaultWindowHeightPresetIndex(int index);
+    int scrollingInsertPosition() const override;
+    void setScrollingInsertPosition(int position);
+    bool scrollingTabStripEnabled() const override;
+    void setScrollingTabStripEnabled(bool enabled) override;
+    bool scrollingWheelFocusEnabled() const;
+    void setScrollingWheelFocusEnabled(bool enabled);
+    bool scrollingWheelFocusInverted() const;
+    void setScrollingWheelFocusInverted(bool inverted);
     // Preset lists: comma-joined string on disk (canonicalProportionList
     // schema validator — a numeric filter, not the plain comma-list),
     // QStringList through IScrollSettings, raw string for QML.
@@ -1101,10 +1161,35 @@ public:
     {
         return outerGapRight();
     }
-    bool scrollingFocusNewWindows() const override
+    // Smart gaps stays a forward: the gaps model is shared, so the tiling
+    // toggle governs both engines (IScrollSettings documents this).
+    bool scrollingSmartGaps() const override
     {
-        return autotileFocusNewWindows();
+        return autotileSmartGaps();
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling Behavior Settings (Scrolling.Behavior group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Store-backed scalars under Scrolling.Behavior; shared leaf key names
+    // (FocusNewWindows, StickyWindowHandling, …) disambiguated by group.
+    bool scrollingFocusNewWindows() const override;
+    void setScrollingFocusNewWindows(bool focus);
+    bool scrollingFocusFollowsMouse() const;
+    void setScrollingFocusFollowsMouse(bool follows);
+    int scrollingStickyWindowHandling() const override;
+    void setScrollingStickyWindowHandling(int handling);
+    bool scrollingRespectMinimumSize() const override;
+    void setScrollingRespectMinimumSize(bool respect);
+    bool scrollingRestoreStripsOnLogin() const;
+    void setScrollingRestoreStripsOnLogin(bool restore);
+    bool scrollingRestoreFloatedWindowsOnLogin() const override;
+    void setScrollingRestoreFloatedWindowsOnLogin(bool restore) override;
+    int scrollingColumnWidthStepPercent() const;
+    void setScrollingColumnWidthStepPercent(int percent);
+    int scrollingWindowHeightStepPercent() const;
+    void setScrollingWindowHeightStepPercent(int percent);
 
     // Scrolling Shortcuts — PhosphorConfig::Store-backed.
     QString scrollingFocusColumnFirstShortcut() const;
@@ -1141,6 +1226,8 @@ public:
     void setScrollingExpandColumnShortcut(const QString& shortcut);
     QString scrollingCycleWindowHeightShortcut() const;
     void setScrollingCycleWindowHeightShortcut(const QString& shortcut);
+    QString scrollingCycleWindowHeightBackShortcut() const;
+    void setScrollingCycleWindowHeightBackShortcut(const QString& shortcut);
     QString scrollingIncreaseWindowHeightShortcut() const;
     void setScrollingIncreaseWindowHeightShortcut(const QString& shortcut);
     QString scrollingDecreaseWindowHeightShortcut() const;
@@ -1269,11 +1356,20 @@ private:
     void writeLockedScreens(const QStringList& screens);
 
     /// Coerce the shared scrolling column-width VALUE into the range its
-    /// current KIND allows. Called from load() and from
-    /// applyConfigOverlayStaged — between them, every path by which a value
-    /// can reach the store without passing the kind-aware setter (hand edit,
-    /// config import, Discard reload, profile staging). See the definition
-    /// for why this is not done on read.
+    /// current KIND allows. Called from load(), from applyConfigOverlayStaged,
+    /// and from the per-page mutators discardKeys() / resetKeys() — between
+    /// them, every path by which a value can reach the store without passing
+    /// the kind-aware setter (hand edit, config import, Discard reload,
+    /// profile staging, per-page Discard and Reset).
+    ///
+    /// The per-page pair matters even though the two width keys are co-owned
+    /// by one page manifest today: relying on that co-ownership would make a
+    /// manifest split (moving the kind to another page) silently reintroduce
+    /// the inconsistent pair, and nothing enforces it. Normalizing here costs
+    /// one read and is called before the re-emit, so a coerced value is
+    /// announced by the same NOTIFY sweep.
+    ///
+    /// See the definition for why this is not done on read.
     void normalizeScrollingColumnWidthValue();
 
 public:
@@ -1718,9 +1814,20 @@ private:
     // Updates). NOT used by save() — save() iterates the schema and lets
     // purgeStaleKeys() handle cleanup.
     static QStringList managedGroupNames();
-    // Delete all per-screen override groups by prefix (ZoneSelector:*,
-    // AutotileScreen:*, and the legacy SnappingScreen:* which is no longer written
-    // but is still swept to scrub any file an older build left behind).
+    // Delete every per-screen override group, plus the container they nest
+    // under. Three things are swept:
+    //   1. Whatever PerScreenPathResolver::isPerScreenPrefix claims. The
+    //      prefixes are NOT re-spelled here — the resolver's mapping table is
+    //      the one list, so a prefix added there is swept by reset() without
+    //      touching this function. Today that covers ZoneSelector:*,
+    //      AutotileScreen:*, ScrollingScreen:*, and the legacy SnappingScreen:*
+    //      which is no longer written but is still swept to scrub any file an
+    //      older build left behind.
+    //   2. VirtualScreen:* groups, which are per-screen in the same sense but
+    //      resolve through their own group accessor rather than the resolver.
+    //   3. The resolver's reserved "PerScreen" container key, which groupList()
+    //      hides and which can survive as an empty husk once every descendant
+    //      is gone.
     static void deletePerScreenGroups(PhosphorConfig::IBackend* backend);
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
@@ -1895,6 +2002,7 @@ private:
 
     // Per-screen autotile overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;
+    QHash<QString, QVariantMap> m_perScreenScrollingSettings;
 
     // Per-monitor gaps are unified (one value per monitor drives both snap and
     // tile) and live in the map above; the gap-dimension sub-domain is projected

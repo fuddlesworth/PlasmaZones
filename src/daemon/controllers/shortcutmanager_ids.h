@@ -79,6 +79,7 @@ inline constexpr auto kIdScrollDecreaseColumnWidth = "scroll_decrease_column_wid
 inline constexpr auto kIdScrollMaximizeColumn = "scroll_maximize_column";
 inline constexpr auto kIdScrollExpandColumn = "scroll_expand_column";
 inline constexpr auto kIdScrollCycleWindowHeight = "scroll_cycle_window_height";
+inline constexpr auto kIdScrollCycleWindowHeightBack = "scroll_cycle_window_height_back";
 inline constexpr auto kIdScrollIncreaseWindowHeight = "scroll_increase_window_height";
 inline constexpr auto kIdScrollDecreaseWindowHeight = "scroll_decrease_window_height";
 inline constexpr auto kIdScrollResetWindowHeights = "scroll_reset_window_heights";
@@ -90,6 +91,15 @@ inline constexpr auto kIdScrollResetWindowHeights = "scroll_reset_window_heights
 // the family into the "Other" bucket.
 inline constexpr auto kQuickLayoutPrefix = "quick_layout_";
 inline constexpr auto kSnapToZonePrefix = "snap_to_zone_";
+
+/// How many slots each indexed family has. Both families are 1-9 (the digit
+/// row), and the number appears in the default-getter array bounds, the
+/// registration loops and the cheatsheet's expected-token lists. Exported for
+/// the same reason as the prefixes above: those sites live in two translation
+/// units, and a bare literal in each lets them drift apart silently — the
+/// cheatsheet's malformed-spec guard cannot catch it, because both sides of
+/// the comparison are built from the same local literal.
+inline constexpr int kIndexedSlotCount = 9;
 
 inline QString quickLayoutId(int slotZeroBased)
 {

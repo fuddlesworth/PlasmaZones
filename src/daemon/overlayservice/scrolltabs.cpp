@@ -23,13 +23,38 @@
 
 namespace PlasmaZones {
 
+void OverlayService::replayScrollTabStrips()
+{
+    // Load-bearing copy: updateScrollTabStrips writes m_lastScrollTabStrips
+    // (insert on a live model, remove on an empty one), so iterating the
+    // member directly would walk a container mutating underneath us.
+    const QHash<QString, QVariantList> cached = m_lastScrollTabStrips;
+    for (auto it = cached.constBegin(); it != cached.constEnd(); ++it) {
+        updateScrollTabStrips(it.key(), it.value());
+    }
+}
+
 void OverlayService::updateScrollTabStrips(const QString& screenId, const QVariantList& strips)
 {
     if (screenId.isEmpty()) {
         return;
     }
 
+    // Cache the live model regardless of the enable toggle, so flipping the
+    // indicator back on can replay the current strips immediately — the
+    // engine's tabStripsChanged is change-latched and would otherwise stay
+    // silent until the next structural strip change. The settings hook
+    // (overlayservice/settings.cpp) replays this cache through THIS function
+    // on every toggle, and the disabled branch below turns a replay into a
+    // hide, so one entry point serves both directions.
     if (strips.isEmpty()) {
+        m_lastScrollTabStrips.remove(screenId);
+    } else {
+        m_lastScrollTabStrips.insert(screenId, strips);
+    }
+    const bool stripEnabled = !m_settings || m_settings->scrollingTabStripEnabled();
+
+    if (strips.isEmpty() || !stripEnabled) {
         // Hide-and-unload without creating a shell for a screen that never
         // showed strips.
         auto it = m_screenStates.find(screenId);

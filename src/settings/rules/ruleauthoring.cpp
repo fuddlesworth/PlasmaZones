@@ -396,6 +396,23 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Consume into focused column");
         }
     }
+    if (type == ActionType::SetScrollInsertPosition && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::RightOfActive) {
+            return PhosphorI18n::tr("Right of the focused column");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::LeftOfActive) {
+            return PhosphorI18n::tr("Left of the focused column");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::First) {
+            return PhosphorI18n::tr("Start of the strip");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::Last) {
+            return PhosphorI18n::tr("End of the strip");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::IntoActiveColumn) {
+            return PhosphorI18n::tr("Into the focused column");
+        }
+    }
     if (type == ActionType::SetWindowLayer && key == ActionParam::Value) {
         if (wireValue == PhosphorRules::WindowLayerToken::Above) {
             return PhosphorI18n::tr("Above other windows");
@@ -539,12 +556,16 @@ QVariantList operatorsForField(int fieldValue)
     }
     const Field field = static_cast<Field>(fieldValue);
     QList<Operator> ops;
-    if (field == Field::Mode || field == Field::ScreenOrientation || field == Field::ActiveLayout) {
-        // These are string-valued but their vocabulary is a closed single-select
-        // dropdown (placement mode, portrait/landscape, a concrete layout id) — only
-        // an exact-token Equals is meaningful. A substring / regex against a closed
-        // token set (or a layout UUID) is a footgun the picker cannot author
-        // sensibly. Mirrors the WindowType enum treatment.
+    if (field == Field::Mode || field == Field::ScreenOrientation || field == Field::ActiveLayout
+        || field == Field::Zone) {
+        // These are string-valued but their vocabulary is closed or opaque
+        // (placement mode, portrait/landscape, a concrete layout id, a zone
+        // UUID) — only an exact-token Equals is meaningful. A substring or
+        // regex against a closed token set, a layout UUID, or a zone UUID is a
+        // footgun the picker cannot author sensibly. Mirrors the WindowType
+        // enum treatment. Zone has no picker of its own yet, so its value is
+        // still a hand-typed brace-wrapped UUID; restricting the operators at
+        // least stops a partial-UUID Contains from silently matching nothing.
         ops = {Operator::Equals};
     } else if (PhosphorRules::fieldIsString(field)) {
         ops = {Operator::Equals, Operator::Contains, Operator::StartsWith, Operator::EndsWith, Operator::Regex};

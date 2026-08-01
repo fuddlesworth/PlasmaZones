@@ -19,6 +19,9 @@
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
 
+#include <functional>
+#include <utility>
+
 namespace PlasmaZones {
 
 namespace {
@@ -83,108 +86,81 @@ void Daemon::connectScrollingShortcuts()
         return scroll;
     };
 
-    m_scrollingShortcutConnections << connect(
-        m_shortcutManager.get(), &ShortcutManager::scrollFocusColumnEndRequested, this, [engineFor](bool last) {
+    // Every verb below is the same three steps — resolve, gate, call — so the
+    // resolve+gate half is written once per SIGNAL ARITY and each connect
+    // carries only the engine call. With the boilerplate gone, the list reads
+    // as the verb table it is, and a verb missing from it is visible.
+    using Scroll = PhosphorScrollEngine::ScrollEngine;
+    const auto plainVerb = [engineFor](std::function<void(Scroll*, const QString&)> verb) {
+        return [engineFor, verb = std::move(verb)]() {
             QString screenId;
             if (auto* scroll = engineFor(&screenId)) {
-                last ? scroll->focusColumnLast(screenId) : scroll->focusColumnFirst(screenId);
+                verb(scroll, screenId);
             }
-        });
-    m_scrollingShortcutConnections << connect(
-        m_shortcutManager.get(), &ShortcutManager::scrollMoveColumnToEndRequested, this, [engineFor](bool last) {
+        };
+    };
+    const auto boolVerb = [engineFor](std::function<void(Scroll*, const QString&, bool)> verb) {
+        return [engineFor, verb = std::move(verb)](bool flag) {
             QString screenId;
             if (auto* scroll = engineFor(&screenId)) {
-                last ? scroll->moveColumnToLast(screenId) : scroll->moveColumnToFirst(screenId);
+                verb(scroll, screenId, flag);
             }
-        });
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(), &ShortcutManager::scrollConsumeWindowRequested,
-                                              this, [engineFor]() {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->consumeWindowIntoColumn(screenId);
-                                                  }
-                                              });
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(), &ShortcutManager::scrollExpelWindowRequested,
-                                              this, [engineFor]() {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->expelWindowFromColumn(screenId);
-                                                  }
-                                              });
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(), &ShortcutManager::scrollConsumeOrExpelRequested,
-                                              this, [engineFor](int delta) {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->consumeOrExpelWindow(delta, screenId);
-                                                  }
-                                              });
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(), &ShortcutManager::scrollCenterColumnRequested,
-                                              this, [engineFor]() {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->centerColumn(screenId);
-                                                  }
-                                              });
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(),
-                                              &ShortcutManager::scrollToggleColumnTabbedRequested, this, [engineFor]() {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->toggleColumnTabbed(screenId);
-                                                  }
-                                              });
-    m_scrollingShortcutConnections << connect(
-        m_shortcutManager.get(), &ShortcutManager::scrollCycleColumnWidthRequested, this, [engineFor](int delta) {
+        };
+    };
+    const auto intVerb = [engineFor](std::function<void(Scroll*, const QString&, int)> verb) {
+        return [engineFor, verb = std::move(verb)](int value) {
             QString screenId;
             if (auto* scroll = engineFor(&screenId)) {
-                scroll->cycleColumnPresetWidth(delta, screenId);
+                verb(scroll, screenId, value);
             }
-        });
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(),
-                                              &ShortcutManager::scrollAdjustColumnWidthRequested, this,
-                                              [engineFor](int deltaPercent) {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->adjustColumnWidth(deltaPercent, screenId);
-                                                  }
-                                              });
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(), &ShortcutManager::scrollMaximizeColumnRequested,
-                                              this, [engineFor]() {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->toggleMaximizeColumn(screenId);
-                                                  }
-                                              });
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(), &ShortcutManager::scrollExpandColumnRequested,
-                                              this, [engineFor]() {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->expandColumnToAvailableWidth(screenId);
-                                                  }
-                                              });
-    // Parameterless: only a forward chord ships (no CycleWindowHeightBack
-    // sibling), so a delta here would be a constant.
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(),
-                                              &ShortcutManager::scrollCycleWindowHeightRequested, this, [engineFor]() {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->cycleWindowPresetHeight(1, screenId);
-                                                  }
-                                              });
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(),
-                                              &ShortcutManager::scrollAdjustWindowHeightRequested, this,
-                                              [engineFor](int deltaPercent) {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->adjustWindowHeight(deltaPercent, screenId);
-                                                  }
-                                              });
-    m_scrollingShortcutConnections << connect(m_shortcutManager.get(),
-                                              &ShortcutManager::scrollResetWindowHeightsRequested, this, [engineFor]() {
-                                                  QString screenId;
-                                                  if (auto* scroll = engineFor(&screenId)) {
-                                                      scroll->resetWindowHeights(screenId);
-                                                  }
-                                              });
+        };
+    };
+    const auto wire = [this](auto signal, auto handler) {
+        m_scrollingShortcutConnections << connect(m_shortcutManager.get(), signal, this, std::move(handler));
+    };
+
+    wire(&ShortcutManager::scrollFocusColumnEndRequested, boolVerb([](Scroll* s, const QString& id, bool last) {
+        last ? s->focusColumnLast(id) : s->focusColumnFirst(id);
+    }));
+    wire(&ShortcutManager::scrollMoveColumnToEndRequested, boolVerb([](Scroll* s, const QString& id, bool last) {
+        last ? s->moveColumnToLast(id) : s->moveColumnToFirst(id);
+    }));
+    wire(&ShortcutManager::scrollConsumeWindowRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->consumeWindowIntoColumn(id);
+    }));
+    wire(&ShortcutManager::scrollExpelWindowRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->expelWindowFromColumn(id);
+    }));
+    wire(&ShortcutManager::scrollConsumeOrExpelRequested, intVerb([](Scroll* s, const QString& id, int delta) {
+        s->consumeOrExpelWindow(delta, id);
+    }));
+    wire(&ShortcutManager::scrollCenterColumnRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->centerColumn(id);
+    }));
+    wire(&ShortcutManager::scrollToggleColumnTabbedRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->toggleColumnTabbed(id);
+    }));
+    wire(&ShortcutManager::scrollCycleColumnWidthRequested, intVerb([](Scroll* s, const QString& id, int delta) {
+        s->cycleColumnPresetWidth(delta, id);
+    }));
+    wire(&ShortcutManager::scrollAdjustColumnWidthRequested, intVerb([](Scroll* s, const QString& id, int percent) {
+        s->adjustColumnWidth(percent, id);
+    }));
+    wire(&ShortcutManager::scrollMaximizeColumnRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->toggleMaximizeColumn(id);
+    }));
+    wire(&ShortcutManager::scrollExpandColumnRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->expandColumnToAvailableWidth(id);
+    }));
+    wire(&ShortcutManager::scrollCycleWindowHeightRequested, intVerb([](Scroll* s, const QString& id, int delta) {
+        s->cycleWindowPresetHeight(delta, id);
+    }));
+    wire(&ShortcutManager::scrollAdjustWindowHeightRequested, intVerb([](Scroll* s, const QString& id, int percent) {
+        s->adjustWindowHeight(percent, id);
+    }));
+    wire(&ShortcutManager::scrollResetWindowHeightsRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->resetWindowHeights(id);
+    }));
 }
 
 } // namespace PlasmaZones

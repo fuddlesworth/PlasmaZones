@@ -24,6 +24,7 @@ constexpr PerScreenMapping kPerScreenMappings[] = {
     {P_PER_SCREEN_PREFIX_ZONE_SELECTOR, "ZoneSelector"},
     {P_PER_SCREEN_PREFIX_AUTOTILE, "Autotile"},
     {P_PER_SCREEN_PREFIX_SNAPPING, "Snapping"},
+    {P_PER_SCREEN_PREFIX_SCROLLING, "Scrolling"},
 };
 } // namespace
 
@@ -57,8 +58,9 @@ bool PerScreenPathResolver::isPerScreenPrefix(const QString& groupName)
 
 bool PerScreenPathResolver::isMalformedPerScreen(const QString& groupName)
 {
-    // "ZoneSelector:" / "AutotileScreen:" / "SnappingScreen:" — prefix present
-    // with a trailing colon but no screen id. Without this check, toJsonPath
+    // A bare prefix from the table above ("ZoneSelector:", "AutotileScreen:",
+    // "SnappingScreen:", "ScrollingScreen:") — the colon is present but no
+    // screen id follows. Without this check, toJsonPath
     // would decline (via isPerScreenPrefix returning false) and the backend
     // would fall back to dot-path, storing the name as an orphan top-level
     // key on disk.

@@ -24,25 +24,78 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorRules/WindowQuery.h>
 #include <PhosphorRules/RuleStore.h>
 
 #include <QJsonArray>
+#include <QSet>
+
+#include <algorithm>
 
 namespace PlasmaZones {
+
+namespace {
+
+/// Structural admission tests for the open-path resolvers, one per stamping
+/// shape. Every one of them is the same guard the zones-layer context resolvers
+/// apply (layoutregistry_contextresolve.cpp), for the same reason.
+///
+/// An UNSTAMPED context field is not merely inert. WindowQuery::valueForField
+/// returns an ENGAGED empty string for the string-valued context fields, so a
+/// POSITIVE leaf (`Mode Equals scrolling`) correctly never matches — but a
+/// NEGATED one (`None{Mode Equals scrolling}`) matches precisely BECAUSE the
+/// inner leaf failed, and the rule then fires for EVERY window. Excluding rules
+/// that reference an unstamped field closes both polarities instead of relying
+/// on the empty value to coincide with a non-match.
+///
+/// ActiveLayout, ScreenOrientation and TiledWindowCount are stamped by NO
+/// resolver on this path (they are context-cascade fields), so they are
+/// excluded everywhere here.
+const QSet<PhosphorRules::Field>& neverStampedFields()
+{
+    static const QSet<PhosphorRules::Field> fields = {
+        PhosphorRules::Field::ActiveLayout,
+        PhosphorRules::Field::ScreenOrientation,
+        PhosphorRules::Field::TiledWindowCount,
+    };
+    return fields;
+}
+
+/// Admission test for a resolver that stamps ScreenId but NOT Mode — the shape
+/// every resolveCached caller on this path shares. Passed identically by all
+/// six so the memo they share stays coherent (see resolveCachedFiltered's
+/// precondition).
+bool admitScreenStamped(const PhosphorRules::Rule& rule)
+{
+    return !rule.match.referencesAnyField(neverStampedFields())
+        && !rule.match.referencesAnyField({PhosphorRules::Field::Mode});
+}
+
+/// Admission test for a resolver that stamps BOTH ScreenId and Mode
+/// (shouldFloatByRule, scrollOpenRuleParams, shouldRestoreSizeOnUnsnap). Mode
+/// stays admitted; only the never-stamped context fields are excluded.
+bool admitScreenAndModeStamped(const PhosphorRules::Rule& rule)
+{
+    return !rule.match.referencesAnyField(neverStampedFields());
+}
+
+} // namespace
 
 bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId,
                                                          PhosphorZones::AssignmentEntry::Mode mode)
 {
     // m_settings is a hard ctor dependency (qFatal on null), so it is non-null
     // here — deref unguarded like every other method in this class. The global
-    // default is per-engine (snap-floated vs autotile-floated); the RestorePosition
-    // rule override below is engine-neutral.
+    // default is per-engine (snap- vs autotile- vs scroll-floated); the
+    // RestorePosition rule override below is engine-neutral.
     const bool globalDefault = mode == PhosphorZones::AssignmentEntry::Mode::Autotile
         ? m_settings->autotileRestoreFloatedWindowsOnLogin()
-        : m_settings->snappingRestoreFloatedWindowsOnLogin();
+        : mode == PhosphorZones::AssignmentEntry::Mode::Scrolling ? m_settings->scrollingRestoreFloatedWindowsOnLogin()
+                                                                  : m_settings->snappingRestoreFloatedWindowsOnLogin();
 
     // No rule store / metadata → the global setting is the whole policy.
     if (!m_ruleStore) {
@@ -75,9 +128,23 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     // every ScreenId-scoped SnapToZone / RouteToScreen rule would silently
     // stop firing for that window. Do not reorder these calls.
     //
+    // CAVEAT on "all four stamp the SAME screenId": they stamp the SPAWN
+    // screen. Under RouteToScreen the window is then dispatched to the routed
+    // TARGET, so the memo keeps the spawn screen and a rule pairing
+    // `ScreenId == target` with RestorePosition (or RestoreToZoneOnLogin) does
+    // not fire for a routed window. The snap side has the same shape; the
+    // scrolling path was verified unaffected. Re-stamping the routed screen
+    // before engine dispatch would close it, at the cost of a second resolve.
+    //
     // shouldFloatByRule and scrollOpenRuleParams opted out of the cache
     // entirely, because they stamp Mode as well.
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    //
+    // admitScreenStamped is the SAME predicate all six cached callers pass, as
+    // resolveCachedFiltered's precondition requires — a filtered verdict is
+    // memoized under the window id, so a caller admitting a different rule set
+    // would poison the memo for the others.
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestorePosition))) {
         // A matched RestorePosition rule overrides the global setting.
@@ -101,7 +168,8 @@ bool WindowTrackingAdaptor::shouldRestoreToZoneOnLogin(const QString& windowId)
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestoreToZoneOnLogin))) {
         return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
@@ -116,10 +184,18 @@ bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
     if (!m_ruleStore) {
         return globalDefault;
     }
-    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
         return globalDefault;
     }
+    // Stamp the window's CURRENT screen and the mode that screen resolves to.
+    // Being uncached, this resolver can carry them for free (there is no memo
+    // to key them into), and without them a rule pairing ScreenId or Mode with
+    // SetRestoreSizeOnUnsnap is silently inert — a pairing the rules editor
+    // offers. The mode token is the MATCH vocabulary ("snapping" / "tiling" /
+    // "scrolling"), not the SetEngineMode action vocabulary.
+    stampScreenAndMode(*query, windowId,
+                       m_service ? m_service->screenForWindow(windowId, m_lastActiveScreenId) : QString());
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
@@ -135,12 +211,56 @@ bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
     // the registry's last extended push, so resolve() reads that same value either
     // way: neutral, not stale, for those; a strict improvement for the refreshed
     // ones.)
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolve(*query);
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveFiltered(*query, admitScreenAndModeStamped);
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestoreSizeOnUnsnap))) {
         return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
     }
     return globalDefault;
+}
+
+void WindowTrackingAdaptor::stampScreenAndMode(PhosphorRules::WindowQuery& query, const QString& windowId,
+                                               const QString& screenId)
+{
+    if (screenId.isEmpty()) {
+        return;
+    }
+    query.screenId = screenId;
+    if (!m_layoutManager) {
+        return;
+    }
+    // The WINDOW's context, resolved through WindowContext's OWN accessors
+    // rather than picked apart here. "Which context governs this window" has
+    // exactly one answer and it lives on WindowContext: effectiveDesktop
+    // resolves a window spanning SEVERAL desktops to the screen's current one
+    // when that is among them, and handles sticky. Neither is expressible from
+    // the query, because buildRuleQueryForWindow copies only the scalar
+    // `virtualDesktop` and never the span — so deriving it inline made the
+    // OPEN-time float verdict disagree with the daemon's LIVE float resolver
+    // for the very same window, which is a per-mode float invariant break.
+    // init_engines.cpp's resolver does exactly this.
+    int desktop = currentDesktopForScreen(screenId);
+    QString activity = m_layoutManager->currentActivity();
+    if (m_windowRegistry) {
+        const auto ctx = m_windowRegistry->windowContext(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+        if (ctx) {
+            desktop = ctx->effectiveDesktop(desktop);
+            activity = ctx->effectiveActivity(activity);
+        }
+    }
+    // The MATCH vocabulary ("snapping" / "tiling" / "scrolling"), not the
+    // SetEngineMode action vocabulary, which spells the middle one "autotile".
+    switch (m_layoutManager->modeForScreen(screenId, desktop, activity)) {
+    case PhosphorZones::AssignmentEntry::Snapping:
+        query.mode = QStringLiteral("snapping");
+        break;
+    case PhosphorZones::AssignmentEntry::Autotile:
+        query.mode = QStringLiteral("tiling");
+        break;
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        query.mode = QStringLiteral("scrolling");
+        break;
+    }
 }
 
 bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QString& screenId)
@@ -154,49 +274,10 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QSt
     if (!query) {
         return false;
     }
-    // Pin the opening screen and the mode it resolves to. buildRuleQueryForWindow
-    // cannot know either, and without them a rule pairing ScreenId or Mode with
-    // Float never matches — a silent inertness, since the rules editor offers
-    // exactly that pairing. The mode token is the MATCH vocabulary
-    // ("snapping" / "tiling" / "scrolling"), not the SetEngineMode action
-    // vocabulary, which spells the middle one "autotile".
-    if (!screenId.isEmpty()) {
-        query->screenId = screenId;
-        if (m_layoutManager) {
-            // The WINDOW's context, resolved through WindowContext's OWN
-            // accessors rather than picked apart here. "Which context governs
-            // this window" has exactly one answer and it lives on
-            // WindowContext: effectiveDesktop resolves a window spanning
-            // SEVERAL desktops to the screen's current one when that is among
-            // them, and handles sticky. Neither is expressible from the query,
-            // because buildRuleQueryForWindow copies only the scalar
-            // `virtualDesktop` and never the span — so deriving it inline made
-            // the OPEN-time float verdict disagree with the daemon's LIVE float
-            // resolver for the very same window, which is a per-mode float
-            // invariant break. init_engines.cpp's resolver does exactly this.
-            int desktop = currentDesktopForScreen(screenId);
-            QString activity = m_layoutManager->currentActivity();
-            if (m_windowRegistry) {
-                const auto ctx =
-                    m_windowRegistry->windowContext(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-                if (ctx) {
-                    desktop = ctx->effectiveDesktop(desktop);
-                    activity = ctx->effectiveActivity(activity);
-                }
-            }
-            switch (m_layoutManager->modeForScreen(screenId, desktop, activity)) {
-            case PhosphorZones::AssignmentEntry::Snapping:
-                query->mode = QStringLiteral("snapping");
-                break;
-            case PhosphorZones::AssignmentEntry::Autotile:
-                query->mode = QStringLiteral("tiling");
-                break;
-            case PhosphorZones::AssignmentEntry::Scrolling:
-                query->mode = QStringLiteral("scrolling");
-                break;
-            }
-        }
-    }
+    // Pin the opening screen and the mode it resolves to; without them a rule
+    // pairing ScreenId or Mode with Float never matches, a silent inertness
+    // since the rules editor offers exactly that pairing.
+    stampScreenAndMode(*query, windowId, screenId);
 
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
@@ -207,7 +288,7 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QSt
     // The first screen a window was asked about would then decide the verdict
     // for its whole lifetime, and a Mode-paired rule would answer for the
     // wrong mode. One resolve per open is the cost.
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolve(*query);
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveFiltered(*query, admitScreenAndModeStamped);
     // The Float action carries free-form params (no Value key), so the verdict is
     // the PRESENCE of the filled slot, not a bool payload.
     return resolved.slot(QString(PhosphorRules::ActionSlot::Float)).has_value();
@@ -241,7 +322,7 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
     // verdict built under a Mode condition it never asked for (and vice
     // versa, on whichever path resolves first). This is one resolve per
     // window open on a scrolling screen.
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolve(*query);
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveFiltered(*query, admitScreenAndModeStamped);
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnWidth))) {
         // Only forward a genuinely numeric fraction inside the SHARED
         // column-width bounds (PhosphorRules::Min/MaxColumnWidthRatio, the
@@ -254,6 +335,16 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
         if (value.isDouble() && fraction >= PhosphorRules::MinColumnWidthRatio
             && fraction <= PhosphorRules::MaxColumnWidthRatio) {
             out.insert(ScrollOpenKeys::widthFraction(), fraction);
+        }
+    }
+    if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenWindowHeight))) {
+        // Same reject-not-clamp policy as the width slot above; the height
+        // fraction shares the width pair's bounds.
+        const auto value = action->params.value(QString(PhosphorRules::ActionParam::Value));
+        const double fraction = value.toDouble(0.0);
+        if (value.isDouble() && fraction >= PhosphorRules::MinColumnWidthRatio
+            && fraction <= PhosphorRules::MaxColumnWidthRatio) {
+            out.insert(ScrollOpenKeys::heightFraction(), fraction);
         }
     }
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenTabbed))) {
@@ -300,7 +391,8 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // resolveCached is keyed on (windowId, ruleSet revision) and returns every matched
     // slot, so reading the Placement slot off the same verdict is free. Same open-path
     // lifetime guarantee (resolved once per window lifetime) as the sibling predicates.
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
 
     PhosphorSnapEngine::PlacementDirective directive;
 
@@ -390,7 +482,7 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    emitRouteToDesktopIfMatched(m_ruleEvaluator->resolveCached(windowId, *query), windowId);
+    emitRouteToDesktopIfMatched(m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped), windowId);
 }
 
 void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, const QString& screenId)
@@ -407,14 +499,29 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
 
     // Bare RouteToScreen only. A rule that ALSO carries SnapToZone routes AND snaps
     // via the placement directive (calculateSnapToPlacementRule resolves the zones
     // ON the target screen and returns shouldSnap, so the facade never reaches the
     // no-snap branch that calls this); moving here too would double-place the window.
-    if (resolved.slot(QString(PhosphorRules::ActionSlot::Placement))) {
-        return;
+    //
+    // Gate on the RESOLVED directive carrying at least one valid ordinal, not on
+    // the Placement slot's mere presence. placementZonesByRule drops
+    // out-of-range ordinals, so an all-rejected SnapToZone payload produces an
+    // empty directive: the engine snaps nothing, and returning here on presence
+    // alone would drop the accompanying RouteToScreen too, leaving the window
+    // neither snapped nor routed.
+    if (const auto placement = resolved.slot(QString(PhosphorRules::ActionSlot::Placement))) {
+        const QJsonArray ordinals = placement->params.value(QString(PhosphorRules::ActionParam::Zones)).toArray();
+        const bool anyValid = std::any_of(ordinals.cbegin(), ordinals.cend(), [](const QJsonValue& v) {
+            const int n = v.toInt(0);
+            return n >= 1 && n <= PhosphorRules::MaxZoneOrdinal;
+        });
+        if (anyValid) {
+            return;
+        }
     }
     const std::optional<PhosphorRules::RuleAction> route =
         resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen));
@@ -422,7 +529,11 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
         return;
     }
     const QString target = route->params.value(QString(PhosphorRules::ActionParam::TargetScreenId)).toString();
-    if (target.isEmpty() || target == screenId) {
+    // screensMatch, not a raw compare: connector-name and EDID-id spellings can
+    // name the SAME monitor, and a raw compare would treat that as a real move —
+    // arming windowOutputMoveExpected and re-placing a window that is already
+    // where the rule wants it.
+    if (target.isEmpty() || PhosphorScreens::ScreenIdentity::screensMatch(target, screenId)) {
         return;
     }
     // m_service is non-null post-construction (class invariant); screenManager()
@@ -446,9 +557,11 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     }
 
     // Map the window's position relative to its current screen's available area onto
-    // the target screen's, preserving size, then clamp so the whole frame fits.
-    // Preserves "the same spot on the other monitor" across differing resolutions; an
-    // unknown / degenerate source area falls back to the target's top-left.
+    // the target screen's, then clamp so the whole frame fits. Preserves "the same
+    // spot on the other monitor" across differing resolutions; an unknown /
+    // degenerate source area falls back to the target's top-left. The SIZE is
+    // carried over unchanged unless the target work area is smaller in that axis,
+    // in which case it shrinks to fit rather than overflowing the monitor.
     const QRect srcAvail = screens->screenAvailableGeometry(screenId);
     const int w = qMin(cur.width(), dstAvail.width());
     const int h = qMin(cur.height(), dstAvail.height());
@@ -486,7 +599,8 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
 
     // RouteToDesktop is engine-neutral — emit it for autotile windows too.
     emitRouteToDesktopIfMatched(resolved, windowId);
@@ -504,7 +618,11 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
         return QString();
     }
     const QString target = route->params.value(QString(PhosphorRules::ActionParam::TargetScreenId)).toString();
-    if (target.isEmpty() || target == screenId || !m_layoutManager) {
+    // screensMatch for the same reason the snap twin uses it: a differently
+    // spelled id for the SAME monitor must read as "already there". A raw
+    // compare would return the target as a distinct screen and the caller would
+    // key tiling state under a second name for one output.
+    if (target.isEmpty() || !m_layoutManager || PhosphorScreens::ScreenIdentity::screensMatch(target, screenId)) {
         return QString();
     }
     // When the same rule also pins a target desktop (RouteToDesktop), the window
@@ -530,8 +648,12 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     // the mode answers from the STORED assignment, so a disconnected
     // monitor still passes it — and a routed open no engine can claim gets
     // DROPPED instead of tiling on the spawn screen.
-    if (m_service && m_service->screenManager()
-        && !m_service->screenManager()->screenAvailableGeometry(target).isValid()) {
+    //
+    // m_service is non-null post-construction (class invariant), so it is
+    // dereferenced directly here as it is in the snap twin; screenManager()
+    // itself may still be null (an unconfigured test fixture), so that is the
+    // one thing checked.
+    if (m_service->screenManager() && !m_service->screenManager()->screenAvailableGeometry(target).isValid()) {
         qCInfo(lcDbusWindow) << "applyOpenRoutingForTiling: RouteToScreen target" << target
                              << "is not connected — window opens on its spawn screen";
         return QString();

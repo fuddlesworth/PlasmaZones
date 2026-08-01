@@ -69,6 +69,7 @@ namespace PhosphorRules {
 class RuleStore;
 class RuleEvaluator;
 class ResolvedActions;
+struct WindowQuery;
 }
 
 namespace PlasmaZones {
@@ -790,6 +791,17 @@ public:
     /// evaluator cache is keyed on windowId and rule revision alone, so a hit
     /// would silently discard both. See rules.cpp.
     QVariantMap scrollOpenRuleParams(const QString& windowId, const QString& screenId);
+
+    /// Stamp @p screenId and the placement mode that screen resolves to onto
+    /// @p query. buildRuleQueryForWindow knows neither, and without them a rule
+    /// pairing ScreenId or Mode with a window action never matches — a pairing
+    /// the rules editor offers. An empty @p screenId stamps nothing. The mode
+    /// comes from the WINDOW's own context (WindowContext::effectiveDesktop /
+    /// effectiveActivity), so an open-time verdict agrees with the daemon's
+    /// live float resolver for the same window. ONLY for resolvers that skip
+    /// the evaluator cache: the memo is keyed on window id and rule revision
+    /// alone, so a stamped query is discarded on a hit.
+    void stampScreenAndMode(PhosphorRules::WindowQuery& query, const QString& windowId, const QString& screenId);
 
     /// Resolve the open-placement directive for a window from its matched window
     /// rules: the 1-based `SnapToZone` ordinals to snap into (empty when no

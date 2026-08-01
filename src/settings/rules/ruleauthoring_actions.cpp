@@ -64,7 +64,8 @@ PickerCategory actionCategory(const QString& type)
             return {PhosphorI18n::tr("Tiling") + QStringLiteral("/") + PhosphorI18n::tr("Behavior"), 3};
         }
         if (type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::SetCenterFocusedColumn
-            || type == ActionType::SetScrollDefaultColumnDisplay) {
+            || type == ActionType::SetScrollDefaultColumnDisplay || type == ActionType::SetScrollInsertPosition
+            || type == ActionType::SetScrollDefaultWindowHeight) {
             return {PhosphorI18n::tr("Scrolling", "tiling mode name"), 4};
         }
         // The per-app open actions are WINDOW-domain: they must sit in the
@@ -73,15 +74,17 @@ PickerCategory actionCategory(const QString& type)
         // and would render window actions above the divider). Nested under
         // Window as a Scrolling submenu for discoverability.
         if (type == ActionType::OpenColumnWidth || type == ActionType::OpenTabbed
-            || type == ActionType::OpenColumnPlacement) {
-            // Order 9, NOT 8: sharing Window's order would keep the two
-            // categories contiguous only while their displayOrder ranges
-            // happen to stay disjoint — a future windowManagement action
-            // with a high displayOrder would split the Window section in
-            // two. Every category carries a unique order for this reason.
+            || type == ActionType::OpenColumnPlacement || type == ActionType::OpenWindowHeight) {
+            // Order 8, the same as plain Window: CategoryMenuButton buckets by
+            // the TOP-LEVEL segment of the category path and orders the buckets
+            // by the smallest order any item in the bucket carries, so
+            // "Window/Scrolling" lands in the Window bucket either way and a
+            // different number here could only ever pull the whole Window
+            // bucket earlier. Orders are per top-level category, not per path:
+            // the Tiling submenus already share 3 with plain Tiling.
             return {PhosphorI18n::tr("Window") + QStringLiteral("/")
                         + PhosphorI18n::tr("Scrolling", "tiling mode name"),
-                    9};
+                    8};
         }
         // Cross-cutting engine controls: SetEngineMode / DisableEngine / LockContext.
         return {PhosphorI18n::tr("Engine"), 1};
@@ -153,6 +156,14 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::SetScrollDefaultColumnDisplay && key == ActionParam::Value) {
         return PhosphorI18n::tr("Display");
+    }
+    if (type == ActionType::SetScrollInsertPosition && key == ActionParam::Value) {
+        return PhosphorI18n::tr("New column position");
+    }
+    // The two height params share a label for the same reason the widths do.
+    if ((type == ActionType::SetScrollDefaultWindowHeight || type == ActionType::OpenWindowHeight)
+        && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Window height (%)");
     }
     if (type == ActionType::OpenTabbed && key == ActionParam::Value) {
         return PhosphorI18n::tr("Open in a tabbed column (off = a normal column)");
@@ -434,8 +445,17 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetScrollDefaultColumnDisplay) {
         return PhosphorI18n::tr("Set default column display");
     }
+    if (type == ActionType::SetScrollInsertPosition) {
+        return PhosphorI18n::tr("Set new column position");
+    }
+    if (type == ActionType::SetScrollDefaultWindowHeight) {
+        return PhosphorI18n::tr("Set default window height");
+    }
     if (type == ActionType::OpenColumnWidth) {
         return PhosphorI18n::tr("Open at column width");
+    }
+    if (type == ActionType::OpenWindowHeight) {
+        return PhosphorI18n::tr("Open at window height");
     }
     if (type == ActionType::OpenTabbed) {
         return PhosphorI18n::tr("Open in a tabbed column");
@@ -635,7 +655,6 @@ QVariantList actionTypes()
         QString type;
         QString categoryLabel;
         int categoryOrder;
-        int displayOrder;
     };
     QList<TypeEntry> entries;
     for (const QString& type : registry.registeredTypes()) {
@@ -644,14 +663,18 @@ QVariantList actionTypes()
             continue;
         }
         const PickerCategory acat = actionCategory(type);
-        entries.append({type, acat.label, acat.order, desc->displayOrder});
+        entries.append({type, acat.label, acat.order});
     }
+    // Sorted only to make this list deterministic across registry iteration
+    // orders. The sole consumer, CategoryMenuButton, re-sorts every item
+    // alphabetically by label and derives its bucket order from the smallest
+    // categoryOrder in each bucket, so nothing downstream can observe a
+    // within-category order chosen here. ActionDescriptor::displayOrder is
+    // deliberately not consulted: honouring it would take a change in the
+    // picker, not another comparator leg here.
     std::sort(entries.begin(), entries.end(), [](const TypeEntry& a, const TypeEntry& b) {
         if (a.categoryOrder != b.categoryOrder) {
             return a.categoryOrder < b.categoryOrder;
-        }
-        if (a.displayOrder != b.displayOrder) {
-            return a.displayOrder < b.displayOrder;
         }
         return a.type < b.type;
     });

@@ -161,15 +161,19 @@ void SettingsController::buildApplicationController()
                QStringLiteral("help-about"));
 
     // Placement children — the three placement modes. They keep their own
-    // drill-down behaviour (collapsible=false) and their inline enable toggles
-    // (keyed by pageId "snapping"/"tiling"/"scrolling" in Main.qml's trailing
-    // delegate); only their parent changed from top-level to "placement".
+    // drill-down behaviour (collapsible=false) and their inline enable toggles;
+    // only their parent changed from top-level to "placement". Main.qml's
+    // trailing delegate keys those toggles off SIX ids, each parent plus its
+    // "-simple" counterpart, because simple mode renders the condensed leaf's
+    // own pageId in the row the toggle has to stay on.
     regVirtual(QStringLiteral("snapping"), QStringLiteral("placement"), PhosphorI18n::tr("Snapping"), QString(),
                QStringLiteral("view-split-left-right"));
     regVirtual(QStringLiteral("tiling"), QStringLiteral("placement"), PhosphorI18n::tr("Tiling"), QString(),
                QStringLiteral("window-duplicate"));
+    // Not view-list-details: that glyph is the Rules page's, and the rail
+    // showing it twice reads as two views of the same thing.
     regVirtual(QStringLiteral("scrolling"), QStringLiteral("placement"), PhosphorI18n::tr("Scrolling"), QString(),
-               QStringLiteral("view-list-details"));
+               QStringLiteral("distribute-horizontal-equal"));
 
     // Display children
     regVirtual(QStringLiteral("virtualscreens"), QStringLiteral("display"), PhosphorI18n::tr("Virtual Screens"),
@@ -285,12 +289,29 @@ void SettingsController::buildApplicationController()
 
     // Scrolling children — the third placement mode's own section, the peer
     // of Snapping and Tiling above (its sidebar row carries the same inline
-    // enable toggle). One surface serves both modes: the engine has a single
-    // page of knobs, so there is no simple/advanced split to declare.
-    regVirtual(QStringLiteral("scrolling-behavior"), QStringLiteral("scrolling"), PhosphorI18n::tr("Behavior"),
-               QStringLiteral("pages/scrolling/ScrollingPage.qml"), QStringLiteral("view-list-details"),
+    // enable toggle). The SimpleOnly condensed page leads, mirroring its two
+    // siblings; its advanced counterpart is the View page, the first of the
+    // View / Columns / Window split described below.
+    regVirtual(QStringLiteral("scrolling-simple"), QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling"),
+               QStringLiteral("pages/scrolling/ScrollingSimplePage.qml"), QStringLiteral("distribute-horizontal-equal"),
                /*collapsible=*/false,
-               /*divider=*/true);
+               /*divider=*/true, PV::SimpleOnly, QStringLiteral("scrolling-view"));
+    // The advanced tree mirrors Tiling's per-concern split: View (viewport
+    // centering + the Meta+wheel gesture), Columns (fresh-column/tile
+    // defaults + presets), Window (window handling + focus). View is the
+    // simple page's counterpart, like tiling-simple ↔ tiling-algorithm.
+    regVirtual(QStringLiteral("scrolling-view"), QStringLiteral("scrolling"), PhosphorI18n::tr("View"),
+               QStringLiteral("pages/scrolling/ScrollingViewPage.qml"), QStringLiteral("zoom-fit-width"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly, QStringLiteral("scrolling-simple"));
+    regVirtual(QStringLiteral("scrolling-columns"), QStringLiteral("scrolling"), PhosphorI18n::tr("Columns"),
+               QStringLiteral("pages/scrolling/ScrollingColumnsPage.qml"), QStringLiteral("view-file-columns"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("scrolling-window"), QStringLiteral("scrolling"), PhosphorI18n::tr("Window"),
+               QStringLiteral("pages/scrolling/ScrollingWindowPage.qml"), QStringLiteral("preferences-system-windows"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
 
     // Animations children — Transitions / Motion / Library categories drill in.
     // The simple-mode surface leads: a SimpleOnly leaf that replaces the whole

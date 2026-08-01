@@ -26,17 +26,40 @@ public:
     virtual int scrollingOuterGapBottom() const = 0;
     virtual int scrollingOuterGapLeft() const = 0;
     virtual int scrollingOuterGapRight() const = 0;
-    /// Whether newly opened windows take focus (shared Tiling.Behavior
-    /// value, forwarded like the gaps).
+    /// Whether newly opened windows take focus (Scrolling.Behavior).
     virtual bool scrollingFocusNewWindows() const = 0;
+    /// StickyWindowHandling as int (0 = treat as normal, 1 = restore only,
+    /// 2 = ignore all) — the shared PhosphorEngine enum's wire values.
+    /// RestoreOnly and IgnoreAll both keep sticky windows out of the strip
+    /// (insertion is active management); the engine's desktop-pin logic is
+    /// deliberately not gated on this.
+    virtual int scrollingStickyWindowHandling() const = 0;
+    /// Whether the strip's layout math honours client minimum sizes (column
+    /// width floor, tile height floor, interactive-resize floor). The
+    /// work-area-oversized float escape ignores this and always fires.
+    virtual bool scrollingRespectMinimumSize() const = 0;
+    /// Zero the outer gaps when the strip holds a single column (shared
+    /// Tiling.Gaps/SmartGaps value, forwarded like the gaps).
+    virtual bool scrollingSmartGaps() const = 0;
 
     /// CenterFocusedColumn as int (0 = never, 1 = always, 2 = on-overflow).
     virtual int scrollingCenterFocusedColumn() const = 0;
     virtual bool scrollingAlwaysCenterSingleColumn() const = 0;
     /// Default width for new columns: kind (0 = proportion, 1 = fixed px,
-    /// 2 = client decides) + value (proportion in [0,1] or pixels).
+    /// 2 = client decides, 3 = preset index) + value (proportion in [0,1]
+    /// or pixels) + the preset index the Preset kind resolves.
     virtual int scrollingDefaultColumnWidthKind() const = 0;
     virtual qreal scrollingDefaultColumnWidthValue() const = 0;
+    virtual int scrollingDefaultColumnWidthPresetIndex() const = 0;
+    /// Default height intent for fresh tiles: kind (0 = auto, 1 = fixed px,
+    /// 2 = preset index) + fixed pixel value + preset index. Matches
+    /// WindowHeight::Kind 1:1 (DefaultHeightKind).
+    virtual int scrollingDefaultWindowHeightKind() const = 0;
+    virtual qreal scrollingDefaultWindowHeightValue() const = 0;
+    virtual int scrollingDefaultWindowHeightPresetIndex() const = 0;
+    /// ScrollInsertPosition as int (0 = right of active, 1 = left of
+    /// active, 2 = first, 3 = last, 4 = into active column).
+    virtual int scrollingInsertPosition() const = 0;
     /// ColumnDisplay new columns open in (0 = normal, 1 = tabbed).
     virtual int scrollingDefaultColumnDisplay() const = 0;
     /// Preset proportion lists, serialized as decimal strings.

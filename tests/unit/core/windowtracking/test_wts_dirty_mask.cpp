@@ -99,15 +99,15 @@ private Q_SLOTS:
     {
         // Fresh service starts DirtyAll so the first save after construction
         // writes every field. Build a fully-isolated fixture (independent
-        // parent, layout manager, stubs, etc.) so construction / teardown
-        // cannot interfere with the shared m_* fixture used by other
-        // tests in this class.
+        // parent, layout manager, virtual-desktop manager) so construction /
+        // teardown cannot interfere with the shared m_* fixture used by other
+        // tests in this class. No zone detector: the service does not take
+        // one, and the dirty mask this pins does not depend on zones.
         auto guard = std::make_unique<IsolatedConfigGuard>();
         QObject freshParent;
         auto* freshLayoutManager =
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &freshParent);
         auto* freshVirtualDesktopManager = new PhosphorWorkspaces::VirtualDesktopManager(&freshParent);
-        auto* freshZoneDetector = new StubZoneDetector(&freshParent);
 
         PhosphorPlacement::WindowTrackingService fresh(freshLayoutManager, nullptr, freshVirtualDesktopManager, nullptr,
                                                        PhosphorPlacement::PlacementConfig{}, &freshParent);

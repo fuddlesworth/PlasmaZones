@@ -55,16 +55,10 @@ PhosphorConfig::Schema buildSettingsSchema()
 // TU shares live in settingsschema_p.h; the rest are local to this file.
 
 using SchemaValidators::clampDouble;
+using SchemaValidators::clampInt;
 using SchemaValidators::validIntOr;
 
 namespace {
-auto clampInt(int minVal, int maxVal)
-{
-    return [minVal, maxVal](const QVariant& v) -> QVariant {
-        return qBound(minVal, v.toInt(), maxVal);
-    };
-}
-
 /// Fall back to @p fallback when the value is an invalid color. Defaults
 /// in the schema are already valid, so this mostly protects against
 /// garbage in the on-disk file.
@@ -840,8 +834,10 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
          CD::snappingStickyWindowHandling(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
-                  static_cast<int>(StickyWindowHandling::IgnoreAll)),
+         validIntOr({static_cast<int>(StickyWindowHandling::TreatAsNormal),
+                     static_cast<int>(StickyWindowHandling::RestoreOnly),
+                     static_cast<int>(StickyWindowHandling::IgnoreAll)},
+                    CD::snappingStickyWindowHandling()),
          intChoices({{static_cast<int>(StickyWindowHandling::TreatAsNormal), "treatAsNormal"_L1},
                      {static_cast<int>(StickyWindowHandling::RestoreOnly), "restoreOnly"_L1},
                      {static_cast<int>(StickyWindowHandling::IgnoreAll), "ignoreAll"_L1}})},
@@ -905,7 +901,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          CD::autotileInsertPosition(),
          QMetaType::Int,
          {},
-         clampInt(CD::autotileInsertPositionMin(), CD::autotileInsertPositionMax()),
+         validIntOr({static_cast<int>(AutotileInsertPosition::End),
+                     static_cast<int>(AutotileInsertPosition::AfterFocused),
+                     static_cast<int>(AutotileInsertPosition::AsMaster)},
+                    CD::autotileInsertPosition()),
          intChoices({{static_cast<int>(AutotileInsertPosition::End), "end"_L1},
                      {static_cast<int>(AutotileInsertPosition::AfterFocused), "afterFocused"_L1},
                      {static_cast<int>(AutotileInsertPosition::AsMaster), "asMaster"_L1}})},
@@ -917,8 +916,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          CD::autotileStickyWindowHandling(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
-                  static_cast<int>(StickyWindowHandling::IgnoreAll)),
+         validIntOr({static_cast<int>(StickyWindowHandling::TreatAsNormal),
+                     static_cast<int>(StickyWindowHandling::RestoreOnly),
+                     static_cast<int>(StickyWindowHandling::IgnoreAll)},
+                    CD::autotileStickyWindowHandling()),
          intChoices({{static_cast<int>(StickyWindowHandling::TreatAsNormal), "treatAsNormal"_L1},
                      {static_cast<int>(StickyWindowHandling::RestoreOnly), "restoreOnly"_L1},
                      {static_cast<int>(StickyWindowHandling::IgnoreAll), "ignoreAll"_L1}})},

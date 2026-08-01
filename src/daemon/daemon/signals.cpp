@@ -100,10 +100,11 @@ void Daemon::connectLayoutSignals()
         });
     }
 
-    // Note: autotileEnabledChanged, snappingEnabledChanged, and perScreenAutotileSettingsChanged
-    // are handled by the consolidated settingsChanged handler (lives in
+    // Note: autotileEnabledChanged, snappingEnabledChanged, scrollingEnabledChanged,
+    // perScreenAutotileSettingsChanged, and perScreenScrollingSettingsChanged are all
+    // handled by the consolidated settingsChanged handler (lives in
     // init_services.cpp since the daemon file split — single-pass processing).
-    // Individual autotile signals only fire from runtime setters, where settingsChanged also
+    // Individual per-mode signals only fire from runtime setters, where settingsChanged also
     // fires and handles the transitions — no separate handlers needed.
 
     // Re-derive autotile screens and layout filter when assignments change

@@ -50,6 +50,16 @@ public:
     explicit ShortcutManager(Settings* settings, QObject* parent = nullptr);
     ~ShortcutManager() override;
 
+    /// The scroll adjust steps in percent of the work area, as the user tuned
+    /// them. Public because the registration table's fire lambdas are
+    /// capture-less function pointers at namespace scope and reach the manager
+    /// only through their ShortcutManager* argument; narrow read-only getters
+    /// rather than exposing the mutable Settings* the table would otherwise
+    /// need. They also hold the unreachable-null defence in one place instead
+    /// of a ternary per call site.
+    int scrollColumnWidthStepPercent() const;
+    int scrollWindowHeightStepPercent() const;
+
 public Q_SLOTS:
     void registerShortcuts();
     /// Re-applies current sequences after a settings save; returns true when
@@ -97,6 +107,17 @@ public:
         QString combinedLabel;
         QString tailToken;
     };
+
+    /**
+     * Every action id in the registration table, in declaration order.
+     *
+     * The table is a file-local array with internal linkage, and
+     * cheatsheetModel() is a COMPRESSED view of it (an opposed pair collapses
+     * into a single row, so its second member has no row of its own). Neither
+     * can enumerate the registration surface, which the Shortcuts.Scrolling
+     * parity check needs in order to compare it against the config schema.
+     */
+    static QStringList staticShortcutIds();
 
     /**
      * Pure family-compression pass over cheatsheet rows (static so tests can
@@ -171,7 +192,10 @@ Q_SIGNALS:
     // the generic navigation signals above; these are the scroll-specific
     // verbs. Direction deltas (consumeOrExpel, cyclePresets) carry -1 =
     // left/back, +1 = right/forward; the two ADJUST signals instead carry a
-    // signed PERCENT of the work area (±10 per keypress).
+    // signed PERCENT of the work area, one step per keypress. The step is the
+    // user-tunable scrollingColumnWidthStepPercent /
+    // scrollingWindowHeightStepPercent setting (1-50, default 10), read
+    // through the narrow getters above.
     void scrollFocusColumnEndRequested(bool last);
     void scrollMoveColumnToEndRequested(bool last);
     void scrollConsumeWindowRequested();
@@ -183,7 +207,7 @@ Q_SIGNALS:
     void scrollAdjustColumnWidthRequested(int deltaPercent);
     void scrollMaximizeColumnRequested();
     void scrollExpandColumnRequested();
-    void scrollCycleWindowHeightRequested();
+    void scrollCycleWindowHeightRequested(int delta);
     void scrollAdjustWindowHeightRequested(int deltaPercent);
     void scrollResetWindowHeightsRequested();
 
@@ -253,6 +277,9 @@ private:
     /// binding actually differed from the registry's stored sequence.
     bool rebindAll();
     void drainPendingAdhocOps();
+    /// Drop every queued adhoc op for @p id. Both queueing paths supersede an
+    /// earlier op for the same id (last write wins), so they share this.
+    void erasePendingAdhocOps(const QString& id);
 
     Settings* m_settings = nullptr;
 

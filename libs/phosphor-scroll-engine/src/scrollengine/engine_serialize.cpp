@@ -232,7 +232,12 @@ QJsonObject ScrollEngine::serializeStripState() const
     liveStrips.reserve(states.size());
     QSet<QString> liveWindowIds;
     for (auto it = states.cbegin(); it != states.cend(); ++it) {
-        const StashedStrip& live = liveStrips.insert(it.key(), buildStashFromState(it.value())).value();
+        // Hold the iterator in a named local rather than binding the
+        // reference straight off insert(...).value(): the returned iterator
+        // is a temporary, and while the value it names lives in the hash (so
+        // the reference is sound), the compiler cannot prove that and warns.
+        const auto inserted = liveStrips.insert(it.key(), buildStashFromState(it.value()));
+        const StashedStrip& live = inserted.value();
         for (const StashedColumn& col : live.columns) {
             for (const StashedTile& tile : col.tiles) {
                 liveWindowIds.insert(tile.windowId);

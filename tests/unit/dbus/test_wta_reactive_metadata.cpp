@@ -833,6 +833,48 @@ private Q_SLOTS:
                  "store wired but no metadata for this window → global ON");
     }
 
+    // ────────────────────────────────────────────────────────────────────
+    // Each Mode must read its OWN restore-floated setting. The test above
+    // covers the snapping/autotile pair; the scrolling arm was added without
+    // one, and the arm-selection chain is a nested ternary where a copy-paste
+    // reading the wrong getter compiles and passes every polarity check that
+    // only exercises two of the three modes. Drive all three flags to distinct
+    // values so exactly one assignment satisfies every row.
+    // ────────────────────────────────────────────────────────────────────
+    void restorePositionGlobalDefault_isPerMode()
+    {
+        const QString unseen = PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"),
+                                                                            QStringLiteral("per-mode-uuid"));
+        m_wta->setRuleStore(nullptr);
+
+        struct Row
+        {
+            const char* name;
+            bool snapping;
+            bool autotile;
+            bool scrolling;
+        };
+        // Three assignments, each isolating one mode as the odd one out — a
+        // getter swap between any PAIR shows up in at least one of them.
+        for (const Row& row :
+             {Row{"scrolling alone ON", false, false, true}, Row{"autotile alone ON", false, true, false},
+              Row{"snapping alone ON", true, false, false}}) {
+            m_settings->setSnappingRestoreFloatedWindowsOnLogin(row.snapping);
+            m_settings->setAutotileRestoreFloatedWindowsOnLogin(row.autotile);
+            m_settings->setScrollingRestoreFloatedWindowsOnLogin(row.scrolling);
+
+            QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Snapping)
+                         == row.snapping,
+                     row.name);
+            QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Autotile)
+                         == row.autotile,
+                     row.name);
+            QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Scrolling)
+                         == row.scrolling,
+                     row.name);
+        }
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
