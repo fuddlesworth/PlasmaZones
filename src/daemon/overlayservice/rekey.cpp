@@ -119,9 +119,10 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     //  - m_scrollTabIndicatorOverrides MUST follow. Otherwise the screen's
     //    context-rule paint overrides silently fall back to the config values
     //    until the next updateScrollingScreens pass re-pushes them.
-    // The last two also have no other removal path for the old key (the
-    // rekeyed key never reaches unwirePassiveShellSlots), so failing to move
-    // them leaks an entry per rekey rather than merely misbehaving once.
+    // After the rekey the old key has no removal path of its own (the rekeyed
+    // key never reaches unwirePassiveShellSlots, and the by-key clears in
+    // updateScrollingScreens name the LIVE screen), so failing to move these
+    // leaks an entry per rekey rather than merely misbehaving once.
     if (const auto stripsIt = m_lastScrollTabStrips.constFind(oldKey); stripsIt != m_lastScrollTabStrips.constEnd()) {
         m_lastScrollTabStrips.insert(newKey, stripsIt.value());
         m_lastScrollTabStrips.remove(oldKey);

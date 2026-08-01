@@ -639,6 +639,18 @@ void Daemon::pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId)
             ++it;
         }
     }
+
+    // Same boundary, same reason, for the raw tab-strip payload cache: a dead
+    // entry there is not merely a leak, it makes refreshScrollTabEnrichment
+    // re-parse and re-push a departed screen on every title tick.
+    for (auto it = m_lastScrollTabStripsJson.begin(); it != m_lastScrollTabStripsJson.end();) {
+        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) == physicalScreenId
+            && !keepIds.contains(it.key())) {
+            it = m_lastScrollTabStripsJson.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void Daemon::pruneEngineOrdersForWindow(const QString& instanceId)

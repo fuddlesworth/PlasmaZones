@@ -247,12 +247,14 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // answer "already applied" and leave the new surface with no input region
     // at all.
     //
-    // It costs nothing when the region is unchanged — QWaylandWindow::setMask
-    // early-returns on an equal mask, and updateInputRegion de-dupes again
-    // before touching the compositor, so no wl_region is created. A flag round
-    // trip needs no re-assert either (setWindowFlags re-derives the surface
-    // region from the still-held mask), which is why this is about window
-    // re-creation specifically and not about the flag.
+    // It is cheap when the region is unchanged: QWaylandWindow caches both the
+    // mask and the input region derived from it (qwaylandwindow_p.h, Qt 6.11 —
+    // separate mMask and mInputRegion members behind a shared
+    // updateInputRegion()), so an unchanged region does not reach the
+    // compositor. Note QWindow::setMask itself does no comparing; the whole
+    // argument rests on the QWaylandWindow side. The re-assert is likewise not
+    // needed for a flag round trip, since the platform window still holds the
+    // mask across one — this is about window re-creation specifically.
     s.m_shellWindow->setMask(wantPartial ? partialInputRegion : QRegion());
 }
 

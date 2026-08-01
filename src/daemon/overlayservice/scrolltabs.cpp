@@ -95,9 +95,14 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     if (strips.isEmpty() || !stripEnabled) {
         // Drop the input region on BOTH no-indicator paths, not just the
         // empty-strips one. Switching the indicator off with strips still live
-        // takes this branch too, and the hide is ANIMATED — so a region left
-        // installed keeps the fading pills eating clicks for the length of the
-        // animation, and keeps the entry for the whole disabled period.
+        // takes this branch too, and without the remove the entry would linger
+        // for the whole disabled period, so any unrelated surface-state sync
+        // would re-install a region for an indicator that is not there.
+        //
+        // This does NOT shorten the click-through window during the animated
+        // hide: nothing is pushed to the shell until a sync runs, and on this
+        // branch that is the hide-completion callback below. The fading pills
+        // stay clickable for the length of the animation either way.
         m_scrollTabInputRegions.remove(screenId);
         // Hide-and-unload without creating a shell for a screen that never
         // showed strips.
@@ -269,9 +274,10 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     }
     slot->setVisible(true);
     m_surfaceAnimator->beginShow(shellSurface, slot, PhosphorRoles::ScrollTabs, []() { });
-    // Display-only: syncPassiveShellSurfaceState counts only modal slots
-    // toward the input region, so this restores click-through after
-    // Surface::show() cleared the transparent-input flag.
+    // Re-derive the surface's input state after Surface::show() cleared the
+    // transparent-input flag. The sync folds this slot's tab region into the
+    // partial region it installs, so the indicator is clickable while the rest
+    // of the passive shell stays click-through.
     syncPassiveShellSurfaceStateForSurface(shellSurface);
 }
 

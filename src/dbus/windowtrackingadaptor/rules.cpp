@@ -296,13 +296,12 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QSt
 
 QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
 {
-    QVariantMap out;
     if (!m_ruleStore) {
-        return out;
+        return {};
     }
     std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
-        return out;
+        return {};
     }
     // NO screen/mode stamping here, unlike scrollOpenRuleParams: this runs
     // from the strip-relayout path, which knows the window but not which
@@ -314,34 +313,53 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
-    // READ the shared memo, never SEED it. Both halves of that matter, and an
-    // earlier revision of this function got both wrong by calling
-    // resolveCached:
+    // This path uses its OWN memo and never touches the shared one. Two
+    // separate reasons, and the shared memo cannot satisfy either:
     //
-    //  - resolveCached forwards an EMPTY admit filter, and the memo key is
-    //    (windowId, revision) with the filter deliberately NOT part of it
-    //    (ruleevaluator.cpp). So an empty-filter verdict lands under the same
-    //    key the six admitScreenStamped callers read, admitting rules those
-    //    callers exclude. Per the negation guard in internal.h that is not
-    //    merely a superset: a `None{Mode Equals scrolling}` group matches
-    //    BECAUSE its inner leaf fails on an unstamped query, so one poisoned
-    //    entry makes such a SnapToZone / RouteToScreen rule fire for every
-    //    window.
-    //  - even with the right filter, SEEDING from here would break the
-    //    ordering invariant documented above shouldRestoreFloatedPosition:
-    //    the two existing unstamped readers only run on the open path, after a
-    //    stamper. This one runs per tab on every relayout, including the first
-    //    resolve after a rules save bumps the revision, so it could seed an
-    //    empty screenId and silently stop every ScreenId-scoped rule from
-    //    firing for that window.
+    //  - POISONING. The shared memo's key is (windowId, revision) with the
+    //    admit filter deliberately NOT part of it (ruleevaluator.cpp), so a
+    //    verdict resolved under a different filter lands under the same key the
+    //    six admitScreenStamped callers read. Per the negation guard in
+    //    internal.h that is not merely a superset: a negated group matches
+    //    BECAUSE its inner leaf fails on an unstamped query, so one foreign
+    //    entry can make a SnapToZone / RouteToScreen rule fire for every
+    //    window. Seeding it from here would also break the ordering invariant
+    //    documented above shouldRestoreFloatedPosition — the two existing
+    //    unstamped readers only run on the open path, AFTER a stamper.
+    //  - COST. Merely READING the shared memo without seeding is not viable
+    //    either: every one of its six seeders runs on the OPEN path only, and
+    //    a rules save bumps the revision, so after any save the peek misses
+    //    forever for every already-open window (they will not open again).
+    //    This function runs per tab on every re-enrichment, which includes
+    //    every window TITLE change, so a permanent miss means a full rule-set
+    //    walk per tab per retitle.
     //
-    // resolveCachedIfPresent is a revision-gated, NON-INSERTING peek, so a hit
-    // costs nothing and a miss cannot corrupt the ordering. The miss path pays
-    // one uncached resolve per tab until a stamper seeds the window, which is
-    // the price of not being a seeder.
-    std::optional<PhosphorRules::ResolvedActions> cached = m_ruleEvaluator->resolveCachedIfPresent(windowId);
+    // A private memo keyed the same way is free of both: nothing else reads it,
+    // so its filter can be exactly right for THIS query, and a second call
+    // costs a hash lookup again.
+    const quint64 revision = m_ruleStore->ruleSet().revision();
+    const auto memoIt = m_tabColorMemo.constFind(windowId);
+    if (memoIt != m_tabColorMemo.constEnd() && memoIt->revision == revision) {
+        return memoIt->colors;
+    }
+    // The filter is stricter than admitScreenStamped: this query stamps NO
+    // context field, and WindowQuery::valueForField returns an ENGAGED empty
+    // QVariant for ScreenId, so a `None{ScreenId Equals …}` group would match
+    // because its inner leaf fails — the same inversion the shared memo's
+    // filter exists to prevent, which admitScreenStamped does not cover here
+    // precisely because it assumes ScreenId IS stamped.
     const PhosphorRules::ResolvedActions resolved =
-        cached ? *cached : m_ruleEvaluator->resolveFiltered(*query, admitScreenStamped);
+        m_ruleEvaluator->resolveFiltered(*query, [](const PhosphorRules::Rule& rule) {
+            return admitScreenStamped(rule) && !rule.match.referencesAnyField({PhosphorRules::Field::ScreenId});
+        });
+    const QVariantMap colors = tabColorsFromResolved(resolved);
+    m_tabColorMemo.insert(windowId, TabColorMemoEntry{revision, colors});
+    return colors;
+}
+
+QVariantMap WindowTrackingAdaptor::tabColorsFromResolved(const PhosphorRules::ResolvedActions& resolved)
+{
+    QVariantMap out;
     const auto readColor = [&resolved, &out](QLatin1StringView slot, const QString& key) {
         const auto action = resolved.slot(QString(slot));
         if (!action) {

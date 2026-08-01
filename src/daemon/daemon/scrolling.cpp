@@ -237,8 +237,20 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // screen that left scrolling would otherwise keep them until it
         // re-entered and something re-resolved.
         if (m_overlayService) {
+            // Tear the indicator down BEFORE dropping the overrides. The
+            // engine's own clear for a departing screen is DEFERRED (the
+            // direct path finds the latch already released by
+            // removeStatesIf), so at this point the overlay still holds the
+            // screen's live strip model. setScrollTabIndicatorOverrides
+            // replays that cached model through updateScrollTabStrips, which
+            // would run the full show choreography for a screen that just left
+            // scrolling and then animate it away again when the queued "[]"
+            // lands. Clearing the model first makes both the override drop and
+            // the queued clear no-ops.
+            m_overlayService->updateScrollTabStrips(screenId, {});
             m_overlayService->setScrollTabIndicatorOverrides(screenId, {});
         }
+        m_lastScrollTabStripsJson.remove(screenId);
     }
 
     // setActiveScreens retiles only ADDED screens on a changed set (the

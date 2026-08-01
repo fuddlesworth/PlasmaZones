@@ -305,8 +305,12 @@ private Q_SLOTS:
             // which is exactly "the settings app writes it and the daemon never
             // sees it". Assert the write path too.
             // Writing the value back that was just read: a no-op for state, so
-            // this cannot perturb the other cases, while still exercising the
-            // setter registration and its validator.
+            // this cannot perturb the other cases. It exercises setter
+            // REGISTRATION only, not the validator — setSetting's equality
+            // guard returns true before the setter is entered for a same-value
+            // write. Registry presence is the failure this test is named after,
+            // and validator behaviour has its own coverage in
+            // test_scrolling_settings.
             if (!m_adaptor->setSetting(name, QDBusVariant(viaBus))) {
                 unwritable.append(name);
             }

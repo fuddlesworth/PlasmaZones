@@ -923,18 +923,6 @@ void Daemon::initEnginesAndWiring()
     // window registry and drives the per-screen overlay slot.
     connect(scrollEngine, &PhosphorScrollEngine::ScrollEngine::tabStripsChanged, this,
             [this](const QString& screenId, const QString& stripsJson) {
-                // Retain the RAW payload. Enrichment (titles, urgency,
-                // per-window colours) is resolved from live state that the
-                // engine knows nothing about, so it can go stale while the
-                // structural payload is unchanged — and the engine's emit is
-                // change-gated on exactly that payload, so it will not re-fire.
-                // Keeping the JSON is what lets refreshScrollTabEnrichment
-                // re-run the enrichment without inventing a second producer.
-                if (stripsJson.isEmpty()) {
-                    m_lastScrollTabStripsJson.remove(screenId);
-                } else {
-                    m_lastScrollTabStripsJson.insert(screenId, stripsJson);
-                }
                 applyScrollTabStrips(screenId, stripsJson);
             });
 
@@ -945,19 +933,20 @@ void Daemon::initEnginesAndWiring()
     // and title it had at the last STRUCTURAL change. That is the stale-state
     // failure the effect-side urgency connection exists to avoid.
     if (m_windowRegistry) {
-        connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::metadataChanged, this,
-                [this](const QString&, const PhosphorEngine::WindowMetadata& oldMeta,
-                       const PhosphorEngine::WindowMetadata& newMeta) {
-                    // Only the two enriched fields. Every other metadata edit
-                    // (geometry, focus, desktop) reaches the strip through the
-                    // engine's own relayout, and re-enriching on those would
-                    // re-push every indicator on every window move.
-                    if (oldMeta.isDemandingAttention == newMeta.isDemandingAttention
-                        && oldMeta.title == newMeta.title) {
-                        return;
-                    }
-                    refreshScrollTabEnrichment();
-                });
+        connect(
+            m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::metadataChanged, this,
+            [this](const QString&, const PhosphorEngine::WindowMetadata& oldMeta,
+                   const PhosphorEngine::WindowMetadata& newMeta) {
+                // Only the two enriched fields. Every other metadata edit
+                // (geometry, focus, desktop) reaches the strip through the
+                // engine's own relayout, and re-enriching on those would
+                // re-push every indicator on every window move.
+                if (oldMeta.isDemandingAttention == newMeta.isDemandingAttention && oldMeta.title == newMeta.title) {
+                    return;
+                }
+                scheduleScrollTabEnrichmentRefresh();
+            },
+            Qt::UniqueConnection);
     }
 
     // Control adaptor - high-level convenience API for third-party integrations.
@@ -1024,7 +1013,39 @@ void Daemon::applyScrollTabStrips(const QString& screenId, const QString& strips
                             << "error=" << parseError.errorString() << "offset=" << parseError.offset;
         return;
     }
+    // Retain the RAW payload. Enrichment (titles, urgency, per-window colours)
+    // is resolved from live state that the engine knows nothing about, so it
+    // can go stale while the structural payload is unchanged — and the engine's
+    // emit is change-gated on exactly that payload, so it will not re-fire.
+    // Keeping the JSON is what lets refreshScrollTabEnrichment re-run the
+    // enrichment without inventing a second producer.
+    //
+    // Keyed on the PARSED result, not on stripsJson.isEmpty(): the engine's
+    // clear paths emit the literal "[]", never an empty string, so testing the
+    // raw payload would never prune and every screen that ever carried a strip
+    // would keep a dead entry forever.
+    if (strips->isEmpty()) {
+        m_lastScrollTabStripsJson.remove(screenId);
+    } else {
+        m_lastScrollTabStripsJson.insert(screenId, stripsJson);
+    }
     m_overlayService->updateScrollTabStrips(screenId, *strips);
+}
+
+void Daemon::scheduleScrollTabEnrichmentRefresh()
+{
+    // Coalesce. Retitling is a chatty signal (lifecycle.cpp carries a dedicated
+    // caption-only path for exactly that reason), and each refresh re-parses
+    // and re-resolves every cached screen, so a burst of title ticks must
+    // collapse into one pass rather than N.
+    if (m_scrollTabEnrichmentPending) {
+        return;
+    }
+    m_scrollTabEnrichmentPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_scrollTabEnrichmentPending = false;
+        refreshScrollTabEnrichment();
+    });
 }
 
 void Daemon::refreshScrollTabEnrichment()
@@ -1036,8 +1057,8 @@ void Daemon::refreshScrollTabEnrichment()
     // column, so the set is small.
     //
     // The copy is load-bearing for the same reason OverlayService::
-    // replayScrollTabStrips takes one: applyScrollTabStrips can reach a path
-    // that mutates the cache.
+    // replayScrollTabStrips takes one: applyScrollTabStrips writes the very
+    // map being iterated.
     const QHash<QString, QString> cached = m_lastScrollTabStripsJson;
     for (auto it = cached.constBegin(); it != cached.constEnd(); ++it) {
         applyScrollTabStrips(it.key(), it.value());

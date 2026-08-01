@@ -431,6 +431,9 @@ private:
     /// retitles moves no rect, so without this its tab would keep the values
     /// it had at the last structural change.
     void refreshScrollTabEnrichment();
+    /// Coalescing front door for refreshScrollTabEnrichment. Retitling is a
+    /// high-rate signal, so a burst collapses into a single refresh.
+    void scheduleScrollTabEnrichmentRefresh();
     void initializeUnifiedController();
     void connectLayoutSignals();
     void connectOverlaySignals();
@@ -1215,8 +1218,15 @@ private:
     QHash<TilingStateKey, QStringList> m_lastEngineOrders;
     /// The engine's RAW tab-strip payload per screen, kept so the enrichment
     /// can be re-run without the engine re-emitting (see
-    /// refreshScrollTabEnrichment). Cleared with the screen's strips.
+    /// refreshScrollTabEnrichment). Written by applyScrollTabStrips keyed on
+    /// the PARSED payload, so the engine's literal "[]" clear prunes the entry;
+    /// also pruned on virtual-screen reconfigure and when a screen leaves
+    /// scrolling. NOT rekeyed by OverlayService::rekeyOverlayState — after a
+    /// VS rekey the stale key's pushes are refused downstream and the live key
+    /// picks the cache back up on its next structural emit.
     QHash<QString, QString> m_lastScrollTabStripsJson;
+    /// Set between a scheduleScrollTabEnrichmentRefresh() and its queued run.
+    bool m_scrollTabEnrichmentPending = false;
 
     // Last-applied active assignment id per effective screen (resolved for that
     // screen's current desktop/activity). Diffed on rulesChanged to find the

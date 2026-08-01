@@ -277,10 +277,17 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     // its header doc). The hide-pending bit and the cached strip model have
     // no such requirement — they are plain state for a shell that no longer
     // exists, and keeping the cache would grow it by one dead screen per
-    // hot-plug cycle, so drop them. The input region and the paint overrides
-    // are the same shape and are dropped for the same reason: both are
-    // rebuilt from the next strip update for a live screen, and retaining
-    // them would leak one QRegion and one QVariantMap per hot-plug cycle.
+    // hot-plug cycle, so drop them. The input region goes for the same reason
+    // and is genuinely self-healing: updateScrollTabStrips rebuilds it from
+    // the next strip update.
+    //
+    // The paint overrides are dropped to avoid the same per-hot-plug leak, but
+    // they are NOT self-healing: their only writer is
+    // Daemon::updateScrollingScreens, which runs on a rules/context re-resolve,
+    // not on a strip update. A screen that stays in scrolling across a shell
+    // teardown therefore falls back to the config colours until the next rule
+    // or context pass. Accepted over leaking a dead entry per cycle, since the
+    // fallback is the correct-looking indicator rather than a broken one.
     m_scrollTabsHidePending.remove(screenId);
     m_lastScrollTabStrips.remove(screenId);
     m_scrollTabInputRegions.remove(screenId);
