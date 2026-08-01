@@ -290,24 +290,22 @@ void SettingsController::buildApplicationController()
     // Scrolling children — the third placement mode's own section, the peer
     // of Snapping and Tiling above (its sidebar row carries the same inline
     // enable toggle). The SimpleOnly condensed page leads, mirroring its two
-    // siblings; its advanced counterpart is the View page, the first of the
-    // View / Columns / Window split described below.
+    // siblings; its advanced counterpart is the Columns page, the first of the
+    // Columns / Window split described below.
     regVirtual(QStringLiteral("scrolling-simple"), QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling"),
                QStringLiteral("pages/scrolling/ScrollingSimplePage.qml"), QStringLiteral("distribute-horizontal-equal"),
                /*collapsible=*/false,
-               /*divider=*/true, PV::SimpleOnly, QStringLiteral("scrolling-view"));
-    // The advanced tree mirrors Tiling's per-concern split: View (viewport
-    // centering + the Meta+wheel gesture), Columns (fresh-column/tile
-    // defaults + presets), Window (window handling + focus). View is the
-    // simple page's counterpart, like tiling-simple ↔ tiling-algorithm.
-    regVirtual(QStringLiteral("scrolling-view"), QStringLiteral("scrolling"), PhosphorI18n::tr("View"),
-               QStringLiteral("pages/scrolling/ScrollingViewPage.qml"), QStringLiteral("zoom-fit-width"),
-               /*collapsible=*/false,
-               /*divider=*/false, AdvancedOnly, QStringLiteral("scrolling-simple"));
+               /*divider=*/true, PV::SimpleOnly, QStringLiteral("scrolling-columns"));
+    // The advanced tree mirrors Tiling's per-concern split: Columns
+    // (fresh-column/tile defaults + presets) and Window (window handling plus
+    // the Focus and view card, which carries viewport centering and the
+    // Meta+wheel gesture — those follow focus, so they sit with it rather than
+    // on a View leaf of their own). Columns is the simple page's counterpart,
+    // like tiling-simple ↔ tiling-algorithm.
     regVirtual(QStringLiteral("scrolling-columns"), QStringLiteral("scrolling"), PhosphorI18n::tr("Columns"),
                QStringLiteral("pages/scrolling/ScrollingColumnsPage.qml"), QStringLiteral("view-file-columns"),
                /*collapsible=*/false,
-               /*divider=*/false, AdvancedOnly);
+               /*divider=*/false, AdvancedOnly, QStringLiteral("scrolling-simple"));
     regVirtual(QStringLiteral("scrolling-window"), QStringLiteral("scrolling"), PhosphorI18n::tr("Window"),
                QStringLiteral("pages/scrolling/ScrollingWindowPage.qml"), QStringLiteral("preferences-system-windows"),
                /*collapsible=*/false,
