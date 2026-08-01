@@ -890,6 +890,11 @@ ColumnDisplay ScrollEngine::effectiveDefaultColumnDisplay(const QString& screenI
     return m_defaultColumnDisplay;
 }
 
+TabIndicatorParams ScrollEngine::tabIndicatorParamsForScreen(const QString& screenId) const
+{
+    return effectiveTabIndicator(screenId);
+}
+
 TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QString& screenId) const
 {
     TabIndicatorParams params = m_tabIndicator;

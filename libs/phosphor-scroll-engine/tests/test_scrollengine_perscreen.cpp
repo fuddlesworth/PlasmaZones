@@ -208,6 +208,8 @@ private Q_SLOTS:
     void absentTrioSlotsFallBackPerSlotToTheGlobal();
     void presetIndexIsClampedToTheLivePresetList();
     void fixedKindWithAProportionValueFallsThroughToTheGlobal();
+    void tabIndicatorOverridesArePerProperty();
+    void tabIndicatorRejectsAGarbagePositionOverride();
 
 private:
     /// A headless engine active on the three screens, with @p settings
@@ -483,6 +485,63 @@ void TestScrollEnginePerScreen::fixedKindWithAProportionValueFallsThroughToTheGl
     const ColumnWidth rejectedFraction = openedWidth(engine, kS3, QStringLiteral("app|c"));
     QCOMPARE(rejectedFraction.kind, ColumnWidth::Proportion);
     QCOMPARE(rejectedFraction.proportion, 0.25);
+}
+
+void TestScrollEnginePerScreen::tabIndicatorOverridesArePerProperty()
+{
+    // effectiveTabIndicator resolves SEVEN independent properties out of one
+    // override map. A rule that sets only one must leave the other six on
+    // their configured values — the same per-property contract the width trio
+    // above has, and the reason each read is guarded by constFind rather than
+    // value(): a default-constructed QVariant would read as false/0 and
+    // silently override a configured value with a zero.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->tabIndicatorPlaceWithinColumn = false;
+    settings->tabIndicatorGap = 5;
+    settings->tabIndicatorWidth = 4;
+    settings->tabIndicatorPosition = static_cast<int>(TabIndicatorPosition::Left);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // One key only.
+    QVariantMap onlyGap;
+    onlyGap.insert(ScrollPerScreenKeys::tabIndicatorGap(), -12);
+    engine->applyPerScreenConfig(kS1, onlyGap);
+
+    const TabIndicatorParams ruled = engine->tabIndicatorParamsForScreen(kS1);
+    QCOMPARE(ruled.gap, -12); // the override landed, negative and all
+    // ...and nothing else moved.
+    QCOMPARE(ruled.width, 4);
+    QCOMPARE(ruled.placeWithinColumn, false);
+    QCOMPARE(ruled.position, TabIndicatorPosition::Left);
+
+    // A screen with no override map at all is the pure configured answer.
+    const TabIndicatorParams global = engine->tabIndicatorParamsForScreen(kS3);
+    QCOMPARE(global.gap, 5);
+    QCOMPARE(global.width, 4);
+}
+
+void TestScrollEnginePerScreen::tabIndicatorRejectsAGarbagePositionOverride()
+{
+    // Position is the one field cast into an enum, so it is validate-then-
+    // fall-back like its siblings: an out-of-range value must leave the
+    // CONFIGURED position alone rather than snapping the indicator to Left
+    // (which a raw static_cast or a value()-with-default would do).
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->tabIndicatorPosition = static_cast<int>(TabIndicatorPosition::Bottom);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVariantMap garbage;
+    garbage.insert(ScrollPerScreenKeys::tabIndicatorPosition(), 99);
+    engine->applyPerScreenConfig(kS1, garbage);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS1).position, TabIndicatorPosition::Bottom);
+
+    // A legitimate override still applies, so the guard is not simply inert.
+    QVariantMap valid;
+    valid.insert(ScrollPerScreenKeys::tabIndicatorPosition(), static_cast<int>(TabIndicatorPosition::Right));
+    engine->applyPerScreenConfig(kS2, valid);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS2).position, TabIndicatorPosition::Right);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePerScreen)

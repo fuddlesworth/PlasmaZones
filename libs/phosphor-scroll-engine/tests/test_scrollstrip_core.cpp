@@ -43,6 +43,8 @@ private Q_SLOTS:
     void tabIndicatorWithinColumnShrinksTheTiles();
     void tabIndicatorLengthIsCenteredOnTheEdge();
     void tabIndicatorGapKeepsMovingWithinColumn();
+    void tabIndicatorRightAndBottomAnchorTheOppositeEdge();
+    void tabIndicatorNarrowerThanItsReservationKeepsTheColumn();
 };
 
 void TestScrollStripCore::openInsertsColumnAndResizesNothing()
@@ -519,6 +521,66 @@ void TestScrollStripCore::tabIndicatorGapKeepsMovingWithinColumn()
     indicator.placeWithinColumn = false;
     QCOMPARE(topOf(-11), 1);
     QCOMPARE(topOf(-20), 10);
+}
+
+void TestScrollStripCore::tabIndicatorRightAndBottomAnchorTheOppositeEdge()
+{
+    // Right and Bottom are the two branches whose arithmetic is most
+    // off-by-one prone (`x + width - thickness + outward`), and Bottom is
+    // additionally the fall-through-after-break path, so a mis-edit there is
+    // silent. Every other indicator case drives Left or Top only.
+    TabIndicatorParams indicator;
+    indicator.placeWithinColumn = true;
+    indicator.gap = 5;
+    indicator.width = 10;
+    const int reserved = 15; // width + gap
+
+    indicator.position = TabIndicatorPosition::Right;
+    ScrollStrip rightStrip;
+    const ResolvedColumn right = tabbedColumn(rightStrip, 2, indicator);
+    // Flush with the column's RIGHT edge, and the tiles keep the left edge.
+    QCOMPARE(right.tabIndicatorRect.right(), right.rect.right());
+    QCOMPARE(right.tabIndicatorRect.width(), 10);
+    QCOMPARE(right.tiles.first().rect.x(), right.rect.x());
+    QCOMPARE(right.tiles.first().rect.width(), right.rect.width() - reserved);
+
+    indicator.position = TabIndicatorPosition::Bottom;
+    ScrollStrip bottomStrip;
+    const ResolvedColumn bottom = tabbedColumn(bottomStrip, 2, indicator);
+    QCOMPARE(bottom.tabIndicatorRect.bottom(), bottom.rect.bottom());
+    QCOMPARE(bottom.tabIndicatorRect.height(), 10);
+    QCOMPARE(bottom.tiles.first().rect.y(), bottom.rect.y());
+    QCOMPARE(bottom.tiles.first().rect.height(), bottom.rect.height() - reserved);
+
+    // Outside the column, both push CLEAR of the far edge by the gap rather
+    // than inward — the sign flip Left/Top would hide.
+    indicator.placeWithinColumn = false;
+    indicator.position = TabIndicatorPosition::Right;
+    ScrollStrip outsideStrip;
+    const ResolvedColumn outside = tabbedColumn(outsideStrip, 2, indicator);
+    QCOMPARE(outside.tabIndicatorRect.x(), outside.rect.right() + 1 + indicator.gap);
+    QCOMPARE(outside.tiles.first().rect, outside.rect);
+}
+
+void TestScrollStripCore::tabIndicatorNarrowerThanItsReservationKeepsTheColumn()
+{
+    // A column smaller than its own reservation must NOT resolve an inverted
+    // tile rect. contentRectFor hands back the untouched column instead, and
+    // the indicator simply overlaps it — the same thing a negative gap does.
+    // Deleting that fallback leaves every other case green.
+    TabIndicatorParams indicator;
+    indicator.position = TabIndicatorPosition::Left;
+    indicator.placeWithinColumn = true;
+    indicator.gap = 0;
+    indicator.width = 4000; // far wider than any column the fixture can make
+
+    ScrollStrip strip;
+    const ResolvedColumn column = tabbedColumn(strip, 2, indicator);
+    QVERIFY(column.rect.isValid());
+    for (const ResolvedTile& tile : column.tiles) {
+        QVERIFY2(tile.rect.isValid(), "an over-large reservation must not invert the tile rect");
+        QCOMPARE(tile.rect, column.rect);
+    }
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripCore)

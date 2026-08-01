@@ -872,6 +872,132 @@ private Q_SLOTS:
         QVERIFY(RuleAction::fromJson(o).has_value());
     }
 
+    /// Every tab-indicator action pinned to its OWN slot, plus the bounds and
+    /// vocabularies that are the only load-time defence for a hand-edited
+    /// rules.json.
+    ///
+    /// The slot pins are the point. Sixteen near-identical registrations were
+    /// added in one commit, each a copy-paste of the last, and a
+    /// `constantSlot` left pointing at the previous action's slot passes every
+    /// bounds assertion while silently writing the wrong slot forever. That is
+    /// the hazard testScrollingParamActions_range already calls out for its
+    /// own pair; this covers the sixteen that came after it.
+    void testTabIndicatorActions_slotsBoundsAndVocabularies()
+    {
+        const auto rejectsMissingValue = [](QLatin1StringView type) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+        };
+        /// Load @p value for @p type, assert it is accepted, pin its slot, and
+        /// round-trip it.
+        const auto acceptsWithSlot = [](QLatin1StringView type, const QJsonValue& value, QLatin1StringView slot) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), value);
+            const auto loaded = RuleAction::fromJson(o);
+            QVERIFY2(loaded.has_value(), type.data());
+            QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(slot));
+            const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+            QVERIFY2(roundTripped.has_value(), type.data());
+            QCOMPARE(*roundTripped, *loaded);
+        };
+        const auto rejects = [](QLatin1StringView type, const QJsonValue& value) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), value);
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+        };
+
+        // ── the three bools ──
+        for (const auto& pair : QList<QPair<QLatin1StringView, QLatin1StringView>>{
+                 {ActionType::SetTabIndicatorEnabled, ActionSlot::TabIndicatorEnabled},
+                 {ActionType::SetTabIndicatorHideWhenSingleTab, ActionSlot::TabIndicatorHideWhenSingleTab},
+                 {ActionType::SetTabIndicatorPlaceWithinColumn, ActionSlot::TabIndicatorPlaceWithinColumn}}) {
+            rejectsMissingValue(pair.first);
+            rejects(pair.first, QStringLiteral("yes")); // non-bool
+            acceptsWithSlot(pair.first, true, pair.second);
+            acceptsWithSlot(pair.first, false, pair.second); // both polarities matter
+        }
+
+        // ── gap: the SIGNED range, the one most likely to be "fixed" to a
+        // zero floor by someone who does not know a negative gap is niri's way
+        // of drawing the indicator over the window ──
+        rejectsMissingValue(ActionType::SetTabIndicatorGap);
+        rejects(ActionType::SetTabIndicatorGap, QStringLiteral("5"));
+        rejects(ActionType::SetTabIndicatorGap, MinTabIndicatorGap - 1);
+        rejects(ActionType::SetTabIndicatorGap, MaxTabIndicatorGap + 1);
+        acceptsWithSlot(ActionType::SetTabIndicatorGap, MinTabIndicatorGap, ActionSlot::TabIndicatorGap);
+        acceptsWithSlot(ActionType::SetTabIndicatorGap, -12, ActionSlot::TabIndicatorGap);
+        acceptsWithSlot(ActionType::SetTabIndicatorGap, MaxTabIndicatorGap, ActionSlot::TabIndicatorGap);
+
+        // ── width: floors at 1, so 0 must be REJECTED (a zero-floored helper
+        // would wrongly admit it) ──
+        rejectsMissingValue(ActionType::SetTabIndicatorWidth);
+        rejects(ActionType::SetTabIndicatorWidth, 0);
+        rejects(ActionType::SetTabIndicatorWidth, MaxTabIndicatorWidth + 1);
+        acceptsWithSlot(ActionType::SetTabIndicatorWidth, MinTabIndicatorWidth, ActionSlot::TabIndicatorWidth);
+        acceptsWithSlot(ActionType::SetTabIndicatorWidth, MaxTabIndicatorWidth, ActionSlot::TabIndicatorWidth);
+
+        // ── length: a [0.05, 1.0] fraction ──
+        rejectsMissingValue(ActionType::SetTabIndicatorLength);
+        rejects(ActionType::SetTabIndicatorLength, 0.0);
+        rejects(ActionType::SetTabIndicatorLength, 1.5);
+        acceptsWithSlot(ActionType::SetTabIndicatorLength, MinTabIndicatorLengthRatio, ActionSlot::TabIndicatorLength);
+        acceptsWithSlot(ActionType::SetTabIndicatorLength, MaxTabIndicatorLengthRatio, ActionSlot::TabIndicatorLength);
+
+        // ── gaps between tabs: genuinely zero-floored, unlike its siblings ──
+        rejectsMissingValue(ActionType::SetTabIndicatorGapsBetweenTabs);
+        rejects(ActionType::SetTabIndicatorGapsBetweenTabs, -1);
+        acceptsWithSlot(ActionType::SetTabIndicatorGapsBetweenTabs, 0, ActionSlot::TabIndicatorGapsBetweenTabs);
+        acceptsWithSlot(ActionType::SetTabIndicatorGapsBetweenTabs, MaxTabIndicatorGap,
+                        ActionSlot::TabIndicatorGapsBetweenTabs);
+
+        // ── corner radius: floors at the pill SENTINEL, not at zero ──
+        rejectsMissingValue(ActionType::SetTabIndicatorCornerRadius);
+        rejects(ActionType::SetTabIndicatorCornerRadius, TabIndicatorCornerRadiusPill - 1);
+        rejects(ActionType::SetTabIndicatorCornerRadius, MaxTabIndicatorCornerRadius + 1);
+        acceptsWithSlot(ActionType::SetTabIndicatorCornerRadius, TabIndicatorCornerRadiusPill,
+                        ActionSlot::TabIndicatorCornerRadius);
+        acceptsWithSlot(ActionType::SetTabIndicatorCornerRadius, 0, ActionSlot::TabIndicatorCornerRadius);
+
+        // ── the two closed vocabularies ──
+        rejectsMissingValue(ActionType::SetTabIndicatorStyle);
+        rejects(ActionType::SetTabIndicatorStyle, QStringLiteral("pills")); // unknown token
+        acceptsWithSlot(ActionType::SetTabIndicatorStyle, QString::fromLatin1(TabIndicatorStyleToken::Chips),
+                        ActionSlot::TabIndicatorStyle);
+        acceptsWithSlot(ActionType::SetTabIndicatorStyle, QString::fromLatin1(TabIndicatorStyleToken::Bar),
+                        ActionSlot::TabIndicatorStyle);
+
+        rejectsMissingValue(ActionType::SetTabIndicatorPosition);
+        rejects(ActionType::SetTabIndicatorPosition, QStringLiteral("middle"));
+        for (QLatin1StringView token : {TabIndicatorPositionToken::Left, TabIndicatorPositionToken::Right,
+                                        TabIndicatorPositionToken::Top, TabIndicatorPositionToken::Bottom}) {
+            acceptsWithSlot(ActionType::SetTabIndicatorPosition, QString::fromLatin1(token),
+                            ActionSlot::TabIndicatorPosition);
+        }
+
+        // ── the six colours: HEX ONLY. The accent sentinel must be REJECTED —
+        // no consumer on either the context or the per-window path resolves it,
+        // so accepting it would land an unparseable colour on the overlay. This
+        // is the overlay-colour contract testOverlayColorActions_hexOnlyNoAccent
+        // pins for its own family. ──
+        for (const auto& pair : QList<QPair<QLatin1StringView, QLatin1StringView>>{
+                 {ActionType::SetTabIndicatorActiveColor, ActionSlot::TabIndicatorActiveColor},
+                 {ActionType::SetTabIndicatorInactiveColor, ActionSlot::TabIndicatorInactiveColor},
+                 {ActionType::SetTabIndicatorUrgentColor, ActionSlot::TabIndicatorUrgentColor},
+                 {ActionType::TabColorActive, ActionSlot::TabColorActive},
+                 {ActionType::TabColorInactive, ActionSlot::TabColorInactive},
+                 {ActionType::TabColorUrgent, ActionSlot::TabColorUrgent}}) {
+            rejectsMissingValue(pair.first);
+            rejects(pair.first, QStringLiteral("accent"));
+            rejects(pair.first, QStringLiteral("red")); // named colours are not hex
+            rejects(pair.first, QStringLiteral("3DAEE9")); // missing the #
+            acceptsWithSlot(pair.first, QStringLiteral("#FF3DAEE9"), pair.second);
+            acceptsWithSlot(pair.first, QStringLiteral("#3DAEE9"), pair.second);
+        }
+    }
+
     void testScrollingParamActions_range()
     {
         // The nine scrolling actions are the only load-time defence for a

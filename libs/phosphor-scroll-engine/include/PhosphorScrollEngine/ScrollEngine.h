@@ -197,6 +197,13 @@ public:
 
     PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) override;
     const PhosphorEngine::IPlacementState* stateForScreen(const QString& screenId) const override;
+    /// The tab-indicator geometry @p screenId resolves to: the configured
+    /// values with any per-screen rule override layered on per property.
+    ///
+    /// Public because the resolution has seven independent fall-back paths and
+    /// is otherwise only observable through a relayout's resolved rects, which
+    /// conflates it with the layout maths. Const and side-effect free.
+    TabIndicatorParams tabIndicatorParamsForScreen(const QString& screenId) const;
     bool isWindowTracked(const QString& windowId) const override;
     bool isWindowTiled(const QString& windowId) const override;
     bool isWindowManaged(const QString& windowId) const override;

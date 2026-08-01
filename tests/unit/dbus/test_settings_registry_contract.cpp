@@ -35,6 +35,7 @@
  */
 
 #include <QTest>
+#include <QDBusVariant>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -278,6 +279,8 @@ private Q_SLOTS:
     {
         const QMetaObject* mo = m_settings->metaObject();
         QStringList missing;
+        QStringList unwritable;
+        QStringList transposed;
         int checked = 0;
         // From 0, not propertyOffset(), for the shortcut scan's reason: a
         // scrolling property declared on the ISettings base would otherwise be
@@ -290,16 +293,47 @@ private Q_SLOTS:
                 continue;
             }
             ++checked;
-            if (!m_adaptor->getSetting(name).variant().isValid()) {
+            const QVariant viaBus = m_adaptor->getSetting(name).variant();
+            if (!viaBus.isValid()) {
                 missing.append(name);
+                continue;
+            }
+            // The getter existing is only half the contract, and it is the
+            // WRONG half for the failure this test is named after: m_getters
+            // and m_setters are populated independently, so a key with a getter
+            // and no setter passes a presence check while staying write-dead —
+            // which is exactly "the settings app writes it and the daemon never
+            // sees it". Assert the write path too.
+            // Writing the value back that was just read: a no-op for state, so
+            // this cannot perturb the other cases, while still exercising the
+            // setter registration and its validator.
+            if (!m_adaptor->setSetting(name, QDBusVariant(viaBus))) {
+                unwritable.append(name);
+            }
+            // And that the registered accessor is the RIGHT one. A copy-paste
+            // that registers key A's name against key B's accessor satisfies
+            // both maps and still reports the wrong value forever; comparing
+            // against the Q_PROPERTY read is what catches a transposition.
+            const QVariant direct = mo->property(i).read(m_settings);
+            if (direct.isValid() && viaBus != direct) {
+                transposed.append(
+                    QStringLiteral("%1 (bus=%2 property=%3)").arg(name, viaBus.toString(), direct.toString()));
             }
         }
         QVERIFY2(checked > 0, "Reflection found no scrolling properties: the scan itself is broken.");
         QVERIFY2(missing.isEmpty(),
                  qPrintable(QStringLiteral("These scrolling settings exist on Settings but are absent from "
-                                           "SettingsAdaptor's getter registry, so the settings app can write "
+                                           "SettingsAdaptor's GETTER registry, so the settings app can write "
                                            "them and the daemon will never see it: %1")
                                 .arg(missing.join(QStringLiteral(", ")))));
+        QVERIFY2(unwritable.isEmpty(),
+                 qPrintable(QStringLiteral("These scrolling settings are readable over the bus but have no SETTER "
+                                           "registered, so a write from the settings app is silently dropped: %1")
+                                .arg(unwritable.join(QStringLiteral(", ")))));
+        QVERIFY2(transposed.isEmpty(),
+                 qPrintable(QStringLiteral("These scrolling settings are registered against the WRONG accessor — the "
+                                           "bus value disagrees with the Q_PROPERTY: %1")
+                                .arg(transposed.join(QStringLiteral(", ")))));
     }
 
     /**

@@ -473,18 +473,22 @@ private Q_SLOTS:
         settings.setScrollingTabIndicatorStyle(shipped);
         QCOMPARE(settings.scrollingTabIndicatorWidth(), ConfigDefaults::scrollingTabIndicatorWidthForStyle(shipped));
 
-        // A deliberate thickness is preserved across a round trip.
+        // A deliberate thickness is preserved across a round trip. Driven with
+        // other/shipped rather than bar/chips: the style is currently `shipped`,
+        // so writing `bar` explicitly would be a same-value no-op whenever the
+        // shipped style IS bar, and that leg would then pass without the
+        // preservation rule ever running.
         settings.setScrollingTabIndicatorWidth(40);
-        settings.setScrollingTabIndicatorStyle(bar);
+        settings.setScrollingTabIndicatorStyle(other);
         QCOMPARE(settings.scrollingTabIndicatorWidth(), 40);
-        settings.setScrollingTabIndicatorStyle(chips);
+        settings.setScrollingTabIndicatorStyle(shipped);
         QCOMPARE(settings.scrollingTabIndicatorWidth(), 40);
 
         // A same-value style write is a full no-op, so it cannot re-seed a
         // width the user set to the other style's default on purpose.
-        settings.setScrollingTabIndicatorWidth(barWidth);
-        settings.setScrollingTabIndicatorStyle(chips);
-        QCOMPARE(settings.scrollingTabIndicatorWidth(), barWidth);
+        settings.setScrollingTabIndicatorWidth(ConfigDefaults::scrollingTabIndicatorWidthForStyle(other));
+        settings.setScrollingTabIndicatorStyle(shipped);
+        QCOMPARE(settings.scrollingTabIndicatorWidth(), ConfigDefaults::scrollingTabIndicatorWidthForStyle(other));
     }
 
     /// Behavior setters follow the standard emit-once contract: an
