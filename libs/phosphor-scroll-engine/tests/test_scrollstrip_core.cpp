@@ -36,6 +36,15 @@ private Q_SLOTS:
     void externalFocusFollowsWindow();
     void stripsAreIndependent();
     void viewAnchorSurvivesLeftInsert();
+    void tabIndicatorResolvesOnlyForTabbedColumns();
+    void tabIndicatorHidesForASingleTab();
+    void tabIndicatorSitsOutsideTheColumnByDefault();
+    void tabIndicatorNegativeGapDrawsOverTheWindow();
+    void tabIndicatorWithinColumnShrinksTheTiles();
+    void tabIndicatorLengthIsCenteredOnTheEdge();
+    void tabIndicatorGapKeepsMovingWithinColumn();
+    void tabIndicatorRightAndBottomAnchorTheOppositeEdge();
+    void tabIndicatorNarrowerThanItsReservationKeepsTheColumn();
 };
 
 void TestScrollStripCore::openInsertsColumnAndResizesNothing()
@@ -304,6 +313,274 @@ void TestScrollStripCore::viewAnchorSurvivesLeftInsert()
     QVERIFY(strip.insertWindowAt(0, QStringLiteral("z"), kHalf, ColumnDisplay::Normal, params));
     QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
     QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("c")), cBefore);
+}
+
+// ── tab indicator ───────────────────────────────────────────────────────────
+// The indicator's geometry is resolved by the relayout, not by the overlay, so
+// these assert against the ResolvedColumn the strip hands back. The pixel
+// numbers all derive from the shared 1200x800 / 10px-gap fixture: a half-width
+// column is 595 px wide (1200 halved, minus half the gap), full height 800.
+
+namespace {
+
+/// A one-column tabbed strip holding @p windowCount windows, laid out under
+/// @p indicator. Returns the resolved column so a case can assert on both the
+/// indicator rect and the tile rects it left behind.
+ResolvedColumn tabbedColumn(ScrollStrip& strip, int windowCount, const TabIndicatorParams& indicator)
+{
+    ScrollLayoutParams params = defaultParams();
+    params.tabIndicator = indicator;
+    // One column, built directly: the first window opens it tabbed and the
+    // rest join it, so the fixture never depends on the default insert
+    // position or on a consume loop to collapse stray columns.
+    strip.insertWindow(QStringLiteral("w0"), kHalf, ColumnDisplay::Tabbed, params);
+    for (int i = 1; i < windowCount; ++i) {
+        strip.insertWindowIntoActiveColumn(QStringLiteral("w%1").arg(i), kHalf, ColumnDisplay::Tabbed, params);
+    }
+    const ResolvedStrip resolved = strip.relayout(params);
+    return resolved.columns.isEmpty() ? ResolvedColumn{} : resolved.columns.first();
+}
+
+} // namespace
+
+void TestScrollStripCore::tabIndicatorResolvesOnlyForTabbedColumns()
+{
+    // A NORMAL column never resolves an indicator, however the settings are
+    // configured — the flag that matters is the column's display, not the
+    // family's enabled bit.
+    ScrollStrip strip;
+    ScrollLayoutParams params = defaultParams();
+    params.tabIndicator.enabled = true;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    const ResolvedStrip resolved = strip.relayout(params);
+    QCOMPARE(resolved.columns.size(), 1);
+    QVERIFY(!resolved.columns.first().tabbed);
+    QVERIFY(resolved.columns.first().tabIndicatorRect.isNull());
+
+    // A tabbed one does.
+    ScrollStrip tabbed;
+    TabIndicatorParams indicator;
+    indicator.enabled = true;
+    QVERIFY(!tabbedColumn(tabbed, 2, indicator).tabIndicatorRect.isNull());
+
+    // ...unless the whole family is switched off, which is the single gate the
+    // payload emitter reads.
+    ScrollStrip off;
+    indicator.enabled = false;
+    QVERIFY(tabbedColumn(off, 2, indicator).tabIndicatorRect.isNull());
+}
+
+void TestScrollStripCore::tabIndicatorHidesForASingleTab()
+{
+    TabIndicatorParams indicator;
+    indicator.enabled = true;
+    indicator.hideWhenSingleTab = true;
+
+    ScrollStrip single;
+    QVERIFY(tabbedColumn(single, 1, indicator).tabIndicatorRect.isNull());
+
+    ScrollStrip pair;
+    QVERIFY(!tabbedColumn(pair, 2, indicator).tabIndicatorRect.isNull());
+
+    // Off, a single-window tabbed column still advertises that it is tabbed.
+    indicator.hideWhenSingleTab = false;
+    ScrollStrip shown;
+    QVERIFY(!tabbedColumn(shown, 1, indicator).tabIndicatorRect.isNull());
+}
+
+void TestScrollStripCore::tabIndicatorSitsOutsideTheColumnByDefault()
+{
+    // Outside means clear of the column by the gap, which is exactly niri's
+    // "the indicator draws outside the column, so it can overlay other windows
+    // or go off-screen" — including going NEGATIVE off the left edge here.
+    TabIndicatorParams indicator;
+    indicator.position = TabIndicatorPosition::Left;
+    indicator.gap = 5;
+    indicator.width = 4;
+
+    ScrollStrip strip;
+    const ResolvedColumn column = tabbedColumn(strip, 2, indicator);
+    QCOMPARE(column.tabIndicatorRect.width(), 4);
+    // Column starts at x=0, so the indicator lands at -(gap + width).
+    QCOMPARE(column.tabIndicatorRect.x(), -9);
+    // The tiles keep the whole column: nothing was reserved.
+    QCOMPARE(column.tiles.first().rect, column.rect);
+}
+
+void TestScrollStripCore::tabIndicatorNegativeGapDrawsOverTheWindow()
+{
+    // A negative gap is meaningful, not a validation escape: it slides the
+    // indicator back ONTO the window.
+    TabIndicatorParams indicator;
+    indicator.position = TabIndicatorPosition::Left;
+    indicator.gap = -4;
+    indicator.width = 4;
+
+    ScrollStrip strip;
+    const ResolvedColumn column = tabbedColumn(strip, 2, indicator);
+    // -(gap + width) = -(-4 + 4) = 0, i.e. flush over the column's left edge.
+    QCOMPARE(column.tabIndicatorRect.x(), 0);
+    QCOMPARE(column.tiles.first().rect, column.rect);
+}
+
+void TestScrollStripCore::tabIndicatorWithinColumnShrinksTheTiles()
+{
+    TabIndicatorParams indicator;
+    indicator.position = TabIndicatorPosition::Left;
+    indicator.placeWithinColumn = true;
+    indicator.gap = 5;
+    indicator.width = 4;
+
+    ScrollStrip strip;
+    const ResolvedColumn column = tabbedColumn(strip, 2, indicator);
+    const int reserved = 9; // width + gap
+
+    // The indicator sits INSIDE, flush against the column's own edge...
+    QCOMPARE(column.tabIndicatorRect.x(), column.rect.x());
+    // ...and the tiles start after the band it reserved. The column rect
+    // itself is deliberately unchanged: it is the full extent, and the
+    // reservation shows up on the tiles.
+    QCOMPARE(column.tiles.first().rect.x(), column.rect.x() + reserved);
+    QCOMPARE(column.tiles.first().rect.width(), column.rect.width() - reserved);
+
+    // Every tab shares the active tile's rect, so the reservation applies to
+    // all of them rather than only to the one on screen.
+    for (const ResolvedTile& tile : column.tiles) {
+        QCOMPARE(tile.rect, column.tiles.first().rect);
+    }
+
+    // A top indicator reserves off the HEIGHT instead, on the same terms.
+    indicator.position = TabIndicatorPosition::Top;
+    ScrollStrip topStrip;
+    const ResolvedColumn top = tabbedColumn(topStrip, 2, indicator);
+    QCOMPARE(top.tiles.first().rect.y(), top.rect.y() + reserved);
+    QCOMPARE(top.tiles.first().rect.height(), top.rect.height() - reserved);
+    QCOMPARE(top.tiles.first().rect.width(), top.rect.width());
+}
+
+void TestScrollStripCore::tabIndicatorLengthIsCenteredOnTheEdge()
+{
+    // Shortening the indicator trims BOTH ends evenly rather than anchoring it
+    // to a corner, so a short indicator stays visually attached to its column.
+    TabIndicatorParams indicator;
+    indicator.position = TabIndicatorPosition::Top;
+    indicator.lengthProportion = 0.5;
+
+    ScrollStrip strip;
+    const ResolvedColumn column = tabbedColumn(strip, 2, indicator);
+    const int expectedLength = qRound(column.rect.width() * 0.5);
+    QCOMPARE(column.tabIndicatorRect.width(), expectedLength);
+    QCOMPARE(column.tabIndicatorRect.x(), column.rect.x() + (column.rect.width() - expectedLength) / 2);
+
+    // A full-length indicator spans the whole edge.
+    indicator.lengthProportion = 1.0;
+    ScrollStrip full;
+    const ResolvedColumn spanning = tabbedColumn(full, 2, indicator);
+    QCOMPARE(spanning.tabIndicatorRect.width(), spanning.rect.width());
+    QCOMPARE(spanning.tabIndicatorRect.x(), spanning.rect.x());
+}
+
+void TestScrollStripCore::tabIndicatorGapKeepsMovingWithinColumn()
+{
+    // The gap must stay a LIVE control across its whole range in within-column
+    // mode. It has two jobs there, and the first one runs out: it shrinks the
+    // reservation until that hits zero at gap == -thickness, and past that it
+    // has to keep moving the indicator inward over the window. It used to
+    // freeze instead, so every press below -thickness did nothing and the
+    // setting was indistinguishable from broken.
+    TabIndicatorParams indicator;
+    indicator.position = TabIndicatorPosition::Top;
+    indicator.placeWithinColumn = true;
+    indicator.width = 10;
+
+    const auto topOf = [&](int gap) {
+        indicator.gap = gap;
+        ScrollStrip strip;
+        const ResolvedColumn column = tabbedColumn(strip, 2, indicator);
+        return column.tabIndicatorRect.y() - column.rect.y();
+    };
+
+    // Down to the bottoming-out point the indicator is flush with the column
+    // edge and the RESERVATION is what the gap is spending itself on.
+    QCOMPARE(topOf(5), 0);
+    QCOMPARE(topOf(0), 0);
+    QCOMPARE(topOf(-10), 0);
+
+    // Past it every further pixel moves the indicator inward, one for one.
+    QCOMPARE(topOf(-11), 1);
+    QCOMPARE(topOf(-20), 10);
+    QCOMPARE(topOf(-40), 30);
+
+    // The reservation stays floored at zero throughout, so the window keeps
+    // the whole column rather than being grown by an over-negative gap.
+    indicator.gap = -40;
+    QCOMPARE(indicator.reservedThickness(2), 0);
+
+    // OUTSIDE the column the gap was always continuous; pinned here so the
+    // two modes cannot drift apart again.
+    indicator.placeWithinColumn = false;
+    QCOMPARE(topOf(-11), 1);
+    QCOMPARE(topOf(-20), 10);
+}
+
+void TestScrollStripCore::tabIndicatorRightAndBottomAnchorTheOppositeEdge()
+{
+    // Right and Bottom are the two branches whose arithmetic is most
+    // off-by-one prone (`x + width - thickness + outward`), and Bottom is
+    // additionally the fall-through-after-break path, so a mis-edit there is
+    // silent. Every other indicator case drives Left or Top only.
+    TabIndicatorParams indicator;
+    indicator.placeWithinColumn = true;
+    indicator.gap = 5;
+    indicator.width = 10;
+    const int reserved = 15; // width + gap
+
+    indicator.position = TabIndicatorPosition::Right;
+    ScrollStrip rightStrip;
+    const ResolvedColumn right = tabbedColumn(rightStrip, 2, indicator);
+    // Flush with the column's RIGHT edge, and the tiles keep the left edge.
+    QCOMPARE(right.tabIndicatorRect.right(), right.rect.right());
+    QCOMPARE(right.tabIndicatorRect.width(), 10);
+    QCOMPARE(right.tiles.first().rect.x(), right.rect.x());
+    QCOMPARE(right.tiles.first().rect.width(), right.rect.width() - reserved);
+
+    indicator.position = TabIndicatorPosition::Bottom;
+    ScrollStrip bottomStrip;
+    const ResolvedColumn bottom = tabbedColumn(bottomStrip, 2, indicator);
+    QCOMPARE(bottom.tabIndicatorRect.bottom(), bottom.rect.bottom());
+    QCOMPARE(bottom.tabIndicatorRect.height(), 10);
+    QCOMPARE(bottom.tiles.first().rect.y(), bottom.rect.y());
+    QCOMPARE(bottom.tiles.first().rect.height(), bottom.rect.height() - reserved);
+
+    // Outside the column, both push CLEAR of the far edge by the gap rather
+    // than inward — the sign flip Left/Top would hide.
+    indicator.placeWithinColumn = false;
+    indicator.position = TabIndicatorPosition::Right;
+    ScrollStrip outsideStrip;
+    const ResolvedColumn outside = tabbedColumn(outsideStrip, 2, indicator);
+    QCOMPARE(outside.tabIndicatorRect.x(), outside.rect.right() + 1 + indicator.gap);
+    QCOMPARE(outside.tiles.first().rect, outside.rect);
+}
+
+void TestScrollStripCore::tabIndicatorNarrowerThanItsReservationKeepsTheColumn()
+{
+    // A column smaller than its own reservation must NOT resolve an inverted
+    // tile rect. contentRectFor hands back the untouched column instead, and
+    // the indicator simply overlaps it — the same thing a negative gap does.
+    // Deleting that fallback leaves every other case green.
+    TabIndicatorParams indicator;
+    indicator.position = TabIndicatorPosition::Left;
+    indicator.placeWithinColumn = true;
+    indicator.gap = 0;
+    indicator.width = 4000; // far wider than any column the fixture can make
+
+    ScrollStrip strip;
+    const ResolvedColumn column = tabbedColumn(strip, 2, indicator);
+    QVERIFY(column.rect.isValid());
+    for (const ResolvedTile& tile : column.tiles) {
+        QVERIFY2(tile.rect.isValid(), "an over-large reservation must not invert the tile rect");
+        QCOMPARE(tile.rect, column.rect);
+    }
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripCore)

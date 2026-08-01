@@ -7,15 +7,18 @@ import org.kde.kirigami as Kirigami
 import "../../js/PresetList.js" as PresetList
 
 /**
- * @brief Scrolling → Columns: what a fresh column and a fresh tile look
- * like (default width and height, display mode, tab indicator) and the
- * preset lists the cycle shortcuts step through. One of the three advanced
- * scrolling leaves (View / Columns / Window).
+ * @brief Scrolling → Columns: what a fresh column and a fresh tile look like
+ * (default width and height, display mode) and the preset lists the cycle
+ * shortcuts step through. One of the three advanced scrolling leaves
+ * (Columns / Tabs / Window).
  *
  * The New columns card is per-monitor overridable through its scope chip
- * (the Columns sub-domain of the per-screen scrolling map). The tab
- * indicator and the preset lists are app-wide, so they sit in their own
- * unscoped cards rather than under the scope chip.
+ * (the Columns sub-domain of the per-screen scrolling map). The preset lists
+ * are app-wide, so they sit in their own unscoped card rather than under the
+ * scope chip.
+ *
+ * This page decides WHICH columns open tabbed (the display row on the New
+ * columns card). How a tabbed column's indicator is drawn is the Tabs leaf.
  */
 SettingsFlickable {
     id: root
@@ -324,37 +327,6 @@ SettingsFlickable {
                             value: root.settingValue("DefaultWindowHeightPresetIndex", appSettings.scrollingDefaultWindowHeightPresetIndex) + 1
                             when: !heightPresetIndexSpin.editing
                             restoreMode: Binding.RestoreNone
-                        }
-                    }
-                }
-            }
-        }
-
-        // =================================================================
-        // Tabbed Columns Card
-        // =================================================================
-        // Its own card, not a row inside New columns: the indicator is one
-        // app-wide overlay service with no per-monitor form, and a global row
-        // under that card's scope chip would read as monitor-scoped.
-        SettingsCard {
-            Layout.fillWidth: true
-            headerText: i18n("Tabbed columns")
-            searchAnchor: "tabbedColumns"
-            collapsible: true
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                SettingsRow {
-                    title: i18n("Tab indicator")
-                    searchAnchor: "tabStripEnabled"
-                    description: i18n("Show a pill of tabs above a tabbed column. Tabbed columns keep working without it.")
-
-                    SettingsSwitch {
-                        checked: appSettings.scrollingTabStripEnabled
-                        accessibleName: i18n("Tab indicator")
-                        onToggled: function (newValue) {
-                            appSettings.scrollingTabStripEnabled = newValue;
                         }
                     }
                 }

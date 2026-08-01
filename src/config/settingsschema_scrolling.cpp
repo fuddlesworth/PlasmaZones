@@ -96,6 +96,22 @@ static_assert(ConfigDefaults::scrollingStickyRestoreOnly()
 static_assert(ConfigDefaults::scrollingStickyIgnoreAll()
                   == static_cast<int>(PhosphorEngine::StickyWindowHandling::IgnoreAll),
               "StickyWindowHandling::IgnoreAll wire value drifted from ConfigDefaults");
+// TabIndicatorPosition. The engine static_casts the stored int straight into
+// this enum after a range check (engine_core.cpp), so a drift would silently
+// place the indicator on the wrong edge rather than failing to build. Two
+// comments already CLAIMED this pinning existed before it did.
+static_assert(ConfigDefaults::scrollingTabIndicatorPositionLeft()
+                  == static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Left),
+              "TabIndicatorPosition::Left wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingTabIndicatorPositionRight()
+                  == static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Right),
+              "TabIndicatorPosition::Right wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingTabIndicatorPositionTop()
+                  == static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Top),
+              "TabIndicatorPosition::Top wire value drifted from ConfigDefaults");
+static_assert(ConfigDefaults::scrollingTabIndicatorPositionBottom()
+                  == static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Bottom),
+              "TabIndicatorPosition::Bottom wire value drifted from ConfigDefaults");
 
 // The preset-index ceiling is a consequence of the preset-list length cap, not
 // an independent number: an index past the last entry a canonicalized list can
@@ -215,9 +231,71 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(0, CD::scrollingPresetIndexMax())},
-        {CD::tabStripEnabledKey(), CD::scrollingTabStripEnabled(), QMetaType::Bool},
         {CD::wheelFocusEnabledKey(), CD::scrollingWheelFocusEnabled(), QMetaType::Bool},
         {CD::wheelFocusInvertedKey(), CD::scrollingWheelFocusInverted(), QMetaType::Bool},
+    };
+
+    // ─── Scrolling tab indicator (Scrolling.TabIndicator) ────────────────
+    // The indicator drawn alongside a tabbed column. The two enums get
+    // validIntOr closed sets built from the SAME ConfigDefaults enumerators
+    // the D-Bus registry guards read, so neither can drift. The colours are
+    // free-form strings because EMPTY is the meaningful "follow the theme"
+    // value and no closed set can express that alongside arbitrary hex.
+    schema.groups[CD::scrollingTabIndicatorGroup()] = {
+        {CD::enabledKey(), CD::scrollingTabIndicatorEnabled(), QMetaType::Bool},
+        {CD::tabIndicatorStyleKey(),
+         CD::scrollingTabIndicatorStyle(),
+         QMetaType::Int,
+         {},
+         validIntOr({CD::scrollingTabIndicatorStyleChips(), CD::scrollingTabIndicatorStyleBar()},
+                    CD::scrollingTabIndicatorStyle()),
+         intChoices(
+             {{CD::scrollingTabIndicatorStyleChips(), "chips"_L1}, {CD::scrollingTabIndicatorStyleBar(), "bar"_L1}})},
+        {CD::positionKey(),
+         CD::scrollingTabIndicatorPosition(),
+         QMetaType::Int,
+         {},
+         validIntOr({CD::scrollingTabIndicatorPositionLeft(), CD::scrollingTabIndicatorPositionRight(),
+                     CD::scrollingTabIndicatorPositionTop(), CD::scrollingTabIndicatorPositionBottom()},
+                    CD::scrollingTabIndicatorPosition()),
+         intChoices({{CD::scrollingTabIndicatorPositionLeft(), "left"_L1},
+                     {CD::scrollingTabIndicatorPositionRight(), "right"_L1},
+                     {CD::scrollingTabIndicatorPositionTop(), "top"_L1},
+                     {CD::scrollingTabIndicatorPositionBottom(), "bottom"_L1}})},
+        {CD::hideWhenSingleTabKey(), CD::scrollingTabIndicatorHideWhenSingleTab(), QMetaType::Bool},
+        {CD::placeWithinColumnKey(), CD::scrollingTabIndicatorPlaceWithinColumn(), QMetaType::Bool},
+        // The gap floor is NEGATIVE on purpose: niri parity, where a negative
+        // gap pulls the indicator on top of the window.
+        {CD::gapKey(),
+         CD::scrollingTabIndicatorGap(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingTabIndicatorGapMin(), CD::scrollingTabIndicatorGapMax())},
+        {CD::widthKey(),
+         CD::scrollingTabIndicatorWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingTabIndicatorWidthMin(), CD::scrollingTabIndicatorWidthMax())},
+        {CD::lengthProportionKey(),
+         CD::scrollingTabIndicatorLengthProportion(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::scrollingTabIndicatorLengthProportionMin(), CD::scrollingTabIndicatorLengthProportionMax())},
+        {CD::gapsBetweenTabsKey(),
+         CD::scrollingTabIndicatorGapsBetweenTabs(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingTabIndicatorGapsBetweenTabsMin(), CD::scrollingTabIndicatorGapsBetweenTabsMax())},
+        // The floor IS the pill sentinel, so the clamp admits -1 and every
+        // literal radius but nothing in between.
+        {CD::cornerRadiusKey(),
+         CD::scrollingTabIndicatorCornerRadius(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingTabIndicatorCornerRadiusMin(), CD::scrollingTabIndicatorCornerRadiusMax())},
+        {CD::activeColorKey(), CD::scrollingTabIndicatorActiveColor(), QMetaType::QString},
+        {CD::inactiveColorKey(), CD::scrollingTabIndicatorInactiveColor(), QMetaType::QString},
+        {CD::urgentColorKey(), CD::scrollingTabIndicatorUrgentColor(), QMetaType::QString},
     };
 
     // ─── Scrolling behavior (Scrolling.Behavior) ─────────────────────────

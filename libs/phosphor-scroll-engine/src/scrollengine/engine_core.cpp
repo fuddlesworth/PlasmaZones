@@ -13,6 +13,18 @@
 #include <QMetaObject>
 
 namespace PhosphorScrollEngine {
+namespace {
+// Sanity bounds for tab-indicator overrides arriving through the public
+// per-screen map. Deliberately NOT the rules layer's constants — this library
+// does not depend on phosphor-rules — but the same numbers, because both
+// ultimately mirror the config schema's clamps. They exist to reject a
+// grossly malformed embedder-supplied override, not to re-implement the
+// cascade's validation, so they are wide.
+constexpr int kMinTabIndicatorGap = -64;
+constexpr int kMaxTabIndicatorGap = 64;
+constexpr int kMinTabIndicatorWidth = 1;
+constexpr int kMaxTabIndicatorWidth = 64;
+} // namespace
 
 ScrollEngine::ScrollEngine(PhosphorEngine::IWindowTrackingService* windowTracker,
                            PhosphorScreens::ScreenManager* screenManager, QObject* parent)
@@ -704,6 +716,24 @@ void ScrollEngine::refreshConfigFromSettings()
     m_respectMinimumSize = settings->scrollingRespectMinimumSize();
     m_smartGaps = settings->scrollingSmartGaps();
 
+    // Tab-indicator geometry. The numeric fields are taken as-is: the config
+    // schema already clamps every one of them, and re-clamping here with a
+    // second set of literals is exactly the drift the ConfigDefaults asserts
+    // exist to prevent. The POSITION is the exception — it is cast to an enum,
+    // so it gets the same validate-then-fall-back guard the other cast enums
+    // above carry, and an unknown value leaves the configured default alone.
+    m_tabIndicator.enabled = settings->scrollingTabIndicatorEnabled();
+    m_tabIndicator.hideWhenSingleTab = settings->scrollingTabIndicatorHideWhenSingleTab();
+    m_tabIndicator.placeWithinColumn = settings->scrollingTabIndicatorPlaceWithinColumn();
+    m_tabIndicator.gap = settings->scrollingTabIndicatorGap();
+    m_tabIndicator.width = settings->scrollingTabIndicatorWidth();
+    m_tabIndicator.lengthProportion = settings->scrollingTabIndicatorLengthProportion();
+    const int indicatorPos = settings->scrollingTabIndicatorPosition();
+    if (indicatorPos >= static_cast<int>(TabIndicatorPosition::Left)
+        && indicatorPos <= static_cast<int>(TabIndicatorPosition::Bottom)) {
+        m_tabIndicator.position = static_cast<TabIndicatorPosition>(indicatorPos);
+    }
+
     // Re-resolve every active strip against the new parameters.
     for (const QString& screenId : std::as_const(m_scrollingScreens)) {
         scheduleRetileForScreen(screenId);
@@ -870,6 +900,78 @@ ColumnDisplay ScrollEngine::effectiveDefaultColumnDisplay(const QString& screenI
         }
     }
     return m_defaultColumnDisplay;
+}
+
+TabIndicatorParams ScrollEngine::tabIndicatorParamsForScreen(const QString& screenId) const
+{
+    return effectiveTabIndicator(screenId);
+}
+
+TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QString& screenId) const
+{
+    TabIndicatorParams params = m_tabIndicator;
+    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    if (overrides.isEmpty()) {
+        return params;
+    }
+    namespace K = ScrollPerScreenKeys;
+    // Per-property: an override map carrying only one key must leave the other
+    // six on their configured values, the same contract the width trio has.
+    // Each read is guarded by constFind rather than value(), because a default
+    // -constructed QVariant would otherwise read as false / 0 and silently
+    // override the configured value with a zero.
+    const auto readBool = [&overrides](const QString& key, bool& out) {
+        const auto it = overrides.constFind(key);
+        if (it != overrides.constEnd()) {
+            out = it->toBool();
+        }
+    };
+    // Bounded, for the same public-API reason the length belt below states: an
+    // embedder can hand this library an override map directly, and an
+    // unbounded width or gap feeds the reservation arithmetic that decides how
+    // much of the column the window gets. Validate-then-fall-back, so a
+    // garbage override leaves the configured value alone.
+    const auto readInt = [&overrides](const QString& key, int& out, int lo, int hi) {
+        const auto it = overrides.constFind(key);
+        if (it != overrides.constEnd()) {
+            bool ok = false;
+            const int v = it->toInt(&ok);
+            if (ok && v >= lo && v <= hi) {
+                out = v;
+            }
+        }
+    };
+    readBool(K::tabIndicatorEnabled(), params.enabled);
+    readBool(K::tabIndicatorHideWhenSingleTab(), params.hideWhenSingleTab);
+    readBool(K::tabIndicatorPlaceWithinColumn(), params.placeWithinColumn);
+    readInt(K::tabIndicatorGap(), params.gap, kMinTabIndicatorGap, kMaxTabIndicatorGap);
+    readInt(K::tabIndicatorWidth(), params.width, kMinTabIndicatorWidth, kMaxTabIndicatorWidth);
+    const auto lengthIt = overrides.constFind(K::tabIndicatorLengthProportion());
+    if (lengthIt != overrides.constEnd()) {
+        bool ok = false;
+        const qreal v = lengthIt->toDouble(&ok);
+        // A belt at the library boundary. The rule cascade DOES range-check
+        // this upstream (layoutregistry_contextresolve.cpp checks it against
+        // the same Min/MaxTabIndicatorLengthRatio the descriptor validates),
+        // but this library is public API and an embedder can hand it an
+        // override map directly, where a zero or negative proportion would
+        // resolve the indicator to a sliver while every setting reports it on.
+        if (ok && v > 0.0) {
+            params.lengthProportion = qMin(v, qreal(1.0));
+        }
+    }
+    // Validate-then-fall-back, the terms effectiveDefaultColumnDisplay uses:
+    // a garbage override must leave the configured position alone rather than
+    // silently snapping the indicator to Left.
+    const auto posIt = overrides.constFind(K::tabIndicatorPosition());
+    if (posIt != overrides.constEnd()) {
+        const int pos = posIt->toInt();
+        if (pos >= static_cast<int>(TabIndicatorPosition::Left)
+            && pos <= static_cast<int>(TabIndicatorPosition::Bottom)) {
+            params.position = static_cast<TabIndicatorPosition>(pos);
+        }
+    }
+    return params;
 }
 
 void ScrollEngine::retile(const QString& screenId)

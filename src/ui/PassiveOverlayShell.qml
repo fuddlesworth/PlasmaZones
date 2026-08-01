@@ -89,8 +89,10 @@ Window {
     /// Shortcuts can't fire here.
     readonly property alias cheatsheetSlotItem: cheatsheetSlot
     /// Scroll tab-strip slot Item — per-screen tab indicators for tabbed
-    /// scrolling columns. Display-only and click-through; content updates
-    /// are plain property writes (no per-update re-instantiation).
+    /// scrolling columns. Each tab is a click target that activates its
+    /// window; the surface is click-through everywhere OUTSIDE the indicator
+    /// rects, which is what the daemon's per-screen input region gives it.
+    /// Content updates are plain property writes (no re-instantiation).
     readonly property alias scrollTabsSlotItem: scrollTabsSlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
@@ -103,6 +105,9 @@ Window {
     signal snapAssistWindowSelected(string windowId, string zoneId, string geometryJson)
     /// Forwarded from snap-assist's backdrop click / dismiss request.
     signal snapAssistDismissRequested
+    /// Forwarded from the scrolling tab indicator's `tabActivated` — host
+    /// wires to onScrollTabActivated and focuses that window.
+    signal scrollTabActivated(string windowId)
     /// Forwarded from picker's `layoutSelected`.
     signal layoutPickerSelected(string layoutId)
     /// Forwarded from picker's `dismissRequested` (backdrop click /
@@ -686,9 +691,12 @@ Window {
     Item {
         id: scrollTabsSlot
 
-        // Tab-strip model — C++ writes a list of strip entries, each a map
-        // with x / y / width (shell-window coordinates) and tabs
-        // (list of {title, active}).
+        // Tab-indicator model — C++ writes a list of strip entries.
+        // Each entry: {x, y, width, height (shell-window coordinates),
+        // position (0 left, 1 right, 2 top, 3 bottom), tabs: [{windowId,
+        // title, active, urgent, colors?}]}. `position` decides the whole
+        // vertical/horizontal branch in the content item, and `windowId` is
+        // what a tab click relays back.
         property var strips: []
         // Content lifecycle gate, toggled by C++ on show/hide. Unlike the
         // OSD-style slots the content is NOT re-instantiated per update —
@@ -703,6 +711,17 @@ Window {
         property bool fontItalic: false
         property bool fontUnderline: false
         property bool fontStrikeout: false
+        // Tab-indicator PAINT settings (Scrolling.TabIndicator), pushed by C++
+        // on every strip update. They must be declared here AND forwarded
+        // below: setProperty on an undeclared name silently creates a dynamic
+        // property that no binding ever sees, so the control looks wired and
+        // does nothing (see the zoneSelectorSlot contract note).
+        property int tabStyle: 0
+        property int gapsBetweenTabs: 0
+        property int cornerRadius: -1
+        property string activeColor: ""
+        property string inactiveColor: ""
+        property string urgentColor: ""
 
         anchors.fill: parent
         // Indicator tier: above the main overlay, below the zone selector,
@@ -718,6 +737,10 @@ Window {
             active: scrollTabsSlot.loaded
             // SYNCHRONOUS by contract — see snapAssistLoader.
             sourceComponent: scrollTabsContentComp
+            onLoaded: {
+                if (scrollTabsLoader.item)
+                    scrollTabsLoader.item.tabActivated.connect(root.scrollTabActivated);
+            }
         }
 
         Component {
@@ -731,6 +754,12 @@ Window {
                 fontItalic: scrollTabsSlot.fontItalic
                 fontUnderline: scrollTabsSlot.fontUnderline
                 fontStrikeout: scrollTabsSlot.fontStrikeout
+                style: scrollTabsSlot.tabStyle
+                gapsBetweenTabs: scrollTabsSlot.gapsBetweenTabs
+                cornerRadius: scrollTabsSlot.cornerRadius
+                activeColor: scrollTabsSlot.activeColor
+                inactiveColor: scrollTabsSlot.inactiveColor
+                urgentColor: scrollTabsSlot.urgentColor
             }
         }
     }

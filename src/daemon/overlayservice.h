@@ -421,17 +421,39 @@ public:
 
     /// Tab indicators for tabbed scrolling columns on @p screenId (per
     /// screen, NOT a singleton). @p strips is a list of maps with x / y /
-    /// width (absolute px, converted to shell coordinates here) and tabs
-    /// ({title, active} list); empty hides the screen's indicators.
-    /// Display-only and click-through.
+    /// width / height (absolute px, converted to shell coordinates here),
+    /// position, and tabs ({windowId, title, active, urgent, colors?} list);
+    /// empty hides the screen's indicators. `windowId` is load-bearing — it is
+    /// what a tab click relays back to focus that window.
+    ///
+    /// Each tab is a click target; the surface stays click-through outside the
+    /// indicator rects via the per-screen input region built here.
     void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
+
+    /// Per-context PAINT overrides for @p screenId's tab indicator, resolved
+    /// from the SetTabIndicator* context rules and layered over the config
+    /// values when the indicator is drawn. Keyed by the overlay SLOT's own
+    /// property names (tabStyle, gapsBetweenTabs, cornerRadius, activeColor,
+    /// inactiveColor, urgentColor); an absent key falls through to config.
+    /// Those names must match PassiveOverlayShell's scrollTabsSlot exactly —
+    /// setProperty on an undeclared name silently creates a dead dynamic
+    /// property instead of failing.
+    ///
+    /// Only the paint half arrives here. The indicator's GEOMETRY overrides go
+    /// to the scrolling engine instead, because they change resolved rects and
+    /// the engine has to size the column around them.
+    ///
+    /// An empty map clears the screen's overrides. Replays the cached strips
+    /// so a rule change repaints a live indicator immediately, for the same
+    /// reason the paint-settings hooks do.
+    void setScrollTabIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
 
     /// Re-push every screen's cached strip model through
     /// updateScrollTabStrips, whose own enabled check turns the replay into a
     /// show (toggle on) or an animated hide (toggle off). Needed because the
     /// engine's tabStripsChanged is change-latched and stays silent until the
     /// next structural change, so nothing else would repaint after the toggle
-    /// moves. Called from the scrollingTabStripEnabledChanged hook and from
+    /// moves. Called from the scrollingTabIndicatorEnabledChanged hook and from
     /// updateSettings, which covers the batch-setSettings case where the
     /// per-key signal never fires.
     void replayScrollTabStrips();
@@ -485,6 +507,11 @@ public Q_SLOTS:
 
 private Q_SLOTS:
     void onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId, const QString& geometryJson);
+    /// A tab of the scrolling indicator was clicked. Relays the canonical
+    /// window id up as scrollTabActivated; the daemon focuses that window, so
+    /// the tab it belongs to becomes the shown one through the ordinary focus
+    /// path rather than by reaching into the strip from here.
+    void onScrollTabActivated(const QString& windowId);
     void onLayoutPickerSelected(const QString& layoutId);
     /// Receiver for the unified passive shell's `osdDismissRequested`
     /// QML signal. Resolves the emitting shell window via `sender()`,
@@ -719,6 +746,15 @@ private:
     /// enable toggle so re-enabling the indicator can replay it (the
     /// engine's tabStripsChanged is change-latched and stays silent).
     QHash<QString, QVariantList> m_lastScrollTabStrips;
+    /// Per-screen tab-indicator paint overrides (see
+    /// setScrollTabIndicatorOverrides). Screens with no context rule carry no
+    /// entry, so the common case costs one empty-hash lookup.
+    QHash<QString, QVariantMap> m_scrollTabIndicatorOverrides;
+    /// Window-local rects of the live tab indicators per screen, handed to the
+    /// shell as its input region so clicks land on a tab but fall through
+    /// everywhere else. Rebuilt from each strip update; cleared with the
+    /// screen's strips.
+    QHash<QString, QRegion> m_scrollTabInputRegions;
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;

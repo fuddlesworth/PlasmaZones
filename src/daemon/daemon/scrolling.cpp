@@ -14,6 +14,9 @@
 #include "daemon/daemon.h"
 #include "config/settings.h"
 #include "core/platform/logging.h"
+// Complete type needed for setScrollTabIndicatorOverrides — daemon.h forward
+// declares OverlayService only.
+#include "daemon/overlayservice.h"
 #include "seedorderfilter.h"
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -157,10 +160,67 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultWindowHeight(),
                              *params.defaultWindowHeight);
         }
+        // The tab indicator's GEOMETRY overrides. Only these seven reach the
+        // engine: the six paint fields alongside them in ContextScrollingParams
+        // cannot change a resolved rect, so they are collected separately below
+        // and handed to the overlay instead (see IScrollSettings for the split).
+        {
+            namespace K = PhosphorScrollEngine::ScrollPerScreenKeys;
+            if (params.tabIndicatorEnabled) {
+                overrides.insert(K::tabIndicatorEnabled(), *params.tabIndicatorEnabled);
+            }
+            if (params.tabIndicatorHideWhenSingleTab) {
+                overrides.insert(K::tabIndicatorHideWhenSingleTab(), *params.tabIndicatorHideWhenSingleTab);
+            }
+            if (params.tabIndicatorPlaceWithinColumn) {
+                overrides.insert(K::tabIndicatorPlaceWithinColumn(), *params.tabIndicatorPlaceWithinColumn);
+            }
+            if (params.tabIndicatorGap) {
+                overrides.insert(K::tabIndicatorGap(), *params.tabIndicatorGap);
+            }
+            if (params.tabIndicatorWidth) {
+                overrides.insert(K::tabIndicatorWidth(), *params.tabIndicatorWidth);
+            }
+            if (params.tabIndicatorLength) {
+                overrides.insert(K::tabIndicatorLengthProportion(), *params.tabIndicatorLength);
+            }
+            if (params.tabIndicatorPosition) {
+                overrides.insert(K::tabIndicatorPosition(), *params.tabIndicatorPosition);
+            }
+        }
         if (overrides.isEmpty()) {
             m_scrollEngine->clearPerScreenConfig(screenId);
         } else {
             m_scrollEngine->applyPerScreenConfig(screenId, overrides);
+        }
+        // The tab indicator's PAINT overrides, keyed by the QML property names
+        // the overlay reads so the layering there is one value() per property.
+        // Handed straight to the overlay: the engine has no use for them and
+        // routing them through its override map would put presentation state
+        // in a library that deliberately knows nothing about presentation.
+        if (m_overlayService) {
+            QVariantMap paint;
+            if (params.tabIndicatorStyle) {
+                // "tabStyle" — the overlay SLOT's property name, see the push
+                // block in overlayservice/scrolltabs.cpp.
+                paint.insert(QStringLiteral("tabStyle"), *params.tabIndicatorStyle);
+            }
+            if (params.tabIndicatorGapsBetweenTabs) {
+                paint.insert(QStringLiteral("gapsBetweenTabs"), *params.tabIndicatorGapsBetweenTabs);
+            }
+            if (params.tabIndicatorCornerRadius) {
+                paint.insert(QStringLiteral("cornerRadius"), *params.tabIndicatorCornerRadius);
+            }
+            if (params.tabIndicatorActiveColor) {
+                paint.insert(QStringLiteral("activeColor"), *params.tabIndicatorActiveColor);
+            }
+            if (params.tabIndicatorInactiveColor) {
+                paint.insert(QStringLiteral("inactiveColor"), *params.tabIndicatorInactiveColor);
+            }
+            if (params.tabIndicatorUrgentColor) {
+                paint.insert(QStringLiteral("urgentColor"), *params.tabIndicatorUrgentColor);
+            }
+            m_overlayService->setScrollTabIndicatorOverrides(screenId, paint);
         }
     }
     m_scrollEngine->setActiveScreens(scrollingScreens);
@@ -172,6 +232,25 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // live set by now, so the schedule is refused instead of queueing a no-op.
     for (const QString& screenId : currentScrollScreens - scrollingScreens) {
         m_scrollEngine->clearPerScreenConfig(screenId);
+        // The overlay's PAINT overrides need the same treatment for the same
+        // reason — they are the other half of the same context resolve, and a
+        // screen that left scrolling would otherwise keep them until it
+        // re-entered and something re-resolved.
+        if (m_overlayService) {
+            // Tear the indicator down BEFORE dropping the overrides. The
+            // engine's own clear for a departing screen is DEFERRED (the
+            // direct path finds the latch already released by
+            // removeStatesIf), so at this point the overlay still holds the
+            // screen's live strip model. setScrollTabIndicatorOverrides
+            // replays that cached model through updateScrollTabStrips, which
+            // would run the full show choreography for a screen that just left
+            // scrolling and then animate it away again when the queued "[]"
+            // lands. Clearing the model first makes both the override drop and
+            // the queued clear no-ops.
+            m_overlayService->updateScrollTabStrips(screenId, {});
+            m_overlayService->setScrollTabIndicatorOverrides(screenId, {});
+        }
+        m_lastScrollTabStripsJson.remove(screenId);
     }
 
     // setActiveScreens retiles only ADDED screens on a changed set (the

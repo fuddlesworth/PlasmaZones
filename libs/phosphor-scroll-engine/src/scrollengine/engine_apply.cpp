@@ -118,6 +118,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
     params.centerFocusedColumn = effectiveCenterFocusedColumn(screenId);
     params.alwaysCenterSingleColumn = m_alwaysCenterSingleColumn;
     params.defaultColumnWidth = effectiveDefaultColumnWidth(screenId);
+    params.tabIndicator = effectiveTabIndicator(screenId);
     return params;
 }
 
@@ -414,13 +415,25 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // exactly once (clearTabStripsForScreen latches on the tracked set).
     QJsonArray strips;
     for (const ResolvedColumn& column : resolved.columns) {
-        if (!column.tabbed || !column.rect.intersects(params.workArea)) {
+        // A null indicator rect is the single gate for "this column draws no
+        // indicator" — it already folds in the master switch and the
+        // single-tab skip (TabIndicatorParams::resolvesFor), so the emitter
+        // never re-tests those and cannot disagree with the relayout that
+        // decided how much space to reserve.
+        if (!column.tabbed || column.tabIndicatorRect.isNull() || !column.rect.intersects(params.workArea)) {
             continue;
         }
         QJsonObject strip;
-        strip[QLatin1String("x")] = column.rect.x();
-        strip[QLatin1String("y")] = column.rect.y();
-        strip[QLatin1String("width")] = column.rect.width();
+        // The rect is the INDICATOR's, not the column's: it is what the
+        // overlay draws, and only this side knows how the position, gap and
+        // within-column reservation combined to place it. Height and position
+        // ride along so the consumer never re-derives the long axis from the
+        // aspect ratio (a one-tab indicator can be square).
+        strip[QLatin1String("x")] = column.tabIndicatorRect.x();
+        strip[QLatin1String("y")] = column.tabIndicatorRect.y();
+        strip[QLatin1String("width")] = column.tabIndicatorRect.width();
+        strip[QLatin1String("height")] = column.tabIndicatorRect.height();
+        strip[QLatin1String("position")] = static_cast<int>(column.tabIndicatorPosition);
         QJsonArray tabs;
         // 0 is a safe seed, not a fallback: a resolved tabbed column always
         // carries exactly one non-hidden tile (relayout marks every tile

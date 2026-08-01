@@ -297,15 +297,23 @@ void SettingsController::buildApplicationController()
                /*collapsible=*/false,
                /*divider=*/true, PV::SimpleOnly, QStringLiteral("scrolling-columns"));
     // The advanced tree mirrors Tiling's per-concern split: Columns
-    // (fresh-column/tile defaults + presets) and Window (window handling plus
-    // the Focus and view card, which carries viewport centering and the
-    // Meta+wheel gesture — those follow focus, so they sit with it rather than
-    // on a View leaf of their own). Columns is the simple page's counterpart,
-    // like tiling-simple ↔ tiling-algorithm.
+    // (fresh-column/tile defaults + presets), Tabs (the tab indicator's own
+    // thirteen-knob family), and Window (window handling plus the Focus and
+    // view card, which carries viewport centering and the Meta+wheel gesture —
+    // those follow focus, so they sit with it rather than on a View leaf of
+    // their own). Columns is the simple page's counterpart, like
+    // tiling-simple ↔ tiling-algorithm.
     regVirtual(QStringLiteral("scrolling-columns"), QStringLiteral("scrolling"), PhosphorI18n::tr("Columns"),
                QStringLiteral("pages/scrolling/ScrollingColumnsPage.qml"), QStringLiteral("view-file-columns"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly, QStringLiteral("scrolling-simple"));
+    // Ordered between Columns and Window because that is the order the three
+    // read in: which columns are tabbed (Columns), how a tabbed one is marked
+    // (Tabs), how the strip treats windows generally (Window).
+    regVirtual(QStringLiteral("scrolling-tabs"), QStringLiteral("scrolling"), PhosphorI18n::tr("Tabs"),
+               QStringLiteral("pages/scrolling/ScrollingTabsPage.qml"), QStringLiteral("tab-detach"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("scrolling-window"), QStringLiteral("scrolling"), PhosphorI18n::tr("Window"),
                QStringLiteral("pages/scrolling/ScrollingWindowPage.qml"), QStringLiteral("preferences-system-windows"),
                /*collapsible=*/false,

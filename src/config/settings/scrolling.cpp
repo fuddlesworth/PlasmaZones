@@ -29,10 +29,18 @@ using settings_detail::reseedColumnWidthForKind;
 // interface layer does not depend on the config layer), so the agreement is
 // pinned here, in a TU that sees both. See the note above the two defaults in
 // isettings.h.
-static_assert(ConfigDefaults::scrollingTabStripEnabled(),
-              "ISettings::scrollingTabStripEnabled defaults to true — update it with this default");
+static_assert(ConfigDefaults::scrollingTabIndicatorEnabled(),
+              "ISettings::scrollingTabIndicatorEnabled defaults to true — update it with this default");
 static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
               "ISettings::scrollingRestoreFloatedWindowsOnLogin defaults to true — update it with this default");
+// The tab indicator's paint half carries the same interface-side defaults, for
+// the same reason: the overlay service reads them through ISettings.
+static_assert(ConfigDefaults::scrollingTabIndicatorStyle() == 1,
+              "ISettings::scrollingTabIndicatorStyle defaults to 1 (segment bar) — update it with this default");
+static_assert(ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs() == 0,
+              "ISettings::scrollingTabIndicatorGapsBetweenTabs defaults to 0 — update it with this default");
+static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
+              "ISettings::scrollingTabIndicatorCornerRadius defaults to 0 (square) — update it with this default");
 
 P_STORE_GET(bool, scrollingEnabled, scrollingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabledChanged)
@@ -218,15 +226,109 @@ P_STORE_SET_STRING(setScrollingPresetWindowHeights, scrollingGroup, presetWindow
 // View knobs, on the Scrolling group with the sizing defaults above rather
 // than on Scrolling.Behavior: they describe how the strip is drawn, not how
 // windows are handled.
-P_STORE_GET(bool, scrollingTabStripEnabled, scrollingGroup, tabStripEnabledKey, bool)
-P_STORE_SET_BOOL(setScrollingTabStripEnabled, scrollingGroup, tabStripEnabledKey, scrollingTabStripEnabledChanged)
-
 P_STORE_GET(bool, scrollingWheelFocusEnabled, scrollingGroup, wheelFocusEnabledKey, bool)
 P_STORE_SET_BOOL(setScrollingWheelFocusEnabled, scrollingGroup, wheelFocusEnabledKey, scrollingWheelFocusEnabledChanged)
 
 P_STORE_GET(bool, scrollingWheelFocusInverted, scrollingGroup, wheelFocusInvertedKey, bool)
 P_STORE_SET_BOOL(setScrollingWheelFocusInverted, scrollingGroup, wheelFocusInvertedKey,
                  scrollingWheelFocusInvertedChanged)
+
+// ── Scrolling tab indicator (Scrolling.TabIndicator) ────────────────────────
+// Its own group rather than more Tab*-prefixed leaves on Scrolling, so the
+// page reset manifest and the rule slots address one subtree. The schema
+// validators own the enum closed sets (validIntOr) and the numeric clamps; the
+// colours are free-form strings whose EMPTY value means "follow the theme", so
+// they deliberately carry no validator.
+
+P_STORE_GET(bool, scrollingTabIndicatorEnabled, scrollingTabIndicatorGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setScrollingTabIndicatorEnabled, scrollingTabIndicatorGroup, enabledKey,
+                 scrollingTabIndicatorEnabledChanged)
+
+P_STORE_GET(int, scrollingTabIndicatorStyle, scrollingTabIndicatorGroup, tabIndicatorStyleKey, int)
+
+// Hand-written style setter, the setScrollingDefaultColumnWidthKind shape: one
+// stored Width key serves both styles, and the thickness that suits one is
+// unusable for the other. A bar is a few pixels of colour; a chip has to hold a
+// title. Flipping style without re-seeding leaves a 28 px bar (a stripe) or a
+// 4 px chip run (no readable title at all), which is what the setting looks
+// broken as.
+//
+// PRESERVATION TEST, not a style sniff, exactly like the width-kind setter's
+// two arms: re-seed ONLY when the stored thickness is the value the OTHER
+// style would have been given, i.e. a thickness the user demonstrably never
+// chose. Any other number is a deliberate choice and survives the flip, so a
+// user who set 40 for chips still has 40 after a bar round trip.
+void Settings::setScrollingTabIndicatorStyle(int style)
+{
+    const int before =
+        m_store->read<int>(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::tabIndicatorStyleKey());
+    m_store->write(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::tabIndicatorStyleKey(), style);
+    const int after =
+        m_store->read<int>(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::tabIndicatorStyleKey());
+    if (after == before) {
+        return;
+    }
+    // Style announced FIRST, for the width-kind setter's reason: a QML handler
+    // keyed on the style NOTIFY must observe the new style before the width
+    // re-seed and the engine refresh it triggers.
+    Q_EMIT scrollingTabIndicatorStyleChanged();
+
+    // ONE aggregate emit per style flip, the setScrollingDefaultColumnWidthKind
+    // contract. The nested width setter is generated by P_STORE_SET_INT, whose
+    // body ends `Q_EMIT signal(); Q_EMIT settingsChanged();` — so emitting here
+    // unconditionally would fire the aggregate TWICE for one user action, and
+    // the first of the pair would be observed with the new style paired with
+    // the STALE width, driving the engine's refresh+retile sweep twice.
+    const int storedWidth =
+        m_store->read<int>(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::widthKey());
+    if (storedWidth == ConfigDefaults::scrollingTabIndicatorWidthForStyle(before)) {
+        setScrollingTabIndicatorWidth(ConfigDefaults::scrollingTabIndicatorWidthForStyle(after));
+    } else {
+        Q_EMIT settingsChanged();
+    }
+}
+
+P_STORE_GET(int, scrollingTabIndicatorPosition, scrollingTabIndicatorGroup, positionKey, int)
+P_STORE_SET_INT(setScrollingTabIndicatorPosition, scrollingTabIndicatorGroup, positionKey,
+                scrollingTabIndicatorPositionChanged)
+
+P_STORE_GET(bool, scrollingTabIndicatorHideWhenSingleTab, scrollingTabIndicatorGroup, hideWhenSingleTabKey, bool)
+P_STORE_SET_BOOL(setScrollingTabIndicatorHideWhenSingleTab, scrollingTabIndicatorGroup, hideWhenSingleTabKey,
+                 scrollingTabIndicatorHideWhenSingleTabChanged)
+
+P_STORE_GET(bool, scrollingTabIndicatorPlaceWithinColumn, scrollingTabIndicatorGroup, placeWithinColumnKey, bool)
+P_STORE_SET_BOOL(setScrollingTabIndicatorPlaceWithinColumn, scrollingTabIndicatorGroup, placeWithinColumnKey,
+                 scrollingTabIndicatorPlaceWithinColumnChanged)
+
+P_STORE_GET(int, scrollingTabIndicatorGap, scrollingTabIndicatorGroup, gapKey, int)
+P_STORE_SET_INT(setScrollingTabIndicatorGap, scrollingTabIndicatorGroup, gapKey, scrollingTabIndicatorGapChanged)
+
+P_STORE_GET(int, scrollingTabIndicatorWidth, scrollingTabIndicatorGroup, widthKey, int)
+P_STORE_SET_INT(setScrollingTabIndicatorWidth, scrollingTabIndicatorGroup, widthKey, scrollingTabIndicatorWidthChanged)
+
+P_STORE_GET(qreal, scrollingTabIndicatorLengthProportion, scrollingTabIndicatorGroup, lengthProportionKey, double)
+P_STORE_SET_DOUBLE(setScrollingTabIndicatorLengthProportion, scrollingTabIndicatorGroup, lengthProportionKey,
+                   scrollingTabIndicatorLengthProportionChanged)
+
+P_STORE_GET(int, scrollingTabIndicatorGapsBetweenTabs, scrollingTabIndicatorGroup, gapsBetweenTabsKey, int)
+P_STORE_SET_INT(setScrollingTabIndicatorGapsBetweenTabs, scrollingTabIndicatorGroup, gapsBetweenTabsKey,
+                scrollingTabIndicatorGapsBetweenTabsChanged)
+
+P_STORE_GET(int, scrollingTabIndicatorCornerRadius, scrollingTabIndicatorGroup, cornerRadiusKey, int)
+P_STORE_SET_INT(setScrollingTabIndicatorCornerRadius, scrollingTabIndicatorGroup, cornerRadiusKey,
+                scrollingTabIndicatorCornerRadiusChanged)
+
+P_STORE_GET(QString, scrollingTabIndicatorActiveColor, scrollingTabIndicatorGroup, activeColorKey, QString)
+P_STORE_SET_STRING(setScrollingTabIndicatorActiveColor, scrollingTabIndicatorGroup, activeColorKey,
+                   scrollingTabIndicatorActiveColorChanged)
+
+P_STORE_GET(QString, scrollingTabIndicatorInactiveColor, scrollingTabIndicatorGroup, inactiveColorKey, QString)
+P_STORE_SET_STRING(setScrollingTabIndicatorInactiveColor, scrollingTabIndicatorGroup, inactiveColorKey,
+                   scrollingTabIndicatorInactiveColorChanged)
+
+P_STORE_GET(QString, scrollingTabIndicatorUrgentColor, scrollingTabIndicatorGroup, urgentColorKey, QString)
+P_STORE_SET_STRING(setScrollingTabIndicatorUrgentColor, scrollingTabIndicatorGroup, urgentColorKey,
+                   scrollingTabIndicatorUrgentColorChanged)
 
 // ── Scrolling behavior (Scrolling.Behavior) ─────────────────────────────────
 // Shared leaf key names under the scrolling behavior group; the schema

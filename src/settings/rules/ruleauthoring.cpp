@@ -388,6 +388,28 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Tabbed");
         }
     }
+    if (type == ActionType::SetTabIndicatorStyle && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::TabIndicatorStyleToken::Chips) {
+            return PhosphorI18n::tr("Titled chips");
+        }
+        if (wireValue == PhosphorRules::TabIndicatorStyleToken::Bar) {
+            return PhosphorI18n::tr("Segment bar");
+        }
+    }
+    if (type == ActionType::SetTabIndicatorPosition && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::TabIndicatorPositionToken::Left) {
+            return PhosphorI18n::tr("Left");
+        }
+        if (wireValue == PhosphorRules::TabIndicatorPositionToken::Right) {
+            return PhosphorI18n::tr("Right");
+        }
+        if (wireValue == PhosphorRules::TabIndicatorPositionToken::Top) {
+            return PhosphorI18n::tr("Top");
+        }
+        if (wireValue == PhosphorRules::TabIndicatorPositionToken::Bottom) {
+            return PhosphorI18n::tr("Bottom");
+        }
+    }
     if (type == ActionType::OpenColumnPlacement && key == ActionParam::Value) {
         if (wireValue == PhosphorRules::ColumnPlacementToken::NewColumn) {
             return PhosphorI18n::tr("New column");

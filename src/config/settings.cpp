@@ -928,6 +928,14 @@ bool Settings::reset()
     // "Updates" sweep scrubs the retired legacy group from configs written by
     // older builds — nothing writes or reads it anymore (dismissed-update-
     // version lives in the settings app's QSettings).
+    // Snapshot every NOTIFY-carrying Q_PROPERTY BEFORE the groups go, for the
+    // same reason the disable lists are snapshotted below: load()'s own
+    // snapshot is taken after this clear, by which point the store already
+    // answers with defaults, so its diff sees no change and fires nothing.
+    // Without this a factory reset restored every value silently and QML
+    // bindings kept painting the old ones until the app was restarted — the
+    // user-visible shape of that bug is "Reset to Defaults did nothing".
+    const QVector<QVariant> propsBeforeReset = snapshotNotifyProperties();
     for (const QString& groupName : managedGroupNames()) {
         m_configBackend->deleteGroup(groupName);
     }
@@ -1034,7 +1042,10 @@ bool Settings::reset()
     // aggregate) also holds for the reset path; otherwise a reset that only
     // cleared disable rules would fire the per-mode signals but not the
     // aggregate.
-    bool anyDisableChanged = false;
+    // The Q_PROPERTY twin of the per-mode loop below, against the snapshot
+    // taken before the clear. Folded into the same aggregate so a reset that
+    // only moved Q_PROPERTYs still fires settingsChanged exactly once.
+    bool anyDisableChanged = emitChangedNotifyProperties(propsBeforeReset);
     for (const Mode mode : PhosphorZones::allModes()) {
         if (canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)) != resetMonitorsBefore.value(mode)) {
             Q_EMIT disabledMonitorsChanged(mode);

@@ -71,6 +71,39 @@ inline QString insertPosition()
 {
     return QStringLiteral("InsertPosition");
 }
+/// RULE channel for the tab indicator's GEOMETRY half, one key per property
+/// so independent rules cascade per-property the way the width trio does.
+/// The indicator's paint half never reaches this library (see
+/// IScrollSettings), so it overrides through the daemon's own channel and has
+/// no key here. Absent key = fall back to the configured value.
+inline QString tabIndicatorEnabled()
+{
+    return QStringLiteral("TabIndicatorEnabled");
+}
+inline QString tabIndicatorHideWhenSingleTab()
+{
+    return QStringLiteral("TabIndicatorHideWhenSingleTab");
+}
+inline QString tabIndicatorPlaceWithinColumn()
+{
+    return QStringLiteral("TabIndicatorPlaceWithinColumn");
+}
+inline QString tabIndicatorGap()
+{
+    return QStringLiteral("TabIndicatorGap");
+}
+inline QString tabIndicatorWidth()
+{
+    return QStringLiteral("TabIndicatorWidth");
+}
+inline QString tabIndicatorLengthProportion()
+{
+    return QStringLiteral("TabIndicatorLengthProportion");
+}
+inline QString tabIndicatorPosition()
+{
+    return QStringLiteral("TabIndicatorPosition");
+}
 } // namespace ScrollPerScreenKeys
 
 /// The narrowest column width this engine will accept as a proportion of the
@@ -112,6 +145,174 @@ enum class ColumnDisplay : int {
     /// Only the active tile is laid out, at full column height; the other
     /// tiles are hidden and represented by a tab-indicator strip.
     Tabbed = 1,
+};
+
+/// Which side of the column the tab indicator runs along (niri's
+/// TabIndicatorPosition, same declaration order). Left/Right put the
+/// indicator on a vertical edge and it runs down the column; Top/Bottom put it
+/// on a horizontal edge and it runs across. The settings layer spells the same
+/// wire values in ConfigDefaults and settingsschema_scrolling.cpp
+/// static_asserts the two agree.
+enum class TabIndicatorPosition : int {
+    Left = 0,
+    Right = 1,
+    Top = 2,
+    Bottom = 3,
+};
+
+/// True when @p position puts the indicator on a vertical edge, so its long
+/// axis is the column's HEIGHT and its thickness eats the column's WIDTH.
+/// Free function rather than a member so the enum stays a plain wire type.
+inline bool isVerticalTabIndicator(TabIndicatorPosition position)
+{
+    return position == TabIndicatorPosition::Left || position == TabIndicatorPosition::Right;
+}
+
+/// The tab indicator's GEOMETRY inputs — the subset of the
+/// Scrolling.TabIndicator family that changes resolved rects, so it has to
+/// live in the layout params rather than staying overlay-side. The paint-only
+/// keys (style, gaps between tabs, corner radius, colours) never reach this
+/// library; the daemon reads those straight onto the overlay.
+struct TabIndicatorParams
+{
+    /// Off, no indicator rect is resolved and @c placeWithinColumn reserves
+    /// nothing — a tabbed column lays out exactly as it did before the
+    /// indicator existed.
+    bool enabled = true;
+    /// Skip the indicator for a tabbed column holding a single tile. Affects
+    /// the resolved rect (and therefore the reservation) as well as the
+    /// payload, so a single-tab column under this flag lays out full-bleed.
+    bool hideWhenSingleTab = false;
+    /// Reserve the indicator's thickness plus its gap out of the column,
+    /// shrinking the tile rects, instead of drawing over whatever sits beside
+    /// the column. This is the only field here that moves windows.
+    bool placeWithinColumn = false;
+    /// Gap between the indicator and the window. NEGATIVE IS MEANINGFUL and
+    /// matches niri: it slides the indicator onto the window. Under
+    /// @c placeWithinColumn a negative gap correspondingly reserves less than
+    /// the thickness, and the reservation floors at zero.
+    int gap = 5;
+    /// Indicator thickness (its short axis) in pixels, EXACT for every style.
+    ///
+    /// Load-bearing for @c reservedThickness: this library cannot measure
+    /// text, so an overlay style that sized itself to its own font would draw
+    /// outside the band reserved for it and over the window. Both sides agree
+    /// on this one number instead, and a style whose content does not fit
+    /// clips.
+    int width = 4;
+    /// Indicator length along its long axis, as a proportion of the column
+    /// extent it runs beside.
+    qreal lengthProportion = 0.5;
+    TabIndicatorPosition position = TabIndicatorPosition::Left;
+
+    /// Pixels this indicator takes out of the column along the indicator's
+    /// THICKNESS axis (the column's width for a left/right indicator, its
+    /// height for top/bottom) when
+    /// @c placeWithinColumn is set, and 0 otherwise. Floored at 0 so a
+    /// negative gap large enough to cancel the thickness cannot GROW the
+    /// column. @p tileCount lets the single-tab skip suppress the
+    /// reservation, keeping the reservation and the drawn rect in agreement.
+    int reservedThickness(int tileCount) const
+    {
+        if (!placeWithinColumn || !resolvesFor(tileCount)) {
+            return 0;
+        }
+        // qMax(1, width), matching indicatorRectFor's thickness exactly. Using
+        // the raw width here would let an embedder-supplied width below 1
+        // reserve one number and draw another, so the visual gap would not be
+        // the configured one.
+        return qMax(0, qMax(1, width) + gap);
+    }
+
+    /// Whether a tabbed column with @p tileCount tiles draws an indicator.
+    bool resolvesFor(int tileCount) const
+    {
+        return enabled && tileCount > 0 && !(hideWhenSingleTab && tileCount <= 1);
+    }
+
+    /// The rect the column's TILES get, i.e. @p columnRect minus whatever the
+    /// indicator reserved. Identical to @p columnRect unless
+    /// @c placeWithinColumn is set and an indicator actually resolves.
+    QRect contentRectFor(const QRect& columnRect, int tileCount) const
+    {
+        const int reserved = reservedThickness(tileCount);
+        if (reserved <= 0) {
+            return columnRect;
+        }
+        QRect content = columnRect;
+        switch (position) {
+        case TabIndicatorPosition::Left:
+            content.setX(columnRect.x() + reserved);
+            break;
+        case TabIndicatorPosition::Right:
+            content.setWidth(columnRect.width() - reserved);
+            break;
+        case TabIndicatorPosition::Top:
+            content.setY(columnRect.y() + reserved);
+            break;
+        case TabIndicatorPosition::Bottom:
+            content.setHeight(columnRect.height() - reserved);
+            break;
+        }
+        // A column narrower/shorter than its own reservation would invert.
+        // Hand back the untouched column instead: an indicator is worth less
+        // than a renderable window, and the drawn rect below stays put so the
+        // two simply overlap, which is the same thing a negative gap does.
+        return content.isValid() ? content : columnRect;
+    }
+
+    /// Where the indicator is drawn for a column occupying @p columnRect, in
+    /// the same coordinates. Null when no indicator resolves (see
+    /// @c resolvesFor). Outside @p columnRect unless @c placeWithinColumn.
+    ///
+    /// The indicator is CENTERED on its long axis, so shortening it with
+    /// @c lengthProportion trims both ends evenly rather than anchoring it to
+    /// one corner. That is niri's behaviour and the only choice that keeps a
+    /// short indicator visually attached to the column it belongs to.
+    QRect indicatorRectFor(const QRect& columnRect, int tileCount) const
+    {
+        if (!resolvesFor(tileCount)) {
+            return QRect();
+        }
+        const int thickness = qMax(1, width);
+        const bool vertical = isVerticalTabIndicator(position);
+        const int axisExtent = vertical ? columnRect.height() : columnRect.width();
+        // Floor at 1: a proportion small enough to round to nothing would make
+        // the indicator vanish while every setting still says it is on.
+        const int length = qBound(1, qRound(axisExtent * lengthProportion), axisExtent);
+        const int longOffset = (axisExtent - length) / 2;
+
+        // Offset of the indicator's near edge from the column's matching edge,
+        // measured OUTWARD; negative means inward, over the window.
+        //
+        // Outside the column the gap is pure placement, so it moves the
+        // indicator one-for-one and a negative gap slides it onto the window.
+        //
+        // WITHIN the column the gap is spent on the reservation instead, and
+        // the indicator sits flush with the column edge. That works until the
+        // reservation bottoms out at zero (gap == -thickness, the window now
+        // filling the whole column), after which the gap had nowhere left to
+        // go and the indicator simply FROZE — every further press of the
+        // control did nothing, with no way to tell that from a broken setting.
+        // Past that point the leftover is spent the only way still available,
+        // by sliding the indicator inward over the window. The control stays
+        // continuous across its whole range in both modes, and "a negative gap
+        // puts the indicator on top of the window" holds either way.
+        const int outward = placeWithinColumn ? -qMax(0, -(thickness + gap)) : (gap + thickness);
+        switch (position) {
+        case TabIndicatorPosition::Left:
+            return QRect(columnRect.x() - outward, columnRect.y() + longOffset, thickness, length);
+        case TabIndicatorPosition::Right:
+            return QRect(columnRect.x() + columnRect.width() - thickness + outward, columnRect.y() + longOffset,
+                         thickness, length);
+        case TabIndicatorPosition::Top:
+            return QRect(columnRect.x() + longOffset, columnRect.y() - outward, length, thickness);
+        case TabIndicatorPosition::Bottom:
+            break;
+        }
+        return QRect(columnRect.x() + longOffset, columnRect.y() + columnRect.height() - thickness + outward, length,
+                     thickness);
+    }
 };
 
 /// Wire vocabulary of the DEFAULT-column-width KIND setting
@@ -354,6 +555,10 @@ struct ScrollLayoutParams
     /// The context's default column width — the un-maximize fallback for a
     /// full-width column with no stored pre-maximize intent.
     ColumnWidth defaultColumnWidth = ColumnWidth::makeProportion(0.5);
+    /// Geometry inputs for the tab indicator drawn beside a tabbed column.
+    /// Default-constructed = the family's own defaults, so a caller that never
+    /// sets it gets an indicator that reserves nothing.
+    TabIndicatorParams tabIndicator{};
 };
 
 /// One tile's resolved output for a relayout pass.
@@ -374,9 +579,22 @@ struct ResolvedTile
 struct ResolvedColumn
 {
     int columnIndex = -1;
-    /// The column's bounding rect (tab-strip anchor for tabbed columns).
+    /// The column's bounding rect. This is the column's FULL extent, before
+    /// any within-column indicator reservation — the tiles carry the reduced
+    /// rects, and @c tabIndicatorRect carries what was reserved.
     QRect rect;
     bool tabbed = false;
+    /// Where the tab indicator is drawn, in the same absolute screen
+    /// coordinates as @c rect. NULL (default-constructed) whenever no
+    /// indicator resolves: a normal column, the indicator switched off, or a
+    /// single-tab column under hideWhenSingleTab. Under placeWithinColumn this
+    /// sits inside @c rect; otherwise it sits outside, which is exactly niri's
+    /// "the indicator can overlay other windows or go off-screen".
+    QRect tabIndicatorRect;
+    /// Which edge @c tabIndicatorRect runs along, so a consumer can tell the
+    /// indicator's long axis without re-deriving it from the rect's aspect (a
+    /// one-tab indicator can be square).
+    TabIndicatorPosition tabIndicatorPosition = TabIndicatorPosition::Top;
     QVector<ResolvedTile> tiles;
 };
 

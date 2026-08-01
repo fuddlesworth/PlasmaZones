@@ -189,6 +189,7 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
     QObject::connect(window, SIGNAL(snapAssistDismissRequested()), this, SLOT(onSnapAssistDismissRequested()));
     QObject::connect(window, SIGNAL(snapAssistWindowSelected(QString, QString, QString)), this,
                      SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
+    QObject::connect(window, SIGNAL(scrollTabActivated(QString)), this, SLOT(onScrollTabActivated(QString)));
     QObject::connect(window, SIGNAL(layoutPickerSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
     QObject::connect(window, SIGNAL(layoutPickerDismissRequested()), this, SLOT(onLayoutPickerDismissRequested()));
     QObject::connect(window, SIGNAL(cheatsheetDismissRequested()), this, SLOT(onCheatsheetDismissRequested()));
@@ -276,9 +277,21 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     // its header doc). The hide-pending bit and the cached strip model have
     // no such requirement — they are plain state for a shell that no longer
     // exists, and keeping the cache would grow it by one dead screen per
-    // hot-plug cycle, so drop both.
+    // hot-plug cycle, so drop them. The input region goes for the same reason
+    // and is genuinely self-healing: updateScrollTabStrips rebuilds it from
+    // the next strip update.
+    //
+    // The paint overrides are dropped to avoid the same per-hot-plug leak, but
+    // they are NOT self-healing: their only writer is
+    // Daemon::updateScrollingScreens, which runs on a rules/context re-resolve,
+    // not on a strip update. A screen that stays in scrolling across a shell
+    // teardown therefore falls back to the config colours until the next rule
+    // or context pass. Accepted over leaking a dead entry per cycle, since the
+    // fallback is the correct-looking indicator rather than a broken one.
     m_scrollTabsHidePending.remove(screenId);
     m_lastScrollTabStrips.remove(screenId);
+    m_scrollTabInputRegions.remove(screenId);
+    m_scrollTabIndicatorOverrides.remove(screenId);
     QObject::disconnect(it->overlayGeomConnection);
     it->overlayGeomConnection = {};
     it->overlayPhysScreen = nullptr;
@@ -342,7 +355,15 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     const bool anyInputGrabbing =
         isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot()) || isVisible(s.cheatsheetSlot());
 
-    m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing);
+    // The tab indicator is the one non-modal slot that takes clicks, and it
+    // takes them ONLY where it draws: a tabbed column's indicator is a few
+    // pixels of a mostly-empty screen, so grabbing the whole surface for it
+    // (the only option before partial regions) would eat every click on the
+    // desktop for as long as any column stayed tabbed. Absent or hidden, the
+    // region is empty and the shell is click-through exactly as before.
+    const QRegion tabRegion = isVisible(s.scrollTabsSlot()) ? m_scrollTabInputRegions.value(effectiveId) : QRegion();
+
+    m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing, tabRegion);
 }
 
 void OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surface* surface)

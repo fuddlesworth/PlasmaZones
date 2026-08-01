@@ -277,15 +277,15 @@ public:
     // not depend on the config layer. A stub answering the opposite of what
     // the real Settings would is a silent behaviour split, so the pair is
     // pinned from the other side: settings/scrolling.cpp — a TU that sees both
-    // — static_asserts ConfigDefaults::scrollingTabStripEnabled() and
+    // — static_asserts the tab-indicator defaults and
     // ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin() against the
     // literals here, and names this comment. Change either default and fix
     // both places.
 
-    /// Tab-indicator strip over tabbed scrolling columns. Virtual with an
+    /// Tab indicator alongside tabbed scrolling columns. Virtual with an
     /// always-on default so the overlay service can gate through the
     /// interface (the zoneSelectorEnabled pattern).
-    virtual bool scrollingTabStripEnabled() const
+    virtual bool scrollingTabIndicatorEnabled() const
     {
         return true;
     }
@@ -294,7 +294,68 @@ public:
     /// per-screen-accessor pattern) so the D-Bus settings registry can register
     /// the key through the interface rather than only on the concrete Settings
     /// — otherwise a non-Settings backend silently loses the key entirely.
-    virtual void setScrollingTabStripEnabled(bool /*enabled*/)
+    virtual void setScrollingTabIndicatorEnabled(bool /*enabled*/)
+    {
+    }
+
+    // The tab indicator's PAINT settings, read by the overlay service through
+    // this interface for the same reason the toggle above is here. The
+    // indicator's GEOMETRY settings are deliberately absent: they change the
+    // resolved column rect, so the scrolling engine reads them through
+    // IScrollSettings and ships the finished rect in the tab-strip payload.
+    // Each NUMERIC default below is pinned against its ConfigDefaults twin by a
+    // static_assert in settings/scrolling.cpp, the way the toggle above is. The
+    // three colour defaults cannot be: ConfigDefaults returns a non-constexpr
+    // QString for them. They are pinned at runtime instead, by the schema
+    // assertions in test_scrolling_settings.cpp.
+
+    /// 0 = title chips, 1 = segment bar (ConfigDefaults' TabIndicatorStyle).
+    /// The bar is the default: it is niri's own indicator, and the only one it
+    /// has.
+    virtual int scrollingTabIndicatorStyle() const
+    {
+        return 1;
+    }
+    virtual void setScrollingTabIndicatorStyle(int /*style*/)
+    {
+    }
+    /// Gap between individual tabs, in logical pixels.
+    virtual int scrollingTabIndicatorGapsBetweenTabs() const
+    {
+        return 0;
+    }
+    virtual void setScrollingTabIndicatorGapsBetweenTabs(int /*px*/)
+    {
+    }
+    /// Per-tab corner radius in logical pixels; -1 means fully rounded. The
+    /// default is square, niri's own; the sentinel is opted into.
+    virtual int scrollingTabIndicatorCornerRadius() const
+    {
+        return 0;
+    }
+    virtual void setScrollingTabIndicatorCornerRadius(int /*px*/)
+    {
+    }
+    /// Tab colours; empty means "follow the theme" (see ConfigDefaults).
+    virtual QString scrollingTabIndicatorActiveColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingTabIndicatorActiveColor(const QString& /*color*/)
+    {
+    }
+    virtual QString scrollingTabIndicatorInactiveColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingTabIndicatorInactiveColor(const QString& /*color*/)
+    {
+    }
+    virtual QString scrollingTabIndicatorUrgentColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingTabIndicatorUrgentColor(const QString& /*color*/)
     {
     }
 
@@ -307,7 +368,7 @@ public:
     }
 
     /// Writer for the toggle above, same no-op-default rationale as
-    /// setScrollingTabStripEnabled. The snap/autotile twins are pure virtuals
+    /// setScrollingTabIndicatorEnabled. The snap/autotile twins are pure virtuals
     /// on ISnappingSettings; this pair carries defaults because its getters do.
     virtual void setScrollingRestoreFloatedWindowsOnLogin(bool /*restore*/)
     {
@@ -684,9 +745,23 @@ Q_SIGNALS:
     void scrollingPresetColumnWidthsChanged();
     void scrollingPresetWindowHeightsChanged();
 
-    void scrollingTabStripEnabledChanged();
     void scrollingWheelFocusEnabledChanged();
     void scrollingWheelFocusInvertedChanged();
+
+    // Scrolling tab indicator (Scrolling.TabIndicator)
+    void scrollingTabIndicatorEnabledChanged();
+    void scrollingTabIndicatorStyleChanged();
+    void scrollingTabIndicatorPositionChanged();
+    void scrollingTabIndicatorHideWhenSingleTabChanged();
+    void scrollingTabIndicatorPlaceWithinColumnChanged();
+    void scrollingTabIndicatorGapChanged();
+    void scrollingTabIndicatorWidthChanged();
+    void scrollingTabIndicatorLengthProportionChanged();
+    void scrollingTabIndicatorGapsBetweenTabsChanged();
+    void scrollingTabIndicatorCornerRadiusChanged();
+    void scrollingTabIndicatorActiveColorChanged();
+    void scrollingTabIndicatorInactiveColorChanged();
+    void scrollingTabIndicatorUrgentColorChanged();
 
     // Scrolling behavior settings
     void scrollingInsertPositionChanged();

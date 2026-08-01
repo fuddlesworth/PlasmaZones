@@ -7,11 +7,12 @@ import org.kde.kirigami as Kirigami
 import "../../js/PresetList.js" as PresetList
 
 /**
- * @brief Simple-mode Scrolling page: the everyday decision (default column
- * width) plus the shared Window Handling and Focus and view cards, the latter
- * carrying the centering and wheel rows. The advanced counterpart is the
- * Columns page (scrolling-columns); dirtiness, Reset, and Discard delegate to
- * both advanced leaves via simplePageBackingPages.
+ * @brief Simple-mode Scrolling page: the everyday decisions (default column
+ * width, and whether tabbed columns are marked and how) plus the shared Window
+ * Handling and Focus and view cards, the latter carrying the centering and
+ * wheel rows. The advanced counterpart is the Columns page
+ * (scrolling-columns); dirtiness, Reset, and Discard delegate to all three
+ * advanced leaves via simplePageBackingPages.
  *
  * Global scope only, like TilingSimplePage: every row binds appSettings
  * directly and no per-monitor scope chip is offered here. Per-monitor
@@ -179,6 +180,77 @@ SettingsFlickable {
                             when: !presetIndexSpin.editing
                             restoreMode: Binding.RestoreNone
                         }
+                    }
+                }
+            }
+        }
+
+        // =================================================================
+        // Tabs Card
+        // =================================================================
+        // Three of the thirteen tab-indicator knobs: whether it shows, and
+        // the two that change what you actually see. The rest (thickness,
+        // length, the two gaps, corner radius, colours, place-within-column,
+        // hide-for-single-tab) are tuning for an indicator you have already
+        // decided you want, which is advanced-mode depth — they live on
+        // Scrolling → Tabs.
+        //
+        // These keys are OWNED by scrolling-tabs, so this page has no
+        // pageOwnedConfigKeys entry for them; dirtiness, Reset and Discard
+        // delegate through simplePageBackingPages, which lists scrolling-tabs
+        // for exactly this reason.
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Tabs")
+            searchAnchor: "simpleTabs"
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Show the tab indicator")
+                    searchAnchor: "simpleTabIndicatorEnabled"
+                    description: i18n("Mark a tabbed column's windows on screen. Tabbed columns keep working without it.")
+
+                    SettingsSwitch {
+                        checked: appSettings.scrollingTabIndicatorEnabled
+                        accessibleName: i18n("Show the tab indicator")
+                        onToggled: function (newValue) {
+                            appSettings.scrollingTabIndicatorEnabled = newValue;
+                        }
+                    }
+                }
+
+                SettingsRow {
+                    title: i18n("Style")
+                    searchAnchor: "simpleTabIndicatorStyle"
+                    description: i18n("Titled chips name each window. A segment bar is thinner and shows only how many there are.")
+                    enabled: appSettings.scrollingTabIndicatorEnabled
+
+                    WideComboBox {
+                        Accessible.name: i18n("Tab indicator style")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: settingsController.valueOptions("Scrolling.TabIndicator", "Style")
+                        storedValue: appSettings.scrollingTabIndicatorStyle
+                        onActivated: appSettings.scrollingTabIndicatorStyle = currentValue
+                    }
+                }
+
+                SettingsRow {
+                    title: i18n("Position")
+                    searchAnchor: "simpleTabIndicatorPosition"
+                    description: i18n("Which edge of the column the indicator runs along.")
+                    enabled: appSettings.scrollingTabIndicatorEnabled
+
+                    WideComboBox {
+                        Accessible.name: i18n("Tab indicator position")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: settingsController.valueOptions("Scrolling.TabIndicator", "Position")
+                        storedValue: appSettings.scrollingTabIndicatorPosition
+                        onActivated: appSettings.scrollingTabIndicatorPosition = currentValue
                     }
                 }
             }

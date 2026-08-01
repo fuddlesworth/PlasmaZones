@@ -132,6 +132,11 @@ public:
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
     P_CONFIG_GROUP(scrollingGroup, "Scrolling")
     P_CONFIG_GROUP(scrollingBehaviorGroup, "Scrolling.Behavior")
+    // Scrolling.TabIndicator — the whole appearance and placement family for
+    // the indicator drawn alongside a tabbed column. Its own group rather than
+    // a dozen Tab*-prefixed leaves on Scrolling, so the settings page, the
+    // per-page reset manifest and the rule slots all address one subtree.
+    P_CONFIG_GROUP(scrollingTabIndicatorGroup, "Scrolling.TabIndicator")
 
     // Decorations — per-surface decoration tree (DecorationProfileTree:
     // shader-pack chain + per-pack parameters, keyed on a dot-path surface
@@ -413,9 +418,25 @@ public:
     P_CONFIG_KEY(defaultWindowHeightKindKey, "DefaultWindowHeightKind")
     P_CONFIG_KEY(defaultWindowHeightValueKey, "DefaultWindowHeightValue")
     P_CONFIG_KEY(defaultWindowHeightPresetIndexKey, "DefaultWindowHeightPresetIndex")
-    P_CONFIG_KEY(tabStripEnabledKey, "TabStripEnabled")
     P_CONFIG_KEY(wheelFocusEnabledKey, "WheelFocusEnabled")
     P_CONFIG_KEY(wheelFocusInvertedKey, "WheelFocusInverted")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.TabIndicator
+    // (also uses enabledKey, widthKey, positionKey — shared leaf names,
+    // disambiguated by group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(tabIndicatorStyleKey, "Style")
+    P_CONFIG_KEY(hideWhenSingleTabKey, "HideWhenSingleTab")
+    P_CONFIG_KEY(placeWithinColumnKey, "PlaceWithinColumn")
+    P_CONFIG_KEY(gapKey, "Gap")
+    P_CONFIG_KEY(lengthProportionKey, "LengthProportion")
+    P_CONFIG_KEY(gapsBetweenTabsKey, "GapsBetweenTabs")
+    P_CONFIG_KEY(cornerRadiusKey, "CornerRadius")
+    P_CONFIG_KEY(activeColorKey, "ActiveColor")
+    P_CONFIG_KEY(inactiveColorKey, "InactiveColor")
+    P_CONFIG_KEY(urgentColorKey, "UrgentColor")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Behavior

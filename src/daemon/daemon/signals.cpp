@@ -11,6 +11,9 @@
 #include "daemon/overlayservice.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
+// Complete type needed to emit focusWindowRequested on the tab-click path —
+// daemon.h forward declares TilingAdaptor only.
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
@@ -285,6 +288,21 @@ void Daemon::connectOverlaySignals()
     // algorithm via the zone-selector popup is gone — users have keyboard
     // shortcuts (NextLayout / QuickLayoutN) and the explicit Layout Picker
     // (Meta+Alt+Space by default) for that.
+
+    // A clicked tab is a focus request, nothing more. Asking the compositor to
+    // activate the window (the same channel the engine's own
+    // activateWindowRequested uses) rather than poking the strip directly
+    // keeps ONE owner of "which tab is showing": the strip learns about it
+    // through windowFocused, exactly as it does for a keyboard focus walk or
+    // an alt-tab. Reaching into the strip here would make the click a second
+    // writer that could disagree with the compositor about what is focused.
+    m_restartScopedConnections << connect(m_overlayService.get(), &IOverlayService::scrollTabActivated, this,
+                                          [this](const QString& windowId) {
+                                              if (!m_tilingAdaptor || windowId.isEmpty()) {
+                                                  return;
+                                              }
+                                              Q_EMIT m_tilingAdaptor->focusWindowRequested(windowId);
+                                          });
 
     // Connect Snap Assist selection: fetch authoritative zone geometry from service (same as
     // keyboard navigation) to avoid overlay coordinate drift/overlap bugs, then forward to effect

@@ -361,8 +361,33 @@ public:
                    setScrollingDefaultWindowHeightPresetIndex NOTIFY scrollingDefaultWindowHeightPresetIndexChanged)
     Q_PROPERTY(int scrollingInsertPosition READ scrollingInsertPosition WRITE setScrollingInsertPosition NOTIFY
                    scrollingInsertPositionChanged)
-    Q_PROPERTY(bool scrollingTabStripEnabled READ scrollingTabStripEnabled WRITE setScrollingTabStripEnabled NOTIFY
-                   scrollingTabStripEnabledChanged)
+    // Scrolling.TabIndicator
+    Q_PROPERTY(bool scrollingTabIndicatorEnabled READ scrollingTabIndicatorEnabled WRITE setScrollingTabIndicatorEnabled
+                   NOTIFY scrollingTabIndicatorEnabledChanged)
+    Q_PROPERTY(int scrollingTabIndicatorStyle READ scrollingTabIndicatorStyle WRITE setScrollingTabIndicatorStyle NOTIFY
+                   scrollingTabIndicatorStyleChanged)
+    Q_PROPERTY(int scrollingTabIndicatorPosition READ scrollingTabIndicatorPosition WRITE
+                   setScrollingTabIndicatorPosition NOTIFY scrollingTabIndicatorPositionChanged)
+    Q_PROPERTY(bool scrollingTabIndicatorHideWhenSingleTab READ scrollingTabIndicatorHideWhenSingleTab WRITE
+                   setScrollingTabIndicatorHideWhenSingleTab NOTIFY scrollingTabIndicatorHideWhenSingleTabChanged)
+    Q_PROPERTY(bool scrollingTabIndicatorPlaceWithinColumn READ scrollingTabIndicatorPlaceWithinColumn WRITE
+                   setScrollingTabIndicatorPlaceWithinColumn NOTIFY scrollingTabIndicatorPlaceWithinColumnChanged)
+    Q_PROPERTY(int scrollingTabIndicatorGap READ scrollingTabIndicatorGap WRITE setScrollingTabIndicatorGap NOTIFY
+                   scrollingTabIndicatorGapChanged)
+    Q_PROPERTY(int scrollingTabIndicatorWidth READ scrollingTabIndicatorWidth WRITE setScrollingTabIndicatorWidth NOTIFY
+                   scrollingTabIndicatorWidthChanged)
+    Q_PROPERTY(qreal scrollingTabIndicatorLengthProportion READ scrollingTabIndicatorLengthProportion WRITE
+                   setScrollingTabIndicatorLengthProportion NOTIFY scrollingTabIndicatorLengthProportionChanged)
+    Q_PROPERTY(int scrollingTabIndicatorGapsBetweenTabs READ scrollingTabIndicatorGapsBetweenTabs WRITE
+                   setScrollingTabIndicatorGapsBetweenTabs NOTIFY scrollingTabIndicatorGapsBetweenTabsChanged)
+    Q_PROPERTY(int scrollingTabIndicatorCornerRadius READ scrollingTabIndicatorCornerRadius WRITE
+                   setScrollingTabIndicatorCornerRadius NOTIFY scrollingTabIndicatorCornerRadiusChanged)
+    Q_PROPERTY(QString scrollingTabIndicatorActiveColor READ scrollingTabIndicatorActiveColor WRITE
+                   setScrollingTabIndicatorActiveColor NOTIFY scrollingTabIndicatorActiveColorChanged)
+    Q_PROPERTY(QString scrollingTabIndicatorInactiveColor READ scrollingTabIndicatorInactiveColor WRITE
+                   setScrollingTabIndicatorInactiveColor NOTIFY scrollingTabIndicatorInactiveColorChanged)
+    Q_PROPERTY(QString scrollingTabIndicatorUrgentColor READ scrollingTabIndicatorUrgentColor WRITE
+                   setScrollingTabIndicatorUrgentColor NOTIFY scrollingTabIndicatorUrgentColorChanged)
     Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
                    NOTIFY scrollingWheelFocusEnabledChanged)
     Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
@@ -1116,8 +1141,36 @@ public:
     void setScrollingDefaultWindowHeightPresetIndex(int index);
     int scrollingInsertPosition() const override;
     void setScrollingInsertPosition(int position);
-    bool scrollingTabStripEnabled() const override;
-    void setScrollingTabStripEnabled(bool enabled) override;
+    // Scrolling.TabIndicator. The geometry half also satisfies IScrollSettings
+    // (the engine reads it to size and place the indicator, and to shrink the
+    // column when PlaceWithinColumn is set); the paint half satisfies ISettings
+    // for the overlay service. Hence the mixed `override` marking.
+    bool scrollingTabIndicatorEnabled() const override;
+    void setScrollingTabIndicatorEnabled(bool enabled) override;
+    int scrollingTabIndicatorStyle() const override;
+    void setScrollingTabIndicatorStyle(int style) override;
+    int scrollingTabIndicatorPosition() const override;
+    void setScrollingTabIndicatorPosition(int position);
+    bool scrollingTabIndicatorHideWhenSingleTab() const override;
+    void setScrollingTabIndicatorHideWhenSingleTab(bool hide);
+    bool scrollingTabIndicatorPlaceWithinColumn() const override;
+    void setScrollingTabIndicatorPlaceWithinColumn(bool within);
+    int scrollingTabIndicatorGap() const override;
+    void setScrollingTabIndicatorGap(int px);
+    int scrollingTabIndicatorWidth() const override;
+    void setScrollingTabIndicatorWidth(int px);
+    qreal scrollingTabIndicatorLengthProportion() const override;
+    void setScrollingTabIndicatorLengthProportion(qreal proportion);
+    int scrollingTabIndicatorGapsBetweenTabs() const override;
+    void setScrollingTabIndicatorGapsBetweenTabs(int px) override;
+    int scrollingTabIndicatorCornerRadius() const override;
+    void setScrollingTabIndicatorCornerRadius(int px) override;
+    QString scrollingTabIndicatorActiveColor() const override;
+    void setScrollingTabIndicatorActiveColor(const QString& color) override;
+    QString scrollingTabIndicatorInactiveColor() const override;
+    void setScrollingTabIndicatorInactiveColor(const QString& color) override;
+    QString scrollingTabIndicatorUrgentColor() const override;
+    void setScrollingTabIndicatorUrgentColor(const QString& color) override;
     bool scrollingWheelFocusEnabled() const;
     void setScrollingWheelFocusEnabled(bool enabled);
     bool scrollingWheelFocusInverted() const;

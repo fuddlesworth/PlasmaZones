@@ -40,6 +40,27 @@ namespace PlasmaZones {
 
 namespace {
 
+/// True if @p s is one of the three hex shapes PhosphorRules' `hasHexColor`
+/// admits: `#RGB`, `#RRGGBB` or `#AARRGGBB`. Mirrors the twin in
+/// layoutregistry_contextresolve.cpp; deliberately NOT
+/// `QColor::isValidColorName`, which also admits SVG keywords, so
+/// "transparent" would reach the overlay as an invisible indicator.
+bool isHexColorString(const QString& s)
+{
+    if ((s.size() != 4 && s.size() != 7 && s.size() != 9) || s.at(0) != QLatin1Char('#')) {
+        return false;
+    }
+    for (int i = 1; i < s.size(); ++i) {
+        const QChar c = s.at(i);
+        const bool hex = (c >= QLatin1Char('0') && c <= QLatin1Char('9'))
+            || (c >= QLatin1Char('a') && c <= QLatin1Char('f')) || (c >= QLatin1Char('A') && c <= QLatin1Char('F'));
+        if (!hex) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// Structural admission tests for the open-path resolvers, one per stamping
 /// shape. Every one of them is the same guard the zones-layer context resolvers
 /// apply (layoutregistry_contextresolve.cpp), for the same reason.
@@ -292,6 +313,106 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QSt
     // The Float action carries free-form params (no Value key), so the verdict is
     // the PRESENCE of the filled slot, not a bool payload.
     return resolved.slot(QString(PhosphorRules::ActionSlot::Float)).has_value();
+}
+
+QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
+{
+    if (!m_ruleStore) {
+        return {};
+    }
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return {};
+    }
+    // NO screen/mode stamping here, unlike scrollOpenRuleParams: this runs
+    // from the strip-relayout path, which knows the window but not which
+    // screen's resolve it belongs to, and a wrong stamp is worse than none —
+    // it would make a ScreenId-conditioned rule match the wrong monitor. A
+    // rule pairing a tab colour with a ScreenId or Mode condition is therefore
+    // inert on this path by design; the per-CONTEXT colour actions are the
+    // spelling for "recolour tabs on this screen".
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    }
+    // This path uses its OWN memo and never touches the shared one. Two
+    // separate reasons, and the shared memo cannot satisfy either:
+    //
+    //  - POISONING. The shared memo's key is (windowId, revision) with the
+    //    admit filter deliberately NOT part of it (ruleevaluator.cpp), so a
+    //    verdict resolved under a different filter lands under the same key the
+    //    six admitScreenStamped callers read. Per the negation guard in
+    //    internal.h that is not merely a superset: a negated group matches
+    //    BECAUSE its inner leaf fails on an unstamped query, so one foreign
+    //    entry can make a SnapToZone / RouteToScreen rule fire for every
+    //    window. Seeding it from here would also break the ordering invariant
+    //    documented above shouldRestoreFloatedPosition — the two existing
+    //    unstamped readers only run on the open path, AFTER a stamper.
+    //  - COST. Merely READING the shared memo without seeding is not viable
+    //    either: every one of its six seeders runs on the OPEN path only, and
+    //    a rules save bumps the revision, so after any save the peek misses
+    //    forever for every already-open window (they will not open again).
+    //    This function runs per tab on every re-enrichment, which includes
+    //    every window TITLE change, so a permanent miss means a full rule-set
+    //    walk per tab per retitle.
+    //
+    // A private memo keyed the same way is free of both: nothing else reads it,
+    // so its filter can be exactly right for THIS query, and a second call
+    // costs a hash lookup again.
+    // The key is the revision PLUS the query fields that move under a live
+    // window. Title is load-bearing: the enrichment refresh that calls this is
+    // driven by title changes, so a revision-only key would pin a
+    // `Title contains …` rule to its first verdict for the window's lifetime.
+    const quint64 revision = m_ruleStore->ruleSet().revision();
+    const auto memoIt = m_tabColorMemo.constFind(windowId);
+    if (memoIt != m_tabColorMemo.constEnd() && memoIt->revision == revision && memoIt->title == query->title
+        && memoIt->captionNormal == query->captionNormal && memoIt->virtualDesktop == query->virtualDesktop
+        && memoIt->activity == query->activity) {
+        return memoIt->colors;
+    }
+    // The filter is stricter than admitScreenStamped: this query stamps NO
+    // context field, and WindowQuery::valueForField returns an ENGAGED empty
+    // QVariant for ScreenId, so a `None{ScreenId Equals …}` group would match
+    // because its inner leaf fails — the same inversion the shared memo's
+    // filter exists to prevent, which admitScreenStamped does not cover here
+    // precisely because it assumes ScreenId IS stamped.
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveFiltered(*query, [](const PhosphorRules::Rule& rule) {
+            return admitScreenStamped(rule) && !rule.match.referencesAnyField({PhosphorRules::Field::ScreenId});
+        });
+    const QVariantMap colors = tabColorsFromResolved(resolved);
+    m_tabColorMemo.insert(windowId,
+                          TabColorMemoEntry{revision, query->title, query->captionNormal, query->virtualDesktop,
+                                            query->activity, colors});
+    return colors;
+}
+
+QVariantMap WindowTrackingAdaptor::tabColorsFromResolved(const PhosphorRules::ResolvedActions& resolved)
+{
+    QVariantMap out;
+    const auto readColor = [&resolved, &out](QLatin1StringView slot, const QString& key) {
+        const auto action = resolved.slot(QString(slot));
+        if (!action) {
+            return;
+        }
+        const QString value = action->params.value(QString(PhosphorRules::ActionParam::Value)).toString();
+        // Empty means "no override" on this path, not "clear to nothing": an
+        // empty colour reaching the overlay would read as the theme fallback
+        // anyway, so dropping it here keeps the map honest about what matched.
+        //
+        // Shape-checked for the same reason its twin in the zones layer is
+        // (layoutregistry_contextresolve.cpp): this value goes through to a
+        // QML `color` property verbatim, where anything unparseable renders as
+        // an invalid colour rather than falling back to the theme. The
+        // descriptors already enforce hex-only, so this only catches a payload
+        // that reached the store without passing them.
+        if (isHexColorString(value)) {
+            out.insert(key, value);
+        }
+    };
+    readColor(PhosphorRules::ActionSlot::TabColorActive, QStringLiteral("activeColor"));
+    readColor(PhosphorRules::ActionSlot::TabColorInactive, QStringLiteral("inactiveColor"));
+    readColor(PhosphorRules::ActionSlot::TabColorUrgent, QStringLiteral("urgentColor"));
+    return out;
 }
 
 QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId, const QString& screenId)

@@ -65,6 +65,34 @@ public:
     /// Preset proportion lists, serialized as decimal strings.
     virtual QStringList scrollingPresetColumnWidths() const = 0;
     virtual QStringList scrollingPresetWindowHeights() const = 0;
+
+    // ── Tab indicator geometry (Scrolling.TabIndicator) ──────────────────
+    //
+    // Only the subset that changes resolved rects lives here; it lands in
+    // ScrollLayoutParams::tabIndicator (TabIndicatorParams, ScrollTypes.h,
+    // where each field is documented in full). The indicator's PAINT settings
+    // — style, gaps between tabs, corner radius, the three colours — are
+    // deliberately absent: they never affect layout, so the daemon reads them
+    // through its own ISettings and applies them to the overlay directly. Keep
+    // that split when adding a knob, or this library grows a dependency on how
+    // the indicator happens to be drawn.
+
+    /// Master switch. Off, no indicator rect resolves and nothing is reserved.
+    virtual bool scrollingTabIndicatorEnabled() const = 0;
+    /// Skip the indicator for a tabbed column holding a single tile.
+    virtual bool scrollingTabIndicatorHideWhenSingleTab() const = 0;
+    /// Reserve the indicator out of the column instead of drawing beside it.
+    virtual bool scrollingTabIndicatorPlaceWithinColumn() const = 0;
+    /// Gap between indicator and window; NEGATIVE puts it over the window.
+    virtual int scrollingTabIndicatorGap() const = 0;
+    /// Indicator thickness. EXACT for every style, chips included: content
+    /// that does not fit clips rather than growing the indicator, which is what
+    /// keeps PlaceWithinColumn's reservation honest. See TabIndicatorParams.
+    virtual int scrollingTabIndicatorWidth() const = 0;
+    /// Indicator length as a proportion of the column extent beside it.
+    virtual qreal scrollingTabIndicatorLengthProportion() const = 0;
+    /// Which column edge the indicator runs along (TabIndicatorPosition).
+    virtual int scrollingTabIndicatorPosition() const = 0;
 };
 
 } // namespace PhosphorEngine

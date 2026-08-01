@@ -79,6 +79,10 @@ inline constexpr QLatin1String DecorationProfileTree("decorationProfileTree");
 /// disengaged, mirroring window_query.cpp's engage-only-when-known contract.
 namespace WindowMetadataKey {
 inline constexpr QLatin1String IsMinimized("isMinimized");
+/// Urgency (KWin's demandsAttention). Like IsMinimized, and unlike the
+/// point-in-time fields, the effect re-pushes full metadata on every edge, so
+/// a consumer may rely on it staying current.
+inline constexpr QLatin1String IsDemandingAttention("isDemandingAttention");
 inline constexpr QLatin1String IsFullscreen("isFullscreen");
 inline constexpr QLatin1String IsSticky("isSticky");
 inline constexpr QLatin1String IsMaximized("isMaximized");

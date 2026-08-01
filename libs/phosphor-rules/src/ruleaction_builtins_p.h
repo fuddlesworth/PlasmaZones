@@ -56,6 +56,25 @@ inline bool hasNumberInRange(const QJsonObject& params, QLatin1StringView key, d
     return d >= 0.0 && d <= maxValue;
 }
 
+/// Validates that @p params has a number in [@p minValue, @p maxValue] at
+/// @p key. The explicit-floor twin of hasNumberInRange above, for slots whose
+/// floor is not zero — whether below it (the tab indicator's gap, where a
+/// negative draws the indicator over the window, and its corner radius, where
+/// -1 is the "fully rounded" sentinel) or above it (its width and length,
+/// which must reject 0 as well as negatives). Slots that genuinely floor at
+/// zero should keep using hasNumberInRange, so a stray negative stays a
+/// validation failure rather than silently reaching a consumer that assumes
+/// non-negative.
+inline bool hasNumberInSignedRange(const QJsonObject& params, QLatin1StringView key, double minValue, double maxValue)
+{
+    const QJsonValue v = params.value(key);
+    if (!v.isDouble()) {
+        return false;
+    }
+    const double d = v.toDouble();
+    return d >= minValue && d <= maxValue;
+}
+
 /// Validates that @p params has a `#`-prefixed hex colour string at @p key.
 /// Accepts the standard QColor hex shapes the effect-side consumer parses via
 /// `QColor(QString)`: `#RGB` (4), `#RRGGBB` (7) and `#AARRGGBB` (9 — QColor reads
@@ -126,6 +145,28 @@ inline constexpr double kMinColumnWidthRatio = MinColumnWidthRatio;
 inline constexpr double kMaxColumnWidthRatio = MaxColumnWidthRatio;
 inline constexpr double kMinColumnWidthPercent = kMinColumnWidthRatio * 100.0;
 inline constexpr double kMaxColumnWidthPercent = kMaxColumnWidthRatio * 100.0;
+// Tab-indicator bounds, mirroring the ConfigDefaults ranges the settings
+// schema clamps to. As with every other bound here these only reject grossly
+// malformed hand-edited payloads; the consumer re-clamps.
+//
+// The GAP floor is negative on purpose (a negative gap draws the indicator
+// over the window, which is niri's behaviour) and so is the CORNER RADIUS
+// floor, whose -1 is the config layer's "fully rounded" sentinel rather than a
+// real negative radius. hasNumberInSignedRange is the EXPLICIT-FLOOR helper,
+// so it serves both directions: those two below zero, and WIDTH (floor 1) and
+// LENGTH (floor 0.05) above it. Only the bounds whose floor really is zero use
+// the zero-floored helper.
+// Aliased from the installed RuleAction.h constants, the kMinColumnWidthRatio
+// pattern, so the descriptor validators and the zones-layer context resolver
+// check the same numbers rather than two hand-mirrored copies.
+inline constexpr double kMinTabIndicatorGap = MinTabIndicatorGap;
+inline constexpr double kMaxTabIndicatorGap = MaxTabIndicatorGap;
+inline constexpr double kMinTabIndicatorWidth = MinTabIndicatorWidth;
+inline constexpr double kMaxTabIndicatorWidth = MaxTabIndicatorWidth;
+inline constexpr double kTabIndicatorCornerRadiusPill = TabIndicatorCornerRadiusPill;
+inline constexpr double kMaxTabIndicatorCornerRadius = MaxTabIndicatorCornerRadius;
+inline constexpr double kMinTabIndicatorLengthRatio = MinTabIndicatorLengthRatio;
+inline constexpr double kMaxTabIndicatorLengthRatio = MaxTabIndicatorLengthRatio;
 
 /// Helper to keep the registerBuiltins body legible — every built-in shares
 /// the same constant slot pattern (no slot-from-params resolution).

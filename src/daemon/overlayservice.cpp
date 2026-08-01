@@ -544,7 +544,7 @@ void OverlayService::updateSettings(ISettings* settings)
     syncCavaState();
 
     // Same missed-emit case for the tab-strip toggle, which otherwise rides
-    // only on scrollingTabStripEnabledChanged: a batch save leaves a live
+    // only on scrollingTabIndicatorEnabledChanged: a batch save leaves a live
     // strip painted after the switch was turned off (or an enabled one
     // blank) until the next structural strip change.
     replayScrollTabStrips();

@@ -33,6 +33,7 @@
 #include <QPointer>
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include <PhosphorConfig/IBackend.h>
 
@@ -792,6 +793,71 @@ public:
     /// would silently discard both. See rules.cpp.
     QVariantMap scrollOpenRuleParams(const QString& windowId, const QString& screenId);
 
+    /// Per-window tab-colour rule slots — niri's `tab-indicator` WINDOW rule,
+    /// which recolours only the matched window's own tab. Returned as a loose
+    /// map with the same key names the overlay reads, present only when the
+    /// slot matched: "activeColor", "inactiveColor", "urgentColor" (all
+    /// QString). These outrank the per-context colours, which outrank the
+    /// config, which falls back to the theme — niri's resolution order.
+    ///
+    /// Resolves once per (window, rule revision, matchable window state)
+    /// through a PRIVATE memo (see m_tabColorMemo) — not the shared evaluator
+    /// cache, which cannot serve this query in either direction. Unlike
+    /// scrollOpenRuleParams this runs per tab per strip RELAYOUT and per title
+    /// change rather than once per window open, so it is deliberately kept to
+    /// a slot read with no screen or mode stamping.
+    QVariantMap tabColorRuleParams(const QString& windowId);
+
+private:
+    /// Extract the three tab-colour slots from an already-resolved verdict.
+    /// Shared by the memo-hit and memo-miss paths so both produce the same map.
+    static QVariantMap tabColorsFromResolved(const PhosphorRules::ResolvedActions& resolved);
+
+    /// tabColorRuleParams' PRIVATE memo, deliberately separate from the
+    /// RuleEvaluator's shared one.
+    ///
+    /// The shared memo cannot serve this path in either direction. Seeding it
+    /// would poison it (its key excludes the admit filter, and this query is
+    /// unstamped) and would break the stamper-first ordering invariant. Merely
+    /// reading it is no good either: all six of its seeders run on the OPEN
+    /// path, and a rules save bumps the revision, so the peek would miss
+    /// forever for every already-open window — and this runs per tab on every
+    /// window title change.
+    /// Caches the extracted COLOUR MAP rather than the ResolvedActions: the
+    /// three slots are all this path ever reads, the map is what every caller
+    /// wants back, and it keeps this header free of the rules-engine include.
+    ///
+    /// The key carries the rule revision plus title, captionNormal
+    /// (title-derived), virtual desktop and activity. Title especially — the
+    /// refresh that consumes this memo is DRIVEN by title changes, so keying on
+    /// the revision alone would leave a `Title contains …` tab-colour rule
+    /// stuck on its first verdict until the next rules save.
+    ///
+    /// KNOWN GAP, deliberate. buildRuleQueryForWindow also copies ~20 EXTENDED
+    /// fields that move under a live window (isMaximized, isFocused,
+    /// isMinimized, keepAbove, the geometry quartet, and the rest of the state
+    /// flags). None is in this key, so a tab-colour rule conditioned on one
+    /// resolves once and stays pinned until the title, desktop, activity or
+    /// rule revision moves. Widening the key would NOT fix such a rule: nothing
+    /// re-drives the enrichment on those fields either
+    /// (scheduleScrollTabEnrichmentRefresh fires on isDemandingAttention and
+    /// title only), so the verdict would still be stale between refreshes. The
+    /// honest fix is a second trigger, not a bigger key, and it is not worth ~20
+    /// extra comparisons per tab per refresh until someone wants those pairings.
+    /// Only appId, windowRole, desktopFile, pid and windowType are genuinely
+    /// immutable for a given window id.
+    struct TabColorMemoEntry
+    {
+        quint64 revision = 0;
+        std::optional<QString> title;
+        std::optional<QString> captionNormal;
+        int virtualDesktop = 0;
+        QString activity;
+        QVariantMap colors;
+    };
+    QHash<QString, TabColorMemoEntry> m_tabColorMemo;
+
+public:
     /// Stamp @p screenId and the placement mode that screen resolves to onto
     /// @p query. buildRuleQueryForWindow knows neither, and without them a rule
     /// pairing ScreenId or Mode with a window action never matches — a pairing

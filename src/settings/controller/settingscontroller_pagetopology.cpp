@@ -140,8 +140,10 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // The scrolling section's leaves; the peer of the two sets above.
     static const QString kScrollingSimple = QStringLiteral("scrolling-simple");
     static const QString kScrollingColumns = QStringLiteral("scrolling-columns");
+    static const QString kScrollingTabs = QStringLiteral("scrolling-tabs");
     static const QString kScrollingWindow = QStringLiteral("scrolling-window");
-    static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingColumns, kScrollingWindow};
+    static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingColumns, kScrollingTabs,
+                                                   kScrollingWindow};
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
@@ -366,7 +368,30 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingGroup(), CD::defaultWindowHeightPresetIndexKey()},
              {CD::scrollingGroup(), CD::presetColumnWidthsKey()},
              {CD::scrollingGroup(), CD::presetWindowHeightsKey()},
-             {CD::scrollingGroup(), CD::tabStripEnabledKey()},
+         }},
+        // The Tabs leaf owns the whole Scrolling.TabIndicator subtree and
+        // nothing else, so its per-page Reset covers the indicator's
+        // visibility, layout and colours together rather than leaving a third
+        // of it behind. Every key of the subtree is listed for that reason;
+        // the one-owner invariant holds because no other page OWNS the group.
+        // ScrollingSimplePage surfaces three of these keys, but a simple page
+        // carries no pageOwnedConfigKeys entry of its own — it delegates
+        // through simplePageBackingPages, so ownership stays here.
+        {QStringLiteral("scrolling-tabs"),
+         {
+             {CD::scrollingTabIndicatorGroup(), CD::enabledKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::tabIndicatorStyleKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::positionKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::hideWhenSingleTabKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::placeWithinColumnKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::gapKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::widthKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::lengthProportionKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::gapsBetweenTabsKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::cornerRadiusKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::activeColorKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::inactiveColorKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::urgentColorKey()},
          }},
         {QStringLiteral("scrolling-window"),
          {
@@ -462,8 +487,9 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
     // per-algorithm slots from Algorithm, plus the whole window-handling
     // card (placement, drag and overflow behaviour, sticky handling, smart
     // gaps, restore-on-login) and focus from Window. scrolling-simple surfaces
-    // view centering and the default column width from View and Columns, plus
-    // the whole window-handling and focus cards from Window.
+    // the default column width from Columns, the tab indicator's enable /
+    // style / position from Tabs, plus view centering and the whole
+    // window-handling and focus cards from Window.
     // They deliberately have NO pageOwnedConfigKeys
     // entry — the one-owner invariant there forbids listing a key twice —
     // so dirtiness, Reset, and Discard delegate through this map instead.
@@ -481,7 +507,8 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
         {QStringLiteral("snapping-simple"),
          {QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-window-behavior")}},
         {QStringLiteral("tiling-simple"), {QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm")}},
-        {QStringLiteral("scrolling-simple"), {QStringLiteral("scrolling-columns"), QStringLiteral("scrolling-window")}},
+        {QStringLiteral("scrolling-simple"),
+         {QStringLiteral("scrolling-columns"), QStringLiteral("scrolling-tabs"), QStringLiteral("scrolling-window")}},
     };
     // Checked once at first call, in debug AND release: the assert names the
     // offending page for a developer, and resetPage / discardPage additionally
@@ -532,6 +559,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("tiling-shortcuts"),
         QStringLiteral("scrolling-simple"),
         QStringLiteral("scrolling-columns"),
+        QStringLiteral("scrolling-tabs"),
         QStringLiteral("scrolling-window"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),

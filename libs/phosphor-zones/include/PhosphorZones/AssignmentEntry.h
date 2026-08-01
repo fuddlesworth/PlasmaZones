@@ -320,7 +320,9 @@ struct ContextTilingParams
  * Each field is set only when a matching context rule fills the corresponding
  * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
  * SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
- * SetScrollDefaultWindowHeight); an unset field means "use the config value".
+ * SetScrollDefaultWindowHeight, plus the thirteen SetTabIndicator* slots
+ * documented in their own block below); an unset field means "use the config
+ * value".
  * Consumed daemon-side: the values are layered onto the scrolling engine's
  * per-screen parameters (config stays the base, the rule wins where present),
  * the same way @ref ContextTilingParams is layered onto the autotile override
@@ -344,10 +346,41 @@ struct ContextScrollingParams
     /// height (0.05-1.0); the engine commits it as fixed pixels at relayout.
     std::optional<double> defaultWindowHeight;
 
+    /// The tab indicator's overrides, niri's `tab-indicator` layout block.
+    /// Split the way IScrollSettings splits the family: the GEOMETRY fields
+    /// are layered onto the scrolling engine's per-screen override map, while
+    /// the PAINT fields never reach that library and are applied to the
+    /// overlay daemon-side. Each is independently optional so a context rule
+    /// that sets one property leaves the other twelve alone.
+    std::optional<bool> tabIndicatorEnabled;
+    std::optional<bool> tabIndicatorHideWhenSingleTab;
+    std::optional<bool> tabIndicatorPlaceWithinColumn;
+    std::optional<int> tabIndicatorGap; ///< px; NEGATIVE draws the indicator over the window
+    std::optional<int> tabIndicatorWidth; ///< px thickness
+    std::optional<double> tabIndicatorLength; ///< fraction of the column extent
+    std::optional<int> tabIndicatorPosition; ///< TabIndicatorPosition ints, left 0 … bottom 3
+    std::optional<int> tabIndicatorStyle; ///< 0 = title chips, 1 = segment bar
+    std::optional<int> tabIndicatorGapsBetweenTabs; ///< px
+    std::optional<int> tabIndicatorCornerRadius; ///< px; -1 is the "fully rounded" sentinel
+    std::optional<QString> tabIndicatorActiveColor;
+    std::optional<QString> tabIndicatorInactiveColor;
+    std::optional<QString> tabIndicatorUrgentColor;
+
+    /// True when at least one tab-indicator slot resolved, so the daemon can
+    /// skip the whole indicator-override path when it is false rather than
+    /// testing thirteen optionals.
+    bool hasTabIndicatorOverrides() const
+    {
+        return tabIndicatorEnabled || tabIndicatorHideWhenSingleTab || tabIndicatorPlaceWithinColumn || tabIndicatorGap
+            || tabIndicatorWidth || tabIndicatorLength || tabIndicatorPosition || tabIndicatorStyle
+            || tabIndicatorGapsBetweenTabs || tabIndicatorCornerRadius || tabIndicatorActiveColor
+            || tabIndicatorInactiveColor || tabIndicatorUrgentColor;
+    }
+
     bool isEmpty() const
     {
         return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay && !insertPosition
-            && !defaultWindowHeight;
+            && !defaultWindowHeight && !hasTabIndicatorOverrides();
     }
 };
 

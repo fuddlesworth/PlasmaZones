@@ -862,6 +862,28 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
 
     // Snap mode: track minimize/unminimize to float/unfloat snapped windows
     connect(w, &KWin::EffectWindow::minimizedChanged, this, &PlasmaZonesEffect::slotWindowMinimizedChanged);
+
+    // Refresh the registry on every urgency edge, for the same reason as the
+    // minimize edge above: WindowMetadata::isDemandingAttention would
+    // otherwise sit at whatever the last unrelated push snapshotted, and a
+    // stale urgency is worse than none — the tab indicator would keep a tab
+    // lit long after the window stopped asking for attention, or never light
+    // it at all. The signal lives on KWin::Window, not EffectWindow, so this
+    // connection needs the underlying window; a window without one (no
+    // KWin::Window backing) simply never reports urgency, which the daemon
+    // reads as "not urgent". The EffectWindow is captured weakly; the
+    // KWin::Window is only the signal SENDER and is not captured at all, and
+    // passing `this` as the context object means Qt drops the connection when
+    // either the sender or the effect is destroyed.
+    if (KWin::Window* underlying = w->window()) {
+        connect(underlying, &KWin::Window::demandsAttentionChanged, this,
+                [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
+                    if (!safeW || safeW->isDeleted()) {
+                        return;
+                    }
+                    pushWindowMetadata(safeW.data());
+                });
+    }
 }
 
 void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, const QRectF& departureFrame)
