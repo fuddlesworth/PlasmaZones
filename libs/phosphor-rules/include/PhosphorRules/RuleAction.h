@@ -703,7 +703,13 @@ inline constexpr double MaxColumnWidthRatio = 1.0;
 /// Two floors are NEGATIVE and neither is a mistake. A negative GAP draws the
 /// indicator on top of the window, which is niri's documented behaviour. The
 /// corner-radius floor is the config layer's "fully rounded" SENTINEL, not a
-/// real negative radius — nothing between it and 0 is a valid value.
+/// real negative radius; the validators admit the whole [-1, max] range rather
+/// than carving out (-1, 0), because every consumer rounds to an int and both
+/// -1 and 0 are meaningful there.
+///
+/// MaxTabIndicatorGap bounds TWO slots: the indicator-to-window gap and the
+/// between-tabs gap (which floors at 0 rather than at the negative). Moving it
+/// moves both.
 inline constexpr double MinTabIndicatorGap = -64.0;
 inline constexpr double MaxTabIndicatorGap = 64.0;
 inline constexpr double MinTabIndicatorWidth = 1.0;

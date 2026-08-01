@@ -195,7 +195,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Thickness")
                     searchAnchor: "tabIndicatorWidth"
-                    description: i18n("How thick the indicator is, and exactly how much room it reserves. A segment bar reads well at a few pixels. Titled chips need enough for their titles, which on a left or right edge means a lot.")
+                    description: i18n("How thick the indicator is. When it makes room inside the column, this is exactly how much room it takes. A segment bar reads well at a few pixels. Titled chips need enough for their titles, which on a left or right edge means a lot.")
 
                     SettingsSpinBox {
                         id: tabWidthSpin
@@ -281,7 +281,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Corner radius")
                     searchAnchor: "tabIndicatorCornerRadius"
-                    description: i18n("How rounded each tab's corners are. With no gap between tabs, only the two ends are rounded.")
+                    description: i18n("How rounded each tab's corners are. On a segment bar with no gap between tabs, only the two ends of the run are rounded.")
                     // Disabled, not hidden, while the pill sentinel is stored:
                     // a row that vanishes makes the switch above look like it
                     // deleted a setting, and the row carries a search anchor a

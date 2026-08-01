@@ -30,7 +30,10 @@ SettingsRow {
     /// What the indicator actually draws while storedColor is empty. Shown as
     /// the swatch so the row previews the real result rather than a blank.
     property color themeColor: Kirigami.Theme.highlightColor
-    /// The page-level ColorDialog (see the class note).
+    /// The page-level ColorDialog (see the class note). Deliberately `var`
+    /// rather than a typed `Dialog`: the row duck-types anything exposing
+    /// accepted / rejected / selectedColor / open(), so a host can substitute
+    /// its own picker without this file importing QtQuick.Dialogs.
     property var picker: null
 
     /// Emitted with the chosen `#AARRGGBB`, or an EMPTY string on reset.
