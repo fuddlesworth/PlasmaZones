@@ -199,11 +199,11 @@ struct TabIndicatorParams
     /// outside the band reserved for it and over the window. Both sides agree
     /// on this one number instead, and a style whose content does not fit
     /// clips.
-    int width = 28;
+    int width = 4;
     /// Indicator length along its long axis, as a proportion of the column
     /// extent it runs beside.
     qreal lengthProportion = 0.5;
-    TabIndicatorPosition position = TabIndicatorPosition::Top;
+    TabIndicatorPosition position = TabIndicatorPosition::Left;
 
     /// Pixels this indicator takes out of the column's short axis when
     /// @c placeWithinColumn is set, and 0 otherwise. Floored at 0 so a

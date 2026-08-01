@@ -158,9 +158,9 @@ public:
     bool tabIndicatorHideWhenSingleTab = false;
     bool tabIndicatorPlaceWithinColumn = false;
     int tabIndicatorGap = 5;
-    int tabIndicatorWidth = 28;
+    int tabIndicatorWidth = 4;
     qreal tabIndicatorLengthProportion = 0.5;
-    int tabIndicatorPosition = static_cast<int>(TabIndicatorPosition::Top);
+    int tabIndicatorPosition = static_cast<int>(TabIndicatorPosition::Left);
 
     bool scrollingTabIndicatorEnabled() const override
     {

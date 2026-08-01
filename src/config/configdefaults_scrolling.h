@@ -215,11 +215,12 @@ public:
     // The indicator drawn alongside a tabbed column. Numeric defaults follow
     // niri's tab-indicator section (gap 5, width 4, length 0.5,
     // gaps-between-tabs 0) so a user coming from niri lands on familiar
-    // proportions. The two that deliberately DIVERGE are Style and Position:
-    // PlasmaZones shipped a title-chip pill on the column's top edge before
-    // this family existed, and defaulting to niri's thin left-edge bar would
-    // silently change every existing user's indicator. Both niri spellings are
-    // one setting away.
+    // proportions. EVERY default here is niri's, including Style and Position:
+    // the segment bar on the column's left edge is the only indicator niri
+    // has, so it is what "default" should mean. The title-chip style is a
+    // PlasmaZones addition with no upstream equivalent and is one setting
+    // away; a user who picks it usually wants Position Top with it, since a
+    // title reads better across than down.
     //
     // The geometry keys (Enabled, HideWhenSingleTab, PlaceWithinColumn, Gap,
     // Width, LengthProportion, Position) reach the LGPL engine through
@@ -246,10 +247,12 @@ public:
     {
         return 1;
     }
-    /// Chips, preserving the indicator PlasmaZones shipped before this family.
+    /// The segment bar, which is niri's own indicator and the only one it has.
+    /// Chips are a PlasmaZones addition with no upstream equivalent, so they
+    /// are the opt-in rather than the default.
     static constexpr int scrollingTabIndicatorStyle()
     {
-        return scrollingTabIndicatorStyleChips();
+        return scrollingTabIndicatorStyleBar();
     }
     /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
     static constexpr bool isValidScrollingTabIndicatorStyle(int v)
@@ -275,8 +278,8 @@ public:
     {
         return 3;
     }
-    /// Top, not niri's Left: the chips style needs horizontal room for its
-    /// labels, and top is where the pill has always sat (see the family note).
+    /// Left, niri's own default. A user switching to the chips style will
+    /// usually want Top with it, since a title reads better across than down.
     static constexpr int scrollingTabIndicatorPosition()
     {
         return scrollingTabIndicatorPositionTop();
@@ -347,9 +350,9 @@ public:
     /// many pixels out of the column, so an indicator that sized itself to its
     /// own font would draw outside the band it was given.
     ///
-    /// Seeded for the DEFAULT style (chips), not niri's 4, and re-seeded by
-    /// the style setter when the user flips styles without having chosen a
-    /// thickness of their own.
+    /// Derived from the DEFAULT style rather than written out, so the two can
+    /// never disagree, and re-seeded by the style setter when the user flips
+    /// styles without having chosen a thickness of their own.
     static constexpr int scrollingTabIndicatorWidth()
     {
         return scrollingTabIndicatorWidthForStyle(scrollingTabIndicatorStyle());
@@ -395,17 +398,19 @@ public:
     }
     /// Per-tab corner radius in logical pixels, with ONE sentinel: the floor
     /// value below means "fully rounded", i.e. half the tab's short extent.
-    /// A plain 0 default (niri's) would square off the pill PlasmaZones has
-    /// always drawn, and no fixed pixel radius tracks a chip whose height
-    /// follows the user's overlay font. The settings page spells the sentinel
-    /// as a "Fully rounded" toggle rather than showing -1 in a spin box.
+    /// The sentinel exists because no fixed pixel radius tracks a chip whose
+    /// height follows the user's overlay font, so "fully rounded" is a value
+    /// only the renderer can resolve. The settings page spells it as a "Fully
+    /// rounded" toggle rather than showing -1 in a spin box.
     static constexpr int scrollingTabIndicatorCornerRadiusPill()
     {
         return -1;
     }
+    /// Square, niri's own default. The sentinel above is what a chips user
+    /// reaches for; it is not the shipped value.
     static constexpr int scrollingTabIndicatorCornerRadius()
     {
-        return scrollingTabIndicatorCornerRadiusPill();
+        return 0;
     }
     static constexpr int scrollingTabIndicatorCornerRadiusMin()
     {

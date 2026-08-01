@@ -262,7 +262,10 @@ private Q_SLOTS:
 
         const auto* radius = findKey(schema, tabGroup, ConfigDefaults::cornerRadiusKey());
         QVERIFY(radius && radius->validator);
-        QCOMPARE(radius->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorCornerRadiusPill());
+        QCOMPARE(radius->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorCornerRadius());
+        // The shipped default is SQUARE (niri's), not the pill sentinel — the
+        // sentinel is a value the user opts into.
+        QCOMPARE(radius->defaultValue.toInt(), 0);
         // The pill sentinel survives; nothing below it does.
         QCOMPARE(radius->validator(ConfigDefaults::scrollingTabIndicatorCornerRadiusPill()).toInt(),
                  ConfigDefaults::scrollingTabIndicatorCornerRadiusPill());
@@ -455,15 +458,20 @@ private Q_SLOTS:
         // vacuously.
         QVERIFY(chipsWidth != barWidth);
 
-        // Fresh config: the default style with its own thickness.
-        QCOMPARE(settings.scrollingTabIndicatorStyle(), chips);
-        QCOMPARE(settings.scrollingTabIndicatorWidth(), chipsWidth);
+        // Fresh config: whatever the shipped style is, paired with its own
+        // thickness. Deliberately not hardcoding WHICH style ships — that is
+        // a product decision this mechanism has no opinion about, and pinning
+        // it here would fail the day it moves for reasons unrelated to the
+        // re-seed.
+        const int shipped = settings.scrollingTabIndicatorStyle();
+        const int other = shipped == bar ? chips : bar;
+        QCOMPARE(settings.scrollingTabIndicatorWidth(), ConfigDefaults::scrollingTabIndicatorWidthForStyle(shipped));
 
-        // Untouched thickness follows the style across.
-        settings.setScrollingTabIndicatorStyle(bar);
-        QCOMPARE(settings.scrollingTabIndicatorWidth(), barWidth);
-        settings.setScrollingTabIndicatorStyle(chips);
-        QCOMPARE(settings.scrollingTabIndicatorWidth(), chipsWidth);
+        // Untouched thickness follows the style across, both ways.
+        settings.setScrollingTabIndicatorStyle(other);
+        QCOMPARE(settings.scrollingTabIndicatorWidth(), ConfigDefaults::scrollingTabIndicatorWidthForStyle(other));
+        settings.setScrollingTabIndicatorStyle(shipped);
+        QCOMPARE(settings.scrollingTabIndicatorWidth(), ConfigDefaults::scrollingTabIndicatorWidthForStyle(shipped));
 
         // A deliberate thickness is preserved across a round trip.
         settings.setScrollingTabIndicatorWidth(40);

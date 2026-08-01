@@ -307,9 +307,11 @@ public:
     // static_assert in settings/scrolling.cpp, the way the toggle above is.
 
     /// 0 = title chips, 1 = segment bar (ConfigDefaults' TabIndicatorStyle).
+    /// The bar is the default: it is niri's own indicator, and the only one it
+    /// has.
     virtual int scrollingTabIndicatorStyle() const
     {
-        return 0;
+        return 1;
     }
     virtual void setScrollingTabIndicatorStyle(int /*style*/)
     {
@@ -322,10 +324,11 @@ public:
     virtual void setScrollingTabIndicatorGapsBetweenTabs(int /*px*/)
     {
     }
-    /// Per-tab corner radius in logical pixels; -1 means fully rounded.
+    /// Per-tab corner radius in logical pixels; -1 means fully rounded. The
+    /// default is square, niri's own; the sentinel is opted into.
     virtual int scrollingTabIndicatorCornerRadius() const
     {
-        return -1;
+        return 0;
     }
     virtual void setScrollingTabIndicatorCornerRadius(int /*px*/)
     {

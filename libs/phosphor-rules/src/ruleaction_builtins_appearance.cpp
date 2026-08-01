@@ -903,7 +903,7 @@ void ActionRegistry::registerBuiltinsAppearance()
                      .kind = QStringLiteral("pixels"),
                      .min = kMinTabIndicatorWidth,
                      .max = kMaxTabIndicatorWidth,
-                     .defaultDisplay = 28.0}},
+                     .defaultDisplay = 4.0}},
         .category = QStringLiteral("tabIndicator"),
         .displayOrder = 7,
         .tags = {QString(Tag::LayoutEngine)},
@@ -966,7 +966,9 @@ void ActionRegistry::registerBuiltinsAppearance()
                      .kind = QStringLiteral("pixels"),
                      .min = kTabIndicatorCornerRadiusPill,
                      .max = kMaxTabIndicatorCornerRadius,
-                     .defaultDisplay = kTabIndicatorCornerRadiusPill}},
+                     // Square, the shipped default. The pill sentinel is a
+                     // value the user opts into, not one a fresh rule seeds.
+                     .defaultDisplay = 0.0}},
         .category = QStringLiteral("tabIndicator"),
         .displayOrder = 10,
         .tags = {QString(Tag::LayoutEngine)},

@@ -35,12 +35,12 @@ static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
               "ISettings::scrollingRestoreFloatedWindowsOnLogin defaults to true — update it with this default");
 // The tab indicator's paint half carries the same interface-side defaults, for
 // the same reason: the overlay service reads them through ISettings.
-static_assert(ConfigDefaults::scrollingTabIndicatorStyle() == 0,
-              "ISettings::scrollingTabIndicatorStyle defaults to 0 — update it with this default");
+static_assert(ConfigDefaults::scrollingTabIndicatorStyle() == 1,
+              "ISettings::scrollingTabIndicatorStyle defaults to 1 (segment bar) — update it with this default");
 static_assert(ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs() == 0,
               "ISettings::scrollingTabIndicatorGapsBetweenTabs defaults to 0 — update it with this default");
-static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == -1,
-              "ISettings::scrollingTabIndicatorCornerRadius defaults to -1 (pill) — update it with this default");
+static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
+              "ISettings::scrollingTabIndicatorCornerRadius defaults to 0 (square) — update it with this default");
 
 P_STORE_GET(bool, scrollingEnabled, scrollingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabledChanged)
