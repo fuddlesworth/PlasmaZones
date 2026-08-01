@@ -923,53 +923,42 @@ void Daemon::initEnginesAndWiring()
     // window registry and drives the per-screen overlay slot.
     connect(scrollEngine, &PhosphorScrollEngine::ScrollEngine::tabStripsChanged, this,
             [this](const QString& screenId, const QString& stripsJson) {
-                QJsonParseError parseError;
-                const auto strips = StripZones::parseTabStripPayload(
-                    stripsJson,
-                    [this](const QString& windowId) -> QString {
-                        if (!m_windowRegistry) {
-                            return QString();
-                        }
-                        const auto meta =
-                            m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-                        return meta ? meta->title : QString();
-                    },
-                    [this](const QString& windowId) -> bool {
-                        if (!m_windowRegistry) {
-                            return false;
-                        }
-                        const auto meta =
-                            m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-                        // value_or(false): a disengaged optional means the
-                        // compositor never reported urgency for this window,
-                        // which must read as "not urgent" rather than lighting
-                        // the tab up on an unknown.
-                        return meta ? meta->isDemandingAttention.value_or(false) : false;
-                    },
-                    [this](const QString& windowId) -> QVariantMap {
-                        // niri's top resolution tier: a window rule recolours
-                        // that window's own tab, outranking the per-context
-                        // colours and the config. Resolved through the tracking
-                        // adaptor's cached window resolve, so a tabbed column's
-                        // handful of tabs costs a cache lookup each.
-                        if (!m_windowTrackingAdaptor) {
-                            return {};
-                        }
-                        return m_windowTrackingAdaptor->tabColorRuleParams(windowId);
-                    },
-                    &parseError);
-                // A parse failure means we know nothing about the strips, which
-                // is not the same as "there are none": clearing on it would wipe
-                // the live tab indicators and leave the columns looking untabbed
-                // until the next relayout. Warn and leave the overlay untouched.
-                if (!strips) {
-                    qCWarning(lcDaemon) << "Tab strips JSON unparseable, keeping previous indicators screen="
-                                        << screenId << "error=" << parseError.errorString()
-                                        << "offset=" << parseError.offset;
-                    return;
+                // Retain the RAW payload. Enrichment (titles, urgency,
+                // per-window colours) is resolved from live state that the
+                // engine knows nothing about, so it can go stale while the
+                // structural payload is unchanged — and the engine's emit is
+                // change-gated on exactly that payload, so it will not re-fire.
+                // Keeping the JSON is what lets refreshScrollTabEnrichment
+                // re-run the enrichment without inventing a second producer.
+                if (stripsJson.isEmpty()) {
+                    m_lastScrollTabStripsJson.remove(screenId);
+                } else {
+                    m_lastScrollTabStripsJson.insert(screenId, stripsJson);
                 }
-                m_overlayService->updateScrollTabStrips(screenId, *strips);
+                applyScrollTabStrips(screenId, stripsJson);
             });
+
+    // Enrichment is resolved from the window registry, so a change there must
+    // re-drive it: the engine has no reason to relayout when a window merely
+    // starts demanding attention or retitles, and its emit is change-gated on
+    // the structural payload, so without this the tab would keep the urgency
+    // and title it had at the last STRUCTURAL change. That is the stale-state
+    // failure the effect-side urgency connection exists to avoid.
+    if (m_windowRegistry) {
+        connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::metadataChanged, this,
+                [this](const QString&, const PhosphorEngine::WindowMetadata& oldMeta,
+                       const PhosphorEngine::WindowMetadata& newMeta) {
+                    // Only the two enriched fields. Every other metadata edit
+                    // (geometry, focus, desktop) reaches the strip through the
+                    // engine's own relayout, and re-enriching on those would
+                    // re-push every indicator on every window move.
+                    if (oldMeta.isDemandingAttention == newMeta.isDemandingAttention
+                        && oldMeta.title == newMeta.title) {
+                        return;
+                    }
+                    refreshScrollTabEnrichment();
+                });
+    }
 
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members
@@ -990,6 +979,69 @@ void Daemon::initEnginesAndWiring()
     // function, so a stop() -> init() cycle hands us a freshly constructed
     // adaptor that carries no connections to sweep.
     connect(m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this, &Daemon::handleAssignmentChangesApplied);
+}
+
+void Daemon::applyScrollTabStrips(const QString& screenId, const QString& stripsJson)
+{
+    if (!m_overlayService) {
+        return;
+    }
+    QJsonParseError parseError;
+    const auto strips = StripZones::parseTabStripPayload(
+        stripsJson,
+        [this](const QString& windowId) -> QString {
+            if (!m_windowRegistry) {
+                return QString();
+            }
+            const auto meta = m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+            return meta ? meta->title : QString();
+        },
+        [this](const QString& windowId) -> bool {
+            if (!m_windowRegistry) {
+                return false;
+            }
+            const auto meta = m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+            // value_or(false): a disengaged optional means the compositor never
+            // reported urgency for this window, which must read as "not urgent"
+            // rather than lighting the tab up on an unknown.
+            return meta ? meta->isDemandingAttention.value_or(false) : false;
+        },
+        [this](const QString& windowId) -> QVariantMap {
+            // niri's top resolution tier: a window rule recolours that window's
+            // own tab, outranking the per-context colours and the config.
+            if (!m_windowTrackingAdaptor) {
+                return {};
+            }
+            return m_windowTrackingAdaptor->tabColorRuleParams(windowId);
+        },
+        &parseError);
+    // A parse failure means we know nothing about the strips, which is not the
+    // same as "there are none": clearing on it would wipe the live tab
+    // indicators and leave the columns looking untabbed until the next
+    // relayout. Warn and leave the overlay untouched.
+    if (!strips) {
+        qCWarning(lcDaemon) << "Tab strips JSON unparseable, keeping previous indicators screen=" << screenId
+                            << "error=" << parseError.errorString() << "offset=" << parseError.offset;
+        return;
+    }
+    m_overlayService->updateScrollTabStrips(screenId, *strips);
+}
+
+void Daemon::refreshScrollTabEnrichment()
+{
+    // Re-enrich every screen holding a cached payload. Deliberately NOT
+    // filtered to the screens containing the changed window: the payload's ids
+    // would have to be re-parsed to test membership, which is the same work as
+    // re-enriching. Strips exist only on scrolling screens that have a tabbed
+    // column, so the set is small.
+    //
+    // The copy is load-bearing for the same reason OverlayService::
+    // replayScrollTabStrips takes one: applyScrollTabStrips can reach a path
+    // that mutates the cache.
+    const QHash<QString, QString> cached = m_lastScrollTabStripsJson;
+    for (auto it = cached.constBegin(); it != cached.constEnd(); ++it) {
+        applyScrollTabStrips(it.key(), it.value());
+    }
 }
 
 } // namespace PlasmaZones

@@ -420,6 +420,17 @@ private:
     /// into m_lastEngineOrders BEFORE either engine seeds (see
     /// updateEngineScreens' capture-all → seed-all ordering).
     void captureScrollingOrders(const QSet<QString>& scrollingScreens);
+    /// Parse @p stripsJson, enrich each tab with live title / urgency /
+    /// per-window colour, and drive @p screenId's overlay indicator.
+    void applyScrollTabStrips(const QString& screenId, const QString& stripsJson);
+    /// Re-run the enrichment for every screen holding a cached payload.
+    ///
+    /// Needed because enrichment reads live window state the ENGINE cannot
+    /// see, while the engine's tabStripsChanged is change-gated on the
+    /// structural payload alone. A window that starts demanding attention or
+    /// retitles moves no rect, so without this its tab would keep the values
+    /// it had at the last structural change.
+    void refreshScrollTabEnrichment();
     void initializeUnifiedController();
     void connectLayoutSignals();
     void connectOverlaySignals();
@@ -1202,6 +1213,10 @@ private:
     // engine's order into the other. Keyed by TilingStateKey (not plain
     // screen name) so cross-desktop toggles don't overwrite each other.
     QHash<TilingStateKey, QStringList> m_lastEngineOrders;
+    /// The engine's RAW tab-strip payload per screen, kept so the enrichment
+    /// can be re-run without the engine re-emitting (see
+    /// refreshScrollTabEnrichment). Cleared with the screen's strips.
+    QHash<QString, QString> m_lastScrollTabStripsJson;
 
     // Last-applied active assignment id per effective screen (resolved for that
     // screen's current desktop/activity). Diffed on rulesChanged to find the
