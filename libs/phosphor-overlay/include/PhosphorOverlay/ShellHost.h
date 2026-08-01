@@ -155,10 +155,13 @@ public:
     ///
     /// @p anyInputGrabbing - true when at least one modal slot
     /// (consumer-defined; Phosphor today: snap-assist + layout picker) wants
-    /// pointer input. When false the shell's QQuickWindow is flagged
-    /// Qt::WindowTransparentForInput so background windows stay
-    /// interactable beneath non-modal slots (OSDs, main overlay, zone
-    /// selector during drag).
+    /// pointer input. When false, OR when @p anyVisible is false, the shell's
+    /// QQuickWindow is flagged Qt::WindowTransparentForInput so background
+    /// windows stay interactable beneath non-modal slots (OSDs, main overlay,
+    /// zone selector during drag). The @p anyVisible term means this does not
+    /// rest on the caller guaranteeing that a grabbing slot is a visible one:
+    /// a grab with nothing visible would otherwise hand an unseen surface
+    /// every click on the screen.
     ///
     /// @p partialInputRegion - the sub-area of the surface that should take
     /// pointer input, in WINDOW-LOCAL logical (device-independent) coordinates.
@@ -168,8 +171,10 @@ public:
     /// behaviour.
     ///
     /// Contract:
-    ///  - IGNORED while @p anyInputGrabbing is true. A modal grab outranks it
-    ///    and takes the whole surface, being entitled to the clicks it covers.
+    ///  - IGNORED while @p anyInputGrabbing is true. A VISIBLE modal grab
+    ///    outranks it and takes the whole surface, being entitled to the
+    ///    clicks it covers; a grab with nothing visible takes none (see the
+    ///    @p anyInputGrabbing note above).
     ///  - IGNORED while @p anyVisible is false. A region on a surface nobody
     ///    can see is an invisible click trap, not a feature.
     ///  - A region larger than the surface, or wholly outside it, is clipped by

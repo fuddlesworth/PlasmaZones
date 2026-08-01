@@ -827,13 +827,25 @@ private:
     /// three slots are all this path ever reads, the map is what every caller
     /// wants back, and it keeps this header free of the rules-engine include.
     ///
-    /// The key carries the rule revision AND every query field that can change
-    /// under a live window without one: title, captionNormal (title-derived),
-    /// virtual desktop and activity. Title especially — the refresh that
-    /// consumes this memo is DRIVEN by title changes, so keying on the revision
-    /// alone would leave a `Title contains …` tab-colour rule stuck on its
-    /// first verdict until the next rules save. The rest of the query (appId,
-    /// role, desktopFile, pid, windowType) is immutable for a given window id.
+    /// The key carries the rule revision plus title, captionNormal
+    /// (title-derived), virtual desktop and activity. Title especially — the
+    /// refresh that consumes this memo is DRIVEN by title changes, so keying on
+    /// the revision alone would leave a `Title contains …` tab-colour rule
+    /// stuck on its first verdict until the next rules save.
+    ///
+    /// KNOWN GAP, deliberate. buildRuleQueryForWindow also copies ~20 EXTENDED
+    /// fields that move under a live window (isMaximized, isFocused,
+    /// isMinimized, keepAbove, the geometry quartet, and the rest of the state
+    /// flags). None is in this key, so a tab-colour rule conditioned on one
+    /// resolves once and stays pinned until the title, desktop, activity or
+    /// rule revision moves. Widening the key would NOT fix such a rule: nothing
+    /// re-drives the enrichment on those fields either
+    /// (scheduleScrollTabEnrichmentRefresh fires on isDemandingAttention and
+    /// title only), so the verdict would still be stale between refreshes. The
+    /// honest fix is a second trigger, not a bigger key, and it is not worth ~20
+    /// extra comparisons per tab per refresh until someone wants those pairings.
+    /// Only appId, windowRole, desktopFile, pid and windowType are genuinely
+    /// immutable for a given window id.
     struct TabColorMemoEntry
     {
         quint64 revision = 0;

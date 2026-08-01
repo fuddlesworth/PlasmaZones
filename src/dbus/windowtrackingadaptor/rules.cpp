@@ -40,6 +40,27 @@ namespace PlasmaZones {
 
 namespace {
 
+/// True if @p s is one of the three hex shapes PhosphorRules' `hasHexColor`
+/// admits: `#RGB`, `#RRGGBB` or `#AARRGGBB`. Mirrors the twin in
+/// layoutregistry_contextresolve.cpp; deliberately NOT
+/// `QColor::isValidColorName`, which also admits SVG keywords, so
+/// "transparent" would reach the overlay as an invisible indicator.
+bool isHexColorString(const QString& s)
+{
+    if ((s.size() != 4 && s.size() != 7 && s.size() != 9) || s.at(0) != QLatin1Char('#')) {
+        return false;
+    }
+    for (int i = 1; i < s.size(); ++i) {
+        const QChar c = s.at(i);
+        const bool hex = (c >= QLatin1Char('0') && c <= QLatin1Char('9'))
+            || (c >= QLatin1Char('a') && c <= QLatin1Char('f')) || (c >= QLatin1Char('A') && c <= QLatin1Char('F'));
+        if (!hex) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// Structural admission tests for the open-path resolvers, one per stamping
 /// shape. Every one of them is the same guard the zones-layer context resolvers
 /// apply (layoutregistry_contextresolve.cpp), for the same reason.
@@ -377,7 +398,14 @@ QVariantMap WindowTrackingAdaptor::tabColorsFromResolved(const PhosphorRules::Re
         // Empty means "no override" on this path, not "clear to nothing": an
         // empty colour reaching the overlay would read as the theme fallback
         // anyway, so dropping it here keeps the map honest about what matched.
-        if (!value.isEmpty()) {
+        //
+        // Shape-checked for the same reason its twin in the zones layer is
+        // (layoutregistry_contextresolve.cpp): this value goes through to a
+        // QML `color` property verbatim, where anything unparseable renders as
+        // an invalid colour rather than falling back to the theme. The
+        // descriptors already enforce hex-only, so this only catches a payload
+        // that reached the store without passing them.
+        if (isHexColorString(value)) {
             out.insert(key, value);
         }
     };

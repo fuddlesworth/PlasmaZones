@@ -22,7 +22,7 @@ import org.kde.kirigami as Kirigami
  * The cards narrow the search, so a user hunting for one knob picks a card
  * rather than scanning the whole list. Layout is split across two of them
  * (Tab indicator carries style and position, Size and spacing carries the
- * measurements) because the measurements alone outnumber everything else.
+ * measurements) because there are more measurements than anything else.
  */
 SettingsFlickable {
     id: root
@@ -38,9 +38,10 @@ SettingsFlickable {
     /// Named once here rather than repeated per row so the gate cannot drift.
     readonly property bool indicatorOn: appSettings.scrollingTabIndicatorEnabled
 
-    // PAGE-LEVEL, shared by the three colour rows: a card collapse or a page
-    // rebuild while the dialog is open would destroy a row-scoped dialog and
-    // tear the popup down under the user. Each row connects to `accepted`
+    // PAGE-LEVEL, shared by the three colour rows: a page rebuild while the
+    // dialog is open would destroy a row-scoped dialog and tear the popup down
+    // under the user. (A card COLLAPSE would not — SettingsCard only drives
+    // its clip height and never destroys the subtree.) Each row connects to `accepted`
     // transiently and disconnects on close, so sharing cannot cross wires.
     ColorDialog {
         id: tabColorDialog

@@ -46,6 +46,27 @@ using namespace RuleHelpers;
 
 namespace {
 
+/// True if @p s is one of the three hex shapes PhosphorRules' `hasHexColor`
+/// admits: `#RGB`, `#RRGGBB` or `#AARRGGBB`. Kept as a local shape test rather
+/// than `QColor::isValidColorName`, which is wider (SVG keywords, and the
+/// longer `#RRRGGGBBB` forms) and would let "transparent" through to a QML
+/// `color` property as an invisible indicator.
+bool isHexColorString(const QString& s)
+{
+    if ((s.size() != 4 && s.size() != 7 && s.size() != 9) || s.at(0) != QLatin1Char('#')) {
+        return false;
+    }
+    for (int i = 1; i < s.size(); ++i) {
+        const QChar c = s.at(i);
+        const bool hex = (c >= QLatin1Char('0') && c <= QLatin1Char('9'))
+            || (c >= QLatin1Char('a') && c <= QLatin1Char('f')) || (c >= QLatin1Char('A') && c <= QLatin1Char('F'));
+        if (!hex) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// True if @p match POSITIVELY pins @p field to a value — an `Equals` leaf on
 /// the field reachable without passing through a negation. Used to rank gap-rule
 /// specificity (a per-monitor ScreenId pin beats a per-mode Mode pin). Unlike
@@ -907,12 +928,14 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
             return;
         }
         const QJsonValue v = action->params.value(PWR::ActionParam::Value);
-        // Parseable colours only, matching the descriptors' hasHexColor. This
-        // helper passes the string through verbatim to a QML `color` property,
-        // where an unparseable value renders as an invalid colour instead of
-        // falling back to the theme — so a store that bypassed the loader's
-        // validation must not get its string through here either.
-        if (v.isString() && !v.toString().isEmpty() && QColor::isValidColorName(v.toString())) {
+        // Hex shapes only, matching the descriptors' hasHexColor exactly.
+        // This helper passes the string through verbatim to a QML `color`
+        // property, so a store that bypassed the loader's validation must not
+        // get its string through here either. Deliberately NOT
+        // QColor::isValidColorName, which is WIDER than the descriptor: it
+        // also admits SVG keywords, and "transparent" would reach the overlay
+        // as a fully invisible indicator while every setting reported it on.
+        if (v.isString() && isHexColorString(v.toString())) {
             out = v.toString();
         }
     };

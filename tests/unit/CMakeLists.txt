@@ -975,6 +975,16 @@ add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)
 # public contract while the adaptors are handwritten — this compares each
 # adaptor's staticMetaObject (bus-exposed slots/invokables, signals,
 # properties) against its XML so drift fails CI instead of shipping.
+# A blanket disconnect(sender, &Signal, this, nullptr) removes EVERY connection
+# on that triple, so it is only correct above every connect it re-establishes.
+# A second one placed next to a later connect silently severs its siblings.
+# Scrapes the source because no Daemon fixture exists to assert it behaviourally.
+add_executable(test_connect_sweep_ordering daemon/test_connect_sweep_ordering.cpp)
+target_compile_definitions(test_connect_sweep_ordering
+                           PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_connect_sweep_ordering PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_connect_sweep_ordering COMMAND test_connect_sweep_ordering)
+
 add_executable(test_dbus_contract_sync dbus/test_dbus_contract_sync.cpp)
 target_compile_definitions(test_dbus_contract_sync
                            PRIVATE PLASMAZONES_DBUS_XML_DIR="${CMAKE_SOURCE_DIR}/dbus")

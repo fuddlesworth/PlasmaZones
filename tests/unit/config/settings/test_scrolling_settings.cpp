@@ -35,6 +35,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QKeySequence>
+#include <QList>
+#include <QPair>
 #include <QSignalSpy>
 #include <QTest>
 #include <QtNumeric>
@@ -295,6 +297,9 @@ private Q_SLOTS:
         QVERIFY(width && width->validator);
         QCOMPARE(width->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorWidth());
         QCOMPARE(width->validator(0).toInt(), ConfigDefaults::scrollingTabIndicatorWidthMin());
+        // Both ends, like the two gap entries: a widened ceiling would
+        // otherwise go unnoticed here.
+        QCOMPARE(width->validator(9999).toInt(), ConfigDefaults::scrollingTabIndicatorWidthMax());
 
         const auto* length = findKey(schema, tabGroup, ConfigDefaults::lengthProportionKey());
         QVERIFY(length && length->validator);

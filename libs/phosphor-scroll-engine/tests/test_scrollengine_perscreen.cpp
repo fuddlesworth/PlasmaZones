@@ -524,9 +524,11 @@ void TestScrollEnginePerScreen::tabIndicatorOverridesArePerProperty()
 
 void TestScrollEnginePerScreen::tabIndicatorRejectsGarbageNumericOverrides()
 {
-    // The three numeric fields are all validate-then-fall-back, and each has a
-    // hand-written guard rather than a shared macro, so each needs its own leg.
-    // Without these the guards can be deleted with the suite still green.
+    // Each of the three numeric fields has a hand-written guard rather than a
+    // shared macro, so each needs its own leg; without these the guards can be
+    // deleted with the suite still green. Gap and width fall back to the
+    // configured value on anything out of range; length falls back below its
+    // floor but CLAMPS above 1.0, which the legs below pin separately.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->tabIndicatorEnabled = true;

@@ -616,10 +616,14 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     const QString shadowId = shadowWindowId(windowId);
     m_frameGeometry.remove(shadowId);
     m_broadcastFloating.remove(shadowId);
-    // Keyed by the CANONICAL id, not the shadow one: tabColorRuleParams is
-    // called with the id the tab-strip payload carries. Without this the memo
-    // grows by one entry per window ever tabbed, for the daemon's lifetime.
-    m_tabColorMemo.remove(windowId);
+    // shadowId, NOT the raw windowId: shadowWindowId() IS the canonical id,
+    // and tabColorRuleParams is called with ids taken from the ScrollEngine
+    // tab-strip payload, which stores them canonicalized. For a WM_CLASS-
+    // mutating app (Electron/CEF) the effect's current composite differs from
+    // the canonical one, so removing by the raw id would miss in exactly the
+    // case canonicalization exists for and leak the entry for the session.
+    // Identical to windowId whenever the id never mutated.
+    m_tabColorMemo.remove(shadowId);
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
     // rely on other WTS state still being present during their cleanup. The
@@ -1052,6 +1056,16 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     for (auto it = m_broadcastFloating.begin(); it != m_broadcastFloating.end();) {
         if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
             it = m_broadcastFloating.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // And the tab-colour rule memo, for the same reason and in the same key
+    // space — it is keyed on canonical ids too, so a raw sweep would erase a
+    // class-mutating app's live entry every pass.
+    for (auto it = m_tabColorMemo.begin(); it != m_tabColorMemo.end();) {
+        if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
+            it = m_tabColorMemo.erase(it);
         } else {
             ++it;
         }

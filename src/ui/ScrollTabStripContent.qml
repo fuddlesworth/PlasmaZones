@@ -266,9 +266,12 @@ Item {
                 // nesting deliberate, and it is what lets the radii below sit
                 // concentric while the corners are FULLY ROUNDED (the two
                 // radii are then both half their own thickness). For an
-                // explicit corner radius the two clamp to the same number, so
-                // the corners match rather than nest — deliberate, since a
-                // named radius should read as the radius the user asked for.
+                // explicit corner radius small enough for both, the two clamp
+                // to the same number, so the corners match rather than nest —
+                // deliberate, since a named radius should read as the radius
+                // the user asked for. Between the two half-thickness clamps
+                // the pill keeps the named radius while the chip clamps to its
+                // own half, so they neither match nor nest; cosmetic only.
                 readonly property int chipInset: Math.max(1, Math.round(Kirigami.Units.smallSpacing / 2))
                 /// Thickness left for a chip once both insets are taken.
                 readonly property int chipThickness: Math.max(1, shortExtent - chipInset * 2)
@@ -295,7 +298,7 @@ Item {
                 /// the run ends flush with the pill's inner edge instead of
                 /// leaving up to tabCount-1 px that belongs to no tab. The bar
                 /// style does the same for its final segment.
-                readonly property int chipTrailingBudget: Math.max(1, longExtent - chipInset * 2 - (chipLongBudget + root.gapsBetweenTabs) * Math.max(0, indicator.tabCount - 1))
+                readonly property int chipTrailingBudget: Math.max(1, pillLongExtent - chipInset * 2 - (chipLongBudget + root.gapsBetweenTabs) * Math.max(0, indicator.tabCount - 1))
 
                 radius: root.tabRadius(shortExtent)
                 color: Qt.alpha(Kirigami.Theme.backgroundColor, 0.85)

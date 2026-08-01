@@ -16,9 +16,10 @@ import org.kde.kirigami as Kirigami
  * is unset. Without that pairing there would be no way back to the default
  * once a colour had been picked.
  *
- * The picker itself is PAGE-LEVEL and passed in rather than owned here: a
- * card collapse or a page rebuild while the dialog is open would destroy a
- * row-scoped dialog and tear the popup down under the user. The accepted
+ * The picker itself is PAGE-LEVEL and passed in rather than owned here: a page
+ * rebuild while the dialog is open would destroy a row-scoped dialog and tear
+ * the popup down under the user. (A card collapse would not — SettingsCard
+ * only drives its clip height and never destroys the subtree.) The accepted
  * handler is transient and self-disconnects, so several rows can share one
  * dialog without crossing wires.
  */
@@ -71,7 +72,7 @@ SettingsRow {
             id: swatch
 
             color: root._followsTheme ? root.themeColor : root.storedColor
-            Accessible.name: root.title
+            Accessible.name: i18nc("@action:button", "%1 color", root.title)
             onClicked: {
                 if (!root.picker)
                     return;
