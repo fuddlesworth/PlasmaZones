@@ -973,9 +973,18 @@ void Daemon::initEnginesAndWiring()
     // relayout, and the context-override replay re-pushes the CACHED enriched
     // model, so an edited window rule would not reach a live tab until the
     // window moved or retitled. The refresh coalesces, so this costs one pass
-    // per save. Same disconnect-first reasoning as above.
+    // per save.
+    //
+    // NO disconnect-first here, unlike the metadataChanged pair above. The
+    // rulesChanged family is swept ONCE, at the top of the block that
+    // establishes it (see the sever above the refilter subscription), because
+    // a blanket disconnect names the (sender, signal, receiver) triple and
+    // cannot single out one subscription. Sweeping again HERE would run after
+    // the refilter, overlay-refresh and assignment-reconcile subscriptions
+    // were established and would silently sever all three. The stop() → init()
+    // duplicate this connect needs protecting from is already handled by that
+    // one sweep, since it precedes every rulesChanged connect including this.
     if (m_ruleStore) {
-        disconnect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, nullptr);
         connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this]() {
             scheduleScrollTabEnrichmentRefresh();
         });
