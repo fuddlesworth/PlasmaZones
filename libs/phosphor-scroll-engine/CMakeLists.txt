@@ -34,6 +34,7 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/engine_core.cpp
     src/scrollengine/engine_context.cpp
     src/scrollengine/engine_apply.cpp
+    src/scrollengine/drag_preview.cpp
     src/scrollengine/engine_lifecycle.cpp
     src/scrollengine/engine_navigation.cpp
     src/scrollengine/engine_serialize.cpp

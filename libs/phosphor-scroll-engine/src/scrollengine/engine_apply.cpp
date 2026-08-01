@@ -349,10 +349,23 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         }
     };
 
+    // Live drag-insert preview: the dragged window's geometry stays under
+    // KWin's interactive move — skip it in the batch (and leave its
+    // m_lastAppliedRect memory alone) while neighbours animate around the
+    // previewed slot. commitDragInsertPreview resets the preview BEFORE its
+    // re-apply, so the commit relayout runs unfiltered and finally emits
+    // the dragged window's rect.
+    const QString dragPreviewSkip = (m_dragInsertPreview && m_dragInsertPreview->targetScreenId == screenId)
+        ? m_dragInsertPreview->windowId
+        : QString();
+
     QJsonArray arr;
     bool anyRectMoved = false;
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
+            if (!dragPreviewSkip.isEmpty() && tile.windowId == dragPreviewSkip) {
+                continue;
+            }
             QRect rect = tile.rect;
             if (tile.hidden) {
                 // Non-active tile of a tabbed column: parked off-canvas so it

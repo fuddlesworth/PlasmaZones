@@ -355,6 +355,14 @@ void ScrollEngine::sweepStatelessScreenBookkeeping(const QSet<QString>& screenId
 
 void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
 {
+    // Unwind a preview stranded by the dying context while both its states
+    // still exist; cancel's own guards degrade gracefully if the prior
+    // context is the one being pruned.
+    if (m_dragInsertPreview
+        && (m_dragInsertPreview->targetKey.desktop == removedDesktop
+            || (m_dragInsertPreview->hadPriorState && m_dragInsertPreview->priorKey.desktop == removedDesktop))) {
+        cancelDragInsertPreview();
+    }
     QSet<QString> touchedScreens;
     m_states.removeStatesIf(
         [removedDesktop](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
@@ -380,6 +388,12 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     const auto stale = [&validActivities](const QString& activity) {
         return !activity.isEmpty() && !validActivities.contains(activity);
     };
+    // Same preview unwind as pruneStatesForDesktop, on the activity axis.
+    if (m_dragInsertPreview
+        && (stale(m_dragInsertPreview->targetKey.activity)
+            || (m_dragInsertPreview->hadPriorState && stale(m_dragInsertPreview->priorKey.activity)))) {
+        cancelDragInsertPreview();
+    }
     QSet<QString> touchedScreens;
     m_states.removeStatesIf(
         [&stale](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
@@ -410,6 +424,13 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     const auto matches = [&physicalScreenId](const QString& screenId) {
         return !screenId.isEmpty() && PhosphorIdentity::VirtualScreenId::samePhysical(screenId, physicalScreenId);
     };
+    // Same preview unwind as pruneStatesForDesktop, for a dying output (the
+    // virtual sub-screen match included).
+    if (m_dragInsertPreview
+        && (matches(m_dragInsertPreview->targetScreenId)
+            || (m_dragInsertPreview->hadPriorState && matches(m_dragInsertPreview->priorKey.screenId)))) {
+        cancelDragInsertPreview();
+    }
     QStringList releasedWindows;
     QSet<QString> releasedScreens;
     m_states.removeStatesIf(

@@ -334,6 +334,51 @@ public:
     int columnIndexForWindow(const QString& screenId, const QString& windowId) const;
 
     // ═══════════════════════════════════════════════════════════════════════
+    // Drag-insert preview (trigger-held window drag re-inserts into the strip)
+    //
+    // The scrolling twin of AutotileEngine's drag-insert preview, with the
+    // same live-retile contract: while a preview is active, applyLayout()
+    // skips emitting geometry for the dragged window (KWin's interactive
+    // move stays in control) while neighbours animate around the previewed
+    // slot. Restoration state is captured in FloatRestore vocabulary
+    // (column + tile + stack anchor + width/display/height intents) — the
+    // strip has no raw-order index for cancel to restore by.
+    // All in drag_preview.cpp.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    bool hasDragInsertPreview() const override
+    {
+        return m_dragInsertPreview.has_value();
+    }
+    QString dragInsertPreviewScreenId() const override
+    {
+        return m_dragInsertPreview ? m_dragInsertPreview->targetScreenId : QString();
+    }
+    /// The window id of the active drag-insert preview, or empty (test seam,
+    /// mirroring AutotileEngine's accessor).
+    QString dragInsertPreviewWindowId() const
+    {
+        return m_dragInsertPreview ? m_dragInsertPreview->windowId : QString();
+    }
+    bool beginDragInsertPreview(const QString& rawWindowId, const QString& screenId) override;
+    void commitDragInsertPreview() override;
+    void cancelDragInsertPreview() override;
+    /// `primary` = column index; `newSlot` true opens a NEW column at
+    /// `primary`; otherwise the window joins column `primary` as tile
+    /// `secondary`. Cursor over the dragged window's own tile (or its own
+    /// solo column, edge bands included) returns the CURRENT target verbatim
+    /// — the same stable-identity contract as autotile's own-zone rule,
+    /// without which the take-and-reinsert churns every tick.
+    DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
+    void updateDragInsertPreview(const DragInsertTarget& target) override;
+    /// Edge auto-scroll while a drag-insert preview is live on @p screenId:
+    /// a cursor inside the left/right work-area band slides the view one
+    /// step toward that edge (rides the daemon's ~30 Hz drag tick). Returns
+    /// true when the view actually moved, so the caller re-hit-tests
+    /// against the shifted strip.
+    bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos);
+
+    // ═══════════════════════════════════════════════════════════════════════
     // Desktop / activity context
     // ═══════════════════════════════════════════════════════════════════════
 
@@ -727,6 +772,50 @@ private:
         WindowHeight height;
     };
     QHash<QString, FloatRestore> m_floatRestore;
+    /// Live drag-insert preview state (drag_preview.cpp). The structural
+    /// edits a preview makes are SIGNAL-SILENT — float bookkeeping signals
+    /// fire only at commit (windowFloatingStateSynced), mirroring autotile's
+    /// contract, so the daemon's float bookkeeping never sees the transient
+    /// begin/cancel round trip.
+    struct DragInsertPreview
+    {
+        QString windowId;
+        QString targetScreenId;
+        /// The context the preview inserted into, captured at begin so the
+        /// prune paths can tell whether a dying context strands it.
+        PhosphorEngine::PlacementStateKey targetKey;
+        /// The applied target, in DragInsertTarget vocabulary with newSlot
+        /// always false (once inserted, the slot reads as an existing one).
+        /// The hit-test returns this verbatim for own-slot stability.
+        DragInsertTarget lastTarget;
+        /// Width/display/height/min-size intents that travel with the
+        /// dragged window across take-and-reinsert updates.
+        FloatRestore carried;
+        // ── cancel restoration ──
+        bool hadPriorState = false;
+        PhosphorEngine::PlacementStateKey priorKey;
+        bool priorSameScreen = false;
+        bool priorFloating = false;
+        /// The tiled slot at begin time (valid when !priorFloating).
+        FloatRestore priorSlot;
+        /// The m_floatRestore entry begin consumed when it silently
+        /// unfloated the window; re-inserted verbatim on cancel.
+        bool hadFloatRestoreEntry = false;
+        FloatRestore floatRestoreEntry;
+        bool wasScrollFloated = false;
+    };
+    std::optional<DragInsertPreview> m_dragInsertPreview;
+    // drag_preview.cpp
+    /// Capture @p windowId's current slot in FloatRestore vocabulary — the
+    /// twin of floatWindowInternal's capture block.
+    static FloatRestore captureDragSlot(const ScrollStrip& strip, const QString& windowId);
+    /// Re-insert @p windowId into @p strip from a FloatRestore-shaped slot
+    /// (anchor arm → column arm → fresh-column fallback), silently. Shared
+    /// by begin (same-screen floating entry) and cancel.
+    bool dragPreviewRestoreSlot(ScrollState* state, const QString& windowId, const FloatRestore& slot,
+                                const ScrollLayoutParams& params, const QString& screenId);
+    /// Drop the preview without restoration when its dragged window closes.
+    void dropClosedWindowFromDragPreview(const QString& windowId);
     /// Windows floated BY scroll mode (mode-transition marker, ephemeral).
     QSet<QString> m_scrollFloatedWindows;
     /// Restore-order seed for deterministic mode transitions. The captured

@@ -402,6 +402,10 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
 void ScrollEngine::windowClosed(const QString& rawWindowId)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
+    // Before any state mutation: a preview whose dragged window just closed
+    // must not survive to restore a dead id (autotile's
+    // dropClosedWindowFromDragPreview twin).
+    dropClosedWindowFromDragPreview(windowId);
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {

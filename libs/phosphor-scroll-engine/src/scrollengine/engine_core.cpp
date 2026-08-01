@@ -99,6 +99,15 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
     const bool wasEnabled = isEnabled();
     const QSet<QString> removed = m_scrollingScreens - screens;
     const QSet<QString> added = screens - m_scrollingScreens;
+    // A live drag-insert preview whose target or restore-source screen is
+    // leaving the set must be unwound BEFORE the state teardown below, while
+    // both states still exist (autotile's setAutotileScreens cancels for the
+    // same reason).
+    if (m_dragInsertPreview
+        && (removed.contains(m_dragInsertPreview->targetScreenId)
+            || (m_dragInsertPreview->hadPriorState && removed.contains(m_dragInsertPreview->priorKey.screenId)))) {
+        cancelDragInsertPreview();
+    }
     m_scrollingScreens = screens;
 
     QStringList releasedWindows;
