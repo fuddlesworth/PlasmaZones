@@ -338,6 +338,10 @@ public:
                    setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
     Q_PROPERTY(bool autotileDragInsertToggle READ autotileDragInsertToggle WRITE setAutotileDragInsertToggle NOTIFY
                    autotileDragInsertToggleChanged)
+    Q_PROPERTY(QVariantList scrollingDragInsertTriggers READ scrollingDragInsertTriggers WRITE
+                   setScrollingDragInsertTriggers NOTIFY scrollingDragInsertTriggersChanged)
+    Q_PROPERTY(bool scrollingDragInsertToggle READ scrollingDragInsertToggle WRITE setScrollingDragInsertToggle NOTIFY
+                   scrollingDragInsertToggleChanged)
 
     // Scrolling Settings (Scrolling)
     Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
@@ -1110,6 +1114,11 @@ public:
     void setAutotileDragInsertTriggers(const QVariantList& triggers) override;
     bool autotileDragInsertToggle() const override;
     void setAutotileDragInsertToggle(bool enable) override;
+
+    QVariantList scrollingDragInsertTriggers() const override;
+    void setScrollingDragInsertTriggers(const QVariantList& triggers) override;
+    bool scrollingDragInsertToggle() const override;
+    void setScrollingDragInsertToggle(bool enable) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Scrolling Settings (IScrollSettings + Scrolling group)

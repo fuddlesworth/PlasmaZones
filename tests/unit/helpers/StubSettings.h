@@ -1839,6 +1839,32 @@ public:
         Q_EMIT autotileDragInsertToggleChanged();
         Q_EMIT settingsChanged();
     }
+    QVariantList scrollingDragInsertTriggers() const override
+    {
+        return m_scrollingDragInsertTriggers;
+    }
+    void setScrollingDragInsertTriggers(const QVariantList& value) override
+    {
+        if (m_scrollingDragInsertTriggers == value) {
+            return;
+        }
+        m_scrollingDragInsertTriggers = value;
+        Q_EMIT scrollingDragInsertTriggersChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool scrollingDragInsertToggle() const override
+    {
+        return m_scrollingDragInsertToggle;
+    }
+    void setScrollingDragInsertToggle(bool value) override
+    {
+        if (m_scrollingDragInsertToggle == value) {
+            return;
+        }
+        m_scrollingDragInsertToggle = value;
+        Q_EMIT scrollingDragInsertToggleChanged();
+        Q_EMIT settingsChanged();
+    }
     QVariantMap autotilePerAlgorithmSettings() const override
     {
         return m_autotilePerAlgorithmSettings;
@@ -2227,6 +2253,7 @@ private:
     QHash<int, QStringList> m_disabledActivities;
     QStringList m_lockedScreens = ConfigDefaults::lockedScreens();
     QVariantList m_autotileDragInsertTriggers = ConfigDefaults::autotileDragInsertTriggers();
+    QVariantList m_scrollingDragInsertTriggers = ConfigDefaults::scrollingDragInsertTriggers();
     QVariantList m_snapAssistTriggers = ConfigDefaults::snapAssistTriggers();
     QVariantList m_zoneSpanTriggers = ConfigDefaults::zoneSpanTriggers();
     StickyWindowHandling m_autotileStickyWindowHandling =
@@ -2242,6 +2269,7 @@ private:
     bool m_audioReverse = ConfigDefaults::audioReverse();
     bool m_audioWaves = ConfigDefaults::audioWaves();
     bool m_autotileDragInsertToggle = ConfigDefaults::autotileDragInsertToggle();
+    bool m_scrollingDragInsertToggle = ConfigDefaults::scrollingDragInsertToggle();
     bool m_autotileFocusFollowsMouse = ConfigDefaults::autotileFocusFollowsMouse();
     bool m_enableAudioVisualizer = ConfigDefaults::enableAudioVisualizer();
     bool m_filterLayoutsByAspectRatio = ConfigDefaults::filterLayoutsByAspectRatio();

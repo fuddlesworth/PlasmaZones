@@ -33,6 +33,12 @@ PLASMAZONES_EXPORT const PhosphorConfig::Schema& cachedSettingsSchema();
 // functions so the migration can add them one at a time without touching
 // a monolithic switch statement.
 
+/// Canonicalize a trigger list (cap size, coerce entries to
+/// {modifier:int, mouseButton:int} maps). Defined in settingsschema.cpp;
+/// shared with the per-domain schema TUs because trigger-list keys now span
+/// domains (Tiling.Behavior and Scrolling.Behavior).
+QVariant canonicalTriggerList(const QVariant& v);
+
 void appendShadersSchema(PhosphorConfig::Schema& schema);
 void appendAppearanceSchema(PhosphorConfig::Schema& schema);
 void appendOrderingSchema(PhosphorConfig::Schema& schema);

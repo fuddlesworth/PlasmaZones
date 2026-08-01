@@ -577,7 +577,7 @@ bool PlasmaZonesEffect::detectActivationAndGrab()
     // no key is currently held (e.g. activation itself is toggled on and the
     // user tapped, then released, the activation trigger).
     if (anyLocalTriggerHeld() || m_cachedToggleActivation || m_cachedAutotileDragInsertToggle
-        || m_cachedZoneSpanToggleMode) {
+        || m_cachedScrollingDragInsertToggle || m_cachedZoneSpanToggleMode) {
         m_dragActivation.detected = true;
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);

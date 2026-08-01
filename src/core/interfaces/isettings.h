@@ -132,6 +132,14 @@ public:
     virtual bool autotileDragInsertToggle() const = 0;
     virtual void setAutotileDragInsertToggle(bool enable) = 0;
 
+    // Scrolling twins: hold-to-activate list for live re-inserting a dragged
+    // window into the scroll strip (WindowDragAdaptor reads them per drag,
+    // beside the autotile pair above).
+    virtual QVariantList scrollingDragInsertTriggers() const = 0;
+    virtual void setScrollingDragInsertTriggers(const QVariantList& triggers) = 0;
+    virtual bool scrollingDragInsertToggle() const = 0;
+    virtual void setScrollingDragInsertToggle(bool enable) = 0;
+
     // Per-algorithm autotile settings map. Settings inherits from
     // PhosphorEngine::IAutotileSettings (which also declares these),
     // so the override in Settings covers both bases — the redundant
@@ -457,6 +465,8 @@ Q_SIGNALS:
     void dragActivationTriggersChanged();
     void autotileDragInsertTriggersChanged();
     void autotileDragInsertToggleChanged();
+    void scrollingDragInsertTriggersChanged();
+    void scrollingDragInsertToggleChanged();
     void zoneSpanEnabledChanged();
     void zoneSpanModifierChanged();
     void zoneSpanTriggersChanged();

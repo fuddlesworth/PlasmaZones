@@ -130,6 +130,11 @@ QVariant canonicalCommaList(const QVariant& v)
 /// drift possible because neither TU carries its own literal.
 constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
 
+} // namespace
+
+// Namespace scope (declared in settingsschema.h): shared with
+// settingsschema_scrolling.cpp, whose Scrolling.Behavior group carries the
+// scrolling drag-insert trigger list.
 QVariant canonicalTriggerList(const QVariant& v)
 {
     const QVariantList raw = v.toList();
@@ -154,6 +159,8 @@ QVariant canonicalTriggerList(const QVariant& v)
     }
     return QVariant(out);
 }
+
+namespace {
 
 /// Canonicalize a per-algorithm settings map: round-trip through
 /// @c AutotileConfig so each algorithm's settings are validated against

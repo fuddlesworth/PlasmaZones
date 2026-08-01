@@ -637,6 +637,12 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
         m_cachedAutotileDragInsertToggle = v.toBool();
     });
+    loadSettingAsync(QStringLiteral("scrollingDragInsertToggle"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        m_cachedScrollingDragInsertToggle = v.toBool();
+    });
     loadSettingAsync(QStringLiteral("zoneSpanToggleMode"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;

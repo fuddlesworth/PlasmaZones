@@ -247,7 +247,19 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("autotileDragInsertTriggers")] = QStringLiteral("stringlist");
 
+    // Scrolling twin — same effect-side consumer contract (which combos
+    // forward dragMoved during an engine-bypassed drag on a scroll strip).
+    m_getters[QStringLiteral("scrollingDragInsertTriggers")] = [this]() {
+        return QVariant::fromValue(m_settings->scrollingDragInsertTriggers());
+    };
+    m_setters[QStringLiteral("scrollingDragInsertTriggers")] = [this](const QVariant& v) {
+        m_settings->setScrollingDragInsertTriggers(v.toList());
+        return true;
+    };
+    m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("stringlist");
+
     REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
+    REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
     REGISTER_BOOL_SETTING("zoneSpanToggleMode", zoneSpanToggleMode, setZoneSpanToggleMode)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)

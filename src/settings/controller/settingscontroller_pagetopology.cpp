@@ -414,6 +414,9 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingBehaviorGroup(), CD::restoreFloatedOnLoginKey()},
              {CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()},
              {CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()},
+             // Drag re-insert triggers (the Triggers card on this page).
+             {CD::scrollingBehaviorGroup(), CD::triggersKey()},
+             {CD::scrollingBehaviorGroup(), CD::toggleActivationKey()},
          }},
         // Only the GLOBAL Windows.* / Gaps.* keys are listed. Per-monitor gap
         // overrides live in the per-screen autotile store (AutotileScreen:*), not

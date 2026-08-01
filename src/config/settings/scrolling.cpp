@@ -45,6 +45,24 @@ static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
 P_STORE_GET(bool, scrollingEnabled, scrollingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabledChanged)
 
+// ── Scrolling drag-insert triggers (PhosphorConfig::Store-backed) ───────────
+// Hand-written like the autotile pair in triggers.cpp: trigger lists are
+// QVariantList payloads, outside the P_STORE macro vocabulary.
+
+QVariantList Settings::scrollingDragInsertTriggers() const
+{
+    return m_store->readVariant(ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::triggersKey()).toList();
+}
+void Settings::setScrollingDragInsertTriggers(const QVariantList& triggers)
+{
+    writeTriggerList(ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::triggersKey(), triggers,
+                     &Settings::scrollingDragInsertTriggersChanged);
+}
+
+P_STORE_GET(bool, scrollingDragInsertToggle, scrollingBehaviorGroup, toggleActivationKey, bool)
+P_STORE_SET_BOOL(setScrollingDragInsertToggle, scrollingBehaviorGroup, toggleActivationKey,
+                 scrollingDragInsertToggleChanged)
+
 P_STORE_GET(int, scrollingCenterFocusedColumn, scrollingGroup, centerFocusedColumnKey, int)
 P_STORE_SET_INT(setScrollingCenterFocusedColumn, scrollingGroup, centerFocusedColumnKey,
                 scrollingCenterFocusedColumnChanged)

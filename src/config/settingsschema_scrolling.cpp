@@ -305,6 +305,8 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     // the shared Tiling.Gaps/SmartGaps value, see IScrollSettings).
     schema.groups[CD::scrollingBehaviorGroup()] = {
         {CD::focusNewWindowsKey(), CD::scrollingFocusNewWindows(), QMetaType::Bool},
+        {CD::triggersKey(), CD::scrollingDragInsertTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
+        {CD::toggleActivationKey(), CD::scrollingDragInsertToggle(), QMetaType::Bool},
         {CD::insertPositionKey(),
          CD::scrollingInsertPosition(),
          QMetaType::Int,
