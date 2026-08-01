@@ -258,6 +258,51 @@ private Q_SLOTS:
     }
 
     /**
+     * Every scrolling setting must be registered, by REFLECTION for the same
+     * reason the shortcut quad above is.
+     *
+     * Scrolling settings have no external fetch site either: the engine reads
+     * them in-process through IScrollSettings and the overlay through
+     * ISettings, both against the DAEMON's own Settings. The D-Bus surface
+     * exists so the settings APP's writes reach that instance at all. Miss a
+     * registration and the control looks completely wired — it writes the
+     * settings app's store, the page shows the new value, Reset and Discard
+     * work — while the daemon never hears about it and nothing on screen
+     * changes. That is what happened to the whole Scrolling.TabIndicator
+     * family: twelve of its thirteen keys were dead, and every other test
+     * passed.
+     *
+     * Q_PROPERTY reflection closes it with no list to maintain.
+     */
+    void testEveryScrollingPropertyIsRegistered()
+    {
+        const QMetaObject* mo = m_settings->metaObject();
+        QStringList missing;
+        int checked = 0;
+        // From 0, not propertyOffset(), for the shortcut scan's reason: a
+        // scrolling property declared on the ISettings base would otherwise be
+        // skipped silently.
+        for (int i = 0; i < mo->propertyCount(); ++i) {
+            const QString name = QString::fromLatin1(mo->property(i).name());
+            // The *Shortcut properties are covered by the scan above; skipping
+            // them here keeps a shortcut miss reported by exactly one test.
+            if (!name.startsWith(QLatin1String("scrolling")) || name.endsWith(QLatin1String("Shortcut"))) {
+                continue;
+            }
+            ++checked;
+            if (!m_adaptor->getSetting(name).variant().isValid()) {
+                missing.append(name);
+            }
+        }
+        QVERIFY2(checked > 0, "Reflection found no scrolling properties: the scan itself is broken.");
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("These scrolling settings exist on Settings but are absent from "
+                                           "SettingsAdaptor's getter registry, so the settings app can write "
+                                           "them and the daemon will never see it: %1")
+                                .arg(missing.join(QStringLiteral(", ")))));
+    }
+
+    /**
      * An EMPTY key is a caller bug in exactly the way an unknown one is, and must answer
      * the same way. It used to return a valid empty string, which is the silent shape
      * this whole file exists to stamp out.

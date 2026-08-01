@@ -128,6 +128,30 @@ QVariantMap SettingsController::scrollingConstants() const
         {QStringLiteral("heightFixedMin"), ConfigDefaults::scrollingDefaultWindowHeightMin()},
         {QStringLiteral("heightFixedMax"), ConfigDefaults::scrollingDefaultWindowHeightMax()},
         {QStringLiteral("heightFixedStep"), ConfigDefaults::scrollingDefaultWindowHeightStep()},
+        // Tab indicator (Scrolling.TabIndicator). The style/position wire
+        // values ride along so the QML combos map index→value through the
+        // vocabulary instead of hardcoding 0/1/2/3.
+        {QStringLiteral("tabStyleChips"), ConfigDefaults::scrollingTabIndicatorStyleChips()},
+        {QStringLiteral("tabStyleBar"), ConfigDefaults::scrollingTabIndicatorStyleBar()},
+        {QStringLiteral("tabPositionLeft"), ConfigDefaults::scrollingTabIndicatorPositionLeft()},
+        {QStringLiteral("tabPositionRight"), ConfigDefaults::scrollingTabIndicatorPositionRight()},
+        {QStringLiteral("tabPositionTop"), ConfigDefaults::scrollingTabIndicatorPositionTop()},
+        {QStringLiteral("tabPositionBottom"), ConfigDefaults::scrollingTabIndicatorPositionBottom()},
+        // The gap floor is NEGATIVE on purpose (it draws the indicator over
+        // the window) and the corner-radius floor IS the "fully rounded"
+        // sentinel — the page spells that one as a toggle, not as -1 in a spin
+        // box, so it needs the sentinel value as well as the range.
+        {QStringLiteral("tabGapMin"), ConfigDefaults::scrollingTabIndicatorGapMin()},
+        {QStringLiteral("tabGapMax"), ConfigDefaults::scrollingTabIndicatorGapMax()},
+        {QStringLiteral("tabWidthMin"), ConfigDefaults::scrollingTabIndicatorWidthMin()},
+        {QStringLiteral("tabWidthMax"), ConfigDefaults::scrollingTabIndicatorWidthMax()},
+        {QStringLiteral("tabLengthMin"), ConfigDefaults::scrollingTabIndicatorLengthProportionMin()},
+        {QStringLiteral("tabLengthMax"), ConfigDefaults::scrollingTabIndicatorLengthProportionMax()},
+        {QStringLiteral("tabLengthStep"), ConfigDefaults::scrollingTabIndicatorLengthProportionStep()},
+        {QStringLiteral("tabGapsBetweenMin"), ConfigDefaults::scrollingTabIndicatorGapsBetweenTabsMin()},
+        {QStringLiteral("tabGapsBetweenMax"), ConfigDefaults::scrollingTabIndicatorGapsBetweenTabsMax()},
+        {QStringLiteral("tabCornerRadiusPill"), ConfigDefaults::scrollingTabIndicatorCornerRadiusPill()},
+        {QStringLiteral("tabCornerRadiusMax"), ConfigDefaults::scrollingTabIndicatorCornerRadiusMax()},
     };
 }
 

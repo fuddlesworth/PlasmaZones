@@ -150,6 +150,15 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("scrolling-columns"),
                             {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("column"),
                              PhosphorI18n::tr("width"), PhosphorI18n::tr("preset"), PhosphorI18n::tr("tab")});
+    // "tab" is deliberately on BOTH scrolling pages: the Columns page decides
+    // which columns open tabbed, this one decides how a tabbed column is
+    // marked, and a user searching "tab" wants to be offered both.
+    search->setPageKeywords(QStringLiteral("scrolling-tabs"),
+                            {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("tab"),
+                             PhosphorI18n::tr("indicator"), PhosphorI18n::tr("color"), PhosphorI18n::tr("urgent"),
+                             // Proper noun, deliberately untranslated (see the
+                             // scrolling-window keywords).
+                             QStringLiteral("niri")});
     search->setPageKeywords(QStringLiteral("scrolling-window"),
                             {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("window"),
                              PhosphorI18n::tr("strip"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("center"),
@@ -599,11 +608,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultWindowHeightPresetIndex"),
                PhosphorI18n::tr("Preset height"),
                {PhosphorI18n::tr("preset"), PhosphorI18n::tr("height"), PhosphorI18n::tr("index")});
-    addSection(search, QStringLiteral("scrolling-columns"), QStringLiteral("tabbedColumns"),
-               PhosphorI18n::tr("Tabbed columns"));
-    addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("tabStripEnabled"),
-               PhosphorI18n::tr("Tab indicator"),
-               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("indicator")});
     addSection(search, QStringLiteral("scrolling-columns"), QStringLiteral("scrollingPresets"),
                PhosphorI18n::tr("Width and height presets"));
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("presetColumnWidths"),
@@ -612,6 +616,59 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("presetWindowHeights"),
                PhosphorI18n::tr("Window heights"),
                {PhosphorI18n::tr("preset"), PhosphorI18n::tr("height"), PhosphorI18n::tr("cycle")});
+
+    // ── Scrolling → Tabs ──
+    // Three sections mirroring the page's three cards, so a search hit lands
+    // on the card that owns the row rather than at the top of the page.
+    addSection(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicator"),
+               PhosphorI18n::tr("Tab indicator"));
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorEnabled"),
+               PhosphorI18n::tr("Show the tab indicator"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("indicator")});
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorHideWhenSingleTab"),
+               PhosphorI18n::tr("Hide it for a single window"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("hide"), PhosphorI18n::tr("single")});
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorStyle"), PhosphorI18n::tr("Style"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("chips"), PhosphorI18n::tr("bar")});
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorPosition"),
+               PhosphorI18n::tr("Position"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("left"), PhosphorI18n::tr("right"), PhosphorI18n::tr("top"),
+                PhosphorI18n::tr("bottom")});
+
+    addSection(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorSizing"),
+               PhosphorI18n::tr("Size and spacing"));
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorPlaceWithinColumn"),
+               PhosphorI18n::tr("Make room inside the column"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("inside"), PhosphorI18n::tr("column")});
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorGap"), PhosphorI18n::tr("Gap"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("gap")});
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorWidth"),
+               PhosphorI18n::tr("Thickness"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("thickness"), PhosphorI18n::tr("width")});
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorLength"),
+               PhosphorI18n::tr("Length"), {PhosphorI18n::tr("tab"), PhosphorI18n::tr("length")});
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorGapsBetweenTabs"),
+               PhosphorI18n::tr("Gap between tabs"), {PhosphorI18n::tr("tab"), PhosphorI18n::tr("gap")});
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorFullyRounded"),
+               PhosphorI18n::tr("Fully rounded tabs"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("rounded"), PhosphorI18n::tr("pill")});
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorCornerRadius"),
+               PhosphorI18n::tr("Corner radius"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("corner"), PhosphorI18n::tr("radius")});
+
+    addSection(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorColors"),
+               PhosphorI18n::tr("Colors"));
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorActiveColor"),
+               PhosphorI18n::tr("Active tab"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("color"), PhosphorI18n::tr("active")});
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorInactiveColor"),
+               PhosphorI18n::tr("Inactive tabs"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("color"), PhosphorI18n::tr("inactive")});
+    addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorUrgentColor"),
+               PhosphorI18n::tr("Urgent tab"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("color"), PhosphorI18n::tr("urgent"),
+                PhosphorI18n::tr("attention")});
+
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingWindowHandling"),
                PhosphorI18n::tr("Window Handling"));
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingNewWindowPlacement"),
@@ -736,6 +793,20 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleDefaultColumnWidthPresetIndex"),
                PhosphorI18n::tr("Preset width"),
                {PhosphorI18n::tr("preset"), PhosphorI18n::tr("width"), PhosphorI18n::tr("index")});
+    // The simple page's Tabs card — the three tab-indicator rows it surfaces.
+    // Their own anchors (simple*) because the row ids must be unique per page
+    // and the advanced Tabs leaf owns the unprefixed ones.
+    addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleTabs"), PhosphorI18n::tr("Tabs"));
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleTabIndicatorEnabled"),
+               PhosphorI18n::tr("Show the tab indicator"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("indicator"), PhosphorI18n::tr("strip")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleTabIndicatorStyle"),
+               PhosphorI18n::tr("Style"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("chips"), PhosphorI18n::tr("bar")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleTabIndicatorPosition"),
+               PhosphorI18n::tr("Position"),
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("left"), PhosphorI18n::tr("right"), PhosphorI18n::tr("top"),
+                PhosphorI18n::tr("bottom")});
     addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingWindowHandling"),
                PhosphorI18n::tr("Window Handling"));
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingNewWindowPlacement"),

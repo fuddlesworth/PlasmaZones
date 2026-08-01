@@ -163,7 +163,8 @@ void ShellHost::destroyShell(const QString& screenId)
     state->slots.clear();
 }
 
-void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing)
+void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing,
+                                 const QRegion& partialInputRegion)
 {
     auto it = m_states.find(screenId);
     if (it == m_states.end() || !it.value()->m_shellSurface || !it.value()->m_shellWindow) {
@@ -210,10 +211,39 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // shell click-through, so background windows stay interactable
     // for the non-modal slot's lifetime instead of eating every click
     // on every screen for several seconds.
-    const bool wantTransparent = !anyInputGrabbing;
+    //
+    // Three states, not two, since partial regions landed:
+    //
+    //   modal up                  -> whole surface takes input (no mask).
+    //   no modal, region non-empty -> input ONLY inside the region.
+    //   no modal, region empty     -> click-through, as before.
+    //
+    // The Qt flag and the mask are NOT independent: with
+    // WindowTransparentForInput set, Qt hands the compositor an empty input
+    // region no matter what mask is installed, so the partial case must clear
+    // the flag first. Deriving both from one branch here keeps them from
+    // disagreeing — a disagreement means either a dead control or the daemon
+    // eating the desktop's clicks.
+    const bool wantPartial = !anyInputGrabbing && !partialInputRegion.isEmpty();
+    const bool wantTransparent = !anyInputGrabbing && !wantPartial;
     if (s.m_shellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
         s.m_shellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
     }
+    // QWindow::setMask reaches wl_surface.set_input_region through the Qt
+    // Wayland platform window (our layer shell is a SHELL INTEGRATION, so the
+    // window underneath is a normal QWaylandWindow and the standard path
+    // applies). An EMPTY mask means "no mask" to Qt, i.e. the whole surface —
+    // which is exactly what the modal and click-through cases want, since the
+    // flag decides those.
+    // Set UNCONDITIONALLY, with no compare against the current mask. QWindow
+    // remembers whatever we last handed it, so the compare answers "already
+    // applied" even when the surface no longer carries the region — and it
+    // stops carrying it whenever the window is re-created or the transparent
+    // -for-input flag round trips, both of which happen outside this call.
+    // The compare therefore turned a recoverable state into a stuck one. The
+    // cost of re-asserting is one wl_region per call on a path that runs on
+    // structural changes, not per frame.
+    s.m_shellWindow->setMask(wantPartial ? partialInputRegion : QRegion());
 }
 
 bool ShellHost::rekey(const QString& oldKey, const QString& newKey)

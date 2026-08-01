@@ -23,6 +23,7 @@
 
 #include <QHash>
 #include <QObject>
+#include <QRegion>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -159,8 +160,25 @@ public:
     /// interactable beneath non-modal slots (OSDs, main overlay, zone
     /// selector during drag).
     ///
+    /// @p partialInputRegion - window-local rects that should take pointer
+    /// input while NO modal slot is up. Empty (the default) keeps the historic
+    /// all-or-nothing behaviour.
+    ///
+    /// This exists because every kbd-None slot shares one screen-sized shell
+    /// surface, so before it the only choices were "eat every click on the
+    /// screen" and "take none". A slot that draws a small interactive control
+    /// (the scrolling tab indicator) needs neither: it needs input exactly
+    /// where it draws. The region is handed to the compositor as the surface's
+    /// input region, so clicks outside it fall through to the windows beneath
+    /// as if the overlay were not there.
+    ///
+    /// PRECEDENCE: a modal grab outranks the region — @p anyInputGrabbing true
+    /// takes the whole surface, because a modal is entitled to the clicks it
+    /// is covering. The region only shapes the non-modal case.
+    ///
     /// No-op when the shell surface or window is not yet up.
-    void syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing);
+    void syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing,
+                          const QRegion& partialInputRegion = QRegion());
 
     /// Move the ShellState entry from @p oldKey to @p newKey, preserving
     /// the underlying heap-allocated state object (the borrowed pointer

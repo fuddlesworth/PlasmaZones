@@ -418,7 +418,7 @@ void SettingsAdaptor::initializeRegistry()
     // the keys entirely.
     REGISTER_BOOL_SETTING("scrollingRestoreFloatedWindowsOnLogin", scrollingRestoreFloatedWindowsOnLogin,
                           setScrollingRestoreFloatedWindowsOnLogin)
-    REGISTER_BOOL_SETTING("scrollingTabStripEnabled", scrollingTabStripEnabled, setScrollingTabStripEnabled)
+    REGISTER_BOOL_SETTING("scrollingTabIndicatorEnabled", scrollingTabIndicatorEnabled, setScrollingTabIndicatorEnabled)
     REGISTER_BOOL_SETTING("snapUnfloatFallbackToZone", snapUnfloatFallbackToZone, setSnapUnfloatFallbackToZone)
     REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
     REGISTER_BOOL_SETTING("suppressDefaultLayoutAssignment", suppressDefaultLayoutAssignment,
@@ -842,7 +842,64 @@ void SettingsAdaptor::initializeRegistry()
                                  setScrollingDefaultWindowHeightValue)
         REGISTER_CONCRETE_INT("scrollingDefaultWindowHeightPresetIndex", scrollingDefaultWindowHeightPresetIndex,
                               setScrollingDefaultWindowHeightPresetIndex)
-        // scrollingTabStripEnabled is registered through ISettings above.
+        // ── Scrolling.TabIndicator ──
+        // scrollingTabIndicatorEnabled is registered through ISettings above;
+        // the other twelve live here so the whole family sits in one block.
+        // EVERY key of the group must be present: this generic surface is the
+        // ONLY channel the settings app has to the daemon, so an unregistered
+        // key is a control that writes the settings app's own store and never
+        // reaches the engine or the overlay — it looks wired and does nothing.
+        //
+        // The two enums get validated setters (the isValidScrollingTabIndicator*
+        // closed sets, same shape as scrollingDefaultColumnDisplay above) rather
+        // than a bare int, so a garbage wire value is refused instead of being
+        // cast into a nonexistent style or edge.
+        m_getters[QStringLiteral("scrollingTabIndicatorStyle")] = [concrete]() {
+            return concrete->scrollingTabIndicatorStyle();
+        };
+        m_setters[QStringLiteral("scrollingTabIndicatorStyle")] = [concrete](const QVariant& v) {
+            const int style = v.toInt();
+            if (!ConfigDefaults::isValidScrollingTabIndicatorStyle(style)) {
+                return false;
+            }
+            concrete->setScrollingTabIndicatorStyle(style);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingTabIndicatorStyle")] = QStringLiteral("int");
+        m_getters[QStringLiteral("scrollingTabIndicatorPosition")] = [concrete]() {
+            return concrete->scrollingTabIndicatorPosition();
+        };
+        m_setters[QStringLiteral("scrollingTabIndicatorPosition")] = [concrete](const QVariant& v) {
+            const int position = v.toInt();
+            if (!ConfigDefaults::isValidScrollingTabIndicatorPosition(position)) {
+                return false;
+            }
+            concrete->setScrollingTabIndicatorPosition(position);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingTabIndicatorPosition")] = QStringLiteral("int");
+        REGISTER_CONCRETE_BOOL("scrollingTabIndicatorHideWhenSingleTab", scrollingTabIndicatorHideWhenSingleTab,
+                               setScrollingTabIndicatorHideWhenSingleTab)
+        REGISTER_CONCRETE_BOOL("scrollingTabIndicatorPlaceWithinColumn", scrollingTabIndicatorPlaceWithinColumn,
+                               setScrollingTabIndicatorPlaceWithinColumn)
+        REGISTER_CONCRETE_INT("scrollingTabIndicatorGap", scrollingTabIndicatorGap, setScrollingTabIndicatorGap)
+        REGISTER_CONCRETE_INT("scrollingTabIndicatorWidth", scrollingTabIndicatorWidth, setScrollingTabIndicatorWidth)
+        REGISTER_CONCRETE_DOUBLE("scrollingTabIndicatorLengthProportion", scrollingTabIndicatorLengthProportion,
+                                 setScrollingTabIndicatorLengthProportion)
+        REGISTER_CONCRETE_INT("scrollingTabIndicatorGapsBetweenTabs", scrollingTabIndicatorGapsBetweenTabs,
+                              setScrollingTabIndicatorGapsBetweenTabs)
+        REGISTER_CONCRETE_INT("scrollingTabIndicatorCornerRadius", scrollingTabIndicatorCornerRadius,
+                              setScrollingTabIndicatorCornerRadius)
+        // Colours are free-form strings, not REGISTER_COLOR_SETTING: EMPTY is
+        // the meaningful "follow the theme" value and a QColor round-trip
+        // cannot carry it.
+        REGISTER_CONCRETE_STRING("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
+                                 setScrollingTabIndicatorActiveColor)
+        REGISTER_CONCRETE_STRING("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
+                                 setScrollingTabIndicatorInactiveColor)
+        REGISTER_CONCRETE_STRING("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
+                                 setScrollingTabIndicatorUrgentColor)
+
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusEnabled", scrollingWheelFocusEnabled, setScrollingWheelFocusEnabled)
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusInverted", scrollingWheelFocusInverted,
                                setScrollingWheelFocusInverted)

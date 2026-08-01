@@ -483,11 +483,19 @@ Q_SIGNALS:
     /// identical-set re-emit contract on desktop/activity switches.
     void scrollingScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
     void enabledChanged(bool enabled);
-    /// Tab-strip indicator model for @p screenId, emitted after every
-    /// relayout: a JSON array with one entry per VISIBLE tabbed column —
-    /// {x, y, width (absolute px), activeIndex, tabs: [windowId, ...]}.
-    /// An empty array clears the screen's indicators. The daemon enriches
-    /// window ids with titles and drives the overlay.
+    /// Tab-indicator model for @p screenId, emitted after every relayout: a
+    /// JSON array with one entry per VISIBLE tabbed column that actually
+    /// resolves an indicator —
+    /// {x, y, width, height (the INDICATOR's absolute px rect, not the
+    /// column's), position (TabIndicatorPosition), activeIndex,
+    /// tabs: [windowId, ...]}.
+    ///
+    /// Columns whose indicator is suppressed (the master switch off, or a
+    /// single-tab column under hideWhenSingleTab) are simply absent, so a
+    /// consumer never re-tests those conditions and cannot disagree with the
+    /// relayout that sized the column around them. An empty array clears the
+    /// screen's indicators. The daemon enriches window ids with titles and
+    /// urgency, adds the paint settings, and drives the overlay.
     void tabStripsChanged(const QString& screenId, const QString& stripsJson);
 
 private:
@@ -657,6 +665,9 @@ private:
     /// "Client decides" default width: open at the client's initial size.
     bool m_defaultWidthClientDecides = false;
     ColumnDisplay m_defaultColumnDisplay = ColumnDisplay::Normal;
+    /// Tab-indicator GEOMETRY, the half of Scrolling.TabIndicator that changes
+    /// resolved rects (IScrollSettings documents the split).
+    TabIndicatorParams m_tabIndicator{};
     /// Scrolling.Behavior tunables (refreshConfigFromSettings). Sticky
     /// handling gates INSERTION only — the desktop-pin logic in
     /// updateStickyScreenPins stays unconditional, matching autotile.
@@ -841,6 +852,9 @@ private:
     /// committed as Fixed pixels against the live work area.
     WindowHeight effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const;
     ScrollInsertPosition effectiveInsertPosition(const QString& screenId) const;
+    /// Per-property override, so a rule that sets only the position leaves the
+    /// other six geometry fields on their configured values.
+    TabIndicatorParams effectiveTabIndicator(const QString& screenId) const;
 
     QHash<QString, QVariantMap> m_perScreenOverrides;
     std::function<void()> m_persistSaveFn;

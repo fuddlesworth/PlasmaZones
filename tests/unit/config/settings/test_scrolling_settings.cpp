@@ -225,6 +225,76 @@ private Q_SLOTS:
         QVERIFY(display && display->validator);
         QCOMPARE(display->validator(7).toInt(), ConfigDefaults::scrollingDefaultColumnDisplay());
         QCOMPARE(display->validator(1).toInt(), 1);
+
+        // ── Scrolling.TabIndicator ──
+        // The two enums are closed sets (a stray value snaps back to the
+        // default, it does NOT clamp to the nearest member), and the two
+        // signed ranges really do admit negatives — the gap because a negative
+        // draws the indicator over the window, the corner radius because its
+        // floor is the "fully rounded" sentinel.
+        const QString tabGroup = ConfigDefaults::scrollingTabIndicatorGroup();
+
+        const auto* style = findKey(schema, tabGroup, ConfigDefaults::tabIndicatorStyleKey());
+        QVERIFY(style && style->validator);
+        QCOMPARE(style->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorStyle());
+        QCOMPARE(style->validator(ConfigDefaults::scrollingTabIndicatorStyleBar()).toInt(),
+                 ConfigDefaults::scrollingTabIndicatorStyleBar());
+        QCOMPARE(style->validator(7).toInt(), ConfigDefaults::scrollingTabIndicatorStyle());
+
+        const auto* position = findKey(schema, tabGroup, ConfigDefaults::positionKey());
+        QVERIFY(position && position->validator);
+        QCOMPARE(position->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorPosition());
+        QCOMPARE(position->validator(ConfigDefaults::scrollingTabIndicatorPositionLeft()).toInt(),
+                 ConfigDefaults::scrollingTabIndicatorPositionLeft());
+        // One past the closed set {Left, Right, Top, Bottom}: a clamping
+        // validator would hand this back as Bottom.
+        QCOMPARE(position->validator(ConfigDefaults::scrollingTabIndicatorPositionBottom() + 1).toInt(),
+                 ConfigDefaults::scrollingTabIndicatorPosition());
+
+        const auto* gap = findKey(schema, tabGroup, ConfigDefaults::gapKey());
+        QVERIFY(gap && gap->validator);
+        QCOMPARE(gap->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorGap());
+        // A negative gap SURVIVES the clamp — this is the assertion that would
+        // catch someone "fixing" the floor to 0.
+        QCOMPARE(gap->validator(-10).toInt(), -10);
+        QCOMPARE(gap->validator(-9999).toInt(), ConfigDefaults::scrollingTabIndicatorGapMin());
+        QCOMPARE(gap->validator(9999).toInt(), ConfigDefaults::scrollingTabIndicatorGapMax());
+
+        const auto* radius = findKey(schema, tabGroup, ConfigDefaults::cornerRadiusKey());
+        QVERIFY(radius && radius->validator);
+        QCOMPARE(radius->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorCornerRadiusPill());
+        // The pill sentinel survives; nothing below it does.
+        QCOMPARE(radius->validator(ConfigDefaults::scrollingTabIndicatorCornerRadiusPill()).toInt(),
+                 ConfigDefaults::scrollingTabIndicatorCornerRadiusPill());
+        QCOMPARE(radius->validator(-50).toInt(), ConfigDefaults::scrollingTabIndicatorCornerRadiusPill());
+
+        const auto* width = findKey(schema, tabGroup, ConfigDefaults::widthKey());
+        QVERIFY(width && width->validator);
+        QCOMPARE(width->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorWidth());
+        QCOMPARE(width->validator(0).toInt(), ConfigDefaults::scrollingTabIndicatorWidthMin());
+
+        const auto* length = findKey(schema, tabGroup, ConfigDefaults::lengthProportionKey());
+        QVERIFY(length && length->validator);
+        QCOMPARE(length->defaultValue.toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportion());
+        QCOMPARE(length->validator(0.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMin());
+        QCOMPARE(length->validator(5.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMax());
+
+        // The colours carry no validator: EMPTY is the meaningful "follow the
+        // theme" value, and no closed set can express that alongside hex.
+        for (const QString& colorKey :
+             {ConfigDefaults::activeColorKey(), ConfigDefaults::inactiveColorKey(), ConfigDefaults::urgentColorKey()}) {
+            const auto* color = findKey(schema, tabGroup, colorKey);
+            QVERIFY2(color, qPrintable(colorKey));
+            QVERIFY(color->defaultValue.toString().isEmpty());
+        }
+
+        // The old flat Scrolling/TabStripEnabled key is GONE, not aliased: the
+        // family moved wholesale into its own group and the no-ad-hoc-compat
+        // rule means the stale value is simply dropped.
+        QVERIFY(findKey(schema, group, QStringLiteral("TabStripEnabled")) == nullptr);
+        const auto* enabled = findKey(schema, tabGroup, ConfigDefaults::enabledKey());
+        QVERIFY(enabled);
+        QCOMPARE(enabled->defaultValue.toBool(), ConfigDefaults::scrollingTabIndicatorEnabled());
     }
 
     /// The Scrolling group's numeric-range keys, which DO clamp (clampInt /
@@ -261,9 +331,6 @@ private Q_SLOTS:
         QCOMPARE(heightValue->validator(99999.0).toDouble(), ConfigDefaults::scrollingDefaultWindowHeightMax());
         QCOMPARE(heightValue->defaultValue.toDouble(), ConfigDefaults::scrollingDefaultWindowHeightValue());
 
-        const auto* tabStrip = findKey(schema, group, ConfigDefaults::tabStripEnabledKey());
-        QVERIFY(tabStrip);
-        QCOMPARE(tabStrip->defaultValue.toBool(), ConfigDefaults::scrollingTabStripEnabled());
         const auto* wheelEnabled = findKey(schema, group, ConfigDefaults::wheelFocusEnabledKey());
         QVERIFY(wheelEnabled);
         QCOMPARE(wheelEnabled->defaultValue.toBool(), ConfigDefaults::scrollingWheelFocusEnabled());
@@ -324,6 +391,92 @@ private Q_SLOTS:
         const auto* restoreFloated = findKey(schema, group, ConfigDefaults::restoreFloatedOnLoginKey());
         QVERIFY(restoreFloated);
         QCOMPARE(restoreFloated->defaultValue.toBool(), ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin());
+    }
+
+    /// A factory reset must ANNOUNCE the values it restored.
+    ///
+    /// reset() clears the groups and reloads, and load() re-emits a property's
+    /// NOTIFY by snapshotting before the reload and diffing after. But reset()
+    /// deletes the groups BEFORE calling load(), so by the time that snapshot
+    /// is taken the store already answers with defaults — the diff sees no
+    /// change and fires nothing. Every QML binding then keeps painting the old
+    /// value until the app is restarted, which is exactly what a user reports
+    /// as "reset did nothing".
+    ///
+    /// Written against the tab-indicator keys because that is where it was
+    /// found, but the defect is general: nothing about it is scrolling-specific.
+    void resetAnnouncesRestoredValues()
+    {
+        TestHelpers::IsolatedConfigGuard guard;
+        Settings settings;
+
+        // Move two properties of different types off their defaults.
+        const int customGap = ConfigDefaults::scrollingTabIndicatorGap() + 11;
+        settings.setScrollingTabIndicatorGap(customGap);
+        settings.setScrollingTabIndicatorPlaceWithinColumn(!ConfigDefaults::scrollingTabIndicatorPlaceWithinColumn());
+        QCOMPARE(settings.scrollingTabIndicatorGap(), customGap);
+
+        QSignalSpy gapSpy(&settings, &Settings::scrollingTabIndicatorGapChanged);
+        QSignalSpy withinSpy(&settings, &Settings::scrollingTabIndicatorPlaceWithinColumnChanged);
+        QVERIFY(gapSpy.isValid() && withinSpy.isValid());
+
+        QVERIFY(settings.reset());
+
+        // The store really did go back to defaults...
+        QCOMPARE(settings.scrollingTabIndicatorGap(), ConfigDefaults::scrollingTabIndicatorGap());
+        QCOMPARE(settings.scrollingTabIndicatorPlaceWithinColumn(),
+                 ConfigDefaults::scrollingTabIndicatorPlaceWithinColumn());
+        // ...and said so, which is the half that was missing.
+        QCOMPARE(gapSpy.count(), 1);
+        QCOMPARE(withinSpy.count(), 1);
+    }
+
+    /// Flipping the tab-indicator STYLE re-seeds the shared Width key, but
+    /// only when the stored thickness is one the user never chose.
+    ///
+    /// The two styles want wildly different thicknesses out of one key: a bar
+    /// is a few pixels of colour, a chip has to hold a title. Without the
+    /// re-seed a style flip leaves a 28 px bar (a stripe) or a 4 px chip run
+    /// (no readable title), which is what the setting looks broken as. The
+    /// preservation half matters just as much: a deliberate thickness must
+    /// survive a round trip, or the re-seed becomes a setting that silently
+    /// eats the user's number.
+    void tabIndicatorStyleReseedsWidthOnlyWhenUntouched()
+    {
+        TestHelpers::IsolatedConfigGuard guard;
+        Settings settings;
+
+        const int chips = ConfigDefaults::scrollingTabIndicatorStyleChips();
+        const int bar = ConfigDefaults::scrollingTabIndicatorStyleBar();
+        const int chipsWidth = ConfigDefaults::scrollingTabIndicatorWidthForChips();
+        const int barWidth = ConfigDefaults::scrollingTabIndicatorWidthForBar();
+        // The whole re-seed rests on these two differing; if they ever
+        // converge the mechanism is pointless and this test would pass
+        // vacuously.
+        QVERIFY(chipsWidth != barWidth);
+
+        // Fresh config: the default style with its own thickness.
+        QCOMPARE(settings.scrollingTabIndicatorStyle(), chips);
+        QCOMPARE(settings.scrollingTabIndicatorWidth(), chipsWidth);
+
+        // Untouched thickness follows the style across.
+        settings.setScrollingTabIndicatorStyle(bar);
+        QCOMPARE(settings.scrollingTabIndicatorWidth(), barWidth);
+        settings.setScrollingTabIndicatorStyle(chips);
+        QCOMPARE(settings.scrollingTabIndicatorWidth(), chipsWidth);
+
+        // A deliberate thickness is preserved across a round trip.
+        settings.setScrollingTabIndicatorWidth(40);
+        settings.setScrollingTabIndicatorStyle(bar);
+        QCOMPARE(settings.scrollingTabIndicatorWidth(), 40);
+        settings.setScrollingTabIndicatorStyle(chips);
+        QCOMPARE(settings.scrollingTabIndicatorWidth(), 40);
+
+        // A same-value style write is a full no-op, so it cannot re-seed a
+        // width the user set to the other style's default on purpose.
+        settings.setScrollingTabIndicatorWidth(barWidth);
+        settings.setScrollingTabIndicatorStyle(chips);
+        QCOMPARE(settings.scrollingTabIndicatorWidth(), barWidth);
     }
 
     /// Behavior setters follow the standard emit-once contract: an

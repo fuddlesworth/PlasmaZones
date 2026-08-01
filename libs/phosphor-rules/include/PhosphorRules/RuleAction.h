@@ -540,6 +540,45 @@ inline constexpr QLatin1StringView SetScrollInsertPosition{"setScrollInsertPosit
 /// committed as a fixed pixel intent against the live work area).
 inline constexpr QLatin1StringView SetScrollDefaultWindowHeight{"setScrollDefaultWindowHeight"};
 
+// ── Per-context tab-indicator overrides (domain Context) ──
+// niri's `tab-indicator` layout block, one action per property so independent
+// context rules cascade per-property (a layout rule can set the position while
+// a theme rule sets the colours, and neither clobbers the other). The GEOMETRY
+// half reaches the scrolling engine through its per-screen override map; the
+// PAINT half is consumed daemon-side and applied to the overlay, matching the
+// split IScrollSettings documents.
+/// Whether tabbed columns show an indicator at all. Boolean `ActionParam::Value`.
+inline constexpr QLatin1StringView SetTabIndicatorEnabled{"setTabIndicatorEnabled"};
+/// Title chips or a segment bar. Closed enum token (`ActionParam::Value`,
+/// TabIndicatorStyleToken).
+inline constexpr QLatin1StringView SetTabIndicatorStyle{"setTabIndicatorStyle"};
+/// Which column edge the indicator runs along. Closed enum token
+/// (`ActionParam::Value`, TabIndicatorPositionToken).
+inline constexpr QLatin1StringView SetTabIndicatorPosition{"setTabIndicatorPosition"};
+/// Hide the indicator on a single-window tabbed column. Boolean `ActionParam::Value`.
+inline constexpr QLatin1StringView SetTabIndicatorHideWhenSingleTab{"setTabIndicatorHideWhenSingleTab"};
+/// Reserve the indicator out of the column instead of drawing beside it.
+/// Boolean `ActionParam::Value`.
+inline constexpr QLatin1StringView SetTabIndicatorPlaceWithinColumn{"setTabIndicatorPlaceWithinColumn"};
+/// Gap between indicator and window in px. Numeric `ActionParam::Value`, and
+/// the one numeric action here whose range is SIGNED — a negative gap draws
+/// the indicator over the window, which is niri's behaviour.
+inline constexpr QLatin1StringView SetTabIndicatorGap{"setTabIndicatorGap"};
+/// Indicator thickness in px. Numeric `ActionParam::Value`.
+inline constexpr QLatin1StringView SetTabIndicatorWidth{"setTabIndicatorWidth"};
+/// Indicator length as a fraction of the column extent. Numeric
+/// `ActionParam::Value` (stored fraction, edited as a percent).
+inline constexpr QLatin1StringView SetTabIndicatorLength{"setTabIndicatorLength"};
+/// Gap between individual tabs in px. Numeric `ActionParam::Value`.
+inline constexpr QLatin1StringView SetTabIndicatorGapsBetweenTabs{"setTabIndicatorGapsBetweenTabs"};
+/// Per-tab corner radius in px. Numeric `ActionParam::Value`, signed like the
+/// gap: -1 is the "fully rounded" sentinel the config layer uses.
+inline constexpr QLatin1StringView SetTabIndicatorCornerRadius{"setTabIndicatorCornerRadius"};
+/// Tab colours. Hex `ActionParam::Value`, same shapes as the border colours.
+inline constexpr QLatin1StringView SetTabIndicatorActiveColor{"setTabIndicatorActiveColor"};
+inline constexpr QLatin1StringView SetTabIndicatorInactiveColor{"setTabIndicatorInactiveColor"};
+inline constexpr QLatin1StringView SetTabIndicatorUrgentColor{"setTabIndicatorUrgentColor"};
+
 // ── Per-window scrolling open overrides (domain Window) ──
 // Read on the open path for the matched window, layered over the context /
 // config defaults above, so one application can open wide or tabbed without
@@ -551,6 +590,13 @@ inline constexpr QLatin1StringView SetScrollDefaultWindowHeight{"setScrollDefaul
 inline constexpr QLatin1StringView OpenColumnWidth{"openColumnWidth"};
 /// Whether the opening window's column starts tabbed. Boolean `ActionParam::Value`.
 inline constexpr QLatin1StringView OpenTabbed{"openTabbed"};
+/// Per-window tab colours — niri's `tab-indicator` WINDOW rule, which recolours
+/// only the matched window's own tab. These outrank the per-context colours
+/// above, which in turn outrank the config, which falls back to the theme:
+/// niri's exact resolution order. Hex `ActionParam::Value`.
+inline constexpr QLatin1StringView TabColorActive{"tabColorActive"};
+inline constexpr QLatin1StringView TabColorInactive{"tabColorInactive"};
+inline constexpr QLatin1StringView TabColorUrgent{"tabColorUrgent"};
 /// Whether the opening window starts its own column or is consumed into the
 /// focused one. Closed enum token (`ActionParam::Value`, ColumnPlacementToken).
 inline constexpr QLatin1StringView OpenColumnPlacement{"openColumnPlacement"};
@@ -648,6 +694,25 @@ inline constexpr double MaxBorderRadius = 20.0;
 inline constexpr double MinColumnWidthRatio = 0.05;
 inline constexpr double MaxColumnWidthRatio = 1.0;
 
+/// Bounds for the tab-indicator numeric slots. Installed here, next to the
+/// column-width pair and for the same reason: the descriptor validators
+/// (ruleaction_builtins_appearance.cpp) and the per-context consumer
+/// (layoutregistry_contextresolve.cpp) both check against these, so a private
+/// copy in either would drift by hand-mirroring.
+///
+/// Two floors are NEGATIVE and neither is a mistake. A negative GAP draws the
+/// indicator on top of the window, which is niri's documented behaviour. The
+/// corner-radius floor is the config layer's "fully rounded" SENTINEL, not a
+/// real negative radius — nothing between it and 0 is a valid value.
+inline constexpr double MinTabIndicatorGap = -64.0;
+inline constexpr double MaxTabIndicatorGap = 64.0;
+inline constexpr double MinTabIndicatorWidth = 1.0;
+inline constexpr double MaxTabIndicatorWidth = 64.0;
+inline constexpr double TabIndicatorCornerRadiusPill = -1.0;
+inline constexpr double MaxTabIndicatorCornerRadius = 64.0;
+inline constexpr double MinTabIndicatorLengthRatio = 0.05;
+inline constexpr double MaxTabIndicatorLengthRatio = 1.0;
+
 /// Upper bound for a `RouteToDesktop` 1-based virtual-desktop number. KWin tops
 /// out far below this in practice; the cap exists only to reject a grossly
 /// malformed hand-edited payload and to keep the validator's integrality check
@@ -707,6 +772,22 @@ namespace ColumnDisplayToken {
 inline constexpr QLatin1StringView Normal{"normal"}; ///< windows share the column vertically (0)
 inline constexpr QLatin1StringView Tabbed{"tabbed"}; ///< windows stack as tabs (1)
 } // namespace ColumnDisplayToken
+
+/// Wire tokens for SetTabIndicatorStyle's `value` param. Ints match
+/// ConfigDefaults' TabIndicatorStyle vocabulary.
+namespace TabIndicatorStyleToken {
+inline constexpr QLatin1StringView Chips{"chips"}; ///< a pill of titled chips (0)
+inline constexpr QLatin1StringView Bar{"bar"}; ///< a run of coloured segments (1)
+} // namespace TabIndicatorStyleToken
+
+/// Wire tokens for SetTabIndicatorPosition's `value` param — which column edge
+/// the indicator runs along. Ints match the engine's TabIndicatorPosition.
+namespace TabIndicatorPositionToken {
+inline constexpr QLatin1StringView Left{"left"}; ///< (0)
+inline constexpr QLatin1StringView Right{"right"}; ///< (1)
+inline constexpr QLatin1StringView Top{"top"}; ///< (2)
+inline constexpr QLatin1StringView Bottom{"bottom"}; ///< (3)
+} // namespace TabIndicatorPositionToken
 
 /// Wire tokens for OpenColumnPlacement's `value` param — whether an opening
 /// window starts its own column or joins the focused one.
@@ -831,12 +912,33 @@ inline constexpr QLatin1StringView CenterFocusedColumn{"center-focused-column"};
 inline constexpr QLatin1StringView ScrollDefaultColumnDisplay{"scroll-default-column-display"};
 inline constexpr QLatin1StringView ScrollInsertPosition{"scroll-insert-position"};
 inline constexpr QLatin1StringView ScrollDefaultWindowHeight{"scroll-default-window-height"};
+// Per-context tab-indicator slots, one per property so independent context
+// rules cascade per-property. Filled by the SetTabIndicator* actions and read
+// by LayoutRegistry::resolveContextScrollingParams into ContextScrollingParams.
+inline constexpr QLatin1StringView TabIndicatorEnabled{"tab-indicator-enabled"};
+inline constexpr QLatin1StringView TabIndicatorStyle{"tab-indicator-style"};
+inline constexpr QLatin1StringView TabIndicatorPosition{"tab-indicator-position"};
+inline constexpr QLatin1StringView TabIndicatorHideWhenSingleTab{"tab-indicator-hide-when-single-tab"};
+inline constexpr QLatin1StringView TabIndicatorPlaceWithinColumn{"tab-indicator-place-within-column"};
+inline constexpr QLatin1StringView TabIndicatorGap{"tab-indicator-gap"};
+inline constexpr QLatin1StringView TabIndicatorWidth{"tab-indicator-width"};
+inline constexpr QLatin1StringView TabIndicatorLength{"tab-indicator-length"};
+inline constexpr QLatin1StringView TabIndicatorGapsBetweenTabs{"tab-indicator-gaps-between-tabs"};
+inline constexpr QLatin1StringView TabIndicatorCornerRadius{"tab-indicator-corner-radius"};
+inline constexpr QLatin1StringView TabIndicatorActiveColor{"tab-indicator-active-color"};
+inline constexpr QLatin1StringView TabIndicatorInactiveColor{"tab-indicator-inactive-color"};
+inline constexpr QLatin1StringView TabIndicatorUrgentColor{"tab-indicator-urgent-color"};
 // Per-window scrolling open slots (one per property so independent rules
 // cascade per-property). Filled by OpenColumnWidth / OpenTabbed /
 // OpenColumnPlacement / OpenWindowHeight, read on the open path by the
 // scrolling engine.
 inline constexpr QLatin1StringView OpenColumnWidth{"open-column-width"};
 inline constexpr QLatin1StringView OpenTabbed{"open-tabbed"};
+/// Per-window tab-colour slots, filled by the TabColor* window actions and
+/// resolved per tab when the daemon builds the tab-indicator model.
+inline constexpr QLatin1StringView TabColorActive{"tab-color-active"};
+inline constexpr QLatin1StringView TabColorInactive{"tab-color-inactive"};
+inline constexpr QLatin1StringView TabColorUrgent{"tab-color-urgent"};
 inline constexpr QLatin1StringView OpenColumnPlacement{"open-column-placement"};
 inline constexpr QLatin1StringView OpenWindowHeight{"open-window-height"};
 // Per-context overlay-property slots (one per property so independent rules

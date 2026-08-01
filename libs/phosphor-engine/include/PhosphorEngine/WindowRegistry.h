@@ -44,6 +44,12 @@ struct WindowMetadata
                                        ///< with the one-edge propagation delay that implies, and
                                        ///< disengaged when the compositor never reported the field
                                        ///< (consumers treat that as "cannot vouch", not "visible").
+    std::optional<bool> isDemandingAttention{}; ///< Urgency (KWin's demandsAttention). Kept current the same way
+                                                ///< isMinimized is — the effect re-pushes full metadata on every
+                                                ///< demandsAttentionChanged edge — because urgency is only useful
+                                                ///< while it is live. Disengaged when the compositor never
+                                                ///< reported it, which consumers read as "not urgent" (an unknown
+                                                ///< urgency must not light a window up).
     std::optional<bool> isFullscreen{};
     std::optional<bool> isSticky{}; ///< on all virtual desktops
     std::optional<bool> isMaximized{}; ///< MaximizeFull (both axes)
@@ -75,8 +81,9 @@ struct WindowMetadata
         return appId == other.appId && desktopFile == other.desktopFile && title == other.title
             && windowRole == other.windowRole && pid == other.pid && virtualDesktop == other.virtualDesktop
             && virtualDesktops == other.virtualDesktops && activity == other.activity && windowType == other.windowType
-            && isMinimized == other.isMinimized && isFullscreen == other.isFullscreen && isSticky == other.isSticky
-            && isMaximized == other.isMaximized && isFocused == other.isFocused && isTransient == other.isTransient
+            && isMinimized == other.isMinimized && isDemandingAttention == other.isDemandingAttention
+            && isFullscreen == other.isFullscreen && isSticky == other.isSticky && isMaximized == other.isMaximized
+            && isFocused == other.isFocused && isTransient == other.isTransient
             && isNotification == other.isNotification && keepAbove == other.keepAbove && keepBelow == other.keepBelow
             && skipTaskbar == other.skipTaskbar && skipPager == other.skipPager && skipSwitcher == other.skipSwitcher
             && isModal == other.isModal && hasDecoration == other.hasDecoration && isResizable == other.isResizable

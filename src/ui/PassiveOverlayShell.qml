@@ -103,6 +103,9 @@ Window {
     signal snapAssistWindowSelected(string windowId, string zoneId, string geometryJson)
     /// Forwarded from snap-assist's backdrop click / dismiss request.
     signal snapAssistDismissRequested
+    /// Forwarded from the scrolling tab indicator's `tabActivated` — host
+    /// wires to onScrollTabActivated and focuses that window.
+    signal scrollTabActivated(string windowId)
     /// Forwarded from picker's `layoutSelected`.
     signal layoutPickerSelected(string layoutId)
     /// Forwarded from picker's `dismissRequested` (backdrop click /
@@ -703,6 +706,17 @@ Window {
         property bool fontItalic: false
         property bool fontUnderline: false
         property bool fontStrikeout: false
+        // Tab-indicator PAINT settings (Scrolling.TabIndicator), pushed by C++
+        // on every strip update. They must be declared here AND forwarded
+        // below: setProperty on an undeclared name silently creates a dynamic
+        // property that no binding ever sees, so the control looks wired and
+        // does nothing (see the zoneSelectorSlot contract note).
+        property int tabStyle: 0
+        property int gapsBetweenTabs: 0
+        property int cornerRadius: -1
+        property string activeColor: ""
+        property string inactiveColor: ""
+        property string urgentColor: ""
 
         anchors.fill: parent
         // Indicator tier: above the main overlay, below the zone selector,
@@ -718,6 +732,10 @@ Window {
             active: scrollTabsSlot.loaded
             // SYNCHRONOUS by contract — see snapAssistLoader.
             sourceComponent: scrollTabsContentComp
+            onLoaded: {
+                if (scrollTabsLoader.item)
+                    scrollTabsLoader.item.tabActivated.connect(root.scrollTabActivated);
+            }
         }
 
         Component {
@@ -731,6 +749,12 @@ Window {
                 fontItalic: scrollTabsSlot.fontItalic
                 fontUnderline: scrollTabsSlot.fontUnderline
                 fontStrikeout: scrollTabsSlot.fontStrikeout
+                style: scrollTabsSlot.tabStyle
+                gapsBetweenTabs: scrollTabsSlot.gapsBetweenTabs
+                cornerRadius: scrollTabsSlot.cornerRadius
+                activeColor: scrollTabsSlot.activeColor
+                inactiveColor: scrollTabsSlot.inactiveColor
+                urgentColor: scrollTabsSlot.urgentColor
             }
         }
     }

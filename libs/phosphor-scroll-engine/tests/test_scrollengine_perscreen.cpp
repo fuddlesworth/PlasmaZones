@@ -150,6 +150,46 @@ public:
     {
         return heightPresets;
     }
+
+    // Tab-indicator geometry. Public fields so a case can drive the indicator
+    // the way it drives the width/height trios above; the seeds are the
+    // shipped defaults, so an untouched stub behaves like a fresh config.
+    bool tabIndicatorEnabled = true;
+    bool tabIndicatorHideWhenSingleTab = false;
+    bool tabIndicatorPlaceWithinColumn = false;
+    int tabIndicatorGap = 5;
+    int tabIndicatorWidth = 28;
+    qreal tabIndicatorLengthProportion = 0.5;
+    int tabIndicatorPosition = static_cast<int>(TabIndicatorPosition::Top);
+
+    bool scrollingTabIndicatorEnabled() const override
+    {
+        return tabIndicatorEnabled;
+    }
+    bool scrollingTabIndicatorHideWhenSingleTab() const override
+    {
+        return tabIndicatorHideWhenSingleTab;
+    }
+    bool scrollingTabIndicatorPlaceWithinColumn() const override
+    {
+        return tabIndicatorPlaceWithinColumn;
+    }
+    int scrollingTabIndicatorGap() const override
+    {
+        return tabIndicatorGap;
+    }
+    int scrollingTabIndicatorWidth() const override
+    {
+        return tabIndicatorWidth;
+    }
+    qreal scrollingTabIndicatorLengthProportion() const override
+    {
+        return tabIndicatorLengthProportion;
+    }
+    int scrollingTabIndicatorPosition() const override
+    {
+        return tabIndicatorPosition;
+    }
 };
 
 const QString kS1 = QStringLiteral("S1");

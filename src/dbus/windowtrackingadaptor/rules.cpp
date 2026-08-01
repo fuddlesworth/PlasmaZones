@@ -294,6 +294,50 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QSt
     return resolved.slot(QString(PhosphorRules::ActionSlot::Float)).has_value();
 }
 
+QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
+{
+    QVariantMap out;
+    if (!m_ruleStore) {
+        return out;
+    }
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return out;
+    }
+    // NO screen/mode stamping here, unlike scrollOpenRuleParams: this runs
+    // from the strip-relayout path, which knows the window but not which
+    // screen's resolve it belongs to, and a wrong stamp is worse than none —
+    // it would make a ScreenId-conditioned rule match the wrong monitor. A
+    // rule pairing a tab colour with a ScreenId or Mode condition is therefore
+    // inert on this path by design; the per-CONTEXT colour actions are the
+    // spelling for "recolour tabs on this screen".
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    }
+    // Cached, unlike scrollOpenRuleParams: with nothing extra stamped onto the
+    // query this IS the plain (windowId, ruleSet revision) resolve the cache is
+    // keyed on, so it can share the cache instead of poisoning it. That matters
+    // here in a way it does not there — this runs per tab per relayout.
+    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    const auto readColor = [&resolved, &out](QLatin1StringView slot, const QString& key) {
+        const auto action = resolved.slot(QString(slot));
+        if (!action) {
+            return;
+        }
+        const QString value = action->params.value(QString(PhosphorRules::ActionParam::Value)).toString();
+        // Empty means "no override" on this path, not "clear to nothing": an
+        // empty colour reaching the overlay would read as the theme fallback
+        // anyway, so dropping it here keeps the map honest about what matched.
+        if (!value.isEmpty()) {
+            out.insert(key, value);
+        }
+    };
+    readColor(PhosphorRules::ActionSlot::TabColorActive, QStringLiteral("activeColor"));
+    readColor(PhosphorRules::ActionSlot::TabColorInactive, QStringLiteral("inactiveColor"));
+    readColor(PhosphorRules::ActionSlot::TabColorUrgent, QStringLiteral("urgentColor"));
+    return out;
+}
+
 QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId, const QString& screenId)
 {
     QVariantMap out;

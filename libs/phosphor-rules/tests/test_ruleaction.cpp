@@ -79,6 +79,22 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetScrollDefaultColumnDisplay,
     ActionType::SetScrollInsertPosition,
     ActionType::SetScrollDefaultWindowHeight,
+    // Tab indicator — context-domain. The geometry half is layered onto the
+    // scrolling engine's per-screen map and the paint half onto the overlay,
+    // but both resolve in the same context pass as the scroll params above.
+    ActionType::SetTabIndicatorEnabled,
+    ActionType::SetTabIndicatorStyle,
+    ActionType::SetTabIndicatorPosition,
+    ActionType::SetTabIndicatorHideWhenSingleTab,
+    ActionType::SetTabIndicatorPlaceWithinColumn,
+    ActionType::SetTabIndicatorGap,
+    ActionType::SetTabIndicatorWidth,
+    ActionType::SetTabIndicatorLength,
+    ActionType::SetTabIndicatorGapsBetweenTabs,
+    ActionType::SetTabIndicatorCornerRadius,
+    ActionType::SetTabIndicatorActiveColor,
+    ActionType::SetTabIndicatorInactiveColor,
+    ActionType::SetTabIndicatorUrgentColor,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -120,6 +136,11 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::OpenTabbed,
     ActionType::OpenColumnPlacement,
     ActionType::OpenWindowHeight,
+    // Per-window tab colours — window-domain, resolved per tab when the
+    // daemon builds the indicator model, where they outrank the context trio.
+    ActionType::TabColorActive,
+    ActionType::TabColorInactive,
+    ActionType::TabColorUrgent,
 };
 } // namespace
 

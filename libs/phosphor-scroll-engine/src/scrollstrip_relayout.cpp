@@ -258,7 +258,14 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             if (col.tiles.at(activeTi).minimized && !visible.isEmpty()) {
                 activeTi = visible.first();
             }
-            const QRect full(x, area.y(), colW, area.height());
+            // The indicator resolves against the count of VISIBLE tiles, not
+            // the column's total: a column whose extra tiles are all minimized
+            // presents as a single tab, so hideWhenSingleTab must hide it. The
+            // tiles then take whatever the indicator did not reserve, which is
+            // the whole column unless placeWithinColumn is set.
+            rc.tabIndicatorPosition = params.tabIndicator.position;
+            rc.tabIndicatorRect = params.tabIndicator.indicatorRectFor(rc.rect, visible.size());
+            const QRect full = params.tabIndicator.contentRectFor(rc.rect, visible.size());
             for (int ti : visible) {
                 ResolvedTile rt;
                 rt.windowId = col.tiles.at(ti).windowId;

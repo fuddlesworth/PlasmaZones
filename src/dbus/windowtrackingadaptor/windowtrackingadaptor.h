@@ -792,6 +792,20 @@ public:
     /// would silently discard both. See rules.cpp.
     QVariantMap scrollOpenRuleParams(const QString& windowId, const QString& screenId);
 
+    /// Per-window tab-colour rule slots — niri's `tab-indicator` WINDOW rule,
+    /// which recolours only the matched window's own tab. Returned as a loose
+    /// map with the same key names the overlay reads, present only when the
+    /// slot matched: "activeColor", "inactiveColor", "urgentColor" (all
+    /// QString). These outrank the per-context colours, which outrank the
+    /// config, which falls back to the theme — niri's resolution order.
+    ///
+    /// Resolves UNCACHED for the same reason scrollOpenRuleParams does. Unlike
+    /// that one this runs per tab per strip RELAYOUT rather than once per
+    /// window open, so it is deliberately kept to a slot read with no screen
+    /// or mode stamping: relayouts are structural events, not per-frame ones,
+    /// and a tabbed column holds a handful of tabs.
+    QVariantMap tabColorRuleParams(const QString& windowId);
+
     /// Stamp @p screenId and the placement mode that screen resolves to onto
     /// @p query. buildRuleQueryForWindow knows neither, and without them a rule
     /// pairing ScreenId or Mode with a window action never matches — a pairing

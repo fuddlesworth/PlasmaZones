@@ -206,6 +206,18 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                      {QStringLiteral("normal"), PhosphorI18n::tr("Normal")},
                      {QStringLiteral("tabbed"), PhosphorI18n::tr("Tabbed")},
                  });
+        t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::tabIndicatorStyleKey()),
+                 {
+                     {QStringLiteral("chips"), PhosphorI18n::tr("Titled chips")},
+                     {QStringLiteral("bar"), PhosphorI18n::tr("Segment bar")},
+                 });
+        t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::positionKey()),
+                 {
+                     {QStringLiteral("left"), PhosphorI18n::tr("Left of the column")},
+                     {QStringLiteral("right"), PhosphorI18n::tr("Right of the column")},
+                     {QStringLiteral("top"), PhosphorI18n::tr("Above the column")},
+                     {QStringLiteral("bottom"), PhosphorI18n::tr("Below the column")},
+                 });
         return t;
     }();
     return table;

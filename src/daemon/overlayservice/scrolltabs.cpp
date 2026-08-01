@@ -34,6 +34,38 @@ void OverlayService::replayScrollTabStrips()
     }
 }
 
+void OverlayService::onScrollTabActivated(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    Q_EMIT scrollTabActivated(windowId);
+}
+
+void OverlayService::setScrollTabIndicatorOverrides(const QString& screenId, const QVariantMap& overrides)
+{
+    if (screenId.isEmpty()) {
+        return;
+    }
+    // Change-gated: this runs on every rule/context re-resolve, and the common
+    // answer is the same map it already held. Replaying unconditionally would
+    // re-push the whole strip model on every desktop switch.
+    if (m_scrollTabIndicatorOverrides.value(screenId) == overrides) {
+        return;
+    }
+    if (overrides.isEmpty()) {
+        m_scrollTabIndicatorOverrides.remove(screenId);
+    } else {
+        m_scrollTabIndicatorOverrides.insert(screenId, overrides);
+    }
+    // Replay THIS screen only. The engine's tabStripsChanged is change-latched
+    // on structure, so nothing else repaints after a pure paint-rule change.
+    const auto cached = m_lastScrollTabStrips.constFind(screenId);
+    if (cached != m_lastScrollTabStrips.constEnd()) {
+        updateScrollTabStrips(screenId, cached.value());
+    }
+}
+
 void OverlayService::updateScrollTabStrips(const QString& screenId, const QVariantList& strips)
 {
     if (screenId.isEmpty()) {
@@ -49,10 +81,13 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     // hide, so one entry point serves both directions.
     if (strips.isEmpty()) {
         m_lastScrollTabStrips.remove(screenId);
+        // Drop the input region with the strips: a stale region would keep the
+        // shell taking clicks over a patch of screen with nothing drawn on it.
+        m_scrollTabInputRegions.remove(screenId);
     } else {
         m_lastScrollTabStrips.insert(screenId, strips);
     }
-    const bool stripEnabled = !m_settings || m_settings->scrollingTabStripEnabled();
+    const bool stripEnabled = !m_settings || m_settings->scrollingTabIndicatorEnabled();
 
     if (strips.isEmpty() || !stripEnabled) {
         // Hide-and-unload without creating a shell for a screen that never
@@ -135,12 +170,23 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     // space here (single conversion point).
     QVariantList shifted;
     shifted.reserve(strips.size());
+    QRegion inputRegion;
     for (const QVariant& entry : strips) {
         QVariantMap strip = entry.toMap();
-        strip.insert(QStringLiteral("x"), strip.value(QStringLiteral("x")).toInt() - screenGeom.x());
-        strip.insert(QStringLiteral("y"), strip.value(QStringLiteral("y")).toInt() - screenGeom.y());
+        const int x = strip.value(QStringLiteral("x")).toInt() - screenGeom.x();
+        const int y = strip.value(QStringLiteral("y")).toInt() - screenGeom.y();
+        strip.insert(QStringLiteral("x"), x);
+        strip.insert(QStringLiteral("y"), y);
         shifted.append(strip);
+        // The input region is the DRAWN rect, not a padded hit box. A padded
+        // one would take clicks off the indicator's edge — on a thin bar most
+        // of the padding lands on the window beside it, which is a worse
+        // trade than a small target. The rects are already window-local here,
+        // which is the coordinate space the shell's mask wants.
+        inputRegion +=
+            QRect(x, y, strip.value(QStringLiteral("width")).toInt(), strip.value(QStringLiteral("height")).toInt());
     }
+    m_scrollTabInputRegions.insert(screenId, inputRegion);
 
     auto* slot = state->scrollTabsSlot();
     auto* shellSurface = state->shell->shellSurface();
@@ -148,7 +194,45 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
 
     writeQmlProperty(slot, QStringLiteral("strips"), shifted);
 
+    // Paint settings, pushed on EVERY update rather than only on the show path
+    // like the font block below. The settings hook replays the cached strips
+    // through this function when any of them changes, and that replay lands on
+    // an already-visible slot, so a show-path-only push would leave a live
+    // indicator painting yesterday's colours until it next hid. Writing an
+    // unchanged QML property emits no change notification, so the cost of
+    // re-pushing these on a plain relayout is the six compares.
+    if (m_settings) {
+        // Context rules win per property over the config value, so a rule that
+        // sets only the style leaves the colours on their configured values.
+        const QVariantMap overrides = m_scrollTabIndicatorOverrides.value(screenId);
+        const auto push = [&](const char* property, const QVariant& configured) {
+            const QString key = QString::fromLatin1(property);
+            writeQmlProperty(slot, key, overrides.value(key, configured));
+        };
+        // "tabStyle", not "style": these names address the SLOT's declared
+        // properties (PassiveOverlayShell's scrollTabsSlot), which forwards
+        // them into the content item. The slot is a shared-shape Item, so the
+        // tab-specific spelling keeps it unambiguous there; the content item's
+        // own property is plain `style`.
+        push("tabStyle", m_settings->scrollingTabIndicatorStyle());
+        push("gapsBetweenTabs", m_settings->scrollingTabIndicatorGapsBetweenTabs());
+        push("cornerRadius", m_settings->scrollingTabIndicatorCornerRadius());
+        push("activeColor", m_settings->scrollingTabIndicatorActiveColor());
+        push("inactiveColor", m_settings->scrollingTabIndicatorInactiveColor());
+        push("urgentColor", m_settings->scrollingTabIndicatorUrgentColor());
+    }
+
     if (slot->isVisible() && !hideWasInFlight) {
+        // Re-assert the surface's input state on EVERY update, not just when
+        // the slot is first shown. The rects move whenever the strip relayouts
+        // — which includes the relayout a tab click itself causes — and the
+        // shell's own show/hide path flips Qt::WindowTransparentForInput
+        // behind our back, so a region applied once at show time does not stay
+        // applied. Skipping this made the indicator clickable exactly once:
+        // the click switched tabs, the relayout that followed never re-applied
+        // the region, and the strip stayed inert until something scrolled it
+        // off screen and back, because only the re-show ran this.
+        syncPassiveShellSurfaceStateForSurface(shellSurface);
         return; // live model update — no show choreography needed
     }
     // Either genuinely hidden, or mid-hide (still visible, opacity

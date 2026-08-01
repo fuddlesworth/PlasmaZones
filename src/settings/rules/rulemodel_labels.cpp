@@ -492,6 +492,70 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Open (invalid)")
                                                        : PhosphorI18n::tr("Open: %1").arg(shown);
         }
+        // ── tab-indicator overrides ──
+        // The three bool actions are already returned by boolActionStateLabel,
+        // like OpenTabbed. Every summary here says "tab" so a rule list mixing
+        // indicator rules with column rules stays readable at a glance.
+        if (action.type == ActionType::SetTabIndicatorStyle) {
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Tab indicator style (invalid)")
+                                                       : PhosphorI18n::tr("Tab indicator style: %1").arg(shown);
+        }
+        if (action.type == ActionType::SetTabIndicatorPosition) {
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Tab indicator position (invalid)")
+                                                       : PhosphorI18n::tr("Tab indicator position: %1").arg(shown);
+        }
+        if (action.type == ActionType::SetTabIndicatorGap) {
+            return PhosphorI18n::tr("Tab indicator gap: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetTabIndicatorWidth) {
+            return PhosphorI18n::tr("Tab indicator thickness: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetTabIndicatorLength) {
+            const int pct = scrollFractionPercent(raw);
+            return pct < 0 ? PhosphorI18n::tr("Tab indicator length (invalid)")
+                           : PhosphorI18n::tr("Tab indicator length: %1%").arg(pct);
+        }
+        if (action.type == ActionType::SetTabIndicatorGapsBetweenTabs) {
+            return PhosphorI18n::tr("Gap between tabs: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetTabIndicatorCornerRadius) {
+            const int px = raw.toInt();
+            // The sentinel is spelled as the outcome, not as -1: a rule list
+            // reading "Tab corner radius: -1 px" would look like a bad value.
+            return px < 0 ? PhosphorI18n::tr("Tab corners: fully rounded")
+                          : PhosphorI18n::tr("Tab corner radius: %1 px").arg(px);
+        }
+        if (action.type == ActionType::SetTabIndicatorActiveColor
+            || action.type == ActionType::SetTabIndicatorInactiveColor
+            || action.type == ActionType::SetTabIndicatorUrgentColor || action.type == ActionType::TabColorActive
+            || action.type == ActionType::TabColorInactive || action.type == ActionType::TabColorUrgent) {
+            // Accent shows as a word and hex as upper case, the border-colour
+            // treatment. The per-window trio says "this window" so a mixed
+            // list cannot confuse a context recolour with a per-app one.
+            const QString value = raw.toString();
+            const QString shown =
+                value == PhosphorRules::BorderColorToken::Accent ? PhosphorI18n::tr("Accent") : value.toUpper();
+            if (action.type == ActionType::SetTabIndicatorActiveColor) {
+                return PhosphorI18n::tr("Active tab: %1").arg(shown);
+            }
+            if (action.type == ActionType::SetTabIndicatorInactiveColor) {
+                return PhosphorI18n::tr("Inactive tab: %1").arg(shown);
+            }
+            if (action.type == ActionType::SetTabIndicatorUrgentColor) {
+                return PhosphorI18n::tr("Urgent tab: %1").arg(shown);
+            }
+            if (action.type == ActionType::TabColorActive) {
+                return PhosphorI18n::tr("This window's active tab: %1").arg(shown);
+            }
+            if (action.type == ActionType::TabColorInactive) {
+                return PhosphorI18n::tr("This window's inactive tab: %1").arg(shown);
+            }
+            return PhosphorI18n::tr("This window's urgent tab: %1").arg(shown);
+        }
         // ── window-management overrides ──
         if (action.type == ActionType::SetWindowLayer) {
             const QString v = raw.toString();

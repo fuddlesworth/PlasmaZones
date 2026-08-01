@@ -934,6 +934,29 @@ void Daemon::initEnginesAndWiring()
                             m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
                         return meta ? meta->title : QString();
                     },
+                    [this](const QString& windowId) -> bool {
+                        if (!m_windowRegistry) {
+                            return false;
+                        }
+                        const auto meta =
+                            m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+                        // value_or(false): a disengaged optional means the
+                        // compositor never reported urgency for this window,
+                        // which must read as "not urgent" rather than lighting
+                        // the tab up on an unknown.
+                        return meta ? meta->isDemandingAttention.value_or(false) : false;
+                    },
+                    [this](const QString& windowId) -> QVariantMap {
+                        // niri's top resolution tier: a window rule recolours
+                        // that window's own tab, outranking the per-context
+                        // colours and the config. Resolved through the tracking
+                        // adaptor's cached window resolve, so a tabbed column's
+                        // handful of tabs costs a cache lookup each.
+                        if (!m_windowTrackingAdaptor) {
+                            return {};
+                        }
+                        return m_windowTrackingAdaptor->tabColorRuleParams(windowId);
+                    },
                     &parseError);
                 // A parse failure means we know nothing about the strips, which
                 // is not the same as "there are none": clearing on it would wipe

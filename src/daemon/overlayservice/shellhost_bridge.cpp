@@ -189,6 +189,7 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
     QObject::connect(window, SIGNAL(snapAssistDismissRequested()), this, SLOT(onSnapAssistDismissRequested()));
     QObject::connect(window, SIGNAL(snapAssistWindowSelected(QString, QString, QString)), this,
                      SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
+    QObject::connect(window, SIGNAL(scrollTabActivated(QString)), this, SLOT(onScrollTabActivated(QString)));
     QObject::connect(window, SIGNAL(layoutPickerSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
     QObject::connect(window, SIGNAL(layoutPickerDismissRequested()), this, SLOT(onLayoutPickerDismissRequested()));
     QObject::connect(window, SIGNAL(cheatsheetDismissRequested()), this, SLOT(onCheatsheetDismissRequested()));
@@ -342,7 +343,15 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     const bool anyInputGrabbing =
         isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot()) || isVisible(s.cheatsheetSlot());
 
-    m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing);
+    // The tab indicator is the one non-modal slot that takes clicks, and it
+    // takes them ONLY where it draws: a tabbed column's indicator is a few
+    // pixels of a mostly-empty screen, so grabbing the whole surface for it
+    // (the only option before partial regions) would eat every click on the
+    // desktop for as long as any column stayed tabbed. Absent or hidden, the
+    // region is empty and the shell is click-through exactly as before.
+    const QRegion tabRegion = isVisible(s.scrollTabsSlot()) ? m_scrollTabInputRegions.value(effectiveId) : QRegion();
+
+    m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing, tabRegion);
 }
 
 void OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surface* surface)

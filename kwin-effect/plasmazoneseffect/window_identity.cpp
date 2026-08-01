@@ -181,6 +181,14 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         if (props.isMinimized) {
             extended.insert(Key::IsMinimized, *props.isMinimized);
         }
+        // Urgency is read straight off KWin::Window rather than through the
+        // rule query: it is not a rule-matchable field, so adding it to
+        // WindowQuery would grow the predicate vocabulary for a value only the
+        // tab indicator consumes. A window with no underlying KWin::Window
+        // leaves the key absent, which the daemon reads as "not urgent".
+        if (window) {
+            extended.insert(Key::IsDemandingAttention, window->isDemandingAttention());
+        }
         if (props.isFullscreen) {
             extended.insert(Key::IsFullscreen, *props.isFullscreen);
         }

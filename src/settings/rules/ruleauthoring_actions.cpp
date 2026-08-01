@@ -89,6 +89,18 @@ PickerCategory actionCategory(const QString& type)
         // Cross-cutting engine controls: SetEngineMode / DisableEngine / LockContext.
         return {PhosphorI18n::tr("Engine"), 1};
     }
+    if (cat == QLatin1String("tabIndicator")) {
+        // Nested under Scrolling, sharing its order 4 so the whole Scrolling
+        // bucket stays put (CategoryMenuButton buckets by the top-level
+        // segment and orders buckets by the smallest order in the bucket).
+        // The three per-window TabColor* actions live here too rather than
+        // under Window/Scrolling: a user reaches for "tab colours" as one
+        // idea, and splitting them by domain would hide the per-window pair
+        // in a different menu from the context pair it overrides.
+        return {PhosphorI18n::tr("Scrolling", "tiling mode name") + QStringLiteral("/")
+                    + PhosphorI18n::tr("Tab indicator"),
+                4};
+    }
     if (cat == QLatin1String("overlay")) {
         return {PhosphorI18n::tr("Overlay"), 5};
     }
@@ -170,6 +182,44 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::OpenColumnPlacement && key == ActionParam::Value) {
         return PhosphorI18n::tr("Placement");
+    }
+    // Tab indicator. The colour actions all share one label: the action label
+    // already names which colour, so repeating it here would read twice.
+    if ((type == ActionType::SetTabIndicatorActiveColor || type == ActionType::SetTabIndicatorInactiveColor
+         || type == ActionType::SetTabIndicatorUrgentColor || type == ActionType::TabColorActive
+         || type == ActionType::TabColorInactive || type == ActionType::TabColorUrgent)
+        && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Color");
+    }
+    if (type == ActionType::SetTabIndicatorEnabled && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Show the indicator over tabbed columns");
+    }
+    if (type == ActionType::SetTabIndicatorStyle && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Style");
+    }
+    if (type == ActionType::SetTabIndicatorPosition && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Position");
+    }
+    if (type == ActionType::SetTabIndicatorHideWhenSingleTab && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Hide it when the column holds one window");
+    }
+    if (type == ActionType::SetTabIndicatorPlaceWithinColumn && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Make room for it inside the column");
+    }
+    if (type == ActionType::SetTabIndicatorGap && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Gap (px, negative draws over the window)");
+    }
+    if (type == ActionType::SetTabIndicatorWidth && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Thickness (px)");
+    }
+    if (type == ActionType::SetTabIndicatorLength && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Length (%)");
+    }
+    if (type == ActionType::SetTabIndicatorGapsBetweenTabs && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Gap between tabs (px)");
+    }
+    if (type == ActionType::SetTabIndicatorCornerRadius && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Corner radius (px, -1 is fully rounded)");
     }
     if (type == ActionType::DisableEngine && key == ActionParam::Mode) {
         return PhosphorI18n::tr("Engine to disable");
@@ -463,6 +513,57 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::OpenColumnPlacement) {
         return PhosphorI18n::tr("Open into column");
     }
+    // Tab indicator. The labels say "tab indicator" rather than just "tabs" so
+    // they cannot be mistaken for the tabbed-column actions above, which
+    // change how a column BEHAVES rather than how its indicator is drawn.
+    if (type == ActionType::SetTabIndicatorEnabled) {
+        return PhosphorI18n::tr("Show the tab indicator");
+    }
+    if (type == ActionType::SetTabIndicatorStyle) {
+        return PhosphorI18n::tr("Set tab indicator style");
+    }
+    if (type == ActionType::SetTabIndicatorPosition) {
+        return PhosphorI18n::tr("Set tab indicator position");
+    }
+    if (type == ActionType::SetTabIndicatorHideWhenSingleTab) {
+        return PhosphorI18n::tr("Hide the tab indicator for a single tab");
+    }
+    if (type == ActionType::SetTabIndicatorPlaceWithinColumn) {
+        return PhosphorI18n::tr("Place the tab indicator inside the column");
+    }
+    if (type == ActionType::SetTabIndicatorGap) {
+        return PhosphorI18n::tr("Set the gap around the tab indicator");
+    }
+    if (type == ActionType::SetTabIndicatorWidth) {
+        return PhosphorI18n::tr("Set tab indicator thickness");
+    }
+    if (type == ActionType::SetTabIndicatorLength) {
+        return PhosphorI18n::tr("Set tab indicator length");
+    }
+    if (type == ActionType::SetTabIndicatorGapsBetweenTabs) {
+        return PhosphorI18n::tr("Set the gap between tabs");
+    }
+    if (type == ActionType::SetTabIndicatorCornerRadius) {
+        return PhosphorI18n::tr("Set tab corner radius");
+    }
+    if (type == ActionType::SetTabIndicatorActiveColor) {
+        return PhosphorI18n::tr("Set the active tab color");
+    }
+    if (type == ActionType::SetTabIndicatorInactiveColor) {
+        return PhosphorI18n::tr("Set the inactive tab color");
+    }
+    if (type == ActionType::SetTabIndicatorUrgentColor) {
+        return PhosphorI18n::tr("Set the urgent tab color");
+    }
+    if (type == ActionType::TabColorActive) {
+        return PhosphorI18n::tr("Set this window's active tab color");
+    }
+    if (type == ActionType::TabColorInactive) {
+        return PhosphorI18n::tr("Set this window's inactive tab color");
+    }
+    if (type == ActionType::TabColorUrgent) {
+        return PhosphorI18n::tr("Set this window's urgent tab color");
+    }
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");
     }
@@ -642,6 +743,20 @@ QString boolActionStateLabel(const QString& type, bool on)
         // Off is not inert: it forces a normal column even where the context
         // default is tabbed, so the off phrase names that outcome.
         return on ? PhosphorI18n::tr("Open in a tabbed column") : PhosphorI18n::tr("Open in a normal column");
+    }
+    // Tab indicator. Each off phrase names an OUTCOME rather than a negation,
+    // for the reason OpenTabbed's does: these override a context or config
+    // value, so switching one off is an instruction, not an absence.
+    if (type == ActionType::SetTabIndicatorEnabled) {
+        return on ? PhosphorI18n::tr("Show the tab indicator") : PhosphorI18n::tr("Hide the tab indicator");
+    }
+    if (type == ActionType::SetTabIndicatorHideWhenSingleTab) {
+        return on ? PhosphorI18n::tr("Hide the tab indicator for a single tab")
+                  : PhosphorI18n::tr("Show the tab indicator for a single tab");
+    }
+    if (type == ActionType::SetTabIndicatorPlaceWithinColumn) {
+        return on ? PhosphorI18n::tr("Tab indicator inside the column")
+                  : PhosphorI18n::tr("Tab indicator beside the column");
     }
     return QString();
 }

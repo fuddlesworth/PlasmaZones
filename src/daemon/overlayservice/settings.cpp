@@ -69,9 +69,29 @@ void OverlayService::setSettings(ISettings* settings)
 
             connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
 
-            // Tab-strip enable toggle. Hiding must RUN, not just skip future
-            // updates, or a live strip stays painted after the switch flips.
-            connect(m_settings, &ISettings::scrollingTabStripEnabledChanged, this,
+            // Tab-indicator enable toggle. Hiding must RUN, not just skip
+            // future updates, or a live indicator stays painted after the
+            // switch flips.
+            connect(m_settings, &ISettings::scrollingTabIndicatorEnabledChanged, this,
+                    &OverlayService::replayScrollTabStrips);
+            // The indicator's PAINT settings. They change nothing structural,
+            // so the engine never re-emits for them and the replay is the only
+            // thing that repaints a live indicator. The GEOMETRY settings are
+            // deliberately absent: those change resolved rects, so the engine
+            // retiles and its own tabStripsChanged carries the new rects
+            // through — replaying here as well would just push a stale model
+            // ahead of the real one.
+            connect(m_settings, &ISettings::scrollingTabIndicatorStyleChanged, this,
+                    &OverlayService::replayScrollTabStrips);
+            connect(m_settings, &ISettings::scrollingTabIndicatorGapsBetweenTabsChanged, this,
+                    &OverlayService::replayScrollTabStrips);
+            connect(m_settings, &ISettings::scrollingTabIndicatorCornerRadiusChanged, this,
+                    &OverlayService::replayScrollTabStrips);
+            connect(m_settings, &ISettings::scrollingTabIndicatorActiveColorChanged, this,
+                    &OverlayService::replayScrollTabStrips);
+            connect(m_settings, &ISettings::scrollingTabIndicatorInactiveColorChanged, this,
+                    &OverlayService::replayScrollTabStrips);
+            connect(m_settings, &ISettings::scrollingTabIndicatorUrgentColorChanged, this,
                     &OverlayService::replayScrollTabStrips);
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);

@@ -208,12 +208,232 @@ public:
     {
         return QStringLiteral("0.333,0.5,0.667");
     }
-    /// Tab-indicator strip over tabbed columns. Off, the indicator hides and
-    /// stays hidden until re-enabled (tabbed columns still work; they just
-    /// carry no on-screen pill).
-    static constexpr bool scrollingTabStripEnabled()
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Tab indicator (Scrolling.TabIndicator)
+    //
+    // The indicator drawn alongside a tabbed column. Numeric defaults follow
+    // niri's tab-indicator section (gap 5, width 4, length 0.5,
+    // gaps-between-tabs 0) so a user coming from niri lands on familiar
+    // proportions. The two that deliberately DIVERGE are Style and Position:
+    // PlasmaZones shipped a title-chip pill on the column's top edge before
+    // this family existed, and defaulting to niri's thin left-edge bar would
+    // silently change every existing user's indicator. Both niri spellings are
+    // one setting away.
+    //
+    // The geometry keys (Enabled, HideWhenSingleTab, PlaceWithinColumn, Gap,
+    // Width, LengthProportion, Position) reach the LGPL engine through
+    // IScrollSettings because they change the resolved column rect. The paint
+    // keys (Style, GapsBetweenTabs, CornerRadius, the three colours) never
+    // enter the engine — the daemon reads them straight onto the overlay.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Master switch. Off, the indicator hides and stays hidden until
+    /// re-enabled (tabbed columns still work; they just carry no on-screen
+    /// indicator). niri's `tab-indicator { off }`.
+    static constexpr bool scrollingTabIndicatorEnabled()
     {
         return true;
+    }
+    /// Style wire values: 0 = title chips (the PlasmaZones pill, one labelled
+    /// chip per tab), 1 = segment bar (niri's thin run of coloured segments).
+    /// Named for the same reason as the CenterFocusedColumn values above.
+    static constexpr int scrollingTabIndicatorStyleChips()
+    {
+        return 0;
+    }
+    static constexpr int scrollingTabIndicatorStyleBar()
+    {
+        return 1;
+    }
+    /// Chips, preserving the indicator PlasmaZones shipped before this family.
+    static constexpr int scrollingTabIndicatorStyle()
+    {
+        return scrollingTabIndicatorStyleChips();
+    }
+    /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
+    static constexpr bool isValidScrollingTabIndicatorStyle(int v)
+    {
+        return v == scrollingTabIndicatorStyleChips() || v == scrollingTabIndicatorStyleBar();
+    }
+    /// Position wire values, niri's TabIndicatorPosition 1:1 in its own
+    /// declaration order. The engine mirrors these as TabIndicatorPosition and
+    /// settingsschema_scrolling.cpp static_asserts the two spellings agree.
+    static constexpr int scrollingTabIndicatorPositionLeft()
+    {
+        return 0;
+    }
+    static constexpr int scrollingTabIndicatorPositionRight()
+    {
+        return 1;
+    }
+    static constexpr int scrollingTabIndicatorPositionTop()
+    {
+        return 2;
+    }
+    static constexpr int scrollingTabIndicatorPositionBottom()
+    {
+        return 3;
+    }
+    /// Top, not niri's Left: the chips style needs horizontal room for its
+    /// labels, and top is where the pill has always sat (see the family note).
+    static constexpr int scrollingTabIndicatorPosition()
+    {
+        return scrollingTabIndicatorPositionTop();
+    }
+    /// Closed-set validity check (see isValidScrollingCenterFocusedColumn).
+    static constexpr bool isValidScrollingTabIndicatorPosition(int v)
+    {
+        return v == scrollingTabIndicatorPositionLeft() || v == scrollingTabIndicatorPositionRight()
+            || v == scrollingTabIndicatorPositionTop() || v == scrollingTabIndicatorPositionBottom();
+    }
+    /// Hide the indicator for a tabbed column holding a single window. Off by
+    /// default, matching niri, so a one-window tabbed column still advertises
+    /// that it is tabbed.
+    static constexpr bool scrollingTabIndicatorHideWhenSingleTab()
+    {
+        return false;
+    }
+    /// Draw the indicator INSIDE the column, shrinking the window rect by
+    /// (width + gap) on the indicator's side, rather than outside it where it
+    /// can overlay a neighbouring column or run off-screen. This is the one
+    /// key in the family that moves windows, so it is read by the engine's
+    /// relayout rather than by the overlay.
+    static constexpr bool scrollingTabIndicatorPlaceWithinColumn()
+    {
+        return false;
+    }
+    /// Gap between the indicator and the window, in logical pixels. NEGATIVE
+    /// IS MEANINGFUL and matches niri: it pulls the indicator on top of the
+    /// window instead of away from it, so the floor is negative rather than 0.
+    static constexpr int scrollingTabIndicatorGap()
+    {
+        return 5;
+    }
+    static constexpr int scrollingTabIndicatorGapMin()
+    {
+        return -64;
+    }
+    static constexpr int scrollingTabIndicatorGapMax()
+    {
+        return 64;
+    }
+    /// Thickness each STYLE wants, in logical pixels. One stored key serves
+    /// both, so these are what the style setter re-seeds between (see
+    /// Settings::setScrollingTabIndicatorStyle): a bar is a few pixels of
+    /// colour, while a chip has to hold a title, and a value that suits one
+    /// is unusable for the other.
+    ///
+    /// The bar figure is niri's. The chip figure is a comfortable line box at
+    /// the default overlay font; a user who scales that font up will want more.
+    static constexpr int scrollingTabIndicatorWidthForBar()
+    {
+        return 4;
+    }
+    static constexpr int scrollingTabIndicatorWidthForChips()
+    {
+        return 28;
+    }
+    /// The thickness @p style wants. Unknown styles answer with the shipped
+    /// default rather than asserting: this is a re-seed hint, not a validator.
+    static constexpr int scrollingTabIndicatorWidthForStyle(int style)
+    {
+        return style == scrollingTabIndicatorStyleBar() ? scrollingTabIndicatorWidthForBar()
+                                                        : scrollingTabIndicatorWidthForChips();
+    }
+    /// Indicator thickness in logical pixels, its short axis. EXACT for every
+    /// style: the chips honour it too, and content that does not fit clips.
+    /// That is what makes PlaceWithinColumn correct — the engine reserves this
+    /// many pixels out of the column, so an indicator that sized itself to its
+    /// own font would draw outside the band it was given.
+    ///
+    /// Seeded for the DEFAULT style (chips), not niri's 4, and re-seeded by
+    /// the style setter when the user flips styles without having chosen a
+    /// thickness of their own.
+    static constexpr int scrollingTabIndicatorWidth()
+    {
+        return scrollingTabIndicatorWidthForStyle(scrollingTabIndicatorStyle());
+    }
+    static constexpr int scrollingTabIndicatorWidthMin()
+    {
+        return 1;
+    }
+    static constexpr int scrollingTabIndicatorWidthMax()
+    {
+        return 64;
+    }
+    /// Indicator length along its long axis, as a proportion of the column
+    /// extent it runs beside — niri's `length total-proportion`.
+    static constexpr qreal scrollingTabIndicatorLengthProportion()
+    {
+        return 0.5;
+    }
+    static constexpr qreal scrollingTabIndicatorLengthProportionMin()
+    {
+        return 0.05;
+    }
+    static constexpr qreal scrollingTabIndicatorLengthProportionMax()
+    {
+        return 1.0;
+    }
+    static constexpr qreal scrollingTabIndicatorLengthProportionStep()
+    {
+        return 0.05;
+    }
+    /// Gap between individual tabs, in logical pixels.
+    static constexpr int scrollingTabIndicatorGapsBetweenTabs()
+    {
+        return 0;
+    }
+    static constexpr int scrollingTabIndicatorGapsBetweenTabsMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollingTabIndicatorGapsBetweenTabsMax()
+    {
+        return 64;
+    }
+    /// Per-tab corner radius in logical pixels, with ONE sentinel: the floor
+    /// value below means "fully rounded", i.e. half the tab's short extent.
+    /// A plain 0 default (niri's) would square off the pill PlasmaZones has
+    /// always drawn, and no fixed pixel radius tracks a chip whose height
+    /// follows the user's overlay font. The settings page spells the sentinel
+    /// as a "Fully rounded" toggle rather than showing -1 in a spin box.
+    static constexpr int scrollingTabIndicatorCornerRadiusPill()
+    {
+        return -1;
+    }
+    static constexpr int scrollingTabIndicatorCornerRadius()
+    {
+        return scrollingTabIndicatorCornerRadiusPill();
+    }
+    static constexpr int scrollingTabIndicatorCornerRadiusMin()
+    {
+        return scrollingTabIndicatorCornerRadiusPill();
+    }
+    static constexpr int scrollingTabIndicatorCornerRadiusMax()
+    {
+        return 64;
+    }
+    /// Tab colours. EMPTY MEANS "follow the theme" — the overlay falls back to
+    /// Kirigami.Theme (highlight for active, a translucent text colour for
+    /// inactive, negative-text for urgent), which is niri's third resolution
+    /// tier ("the colour matching the window border or focus ring") expressed
+    /// in Plasma's vocabulary. A rule-level override outranks these, matching
+    /// niri's order: window rule, then layout config, then theme.
+    static QString scrollingTabIndicatorActiveColor()
+    {
+        return QString();
+    }
+    static QString scrollingTabIndicatorInactiveColor()
+    {
+        return QString();
+    }
+    /// Urgent tabs need the window-urgency channel to be live; with no urgent
+    /// window this colour simply never resolves.
+    static QString scrollingTabIndicatorUrgentColor()
+    {
+        return QString();
     }
     /// Meta+wheel column focus in the KWin effect. Off, the axis chords are
     /// genuinely released back to the compositor (KWin's zoom effect can
@@ -575,5 +795,43 @@ static_assert(ConfigDefaultsScrolling::scrollingWindowHeightStepPercent()
                   && ConfigDefaultsScrolling::scrollingWindowHeightStepPercent()
                       <= ConfigDefaultsScrolling::scrollingStepPercentMax(),
               "ConfigDefaults::scrollingWindowHeightStepPercent() outside the declared [min, max] range");
+// Tab-indicator family: the same closed-set and [min, max] guards the rest of
+// the file carries, so a default edited out of its own declared range fails
+// the build instead of being silently snapped by the schema on first read.
+static_assert(
+    ConfigDefaultsScrolling::isValidScrollingTabIndicatorStyle(ConfigDefaultsScrolling::scrollingTabIndicatorStyle()),
+    "ConfigDefaults::scrollingTabIndicatorStyle() is not in its own closed set");
+static_assert(ConfigDefaultsScrolling::isValidScrollingTabIndicatorPosition(
+                  ConfigDefaultsScrolling::scrollingTabIndicatorPosition()),
+              "ConfigDefaults::scrollingTabIndicatorPosition() is not in its own closed set");
+static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorGap()
+                      >= ConfigDefaultsScrolling::scrollingTabIndicatorGapMin()
+                  && ConfigDefaultsScrolling::scrollingTabIndicatorGap()
+                      <= ConfigDefaultsScrolling::scrollingTabIndicatorGapMax(),
+              "ConfigDefaults::scrollingTabIndicatorGap() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorWidth()
+                      >= ConfigDefaultsScrolling::scrollingTabIndicatorWidthMin()
+                  && ConfigDefaultsScrolling::scrollingTabIndicatorWidth()
+                      <= ConfigDefaultsScrolling::scrollingTabIndicatorWidthMax(),
+              "ConfigDefaults::scrollingTabIndicatorWidth() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorLengthProportion()
+                      >= ConfigDefaultsScrolling::scrollingTabIndicatorLengthProportionMin()
+                  && ConfigDefaultsScrolling::scrollingTabIndicatorLengthProportion()
+                      <= ConfigDefaultsScrolling::scrollingTabIndicatorLengthProportionMax(),
+              "ConfigDefaults::scrollingTabIndicatorLengthProportion() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorGapsBetweenTabs()
+                      >= ConfigDefaultsScrolling::scrollingTabIndicatorGapsBetweenTabsMin()
+                  && ConfigDefaultsScrolling::scrollingTabIndicatorGapsBetweenTabs()
+                      <= ConfigDefaultsScrolling::scrollingTabIndicatorGapsBetweenTabsMax(),
+              "ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadius()
+                      >= ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusMin()
+                  && ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadius()
+                      <= ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusMax(),
+              "ConfigDefaults::scrollingTabIndicatorCornerRadius() outside the declared [min, max] range");
+// The pill sentinel IS the floor, so nothing between it and 0 can be stored.
+static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusMin()
+                  == ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusPill(),
+              "The corner-radius floor must be the pill sentinel — see the accessor comment");
 
 } // namespace PlasmaZones

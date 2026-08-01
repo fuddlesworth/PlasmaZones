@@ -178,6 +178,17 @@ Q_SIGNALS:
                                   const QString& screenId);
 
     /**
+     * @brief A tab of the scrolling tab indicator was clicked.
+     *
+     * Carries only the canonical window id: the consumer focuses that window,
+     * and the strip follows through its ordinary focus notification, so this
+     * path never needs to know which screen or column the tab belonged to.
+     *
+     * @param windowId Canonical id of the window whose tab was clicked
+     */
+    void scrollTabActivated(const QString& windowId);
+
+    /**
      * @brief Informational signal emitted when the Snap Assist overlay is shown.
      *
      * The kwin-effect drives thumbnail capture independently as part of the

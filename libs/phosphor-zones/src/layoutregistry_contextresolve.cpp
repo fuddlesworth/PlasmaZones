@@ -870,6 +870,91 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
         }
     }
     readFraction(PWR::ActionSlot::ScrollDefaultWindowHeight, params.defaultWindowHeight);
+
+    // ── tab indicator (niri's `tab-indicator` layout block) ──
+    // Same REJECT AND FALL THROUGH policy as readFraction above: a hand-edited
+    // rules.json carrying the wrong JSON type must leave the field unset so it
+    // falls through to the configured value, never coerce to 0 and apply an
+    // override the user did not write. The descriptor validators already
+    // reject these at load; this is the defence in depth for what bypasses
+    // them.
+    const auto readBool = [&resolved](QLatin1StringView slot, std::optional<bool>& out) {
+        const auto action = resolved.slot(QString(slot));
+        if (!action) {
+            return;
+        }
+        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
+        if (v.isBool()) {
+            out = v.toBool();
+        }
+    };
+    // Bounds are the descriptors' own, so a value the validator accepts is a
+    // value this resolver accepts.
+    const auto readInt = [&resolved](QLatin1StringView slot, std::optional<int>& out, double lo, double hi) {
+        const auto action = resolved.slot(QString(slot));
+        if (!action) {
+            return;
+        }
+        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
+        const double d = v.toDouble();
+        if (v.isDouble() && d >= lo && d <= hi) {
+            out = qRound(d);
+        }
+    };
+    const auto readColor = [&resolved](QLatin1StringView slot, std::optional<QString>& out) {
+        const auto action = resolved.slot(QString(slot));
+        if (!action) {
+            return;
+        }
+        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
+        if (v.isString() && !v.toString().isEmpty()) {
+            out = v.toString();
+        }
+    };
+
+    readBool(PWR::ActionSlot::TabIndicatorEnabled, params.tabIndicatorEnabled);
+    readBool(PWR::ActionSlot::TabIndicatorHideWhenSingleTab, params.tabIndicatorHideWhenSingleTab);
+    readBool(PWR::ActionSlot::TabIndicatorPlaceWithinColumn, params.tabIndicatorPlaceWithinColumn);
+    readInt(PWR::ActionSlot::TabIndicatorGap, params.tabIndicatorGap, PWR::MinTabIndicatorGap, PWR::MaxTabIndicatorGap);
+    readInt(PWR::ActionSlot::TabIndicatorWidth, params.tabIndicatorWidth, PWR::MinTabIndicatorWidth,
+            PWR::MaxTabIndicatorWidth);
+    readInt(PWR::ActionSlot::TabIndicatorGapsBetweenTabs, params.tabIndicatorGapsBetweenTabs, 0,
+            PWR::MaxTabIndicatorGap);
+    readInt(PWR::ActionSlot::TabIndicatorCornerRadius, params.tabIndicatorCornerRadius,
+            PWR::TabIndicatorCornerRadiusPill, PWR::MaxTabIndicatorCornerRadius);
+    readColor(PWR::ActionSlot::TabIndicatorActiveColor, params.tabIndicatorActiveColor);
+    readColor(PWR::ActionSlot::TabIndicatorInactiveColor, params.tabIndicatorInactiveColor);
+    readColor(PWR::ActionSlot::TabIndicatorUrgentColor, params.tabIndicatorUrgentColor);
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::TabIndicatorLength))) {
+        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
+        const double fraction = v.toDouble();
+        if (v.isDouble() && fraction >= PWR::MinTabIndicatorLengthRatio
+            && fraction <= PWR::MaxTabIndicatorLengthRatio) {
+            params.tabIndicatorLength = fraction;
+        }
+    }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::TabIndicatorStyle))) {
+        // Wire token → the style int (chips 0 / bar 1).
+        const QString token = action->params.value(PWR::ActionParam::Value).toString();
+        if (token == PWR::TabIndicatorStyleToken::Chips) {
+            params.tabIndicatorStyle = 0;
+        } else if (token == PWR::TabIndicatorStyleToken::Bar) {
+            params.tabIndicatorStyle = 1;
+        }
+    }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::TabIndicatorPosition))) {
+        // Wire token → TabIndicatorPosition (left 0 / right 1 / top 2 / bottom 3).
+        const QString token = action->params.value(PWR::ActionParam::Value).toString();
+        if (token == PWR::TabIndicatorPositionToken::Left) {
+            params.tabIndicatorPosition = 0;
+        } else if (token == PWR::TabIndicatorPositionToken::Right) {
+            params.tabIndicatorPosition = 1;
+        } else if (token == PWR::TabIndicatorPositionToken::Top) {
+            params.tabIndicatorPosition = 2;
+        } else if (token == PWR::TabIndicatorPositionToken::Bottom) {
+            params.tabIndicatorPosition = 3;
+        }
+    }
     return params;
 }
 

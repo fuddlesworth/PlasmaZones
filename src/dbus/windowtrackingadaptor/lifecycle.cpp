@@ -740,6 +740,8 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             const QVariant& v = it.value();
             if (k == Key::IsMinimized) {
                 meta.isMinimized = v.toBool();
+            } else if (k == Key::IsDemandingAttention) {
+                meta.isDemandingAttention = v.toBool();
             } else if (k == Key::IsFullscreen) {
                 meta.isFullscreen = v.toBool();
             } else if (k == Key::IsSticky) {
