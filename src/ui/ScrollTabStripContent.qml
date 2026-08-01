@@ -11,8 +11,12 @@
  * {windowId, title, active, urgent, colors?}). Updates are plain property
  * writes; the component is not re-instantiated per relayout.
  *
- * BOTH STYLES FILL THE RESOLVED RECT EXACTLY, on both axes, and divide it
- * evenly between the tabs. That is not cosmetic: the engine reserves exactly
+ * BOTH STYLES FILL THE RESOLVED RECT EXACTLY, on both axes. The tabs split
+ * the long axis in equal shares, with the last one absorbing whatever the
+ * integer division left over so the run ends flush with the rect. Chips also
+ * spend `gapsBetweenTabs` of that axis between neighbours, which comes out of
+ * the shares rather than out of the rect. That exactness is not cosmetic: the
+ * engine reserves exactly
  * this many pixels out of the column when `place within column` is set, so an
  * indicator that sized itself to its own content would draw over the window;
  * and the daemon hands the compositor this same rect as the surface's input

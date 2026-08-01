@@ -25,10 +25,11 @@ import org.kde.kirigami as Kirigami
 SettingsFlickable {
     id: root
 
-    // Value bounds and the two enum vocabularies, read once through the
-    // controller — the C++ side is the single home for these numbers, and the
-    // combos map index→value through the vocabulary rather than hardcoding
-    // 0/1/2/3.
+    // Slider bounds and steps, read once through the controller so the C++
+    // side stays the single home for these numbers. The two enum vocabularies
+    // do NOT come through here: the Style and Position combos take their
+    // options from settingsController.valueOptions(), which carries the
+    // labels along with the values.
     readonly property var _scrollConsts: settingsController.scrollingConstants()
 
     /// Every row below the master switch is dead while the indicator is off.

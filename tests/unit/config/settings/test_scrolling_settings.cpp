@@ -484,11 +484,43 @@ private Q_SLOTS:
         settings.setScrollingTabIndicatorStyle(shipped);
         QCOMPARE(settings.scrollingTabIndicatorWidth(), 40);
 
-        // A same-value style write is a full no-op, so it cannot re-seed a
-        // width the user set to the other style's default on purpose.
-        settings.setScrollingTabIndicatorWidth(ConfigDefaults::scrollingTabIndicatorWidthForStyle(other));
+        // The re-seed is hand-written rather than generated, which puts the
+        // emit-once contract at risk in a way width alone cannot show: a
+        // re-seeding write must fire settingsChanged exactly ONCE even though
+        // it touches two keys, and a same-value style write must fire nothing
+        // at all. Asserted on counts because a same-value write is invisible in
+        // the width — both branches of the re-seed would leave it untouched.
+        QSignalSpy styleSpy(&settings, &Settings::scrollingTabIndicatorStyleChanged);
+        QSignalSpy widthSpy(&settings, &Settings::scrollingTabIndicatorWidthChanged);
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+
         settings.setScrollingTabIndicatorStyle(shipped);
+        QCOMPARE(styleSpy.count(), 0);
+        QCOMPARE(widthSpy.count(), 0);
+        QCOMPARE(changedSpy.count(), 0);
+
+        // Re-seeding flip: style and width both move, and the two-key write
+        // still announces once.
+        settings.setScrollingTabIndicatorWidth(ConfigDefaults::scrollingTabIndicatorWidthForStyle(shipped));
+        styleSpy.clear();
+        widthSpy.clear();
+        changedSpy.clear();
+        settings.setScrollingTabIndicatorStyle(other);
         QCOMPARE(settings.scrollingTabIndicatorWidth(), ConfigDefaults::scrollingTabIndicatorWidthForStyle(other));
+        QCOMPARE(styleSpy.count(), 1);
+        QCOMPARE(widthSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), 1);
+
+        // Preserving flip: only the style moves, and it still announces once.
+        settings.setScrollingTabIndicatorWidth(40);
+        styleSpy.clear();
+        widthSpy.clear();
+        changedSpy.clear();
+        settings.setScrollingTabIndicatorStyle(shipped);
+        QCOMPARE(settings.scrollingTabIndicatorWidth(), 40);
+        QCOMPARE(styleSpy.count(), 1);
+        QCOMPARE(widthSpy.count(), 0);
+        QCOMPARE(changedSpy.count(), 1);
     }
 
     /// Behavior setters follow the standard emit-once contract: an
