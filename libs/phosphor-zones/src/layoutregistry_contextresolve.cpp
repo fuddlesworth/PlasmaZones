@@ -907,7 +907,12 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
             return;
         }
         const QJsonValue v = action->params.value(PWR::ActionParam::Value);
-        if (v.isString() && !v.toString().isEmpty()) {
+        // Parseable colours only, matching the descriptors' hasHexColor. This
+        // helper passes the string through verbatim to a QML `color` property,
+        // where an unparseable value renders as an invalid colour instead of
+        // falling back to the theme — so a store that bypassed the loader's
+        // validation must not get its string through here either.
+        if (v.isString() && !v.toString().isEmpty() && QColor::isValidColorName(v.toString())) {
             out = v.toString();
         }
     };

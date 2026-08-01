@@ -99,10 +99,14 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         // for the whole disabled period, so any unrelated surface-state sync
         // would re-install a region for an indicator that is not there.
         //
-        // This does NOT shorten the click-through window during the animated
-        // hide: nothing is pushed to the shell until a sync runs, and on this
-        // branch that is the hide-completion callback below. The fading pills
-        // stay clickable for the length of the animation either way.
+        // This mostly does not shorten the click-through window during the
+        // animated hide: nothing is pushed to the shell until a sync runs, and
+        // on this branch that is the hide-completion callback below, so the
+        // fading pills normally stay clickable for the length of the
+        // animation. The exception is an UNRELATED sync landing mid-animation
+        // (an OSD, the zone selector, a geometry change), which now reads the
+        // empty region and drops the pills' input early. That is the safe
+        // direction to fail in.
         m_scrollTabInputRegions.remove(screenId);
         // Hide-and-unload without creating a shell for a screen that never
         // showed strips.

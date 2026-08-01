@@ -13,6 +13,18 @@
 #include <QMetaObject>
 
 namespace PhosphorScrollEngine {
+namespace {
+// Sanity bounds for tab-indicator overrides arriving through the public
+// per-screen map. Deliberately NOT the rules layer's constants — this library
+// does not depend on phosphor-rules — but the same numbers, because both
+// ultimately mirror the config schema's clamps. They exist to reject a
+// grossly malformed embedder-supplied override, not to re-implement the
+// cascade's validation, so they are wide.
+constexpr int kMinTabIndicatorGap = -64;
+constexpr int kMaxTabIndicatorGap = 64;
+constexpr int kMinTabIndicatorWidth = 1;
+constexpr int kMaxTabIndicatorWidth = 64;
+} // namespace
 
 ScrollEngine::ScrollEngine(PhosphorEngine::IWindowTrackingService* windowTracker,
                            PhosphorScreens::ScreenManager* screenManager, QObject* parent)
@@ -914,12 +926,17 @@ TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QString& screenId) 
             out = it->toBool();
         }
     };
-    const auto readInt = [&overrides](const QString& key, int& out) {
+    // Bounded, for the same public-API reason the length belt below states: an
+    // embedder can hand this library an override map directly, and an
+    // unbounded width or gap feeds the reservation arithmetic that decides how
+    // much of the column the window gets. Validate-then-fall-back, so a
+    // garbage override leaves the configured value alone.
+    const auto readInt = [&overrides](const QString& key, int& out, int lo, int hi) {
         const auto it = overrides.constFind(key);
         if (it != overrides.constEnd()) {
             bool ok = false;
             const int v = it->toInt(&ok);
-            if (ok) {
+            if (ok && v >= lo && v <= hi) {
                 out = v;
             }
         }
@@ -927,8 +944,8 @@ TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QString& screenId) 
     readBool(K::tabIndicatorEnabled(), params.enabled);
     readBool(K::tabIndicatorHideWhenSingleTab(), params.hideWhenSingleTab);
     readBool(K::tabIndicatorPlaceWithinColumn(), params.placeWithinColumn);
-    readInt(K::tabIndicatorGap(), params.gap);
-    readInt(K::tabIndicatorWidth(), params.width);
+    readInt(K::tabIndicatorGap(), params.gap, kMinTabIndicatorGap, kMaxTabIndicatorGap);
+    readInt(K::tabIndicatorWidth(), params.width, kMinTabIndicatorWidth, kMaxTabIndicatorWidth);
     const auto lengthIt = overrides.constFind(K::tabIndicatorLengthProportion());
     if (lengthIt != overrides.constEnd()) {
         bool ok = false;

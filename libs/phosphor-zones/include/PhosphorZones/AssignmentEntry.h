@@ -320,7 +320,9 @@ struct ContextTilingParams
  * Each field is set only when a matching context rule fills the corresponding
  * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
  * SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
- * SetScrollDefaultWindowHeight); an unset field means "use the config value".
+ * SetScrollDefaultWindowHeight, plus the thirteen SetTabIndicator* slots
+ * documented in their own block below); an unset field means "use the config
+ * value".
  * Consumed daemon-side: the values are layered onto the scrolling engine's
  * per-screen parameters (config stays the base, the rule wins where present),
  * the same way @ref ContextTilingParams is layered onto the autotile override

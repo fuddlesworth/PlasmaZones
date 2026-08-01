@@ -339,10 +339,12 @@ public:
     }
     /// The thickness @p style wants. Unknown styles answer with the shipped
     /// default rather than asserting: this is a re-seed hint, not a validator.
+    /// Spelled as a test for CHIPS so that arm stays true — the fallback must
+    /// be the shipped style's thickness, and Bar is what ships.
     static constexpr int scrollingTabIndicatorWidthForStyle(int style)
     {
-        return style == scrollingTabIndicatorStyleBar() ? scrollingTabIndicatorWidthForBar()
-                                                        : scrollingTabIndicatorWidthForChips();
+        return style == scrollingTabIndicatorStyleChips() ? scrollingTabIndicatorWidthForChips()
+                                                          : scrollingTabIndicatorWidthForBar();
     }
     /// Indicator thickness in logical pixels, its short axis. EXACT for every
     /// style: the chips honour it too, and content that does not fit clips.

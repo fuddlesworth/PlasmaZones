@@ -373,7 +373,10 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         // nothing else, so its per-page Reset covers the indicator's
         // visibility, layout and colours together rather than leaving a third
         // of it behind. Every key of the subtree is listed for that reason;
-        // the one-owner invariant holds because no other page reads the group.
+        // the one-owner invariant holds because no other page OWNS the group.
+        // ScrollingSimplePage surfaces three of these keys, but a simple page
+        // carries no pageOwnedConfigKeys entry of its own — it delegates
+        // through simplePageBackingPages, so ownership stays here.
         {QStringLiteral("scrolling-tabs"),
          {
              {CD::scrollingTabIndicatorGroup(), CD::enabledKey()},

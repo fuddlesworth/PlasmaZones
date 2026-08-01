@@ -180,6 +180,25 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
+// A tab-indicator colour: EMPTY (follow the theme) or a colour QColor can
+// parse. Rejects anything else at the boundary rather than letting it reach
+// the QML `color` property, where an unparseable string renders as an invalid
+// colour rather than falling back. Returning false surfaces the rejection to
+// the D-Bus caller instead of silently dropping the write.
+#define REGISTER_TAB_COLOR(name, getter, setter)                                                                       \
+    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
+        return concrete->getter();                                                                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        const QString s = v.toString();                                                                                \
+        if (!s.isEmpty() && !QColor::isValidColorName(s)) {                                                            \
+            return false;                                                                                              \
+        }                                                                                                              \
+        concrete->setter(s);                                                                                           \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
+
     // Activation settings — drag activation triggers list (multi-bind)
     m_getters[QStringLiteral("dragActivationTriggers")] = [this]() {
         return QVariant::fromValue(m_settings->dragActivationTriggers());
@@ -890,15 +909,18 @@ void SettingsAdaptor::initializeRegistry()
                               setScrollingTabIndicatorGapsBetweenTabs)
         REGISTER_CONCRETE_INT("scrollingTabIndicatorCornerRadius", scrollingTabIndicatorCornerRadius,
                               setScrollingTabIndicatorCornerRadius)
-        // Colours are free-form strings, not REGISTER_COLOR_SETTING: EMPTY is
-        // the meaningful "follow the theme" value and a QColor round-trip
-        // cannot carry it.
-        REGISTER_CONCRETE_STRING("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
-                                 setScrollingTabIndicatorActiveColor)
-        REGISTER_CONCRETE_STRING("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
-                                 setScrollingTabIndicatorInactiveColor)
-        REGISTER_CONCRETE_STRING("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
-                                 setScrollingTabIndicatorUrgentColor)
+        // Colours are strings, not REGISTER_COLOR_SETTING: EMPTY is the
+        // meaningful "follow the theme" value and a QColor round-trip cannot
+        // carry it. They are still validated at this boundary rather than
+        // passed through — the string lands on a QML `color` property, where an
+        // unparseable value renders as an invalid colour instead of falling
+        // back to the theme, so an arbitrary D-Bus write must not reach it.
+        REGISTER_TAB_COLOR("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
+                           setScrollingTabIndicatorActiveColor)
+        REGISTER_TAB_COLOR("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
+                           setScrollingTabIndicatorInactiveColor)
+        REGISTER_TAB_COLOR("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
+                           setScrollingTabIndicatorUrgentColor)
 
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusEnabled", scrollingWheelFocusEnabled, setScrollingWheelFocusEnabled)
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusInverted", scrollingWheelFocusInverted,

@@ -19,8 +19,10 @@ import org.kde.kirigami as Kirigami
  * this page) and the Meta+Alt+T shortcut, which toggles the focused column.
  * This page only governs how a column that is already tabbed advertises it.
  *
- * The three cards mirror the three concerns above, so a user hunting for one
- * knob narrows by card rather than scanning a thirteen-row list.
+ * The cards narrow the search, so a user hunting for one knob picks a card
+ * rather than scanning the whole list. Layout is split across two of them
+ * (Tab indicator carries style and position, Size and spacing carries the
+ * measurements) because the measurements alone outnumber everything else.
  */
 SettingsFlickable {
     id: root

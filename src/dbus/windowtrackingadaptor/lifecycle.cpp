@@ -616,6 +616,10 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     const QString shadowId = shadowWindowId(windowId);
     m_frameGeometry.remove(shadowId);
     m_broadcastFloating.remove(shadowId);
+    // Keyed by the CANONICAL id, not the shadow one: tabColorRuleParams is
+    // called with the id the tab-strip payload carries. Without this the memo
+    // grows by one entry per window ever tabbed, for the daemon's lifetime.
+    m_tabColorMemo.remove(windowId);
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
     // rely on other WTS state still being present during their cleanup. The

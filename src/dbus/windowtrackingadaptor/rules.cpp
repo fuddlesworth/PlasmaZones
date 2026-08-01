@@ -337,9 +337,15 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     // A private memo keyed the same way is free of both: nothing else reads it,
     // so its filter can be exactly right for THIS query, and a second call
     // costs a hash lookup again.
+    // The key is the revision PLUS the query fields that move under a live
+    // window. Title is load-bearing: the enrichment refresh that calls this is
+    // driven by title changes, so a revision-only key would pin a
+    // `Title contains …` rule to its first verdict for the window's lifetime.
     const quint64 revision = m_ruleStore->ruleSet().revision();
     const auto memoIt = m_tabColorMemo.constFind(windowId);
-    if (memoIt != m_tabColorMemo.constEnd() && memoIt->revision == revision) {
+    if (memoIt != m_tabColorMemo.constEnd() && memoIt->revision == revision && memoIt->title == query->title
+        && memoIt->captionNormal == query->captionNormal && memoIt->virtualDesktop == query->virtualDesktop
+        && memoIt->activity == query->activity) {
         return memoIt->colors;
     }
     // The filter is stricter than admitScreenStamped: this query stamps NO
@@ -353,7 +359,9 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
             return admitScreenStamped(rule) && !rule.match.referencesAnyField({PhosphorRules::Field::ScreenId});
         });
     const QVariantMap colors = tabColorsFromResolved(resolved);
-    m_tabColorMemo.insert(windowId, TabColorMemoEntry{revision, colors});
+    m_tabColorMemo.insert(windowId,
+                          TabColorMemoEntry{revision, query->title, query->captionNormal, query->virtualDesktop,
+                                            query->activity, colors});
     return colors;
 }
 

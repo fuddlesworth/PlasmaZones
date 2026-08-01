@@ -845,6 +845,13 @@ void Daemon::stop()
     // first placementChanged of the next init/start cycle read as "unchanged"
     // and silently skip its save trigger.
     m_lastTiledCountByScreen.clear();
+    // Same shape: the raw tab-strip payloads and the pending-refresh latch are
+    // per-session. A refresh scheduled just before stop() would otherwise fire
+    // afterwards and re-push the pre-stop strips (harmless, since
+    // applyScrollTabStrips bails on a null overlay service, but it is dead work
+    // over dead state).
+    m_lastScrollTabStripsJson.clear();
+    m_scrollTabEnrichmentPending = false;
     // Per-session restore staging: entries computed against the pre-stop
     // window set must not feed a post-restart KCM apply with dead geometry.
     m_pendingSnapFloatRestores.clear();

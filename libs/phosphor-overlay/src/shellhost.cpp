@@ -231,7 +231,12 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // immediately clear it again and install a region over a surface the user
     // cannot see.
     const bool wantPartial = anyVisible && !anyInputGrabbing && !partialInputRegion.isEmpty();
-    const bool wantTransparent = !anyInputGrabbing && !wantPartial;
+    // The grab term is spelled `anyVisible && anyInputGrabbing` rather than
+    // bare `anyInputGrabbing` so the derivation does not rest on callers
+    // guaranteeing that a grabbing slot is also a visible one. Nothing in this
+    // library enforces that, and if it were ever false the bare form would hand
+    // an invisible surface the whole screen's clicks.
+    const bool wantTransparent = !(anyVisible && anyInputGrabbing) && !wantPartial;
     if (s.m_shellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
         s.m_shellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
     }
@@ -247,14 +252,18 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // answer "already applied" and leave the new surface with no input region
     // at all.
     //
-    // It is cheap when the region is unchanged: QWaylandWindow caches both the
-    // mask and the input region derived from it (qwaylandwindow_p.h, Qt 6.11 —
-    // separate mMask and mInputRegion members behind a shared
-    // updateInputRegion()), so an unchanged region does not reach the
-    // compositor. Note QWindow::setMask itself does no comparing; the whole
-    // argument rests on the QWaylandWindow side. The re-assert is likewise not
-    // needed for a flag round trip, since the platform window still holds the
-    // mask across one — this is about window re-creation specifically.
+    // Cost is not a concern here regardless: every caller is on a structural
+    // edge (slot show, hide completion, screen add/remove, strip relayout),
+    // never on a paint or frame-callback path. QWaylandWindow does hold the
+    // state needed to elide a redundant request — qwaylandwindow_p.h (Qt 6.11)
+    // carries separate mMask and mInputRegion members behind a shared
+    // updateInputRegion() — so an unchanged region is expected not to reach the
+    // compositor, but that elision lives in qwaylandwindow.cpp and is not
+    // verified here. QWindow::setMask itself does no comparing.
+    //
+    // The re-assert is not needed for a flag round trip either, since the
+    // platform window still holds the mask across one — this is about window
+    // re-creation specifically.
     s.m_shellWindow->setMask(wantPartial ? partialInputRegion : QRegion());
 }
 

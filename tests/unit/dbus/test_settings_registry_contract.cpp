@@ -38,6 +38,7 @@
 #include <QDBusVariant>
 #include <QDir>
 #include <QDirIterator>
+#include <QMetaProperty>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -318,10 +319,47 @@ private Q_SLOTS:
             // that registers key A's name against key B's accessor satisfies
             // both maps and still reports the wrong value forever; comparing
             // against the Q_PROPERTY read is what catches a transposition.
-            const QVariant direct = mo->property(i).read(m_settings);
-            if (direct.isValid() && viaBus != direct) {
+            //
+            // PERTURB FIRST. Every property here holds its schema default
+            // under the isolated config, and this family is full of keys that
+            // SHARE one — the three tab colours are all empty, the two tab
+            // bools are both false, the two step percentages are both 10. A
+            // transposition inside any of those sets is invisible against
+            // defaults, so write something distinct through the property,
+            // compare, then put it back.
+            const QMetaProperty prop = mo->property(i);
+            const QVariant original = prop.read(m_settings);
+            QVariant perturbed;
+            switch (original.metaType().id()) {
+            case QMetaType::Bool:
+                perturbed = !original.toBool();
+                break;
+            case QMetaType::Int:
+                perturbed = original.toInt() + 1;
+                break;
+            case QMetaType::Double:
+                perturbed = original.toDouble() + 1.0;
+                break;
+            case QMetaType::QString:
+                perturbed = QVariant(original.toString() + QStringLiteral("zz"));
+                break;
+            default:
+                break;
+            }
+            // Only compare when the perturbation actually took: a setter that
+            // clamps or validates may refuse it, and then this key is simply
+            // back to the default-valued comparison it had before.
+            if (perturbed.isValid() && prop.isWritable()) {
+                prop.write(m_settings, perturbed);
+            }
+            const QVariant direct = prop.read(m_settings);
+            const QVariant perturbedViaBus = m_adaptor->getSetting(name).variant();
+            if (direct.isValid() && perturbedViaBus != direct) {
                 transposed.append(
-                    QStringLiteral("%1 (bus=%2 property=%3)").arg(name, viaBus.toString(), direct.toString()));
+                    QStringLiteral("%1 (bus=%2 property=%3)").arg(name, perturbedViaBus.toString(), direct.toString()));
+            }
+            if (prop.isWritable()) {
+                prop.write(m_settings, original);
             }
         }
         QVERIFY2(checked > 0, "Reflection found no scrolling properties: the scan itself is broken.");

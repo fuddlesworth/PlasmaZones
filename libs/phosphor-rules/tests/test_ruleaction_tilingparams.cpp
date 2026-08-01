@@ -16,6 +16,9 @@
 #include <PhosphorRules/RuleAction.h>
 
 #include <QJsonObject>
+#include <QJsonValue>
+#include <QList>
+#include <QPair>
 #include <QTest>
 
 using namespace PhosphorRules;

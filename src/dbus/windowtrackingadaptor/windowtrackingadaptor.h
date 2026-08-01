@@ -33,6 +33,7 @@
 #include <QPointer>
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include <PhosphorConfig/IBackend.h>
 
@@ -799,11 +800,12 @@ public:
     /// QString). These outrank the per-context colours, which outrank the
     /// config, which falls back to the theme — niri's resolution order.
     ///
-    /// Resolves UNCACHED for the same reason scrollOpenRuleParams does. Unlike
-    /// that one this runs per tab per strip RELAYOUT rather than once per
-    /// window open, so it is deliberately kept to a slot read with no screen
-    /// or mode stamping: relayouts are structural events, not per-frame ones,
-    /// and a tabbed column holds a handful of tabs.
+    /// Resolves once per (window, rule revision, matchable window state)
+    /// through a PRIVATE memo (see m_tabColorMemo) — not the shared evaluator
+    /// cache, which cannot serve this query in either direction. Unlike
+    /// scrollOpenRuleParams this runs per tab per strip RELAYOUT and per title
+    /// change rather than once per window open, so it is deliberately kept to
+    /// a slot read with no screen or mode stamping.
     QVariantMap tabColorRuleParams(const QString& windowId);
 
 private:
@@ -824,9 +826,21 @@ private:
     /// Caches the extracted COLOUR MAP rather than the ResolvedActions: the
     /// three slots are all this path ever reads, the map is what every caller
     /// wants back, and it keeps this header free of the rules-engine include.
+    ///
+    /// The key carries the rule revision AND every query field that can change
+    /// under a live window without one: title, captionNormal (title-derived),
+    /// virtual desktop and activity. Title especially — the refresh that
+    /// consumes this memo is DRIVEN by title changes, so keying on the revision
+    /// alone would leave a `Title contains …` tab-colour rule stuck on its
+    /// first verdict until the next rules save. The rest of the query (appId,
+    /// role, desktopFile, pid, windowType) is immutable for a given window id.
     struct TabColorMemoEntry
     {
         quint64 revision = 0;
+        std::optional<QString> title;
+        std::optional<QString> captionNormal;
+        int virtualDesktop = 0;
+        QString activity;
         QVariantMap colors;
     };
     QHash<QString, TabColorMemoEntry> m_tabColorMemo;

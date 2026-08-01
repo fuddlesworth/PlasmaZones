@@ -209,6 +209,7 @@ private Q_SLOTS:
     void presetIndexIsClampedToTheLivePresetList();
     void fixedKindWithAProportionValueFallsThroughToTheGlobal();
     void tabIndicatorOverridesArePerProperty();
+    void tabIndicatorRejectsGarbageNumericOverrides();
     void tabIndicatorRejectsAGarbagePositionOverride();
 
 private:
@@ -519,6 +520,58 @@ void TestScrollEnginePerScreen::tabIndicatorOverridesArePerProperty()
     const TabIndicatorParams global = engine->tabIndicatorParamsForScreen(kS3);
     QCOMPARE(global.gap, 5);
     QCOMPARE(global.width, 4);
+}
+
+void TestScrollEnginePerScreen::tabIndicatorRejectsGarbageNumericOverrides()
+{
+    // The three numeric fields are all validate-then-fall-back, and each has a
+    // hand-written guard rather than a shared macro, so each needs its own leg.
+    // Without these the guards can be deleted with the suite still green.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->tabIndicatorEnabled = true;
+    settings->tabIndicatorHideWhenSingleTab = false;
+    settings->tabIndicatorGap = 5;
+    settings->tabIndicatorWidth = 4;
+    settings->tabIndicatorLengthProportion = 0.5;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // Length: a legal fraction lands; zero and negative leave the configured
+    // value alone (they would resolve the indicator to a sliver while every
+    // setting still reported it on), and above 1.0 clamps rather than falls back.
+    QVariantMap m;
+    m.insert(ScrollPerScreenKeys::tabIndicatorLengthProportion(), 0.25);
+    engine->applyPerScreenConfig(kS1, m);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS1).lengthProportion, 0.25);
+
+    m.insert(ScrollPerScreenKeys::tabIndicatorLengthProportion(), 0.0);
+    engine->applyPerScreenConfig(kS1, m);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS1).lengthProportion, 0.5);
+
+    m.insert(ScrollPerScreenKeys::tabIndicatorLengthProportion(), -1.0);
+    engine->applyPerScreenConfig(kS1, m);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS1).lengthProportion, 0.5);
+
+    m.insert(ScrollPerScreenKeys::tabIndicatorLengthProportion(), 4.0);
+    engine->applyPerScreenConfig(kS1, m);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS1).lengthProportion, 1.0);
+
+    // Gap and width are bounded at this boundary too: an out-of-range override
+    // leaves the configured value rather than feeding the reservation
+    // arithmetic a number the config layer would never have produced.
+    QVariantMap wild;
+    wild.insert(ScrollPerScreenKeys::tabIndicatorGap(), 100000);
+    wild.insert(ScrollPerScreenKeys::tabIndicatorWidth(), -5);
+    engine->applyPerScreenConfig(kS2, wild);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS2).gap, 5);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS2).width, 4);
+
+    // The two bools that no other case exercises still round-trip.
+    QVariantMap bools;
+    bools.insert(ScrollPerScreenKeys::tabIndicatorHideWhenSingleTab(), true);
+    engine->applyPerScreenConfig(kS3, bools);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS3).hideWhenSingleTab, true);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS3).enabled, true);
 }
 
 void TestScrollEnginePerScreen::tabIndicatorRejectsAGarbagePositionOverride()

@@ -217,7 +217,11 @@ struct TabIndicatorParams
         if (!placeWithinColumn || !resolvesFor(tileCount)) {
             return 0;
         }
-        return qMax(0, width + gap);
+        // qMax(1, width), matching indicatorRectFor's thickness exactly. Using
+        // the raw width here would let an embedder-supplied width below 1
+        // reserve one number and draw another, so the visual gap would not be
+        // the configured one.
+        return qMax(0, qMax(1, width) + gap);
     }
 
     /// Whether a tabbed column with @p tileCount tiles draws an indicator.

@@ -85,7 +85,9 @@ public:
     virtual bool scrollingTabIndicatorPlaceWithinColumn() const = 0;
     /// Gap between indicator and window; NEGATIVE puts it over the window.
     virtual int scrollingTabIndicatorGap() const = 0;
-    /// Indicator thickness (exact for the bar style, a floor for chips).
+    /// Indicator thickness. EXACT for every style, chips included: content
+    /// that does not fit clips rather than growing the indicator, which is what
+    /// keeps PlaceWithinColumn's reservation honest. See TabIndicatorParams.
     virtual int scrollingTabIndicatorWidth() const = 0;
     /// Indicator length as a proportion of the column extent beside it.
     virtual qreal scrollingTabIndicatorLengthProportion() const = 0;

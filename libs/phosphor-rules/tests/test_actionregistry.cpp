@@ -4,6 +4,7 @@
 #include <PhosphorRules/RuleAction.h>
 
 #include <QJsonObject>
+#include <QSet>
 #include <QTest>
 
 using namespace PhosphorRules;
@@ -260,6 +261,51 @@ private Q_SLOTS:
     {
         const ActionRegistry& reg = ActionRegistry::instance();
         QVERIFY(!reg.validate(makeAction(QLatin1StringView("notRegistered"))));
+    }
+
+    /// Every registered param's `kind` must be one the settings layer's QML
+    /// dispatcher recognises. The kind is a free-form QString that no compiler
+    /// checks, and ActionRow.qml falls back to a plain TEXT FIELD for an
+    /// unknown one — so a typo silently ships a numeric slot as free text,
+    /// which is exactly what "pixels" did until this round. Failing here is
+    /// far cheaper than noticing it in the rule editor.
+    ///
+    /// The list mirrors ActionRow.qml's dispatch plus the struct doc on
+    /// ParamSchema. Adding a kind means adding it in BOTH places, and this
+    /// canary is what makes the omission loud.
+    void everyParamKindIsInTheKnownVocabulary()
+    {
+        static const QSet<QString> known = {
+            QStringLiteral("string"),         QStringLiteral("number"),
+            QStringLiteral("percent"),        QStringLiteral("enum"),
+            QStringLiteral("bool"),           QStringLiteral("color"),
+            QStringLiteral("snappingLayout"), QStringLiteral("tilingAlgorithm"),
+            QStringLiteral("animationEvent"), QStringLiteral("shaderEffect"),
+            QStringLiteral("overlayShader"),  QStringLiteral("zoneOrdinals"),
+            QStringLiteral("curveEditor"),    QStringLiteral("screenId"),
+            QStringLiteral("virtualDesktop"), QStringLiteral("decorationChain"),
+        };
+        const ActionRegistry& reg = ActionRegistry::instance();
+        QStringList offenders;
+        int paramsSeen = 0;
+        for (const QString& type : reg.registeredTypes()) {
+            const auto desc = reg.descriptor(type);
+            if (!desc) {
+                continue;
+            }
+            for (const ParamSchema& p : desc->params) {
+                ++paramsSeen;
+                if (!known.contains(p.kind)) {
+                    offenders.append(type + QLatin1Char('/') + p.key + QLatin1String(" = \"") + p.kind
+                                     + QLatin1Char('"'));
+                }
+            }
+        }
+        QVERIFY2(paramsSeen > 0, "No descriptor params found: the scan itself is broken.");
+        QVERIFY2(offenders.isEmpty(),
+                 qPrintable(QStringLiteral("Param kinds the settings-layer dispatcher does not recognise, so their "
+                                           "editors silently fall back to a text field: %1")
+                                .arg(offenders.join(QStringLiteral(", ")))));
     }
 };
 

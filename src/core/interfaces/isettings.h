@@ -303,8 +303,11 @@ public:
     // indicator's GEOMETRY settings are deliberately absent: they change the
     // resolved column rect, so the scrolling engine reads them through
     // IScrollSettings and ships the finished rect in the tab-strip payload.
-    // Each default below is pinned against its ConfigDefaults twin by a
-    // static_assert in settings/scrolling.cpp, the way the toggle above is.
+    // Each NUMERIC default below is pinned against its ConfigDefaults twin by a
+    // static_assert in settings/scrolling.cpp, the way the toggle above is. The
+    // three colour defaults cannot be: ConfigDefaults returns a non-constexpr
+    // QString for them. They are pinned at runtime instead, by the schema
+    // assertions in test_scrolling_settings.cpp.
 
     /// 0 = title chips, 1 = segment bar (ConfigDefaults' TabIndicatorStyle).
     /// The bar is the default: it is niri's own indicator, and the only one it

@@ -741,8 +741,8 @@ private Q_SLOTS:
 
     void testNewActions_rejectStrayKeys()
     {
-        // The Value-keyed families (border, gap, tint/layer, scrolling) all
-        // declare `allowedKeys = {Value}`; pin that an otherwise-valid payload
+        // The Value-keyed families (border, gap, tint/layer, scrolling, tab
+        // indicator) all declare `allowedKeys = {Value}`; pin that a payload
         // carrying an unexpected extra key is rejected, so the strict-key path
         // is exercised for every one of them (not just for the pre-existing
         // SetEngineMode in testJson_rejectsInvalidParams).
@@ -783,6 +783,19 @@ private Q_SLOTS:
         rejectsStray(ActionType::OverrideOverlayStyle, QJsonValue(QString(OverlayStyleToken::Preview)));
         // SetWindowLayer is the same Value-keyed closed-enum shape.
         rejectsStray(ActionType::SetWindowLayer, QJsonValue(QString(WindowLayerToken::Above)));
+        // The tab-indicator family is the largest Value-keyed group in the
+        // vocabulary. One of each SHAPE covers it: the stray-key path is the
+        // descriptor's, not the validator's, so a bool, a signed-range number,
+        // a fraction, a zero-floored number, a token and a colour exercise
+        // every distinct descriptor form the sixteen are built from.
+        rejectsStray(ActionType::SetTabIndicatorEnabled, QJsonValue(true));
+        rejectsStray(ActionType::SetTabIndicatorGap, QJsonValue(-4));
+        rejectsStray(ActionType::SetTabIndicatorLength, QJsonValue(0.5));
+        rejectsStray(ActionType::SetTabIndicatorGapsBetweenTabs, QJsonValue(2));
+        rejectsStray(ActionType::SetTabIndicatorStyle, QJsonValue(QString(TabIndicatorStyleToken::Bar)));
+        rejectsStray(ActionType::SetTabIndicatorActiveColor, QJsonValue(QStringLiteral("#ff224466")));
+        // …and the window-domain half, which is a separate registration path.
+        rejectsStray(ActionType::TabColorUrgent, QJsonValue(QStringLiteral("#ff884422")));
     }
 
     void testOverrideOverlay_fromJson()

@@ -15,8 +15,10 @@
  * the long axis in equal shares, with the last one absorbing whatever the
  * integer division left over so the run ends flush with the rect. Chips also
  * spend `gapsBetweenTabs` of that axis between neighbours, which comes out of
- * the shares rather than out of the rect. That exactness is not cosmetic: the
- * engine reserves exactly
+ * the shares rather than out of the rect. The one exception is a rect too
+ * short for its tab count and gaps (each share floors at 1px), where the run
+ * runs LONGER than the rect and the clip takes the tail. That exactness is not
+ * cosmetic: the engine reserves exactly
  * this many pixels out of the column when `place within column` is set, so an
  * indicator that sized itself to its own content would draw over the window;
  * and the daemon hands the compositor this same rect as the surface's input
@@ -55,6 +57,10 @@ Item {
 
     /// Strip entries pushed by the daemon (see file doc).
     property var strips: []
+
+    /// Shown for a tab whose window reports no title. Named once so a
+    /// translator change lands on every one of the three places it appears.
+    readonly property string untitledLabel: i18n("Untitled window")
 
     /// A tab was clicked; @p windowId is the canonical id the daemon put in
     /// the payload. The daemon focuses that window, which makes it the shown
@@ -225,7 +231,7 @@ Item {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         Accessible.role: Accessible.Button
-                        Accessible.name: segment.modelData.title || i18n("Untitled window")
+                        Accessible.name: segment.modelData.title || root.untitledLabel
                         onClicked: root.tabActivated(segment.modelData.windowId)
                     }
                 }
@@ -258,7 +264,11 @@ Item {
                 // showing at the ends — two identical capsules, joined on one
                 // axis and nested on the other. A uniform inset makes the
                 // nesting deliberate, and it is what lets the radii below sit
-                // concentric.
+                // concentric while the corners are FULLY ROUNDED (the two
+                // radii are then both half their own thickness). For an
+                // explicit corner radius the two clamp to the same number, so
+                // the corners match rather than nest — deliberate, since a
+                // named radius should read as the radius the user asked for.
                 readonly property int chipInset: Math.max(1, Math.round(Kirigami.Units.smallSpacing / 2))
                 /// Thickness left for a chip once both insets are taken.
                 readonly property int chipThickness: Math.max(1, shortExtent - chipInset * 2)
@@ -276,8 +286,11 @@ Item {
                 /// already is: a sliver per tab, all of them present and
                 /// hittable. At that density the bar style is the better
                 /// choice anyway, and this makes the strip say so.
-                readonly property int longExtent: indicator.vertical ? height : width
-                readonly property int chipLongBudget: Math.max(1, Math.floor((longExtent - chipInset * 2 - root.gapsBetweenTabs * Math.max(0, indicator.tabCount - 1)) / Math.max(1, indicator.tabCount)))
+                // Deliberately NOT named longExtent: that name is already taken
+                // by indicator's, and the two would silently diverge the day
+                // either grows an inset.
+                readonly property int pillLongExtent: indicator.vertical ? height : width
+                readonly property int chipLongBudget: Math.max(1, Math.floor((pillLongExtent - chipInset * 2 - root.gapsBetweenTabs * Math.max(0, indicator.tabCount - 1)) / Math.max(1, indicator.tabCount)))
                 /// The LAST chip's share, absorbing the division remainder so
                 /// the run ends flush with the pill's inner edge instead of
                 /// leaving up to tabCount-1 px that belongs to no tab. The bar
@@ -366,7 +379,8 @@ Item {
                             // (or row) of tabs rather than a ragged stack of
                             // differently-sized blobs. Deriving it from the
                             // pill rather than from the label is also what
-                            // keeps the two radii concentric. No binding loop:
+                            // keeps the two radii concentric when fully
+                            // rounded (see chipInset). No binding loop:
                             // the pill's thickness is the engine's number and
                             // does not depend on its content.
                             width: indicator.vertical ? pill.chipThickness : alongAxis
@@ -378,7 +392,7 @@ Item {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 Accessible.role: Accessible.Button
-                                Accessible.name: chip.modelData.title || i18n("Untitled window")
+                                Accessible.name: chip.modelData.title || root.untitledLabel
                                 onClicked: root.tabActivated(chip.modelData.windowId)
                             }
 
@@ -401,11 +415,11 @@ Item {
                                 rotation: !indicator.vertical ? 0 : (indicator.leftEdge ? -90 : 90)
                                 // A window with neither a registry title nor an app id would
                                 // otherwise render a stray text-less blob.
-                                text: chip.modelData.title || i18n("Untitled window")
+                                text: chip.modelData.title || root.untitledLabel
                                 elide: Text.ElideRight
                                 // Against the chip's SHARE of the indicator,
                                 // not a fixed cap (see pill.chipLongBudget).
-                                width: Math.min(implicitWidth, Math.max(1, pill.chipLongBudget - Kirigami.Units.largeSpacing))
+                                width: Math.min(implicitWidth, Math.max(1, chip.alongAxis - Kirigami.Units.largeSpacing))
                                 color: chip.isUrgent || chip.isActive ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                                 // pixelSize (not pointSize, which is -1 for
                                 // pixel-defined theme fonts) scaled by the user's

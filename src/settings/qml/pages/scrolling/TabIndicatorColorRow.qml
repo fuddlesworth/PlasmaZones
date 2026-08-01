@@ -75,6 +75,14 @@ SettingsRow {
             onClicked: {
                 if (!root.picker)
                     return;
+                // The picker is SHARED across the three rows. If a second row
+                // could open it while the first is pending, both rows' handlers
+                // would be connected and one accept would write the chosen
+                // colour into two settings. Refusing while it is up is what
+                // actually makes the sharing safe, rather than relying on the
+                // dialog's modality.
+                if (root.picker.visible)
+                    return;
                 var picker = root.picker;
 
                 function acceptedHandler() {
@@ -101,7 +109,7 @@ SettingsRow {
         QQC2.Label {
             text: root._followsTheme ? i18n("Color scheme") : root._displayHex(root.storedColor)
             color: root._followsTheme ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
-            font.family: root._followsTheme ? Kirigami.Theme.defaultFont.family : "monospace"
+            font.family: root._followsTheme ? Kirigami.Theme.defaultFont.family : Kirigami.Theme.fixedWidthFont.family
             Layout.preferredWidth: Kirigami.Units.gridUnit * 6
             elide: Text.ElideRight
         }

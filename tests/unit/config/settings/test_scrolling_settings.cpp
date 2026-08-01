@@ -260,6 +260,26 @@ private Q_SLOTS:
         QCOMPARE(gap->validator(-9999).toInt(), ConfigDefaults::scrollingTabIndicatorGapMin());
         QCOMPARE(gap->validator(9999).toInt(), ConfigDefaults::scrollingTabIndicatorGapMax());
 
+        // GapsBetweenTabs sits two entries from Gap and looks identical, but
+        // its floor is 0, not negative. A copy-paste from the block above is
+        // exactly how it would acquire a negative floor it must not have.
+        const auto* betweenTabs = findKey(schema, tabGroup, ConfigDefaults::gapsBetweenTabsKey());
+        QVERIFY(betweenTabs && betweenTabs->validator);
+        QCOMPARE(betweenTabs->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs());
+        QCOMPARE(betweenTabs->validator(-10).toInt(), ConfigDefaults::scrollingTabIndicatorGapsBetweenTabsMin());
+        QCOMPARE(betweenTabs->validator(9999).toInt(), ConfigDefaults::scrollingTabIndicatorGapsBetweenTabsMax());
+
+        // The two bools carry no validator; the assertion that matters is that
+        // they are present with the shipped default, since the whole family
+        // has to be reachable through the schema for reset/discard to cover it.
+        for (const auto& pair : QList<QPair<QString, bool>>{
+                 {ConfigDefaults::hideWhenSingleTabKey(), ConfigDefaults::scrollingTabIndicatorHideWhenSingleTab()},
+                 {ConfigDefaults::placeWithinColumnKey(), ConfigDefaults::scrollingTabIndicatorPlaceWithinColumn()}}) {
+            const auto* entry = findKey(schema, tabGroup, pair.first);
+            QVERIFY2(entry, qPrintable(pair.first));
+            QCOMPARE(entry->defaultValue.toBool(), pair.second);
+        }
+
         const auto* radius = findKey(schema, tabGroup, ConfigDefaults::cornerRadiusKey());
         QVERIFY(radius && radius->validator);
         QCOMPARE(radius->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorCornerRadius());

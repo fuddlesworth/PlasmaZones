@@ -932,21 +932,53 @@ void Daemon::initEnginesAndWiring()
     // the structural payload, so without this the tab would keep the urgency
     // and title it had at the last STRUCTURAL change. That is the stale-state
     // failure the effect-side urgency connection exists to avoid.
+    //
+    // Disconnect-then-connect, NOT Qt::UniqueConnection: m_windowRegistry is
+    // built once in the Daemon ctor and never reset, so a stop() -> init()
+    // cycle would otherwise stack a second copy. UniqueConnection cannot do
+    // that job here — qobject.h's functor branch asserts on the flag
+    // ("Unique connection requires the slot to be a pointer to a member
+    // function") and de-duplicates nothing, so it would abort a debug build
+    // and be silently inert in release. Mirrors the rule-store pattern above.
+    // Safe to sweep by receiver: the only other metadataChanged subscriber is
+    // WindowTrackingAdaptor, a different receiver.
     if (m_windowRegistry) {
-        connect(
-            m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::metadataChanged, this,
-            [this](const QString&, const PhosphorEngine::WindowMetadata& oldMeta,
-                   const PhosphorEngine::WindowMetadata& newMeta) {
-                // Only the two enriched fields. Every other metadata edit
-                // (geometry, focus, desktop) reaches the strip through the
-                // engine's own relayout, and re-enriching on those would
-                // re-push every indicator on every window move.
-                if (oldMeta.isDemandingAttention == newMeta.isDemandingAttention && oldMeta.title == newMeta.title) {
-                    return;
-                }
-                scheduleScrollTabEnrichmentRefresh();
-            },
-            Qt::UniqueConnection);
+        disconnect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::metadataChanged, this, nullptr);
+        connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::metadataChanged, this,
+                [this](const QString&, const PhosphorEngine::WindowMetadata& oldMeta,
+                       const PhosphorEngine::WindowMetadata& newMeta) {
+                    // Only the two enriched fields. Every other metadata edit
+                    // (geometry, focus, desktop) reaches the strip through the
+                    // engine's own relayout, and re-enriching on those would
+                    // re-push every indicator on every window move.
+                    if (oldMeta.isDemandingAttention == newMeta.isDemandingAttention
+                        && oldMeta.title == newMeta.title) {
+                        return;
+                    }
+                    scheduleScrollTabEnrichmentRefresh();
+                });
+        // metadataChanged is not enough on its own: WindowRegistry::upsert
+        // emits windowAppeared, NOT metadataChanged, for an instance's FIRST
+        // record. If that record lands after the engine already emitted a
+        // strip naming the window, its tab would show the appId fallback until
+        // something else moved. Coalesced, so the extra edge is nearly free.
+        disconnect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowAppeared, this, nullptr);
+        connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowAppeared, this, [this]() {
+            scheduleScrollTabEnrichmentRefresh();
+        });
+    }
+
+    // A rules save changes what the per-window TabColor* actions resolve to,
+    // but nothing else re-drives the enrichment: the engine has no reason to
+    // relayout, and the context-override replay re-pushes the CACHED enriched
+    // model, so an edited window rule would not reach a live tab until the
+    // window moved or retitled. The refresh coalesces, so this costs one pass
+    // per save. Same disconnect-first reasoning as above.
+    if (m_ruleStore) {
+        disconnect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, nullptr);
+        connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this]() {
+            scheduleScrollTabEnrichmentRefresh();
+        });
     }
 
     // Control adaptor - high-level convenience API for third-party integrations.
@@ -1056,9 +1088,12 @@ void Daemon::refreshScrollTabEnrichment()
     // re-enriching. Strips exist only on scrolling screens that have a tabbed
     // column, so the set is small.
     //
-    // The copy is load-bearing for the same reason OverlayService::
-    // replayScrollTabStrips takes one: applyScrollTabStrips writes the very
-    // map being iterated.
+    // Defensive snapshot. applyScrollTabStrips writes the very map being
+    // iterated, though only its INSERT branch is reachable from here (a
+    // refresh only ever replays non-empty cached payloads, and re-parsing the
+    // same JSON is deterministic), so the remove that would actually
+    // invalidate an iterator cannot fire today. Cheap to keep: QHash is
+    // implicitly shared and nothing here detaches it.
     const QHash<QString, QString> cached = m_lastScrollTabStripsJson;
     for (auto it = cached.constBegin(); it != cached.constEnd(); ++it) {
         applyScrollTabStrips(it.key(), it.value());

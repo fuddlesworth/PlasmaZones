@@ -152,8 +152,10 @@ inline constexpr double kMaxColumnWidthPercent = kMaxColumnWidthRatio * 100.0;
 // The GAP floor is negative on purpose (a negative gap draws the indicator
 // over the window, which is niri's behaviour) and so is the CORNER RADIUS
 // floor, whose -1 is the config layer's "fully rounded" sentinel rather than a
-// real negative radius. Both are validated with hasNumberInSignedRange; every
-// other bound here stays zero-floored.
+// real negative radius. hasNumberInSignedRange is the EXPLICIT-FLOOR helper,
+// so it serves both directions: those two below zero, and WIDTH (floor 1) and
+// LENGTH (floor 0.05) above it. Only the bounds whose floor really is zero use
+// the zero-floored helper.
 // Aliased from the installed RuleAction.h constants, the kMinColumnWidthRatio
 // pattern, so the descriptor validators and the zones-layer context resolver
 // check the same numbers rather than two hand-mirrored copies.
