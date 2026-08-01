@@ -7,11 +7,11 @@ import org.kde.kirigami as Kirigami
 import "../../js/PresetList.js" as PresetList
 
 /**
- * @brief Simple-mode Scrolling page: the everyday decisions (view centering,
- * default column width) plus the shared Window Handling and Focus cards. The
- * advanced counterpart is the View page (scrolling-view); dirtiness, Reset,
- * and Discard delegate to all three advanced leaves via
- * simplePageBackingPages.
+ * @brief Simple-mode Scrolling page: the everyday decision (default column
+ * width) plus the shared Window Handling and Focus and view cards, the latter
+ * carrying the centering and wheel rows. The advanced counterpart is the
+ * Columns page (scrolling-columns); dirtiness, Reset, and Discard delegate to
+ * both advanced leaves via simplePageBackingPages.
  *
  * Global scope only, like TilingSimplePage: every row binds appSettings
  * directly and no per-monitor scope chip is offered here. Per-monitor
@@ -83,23 +83,6 @@ SettingsFlickable {
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
-
-                SettingsRow {
-                    title: i18n("Center the focused column")
-                    searchAnchor: "simpleCenterFocusedColumn"
-                    description: i18n("With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.")
-
-                    WideComboBox {
-                        Accessible.name: i18n("Center the focused column")
-                        textRole: "text"
-                        valueRole: "value"
-                        model: settingsController.valueOptions("Scrolling", "CenterFocusedColumn")
-                        storedValue: appSettings.scrollingCenterFocusedColumn
-                        onActivated: appSettings.scrollingCenterFocusedColumn = currentValue
-                    }
-                }
-
-                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Default width")

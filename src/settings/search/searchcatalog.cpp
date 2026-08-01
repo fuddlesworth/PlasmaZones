@@ -96,7 +96,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("column"),
                              PhosphorI18n::tr("strip"),
                              // Proper noun, deliberately untranslated (see the
-                             // scrolling-view keywords).
+                             // scrolling-window keywords).
                              QStringLiteral("niri")});
     search->setPageKeywords(QStringLiteral("animations-simple"),
                             {PhosphorI18n::tr("animation"), PhosphorI18n::tr("motion"), PhosphorI18n::tr("easing"),
@@ -147,18 +147,16 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("tiling-algorithm"),
                             {PhosphorI18n::tr("algorithm"), PhosphorI18n::tr("bsp"), PhosphorI18n::tr("binary"),
                              PhosphorI18n::tr("spiral"), PhosphorI18n::tr("master"), PhosphorI18n::tr("stack")});
-    search->setPageKeywords(QStringLiteral("scrolling-view"),
-                            {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("center"),
-                             PhosphorI18n::tr("wheel"),
-                             // Proper noun (the upstream compositor), deliberately not translated —
-                             // the one exception to this section's tr-for-extraction rule.
-                             QStringLiteral("niri")});
     search->setPageKeywords(QStringLiteral("scrolling-columns"),
                             {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("column"),
                              PhosphorI18n::tr("width"), PhosphorI18n::tr("preset"), PhosphorI18n::tr("tab")});
     search->setPageKeywords(QStringLiteral("scrolling-window"),
                             {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("window"),
-                             PhosphorI18n::tr("strip"), PhosphorI18n::tr("focus")});
+                             PhosphorI18n::tr("strip"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("center"),
+                             PhosphorI18n::tr("wheel"),
+                             // Proper noun (the upstream compositor), deliberately not translated —
+                             // the one exception to this section's tr-for-extraction rule.
+                             QStringLiteral("niri")});
     search->setPageKeywords(QStringLiteral("tiling-ordering"),
                             {PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
     search->setPageKeywords(QStringLiteral("tiling-shortcuts"),
@@ -576,21 +574,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // kind-gated size rows are registered unconditionally: those rows stay
     // visible while disabled (see ScrollingColumnsPage), so a deep link lands
     // on something the user can see and read.
-    addSection(search, QStringLiteral("scrolling-view"), QStringLiteral("focusAndView"),
-               PhosphorI18n::tr("Focus and view"));
-    addSetting(search, QStringLiteral("scrolling-view"), QStringLiteral("centerFocusedColumn"),
-               PhosphorI18n::tr("Center the focused column"),
-               {PhosphorI18n::tr("center"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("column"),
-                PhosphorI18n::tr("scroll")});
-    addSetting(search, QStringLiteral("scrolling-view"), QStringLiteral("alwaysCenterSingleColumn"),
-               PhosphorI18n::tr("Center a lone column"),
-               {PhosphorI18n::tr("center"), PhosphorI18n::tr("single"), PhosphorI18n::tr("column")});
-    addSetting(search, QStringLiteral("scrolling-view"), QStringLiteral("wheelFocusEnabled"),
-               PhosphorI18n::tr("Scroll columns with the mouse wheel"),
-               {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("scroll")});
-    addSetting(search, QStringLiteral("scrolling-view"), QStringLiteral("wheelFocusInverted"),
-               PhosphorI18n::tr("Invert wheel direction"),
-               {PhosphorI18n::tr("invert"), PhosphorI18n::tr("wheel"), PhosphorI18n::tr("direction")});
     addSection(search, QStringLiteral("scrolling-columns"), QStringLiteral("newColumns"),
                PhosphorI18n::tr("New columns"));
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultColumnWidthKind"),
@@ -654,13 +637,30 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingWindowHeightStep"),
                PhosphorI18n::tr("Height adjustment step"),
                {PhosphorI18n::tr("step"), PhosphorI18n::tr("height"), PhosphorI18n::tr("shortcut")});
-    addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingFocus"), PhosphorI18n::tr("Focus"));
+    // The Focus and view card, shared with scrolling-simple below: it absorbed
+    // the former View page's viewport rows, so those anchors resolve against
+    // both pages that host the card.
+    addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingFocus"),
+               PhosphorI18n::tr("Focus and view"));
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("centerFocusedColumn"),
+               PhosphorI18n::tr("Center the focused column"),
+               {PhosphorI18n::tr("center"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("column"),
+                PhosphorI18n::tr("scroll")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("alwaysCenterSingleColumn"),
+               PhosphorI18n::tr("Center a lone column"),
+               {PhosphorI18n::tr("center"), PhosphorI18n::tr("single"), PhosphorI18n::tr("column")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingFocusNewWindows"),
                PhosphorI18n::tr("Focus new windows"),
                {PhosphorI18n::tr("focus"), PhosphorI18n::tr("new"), PhosphorI18n::tr("open")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingFocusFollowsMouse"),
                PhosphorI18n::tr("Focus follows mouse"),
                {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("hover")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("wheelFocusEnabled"),
+               PhosphorI18n::tr("Scroll columns with the mouse wheel"),
+               {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("scroll")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("wheelFocusInverted"),
+               PhosphorI18n::tr("Invert wheel direction"),
+               {PhosphorI18n::tr("invert"), PhosphorI18n::tr("wheel"), PhosphorI18n::tr("direction")});
 
     // Tiling › Window (behaviour rows)
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("alwaysReinsertOnDrag"),
@@ -721,13 +721,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Max windows"), {PhosphorI18n::tr("limit"), PhosphorI18n::tr("count")});
 
     // Scrolling's own condensed rows plus the shared Window Handling and
-    // Focus cards it re-hosts, under the same rationale as its two siblings
+    // Focus and view cards it re-hosts, under the same rationale as its two siblings
     // above.
     addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingSimple"),
                PhosphorI18n::tr("Scrolling"));
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleCenterFocusedColumn"),
-               PhosphorI18n::tr("Center the focused column"),
-               {PhosphorI18n::tr("center"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("column")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleDefaultColumnWidthKind"),
                PhosphorI18n::tr("Default width"),
                {PhosphorI18n::tr("width"), PhosphorI18n::tr("column"), PhosphorI18n::tr("proportion")});
@@ -758,11 +755,23 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Width adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("width")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingWindowHeightStep"),
                PhosphorI18n::tr("Height adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("height")});
-    addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocus"), PhosphorI18n::tr("Focus"));
+    addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocus"),
+               PhosphorI18n::tr("Focus and view"));
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("centerFocusedColumn"),
+               PhosphorI18n::tr("Center the focused column"),
+               {PhosphorI18n::tr("center"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("column")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("alwaysCenterSingleColumn"),
+               PhosphorI18n::tr("Center a lone column"),
+               {PhosphorI18n::tr("center"), PhosphorI18n::tr("single"), PhosphorI18n::tr("column")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusNewWindows"),
                PhosphorI18n::tr("Focus new windows"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("open")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusFollowsMouse"),
                PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("wheelFocusEnabled"),
+               PhosphorI18n::tr("Scroll columns with the mouse wheel"),
+               {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("mouse")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("wheelFocusInverted"),
+               PhosphorI18n::tr("Invert wheel direction"), {PhosphorI18n::tr("invert"), PhosphorI18n::tr("wheel")});
 
     // The simple animations page hosts the SHARED GlobalTimingDefaultsCard,
     // which registers the same "globalAnimationDefaults" anchor the advanced
