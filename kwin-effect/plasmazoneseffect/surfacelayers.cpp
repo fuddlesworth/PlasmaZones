@@ -245,7 +245,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         planSurfaceFold(w, windowId, *bit, chain, state, compiledPackLazy, captureRestoreShader != nullptr);
     const bool mayAnimate = plan.mayAnimate;
     const float foldTime = plan.foldTime;
-    const bool captureCacheable = plan.captureCacheable;
     const int foldablePacks = plan.foldablePacks;
     const int staticPrefix = plan.staticPrefix;
     const int lastStaticDraw = plan.lastStaticDraw;
@@ -288,7 +287,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             }
         }
         captureWindowSurface(w, state, logicalGeometry, captureScale,
-                             /*intoCaptureTex=*/!plan.captureInComposite, captureCacheable, captureOpacity);
+                             /*intoCaptureTex=*/!plan.captureInComposite, captureOpacity);
     }
     // Hand the OffscreenEffect slot back: to the passthrough present on the rest
     // path, or to the caller's animation shader mid-transition. Runs on the

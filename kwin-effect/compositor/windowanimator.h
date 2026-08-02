@@ -133,6 +133,13 @@ public:
     bool hasActiveAnimations() const;
     bool hasAnimation(KWin::EffectWindow* handle) const;
 
+    /// True when any live animation's swept bounds (from∪to plus overshoot
+    /// samples, padded like the repaint sites) intersect @p region. Used by
+    /// prePaintScreen to gate PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS per
+    /// output, so an animation on one monitor does not force full repaints
+    /// of the others.
+    bool hasAnimationsIntersecting(const QRectF& region) const;
+
     /// Start an animation. When @p profileOverride is non-null, the per-call
     /// curve / duration / minDistance / sequence overrides on it replace the
     /// configured global profile (`m_profile`) for THIS animation only —

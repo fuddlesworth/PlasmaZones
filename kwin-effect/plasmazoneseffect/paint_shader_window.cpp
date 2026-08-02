@@ -570,14 +570,16 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                 // shader, and the whole compositor's transformed-windows paint
                 // path for ~3.5 s after every single drag.
                 //
-                // Deliberately NOT m_selfRepainting-flagged, unlike the other
-                // repaints the effect issues to drive its own animation. This one
-                // fires inside a live transition, where the capture cache is off
-                // anyway (captureCacheable excludes a transition, which supplies its
-                // own restore shader), so there is no cache for it to invalidate —
-                // and it is a one-shot settle edge, not a per-frame driver. Flag it
-                // if either of those ever stops being true.
+                // Flagged m_selfRepainting, like the other repaints the effect
+                // issues to drive its own animation. The capture cache now stays
+                // warm through a live transition (see planSurfaceFold), and
+                // windowDamaged fires on repaint SCHEDULING — so an un-flagged
+                // settle repaint would read as content damage and force the
+                // fold's most expensive step, a full effects->drawWindow()
+                // re-entry, for a settle edge that says nothing about the
+                // window's content.
                 if (!wasSettled && transition.meshSim.settled) {
+                    const auto selfRepaint = selfRepaintScope();
                     w->addRepaintFull();
                 }
             }

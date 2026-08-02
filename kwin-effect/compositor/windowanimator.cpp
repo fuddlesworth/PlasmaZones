@@ -124,6 +124,20 @@ bool WindowAnimator::hasAnimation(KWin::EffectWindow* handle) const
     return m_animations.contains(handle);
 }
 
+bool WindowAnimator::hasAnimationsIntersecting(const QRectF& region) const
+{
+    for (const auto& [handle, anim] : m_animations) {
+        // Same bounds the repaint sites damage: the full swept range padded
+        // out to the expanded geometry, so a cross-screen morph counts on
+        // both outputs for its whole flight.
+        const QRectF bounds = anim.bounds().marginsAdded(expandedPadding(handle, anim));
+        if (bounds.isValid() && bounds.intersects(region)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool WindowAnimator::startAnimation(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame,
                                     const PhosphorAnimation::Profile* profileOverride)
 {

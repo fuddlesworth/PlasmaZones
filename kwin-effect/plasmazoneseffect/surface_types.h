@@ -237,9 +237,6 @@ struct SurfaceFoldPlan
     /// The clock this fold pushes as iTime — the window's OWN, which stops while it is
     /// not animating. Never a raw shared-clock read. See SurfaceMultipassState.
     float foldTime = 0.0f;
-    /// Can the window capture be reused across frames? False under a live transition,
-    /// which re-captures every frame.
-    bool captureCacheable = true;
     /// Which texture the capture belongs in THIS fold — compositeTex[0] when no pack
     /// compiles (nothing folds, so the capture is the composite), captureTex otherwise.
     /// A chain can cross that line at runtime, and a capture cached on the wrong side of

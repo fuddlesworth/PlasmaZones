@@ -212,7 +212,7 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
 // compositeTex[0].
 void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state,
                                              const QRectF& logicalGeometry, qreal captureScale, bool intoCaptureTex,
-                                             bool captureCacheable, qreal captureOpacity)
+                                             qreal captureOpacity)
 {
     KWin::GLFramebuffer& fbo = intoCaptureTex ? *state.captureFbo : *state.compositeFbo[0];
     setShader(w, nullptr);
@@ -243,7 +243,7 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     }
     resetCapture.dismiss();
     m_capturingSnapshot = false;
-    state.captureValid = captureCacheable;
+    state.captureValid = true;
     state.captureInComposite = !intoCaptureTex;
 }
 
@@ -256,7 +256,8 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
 // of agreement with each other, which they have done more than once.
 //
 // @p inTransition: a live shader transition owns the window's shader slot. It always
-// animates (it IS the thing being watched), and its capture is never cacheable.
+// animates (it IS the thing being watched). Its capture stays cacheable — see the
+// invalidation rationale at the fold-time block below.
 SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const QString& windowId,
                                                    const WindowDecoration& deco, const QStringList& chain,
                                                    SurfaceMultipassState& state,
@@ -326,20 +327,23 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // frame it froze on instead of drifting.
     const qint64 ownClockMs = (plan.mayAnimate ? sharedNowMs : state.pausedAtMs) - state.timeOffsetMs;
     plan.foldTime = static_cast<float>(static_cast<double>(ownClockMs) / 1000.0);
-    // A transition supplies its own restore shader and drives the window's geometry
-    // frame by frame; don't trust a cached capture across it.
-    //
-    // NOT gated on foldablePacks. A chain in which every pack failed to compile folds
-    // nothing — the capture goes straight into compositeTex[0] and is presented from
-    // there — and its capture is as reusable as any other, because the window's own
-    // damage is the only thing that can change it. Requiring a foldable pack here meant
-    // such a window re-ran the full effects->drawWindow() re-entry, the single most
-    // expensive step of the fold, on EVERY paint of any window overlapping it, forever,
-    // to reproduce a composite identical to the undecorated window.
-    plan.captureCacheable = !inTransition;
-    if (!plan.captureCacheable) {
-        state.captureValid = false;
-    }
+    // The capture is cacheable THROUGH a live transition. This used to be
+    // `!inTransition` ("the transition drives the window's geometry frame by frame;
+    // don't trust a cached capture across it"), which re-ran the full
+    // effects->drawWindow() re-entry — the single most expensive step of the fold —
+    // plus the whole chain re-fold, per decorated window, per frame, for every
+    // animation. But the two ways a capture can actually go stale are both covered by
+    // machinery that stays live throughout a transition:
+    //   • a geometry/scale move changes canvasGeo → textureSize/captureScale →
+    //     ensureSurfaceTargets reallocates and clears captureValid;
+    //   • real client damage fires the windowDamaged connection (decorations.cpp),
+    //     which clears captureValid; the per-frame transition drivers in
+    //     postPaintScreen damage at SCREEN level and never trip it.
+    // The transition's own motion (WindowAnimator transform, vertex-stage sweep) is
+    // applied downstream of the composite and is never baked into the capture, so it
+    // cannot stale it. One-shot window-level repaints (transition install, animation
+    // start, mesh settle) still invalidate once each — that costs one re-capture per
+    // edge, not one per frame.
 
     // How many packs in the chain actually compiled and therefore draw? A pack that
     // failed to compile folds nothing, so it cannot make the composite time-varying and
@@ -477,7 +481,7 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
 
     // The PREFIX cache pays only when something per-frame follows the cacheable run:
     // it exists so those packs can fold over a run that does not need re-folding.
-    bool usePrefix = plan.captureCacheable && staticFoldable > 0 && staticFoldable < foldablePacks;
+    bool usePrefix = staticFoldable > 0 && staticFoldable < foldablePacks;
     // Allocate its target lazily, and only for a chain that will actually use it. A
     // chain with no per-frame pack (the default ["border"]) never writes it, so an
     // eager allocation was a full-canvas RGBA8 held for nothing. Release it again if
@@ -503,13 +507,14 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // NO `foldablePacks > 0` term. A chain in which nothing compiles folds nothing: the
     // capture goes straight into compositeTex[0] and is presented from there, so the
     // composite is a pure function of the capture and is every bit as cacheable as an
-    // all-static chain — captureCacheable already argues exactly that, two dozen lines up.
+    // all-static chain — the capture-cacheability rationale two dozen lines up argues
+    // exactly that.
     // Requiring at least one foldable pack meant such a chain never took the cached-composite
     // early return, so it cleared backdropRepaintPending on every fold, so a needsBackdrop
     // driver re-armed every 33ms forever, plus a full-canvas backdrop blit per paint, for a
     // decoration that draws nothing at all. `staticFoldable == foldablePacks` is trivially
     // true when both are zero, which is the right answer.
-    plan.allStatic = plan.captureCacheable && staticFoldable == foldablePacks;
+    plan.allStatic = staticFoldable == foldablePacks;
     // Both caches sit downstream of the capture and of the folded state.
     if (!state.captureValid || stateMoved) {
         state.prefixValid = false;

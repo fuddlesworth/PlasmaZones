@@ -111,6 +111,21 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
         // open after the fade settles, minimise, etc.), which means
         // the shader installs and silently expires unrendered.
         //
+        // Gate PER OUTPUT (mirroring the desktop-transition gate below):
+        // the KWin header documents this flag as "forces the entire screen
+        // to be painted", so setting it globally makes one window animating
+        // on monitor 1 force full, damage-free repaints of monitors 2 and 3
+        // for the whole animation — the dominant iGPU cost of the default
+        // geometry morph. An output is included when an animation's swept
+        // bounds intersect it (rect intersection, NOT screen() equality, so
+        // a window straddling outputs — or morphing across them — keeps the
+        // flag on every output it touches) or when a live shader transition's
+        // window is on it. Transition relevance uses screen() OR expanded-
+        // geometry intersection: the surface-extent quad covers the whole of
+        // the window's own output, and the postPaintScreen damage loops only
+        // ever damage that output, so this matches what can actually paint.
+        // Null screen (test paths, hotplug) falls back to the global flag.
+        //
         // First-frame open suppression does NOT need the screen-level
         // flag: prePaintWindow already calls `data.setTransformed()` for
         // every suppressed window via the same predicate
@@ -120,7 +135,34 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
         // would force every other window on every output through the
         // transformed-windows paint path while ANY window is suppressed
         // (up to 250 ms per opened window) — pure overhead.
-        data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
+        bool touchesThisOutput = !data.screen;
+        if (data.screen) {
+            const QRectF outputGeo = QRect(data.screen->geometry());
+            touchesThisOutput = m_windowAnimator->hasAnimationsIntersecting(outputGeo);
+            if (!touchesThisOutput) {
+                for (const auto& [tw, transition] : m_shaderManager.shaderTransitions()) {
+                    if (!tw) {
+                        continue;
+                    }
+                    // Same skip predicate as the postPaintScreen repaint pump:
+                    // a closing window is isDeleted() for its ENTIRE close
+                    // animation (the close grab keeps the corpse alive and
+                    // paintWindow calls screen() on it every close frame), so
+                    // a grab-held leg must keep the flag on its output or the
+                    // close shader goes unrendered on stable outputs.
+                    if (!transition.closeGrabHeld && tw->isDeleted()) {
+                        continue;
+                    }
+                    if (tw->screen() == data.screen || QRectF(tw->expandedGeometry()).intersects(outputGeo)) {
+                        touchesThisOutput = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (touchesThisOutput) {
+            data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
+        }
     }
 
     // A live desktop-switch transition replaces the whole screen with its own
