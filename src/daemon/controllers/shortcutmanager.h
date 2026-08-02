@@ -127,7 +127,13 @@ public:
         // describes only one direction; a family that carries per-member
         // descriptions should supply a combined wording here. Empty = keep
         // the first member's.
-        QString combinedDescription;
+        //
+        // The default-member-initializer (= {}) is load-bearing, same as
+        // KeyDef's trailing members: the directional/digit FamilySpecs are
+        // 4-field aggregate initializers that omit this trailing field, and
+        // GCC's -Wmissing-field-initializers fires per init site when an
+        // omitted field lacks an NSDMI.
+        QString combinedDescription = {};
     };
 
     /**
