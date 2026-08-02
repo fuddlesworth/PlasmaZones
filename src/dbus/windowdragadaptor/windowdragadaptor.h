@@ -460,6 +460,22 @@ private:
     /// resolveReorderMode bound to this adaptor's registry and settings.
     bool effectiveReorderMode(const QString& screenId) const;
 
+    /// The engine that owns drag-insert on @p screenId: autotile when the
+    /// screen is autotile-active, else the scroll engine when scrolling-
+    /// active, else nullptr. Every drag-insert dispatch site resolves
+    /// through this instead of hard-typing m_autotileEngine.
+    PhosphorEngine::IPlacementEngine* dragInsertEngineFor(const QString& screenId) const;
+
+    /// The engine currently holding a live drag-insert preview (at most one
+    /// across both engines by construction), or nullptr.
+    PhosphorEngine::IPlacementEngine* dragInsertPreviewEngine() const;
+
+    /// Reorder-mode resolve for whichever engine owns @p screenId: autotile
+    /// keeps the SetDragBehavior-rule/global-setting cascade; scrolling has
+    /// no DragBehavior enum, so "always re-insert" IS the AlwaysActive
+    /// sentinel in its trigger list (read from the per-drag parsed cache).
+    bool effectiveDragReorderModeFor(const QString& screenId) const;
+
     /// Whether @p screenId's context has no active zone layout because the
     /// default assignment is suppressed (the computeDragPolicy
     /// activeLayoutSuppressed input, resolved on the current desktop/activity
@@ -571,8 +587,11 @@ private:
     bool m_triggerReleasedAfterCancel = false; // Tracks release→press cycle for retrigger after Escape
     bool m_activationToggled = false; // Current toggle state (on/off)
     bool m_prevTriggerHeld = false; // Previous frame's trigger state for edge detection
-    bool m_autotileDragInsertToggled = false; // Current toggle state for autotile drag-insert
-    bool m_prevAutotileDragInsertHeld = false; // Previous frame's autotile drag-insert trigger state
+    // Drag-insert toggle latch, shared across engines (the cursor is on one
+    // screen at a time; the trigger LIST and toggle SETTING are selected per
+    // tick by the engine owning the cursor screen).
+    bool m_dragInsertToggled = false; // Current toggle state for drag-insert
+    bool m_prevDragInsertHeld = false; // Previous frame's drag-insert trigger state
     bool m_zoneSpanToggled = false; // Current toggle state for zone span (toggle mode)
     bool m_prevZoneSpanTriggerHeld = false; // Previous frame's zone span trigger state for edge detection
     // Drag-to-reorder mode is active for the current autotile screen: cached so
@@ -629,20 +648,21 @@ private:
     QVector<ParsedTrigger> m_cachedActivationTriggers;
     QVector<ParsedTrigger> m_cachedZoneSpanTriggers;
     QVector<ParsedTrigger> m_cachedAutotileDragInsertTriggers;
+    QVector<ParsedTrigger> m_cachedScrollingDragInsertTriggers;
 
-    // Autotile drag-insert preview state lives on AutotileEngine
+    // Drag-insert preview state lives on the owning engine
     // (hasDragInsertPreview(), dragInsertPreviewScreenId()). The adaptor
-    // queries the engine directly to avoid drift between the two caches.
+    // queries the engines directly to avoid drift between caches.
 
-    // DRY helper: cancel any active autotile drag-insert preview.
+    // DRY helper: cancel any active drag-insert preview on either engine.
     void cancelDragInsertIfActive();
 
-    /// Drop-path settle for a live autotile drag-insert preview. Commits it
-    /// and returns true when the preview belongs to the screen under
-    /// (@p cursorX, @p cursorY); otherwise cancels it (or does nothing when no
-    /// preview is live) and returns false. Shared by the two drop entry points
-    /// (drop.cpp's dragStopped and drag_protocol.cpp's autotile bypass), which
-    /// differ only in how they finalize after a commit.
+    /// Drop-path settle for a live drag-insert preview (either engine).
+    /// Commits it and returns true when the preview belongs to the screen
+    /// under (@p cursorX, @p cursorY); otherwise cancels it (or does nothing
+    /// when no preview is live) and returns false. Shared by the two drop
+    /// entry points (drop.cpp's dragStopped and drag_protocol.cpp's
+    /// engine-owned bypass), which differ only in how they finalize.
     bool settleDragInsertPreviewAt(int cursorX, int cursorY);
 
     // Last emitted zone geometry (emit only when changed)

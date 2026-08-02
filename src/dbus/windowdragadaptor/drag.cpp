@@ -544,73 +544,84 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // (hold or toggle) when always-active is on (#249).
     const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
 
-    // ── Autotile drag-insert preview (runs even when m_snapCancelled) ───────
+    // ── Drag-insert preview (runs even when m_snapCancelled) ────────────────
     // This block is intentionally ABOVE the snap-cancelled early return because
     // the KWin effect calls callCancelSnap() when the cursor crosses from a snap
-    // screen to an autotile screen mid-drag. That sets m_snapCancelled=true, and
-    // would otherwise starve this block for the entire remainder of the drag.
-    // Autotile drag-insert lives on an independent trigger list, so it should
-    // activate regardless of snap-overlay cancel state.
-    if (m_autotileEngine && m_settings) {
-        const bool rawAutotileInsertHeld = anyTriggerHeld(m_cachedAutotileDragInsertTriggers, mods, mouseButtons);
+    // screen to an engine-owned screen mid-drag. That sets m_snapCancelled=true,
+    // and would otherwise starve this block for the entire remainder of the
+    // drag. Drag-insert lives on independent trigger lists, so it should
+    // activate regardless of snap-overlay cancel state. The engine owning the
+    // cursor's screen (autotile or scrolling) selects which trigger list and
+    // toggle setting apply this tick; the rising-edge latch is shared (the
+    // cursor is on one screen at a time).
+    if (m_settings && (m_autotileEngine || m_scrollEngine)) {
+        const QString insertScreenId = effectiveScreenIdAt(cursorX, cursorY);
+        PhosphorEngine::IPlacementEngine* insertEngine = dragInsertEngineFor(insertScreenId);
+        const bool onScrollingScreen = insertEngine && insertEngine == m_scrollEngine;
+
+        const bool rawInsertHeld = insertEngine
+            && anyTriggerHeld(onScrollingScreen ? m_cachedScrollingDragInsertTriggers
+                                                : m_cachedAutotileDragInsertTriggers,
+                              mods, mouseButtons);
 
         // Toggle mode: detect rising edge (release→press) to flip insert-active state
-        bool autotileInsertHeld;
-        if (m_settings->autotileDragInsertToggle()) {
-            if (rawAutotileInsertHeld && !m_prevAutotileDragInsertHeld) {
-                m_autotileDragInsertToggled = !m_autotileDragInsertToggled;
+        bool insertHeld;
+        const bool toggleMode = insertEngine
+            && (onScrollingScreen ? m_settings->scrollingDragInsertToggle() : m_settings->autotileDragInsertToggle());
+        if (toggleMode) {
+            if (rawInsertHeld && !m_prevDragInsertHeld) {
+                m_dragInsertToggled = !m_dragInsertToggled;
             }
-            m_prevAutotileDragInsertHeld = rawAutotileInsertHeld;
-            autotileInsertHeld = m_autotileDragInsertToggled;
+            m_prevDragInsertHeld = rawInsertHeld;
+            insertHeld = m_dragInsertToggled;
         } else {
-            autotileInsertHeld = rawAutotileInsertHeld;
+            insertHeld = rawInsertHeld;
         }
 
-        const QString autotileScreenId = effectiveScreenIdAt(cursorX, cursorY);
-        const bool onAutotileScreen =
-            !autotileScreenId.isEmpty() && m_autotileEngine->isActiveOnScreen(autotileScreenId);
-
-        // Reorder-mode override: the Krohnkite-style drag-to-swap setting makes
-        // drag-insert the default behavior on autotile screens (no modifier
-        // required). Gated on the beginDrag-time snapshot m_dragReorderActive
-        // so we don't re-query settings + engine tiled-state per cursor tick.
-        // Also scoped to onAutotileScreen — if the cursor leaves the autotile
-        // screen mid-drag, the normal cross-screen cancel logic below should
-        // run, not the force-held override. Explicit held trigger still wins
-        // downstream, but is redundant.
-        if (m_dragReorderActive && onAutotileScreen) {
-            autotileInsertHeld = true;
+        // Reorder-mode override: drag-insert as the default behavior on the
+        // engine-owned screen (Krohnkite drag-to-swap for autotile, the
+        // AlwaysActive sentinel for scrolling), no modifier required. Gated
+        // on the beginDrag-time snapshot m_dragReorderActive so we don't
+        // re-query settings + engine tiled-state per cursor tick. Also
+        // scoped to the engine-owned screen — if the cursor leaves it
+        // mid-drag, the normal cross-screen cancel logic below should run,
+        // not the force-held override.
+        if (m_dragReorderActive && insertEngine) {
+            insertHeld = true;
         }
 
-        const bool previewActive = m_autotileEngine->hasDragInsertPreview();
-        const QString previewScreenId = m_autotileEngine->dragInsertPreviewScreenId();
+        PhosphorEngine::IPlacementEngine* previewEngine = dragInsertPreviewEngine();
 
-        if (autotileInsertHeld && onAutotileScreen) {
-            // Cursor crossed between two autotile screens while the trigger is
-            // held: cancel the old preview before starting a fresh one on the
-            // new screen. Without this the old preview stays stuck on the
-            // departed screen until the trigger is released.
-            if (previewActive && previewScreenId != autotileScreenId) {
-                m_autotileEngine->cancelDragInsertPreview();
+        if (insertEngine && insertHeld) {
+            // Cursor crossed between two engine-owned screens (same engine
+            // or autotile↔scrolling) while the trigger is held: cancel the
+            // old preview before starting a fresh one on the new screen.
+            if (previewEngine
+                && (previewEngine != insertEngine || previewEngine->dragInsertPreviewScreenId() != insertScreenId)) {
+                previewEngine->cancelDragInsertPreview();
             }
-            if (!m_autotileEngine->hasDragInsertPreview()) {
-                const bool began = m_autotileEngine->beginDragInsertPreview(windowId, autotileScreenId);
-                qCDebug(lcDbusWindow) << "autotile drag-insert preview begin:" << windowId << "on" << autotileScreenId
-                                      << "=>" << began;
+            if (!insertEngine->hasDragInsertPreview()) {
+                const bool began = insertEngine->beginDragInsertPreview(windowId, insertScreenId);
+                qCDebug(lcDbusWindow) << "drag-insert preview begin:" << windowId << "on" << insertScreenId
+                                      << "engine=" << insertEngine->engineId() << "=>" << began;
             }
-            if (m_autotileEngine->hasDragInsertPreview()
-                && m_autotileEngine->dragInsertPreviewScreenId() == autotileScreenId) {
+            if (insertEngine->hasDragInsertPreview() && insertEngine->dragInsertPreviewScreenId() == insertScreenId) {
+                // Edge auto-scroll first (scrolling only; no-op default
+                // elsewhere) so the hit-test below resolves against the
+                // shifted strip.
+                insertEngine->nudgeDragScroll(insertScreenId, QPoint(cursorX, cursorY));
                 const PhosphorEngine::IPlacementEngine::DragInsertTarget target =
-                    m_autotileEngine->computeDragInsertTargetAtPoint(autotileScreenId, QPoint(cursorX, cursorY));
+                    insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
                 if (target.isValid()) {
-                    m_autotileEngine->updateDragInsertPreview(target);
+                    insertEngine->updateDragInsertPreview(target);
                 }
                 return;
             }
-        } else if (previewActive) {
-            // Trigger released or cursor left the autotile screen mid-drag —
-            // cancel the preview so neighbours snap back to their original order.
-            m_autotileEngine->cancelDragInsertPreview();
+        } else if (previewEngine) {
+            // Trigger released or cursor left the engine-owned screen
+            // mid-drag — cancel so neighbours snap back to their original
+            // order.
+            previewEngine->cancelDragInsertPreview();
         }
     }
 

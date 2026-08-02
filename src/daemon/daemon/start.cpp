@@ -267,9 +267,12 @@ void Daemon::connectDesktopActivity()
     connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopChanged, this,
             [this](const QString& screenId, int desktop) {
                 // [SEQ A] Cancel any active drag-insert preview before the engine's
-                // desktop changes, else cancel/commit would hit the wrong TilingState.
+                // desktop changes, else cancel/commit would hit the wrong state.
                 if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
                     m_autotileEngine->cancelDragInsertPreview();
+                }
+                if (m_scrollEngine && m_scrollEngine->hasDragInsertPreview()) {
+                    m_scrollEngine->cancelDragInsertPreview();
                 }
                 // [SEQ B] Pin screens where all autotiled windows are sticky BEFORE
                 // changing the desktop context, so currentKeyForScreen() still
@@ -456,10 +459,13 @@ void Daemon::connectDesktopActivity()
                     if (m_unifiedLayoutController) {
                         m_unifiedLayoutController->setCurrentActivity(activityId);
                     }
-                    // Activity switch invalidates the TilingStateKey context — cancel
-                    // any active drag-insert preview before the engine's activity changes.
+                    // Activity switch invalidates the placement-state context — cancel
+                    // any active drag-insert preview before the engines' activity changes.
                     if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
                         m_autotileEngine->cancelDragInsertPreview();
+                    }
+                    if (m_scrollEngine && m_scrollEngine->hasDragInsertPreview()) {
+                        m_scrollEngine->cancelDragInsertPreview();
                     }
                     // Pin sticky screens before changing activity context
                     // (null-guarded service, matching every other daemon

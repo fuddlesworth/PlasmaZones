@@ -5,6 +5,7 @@
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QScreen>
+#include <algorithm>
 #include <cmath>
 #include "phosphor_i18n.h"
 #include "config/configdefaults.h"
@@ -229,27 +230,79 @@ QStringList WindowDragAdaptor::zoneIdsToStringList(const QVector<QUuid>& ids)
     return result;
 }
 
-void WindowDragAdaptor::cancelDragInsertIfActive()
+PhosphorEngine::IPlacementEngine* WindowDragAdaptor::dragInsertEngineFor(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return nullptr;
+    }
+    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
+        return m_autotileEngine;
+    }
+    if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(screenId)) {
+        return m_scrollEngine;
+    }
+    return nullptr;
+}
+
+PhosphorEngine::IPlacementEngine* WindowDragAdaptor::dragInsertPreviewEngine() const
 {
     if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
+        return m_autotileEngine;
+    }
+    if (m_scrollEngine && m_scrollEngine->hasDragInsertPreview()) {
+        return m_scrollEngine;
+    }
+    return nullptr;
+}
+
+bool WindowDragAdaptor::effectiveDragReorderModeFor(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return false;
+    }
+    if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
+        return effectiveReorderMode(screenId);
+    }
+    if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(screenId)) {
+        // Scrolling's "always re-insert" is the AlwaysActive sentinel in its
+        // trigger list — no DragBehavior enum, no rule resolve. Read from
+        // the per-drag parsed cache (populated unconditionally by beginDrag,
+        // ahead of every consumer).
+        return std::any_of(m_cachedScrollingDragInsertTriggers.cbegin(), m_cachedScrollingDragInsertTriggers.cend(),
+                           [](const ParsedTrigger& pt) {
+                               return pt.modifier == static_cast<int>(DragModifier::AlwaysActive);
+                           });
+    }
+    return false;
+}
+
+void WindowDragAdaptor::cancelDragInsertIfActive()
+{
+    // At most one engine holds a preview, but sweep both — a stale second
+    // preview would otherwise be unreachable by every cleanup path.
+    if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
         m_autotileEngine->cancelDragInsertPreview();
+    }
+    if (m_scrollEngine && m_scrollEngine->hasDragInsertPreview()) {
+        m_scrollEngine->cancelDragInsertPreview();
     }
 }
 
 bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
 {
-    if (!m_autotileEngine || !m_autotileEngine->hasDragInsertPreview()) {
+    PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
+    if (!engine) {
         return false;
     }
     // Screen-matched: a fast drop can land on another screen before any
     // dragMoved tick cancelled the departed preview, and committing then would
     // reorder the WRONG screen and swallow the real drop outcome.
-    if (!PhosphorScreens::ScreenIdentity::screensMatch(m_autotileEngine->dragInsertPreviewScreenId(),
+    if (!PhosphorScreens::ScreenIdentity::screensMatch(engine->dragInsertPreviewScreenId(),
                                                        resolveScreenAt(QPointF(cursorX, cursorY)).screenId)) {
-        m_autotileEngine->cancelDragInsertPreview();
+        engine->cancelDragInsertPreview();
         return false;
     }
-    m_autotileEngine->commitDragInsertPreview(); // commit, not cancel — the drop finalizes the reorder
+    engine->commitDragInsertPreview(); // commit, not cancel — the drop finalizes the reorder
     return true;
 }
 

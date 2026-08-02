@@ -376,7 +376,7 @@ public:
     /// step toward that edge (rides the daemon's ~30 Hz drag tick). Returns
     /// true when the view actually moved, so the caller re-hit-tests
     /// against the shifted strip.
-    bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos);
+    bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos) override;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Desktop / activity context

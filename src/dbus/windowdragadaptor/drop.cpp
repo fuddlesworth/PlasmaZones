@@ -52,12 +52,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         return;
     }
 
-    // ── Autotile drag-insert commit ─────────────────────────────────────────
-    // If a drag-insert preview is live, finalize it: commit the reorder so the
-    // dragged window's final geometry is applied on the next retile. Snapping
-    // logic is skipped entirely — the window's place in the stack IS the drop.
-    // Deliberately autotile-only: the strip has no drag-insert preview
-    // (ScrollEngine keeps the IPlacementEngine no-op defaults).
+    // ── Drag-insert commit ──────────────────────────────────────────────────
+    // If a drag-insert preview is live (autotile stack or scroll strip),
+    // finalize it: commit the reorder so the dragged window's final geometry
+    // is applied on the next retile. Snapping logic is skipped entirely — the
+    // window's place in the layout IS the drop.
     if (settleDragInsertPreviewAt(cursorX, cursorY)) {
         hideOverlayAndSelector();
         resetDragState();

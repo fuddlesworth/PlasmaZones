@@ -578,6 +578,19 @@ public:
         Q_UNUSED(target)
     }
 
+    /// Edge auto-scroll during a drag-insert preview: an engine whose layout
+    /// is a scrollable viewport (the scroll strip) shifts its view one step
+    /// when the cursor sits inside its edge band, so drops can land past the
+    /// visible columns. Called by the daemon's drag tick just before the
+    /// hit-test; returns true when the view actually moved. Default no-op
+    /// for engines with a fixed layout.
+    virtual bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(cursorPos)
+        return false;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Algorithm / mode identity (override if engine has switchable algorithms)
     // ═══════════════════════════════════════════════════════════════════════════

@@ -295,24 +295,50 @@ private Q_SLOTS:
         scroll->windowOpened(QStringLiteral("win-1"), QStringLiteral("HP-1"), 0, 0);
         QCoreApplication::processEvents();
 
+        // reorderMode is resolved PER SCREEN by the caller
+        // (effectiveDragReorderModeFor): for a scrolling screen it is the
+        // AlwaysActive sentinel in the SCROLLING trigger list, never the
+        // autotile DragBehavior setting — so the autotile Reorder setting
+        // above must not leak in here, and this call passes false.
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
             &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+            /*reorderMode=*/false, /*activeLayoutSuppressed=*/false);
 
         // Both tiling-family engines report the SAME bypass reason: the value
         // means "a tiling-family engine owns this screen", and its
         // autotile_screen wire token predates the scroll engine. The branches
-        // are told apart by the policy FIELDS, not by this token, which is
-        // what the immediateFloatOnStart assertion below does — the autotile
-        // Reorder case asserts the opposite.
+        // are told apart by the policy FIELDS, not by this token.
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
         QVERIFY(!p.grabKeyboard);
         QVERIFY(p.captureGeometry);
-        // Reorder mode does NOT clear the float for a scrolling screen — the
-        // strip has no reorder preview.
+        // Without reorder mode a tracked window floats immediately.
         QVERIFY(p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // Scroll branch, reorder mode (the AlwaysActive sentinel in the scrolling
+    // drag-insert trigger list): the strip runs a drag-insert preview, so the
+    // effect must NOT float the tile being reordered — the same contract as
+    // the autotile Reorder case.
+    void scrollingScreen_reorderModeClearsImmediateFloat()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+        scroll->windowOpened(QStringLiteral("win-1"), QStringLiteral("HP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
+            /*reorderMode=*/true, /*activeLayoutSuppressed=*/false);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
+        QVERIFY(p.captureGeometry);
+        QVERIFY(!p.immediateFloatOnStart);
         QVERIFY(p.validationError().isEmpty());
     }
 
