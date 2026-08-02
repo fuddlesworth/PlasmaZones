@@ -140,6 +140,13 @@ public:
     /// of the others.
     bool hasAnimationsIntersecting(const QRectF& region) const;
 
+    /// True when any live animation's handle satisfies @p pred. Used by
+    /// prePaintScreen to decide whether the vertex-snapping flip is needed
+    /// at all: the mode only affects REDIRECTED (decorated) windows'
+    /// offscreen presentation, so an undecorated window's morph should not
+    /// un-snap the decorated bystanders. O(#animations), single digits.
+    bool hasAnimationMatching(const std::function<bool(KWin::EffectWindow*)>& pred) const;
+
     /// Start an animation. When @p profileOverride is non-null, the per-call
     /// curve / duration / minDistance / sequence overrides on it replace the
     /// configured global profile (`m_profile`) for THIS animation only —

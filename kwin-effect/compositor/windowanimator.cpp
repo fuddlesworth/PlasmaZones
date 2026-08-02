@@ -124,6 +124,16 @@ bool WindowAnimator::hasAnimation(KWin::EffectWindow* handle) const
     return m_animations.contains(handle);
 }
 
+bool WindowAnimator::hasAnimationMatching(const std::function<bool(KWin::EffectWindow*)>& pred) const
+{
+    for (const auto& [handle, anim] : m_animations) {
+        if (pred(handle)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool WindowAnimator::hasAnimationsIntersecting(const QRectF& region) const
 {
     for (const auto& [handle, anim] : m_animations) {

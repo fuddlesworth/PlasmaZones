@@ -89,17 +89,34 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     m_windowAnimator->advanceAnimations();
 
     // Vertex snapping tracks the animation state (see the initRenderingAndRegistries
-    // note): None while anything animates so smooth translates keep sub-pixel
-    // precision, Round (KWin's default) at rest so permanently-redirected
+    // note): None while a REDIRECTED window animates so its smooth translates keep
+    // sub-pixel precision, Round (KWin's default) otherwise so permanently-redirected
     // decorated windows stay device-pixel-aligned at fractional output scales
     // instead of being bilinearly resampled every frame (discussion #868).
-    // `!m_shaderManager.empty()` over-includes installed-but-expired transitions;
-    // that only extends None by a frame or two, which is harmless.
+    //
+    // Gated on redirected-window animation, not on animation in general: the mode
+    // only exists on KWin's per-window OffscreenData, so it affects nothing but
+    // redirected (decorated / transition) windows' offscreen presentation. An
+    // UNDECORATED window's morph presents through the direct scene path, where the
+    // mode never applies — flipping on it only un-snapped every decorated bystander
+    // for the animation's duration, a full-desktop resample tax at fractional scale
+    // that bought nothing. Shader transitions always redirect their window, so
+    // `!m_shaderManager.empty()` stays a sufficient condition on its own (it
+    // over-includes installed-but-expired transitions; that only extends None by a
+    // frame or two, which is harmless).
     const bool animationsInFlight = m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty();
-    if (animationsInFlight != m_vertexSnappingDisabled) {
-        setVertexSnappingMode(animationsInFlight ? KWin::RenderGeometry::VertexSnappingMode::None
-                                                 : KWin::RenderGeometry::VertexSnappingMode::Round);
-        m_vertexSnappingDisabled = animationsInFlight;
+    const bool redirectedAnimating =
+        !m_shaderManager.empty() || m_windowAnimator->hasAnimationMatching([this](KWin::EffectWindow* aw) {
+            if (!aw || aw->isDeleted()) {
+                return false;
+            }
+            const auto it = m_windowDecorations.constFind(getWindowId(aw));
+            return it != m_windowDecorations.constEnd() && it->shaderApplied;
+        });
+    if (redirectedAnimating != m_vertexSnappingDisabled) {
+        setVertexSnappingMode(redirectedAnimating ? KWin::RenderGeometry::VertexSnappingMode::None
+                                                  : KWin::RenderGeometry::VertexSnappingMode::Round);
+        m_vertexSnappingDisabled = redirectedAnimating;
     }
 
     if (animationsInFlight) {
