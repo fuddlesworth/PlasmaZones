@@ -44,9 +44,10 @@ using namespace ShortcutIds;
 // working key and never advertises a dead one:
 //  - "all" for everything each engine implements in its own address space:
 //    the directional move/focus/swap quads, rotate, the cycle pair, restore
-//    size, and the snap-to-zone digits (moveFocusedToPosition addresses
+//    size, the snap-to-zone digits (moveFocusedToPosition addresses
 //    zones in snapping, layout slots in autotile, visible tile slots in
-//    scrolling)
+//    scrolling), the quick-layout digits, and the virtual-screen swap and
+//    rotate family (virtual screens exist in every mode)
 //  - "snapping" for ops that are hard no-ops off snapping: the multi-zone
 //    span quad and the empty-zone push
 //  - "autotile" for the master-stack ops, hard no-ops off autotile
@@ -123,7 +124,11 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdLayoutPicker, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
         add(kIdToggleLayoutLock, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
         add(kIdResnapToNewLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
-        add(kIdSnapAllWindows, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
+        // Mode-neutral sheet label: the registration description names zones
+        // (System Settings lists it standalone), but the row is tagged "all"
+        // and the action addresses zones only in snapping.
+        add(kIdSnapAllWindows, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Arrange All Windows"));
         // Heading is "Zones", not "Snap to Zone": the group holds mode-neutral
         // rows (restore size, the numbered slots) whose keys address a zone in
         // snapping, a layout slot in tiling and a visible strip tile in
@@ -243,9 +248,14 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones", "Widens the focused column by the configured step."));
         add(kIdScrollDecreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Narrows the focused column by the configured step."));
+        // "A narrower width", not "its previous width": the engine keeps ONE
+        // pre-maximize slot for the whole strip, so a second column's
+        // maximize discards the first's stored width and un-maximizing then
+        // falls back to the default width. And the target is the work area
+        // (panels excluded), not the screen.
         add(kIdScrollMaximizeColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Toggles the focused column between full screen width and its previous width."));
+                              "Toggles the focused column between filling the work area and a narrower width."));
         add(kIdScrollExpandColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Grow into Empty Space"),
             QT_TRANSLATE_NOOP("plasmazones",
@@ -306,9 +316,11 @@ CatalogMeta catalogMetaForId(const QString& id)
 /// reach.
 ///
 /// One definition removes THIS divergence, not every one: the consumer also
-/// rejects split == 0 (a sequence starting with '+') before it ever asks for
-/// the token, where the producer happily tokenizes one. That case cannot
-/// wrongly compress — it only declines to — so the asymmetry is left alone.
+/// rejects split == 0 (a sequence starting with '+') and split == size-1 (a
+/// '+'-terminated binding, whose retained-'+' prefix would render a garbage
+/// merged chip) before it ever asks for the token, where the producer
+/// happily tokenizes both. Those cases cannot wrongly compress — they only
+/// decline to — so the asymmetry is left alone.
 QString lastKeyToken(const QString& sequence)
 {
     const int split = sequence.lastIndexOf(QLatin1Char('+'));
@@ -409,13 +421,26 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // labels used to disagree ("1…9" against "1-9") for no reason a reader
     // could act on.
     const QString digitRange = QStringLiteral("1-") + QString::number(kIndexedSlotCount);
+    // INVARIANT: a spec without a combinedDescription must only cover members
+    // that carry no per-action explanation — the merged row keeps the FIRST
+    // member's description, and a directional/digit member's single-direction
+    // wording would misdescribe the whole family. Every member below has an
+    // empty explanation today; give the spec a combinedDescription before
+    // adding one.
     QVector<FamilySpec> families = {
-        {quickLayoutIds, digitTokens, PhosphorI18n::tr("Apply Layout 1-9"), digitRange},
+        // Labels derive the digit range from kIndexedSlotCount, like the chip
+        // token, so raising the constant cannot desynchronize the two.
+        // "range of layout slots" disambiguation: the registration table uses
+        // the SAME source string with an ordinal ("Apply Layout 3"), and a
+        // locale may phrase a range differently from an ordinal — without the
+        // context lupdate would merge the two into one translatable unit.
+        {quickLayoutIds, digitTokens,
+         PhosphorI18n::tr("Apply Layout %1", "range of layout slots, e.g. 1-9").arg(digitRange), digitRange},
         // "Zone", not "Snap to Zone": the group heading already carries that,
         // and the digits address a zone in snapping, a layout slot in tiling
         // and a visible tile in scrolling, so the row itself stays out of any
         // one mode's vocabulary.
-        {snapToZoneIds, digitTokens, PhosphorI18n::tr("Zone 1-9"), digitRange},
+        {snapToZoneIds, digitTokens, PhosphorI18n::tr("Zone %1").arg(digitRange), digitRange},
         {{QString::fromLatin1(kIdMoveWindowLeft), QString::fromLatin1(kIdMoveWindowRight),
           QString::fromLatin1(kIdMoveWindowUp), QString::fromLatin1(kIdMoveWindowDown)},
          arrowTokens,
@@ -444,13 +469,32 @@ QVariantList ShortcutManager::cheatsheetModel() const
          // Group heading ("Virtual Screens") carries the context.
          PhosphorI18n::tr("Swap Screens"),
          arrowsTail},
+        // Bracket-opposed and comma-opposed pairs outside the scrolling
+        // group: their shipped defaults share a modifier prefix and differ
+        // only in the final token, so they compress exactly like the arrow
+        // quads.
+        {{QString::fromLatin1(kIdRotateWindowsCW), QString::fromLatin1(kIdRotateWindowsCCW)},
+         {QStringLiteral("]"), QStringLiteral("[")},
+         PhosphorI18n::tr("Rotate"),
+         QStringLiteral("] / [")},
+        {{QString::fromLatin1(kIdCycleWindowForward), QString::fromLatin1(kIdCycleWindowBackward)},
+         {QStringLiteral("."), QStringLiteral(",")},
+         PhosphorI18n::tr("Cycle Focus"),
+         QStringLiteral(". / ,")},
+        {{QString::fromLatin1(kIdRotateVirtualScreensCW), QString::fromLatin1(kIdRotateVirtualScreensCCW)},
+         {QStringLiteral("]"), QStringLiteral("[")},
+         PhosphorI18n::tr("Rotate"),
+         QStringLiteral("] / [")},
     };
 
     // The scrolling family's natural pairs collapse the same way the
-    // directional quads do, trimming the 21-row Scrolling group. Every opposed
-    // pair in the group is listed below: leaving any out is an omission, not a
-    // judgement, and it leaves near-identical rows on the sheet the mechanism
-    // exists to merge.
+    // directional quads do. Only the four pairs whose OPPOSED members end in
+    // DIFFERENT keys are listed: the letter+Shift pairs (consume/expel on I,
+    // adjust width on W, both preset cycles on R and H) share their final
+    // key, so compression would require both members to carry the identical
+    // full sequence — a duplicate chord KGlobalAccel refuses — and a spec
+    // for them would sit in the table permanently dead, extracting merged
+    // labels no user could ever see.
     //
     // A pair is SKIPPED when either member has no sequence to expect: an
     // expectation of "" can never match a live trigger, so a spelled-out
@@ -487,10 +531,6 @@ QVariantList ShortcutManager::cheatsheetModel() const
                                    firstKey + QStringLiteral(" / ") + secondKey,
                                    description});
     };
-    // Several pairs (consume/expel, adjust width) ship Shift-opposed
-    // defaults, whose differing modifier prefix means they will not
-    // compress; the specs stay listed so a user rebind onto a shared prefix
-    // still collapses them.
     addScrollPair(kIdScrollFocusColumnFirst, ConfigDefaults::scrollingFocusColumnFirstShortcut(),
                   kIdScrollFocusColumnLast, ConfigDefaults::scrollingFocusColumnLastShortcut(),
                   PhosphorI18n::tr("Focus First / Last Column"),
@@ -499,27 +539,11 @@ QVariantList ShortcutManager::cheatsheetModel() const
                   kIdScrollMoveColumnToLast, ConfigDefaults::scrollingMoveColumnToLastShortcut(),
                   PhosphorI18n::tr("Move Column to Start / End"),
                   PhosphorI18n::tr("Moves the focused column to the first or last position."));
-    addScrollPair(kIdScrollCycleColumnWidth, ConfigDefaults::scrollingCycleColumnWidthShortcut(),
-                  kIdScrollCycleColumnWidthBack, ConfigDefaults::scrollingCycleColumnWidthBackShortcut(),
-                  PhosphorI18n::tr("Cycle Column Width"),
-                  PhosphorI18n::tr("Steps the focused column through the preset widths."));
-    addScrollPair(kIdScrollCycleWindowHeight, ConfigDefaults::scrollingCycleWindowHeightShortcut(),
-                  kIdScrollCycleWindowHeightBack, ConfigDefaults::scrollingCycleWindowHeightBackShortcut(),
-                  PhosphorI18n::tr("Cycle Window Height"),
-                  PhosphorI18n::tr("Steps the focused window through the preset heights."));
-    addScrollPair(kIdScrollConsumeWindow, ConfigDefaults::scrollingConsumeWindowShortcut(), kIdScrollExpelWindow,
-                  ConfigDefaults::scrollingExpelWindowShortcut(), PhosphorI18n::tr("Consume / Expel Window"),
-                  PhosphorI18n::tr("Pulls a window from the next column into the focused column, or moves the "
-                                   "focused window out into a new column of its own."));
     addScrollPair(kIdScrollConsumeOrExpelLeft, ConfigDefaults::scrollingConsumeOrExpelLeftShortcut(),
                   kIdScrollConsumeOrExpelRight, ConfigDefaults::scrollingConsumeOrExpelRightShortcut(),
                   PhosphorI18n::tr("Consume or Expel Left / Right"),
                   PhosphorI18n::tr("Splits the focused window out of a shared column to that side. A window alone "
                                    "in its column merges into the neighboring column instead."));
-    addScrollPair(kIdScrollIncreaseColumnWidth, ConfigDefaults::scrollingIncreaseColumnWidthShortcut(),
-                  kIdScrollDecreaseColumnWidth, ConfigDefaults::scrollingDecreaseColumnWidthShortcut(),
-                  PhosphorI18n::tr("Adjust Column Width"),
-                  PhosphorI18n::tr("Adjusts the width of the focused column by the configured step."));
     addScrollPair(kIdScrollIncreaseWindowHeight, ConfigDefaults::scrollingIncreaseWindowHeightShortcut(),
                   kIdScrollDecreaseWindowHeight, ConfigDefaults::scrollingDecreaseWindowHeightShortcut(),
                   PhosphorI18n::tr("Adjust Window Height"),
@@ -549,6 +573,12 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
         rowIndexById.insert(rows[i].value(QLatin1String("id")).toString(), i);
     }
     QSet<int> removedIndices;
+    // Every index an earlier family already consumed — its removed members
+    // AND its rewritten first row. The overlap guard tests this set, not
+    // removedIndices alone: a later family naming an earlier family's FIRST
+    // member would otherwise slip past (that row was rewritten in place, not
+    // removed) and only fail quietly on the token compare.
+    QSet<int> consumedIndices;
     for (const auto& family : families) {
         // The two lists are parallel arrays; a mismatched spec would index
         // expectedLastTokens out of bounds below, and an EMPTY one would walk
@@ -571,6 +601,17 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
                 compressible = false;
                 break;
             }
+            // A member already consumed by an EARLIER family must not merge
+            // again: the earlier merge removed its row (or rewrote it as that
+            // family's merged row), so this family would fold itself into a
+            // removed row and silently vanish from the sheet. Overlapping
+            // specs are a table bug; refuse loudly like the malformed case.
+            if (consumedIndices.contains(idx)) {
+                qCWarning(lcShortcuts) << "cheatsheet: family" << family.combinedLabel << "member" << family.ids[m]
+                                       << "already merged by an earlier family — skipping compression";
+                compressible = false;
+                break;
+            }
             // No separate "assigned" check: the producer derives it as
             // triggers-non-empty, so the single-trigger requirement below
             // already rejects unassigned members.
@@ -585,8 +626,11 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
             const QString seq = memberTriggers.first();
             const int split = seq.lastIndexOf(QLatin1Char('+'));
             // Through the shared tokenizer, so a '+'-terminated binding is
-            // read the same way the merged chip's producer reads it.
-            if (split <= 0 || lastKeyToken(seq) != family.expectedLastTokens[m]) {
+            // read the same way the merged chip's producer reads it. A
+            // '+'-terminated sequence (the plus KEY) is additionally rejected
+            // outright: its prefix would keep the trailing '+' and the merged
+            // chip would render as "Meta+Alt++ / …" garbage.
+            if (split <= 0 || split == seq.size() - 1 || lastKeyToken(seq) != family.expectedLastTokens[m]) {
                 compressible = false;
                 break;
             }
@@ -595,6 +639,7 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
                 sharedPrefix = prefix;
             } else if (prefix != sharedPrefix) {
                 compressible = false;
+                break;
             }
         }
         if (!compressible) {
@@ -613,11 +658,12 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
         // under the wrong heading. Every current family is uniform on both;
         // this pins that as a requirement of the spec rather than a
         // coincidence of the table.
-        // Release pair for the Q_ASSERT: a mixed family still merges rather
-        // than bailing, because the consequence is cosmetic (a row filed
-        // under the first member's mode or heading) and dropping the
-        // compression would cost the user a readable sheet over a table
-        // typo. Warn-only is the deliberate choice, not an oversight.
+        // In a DEBUG build the Q_ASSERT below aborts, surfacing the table
+        // typo at the developer's desk. The release behaviour is warn-only:
+        // a mixed family still merges rather than bailing, because the
+        // consequence is cosmetic (a row filed under the first member's mode
+        // or heading) and dropping the compression would cost the user a
+        // readable sheet over a table typo.
         for (int m = 1; m < family.ids.size(); ++m) {
             const int memberIdx = rowIndexById.value(family.ids[m], -1);
             const bool uniform = memberIdx < 0
@@ -638,10 +684,12 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
             row.insert(QStringLiteral("description"), family.combinedDescription);
         }
         row.insert(QStringLiteral("triggers"), QStringList{sharedPrefix + QLatin1Char('+') + family.tailToken});
+        consumedIndices.insert(firstIdx);
         for (int m = 1; m < family.ids.size(); ++m) {
             const int memberIdx = rowIndexById.value(family.ids[m], -1);
             if (memberIdx >= 0) {
                 removedIndices.insert(memberIdx);
+                consumedIndices.insert(memberIdx);
             }
         }
     }

@@ -303,7 +303,10 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                     int restoreW = fallbackW;
                     int restoreH = fallbackH;
                     QDBusPendingReply<bool, int, int, int, int> reply = *pw;
-                    if (reply.isValid() && reply.count() >= 5 && reply.argumentAt<0>()) {
+                    // No arity term: count() is compile-time constant 5 (see
+                    // requestDaemonPreTileRestore) — isValid + the success
+                    // flag + the positive-extent checks below are the guard.
+                    if (reply.isValid() && reply.argumentAt<0>()) {
                         int dw = reply.argumentAt<3>();
                         int dh = reply.argumentAt<4>();
                         if (dw > 0 && dh > 0) {

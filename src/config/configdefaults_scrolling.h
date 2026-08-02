@@ -22,7 +22,7 @@ public:
     /// snappingEnabled and autotileEnabled. Off, a Scrolling context
     /// downgrades to Snapping in the daemon's derive pass and the mode
     /// toggle skips the mode.
-    static bool scrollingEnabled()
+    static constexpr bool scrollingEnabled()
     {
         return true;
     }
@@ -49,10 +49,15 @@ public:
     {
         return scrollingCenterFocusedColumnNever();
     }
-    /// Closed-set validity check — the SAME enumerator list the schema's
-    /// validIntOr closed set uses, so the D-Bus registry guard and the
-    /// schema validator cannot drift (a range check would silently accept
-    /// any hole a future enum leaves).
+    /// Closed-set validity check for the D-Bus registry guard. The schema's
+    /// validIntOr closed set is spelled SEPARATELY (settingsschema_scrolling
+    /// builds its own list, in places from the engine enumerators), so the
+    /// two lists are maintained IN PARALLEL and adding an enum value means
+    /// editing both — forgetting one lets the D-Bus guard accept a value the
+    /// schema snaps back to default, or the reverse. (A range check would be
+    /// worse still: it silently accepts any hole a future enum leaves.) The
+    /// same parallel-maintenance rule applies to every isValidScrolling*
+    /// predicate below that names this comment.
     static constexpr bool isValidScrollingCenterFocusedColumn(int v)
     {
         return v == scrollingCenterFocusedColumnNever() || v == scrollingCenterFocusedColumnAlways()
@@ -63,8 +68,7 @@ public:
         return false;
     }
     /// Width-kind wire values (0 = proportion, 1 = fixed px, 2 = client
-    /// decides, 3 = preset index — declared just below, out of numeric order
-    /// because it was appended later). Named so the settings layer's
+    /// decides, 3 = preset index). Named so the settings layer's
     /// kind-aware branches read against the vocabulary instead of raw ints;
     /// the LGPL engine keeps its own interpretation of the same values
     /// (IScrollSettings docs).
@@ -443,8 +447,9 @@ public:
         return QString();
     }
     /// Meta+wheel column focus in the KWin effect. Off, the axis chords are
-    /// genuinely released back to the compositor (KWin's zoom effect can
-    /// reclaim Meta+wheel). Inverted flips the scroll direction.
+    /// genuinely released back to the compositor for any later registrant
+    /// (stock zoom binds its axis gesture to Meta+Ctrl, not plain Meta).
+    /// Inverted flips the scroll direction.
     static constexpr bool scrollingWheelFocusEnabled()
     {
         return true;
@@ -557,7 +562,7 @@ public:
         return v == scrollingInsertRightOfActive() || v == scrollingInsertLeftOfActive() || v == scrollingInsertFirst()
             || v == scrollingInsertLast() || v == scrollingInsertIntoActiveColumn();
     }
-    static bool scrollingFocusFollowsMouse()
+    static constexpr bool scrollingFocusFollowsMouse()
     {
         return false;
     }
@@ -831,6 +836,20 @@ static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorWidth()
                   && ConfigDefaultsScrolling::scrollingTabIndicatorWidth()
                       <= ConfigDefaultsScrolling::scrollingTabIndicatorWidthMax(),
               "ConfigDefaults::scrollingTabIndicatorWidth() outside the declared [min, max] range");
+// Both per-style thickness figures explicitly, not just the default-style one
+// the accessor above resolves to: the style setter re-seeds the ranged Width
+// key from these, so an out-of-range edit would otherwise be silently snapped
+// by the schema on the first style flip instead of failing the build.
+static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorWidthForBar()
+                      >= ConfigDefaultsScrolling::scrollingTabIndicatorWidthMin()
+                  && ConfigDefaultsScrolling::scrollingTabIndicatorWidthForBar()
+                      <= ConfigDefaultsScrolling::scrollingTabIndicatorWidthMax(),
+              "ConfigDefaults::scrollingTabIndicatorWidthForBar() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorWidthForChips()
+                      >= ConfigDefaultsScrolling::scrollingTabIndicatorWidthMin()
+                  && ConfigDefaultsScrolling::scrollingTabIndicatorWidthForChips()
+                      <= ConfigDefaultsScrolling::scrollingTabIndicatorWidthMax(),
+              "ConfigDefaults::scrollingTabIndicatorWidthForChips() outside the declared [min, max] range");
 static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorLengthProportion()
                       >= ConfigDefaultsScrolling::scrollingTabIndicatorLengthProportionMin()
                   && ConfigDefaultsScrolling::scrollingTabIndicatorLengthProportion()

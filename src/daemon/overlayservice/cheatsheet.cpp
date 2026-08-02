@@ -27,7 +27,7 @@
 namespace PlasmaZones {
 
 void OverlayService::showCheatsheet(const QString& screenId, const QVariantList& model, const QString& currentMode,
-                                    bool autotileAvailable)
+                                    bool autotileAvailable, bool scrollingAvailable)
 {
     QScreen* screen = resolveTargetScreen(m_screenManager, screenId);
     if (!screen) {
@@ -84,6 +84,7 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
     writeQmlProperty(slot, QStringLiteral("shortcuts"), model);
     writeQmlProperty(slot, QStringLiteral("currentMode"), currentMode);
     writeQmlProperty(slot, QStringLiteral("autotileAvailable"), autotileAvailable);
+    writeQmlProperty(slot, QStringLiteral("scrollingAvailable"), scrollingAvailable);
     writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     // Same SurfaceDecoration host the picker uses, retargeted to the
@@ -155,7 +156,8 @@ QString OverlayService::cheatsheetScreenId() const
     return m_cheatsheetScreenId;
 }
 
-void OverlayService::refreshCheatsheet(const QVariantList& model, const QString& currentMode, bool autotileAvailable)
+void OverlayService::refreshCheatsheet(const QVariantList& model, const QString& currentMode, bool autotileAvailable,
+                                       bool scrollingAvailable)
 {
     if (!m_cheatsheetVisible) {
         return;
@@ -173,6 +175,7 @@ void OverlayService::refreshCheatsheet(const QVariantList& model, const QString&
     writeQmlProperty(slot, QStringLiteral("shortcuts"), model);
     writeQmlProperty(slot, QStringLiteral("currentMode"), currentMode);
     writeQmlProperty(slot, QStringLiteral("autotileAvailable"), autotileAvailable);
+    writeQmlProperty(slot, QStringLiteral("scrollingAvailable"), scrollingAvailable);
 }
 
 void OverlayService::onCheatsheetSlotHideCompleted(const QString& effectiveId)

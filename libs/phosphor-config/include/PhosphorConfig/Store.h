@@ -49,9 +49,10 @@ class PHOSPHORCONFIG_EXPORT Store : public QObject
 public:
     /// Construct a store that borrows @p backend and applies @p schema. The
     /// backend must outlive the store — typically owned by the caller via
-    /// @c std::unique_ptr in a containing class. On entry the schema's
-    /// migration chain runs against the backend's in-memory state; after
-    /// migration the version key is stamped (JsonBackend only).
+    /// @c std::unique_ptr in a containing class. On entry the version stamp
+    /// is DECLARED to the backend first and the schema's migration chain
+    /// runs second; the declared stamp only reaches the on-disk root when
+    /// the migration did not write one (JsonBackend only).
     Store(IBackend* backend, Schema schema, QObject* parent = nullptr);
 
     ~Store() override;
@@ -86,9 +87,12 @@ public:
         return T();
     }
 
-    /// Read as @c QVariant. Uses @c QString coercion on the wire and
-    /// reconstructs the type via @c QMetaType when possible. Undeclared
-    /// keys return @c QVariant().
+    /// Read as @c QVariant. Dispatches on the declared @c expectedType for
+    /// the known kinds (bool, the integer widths, double, QString, QColor,
+    /// QStringList, QVariantMap/List). Any OTHER type round-trips as a
+    /// QString: the write side stringifies it and this read returns the
+    /// string, so an exotic-typed key (QDateTime, QPoint, …) changes type
+    /// across the round trip. Undeclared keys return @c QVariant().
     QVariant readVariant(const QString& group, const QString& key) const;
 
     /// Write a value. If the schema declares an @c expectedType for this
@@ -114,7 +118,11 @@ public:
     /// signal instead.
     void reset(const QString& group, const QString& key);
 
-    /// Reset every key declared in @p group. Undeclared extras are left alone.
+    /// Reset every key declared in @p group. Undeclared extras are left
+    /// alone. Same semantics as reset() per key: a stored key is DELETED
+    /// (sparse persistence), an absent key is skipped without dirtying the
+    /// backend, and one @c changed per actually-deleted key is emitted after
+    /// the group handle is released.
     void resetGroup(const QString& group);
 
     /// Reset every declared key in every declared group. Extras are untouched.
@@ -148,9 +156,15 @@ public:
     /// refused" instead of relying on log scraping.
     bool importFromJson(const QJsonObject& snapshot);
 
-    /// Flush the underlying backend. Returns the backend's sync() result —
-    /// @c true on success (or nothing to flush), @c false on an I/O error.
+    /// Flush the underlying backend. Mirrors IBackend::sync(): @c true means
+    /// ACCEPTED, not committed — a backend may satisfy it by scheduling the
+    /// write. Never advance a baseline or report success to a user off this
+    /// result; use @c commit() for a durable answer.
     bool sync();
+
+    /// Durable flush: the backend's commit(), which never defers. @c true
+    /// means the bytes landed (or nothing needed writing).
+    bool commit();
 
     /// Direct access for callers that still need the backend (e.g. to read
     /// an undeclared key or to call @c groupList()).

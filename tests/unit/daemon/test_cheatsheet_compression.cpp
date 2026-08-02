@@ -14,7 +14,7 @@ using PlasmaZones::ShortcutManager;
 
 namespace {
 
-QVariantMap makeRow(const QString& id, const QStringList& triggers)
+QVariantMap makeRow(const QString& id, const QStringList& triggers, const QString& description = QString())
 {
     QVariantMap r;
     r.insert(QStringLiteral("id"), id);
@@ -24,6 +24,9 @@ QVariantMap makeRow(const QString& id, const QStringList& triggers)
     r.insert(QStringLiteral("triggers"), triggers);
     r.insert(QStringLiteral("assigned"), !triggers.isEmpty());
     r.insert(QStringLiteral("mode"), QStringLiteral("all"));
+    // Mirrors cheatsheetModel(): the role is ALWAYS present, empty when the
+    // action carries no explanation.
+    r.insert(QStringLiteral("description"), description);
     return r;
 }
 
@@ -63,6 +66,74 @@ private Q_SLOTS:
         QCOMPARE(row.value(QStringLiteral("label")).toString(), QStringLiteral("Span Window"));
         QCOMPARE(row.value(QStringLiteral("triggers")).toStringList(),
                  (QStringList{QStringLiteral("Ctrl+Alt+Arrows")}));
+    }
+
+    void combinedDescription_overridesFirstMembers()
+    {
+        // A family carrying a combinedDescription must stamp it onto the
+        // merged row in place of the first member's single-direction text.
+        QVector<QVariantMap> rows = {
+            makeRow(QStringLiteral("first"), {QStringLiteral("Meta+Home")}, QStringLiteral("Goes to the first.")),
+            makeRow(QStringLiteral("last"), {QStringLiteral("Meta+End")}, QStringLiteral("Goes to the last.")),
+        };
+        ShortcutManager::CheatsheetFamily f;
+        f.ids = {QStringLiteral("first"), QStringLiteral("last")};
+        f.expectedLastTokens = {QStringLiteral("Home"), QStringLiteral("End")};
+        f.combinedLabel = QStringLiteral("First / Last");
+        f.tailToken = QStringLiteral("Home / End");
+        f.combinedDescription = QStringLiteral("Goes to the first or last.");
+
+        const QVector<QVariantMap> out = ShortcutManager::compressCheatsheetFamilies(rows, {f});
+        QCOMPARE(out.size(), 1);
+        QCOMPARE(out.first().value(QStringLiteral("description")).toString(),
+                 QStringLiteral("Goes to the first or last."));
+    }
+
+    void emptyCombinedDescription_keepsFirstMembers()
+    {
+        // Without a combinedDescription the merged row keeps the FIRST
+        // member's description — the documented fallback.
+        QVector<QVariantMap> rows = {
+            makeRow(QStringLiteral("first"), {QStringLiteral("Meta+Home")}, QStringLiteral("Goes to the first.")),
+            makeRow(QStringLiteral("last"), {QStringLiteral("Meta+End")}, QStringLiteral("Goes to the last.")),
+        };
+        ShortcutManager::CheatsheetFamily f;
+        f.ids = {QStringLiteral("first"), QStringLiteral("last")};
+        f.expectedLastTokens = {QStringLiteral("Home"), QStringLiteral("End")};
+        f.combinedLabel = QStringLiteral("First / Last");
+        f.tailToken = QStringLiteral("Home / End");
+
+        const QVector<QVariantMap> out = ShortcutManager::compressCheatsheetFamilies(rows, {f});
+        QCOMPARE(out.size(), 1);
+        QCOMPARE(out.first().value(QStringLiteral("description")).toString(), QStringLiteral("Goes to the first."));
+    }
+
+    void overlappingFamilies_secondIsRefusedNotLost()
+    {
+        // Two specs sharing a member: the first merges, the second must be
+        // refused wholesale — its OTHER member's row survives instead of the
+        // whole family silently vanishing into an already-removed row.
+        QVector<QVariantMap> rows = {
+            makeRow(QStringLiteral("a"), {QStringLiteral("Meta+Home")}),
+            makeRow(QStringLiteral("b"), {QStringLiteral("Meta+End")}),
+            makeRow(QStringLiteral("c"), {QStringLiteral("Meta+PgUp")}),
+        };
+        ShortcutManager::CheatsheetFamily first;
+        first.ids = {QStringLiteral("a"), QStringLiteral("b")};
+        first.expectedLastTokens = {QStringLiteral("Home"), QStringLiteral("End")};
+        first.combinedLabel = QStringLiteral("A / B");
+        first.tailToken = QStringLiteral("Home / End");
+        ShortcutManager::CheatsheetFamily second;
+        second.ids = {QStringLiteral("b"), QStringLiteral("c")};
+        second.expectedLastTokens = {QStringLiteral("End"), QStringLiteral("PgUp")};
+        second.combinedLabel = QStringLiteral("B / C");
+        second.tailToken = QStringLiteral("End / PgUp");
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("already merged by an earlier family")));
+        const QVector<QVariantMap> out = ShortcutManager::compressCheatsheetFamilies(rows, {first, second});
+        QCOMPARE(out.size(), 2);
+        QCOMPARE(out.at(0).value(QStringLiteral("label")).toString(), QStringLiteral("A / B"));
+        QCOMPARE(out.at(1).value(QStringLiteral("id")).toString(), QStringLiteral("c"));
     }
 
     void alternateBinding_staysUncompressed()
