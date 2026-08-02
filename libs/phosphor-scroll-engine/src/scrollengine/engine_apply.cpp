@@ -256,13 +256,22 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         qCDebug(lcScrollEngine) << "applyLayout: no valid work area for screen" << screenId;
         return;
     }
+    // Live drag-insert preview on THIS screen: the daemon's drag tick (edge
+    // auto-scroll, take-and-reinsert updates) is steering the view manually,
+    // and both nudgeDragScroll and the preview's holdViewX compensate the
+    // anchor themselves — re-applying the centering policy here would snap
+    // the view back to the focused column every pass and undo them.
+    const bool dragPreviewSteersView = m_dragInsertPreview && m_dragInsertPreview->targetScreenId == screenId;
+
     // Re-apply the centering policy before resolving: a work-area change
     // (resolution, panels, outer gaps) or a centering-settings flip leaves
     // the stored anchor relative to the OLD width, and nothing else
     // re-derives it until the next focus move. Idempotent for a settled
     // strip (a fully-visible column stays put under Never/OnOverflow).
     const int anchorBefore = state->strip().viewAnchor();
-    state->strip().updateViewForFocus(params);
+    if (!dragPreviewSteersView) {
+        state->strip().updateViewForFocus(params);
+    }
     // The anchor is PERSISTED state (serializeStripState) and
     // placementChanged is the only producer of DirtyScrollStrips. The
     // focus-moving verbs all emit it themselves, but the re-anchor here also
