@@ -334,16 +334,18 @@ public:
     int columnIndexForWindow(const QString& screenId, const QString& windowId) const;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Drag-insert preview (trigger-held window drag re-inserts into the strip)
+    // Drag-insert (trigger-held window drag re-inserts into the strip)
     //
-    // The scrolling twin of AutotileEngine's drag-insert preview, with the
-    // same live-retile contract: while a preview is active, applyLayout()
-    // skips emitting geometry for the dragged window (KWin's interactive
-    // move stays in control) while neighbours animate around the previewed
-    // slot. Restoration state is captured in FloatRestore vocabulary
-    // (column + tile + stack anchor + width/display/height intents) — the
-    // strip has no raw-order index for cancel to restore by.
-    // All in drag_preview.cpp.
+    // DETACH-ONCE architecture, deliberately unlike autotile's live-
+    // restructure preview: begin detaches the window from the strip (one
+    // settle, neighbours close up), update only remembers the hit-tested
+    // drop target against the now-stable strip, and commit applies the
+    // structure once at drop. A strip cannot restructure per tick the way
+    // a fixed zone grid can — it slides the layout under the cursor (see
+    // drag_preview.cpp's header for the full rationale). Restoration state
+    // is captured in FloatRestore vocabulary (column + tile + stack anchor
+    // + width/display/height intents) — the strip has no raw-order index
+    // for cancel to restore by. All in drag_preview.cpp.
     // ═══════════════════════════════════════════════════════════════════════
 
     bool hasDragInsertPreview() const override
@@ -792,12 +794,13 @@ private:
         /// The context the preview inserted into, captured at begin so the
         /// prune paths can tell whether a dying context strands it.
         PhosphorEngine::PlacementStateKey targetKey;
-        /// The applied target, in DragInsertTarget vocabulary with newSlot
-        /// always false (once inserted, the slot reads as an existing one).
-        /// The hit-test returns this verbatim for own-slot stability.
+        /// The most recent hit-tested drop target, stored verbatim —
+        /// nothing structural happens until commit applies it.
         DragInsertTarget lastTarget;
-        /// Width/display/height/min-size intents that travel with the
-        /// dragged window across take-and-reinsert updates.
+        /// The window's OWN begin-time width/display/height/min-size
+        /// intents, applied at commit. Never refreshed mid-drag: reading
+        /// them from a transient host column stamped foreign widths across
+        /// columns in the abandoned live-restructure design.
         FloatRestore carried;
         // ── cancel restoration ──
         bool hadPriorState = false;
