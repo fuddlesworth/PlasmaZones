@@ -265,7 +265,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                     // fetch it async and restore once the reply lands.
                     // Without this the window stays parked at its tiled
                     // frame. Gated on wasTracked: see the capture above.
-                    requestDaemonPreTileRestore(w, windowId);
+                    requestDaemonPreTileRestore(w, windowId, screenId);
                 }
             }
             m_effect->updateAllDecorations();
@@ -379,10 +379,30 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             pruneRemovedScreenEntries(m_tileTargetZones);
             pruneRemovedScreenEntries(m_centeredWaylandZones);
 
-            // Clear pre-autotile geometries for removed screens — they're
-            // no longer needed.
+            // Clear pre-autotile geometries captured for removed screens —
+            // per ENTRY, not per bucket: the bucket key names the rect's
+            // capture-time coordinate space, and a window transferred to a
+            // still-managed screen keeps its rect filed under the OLD
+            // screen's bucket (outputchange.cpp re-files it there on
+            // purpose). Dropping the whole bucket would lose those windows'
+            // effect-side float-backs and leave only the daemon copy.
             for (const QString& screenId : removed) {
-                m_preTileGeometries.remove(screenId);
+                auto bucketIt = m_preTileGeometries.find(screenId);
+                if (bucketIt == m_preTileGeometries.end()) {
+                    continue;
+                }
+                for (auto it = bucketIt->begin(); it != bucketIt->end();) {
+                    KWin::EffectWindow* w = m_effect->findWindowByIdExact(it.key());
+                    const QString current = (w && !w->isDeleted()) ? m_effect->getWindowScreenId(w) : QString();
+                    if (current.isEmpty() || removed.contains(current)) {
+                        it = bucketIt->erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+                if (bucketIt->isEmpty()) {
+                    m_preTileGeometries.erase(bucketIt);
+                }
             }
         }
     }

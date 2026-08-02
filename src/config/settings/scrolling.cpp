@@ -147,8 +147,13 @@ void Settings::normalizeScrollingColumnWidthValue()
     if (qFuzzyCompare(1.0 + stored, 1.0 + coerced)) {
         return;
     }
+    // "In memory for this session": load() runs this BEFORE captureBaseline,
+    // so the repaired value is baked into the committed baseline, never
+    // reads as a pending edit, and only reaches disk when some unrelated
+    // change makes the user save. Each launch re-repairs the same stored
+    // pair; the engine never sees the bad value, so this is deliberate.
     qCWarning(lcConfig) << "scrolling: stored column width" << stored << "is out of range for the current kind" << kind
-                        << "— using" << coerced << "in memory; it reaches disk on the next save";
+                        << "— repaired to" << coerced << "in memory for this session";
     m_store->write(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultColumnWidthValueKey(), coerced);
     // NO Q_EMIT here. EVERY caller — load(), applyConfigOverlayStaged, and the
     // per-page discardKeys/resetKeys —

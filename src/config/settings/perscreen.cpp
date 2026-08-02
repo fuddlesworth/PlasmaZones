@@ -226,12 +226,16 @@ static_assert(std::size(kPerScreenScrollingKeys) == 7,
 // plain-copy merge intact, opening every column on that monitor one pixel
 // wide. The inverse pair opens them at 100%.
 //
-// @p globalKind stands in when the screen overrides the value without
-// overriding the kind, which is the resolution the daemon's merge performs:
-// an absent per-screen key means the app-wide setting is in force.
+// A VALUE-only override (no per-screen Kind key) is left untouched: the
+// engine gates the whole per-screen width channel on the Kind key's presence
+// (ScrollEngine::effectiveDefaultColumnWidth returns the global width
+// wholesale when the per-screen Kind is absent), so such a value never
+// applies — and repairing it against the GLOBAL kind would destroy the
+// retained figure the engine would use the moment the user re-adds a
+// per-screen kind.
 //
 // Returns whether @p overrides was modified.
-bool repairPerScreenScrollingWidth(QVariantMap& overrides, int globalKind)
+bool repairPerScreenScrollingWidth(QVariantMap& overrides)
 {
     namespace K = PerScreenScrollingKey;
     auto valueIt = overrides.find(QString(QLatin1String(K::DefaultColumnWidthValue)));
@@ -239,7 +243,10 @@ bool repairPerScreenScrollingWidth(QVariantMap& overrides, int globalKind)
         return false;
     }
     const auto kindIt = overrides.constFind(QString(QLatin1String(K::DefaultColumnWidthKind)));
-    const int kind = (kindIt != overrides.constEnd()) ? kindIt->toInt() : globalKind;
+    if (kindIt == overrides.constEnd()) {
+        return false;
+    }
+    const int kind = kindIt->toInt();
     const qreal stored = valueIt->toDouble();
     // ClientDecides and Preset are returned untouched by the shared helper —
     // neither owns the value, so neither can make the pair inconsistent.
@@ -596,14 +603,11 @@ void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
     // {Kind, Value} combination that is individually legal but jointly
     // impossible survives it — from a hand edit, a config import, or a staged
     // profile blob. Repair it here, the load-path twin of the kind-aware
-    // re-seed setPerScreenScrollingSetting applies on a kind write. The global
-    // pair has already been normalized by this point in load(), so its kind is
-    // a sound stand-in for a screen that overrides the value alone.
-    {
-        const int globalKind = scrollingDefaultColumnWidthKind();
-        for (auto it = m_perScreenScrollingSettings.begin(); it != m_perScreenScrollingSettings.end(); ++it) {
-            repairPerScreenScrollingWidth(it.value(), globalKind);
-        }
+    // re-seed setPerScreenScrollingSetting applies on a kind write. Screens
+    // overriding the value WITHOUT a kind are skipped inside the helper (the
+    // engine ignores such a value entirely).
+    for (auto it = m_perScreenScrollingSettings.begin(); it != m_perScreenScrollingSettings.end(); ++it) {
+        repairPerScreenScrollingWidth(it.value());
     }
     // No separate per-screen snapping group to load: per-monitor gaps are unified
     // and live in the per-screen autotile store loaded above.
@@ -1075,7 +1079,7 @@ void Settings::setPerScreenScrollingSetting(const QString& screenIdOrName, const
     if (key == QLatin1String(PerScreenScrollingKey::DefaultColumnWidthKind)) {
         auto it = findPerScreenEntryMutable(m_perScreenScrollingSettings, screenIdOrName);
         if (it != m_perScreenScrollingSettings.end()) {
-            repairPerScreenScrollingWidth(it.value(), scrollingDefaultColumnWidthKind());
+            repairPerScreenScrollingWidth(it.value());
         }
     }
     Q_EMIT perScreenScrollingSettingsChanged();

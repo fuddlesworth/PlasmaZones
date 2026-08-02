@@ -14,10 +14,8 @@
 #include <PhosphorShortcuts/Registry.h>
 
 #include <QHash>
-#include <QSet>
 #include <QStringList>
 #include <QTimer>
-#include <QVariantMap>
 
 #include <algorithm>
 
@@ -381,8 +379,12 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollMaximizeColumnRequested();
      }},
+    // "Grow into empty space", not "expand to available width": the old
+    // wording was indistinguishable from Maximize Column in the System
+    // Settings list. This one names what the op actually does — claim the
+    // visible leftover space without touching other columns.
     {kIdScrollExpandColumn, &ConfigDefaults::scrollingExpandColumnShortcut, &Settings::scrollingExpandColumnShortcut,
-     QT_TRANSLATE_NOOP("plasmazones", "Expand Column to Available Width"),
+     QT_TRANSLATE_NOOP("plasmazones", "Grow Column into Empty Space"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollExpandColumnRequested();
      }},
@@ -437,7 +439,10 @@ constexpr DefaultGetter kSnapToZoneDefaults[kIndexedSlotCount] = {
 
 // QKeySequence(QString) silently returns an empty sequence on malformed
 // input. Wrap with a warning log so a typo in the config surfaces from the
-// logs instead of silently disabling a shortcut.
+// logs instead of silently disabling a shortcut. The warning latches per
+// (id, spelling): the currentSeq lambdas re-parse every entry on every
+// settings save, and a persistently malformed value would otherwise re-log
+// the identical line for the life of the process.
 QKeySequence parseSequence(const QString& raw, const QString& contextId)
 {
     if (raw.isEmpty()) {
@@ -445,7 +450,11 @@ QKeySequence parseSequence(const QString& raw, const QString& contextId)
     }
     QKeySequence seq(raw);
     if (seq.isEmpty()) {
-        qCWarning(lcShortcuts) << "Failed to parse shortcut sequence for" << contextId << ":" << raw;
+        static QHash<QString, QString> warnedSpellings;
+        if (warnedSpellings.value(contextId) != raw) {
+            warnedSpellings.insert(contextId, raw);
+            qCWarning(lcShortcuts) << "Failed to parse shortcut sequence for" << contextId << ":" << raw;
+        }
     }
     return seq;
 }
@@ -705,6 +714,17 @@ void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequenc
                                << "): no registry — registerShortcuts() must be called before adhoc binding";
         return;
     }
+    // Boundary validation: an adhoc id colliding with the settings-driven
+    // table (or the indexed slot prefixes) would rebind the persistent entry
+    // as transient, and the matching unregisterAdhocShortcut() would purge
+    // the persistent binding's saved kglobalshortcutsrc record — the exact
+    // wipe unregisterShortcuts() exists to avoid (discussion #851).
+    if (staticShortcutIds().contains(id) || id.startsWith(QLatin1String(kQuickLayoutPrefix))
+        || id.startsWith(QLatin1String(kSnapToZonePrefix))) {
+        qCWarning(lcShortcuts) << "registerAdhocShortcut(" << id
+                               << "): id collides with a settings-driven shortcut — rejected";
+        return;
+    }
     // Adhoc registration during the initial settings-driven batch would race
     // the batched BindShortcuts on the Portal backend (the per-batch Request
     // subscription gets torn down mid-flight when the adhoc flush fires,
@@ -727,7 +747,45 @@ void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequenc
     // wants the new sequence to win. For a fresh id the rebind is a same-
     // sequence short-circuit inside Registry.
     m_registry->rebind(id, sequence);
-    m_registry->flush();
+    if (!m_suppressAdhocFlush) {
+        m_registry->flush();
+    }
+}
+
+void ShortcutManager::registerAdhocShortcuts(
+    const QVector<PhosphorShortcutsIntegration::IAdhocRegistrar::AdhocBinding>& bindings)
+{
+    // Every entry binds through the per-id path with its flush deferred to a
+    // single trailing call: on the Portal backend each flush issues a
+    // BindShortcuts whose Request supersedes the prior in-flight Response, so
+    // a burst of per-id flushes (the six layout-picker navigation grabs)
+    // would lose the read-back confirmation for all but the last.
+    if (bindings.isEmpty()) {
+        return;
+    }
+    m_suppressAdhocFlush = true;
+    for (const auto& binding : bindings) {
+        registerAdhocShortcut(binding.id, binding.sequence, binding.description, binding.callback);
+    }
+    m_suppressAdhocFlush = false;
+    if (m_registry && !m_registrationInProgress) {
+        m_registry->flush();
+    }
+}
+
+void ShortcutManager::unregisterAdhocShortcuts(const QStringList& ids)
+{
+    if (ids.isEmpty()) {
+        return;
+    }
+    m_suppressAdhocFlush = true;
+    for (const QString& id : ids) {
+        unregisterAdhocShortcut(id);
+    }
+    m_suppressAdhocFlush = false;
+    if (m_registry && !m_registrationInProgress) {
+        m_registry->flush();
+    }
 }
 
 void ShortcutManager::unregisterAdhocShortcut(const QString& id)
@@ -757,7 +815,9 @@ void ShortcutManager::unregisterAdhocShortcut(const QString& id)
         return;
     }
     m_registry->unbind(id);
-    m_registry->flush();
+    if (!m_suppressAdhocFlush) {
+        m_registry->flush();
+    }
 }
 
 void ShortcutManager::erasePendingAdhocOps(const QString& id)

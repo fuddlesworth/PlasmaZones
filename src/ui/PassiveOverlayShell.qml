@@ -616,6 +616,7 @@ Window {
         property var shortcuts: []
         property string currentMode: "snapping"
         property bool autotileAvailable: true
+        property bool scrollingAvailable: true
         // Card corner radius the surface decoration rounds to (see osdSlot).
         property real cardCornerRadius: Kirigami.Units.largeSpacing * 2
         property string fontFamily: ""
@@ -670,6 +671,7 @@ Window {
                 shortcuts: cheatsheetSlot.shortcuts
                 currentMode: cheatsheetSlot.currentMode
                 autotileAvailable: cheatsheetSlot.autotileAvailable
+                scrollingAvailable: cheatsheetSlot.scrollingAvailable
                 fontFamily: cheatsheetSlot.fontFamily
                 fontSizeScale: cheatsheetSlot.fontSizeScale
             }

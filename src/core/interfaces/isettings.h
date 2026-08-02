@@ -444,7 +444,10 @@ public:
     // Settings::load (settings.cpp) for the live guard against
     // `m_ownedRuleStore`.
     virtual void load() = 0;
-    virtual void save() = 0;
+    /// Persist the current values. Returns false when the write did not
+    /// reach disk (the implementation keeps the previous baseline so the
+    /// unsaved values stay discardable and the next save retries).
+    virtual bool save() = 0;
     /// Restore factory defaults. Returns false when the cleared configuration
     /// could not be persisted, in which case the implementation must leave the
     /// previous state intact rather than half-applying the reset. Callers that

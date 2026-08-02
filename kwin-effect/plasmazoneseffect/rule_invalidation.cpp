@@ -29,7 +29,13 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
     // resolves through), so a snap / unsnap / zone change must re-resolve the
     // window's appearance. With none of them, a placement change can't change any
     // window's appearance — skip.
-    if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault() && !hasDecorationTreeContent()) {
+    // The exclusion term matters: exclusion verdicts are ALSO cached per
+    // (windowId, revision) — window_filtering.cpp resolves them through
+    // resolveCached — and an Exclude rule can scope on the same placement
+    // fields, so an exclusion-only session must still enqueue (the flush
+    // then does only the cheap cache clear).
+    if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault() && !hasDecorationTreeContent()
+        && m_snappingExclusionRuleSet.isEmpty()) {
         return;
     }
     // Coalesce: a single float toggle emits BOTH windowFloatingChanged and
@@ -38,11 +44,6 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
     // match-cache clear is global (running it per call is wasteful) and the
     // per-window border rebuild is otherwise repeated. The flush before the next
     // paint keeps the re-resolved border / opacity visually immediate.
-    //
-    // Only the CACHED verdicts (border / opacity) need invalidation. shouldHandleWindow's
-    // exclusion query is evaluated on-demand every time it is consulted (drag start,
-    // lifecycle filtering), so a snap/float/zone change is picked up at the next natural
-    // call without eager re-filtering.
     const bool wasEmpty = m_pendingRuleInvalidations.isEmpty();
     m_pendingRuleInvalidations.insert(windowId);
     if (wasEmpty) {
@@ -57,21 +58,24 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
 void PlasmaZonesEffect::flushPendingRuleInvalidations()
 {
     const QSet<QString> windowIds = std::exchange(m_pendingRuleInvalidations, {});
-    if (windowIds.isEmpty()
-        || (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault()
-            && !hasDecorationTreeContent())) {
+    if (windowIds.isEmpty()) {
+        return;
+    }
+    // The exclusion clear runs BEFORE the appearance guard: in an
+    // exclusion-only session (Exclude rules but no animation rules, no
+    // appearance default, no decoration tree) the guard returns early, and
+    // a placement-scoped Exclude verdict would otherwise keep its
+    // first-computed answer for the whole session.
+    if (!m_snappingExclusionRuleSet.isEmpty()) {
+        m_snappingExclusionEvaluator.clearCache();
+    }
+    if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault() && !hasDecorationTreeContent()) {
         return;
     }
     // The match cache is keyed on (windowId, ruleSet revision); neither moves on a
     // placement-state change, so drop it once so border / opacity rules re-resolve
     // against the new snapped / floating / zone state.
     m_shaderManager.animationRuleEvaluator().clearCache();
-    // The exclusion verdicts (isExcludedBySnappingRule) are cached the same way
-    // and an Exclude rule can scope on the same placement fields — keep them in
-    // lockstep.
-    if (!m_snappingExclusionRuleSet.isEmpty()) {
-        m_snappingExclusionEvaluator.clearCache();
-    }
     for (const QString& windowId : windowIds) {
         KWin::EffectWindow* w = findWindowById(windowId);
         if (!w) {
@@ -128,6 +132,12 @@ void PlasmaZonesEffect::scheduleBorderSweep()
 
 void PlasmaZonesEffect::invalidateAllRuleCaches()
 {
+    // Exclusion verdicts share the placement-scoped staleness and must be
+    // dropped even when the early return below fires (exclusion-only rule
+    // stores leave the animation set empty and no layer snapshots).
+    if (!m_snappingExclusionRuleSet.isEmpty()) {
+        m_snappingExclusionEvaluator.clearCache();
+    }
     if (m_shaderManager.animationRuleSet().isEmpty() && m_ruleWindowLayerSnapshots.isEmpty()) {
         return;
     }
@@ -141,10 +151,6 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
     // (clearAllDecorations), and the daemon-ready re-seeds schedule a border sweep to
     // re-fold every window against the fresh placement.
     m_shaderManager.animationRuleEvaluator().clearCache();
-    // Exclusion verdicts share the placement-scoped staleness — same sweep.
-    if (!m_snappingExclusionRuleSet.isEmpty()) {
-        m_snappingExclusionEvaluator.clearCache();
-    }
     // Window-layer rules need the same placement-scoped re-resolve, but they
     // are EVENT-driven (during normal operation only reconcileRuleWindowLayer
     // writes keepAbove/keepBelow; restoreAllRuleWindowLayers is

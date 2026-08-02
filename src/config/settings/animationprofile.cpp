@@ -34,9 +34,16 @@ static PhosphorAnimation::CurveRegistry& fallbackCurveRegistry()
 
 namespace {
 /// Read the Profile blob as a mutable QJsonObject. Stored as a nested
-/// QVariantMap; an absent / malformed entry returns an empty object so
-/// callers that then write back produce a minimal blob containing only
-/// the patched field.
+/// QVariantMap. ABSENT returns the POPULATED 5-field schema default
+/// (read<QVariantMap> substitutes ConfigDefaults::animationProfile());
+/// only a present-but-MALFORMED entry returns an empty object. This is
+/// deliberate, not an accident of the Store contract: the blob's absent
+/// fields resolve through the LIBRARY defaults (Profile::effective*,
+/// duration 150), which differ from the ConfigDefaults values (320), so a
+/// minimal blob would change effective behaviour. The cost is that a
+/// read-patch-write of one field materializes all five on disk, freezing
+/// the untouched four against future ConfigDefaults retunes — accepted,
+/// because the alternative silently changes what unset fields mean.
 QJsonObject readProfileObject(const PhosphorConfig::Store& store)
 {
     const QVariantMap map =
@@ -53,10 +60,12 @@ void writeProfileObject(PhosphorConfig::Store& store, const QJsonObject& obj)
 
 PhosphorAnimation::Profile Settings::animationProfile() const
 {
-    // An absent / malformed blob returns an empty object, which yields a
-    // default-constructed Profile (unset-optional fields). Profile::effective*
-    // methods then substitute library defaults — "garbage in disk → sensible
-    // defaults".
+    // Only a MALFORMED blob returns an empty object here (yielding a
+    // default-constructed Profile whose effective* methods substitute
+    // library defaults — "garbage in disk → sensible defaults"). An ABSENT
+    // blob arrives as the populated ConfigDefaults 5-field object via
+    // readProfileObject, so a pristine config runs the ConfigDefaults
+    // values, not the library ones.
     const QJsonObject obj = readProfileObject(*m_store);
     if (obj.isEmpty()) {
         return PhosphorAnimation::Profile{};

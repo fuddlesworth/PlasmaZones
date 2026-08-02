@@ -562,7 +562,12 @@ private:
      * appId-fuzzy and session-persisted, so an ungated call can teleport a
      * never-autotiled window.
      */
-    void requestDaemonPreTileRestore(KWin::EffectWindow* w, const QString& windowId);
+    /// `capturedScreenId` is the caller's screen resolution taken while the
+    /// engine-authoritative override was still live; the reply guard tests it
+    /// instead of re-resolving, because by reply time the window's tracking
+    /// has been demoted and a positional re-resolve of a parked (off-canvas)
+    /// frame can name a neighbouring output.
+    void requestDaemonPreTileRestore(KWin::EffectWindow* w, const QString& windowId, const QString& capturedScreenId);
 
     /**
      * @brief Declared compositor min-size for @p w, rounded up to ints.

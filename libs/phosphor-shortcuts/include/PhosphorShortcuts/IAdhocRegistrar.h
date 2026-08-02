@@ -5,6 +5,8 @@
 
 #include <QKeySequence>
 #include <QString>
+#include <QStringList>
+#include <QVector>
 
 #include <functional>
 
@@ -57,6 +59,37 @@ public:
      * KGlobalAccel and DBusTrigger release cleanly).
      */
     virtual void unregisterAdhocShortcut(const QString& id) = 0;
+
+    /// One entry of the batch register form below.
+    struct AdhocBinding
+    {
+        QString id;
+        QKeySequence sequence;
+        QString description;
+        std::function<void()> callback;
+    };
+
+    /**
+     * Batch forms. The defaults forward to the per-id calls, so existing
+     * implementations keep working unchanged. Implementations whose backend
+     * pays a round-trip per flush should override to bind every entry and
+     * flush ONCE: on the XDG Portal each BindShortcuts request supersedes
+     * the prior in-flight Response, so a burst of per-id flushes loses the
+     * read-back confirmation for every batch but the last.
+     */
+    virtual void registerAdhocShortcuts(const QVector<AdhocBinding>& bindings)
+    {
+        for (const AdhocBinding& binding : bindings) {
+            registerAdhocShortcut(binding.id, binding.sequence, binding.description, binding.callback);
+        }
+    }
+
+    virtual void unregisterAdhocShortcuts(const QStringList& ids)
+    {
+        for (const QString& id : ids) {
+            unregisterAdhocShortcut(id);
+        }
+    }
 };
 
 } // namespace PhosphorShortcutsIntegration

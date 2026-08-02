@@ -343,7 +343,11 @@ void Settings::load()
 QStringList Settings::managedGroupNames()
 {
     return {
-        ConfigDefaults::generalGroup(), // "General"
+        // "General" is deliberately ABSENT: it is the backend's root-group
+        // CONTAINER (configbackends.cpp anchors setRootGroupName on it), the
+        // reserved name groupList() never enumerates and purgeStaleKeys
+        // documents as protected. Listing it here would have reset() delete
+        // the root container wholesale. No schema group lives there.
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
         ConfigDefaults::scrollingGroup(), // "Scrolling"
@@ -508,8 +512,11 @@ void Settings::purgeStaleKeys()
     // claimed by the Store, and isn't a per-screen / virtual-screen group
     // gets blanket-deleted. save*Config runs next and rewrites unmigrated
     // managed groups from their cached members.
+    // One dedup set only: groupList() cannot repeat a name (JSON keys are
+    // unique per object and resolver names exit at the per-screen continue),
+    // so sub-paths need no tracking — the top-level set exists because many
+    // sub-paths share one top level.
     QSet<QString> deletedTopLevels;
-    QSet<QString> deletedSubPaths;
     for (const QString& groupName : m_configBackend->groupList()) {
         if (PerScreenPathResolver::isPerScreenPrefix(groupName)) {
             continue;
@@ -528,11 +535,7 @@ void Settings::purgeStaleKeys()
         // When the top-level itself is a Store ancestor, we can't delete
         // the whole thing — descend and delete only the non-claimed child.
         if (isStoreClaimed(topLevel)) {
-            if (deletedSubPaths.contains(groupName)) {
-                continue;
-            }
             m_configBackend->deleteGroup(groupName);
-            deletedSubPaths.insert(groupName);
         } else {
             m_configBackend->deleteGroup(topLevel);
             deletedTopLevels.insert(topLevel);
@@ -540,15 +543,17 @@ void Settings::purgeStaleKeys()
     }
 }
 
-void Settings::save()
+bool Settings::save()
 {
     purgeStaleKeys();
 
-    // Flush every Store-declared key so the on-disk file always carries
-    // the complete declared set after save, not just the keys a user
-    // happened to mutate. Keys that haven't been written yet fall back to
-    // the schema default via Store::readVariant, and the write path runs
-    // the validator so clamped/normalized values land as the canonical form.
+    // Flush every Store-declared key through write() so clamp /
+    // canonicalization applies to whatever the file holds. Persistence is
+    // SPARSE: write() stores a default-equal value as absence, so this loop
+    // also prunes frozen defaults (values an older version's save stamped
+    // that still equal the current default) — a later default retune then
+    // reaches existing installs instead of being shadowed. Only values that
+    // differ from their schema default land on disk.
     //
     // INVARIANT: this loop iterates schema-declared keys only. Any key
     // present in the backing store but NOT in the schema is ignored here
@@ -582,12 +587,13 @@ void Settings::save()
         // discard them.
         qCWarning(lcConfig) << "save: failed to write the configuration to disk — keeping the previous baseline so "
                                "the unsaved values stay discardable; the next save retries";
-        return;
+        return false;
     }
 
     // Disk now holds the flushed store — the just-saved values become the new
     // committed baseline for per-page Discard / dirty checks.
     captureBaseline();
+    return true;
 }
 
 bool Settings::exportTo(const QString& filePath)
@@ -825,9 +831,9 @@ void Settings::resetKeys(const ConfigKeyList& keys)
 
 void Settings::connectRuleStoreGapReactivity()
 {
-    if (m_ruleStore == nullptr) {
-        return;
-    }
+    // No null guard: every constructor sets m_ruleStore to either the
+    // injected store or the owned fallback, so null is unreachable (reset()
+    // and the other consumers deref it unguarded for the same reason).
     // The global and per-screen gaps are config-backed now, so nothing here
     // seeds them. Only the context (per-mode / per-desktop / per-activity) gap
     // rules remain rule-backed and feed the geometry cascade — seed their
@@ -870,9 +876,8 @@ void Settings::onRuleStoreChanged()
 // border rule write.
 QString Settings::gapRulesFingerprint() const
 {
-    if (m_ruleStore == nullptr) {
-        return QString();
-    }
+    // No null guard — same constructor invariant connectRuleStoreGapReactivity
+    // documents.
     static const QSet<QString> gapTypes = {
         QString(PhosphorRules::ActionType::SetInnerGap),           QString(PhosphorRules::ActionType::SetOuterGap),
         QString(PhosphorRules::ActionType::SetUsePerSideOuterGap), QString(PhosphorRules::ActionType::SetOuterGapTop),
@@ -940,6 +945,13 @@ bool Settings::reset()
         m_configBackend->deleteGroup(groupName);
     }
     m_configBackend->deleteGroup(ConfigDefaults::updatesGroup());
+    // The root-group container ("General") is deliberately NOT in
+    // managedGroupNames (it is the reserved root groupList() never
+    // enumerates), but an INI-migrated install can carry legacy ungrouped
+    // keys in it (ConfigMigration::iniMapToJson routes them there) that
+    // purgeStaleKeys cannot reach. A factory reset is the one sweep that
+    // may clear that husk.
+    m_configBackend->deleteGroup(ConfigDefaults::generalGroup());
     deletePerScreenGroups(m_configBackend);
     // commit(), not sync(), for the same reason save() uses it: sync() is
     // allowed to return true for a write it merely scheduled (JsonBackend's
@@ -956,11 +968,24 @@ bool Settings::reset()
     if (!m_configBackend->commit()) {
         qCWarning(lcConfig) << "reset: failed to write the cleared configuration to disk — the deletions were "
                                "dropped and the previous values remain";
-        // Reparse from disk so the in-memory store stops reporting the dropped
-        // deletions, and re-baseline onto what disk actually holds. The session
-        // file and the rule store were never touched, so there is nothing else
-        // to undo.
+        // Reparse BEFORE load(): load()'s property snapshot must see the
+        // RESTORED values, not the wiped in-memory root — otherwise its
+        // post-reparse diff reads defaults-vs-restored and fires a NOTIFY
+        // plus settingsChanged round (a daemon retile) for values that never
+        // observably changed. load() repeats the reparse harmlessly. The
+        // session file and the rule store were never touched, so there is
+        // nothing else to undo.
+        m_configBackend->reparseConfiguration();
         load();
+        // The reparse also DISCARDS any unsaved in-memory edits (they were
+        // never committed), and load()'s internal diff cannot see that (its
+        // snapshot already reads the restored values). Diff against the true
+        // pre-reset observable state instead: silent when the restore was a
+        // no-op, one NOTIFY round when unsaved edits were dropped, so QML
+        // stops painting a value the store no longer holds.
+        if (emitChangedNotifyProperties(propsBeforeReset)) {
+            Q_EMIT settingsChanged();
+        }
         return false;
     }
     if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
@@ -997,6 +1022,7 @@ bool Settings::reset()
         resetDesktopsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)));
         resetActivitiesBefore.insert(mode, canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode)));
     }
+    bool ruleStorePersisted = true;
     {
         namespace CRB = PhosphorRules::ContextRuleBridge;
         QList<PhosphorRules::Rule> kept;
@@ -1007,6 +1033,7 @@ bool Settings::reset()
         }
         if (kept.size() != m_ruleStore->count()) {
             if (!m_ruleStore->setAllRules(kept)) {
+                ruleStorePersisted = false;
                 // Persistence failed — the in-memory store advanced but the
                 // on-disk file is stale. Roll back the in-memory state by
                 // reloading from disk so the per-mode re-emit loop below
@@ -1066,7 +1093,11 @@ bool Settings::reset()
     }
 
     qCInfo(lcConfig) << "Settings reset to defaults";
-    return true;
+    // False when the rule-store arm failed to persist (the config arm already
+    // returned false on its own failure above): the caller must be able to
+    // tell "everything reset" from "config reset, per-mode disable rules
+    // survive on disk and reappear next launch".
+    return ruleStorePersisted;
 }
 
 } // namespace PlasmaZones
