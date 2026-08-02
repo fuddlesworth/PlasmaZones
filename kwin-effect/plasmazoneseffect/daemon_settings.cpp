@@ -132,8 +132,8 @@ void PlasmaZonesEffect::loadCachedSettings()
     // a reply that ARRIVES but is not a bool: an older daemon on the other end of the
     // bus, a mid-restart half-answer, a getter returning the invalid-variant fallback.
     // QVariant("").toBool() is false, so an unguarded read there would force these off,
-    // which is merely redundant for a default-false setting but INVERTS the
-    // default-true PauseWhenIdle. Same guard the audio loaders below use.
+    // INVERTING both settings — AnimateFocusedOnly and PauseWhenIdle are each
+    // default-true. Same guard the audio loaders below use.
     loadSettingAsync(QStringLiteral("decorationAnimateFocusedOnly"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;

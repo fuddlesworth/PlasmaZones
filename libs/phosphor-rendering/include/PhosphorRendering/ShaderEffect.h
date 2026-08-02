@@ -104,6 +104,8 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
                    bufferShaderPathsChanged FINAL)
     Q_PROPERTY(bool bufferFeedback READ bufferFeedback WRITE setBufferFeedback NOTIFY bufferFeedbackChanged FINAL)
     Q_PROPERTY(qreal bufferScale READ bufferScale WRITE setBufferScale NOTIFY bufferScaleChanged FINAL)
+    Q_PROPERTY(
+        bool halfFloatBuffers READ halfFloatBuffers WRITE setHalfFloatBuffers NOTIFY halfFloatBuffersChanged FINAL)
     Q_PROPERTY(QString bufferWrap READ bufferWrap WRITE setBufferWrap NOTIFY bufferWrapChanged FINAL)
     Q_PROPERTY(QStringList bufferWraps READ bufferWraps WRITE setBufferWraps NOTIFY bufferWrapsChanged FINAL)
     Q_PROPERTY(QString bufferFilter READ bufferFilter WRITE setBufferFilter NOTIFY bufferFilterChanged FINAL)
@@ -376,6 +378,12 @@ public:
     }
     void setBufferScale(qreal scale);
 
+    bool halfFloatBuffers() const
+    {
+        return m_halfFloatBuffers;
+    }
+    void setHalfFloatBuffers(bool enable);
+
     QString bufferWrap() const
     {
         return m_bufferWrap;
@@ -642,6 +650,24 @@ public:
     /** Force reload of shader from source (callable from QML). */
     Q_INVOKABLE void reloadShader();
 
+    /**
+     * Release the render node's RHI resources (buffer FBOs, pipelines,
+     * uploaded textures) while the item sits idle, without destroying the
+     * node, the item, or the window. Safe to call from the GUI thread: the
+     * release runs as a scheduled render job on the scene-graph thread, the
+     * only thread allowed to touch the node. Everything re-creates lazily
+     * through the ensure* paths on the next painted frame (the same recovery
+     * the device-loss path exercises), so the cost of calling this on a
+     * window that immediately resumes is one warm-up frame, not a teardown.
+     *
+     * Intended for long-lived, kept-alive windows whose content goes
+     * invisible for long stretches (the daemon's idle-quiesced overlays):
+     * an invisible item never reaches updatePaintNode, so without this its
+     * full-screen render targets stay pinned in (shared, on an iGPU) memory
+     * for the window's whole lifetime.
+     */
+    Q_INVOKABLE void releaseIdleGraphicsResources();
+
 Q_SIGNALS:
     void iTimeChanged();
     void iTimeDeltaChanged();
@@ -659,6 +685,7 @@ Q_SIGNALS:
     void bufferShaderPathsChanged();
     void bufferFeedbackChanged();
     void bufferScaleChanged();
+    void halfFloatBuffersChanged();
     void bufferWrapChanged();
     void bufferWrapsChanged();
     void bufferFilterChanged();
@@ -707,10 +734,11 @@ protected:
     qreal effectiveResolutionScale() const;
 
     /**
-     * @brief Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) to a render node.
+     * @brief Sync base properties (time, params, colors, audio, multipass, depth, wallpaper,
+     *        user textures, uniform extension) to a render node.
      *
-     * Does NOT sync user textures, uniform extension, or shader source — these differ
-     * between ShaderEffect and subclasses (e.g. ZoneShaderItem).
+     * Does NOT sync shader source — that load is owned by updatePaintNode's
+     * needLoad branch (and differs between ShaderEffect and subclasses).
      *
      * Called from updatePaintNode(); subclasses that override updatePaintNode should call
      * this instead of duplicating the property sync.
@@ -847,6 +875,7 @@ private:
     QStringList m_bufferShaderPaths;
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
+    bool m_halfFloatBuffers = true;
     QString m_bufferWrap = QStringLiteral("clamp");
     QStringList m_bufferWraps;
     QString m_bufferFilter = QStringLiteral("linear");
@@ -953,6 +982,16 @@ private:
     // QPointer defends against reparent/teardown storms where the window is
     // destroyed out from under us before windowChanged(nullptr) fires.
     QPointer<QQuickWindow> m_connectedWindow;
+    /// Liveness token for render jobs queued via releaseIdleGraphicsResources.
+    /// A QPointer is not documented thread-safe against concurrent destruction
+    /// (a NoStage job can sit queued for an unbounded interval and pass a
+    /// QPointer null-check just as ~QObject begins on the GUI thread). The
+    /// job captures this shared_ptr by value and bails when the atomic loads
+    /// null; the destructor stores null as its FIRST statement, before any
+    /// member teardown. This NARROWS the destruction race to the destructor
+    /// body (versus QPointer's clear inside ~QObject, last) — it does not
+    /// close it; closing it needs real synchronisation and a design pass.
+    std::shared_ptr<std::atomic<ShaderEffect*>> m_selfToken = std::make_shared<std::atomic<ShaderEffect*>>(nullptr);
 
     // ── Thread-safe dirty flags for main -> render thread sync ───────
     std::atomic<bool> m_shaderDirty{false};

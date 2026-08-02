@@ -88,9 +88,37 @@ Kirigami.Dialog {
     property real _previewLastTime: 0
     property int _previewFrame: 0
 
+    // True while the application itself is frontmost. Folded into the preview
+    // clock's `running` and the audio capture, mirroring the editor dialog's
+    // onAppActiveChanged: pane visibility alone does not drop when the
+    // settings window is merely unfocused or covered, so without this gate an
+    // open dialog kept the 60 Hz tick and the CAVA child process running in
+    // the background until the dialog closed.
+    readonly property bool _appActive: Qt.application.state === Qt.ApplicationActive
+
+    on_AppActiveChanged: {
+        if (!opened || !_livePreview)
+            return;
+        if (_appActive) {
+            // Re-baseline so the first post-resume delta is ~one frame, not
+            // the clamped 100 ms jump.
+            _previewLastTime = Date.now() / 1000;
+            previewController.startAudioCapture();
+        } else {
+            previewController.stopAudioCapture();
+        }
+    }
+
     function _resetPreview() {
         if (!_livePreview)
             return;
+        // Fresh clock per shader: without this the previous shader's iTime
+        // carries over (a time-driven pack starts mid-animation) and the
+        // first tick computes its delta against a stale wall-clock stamp.
+        _previewITime = 0;
+        _previewTimeDelta = 0;
+        _previewFrame = 0;
+        _previewLastTime = Date.now() / 1000;
         _shaderInfo = previewController.getShaderInfo(effect.id) || ({});
         var p = {};
         var params = effect.parameters || [];
@@ -129,7 +157,11 @@ Kirigami.Dialog {
         _presetError = "";
         if (_livePreview) {
             _resetPreview();
-            previewController.startAudioCapture();
+            // Gate on _appActive: opening the dialog while the settings app
+            // is backgrounded must not start CAVA — the on_AppActiveChanged
+            // handler starts it when the app comes to the front.
+            if (_appActive)
+                previewController.startAudioCapture();
         }
     }
     onClosed: {
@@ -583,9 +615,10 @@ Kirigami.Dialog {
                         }
                     }
 
-                    // ~60fps clock — only ticks while the pane is shown.
+                    // ~60fps clock — only ticks while the pane is shown AND the
+                    // application is frontmost (see root._appActive).
                     Timer {
-                        running: livePreviewPane.visible
+                        running: livePreviewPane.visible && root._appActive
                         interval: 16
                         repeat: true
                         onTriggered: {
@@ -633,6 +666,7 @@ Kirigami.Dialog {
                                     "bufferShaderPaths": root._shaderInfo.bufferShaderPaths || [],
                                     "bufferFeedback": root._shaderInfo.bufferFeedback || false,
                                     "bufferScale": root._shaderInfo.bufferScale !== undefined ? root._shaderInfo.bufferScale : 1,
+                                    "halfFloatBuffers": root._shaderInfo.halfFloatBuffers !== undefined ? root._shaderInfo.halfFloatBuffers : true,
                                     "bufferWrap": root._shaderInfo.bufferWrap || "clamp",
                                     "bufferWraps": root._shaderInfo.bufferWraps || [],
                                     "bufferFilter": root._shaderInfo.bufferFilter || "linear",
@@ -700,8 +734,15 @@ Kirigami.Dialog {
         }
 
         onAccepted: {
+            // Store the STRING form, matching the editor twin and every other
+            // producer of this map (randomize, preset load): a QColor object
+            // renders fine live (extractColor converts) but skips the
+            // registry's color normalization and does not survive
+            // saveShaderPreset's JSON serialization, dropping the alpha the
+            // picker's ShowAlphaChannel let the user choose (or the whole
+            // param).
             if (paramId.length > 0)
-                root._setLiveParam(paramId, selectedColor);
+                root._setLiveParam(paramId, selectedColor.toString());
         }
     }
 
@@ -716,7 +757,12 @@ Kirigami.Dialog {
         nameFilters: [i18nc("@item:inlistbox image file filter", "Images (*.png *.jpg *.jpeg *.bmp *.webp)")]
 
         onAccepted: {
-            if (paramId.length > 0)
+            // Guarded lookup: settingsController is a host-app context
+            // property, and this dialog is shared between two browsers —
+            // every other controller access here goes through the guarded
+            // root.previewController pattern, so the bare name must not be
+            // the one lookup that throws in a host without it.
+            if (paramId.length > 0 && typeof settingsController !== "undefined" && settingsController)
                 root._setLiveParam(paramId, settingsController.urlToLocalFile(selectedFile));
         }
     }
@@ -742,7 +788,8 @@ Kirigami.Dialog {
         nameFilters: [i18nc("@item:inlistbox preset file filter", "Shader presets (*.json)")]
 
         onAccepted: {
-            if (root.previewController && root.effect)
+            // Same guarded settingsController lookup as the image picker.
+            if (root.previewController && root.effect && typeof settingsController !== "undefined" && settingsController)
                 root.previewController.saveShaderPreset(settingsController.urlToLocalFile(selectedFile), root.effect.id, root._liveParams, "");
         }
     }
@@ -755,7 +802,8 @@ Kirigami.Dialog {
         nameFilters: [i18nc("@item:inlistbox preset file filter", "Shader presets (*.json)")]
 
         onAccepted: {
-            if (!root.previewController || !root.effect)
+            // Same guarded settingsController lookup as the image picker.
+            if (!root.previewController || !root.effect || typeof settingsController === "undefined" || !settingsController)
                 return;
             var r = root.previewController.loadShaderPreset(settingsController.urlToLocalFile(selectedFile));
             if (!r || !r.shaderParams)

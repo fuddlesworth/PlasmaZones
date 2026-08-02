@@ -68,8 +68,14 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
     // accident (an empty textureSize returns before this, so captureScale is never 0), and
     // an accident is not a contract.
     constexpr qreal kScaleEpsilon = 1e-6;
+    // `!state.captureTex` completes the defensive pair the fold's srcTex bind
+    // relies on (mirroring the composite-pair terms beside it): the invariant
+    // that captureTex is allocated whenever the pair is holds today by
+    // construction, but a null capture texture reaching the bind would be a
+    // null deref inside the compositor — the same reasoning the prefixTex
+    // guard in surfacelayers.cpp spells out.
     if (state.compositeSize != textureSize || std::abs(state.captureScaleKey - captureScale) > kScaleEpsilon
-        || !state.compositeTex[0] || !state.compositeTex[1]) {
+        || !state.compositeTex[0] || !state.compositeTex[1] || !state.captureTex) {
         bool allocFailed = false;
         for (size_t i = 0; i < state.compositeTex.size(); ++i) {
             auto& t = state.compositeTex[i];
@@ -212,7 +218,7 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
 // compositeTex[0].
 void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state,
                                              const QRectF& logicalGeometry, qreal captureScale, bool intoCaptureTex,
-                                             bool captureCacheable, qreal captureOpacity)
+                                             qreal captureOpacity)
 {
     KWin::GLFramebuffer& fbo = intoCaptureTex ? *state.captureFbo : *state.compositeFbo[0];
     setShader(w, nullptr);
@@ -243,7 +249,7 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     }
     resetCapture.dismiss();
     m_capturingSnapshot = false;
-    state.captureValid = captureCacheable;
+    state.captureValid = true;
     state.captureInComposite = !intoCaptureTex;
 }
 
@@ -256,7 +262,8 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
 // of agreement with each other, which they have done more than once.
 //
 // @p inTransition: a live shader transition owns the window's shader slot. It always
-// animates (it IS the thing being watched), and its capture is never cacheable.
+// animates (it IS the thing being watched). Its capture stays cacheable — see the
+// invalidation rationale at the fold-time block below.
 SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const QString& windowId,
                                                    const WindowDecoration& deco, const QStringList& chain,
                                                    SurfaceMultipassState& state,
@@ -326,20 +333,34 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // frame it froze on instead of drifting.
     const qint64 ownClockMs = (plan.mayAnimate ? sharedNowMs : state.pausedAtMs) - state.timeOffsetMs;
     plan.foldTime = static_cast<float>(static_cast<double>(ownClockMs) / 1000.0);
-    // A transition supplies its own restore shader and drives the window's geometry
-    // frame by frame; don't trust a cached capture across it.
-    //
-    // NOT gated on foldablePacks. A chain in which every pack failed to compile folds
-    // nothing — the capture goes straight into compositeTex[0] and is presented from
-    // there — and its capture is as reusable as any other, because the window's own
-    // damage is the only thing that can change it. Requiring a foldable pack here meant
-    // such a window re-ran the full effects->drawWindow() re-entry, the single most
-    // expensive step of the fold, on EVERY paint of any window overlapping it, forever,
-    // to reproduce a composite identical to the undecorated window.
-    plan.captureCacheable = !inTransition;
-    if (!plan.captureCacheable) {
-        state.captureValid = false;
-    }
+    // The capture is cacheable THROUGH a live transition. This used to be
+    // `!inTransition` ("the transition drives the window's geometry frame by frame;
+    // don't trust a cached capture across it"), which re-ran the full
+    // effects->drawWindow() re-entry — the single most expensive step of the fold —
+    // plus the whole chain re-fold, per decorated window, per frame, for every
+    // animation. But the two ways a capture can actually go stale are both covered by
+    // machinery that stays live throughout a transition:
+    //   • a geometry/scale move changes canvasGeo → textureSize/captureScale →
+    //     ensureSurfaceTargets reallocates and clears captureValid;
+    //   • real client damage fires the windowDamaged connection (decorations.cpp),
+    //     which clears captureValid; the per-frame transition drivers in
+    //     postPaintScreen damage at SCREEN level and never trip it.
+    // The transition's own motion (WindowAnimator transform, vertex-stage sweep) is
+    // applied downstream of the composite and is never baked into the capture, so it
+    // cannot stale it. One-shot window-level repaints (transition install, and
+    // animation start via onAnimationStarted's unscoped addRepaintFull) still
+    // invalidate once each — that costs one re-capture per edge, not one per
+    // frame. (The mesh settle-edge repaint is selfRepaintScope'd and does not
+    // invalidate.) The BACKDROP is a third input with no invalidator here, and
+    // deliberately so: the backdrop is not part of the CAPTURE (it is sampled
+    // by the fold each refold), and a chain that links a backdrop uniform is
+    // classified per-frame by packVariesPerFrame regardless of pause state, so
+    // its composite is never served from this cache. Two known residuals at
+    // fractional output scale, accepted pending a live check: a pure MOVE
+    // during a held drag keeps the capture's sub-pixel rasterization phase
+    // from when it was taken (snapping is relaxed for the duration, pulling
+    // the same direction), and the capture's edge texels blend with the
+    // transparent canvas under a bufferScale < 1 downsample.
 
     // How many packs in the chain actually compiled and therefore draw? A pack that
     // failed to compile folds nothing, so it cannot make the composite time-varying and
@@ -432,6 +453,21 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
         ? foldCursorFor(w, state.canvasGeo, decorationMayAnimate(w), m_shaderManager.m_cachedCursorGlobal)
         : kCursorOutside;
     const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
+    if (!chainReadsFocus) {
+        // Terminate a STRANDED ramp. advanceFocusFade is this map's only
+        // advancer, and it is unreachable for a chain with no compiled
+        // focus-reading pack — so if the chain stopped reading focus with a
+        // fade mid-flight (a chain edit, or the focus pack's compile failing
+        // on a hot-reload), the entry would sit strictly between 0 and 1
+        // forever, focusRampInFlight would keep windowSurfaceAnimates true
+        // unconditionally, and the repaint driver would bypass the
+        // Decorations.Performance gate at vsync rate with nothing able to
+        // stop it. The driver's own repaint reaches this fold, so the drop
+        // lands on the first frame of the runaway; a focus-reading pack
+        // returning later re-seeds the -1 snap sentinel, matching the
+        // undecorated→decorated scrub in updateWindowDecoration.
+        m_focusFade.remove(windowId);
+    }
     plan.foldFocus = chainReadsFocus ? advanceFocusFade(windowId, focusedNow) : 0.0f;
     // The effective opacity, folded into the opacity-tint pack param and carried on the
     // decoration. It is a fold cache key: a change re-folds, and on the fail-safe path (where
@@ -477,7 +513,7 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
 
     // The PREFIX cache pays only when something per-frame follows the cacheable run:
     // it exists so those packs can fold over a run that does not need re-folding.
-    bool usePrefix = plan.captureCacheable && staticFoldable > 0 && staticFoldable < foldablePacks;
+    bool usePrefix = staticFoldable > 0 && staticFoldable < foldablePacks;
     // Allocate its target lazily, and only for a chain that will actually use it. A
     // chain with no per-frame pack (the default ["border"]) never writes it, so an
     // eager allocation was a full-canvas RGBA8 held for nothing. Release it again if
@@ -503,13 +539,14 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // NO `foldablePacks > 0` term. A chain in which nothing compiles folds nothing: the
     // capture goes straight into compositeTex[0] and is presented from there, so the
     // composite is a pure function of the capture and is every bit as cacheable as an
-    // all-static chain — captureCacheable already argues exactly that, two dozen lines up.
+    // all-static chain — the capture-cacheability rationale two dozen lines up argues
+    // exactly that.
     // Requiring at least one foldable pack meant such a chain never took the cached-composite
     // early return, so it cleared backdropRepaintPending on every fold, so a needsBackdrop
     // driver re-armed every 33ms forever, plus a full-canvas backdrop blit per paint, for a
     // decoration that draws nothing at all. `staticFoldable == foldablePacks` is trivially
     // true when both are zero, which is the right answer.
-    plan.allStatic = plan.captureCacheable && staticFoldable == foldablePacks;
+    plan.allStatic = staticFoldable == foldablePacks;
     // Both caches sit downstream of the capture and of the folded state.
     if (!state.captureValid || stateMoved) {
         state.prefixValid = false;

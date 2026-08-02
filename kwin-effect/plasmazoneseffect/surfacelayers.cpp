@@ -208,6 +208,17 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         return compiledPack(packId, *profile);
     };
 
+    // Reference into an unordered_map: stable across rehash (unlike the QHash
+    // iterator the decoration copy above defends against), invalidated only by
+    // an ERASE of this entry. No traced path reaches an erase from inside the
+    // nested capture draw — paintWindow's m_capturingSnapshot early-return
+    // blocks the fold/teardown chain during the re-entry — but the hazard
+    // class is the same one the copy above exists for. If a synchronous
+    // updateWindowDecoration/removeWindowDecoration path from inside the
+    // capture is ever demonstrated, this reference needs the matching
+    // treatment: re-find(windowId) after captureWindowSurface and abandon the
+    // fold when the entry is gone (the shape ensureSurfaceTargets' dangling
+    // alloc-failure path already documents).
     SurfaceMultipassState& state = m_surfaceMultipass[windowId];
     state.canvasGeo = logicalGeometry;
 
@@ -229,8 +240,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // longer exists — and left releaseDecorationGl's addRepaintFull unflagged,
             // which only failed to invalidate the capture cache because the state had
             // already been erased one line earlier. That is an accident, not a design.
-            // removeWindowDecoration disconnects both, releases the GL, and takes the
-            // self-repaint scope for us.
+            // removeWindowDecoration disconnects both and releases the GL; the
+            // self-repaint scope taken HERE is what flags the addRepaintFull the
+            // teardown issues (removeWindowDecoration does not take one itself).
             const auto selfRepaint = selfRepaintScope();
             removeWindowDecoration(windowId, w);
         }
@@ -245,7 +257,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         planSurfaceFold(w, windowId, *bit, chain, state, compiledPackLazy, captureRestoreShader != nullptr);
     const bool mayAnimate = plan.mayAnimate;
     const float foldTime = plan.foldTime;
-    const bool captureCacheable = plan.captureCacheable;
     const int foldablePacks = plan.foldablePacks;
     const int staticPrefix = plan.staticPrefix;
     const int lastStaticDraw = plan.lastStaticDraw;
@@ -288,7 +299,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             }
         }
         captureWindowSurface(w, state, logicalGeometry, captureScale,
-                             /*intoCaptureTex=*/!plan.captureInComposite, captureCacheable, captureOpacity);
+                             /*intoCaptureTex=*/!plan.captureInComposite, captureOpacity);
     }
     // Hand the OffscreenEffect slot back: to the passthrough present on the rest
     // path, or to the caller's animation shader mid-transition. Runs on the

@@ -89,17 +89,53 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     m_windowAnimator->advanceAnimations();
 
     // Vertex snapping tracks the animation state (see the initRenderingAndRegistries
-    // note): None while anything animates so smooth translates keep sub-pixel
-    // precision, Round (KWin's default) at rest so permanently-redirected
+    // note): None while a REDIRECTED window animates so its smooth translates keep
+    // sub-pixel precision, Round (KWin's default) otherwise so permanently-redirected
     // decorated windows stay device-pixel-aligned at fractional output scales
     // instead of being bilinearly resampled every frame (discussion #868).
-    // `!m_shaderManager.empty()` over-includes installed-but-expired transitions;
-    // that only extends None by a frame or two, which is harmless.
+    //
+    // Gated on redirected-window animation, not on animation in general: the mode
+    // only exists on KWin's per-window OffscreenData, so it affects nothing but
+    // redirected (decorated / transition) windows' offscreen presentation. An
+    // UNDECORATED window's morph presents through the direct scene path, where the
+    // mode never applies — flipping on it only un-snapped every decorated bystander
+    // for the animation's duration, a full-desktop resample tax at fractional scale
+    // that bought nothing. Shader transitions always redirect their window, so
+    // `!m_shaderManager.empty()` stays a sufficient condition on its own (it
+    // over-includes installed-but-expired transitions; that only extends None by a
+    // frame or two, which is harmless).
+    //
+    // Scope caveat, stated so nobody narrows the wrong half: setVertexSnappingMode
+    // is EFFECT-GLOBAL (OffscreenEffect pushes it into every redirected window's
+    // OffscreenData), so while ONE decorated window animates, every other decorated
+    // window is also un-snapped for the duration. A per-window relax needs an
+    // upstream per-window API; this predicate only narrows WHEN the global flip
+    // happens (a decorated animation) versus the old any-animation trigger.
+    //
+    // The `it->shaderApplied` half is a proxy for "redirected", and it is correct
+    // ONLY because the `!m_shaderManager.empty()` term short-circuits first: a
+    // transition-owned window keeps shaderApplied true at install and only
+    // reconcileDecorationShader's next run cedes the slot (clears the flag), so
+    // during a transition the flag's value is timing-dependent either way —
+    // which never matters, because the shader-manager term answers first for
+    // the whole transition. Narrowing that term to a per-window test without
+    // also fixing this half would silently stop relaxing snapping for
+    // transition-owned windows.
     const bool animationsInFlight = m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty();
-    if (animationsInFlight != m_vertexSnappingDisabled) {
-        setVertexSnappingMode(animationsInFlight ? KWin::RenderGeometry::VertexSnappingMode::None
-                                                 : KWin::RenderGeometry::VertexSnappingMode::Round);
-        m_vertexSnappingDisabled = animationsInFlight;
+    // The decoration probe can only return true when decorations exist — skip
+    // the per-animation id derivation entirely on an undecorated desktop.
+    const bool redirectedAnimating = !m_shaderManager.empty()
+        || (!m_windowDecorations.isEmpty() && m_windowAnimator->hasAnimationMatching([this](KWin::EffectWindow* aw) {
+               if (!aw || aw->isDeleted()) {
+                   return false;
+               }
+               const auto it = m_windowDecorations.constFind(getWindowId(aw));
+               return it != m_windowDecorations.constEnd() && it->shaderApplied;
+           }));
+    if (redirectedAnimating != m_vertexSnappingDisabled) {
+        setVertexSnappingMode(redirectedAnimating ? KWin::RenderGeometry::VertexSnappingMode::None
+                                                  : KWin::RenderGeometry::VertexSnappingMode::Round);
+        m_vertexSnappingDisabled = redirectedAnimating;
     }
 
     if (animationsInFlight) {
@@ -111,6 +147,21 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
         // open after the fade settles, minimise, etc.), which means
         // the shader installs and silently expires unrendered.
         //
+        // Gate PER OUTPUT (mirroring the desktop-transition gate below):
+        // the KWin header documents this flag as "forces the entire screen
+        // to be painted", so setting it globally makes one window animating
+        // on monitor 1 force full, damage-free repaints of monitors 2 and 3
+        // for the whole animation — the dominant iGPU cost of the default
+        // geometry morph. An output is included when an animation's swept
+        // bounds intersect it (rect intersection, NOT screen() equality, so
+        // a window straddling outputs — or morphing across them — keeps the
+        // flag on every output it touches) or when a live shader transition's
+        // window is on it. Transition relevance uses screen() OR expanded-
+        // geometry intersection: the surface-extent quad covers the whole of
+        // the window's own output, and the postPaintScreen damage loops only
+        // ever damage that output, so this matches what can actually paint.
+        // Null screen (test paths, hotplug) falls back to the global flag.
+        //
         // First-frame open suppression does NOT need the screen-level
         // flag: prePaintWindow already calls `data.setTransformed()` for
         // every suppressed window via the same predicate
@@ -120,7 +171,45 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
         // would force every other window on every output through the
         // transformed-windows paint path while ANY window is suppressed
         // (up to 250 ms per opened window) — pure overhead.
-        data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
+        bool touchesThisOutput = !data.screen;
+        if (data.screen) {
+            const QRectF outputGeo = QRect(data.screen->geometry());
+            touchesThisOutput = m_windowAnimator->hasAnimationsIntersecting(outputGeo);
+            if (!touchesThisOutput) {
+                for (const auto& [tw, transition] : m_shaderManager.shaderTransitions()) {
+                    if (!tw) {
+                        continue;
+                    }
+                    // Same skip predicate as the postPaintScreen repaint pump:
+                    // a closing window is isDeleted() for its ENTIRE close
+                    // animation (the close grab keeps the corpse alive and
+                    // paintWindow calls screen() on it every close frame), so
+                    // a grab-held leg must keep the flag on its output or the
+                    // close shader goes unrendered on stable outputs. The
+                    // off-desktop clause mirrors the pump too: a leg the pump
+                    // refuses to drive must not keep this output on the
+                    // transformed-windows path for a paint that never comes.
+                    if (!transition.closeGrabHeld && (tw->isDeleted() || !tw->isOnCurrentDesktop())) {
+                        continue;
+                    }
+                    // Unknown output on the transition's window: mirror
+                    // postPaintScreen's addRepaintFull fallback and keep the
+                    // flag on every output rather than trusting a possibly
+                    // stale expandedGeometry against this one.
+                    if (!tw->screen()) {
+                        touchesThisOutput = true;
+                        break;
+                    }
+                    if (tw->screen() == data.screen || QRectF(tw->expandedGeometry()).intersects(outputGeo)) {
+                        touchesThisOutput = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (touchesThisOutput) {
+            data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
+        }
     }
 
     // A live desktop-switch transition replaces the whole screen with its own
@@ -147,9 +236,14 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     }
 
     // Frame-pin the shader clock. KWin can invoke `paintWindow` more than
-    // once per compositor cycle (multi-output, multi-pass, back-to-back
-    // paint cycles scheduled by our own `effects->addRepaint` calls in
-    // postPaintScreen). If every paintWindow call re-sampled
+    // once per OUTPUT PASS (multi-pass, back-to-back paint cycles scheduled
+    // by our own `effects->addRepaint` calls in postPaintScreen). The pin's
+    // scope is the prePaintScreen→postPaintScreen bracket of ONE output —
+    // on an N-output desktop each output pass pins its own (microseconds
+    // apart) timestamp, so a window straddling outputs still sees one value
+    // per pass, not one per vsync; dt-driven consumers conserve total dt
+    // across the passes, and the residual drift is iFrame advancing once per
+    // pass for a straddler. If every paintWindow call re-sampled
     // `shaderClockNowMs()`, each call would see a slightly later
     // timestamp and compute a slightly different `progress`, painting
     // the surface-extent quad at a slightly different position. With
@@ -506,9 +600,19 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     } else if (w && !m_windowDecorations.isEmpty()) {
         // Padded decoration chains (WindowDecoration::outerPadding) present on a
         // quad LARGER than the window's natural rect (see apply()); mark the
-        // window transformed so KWin paints the padded quad unclipped. The
-        // opaque region stays — the window's own content still covers it, so
-        // occlusion culling underneath remains valid.
+        // window transformed so KWin paints the padded quad unclipped.
+        //
+        // This flag is NOT occlusion-free, and the cost is the same double loss
+        // the translucent marking below pays: in KWin 6.7's workspacescene.cpp,
+        // PAINT_WINDOW_TRANSFORMED excludes the window from the opaque
+        // accumulation in BOTH collectDamage() and paintSimpleScreen(), and
+        // BlurEffect::shouldBlur additionally refuses blur-behind for any
+        // transformed window. So a padded chain forfeits occlusion culling
+        // (making the interiorOpaque skip below a no-op for it) AND KWin's own
+        // blur on that window, regardless of what the chain draws. Recovering
+        // either needs a way to present the padded margin without the
+        // transformed flag, which KWin's untransformed path does not offer (it
+        // clips paint to the window item's bounding rect).
         if (decorated && decoIt->outerPadding > 0) {
             data.setTransformed();
         }
@@ -539,8 +643,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         }
     }
 
-    // A decorated window is TRANSLUCENT. Clear its opaque region so KWin keeps
-    // compositing whatever sits behind it.
+    // A decorated window is TRANSLUCENT — unless its whole chain proves otherwise.
+    // Clear its opaque region so KWin keeps compositing whatever sits behind it.
     //
     // This is an OCCLUSION hint, not a rendering one, and it cannot be expressed in
     // the fragment stage: KWin decides what to composite BEHIND a window before any
@@ -548,9 +652,15 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // already skipped whatever is underneath and the pack blends against stale
     // framebuffer pixels.
     //
-    // It is unconditional because EVERY chain is in fact translucent, and that is a
-    // property of the shader, not a conservative guess. Reading
-    // data/surface/shared/surface_lib.glsl:
+    // The cost is real and double-ended. In KWin 6.7's workspacescene.cpp, a
+    // PAINT_WINDOW_TRANSLUCENT window contributes nothing to the opaque
+    // accumulation in BOTH collectDamage() (damage from windows underneath is
+    // never culled away) and paintSimpleScreen() (`visible -= deviceOpaque` is
+    // skipped, so windows underneath are genuinely painted). A video playing
+    // fully behind a maximized decorated window keeps driving full composites.
+    //
+    // Why the default is still translucent: for most chains it is a property of
+    // the shader, not a conservative guess. Reading data/surface/shared/surface_lib.glsl:
     //
     //   borderComposite  ba = edge * insideMask * col.a — the band's output alpha IS
     //                    the border colour's alpha, and a translucent border colour is
@@ -562,12 +672,30 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     //                    the outermost ring of the frame partially transparent
     //                    regardless.
     //
-    // So a chain covering every texel of the frame would need a zero-width border —
-    // one that draws nothing — and even that is feathered. Deriving a per-window
-    // "is it opaque" flag was tried and deleted: its true branch could not fire, and
-    // it read as a fix while changing nothing. Proving opacity would need a pack
-    // metadata contract that does not exist (metadata declares what a pack NEEDS —
-    // needsBackdrop, handlesOpacity, padding — never that its output is total).
+    // So every border-family chain thins frame texels and must stay translucent. But
+    // the margin-only packs (shadow, glow) provably do NOT: their halo is gated on
+    // `1 - base.a` (haloFalloff) and composited additively over the transparent
+    // margin (marginComposite), so the interior passes through byte-for-byte and
+    // the client's own opaque region stays truthful. That is exactly the metadata
+    // contract an earlier attempt at this flag lacked: packs now declare
+    // `interiorOpaque` (SurfaceShaderEffect), the chain sweep in
+    // updateWindowDecoration ANDs it into WindowDecoration::chainInteriorOpaque,
+    // and a chain that qualifies keeps KWin's occlusion culling — PROVIDED the
+    // folded opacity is at rest, since the failed-compile fail-safe dims the
+    // CAPTURE itself (see foldedOpacity's doc) and that thins the interior with
+    // no pack involved.
+    //
+    // SCOPE LIMIT, verified against the same workspacescene.cpp sources: a
+    // PADDED chain (outerPadding > 0) is marked PAINT_WINDOW_TRANSFORMED
+    // above, and the transformed flag independently excludes the window from
+    // BOTH culling halves — so skipping setTranslucent() recovers nothing for
+    // it. The two bundled interiorOpaque declarers (shadow, glow) are both
+    // padded, which means the skip below is live only for an unpadded
+    // interiorOpaque chain: a third-party contract today, not a bundled win.
+    // Keeping the flag is still correct (it is the necessary half of the
+    // recovery; the transformed presentation is the other), and the sweep's
+    // AND is what a future unpadded pack or a padded-presentation redesign
+    // will inherit.
     //
     // Note what this is NOT for. It used to be set to keep the window in KWin's paint
     // set so drawWindow kept firing on idle frames. That was a repaint-scheduling hack
@@ -576,7 +704,10 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // The cases where the composite changes with no window damage (a focus cross-fade,
     // an iTime pack, a backdrop refresh) schedule their own repaints in postPaintScreen.
     if (!transformDriven && decorated) {
-        data.setTranslucent();
+        const bool interiorOpaque = decoIt->chainInteriorOpaque && decoIt->foldedOpacity >= 1.0;
+        if (!interiorOpaque) {
+            data.setTranslucent();
+        }
     }
 
     OffscreenEffect::prePaintWindow(view, w, data);
@@ -654,13 +785,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     }
 
     // Read the cached per-frame clock pinned by prePaintScreen. Multiple
-    // paintWindow calls within one compositor cycle (multi-output,
-    // multi-pass, back-to-back paint cycles driven by our addRepaint)
-    // would otherwise each see a slightly later `shaderClockNowMs()`
-    // and paint the surface-extent quad at a slightly different
-    // progress — visible as staggered ghost copies of the in-flight
-    // window. Fall back to a live read if prePaintScreen hasn't pinned
-    // the clock yet (test harness, defensive bootstrap path).
+    // paintWindow calls within one OUTPUT PASS (multi-pass, back-to-back
+    // paint cycles driven by our addRepaint) would otherwise each see a
+    // slightly later `shaderClockNowMs()` and paint the surface-extent quad
+    // at a slightly different progress — visible as staggered ghost copies
+    // of the in-flight window. (The pin is per output pass, not per vsync;
+    // see the prePaintScreen comment for the multi-output scope.) Fall back
+    // to a live read if prePaintScreen hasn't pinned the clock yet (test
+    // harness, defensive bootstrap path).
     //
     // Sentinel for "not pinned" is -1, established at construction
     // (ShaderTransitionManager::m_currentFrameClockMs default). 0 is a
@@ -681,8 +813,60 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // gate rather than shaderApplied alone.
     if (w && !w->isDeleted() && !m_capturingSnapshot && !m_windowDecorations.isEmpty()) {
         const auto backIt = m_windowDecorations.constFind(getWindowId(w));
+        // Skip frames restore-suppression will withhold anyway: the early
+        // return below paints nothing on those frames, so a capture taken
+        // here is thrown away — and the suppression loop repaints every
+        // vsync, so a suppressed frost-decorated opener paid a full-canvas
+        // blit per frame for up to 250 ms. Only the WITHHELD frames skip; the
+        // release frame (deadline reached) erases the entry and folds in this
+        // same call, so it must still capture or its first visible fold has
+        // no backdrop. Computed lazily — the undecorated common case never
+        // pays the suppression-map probe.
+        const auto isWithheldThisFrame = [this, w, frameNowMs]() {
+            const auto supLook = m_restoreSuppress.constFind(w);
+            return supLook != m_restoreSuppress.constEnd() && frameNowMs < supLook->deadlineMs;
+        };
+        // needsBackdrop is METADATA and can over-report (pack declares it but
+        // the linker dropped every backdrop uniform, or the pack failed to
+        // compile). The fold for such a chain takes the all-static early
+        // return and discards the capture every frame, so gate the capture on
+        // the same linked-uniform evidence packVariesPerFrame uses — resolved
+        // through the SAME lazy compile the fold uses, so the gate and the
+        // fold agree within one frame. A raw cache probe here skipped the
+        // capture on a fresh frost window's first paint (the fold compiled
+        // the pack moments later and read a backdrop this gate had called
+        // absent) and answered false for a frame after every registry reload
+        // cleared the cache while a pre-reload backdropRect still claimed
+        // validity.
+        const auto chainReadsBackdrop = [this](const WindowDecoration& deco, const QString& windowId) {
+            std::optional<PhosphorSurfaceShaders::DecorationProfile> profile;
+            for (const QString& packId : deco.chain) {
+                CompiledSurfacePack* pk = nullptr;
+                if (const auto cacheIt = m_compiledPacks.find(packId); cacheIt != m_compiledPacks.end()) {
+                    pk = &cacheIt->second;
+                } else {
+                    if (!profile) {
+                        profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId));
+                    }
+                    pk = compiledPack(packId, *profile);
+                }
+                if (!pk || !pk->shader) {
+                    continue;
+                }
+                if (linksBackdropUniforms(pk->uBackdropLoc, pk->uHasBackdropLoc, pk->uBackdropRectLoc)) {
+                    return true;
+                }
+                for (const CompiledSurfaceBufferPass& bp : pk->bufferPasses) {
+                    if (linksBackdropUniforms(bp.uBackdropLoc, bp.uHasBackdropLoc, bp.uBackdropRectLoc)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
         if (backIt != m_windowDecorations.constEnd() && backIt->needsBackdrop
-            && (backIt->shaderApplied || m_shaderManager.findTransition(w))) {
+            && (backIt->shaderApplied || m_shaderManager.findTransition(w)) && !isWithheldThisFrame()
+            && chainReadsBackdrop(*backIt, backIt.key())) {
             // While an animation is drawing the window somewhere other than
             // its resting rect, capture the backdrop where the quad actually
             // IS this frame, or the pane shows the wrong slice of the scene

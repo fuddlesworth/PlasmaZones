@@ -182,10 +182,15 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float glowRadius = zoneLen(mix(5.0, 9.0, vitality));
     // The gate covers the ENLARGED radius. The bass wavefront below adds up
     // to zoneLen(8.0) to glowRadius AFTER this test, so gating on the base
-    // alone cut the widened glow mid-gradient and rang. Two e-folds past
-    // the enlarged radius leaves ~13% residual, which is invisible; three
-    // pushed the glow visibly further than it reached before this PR and
-    // nearly tripled the annulus this branch shades.
+    // alone cut the widened glow mid-gradient and rang. Two e-folds past the
+    // enlarged radius leaves ~13% of peak at the cut — the residual step
+    // expGlowBounded (common.glsl) exists to remove — and this pack (with
+    // liquid-canvas and pulse-flow, the same shape) accepts it: without
+    // audio the residual is ~2%, the 13% case needs a bass peak at full
+    // vitality, and three e-folds pushed the glow visibly further than it
+    // reached before this PR while nearly tripling the shaded annulus.
+    // Switching the family to expGlowBounded with a post-wave bound is the
+    // clean alternative if the bass-peak ring ever reads as a defect.
     if (d > 0.0 && d < (glowRadius + zoneLen(8.0)) * 2.0) {
         float glowFalloff = mix(0.3, 0.6, vitality);
         // Cascade wavefront glow — bass sends expanding rings outward from
@@ -249,10 +254,14 @@ vec4 compositeNexusLabels(vec4 color, vec2 fragCoord,
     float labelAudioReact = p_chromaReact >= 0.0 ? p_chromaReact : 1.0;
     float signalSpeed     = p_signalSpeed >= 0.0 ? p_signalSpeed : 6.0;
 
-    // Chromatic aberration direction rotates over time
+    // Chromatic aberration direction rotates over time. The offset is a
+    // couple of DEVICE PIXELS (px.x converts to UV), matching the ~1 px halo
+    // steps below — the old `px.x * iResolution.x * 0.003` pair cancelled to
+    // a constant UV fraction, so the split grew with resolution (~11 px at
+    // 1920 wide, ~23 px at 4K) while the halo it sits on did not.
     float caAngle = iTime * 0.7;
     vec2 caDir = vec2(cos(caAngle), sin(caAngle));
-    float caAmount = (hasAudio ? 2.0 + bass * 3.0 * labelAudioReact : 2.0) * px.x * iResolution.x * 0.003;
+    float caAmount = (hasAudio ? 2.0 + bass * 3.0 * labelAudioReact : 2.0) * px.x;
 
     // Sample RGB channels at offset positions
     float rCh = texture(uZoneLabels, uv + caDir * caAmount).a;

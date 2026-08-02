@@ -42,6 +42,7 @@ struct ShaderMetadata
     bool bufferFeedback = false;
     bool depthBuffer = false;
     qreal bufferScale = 1.0;
+    bool halfFloatBuffers = true;
     QString bufferWrap = QStringLiteral("clamp");
     QStringList bufferWraps;
     QString bufferFilter = QStringLiteral("linear");

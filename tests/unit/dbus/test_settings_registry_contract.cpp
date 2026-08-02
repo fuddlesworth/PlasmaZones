@@ -212,6 +212,19 @@ private Q_SLOTS:
         const QVariant on = m_adaptor->getSetting(QStringLiteral("decorationPauseWhenIdle")).variant();
         QCOMPARE(on.typeId(), QMetaType::Bool);
         QCOMPARE(on.toBool(), true);
+
+        // AnimateFocusedOnly joined the default-true risk class in PR #872 and
+        // the effect pulls it over this identical getter path
+        // (daemon_settings.cpp), so pin its polarity round-trip the same way.
+        m_settings->setDecorationAnimateFocusedOnly(false);
+        const QVariant afoOff = m_adaptor->getSetting(QStringLiteral("decorationAnimateFocusedOnly")).variant();
+        QCOMPARE(afoOff.typeId(), QMetaType::Bool);
+        QCOMPARE(afoOff.toBool(), false);
+
+        m_settings->setDecorationAnimateFocusedOnly(true);
+        const QVariant afoOn = m_adaptor->getSetting(QStringLiteral("decorationAnimateFocusedOnly")).variant();
+        QCOMPARE(afoOn.typeId(), QMetaType::Bool);
+        QCOMPARE(afoOn.toBool(), true);
     }
 
     /**

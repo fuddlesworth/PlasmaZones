@@ -1234,7 +1234,7 @@ private:
     /// most expensive step of the fold — it re-enters KWin's whole draw chain — and the
     /// reason SurfaceMultipassState::captureValid exists. Defined in surface_capture.cpp.
     void captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state, const QRectF& logicalGeometry,
-                              qreal captureScale, bool intoCaptureTex, bool captureCacheable, qreal captureOpacity);
+                              qreal captureScale, bool intoCaptureTex, qreal captureOpacity);
 
     /// Render the window's active surface-layer stack into the window's
     /// per-window ping-pong FBO chain (`m_surfaceMultipass`, shared with the
@@ -1962,7 +1962,10 @@ private:
 
     /// Animate only the focused window's chain; unfocused windows hold their last
     /// composite. Divides the continuous redraw by the decorated-window count.
-    bool m_animateFocusedOnly = false;
+    // Mirrors ConfigDefaults::decorationAnimateFocusedOnly() — the daemon pushes
+    // the real setting on connect, but until it does (or when it is gone) the
+    // effect must sit on the same default the settings UI shows.
+    bool m_animateFocusedOnly = true;
 
     /// Stop animating once the session goes idle, resume on the first input.
     bool m_pauseAnimationWhenIdle = true;
