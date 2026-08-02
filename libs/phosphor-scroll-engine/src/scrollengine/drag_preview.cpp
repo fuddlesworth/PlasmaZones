@@ -28,6 +28,7 @@
 #include "scrollenginelogging.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace PhosphorScrollEngine {
 
@@ -40,10 +41,14 @@ constexpr int kEdgeBandMaxPx = 96;
 constexpr int kEdgeBandDivisor = 4;
 
 /// Edge auto-scroll: band inside the work area's left/right edges that arms
-/// the scroll, and the per-tick step. ~30 Hz drag ticks make 32 px/tick
-/// roughly a full 1080p-width strip crossing in two seconds.
+/// the scroll, and the maximum per-step size. The daemon drives steps from
+/// a ~60 Hz timer (niri's dnd-edge-view-scroll shape), and the step scales
+/// QUADRATICALLY with how deep the cursor sits in the band — brushing the
+/// band's inner edge barely moves (no accidental yanks when aiming near an
+/// edge column), parking at the screen edge reaches ~kDragScrollMaxStepPx
+/// per step (~1400 px/s at 60 Hz).
 constexpr int kDragScrollBandPx = 48;
-constexpr int kDragScrollStepPx = 32;
+constexpr int kDragScrollMaxStepPx = 24;
 
 } // namespace
 
@@ -168,12 +173,28 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
             preview.wasScrollFloated = m_scrollFloatedWindows.remove(windowId);
             priorState->removeFloating(windowId);
             preview.carried = preview.floatRestoreEntry;
-        } else {
-            if (preview.priorSlot.column < 0) {
-                return false; // reverse map said tracked, strip disagrees
+            if (!preview.hadFloatRestoreEntry) {
+                // A floating window with no restore entry carries no intents
+                // of its own — seed the screen's configured defaults, not
+                // FloatRestore's default-constructed 50% proportion.
+                preview.carried.width = effectiveDefaultColumnWidth(screenId);
+                preview.carried.display = effectiveDefaultColumnDisplay(screenId);
             }
+        } else if (preview.priorSlot.column >= 0) {
             priorState->strip().takeWindow(windowId, layoutParamsForScreen(preview.priorKey.screenId));
             preview.carried = preview.priorSlot;
+        } else {
+            // Tracked but in NEITHER the strip nor the floating set —
+            // detached residue from an earlier torn-down preview (or any
+            // future bookkeeping slip). Refusing here would make the state
+            // permanent: begin would never accept the window again and the
+            // drop float cannot repair it either. Adopt-and-heal instead:
+            // nothing to detach, default intents, and commit/cancel re-home
+            // the window into the strip.
+            qCWarning(lcScrollEngine) << "beginDragInsertPreview:" << windowId
+                                      << "tracked but absent from strip and floating set — adopting to heal";
+            preview.carried.width = effectiveDefaultColumnWidth(screenId);
+            preview.carried.display = effectiveDefaultColumnDisplay(screenId);
         }
         // Keep the window tracked against the TARGET context while detached
         // (screen routing, isWindowTracked, the daemon's re-latch all keep
@@ -250,7 +271,16 @@ void ScrollEngine::commitDragInsertPreview()
                                       p.carried.minHeight, ScrollInsertPosition::Last);
     }
     if (!inserted) {
-        qCWarning(lcScrollEngine) << "commitDragInsertPreview: every insert refused for" << p.windowId;
+        // Never leave the window in the detached limbo (tracked, in neither
+        // the strip nor the floating set) — that state is refused by every
+        // normal path. Degrade to a floating window with its carried intents
+        // preserved for a later unfloat.
+        qCWarning(lcScrollEngine) << "commitDragInsertPreview: every insert refused for" << p.windowId
+                                  << "— degrading to floating";
+        targetState->addFloating(p.windowId);
+        m_floatRestore.insert(p.windowId, p.carried);
+        m_states.setKeyForWindow(p.windowId, p.targetKey);
+        Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
         return;
     }
     if (p.carried.minWidth > 0 || p.carried.minHeight > 0) {
@@ -294,18 +324,22 @@ void ScrollEngine::cancelDragInsertPreview()
     if (p.priorSameScreen) {
         ScrollState* targetState = stateForKey(p.targetKey, /*createIfMissing=*/false);
         const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
-        if (targetState) {
-            if (p.priorFloating) {
-                targetState->addFloating(p.windowId);
-                if (p.hadFloatRestoreEntry) {
-                    m_floatRestore.insert(p.windowId, p.floatRestoreEntry);
-                }
-                if (p.wasScrollFloated) {
-                    m_scrollFloatedWindows.insert(p.windowId);
-                }
-            } else {
-                dragPreviewRestoreSlot(targetState, p.windowId, p.priorSlot, params, p.targetScreenId);
+        if (p.priorFloating) {
+            // The engine-global bookkeeping is restored UNCONDITIONALLY —
+            // gating it on the state's survival destroyed the FloatRestore
+            // entry when the context died between begin and cancel, leaving
+            // the window unrestorable forever.
+            if (p.hadFloatRestoreEntry) {
+                m_floatRestore.insert(p.windowId, p.floatRestoreEntry);
             }
+            if (p.wasScrollFloated) {
+                m_scrollFloatedWindows.insert(p.windowId);
+            }
+            if (targetState) {
+                targetState->addFloating(p.windowId);
+            }
+        } else if (targetState) {
+            dragPreviewRestoreSlot(targetState, p.windowId, p.priorSlot, params, p.targetScreenId);
         }
         applyLayout(p.targetScreenId, false);
         return;
@@ -449,11 +483,19 @@ bool ScrollEngine::nudgeDragScroll(const QString& screenId, const QPoint& cursor
     if (resolved.stripWidth <= params.workArea.width()) {
         return false; // strip fits the viewport — nothing to reveal
     }
+    // Quadratic depth ramp: depth 0 at the band's inner edge, 1 at the
+    // screen edge. Shallow contact scrolls barely at all, so dragging near
+    // an edge column doesn't yank the strip; parking at the edge reaches
+    // full speed.
     int step = 0;
     if (cursorPos.x() <= params.workArea.left() + kDragScrollBandPx) {
-        step = -kDragScrollStepPx;
+        const double depth = std::clamp(
+            (params.workArea.left() + kDragScrollBandPx - cursorPos.x()) / double(kDragScrollBandPx), 0.0, 1.0);
+        step = -std::max(1, static_cast<int>(std::lround(depth * depth * kDragScrollMaxStepPx)));
     } else if (cursorPos.x() >= params.workArea.right() - kDragScrollBandPx) {
-        step = kDragScrollStepPx;
+        const double depth = std::clamp(
+            (cursorPos.x() - (params.workArea.right() - kDragScrollBandPx)) / double(kDragScrollBandPx), 0.0, 1.0);
+        step = std::max(1, static_cast<int>(std::lround(depth * depth * kDragScrollMaxStepPx)));
     } else {
         return false;
     }

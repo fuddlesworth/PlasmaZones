@@ -614,11 +614,23 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     const int columnIdx = state->strip().columnOfWindow(windowId);
     if (columnIdx < 0) {
         // Tracked in the reverse map yet in neither the strip nor the
-        // floating set — a genuine bookkeeping inconsistency, not a
-        // documented no-op like the other bails in this file.
+        // floating set — bookkeeping residue (e.g. a drag-insert preview
+        // torn down without restoration). Refusing here made the state
+        // permanent: nothing else ever revisits it, so the window could
+        // never float OR re-enter the strip again. Heal by adopting it as
+        // floating with a slotless restore entry (column -1 = unfloat opens
+        // a fresh column), the same shape seedFloatRestoreForOpen writes.
         qCWarning(lcScrollEngine) << "floatWindowInternal:" << windowId
-                                  << "tracked but absent from strip and floating set on" << key.screenId;
-        return false;
+                                  << "tracked but absent from strip and floating set on" << key.screenId
+                                  << "— healing by adopting as floating";
+        state->addFloating(windowId);
+        if (!m_floatRestore.contains(windowId)) {
+            m_floatRestore.insert(windowId, FloatRestore{});
+        }
+        m_scrollFloatedWindows.insert(windowId);
+        Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
+        Q_EMIT placementChanged(key.screenId);
+        return true;
     }
     FloatRestore restore;
     restore.column = columnIdx;

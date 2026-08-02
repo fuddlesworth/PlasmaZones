@@ -4,6 +4,7 @@
 #include "windowdragadaptor.h"
 #include <QGuiApplication>
 #include <QKeySequence>
+#include <QTimer>
 #include <QScreen>
 #include <algorithm>
 #include <cmath>
@@ -274,6 +275,42 @@ bool WindowDragAdaptor::effectiveDragReorderModeFor(const QString& screenId) con
                            });
     }
     return false;
+}
+
+void WindowDragAdaptor::ensureDragScrollTimerRunning()
+{
+    if (!m_dragScrollTimer) {
+        m_dragScrollTimer = new QTimer(this);
+        // ~60 Hz: smooth continuous scroll while the cursor parks in the
+        // edge band. The engine's per-step size is scaled for this rate.
+        m_dragScrollTimer->setInterval(16);
+        connect(m_dragScrollTimer, &QTimer::timeout, this, &WindowDragAdaptor::onDragScrollTick);
+    }
+    if (!m_dragScrollTimer->isActive()) {
+        m_dragScrollTimer->start();
+    }
+}
+
+void WindowDragAdaptor::onDragScrollTick()
+{
+    // Self-terminating: the preview ending (drop, cancel, window close) is
+    // the single stop condition, so no teardown path has to remember the
+    // timer.
+    PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
+    if (!engine || m_draggedWindowId.isEmpty()) {
+        m_dragScrollTimer->stop();
+        return;
+    }
+    const QString screenId = engine->dragInsertPreviewScreenId();
+    if (engine->nudgeDragScroll(screenId, m_lastDragCursorPos)) {
+        // The strip shifted under a (possibly stationary) cursor — the drop
+        // target must follow the columns, not the stale hit.
+        const PhosphorEngine::IPlacementEngine::DragInsertTarget target =
+            engine->computeDragInsertTargetAtPoint(screenId, m_lastDragCursorPos);
+        if (target.isValid()) {
+            engine->updateDragInsertPreview(target);
+        }
+    }
 }
 
 void WindowDragAdaptor::cancelDragInsertIfActive()

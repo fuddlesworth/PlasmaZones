@@ -51,6 +51,7 @@ private Q_SLOTS:
     void windowClosedDropsPreview();
     void screenSetChangeCancelsPreview();
     void interactiveDragMarkSuppressesEmitAndReconcile();
+    void detachedResidueHealsInsteadOfLatching();
 
 private:
     static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
@@ -514,6 +515,42 @@ void TestScrollEngineDragInsert::interactiveDragMarkSuppressesEmitAndReconcile()
         emittedA = emittedA || emission.first().toString().contains(QStringLiteral("\"a\""));
     }
     QVERIFY(emittedA);
+}
+
+void TestScrollEngineDragInsert::detachedResidueHealsInsteadOfLatching()
+{
+    // The unhealable-limbo class: a window tracked in the reverse map but in
+    // neither the strip nor the floating set (e.g. a preview torn down
+    // without restoration). Refusing it in begin AND in floatWindowInternal
+    // made the state permanent — Alt+drag dead forever for that window.
+    // Both paths must heal instead.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    // Manufacture the residue: strip loses b, the reverse map keeps it.
+    QVERIFY(state->strip().takeWindow(QStringLiteral("b"), defaultParams()));
+    QVERIFY(engine->isWindowTracked(QStringLiteral("b")));
+    QVERIFY(!engine->isWindowTiled(QStringLiteral("b")));
+
+    // begin adopts-and-heals; a targeted commit re-homes the window.
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
+    DragTarget target;
+    target.primary = 1;
+    target.newSlot = true;
+    engine->updateDragInsertPreview(target);
+    engine->commitDragInsertPreview();
+    QVERIFY(engine->isWindowTiled(QStringLiteral("b")));
+
+    // And the float path heals the same residue (the drop's ApplyFloat leg).
+    QVERIFY(state->strip().takeWindow(QStringLiteral("b"), defaultParams()));
+    engine->setWindowFloat(QStringLiteral("b"), true, QStringLiteral("S1"));
+    QVERIFY(engine->isWindowFloatingInScroll(QStringLiteral("b")));
+    // The healed float round-trips: unfloat opens a fresh column.
+    engine->setWindowFloat(QStringLiteral("b"), false, QStringLiteral("S1"));
+    QVERIFY(engine->isWindowTiled(QStringLiteral("b")));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineDragInsert)

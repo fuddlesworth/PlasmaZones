@@ -564,6 +564,18 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                                                 : m_cachedAutotileDragInsertTriggers,
                               mods, mouseButtons);
 
+        // One info line per drag, on the first tick: the block's two silent
+        // failure modes (engine unresolved for the cursor screen, trigger
+        // never reading as held) are indistinguishable from "no ticks" in
+        // the journal without it.
+        if (!m_dragInsertTickLogged) {
+            m_dragInsertTickLogged = true;
+            qCInfo(lcDbusWindow) << "drag-insert tick:" << windowId << "screen=" << insertScreenId
+                                 << "engine=" << (insertEngine ? insertEngine->engineId() : QStringLiteral("none"))
+                                 << "rawHeld=" << rawInsertHeld << "mods=" << static_cast<int>(mods)
+                                 << "buttons=" << mouseButtons;
+        }
+
         // Toggle mode: detect rising edge (release→press) to flip insert-active state
         bool insertHeld;
         const bool toggleMode = insertEngine
@@ -606,10 +618,12 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                                       << "engine=" << insertEngine->engineId() << "=>" << began;
             }
             if (insertEngine->hasDragInsertPreview() && insertEngine->dragInsertPreviewScreenId() == insertScreenId) {
-                // Edge auto-scroll first (scrolling only; no-op default
-                // elsewhere) so the hit-test below resolves against the
-                // shifted strip.
-                insertEngine->nudgeDragScroll(insertScreenId, QPoint(cursorX, cursorY));
+                // Edge auto-scroll is TIMER-driven (see m_dragScrollTimer):
+                // this motion tick only records the cursor and keeps the
+                // timer alive, so a hand parked in the edge band scrolls
+                // continuously instead of stalling with the motion stream.
+                m_lastDragCursorPos = QPoint(cursorX, cursorY);
+                ensureDragScrollTimerRunning();
                 const PhosphorEngine::IPlacementEngine::DragInsertTarget target =
                     insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
                 if (target.isValid()) {
@@ -620,7 +634,11 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         } else if (previewEngine) {
             // Trigger released or cursor left the engine-owned screen
             // mid-drag — cancel so neighbours snap back to their original
-            // order.
+            // order. Logged: a cancel on the LAST tick before release is
+            // otherwise indistinguishable from "never began" at drop time.
+            qCInfo(lcDbusWindow) << "drag-insert cancel:" << windowId << "screen=" << insertScreenId
+                                 << "engineResolved=" << (insertEngine != nullptr) << "held=" << insertHeld
+                                 << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
             previewEngine->cancelDragInsertPreview();
         }
     }

@@ -9,6 +9,7 @@
 #include <QDBusAbstractAdaptor>
 #include <QObject>
 #include <QString>
+#include <QTimer>
 #include <QRect>
 #include <QUuid>
 #include <QSet>
@@ -653,6 +654,23 @@ private:
     // Drag-insert preview state lives on the owning engine
     // (hasDragInsertPreview(), dragInsertPreviewScreenId()). The adaptor
     // queries the engines directly to avoid drift between caches.
+
+    /// One-per-drag latch for the drag-insert tick diagnostic (the block's
+    /// silent failure modes are indistinguishable from missing ticks in the
+    /// journal without it). Reset by beginDrag.
+    bool m_dragInsertTickLogged = false;
+
+    /// Edge auto-scroll driver (niri's dnd-edge-view-scroll shape): a
+    /// repeating ~60 Hz timer runs while a drag-insert preview is live, so
+    /// a cursor PARKED in the edge band keeps scrolling — dragMoved ticks
+    /// are motion-driven and stall the moment the hand stops. The engine's
+    /// nudgeDragScroll self-gates on the band and scales its step by band
+    /// depth; after each real scroll the drop target is re-resolved against
+    /// the shifted strip. The timer self-stops when the preview ends.
+    QTimer* m_dragScrollTimer = nullptr;
+    QPoint m_lastDragCursorPos;
+    void ensureDragScrollTimerRunning();
+    void onDragScrollTick();
 
     // DRY helper: cancel any active drag-insert preview on either engine.
     void cancelDragInsertIfActive();

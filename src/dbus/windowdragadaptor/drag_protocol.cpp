@@ -234,6 +234,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     // release and re-press to toggle.
     m_dragInsertToggled = false;
     m_prevDragInsertHeld = true;
+    m_dragInsertTickLogged = false;
     // Zone span toggle latch (#563), same rationale and seed contract as the
     // autotile drag-insert latch above: reset on every beginDrag so it covers
     // both the bypass path (dragStarted never runs) and the snap path. Prev is
@@ -738,8 +739,13 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
             // cross to a Reorder screen where that begin fails the window float-drops on
             // release rather than during the drag — an acceptable degradation for a
             // transient begin failure (the common case begins successfully).
+            // isWindowTiled OR a live preview: under detach-once semantics
+            // the dragged window is NOT a tile while its preview is live, so
+            // tiled-only would drop the reorder latch on every mid-drag
+            // screen crossing.
             m_dragReorderActive = candidate.bypassReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen
-                && reorderMode && cursorEngine && cursorEngine->isWindowTiled(windowId);
+                && reorderMode && cursorEngine
+                && (cursorEngine->isWindowTiled(windowId) || cursorEngine->hasDragInsertPreview());
             // A flip onto ANY bypass screen invalidates the live zone
             // selection: without this, the zone state populated on the last
             // active-screen tick (m_currentZoneId/geometry, multi-zone set,
