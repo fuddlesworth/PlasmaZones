@@ -78,6 +78,13 @@ struct CatalogMeta
     // Screens") overflow the column for no information. nullptr = use the
     // registration description.
     const char* shortLabel = nullptr;
+    // Optional plain-prose explanation of what the action does, surfaced as
+    // a tooltip on the cheatsheet row. The System Settings KCM cannot show
+    // it (KGlobalAccel carries only the action name), so the registration
+    // description still has to stand alone without this. nullptr = no
+    // tooltip; reserved for actions whose name alone does not tell a reader
+    // what will happen (today that is the scrolling column vocabulary).
+    const char* explanation = nullptr;
 };
 
 CatalogMeta catalogMetaForId(const QString& id)
@@ -85,8 +92,9 @@ CatalogMeta catalogMetaForId(const QString& id)
     static const QHash<QString, CatalogMeta> kMeta = [] {
         QHash<QString, CatalogMeta> m;
         const auto add = [&m](const char* id, const char* category, int order, const char* mode,
-                              const char* categoryDisambiguation = nullptr, const char* shortLabel = nullptr) {
-            m.insert(QLatin1String(id), {category, order, mode, categoryDisambiguation, shortLabel});
+                              const char* categoryDisambiguation = nullptr, const char* shortLabel = nullptr,
+                              const char* explanation = nullptr) {
+            m.insert(QLatin1String(id), {category, order, mode, categoryDisambiguation, shortLabel, explanation});
         };
         // The scrolling category word needs the "tiling mode name"
         // disambiguation or it inherits the scrollbar-sense translation.
@@ -194,34 +202,69 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdIncreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         add(kIdDecreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         add(kIdRetile, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
-        add(kIdScrollFocusColumnFirst, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
-        add(kIdScrollFocusColumnLast, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
-        add(kIdScrollMoveColumnToFirst, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
-        add(kIdScrollMoveColumnToLast, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
+        // Every scrolling row carries an explanation: the column vocabulary
+        // (consume, expel, grow) is opaque to anyone who has not used a
+        // scrolling tiler before, and the sheet is where they look it up.
+        add(kIdScrollFocusColumnFirst, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the first column."));
+        add(kIdScrollFocusColumnLast, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the last column."));
+        add(kIdScrollMoveColumnToFirst, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Moves the focused column to the first position."));
+        add(kIdScrollMoveColumnToLast, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Moves the focused column to the last position."));
         add(kIdScrollConsumeWindow, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Consume Window"));
+            QT_TRANSLATE_NOOP("plasmazones", "Consume Window"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Pulls a window from the column to the right into the focused column, stacking them."));
         add(kIdScrollExpelWindow, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Expel Window"));
-        add(kIdScrollConsumeOrExpelLeft, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
-        add(kIdScrollConsumeOrExpelRight, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
-        add(kIdScrollCenterColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
-        add(kIdScrollToggleColumnTabbed, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
+            QT_TRANSLATE_NOOP("plasmazones", "Expel Window"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves the focused window out of a shared column into a new column on the right."));
+        add(kIdScrollConsumeOrExpelLeft, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Splits the focused window out of a shared column to the left. A window "
+                              "alone in its column merges into the column on the left instead."));
+        add(kIdScrollConsumeOrExpelRight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Splits the focused window out of a shared column to the right. A window "
+                              "alone in its column merges into the column on the right instead."));
+        add(kIdScrollCenterColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the focused column sits centered on the screen."));
+        add(kIdScrollToggleColumnTabbed, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Switches the focused column between stacked windows and tabs."));
         add(kIdScrollCycleColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"));
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"),
+            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the preset widths."));
         add(kIdScrollCycleColumnWidthBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width Back"));
-        add(kIdScrollIncreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
-        add(kIdScrollDecreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
-        add(kIdScrollMaximizeColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width Back"),
+            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the preset widths in reverse."));
+        add(kIdScrollIncreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Widens the focused column by the configured step."));
+        add(kIdScrollDecreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Narrows the focused column by the configured step."));
+        add(kIdScrollMaximizeColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Toggles the focused column between full screen width and its previous width."));
         add(kIdScrollExpandColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Expand Column"));
+            QT_TRANSLATE_NOOP("plasmazones", "Grow into Empty Space"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Grows the focused column to fill the empty space visible on screen. "
+                              "Other columns keep their size."));
         add(kIdScrollCycleWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height"));
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height"),
+            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused window through the preset heights."));
         add(kIdScrollCycleWindowHeightBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height Back"));
-        add(kIdScrollIncreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
-        add(kIdScrollDecreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
-        add(kIdScrollResetWindowHeights, kScrollingCategory.source, 10, "scrolling", kModeNameContext);
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height Back"),
+            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused window through the preset heights in reverse."));
+        add(kIdScrollIncreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Makes the focused window taller by the configured step."));
+        add(kIdScrollDecreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Makes the focused window shorter by the configured step."));
+        add(kIdScrollResetWindowHeights, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Clears manual window heights in the focused column so its windows share the "
+                              "height evenly."));
         return m;
     }();
 
@@ -307,6 +350,9 @@ QVariantList ShortcutManager::cheatsheetModel() const
         QVariantMap row;
         row.insert(QStringLiteral("id"), e.id);
         row.insert(QStringLiteral("label"), meta.shortLabel ? PhosphorI18n::tr(meta.shortLabel) : e.description);
+        // Always present (possibly empty) so the QML tooltip binding never
+        // reads an undefined role.
+        row.insert(QStringLiteral("description"), meta.explanation ? PhosphorI18n::tr(meta.explanation) : QString());
         row.insert(QStringLiteral("category"), PhosphorI18n::tr(meta.category, meta.categoryDisambiguation));
         row.insert(QStringLiteral("categoryOrder"), meta.categoryOrder);
         row.insert(QStringLiteral("triggers"), triggers);
@@ -336,10 +382,10 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // Structural asymmetry worth knowing: because the expectation IS the
     // default, any user rebind of either member uncompresses this pair for
     // good, where a digit or arrow family recompresses as soon as the rebind
-    // still lands on its structural token. The one exception is a member with
-    // no default at all (the deliberately-unbound reverse cycles), whose
-    // expectation is taken from the live binding instead — see addScrollPair
-    // below.
+    // still lands on its structural token. The one exception is a member
+    // whose default is empty (every default ships bound today, but a user
+    // can clear one), whose expectation is taken from the live binding
+    // instead — see addScrollPair below.
     const auto lastKeyOf = [](const QString& sequence) {
         // Normalize to PortableText first, exactly as the row builder above
         // does to the LIVE triggers before the compare. The defaults are
@@ -406,12 +452,13 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // judgement, and it leaves near-identical rows on the sheet the mechanism
     // exists to merge.
     //
-    // A pair is SKIPPED when either member has no sequence to expect. Two of
-    // the reverse cycles ship deliberately unbound (empty default), and an
-    // expectation of "" can never match a live trigger, so a spelled-out pair
-    // for them would sit in the table looking active while being structurally
-    // dead. Where the user HAS bound such a member, its live single trigger
-    // stands in for the missing default and the pair collapses normally.
+    // A pair is SKIPPED when either member has no sequence to expect: an
+    // expectation of "" can never match a live trigger, so a spelled-out
+    // pair for a default-less member would sit in the table looking active
+    // while being structurally dead. Every default ships bound today, but a
+    // user can clear one; where they instead REBOUND such a member, its
+    // live single trigger stands in for the missing default and the pair
+    // collapses normally.
     const auto liveSequenceFor = [this](const char* id) -> QString {
         if (!m_registry) {
             return QString();
@@ -426,7 +473,7 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // space-joined pair instead read as one chord, so the alternatives are
     // separated the way the row labels separate them.
     const auto addScrollPair = [&](const char* firstId, const QString& firstDefault, const char* secondId,
-                                   const QString& secondDefault, const QString& label) {
+                                   const QString& secondDefault, const QString& label, const QString& description) {
         const QString firstSeq = firstDefault.isEmpty() ? liveSequenceFor(firstId) : firstDefault;
         const QString secondSeq = secondDefault.isEmpty() ? liveSequenceFor(secondId) : secondDefault;
         if (firstSeq.isEmpty() || secondSeq.isEmpty()) {
@@ -437,31 +484,46 @@ QVariantList ShortcutManager::cheatsheetModel() const
         families.append(FamilySpec{{QString::fromLatin1(firstId), QString::fromLatin1(secondId)},
                                    {firstKey, secondKey},
                                    label,
-                                   firstKey + QStringLiteral(" / ") + secondKey});
+                                   firstKey + QStringLiteral(" / ") + secondKey,
+                                   description});
     };
+    // Several pairs (consume/expel, adjust width) ship Shift-opposed
+    // defaults, whose differing modifier prefix means they will not
+    // compress; the specs stay listed so a user rebind onto a shared prefix
+    // still collapses them.
     addScrollPair(kIdScrollFocusColumnFirst, ConfigDefaults::scrollingFocusColumnFirstShortcut(),
                   kIdScrollFocusColumnLast, ConfigDefaults::scrollingFocusColumnLastShortcut(),
-                  PhosphorI18n::tr("Focus First / Last Column"));
+                  PhosphorI18n::tr("Focus First / Last Column"),
+                  PhosphorI18n::tr("Moves focus to the first or last column."));
     addScrollPair(kIdScrollMoveColumnToFirst, ConfigDefaults::scrollingMoveColumnToFirstShortcut(),
                   kIdScrollMoveColumnToLast, ConfigDefaults::scrollingMoveColumnToLastShortcut(),
-                  PhosphorI18n::tr("Move Column to Start / End"));
+                  PhosphorI18n::tr("Move Column to Start / End"),
+                  PhosphorI18n::tr("Moves the focused column to the first or last position."));
     addScrollPair(kIdScrollCycleColumnWidth, ConfigDefaults::scrollingCycleColumnWidthShortcut(),
                   kIdScrollCycleColumnWidthBack, ConfigDefaults::scrollingCycleColumnWidthBackShortcut(),
-                  PhosphorI18n::tr("Cycle Column Width"));
+                  PhosphorI18n::tr("Cycle Column Width"),
+                  PhosphorI18n::tr("Steps the focused column through the preset widths."));
     addScrollPair(kIdScrollCycleWindowHeight, ConfigDefaults::scrollingCycleWindowHeightShortcut(),
                   kIdScrollCycleWindowHeightBack, ConfigDefaults::scrollingCycleWindowHeightBackShortcut(),
-                  PhosphorI18n::tr("Cycle Window Height"));
+                  PhosphorI18n::tr("Cycle Window Height"),
+                  PhosphorI18n::tr("Steps the focused window through the preset heights."));
     addScrollPair(kIdScrollConsumeWindow, ConfigDefaults::scrollingConsumeWindowShortcut(), kIdScrollExpelWindow,
-                  ConfigDefaults::scrollingExpelWindowShortcut(), PhosphorI18n::tr("Consume / Expel Window"));
+                  ConfigDefaults::scrollingExpelWindowShortcut(), PhosphorI18n::tr("Consume / Expel Window"),
+                  PhosphorI18n::tr("Pulls a window from the next column into the focused column, or moves the "
+                                   "focused window out into a new column of its own."));
     addScrollPair(kIdScrollConsumeOrExpelLeft, ConfigDefaults::scrollingConsumeOrExpelLeftShortcut(),
                   kIdScrollConsumeOrExpelRight, ConfigDefaults::scrollingConsumeOrExpelRightShortcut(),
-                  PhosphorI18n::tr("Consume or Expel Left / Right"));
+                  PhosphorI18n::tr("Consume or Expel Left / Right"),
+                  PhosphorI18n::tr("Splits the focused window out of a shared column to that side. A window alone "
+                                   "in its column merges into the neighboring column instead."));
     addScrollPair(kIdScrollIncreaseColumnWidth, ConfigDefaults::scrollingIncreaseColumnWidthShortcut(),
                   kIdScrollDecreaseColumnWidth, ConfigDefaults::scrollingDecreaseColumnWidthShortcut(),
-                  PhosphorI18n::tr("Adjust Column Width"));
+                  PhosphorI18n::tr("Adjust Column Width"),
+                  PhosphorI18n::tr("Adjusts the width of the focused column by the configured step."));
     addScrollPair(kIdScrollIncreaseWindowHeight, ConfigDefaults::scrollingIncreaseWindowHeightShortcut(),
                   kIdScrollDecreaseWindowHeight, ConfigDefaults::scrollingDecreaseWindowHeightShortcut(),
-                  PhosphorI18n::tr("Adjust Window Height"));
+                  PhosphorI18n::tr("Adjust Window Height"),
+                  PhosphorI18n::tr("Adjusts the height of the focused window by the configured step."));
 
     QVector<QVariantMap> out = compressCheatsheetFamilies(rows, families);
     // Category blocks in display order; stable sort keeps the table's
@@ -570,6 +632,11 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
         }
         QVariantMap& row = rows[firstIdx];
         row.insert(QStringLiteral("label"), family.combinedLabel);
+        // The merged row otherwise keeps the first member's description,
+        // which for an opposed pair names only one direction.
+        if (!family.combinedDescription.isEmpty()) {
+            row.insert(QStringLiteral("description"), family.combinedDescription);
+        }
         row.insert(QStringLiteral("triggers"), QStringList{sharedPrefix + QLatin1Char('+') + family.tailToken});
         for (int m = 1; m < family.ids.size(); ++m) {
             const int memberIdx = rowIndexById.value(family.ids[m], -1);

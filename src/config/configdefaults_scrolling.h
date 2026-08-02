@@ -666,13 +666,17 @@ public:
     }
     static QString scrollingConsumeWindowShortcut()
     {
-        // Meta+Alt+, and Meta+Alt+. belong to cycle-in-zone; the semicolon
-        // pair is the nearest free punctuation.
-        return QStringLiteral("Meta+Alt+;");
+        // Letters only for this family's chords: punctuation like ; ' =
+        // is shifted (or absent) on many non-US layouts, and a chord whose
+        // spelling needs Shift on the user's layout can never fire on
+        // Wayland (see toggleCheatsheetShortcut). I as in "into the
+        // column"; Shift+I is the opposite direction. Shift+letter is safe
+        // — only Shift+SYMBOL spellings are forbidden.
+        return QStringLiteral("Meta+Alt+I");
     }
     static QString scrollingExpelWindowShortcut()
     {
-        return QStringLiteral("Meta+Alt+'");
+        return QStringLiteral("Meta+Alt+Shift+I");
     }
     static QString scrollingConsumeOrExpelLeftShortcut()
     {
@@ -693,21 +697,27 @@ public:
     }
     static QString scrollingCycleColumnWidthShortcut()
     {
+        // The letter pairs in this family follow one convention: a mnemonic
+        // letter for the primary action and Shift on the same letter for the
+        // opposed one (I/Shift+I consume/expel, W/Shift+W widen/narrow,
+        // R/Shift+R and H/Shift+H cycle forward/back). R is niri's preset
+        // width mnemonic, H is height.
         return QStringLiteral("Meta+Alt+R");
     }
     static QString scrollingCycleColumnWidthBackShortcut()
     {
-        // Deliberately unbound: the reverse cycle is a niche refinement and
-        // free chords near Meta+Alt+R are scarce.
-        return QString();
+        return QStringLiteral("Meta+Alt+Shift+R");
     }
     static QString scrollingIncreaseColumnWidthShortcut()
     {
-        return QStringLiteral("Meta+Alt+=");
+        // NOT Meta+Alt+= / Meta+Alt+- : "=" is a shifted key on several
+        // non-US layouts (dead chord on Wayland, same trap as the consume
+        // pair above). W for width, Shift+W for the opposite direction.
+        return QStringLiteral("Meta+Alt+W");
     }
     static QString scrollingDecreaseColumnWidthShortcut()
     {
-        return QStringLiteral("Meta+Alt+-");
+        return QStringLiteral("Meta+Alt+Shift+W");
     }
     static QString scrollingMaximizeColumnShortcut()
     {
@@ -719,14 +729,14 @@ public:
     }
     static QString scrollingCycleWindowHeightShortcut()
     {
-        return QStringLiteral("Meta+Alt+Shift+R");
+        // NOT Meta+Alt+Shift+R: that slot is the width cycle's reverse
+        // (see scrollingCycleColumnWidthShortcut for the letter+Shift
+        // convention).
+        return QStringLiteral("Meta+Alt+H");
     }
     static QString scrollingCycleWindowHeightBackShortcut()
     {
-        // Deliberately unbound, like scrollingCycleColumnWidthBackShortcut:
-        // the reverse cycle is a niche refinement and free chords near
-        // Meta+Alt+Shift+R are scarce. Bindable via the Shortcuts KCM.
-        return QString();
+        return QStringLiteral("Meta+Alt+Shift+H");
     }
     static QString scrollingIncreaseWindowHeightShortcut()
     {

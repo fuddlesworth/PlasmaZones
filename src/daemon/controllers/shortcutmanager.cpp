@@ -381,8 +381,12 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollMaximizeColumnRequested();
      }},
+    // "Grow into empty space", not "expand to available width": the old
+    // wording was indistinguishable from Maximize Column in the System
+    // Settings list. This one names what the op actually does — claim the
+    // visible leftover space without touching other columns.
     {kIdScrollExpandColumn, &ConfigDefaults::scrollingExpandColumnShortcut, &Settings::scrollingExpandColumnShortcut,
-     QT_TRANSLATE_NOOP("plasmazones", "Expand Column to Available Width"),
+     QT_TRANSLATE_NOOP("plasmazones", "Grow Column into Empty Space"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollExpandColumnRequested();
      }},

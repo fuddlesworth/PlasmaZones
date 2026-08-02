@@ -106,6 +106,12 @@ public:
         QStringList expectedLastTokens;
         QString combinedLabel;
         QString tailToken;
+        // Optional tooltip for the merged row. The merged row otherwise
+        // keeps the FIRST member's description, which for an opposed pair
+        // describes only one direction; a family that carries per-member
+        // descriptions should supply a combined wording here. Empty = keep
+        // the first member's.
+        QString combinedDescription;
     };
 
     /**

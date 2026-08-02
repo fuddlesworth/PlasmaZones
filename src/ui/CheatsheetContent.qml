@@ -329,6 +329,20 @@ Item {
 
                                         Accessible.role: Accessible.StaticText
                                         Accessible.name: shortcutRow.modelData.assigned ? i18nc("shortcut row: action, keys", "%1, %2", shortcutRow.modelData.label, shortcutRow.modelData.triggers[0]) : i18nc("shortcut row: action unassigned", "%1, unassigned", shortcutRow.modelData.label)
+                                        Accessible.description: shortcutRow.modelData.description
+
+                                        // Plain-prose explanation from the
+                                        // catalog, on hover. Rows without one
+                                        // (empty description) show no tooltip.
+                                        HoverHandler {
+                                            id: rowHover
+
+                                            enabled: shortcutRow.modelData.description.length > 0
+                                        }
+
+                                        ToolTip.visible: rowHover.hovered
+                                        ToolTip.text: shortcutRow.modelData.description
+                                        ToolTip.delay: Kirigami.Units.toolTipDelay
 
                                         Label {
                                             text: shortcutRow.modelData.label

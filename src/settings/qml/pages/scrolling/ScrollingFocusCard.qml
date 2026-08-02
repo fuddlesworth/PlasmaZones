@@ -96,7 +96,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Scroll columns with the mouse wheel")
             searchAnchor: "wheelFocusEnabled"
-            description: i18n("Hold Meta or Meta+Alt and scroll to move column focus along the strip. When this is off, the compositor keeps those wheel shortcuts.")
+            description: i18n("Hold Meta and scroll to move column focus along the strip. When this is off, the compositor keeps the Meta+wheel shortcut.")
 
             SettingsSwitch {
                 checked: appSettings.scrollingWheelFocusEnabled
