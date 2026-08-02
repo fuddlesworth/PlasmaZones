@@ -639,6 +639,16 @@ bool ScrollEngine::nudgeDragScroll(const QString& screenId, const QPoint& cursor
     return true;
 }
 
+void ScrollEngine::setInteractiveDragWindow(const QString& windowId)
+{
+    // Deliberately NO retile on clear: every drop path finalizes on its own
+    // (commit re-applies unfiltered, ApplyFloat floats the tile out, a
+    // cancelled move has KWin restore the frame), and a defensive retile
+    // here would race the async float call — snapping the window to its
+    // slot for a frame before the float lands.
+    m_interactiveDragWindow = canonicalizeForLookup(windowId);
+}
+
 void ScrollEngine::dropClosedWindowFromDragPreview(const QString& windowId)
 {
     if (!m_dragInsertPreview) {

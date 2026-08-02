@@ -377,6 +377,14 @@ public:
     /// true when the view actually moved, so the caller re-hit-tests
     /// against the shifted strip.
     bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos) override;
+    /// While set, applyLayout never emits this window's rect and
+    /// onWindowResized never reconciles its acks: during a drag the effect
+    /// floats the window VISUALLY ONLY (the engine keeps its strip tile),
+    /// so without the mark every mid-drag ack re-emitted the slot rect
+    /// (yanking the window from the cursor) and pinned the column's
+    /// width/height intents to transient drag frames. Clearing does NOT
+    /// retile — every drop path finalizes on its own (see the definition).
+    void setInteractiveDragWindow(const QString& windowId) override;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Desktop / activity context
@@ -805,6 +813,10 @@ private:
         bool wasScrollFloated = false;
     };
     std::optional<DragInsertPreview> m_dragInsertPreview;
+    /// Canonical id of the window under a compositor interactive move (see
+    /// setInteractiveDragWindow). Independent of the preview: the mark
+    /// covers the WHOLE drag, trigger held or not.
+    QString m_interactiveDragWindow;
     // drag_preview.cpp
     /// Capture @p windowId's current slot in FloatRestore vocabulary — the
     /// twin of floatWindowInternal's capture block.

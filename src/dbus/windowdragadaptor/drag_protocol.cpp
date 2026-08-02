@@ -213,6 +213,17 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     // from a clean slate.
     clearPendingSnapDragState();
 
+    // Mark the window as under a compositor interactive move for the WHOLE
+    // drag. The scroll engine keeps a dragged tile in its strip model (the
+    // effect's immediate float is visual only), so without this mark any
+    // mid-drag retile re-emits the slot rect against KWin's move and the
+    // per-ack reconcile pins size intents to transient drag frames. Cleared
+    // on every drag exit (endDrag before the drop settles, window close,
+    // and the clean-slate reset above for crash recovery).
+    if (m_scrollEngine) {
+        m_scrollEngine->setInteractiveDragWindow(windowId);
+    }
+
     // Reset the drag-insert toggle latch on every drag start. This runs
     // before branching so it covers both the bypass path (drag starts on an
     // engine-owned screen, dragStarted() is never called) and the snap path.
@@ -432,6 +443,11 @@ void WindowDragAdaptor::clearPendingSnapDragState()
     // (daemon lost track, client disconnect, snapping-disabled flip, etc.)
     // must be cleared too — its referenced window may no longer exist.
     cancelDragInsertIfActive();
+    // Same staleness argument for the interactive-drag mark: a leftover
+    // mark would silently exempt a window from layout forever.
+    if (m_scrollEngine) {
+        m_scrollEngine->setInteractiveDragWindow(QString());
+    }
 }
 
 PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int cursorY,
@@ -493,6 +509,12 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
     // m_dragReorderActive lives for one drag only. Reset here (before the
     // various early-return branches below) so no branch has to remember.
     m_dragReorderActive = false;
+    // The interactive move is over: release the window back to engine
+    // authority BEFORE the drop settles, so a preview commit's finalizing
+    // relayout emits the dragged window's rect unfiltered.
+    if (m_scrollEngine) {
+        m_scrollEngine->setInteractiveDragWindow(QString());
+    }
 
     qCInfo(lcDbusWindow) << "endDrag:" << windowId << "cursor=" << cursorX << cursorY << "cancelled=" << cancelled
                          << "bypass=" << bypassReason;
@@ -685,8 +707,10 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
             // flips (snap→snap or autotile→autotile cross-VS) aren't opaque in
             // the logs — "None @ DP-1 -> None @ DP-2" makes the trigger obvious.
             qCInfo(lcDbusWindow) << "updateDragCursor: policy flip" << m_currentDragPolicy.bypassReason << "@"
-                                 << m_currentDragPolicy.screenId << "->" << candidate.bypassReason << "@"
-                                 << cursorScreenId;
+                                 << m_currentDragPolicy.screenId
+                                 << "immediateFloat=" << m_currentDragPolicy.immediateFloatOnStart << "->"
+                                 << candidate.bypassReason << "@" << cursorScreenId
+                                 << "immediateFloat=" << candidate.immediateFloatOnStart;
             m_currentDragPolicy = candidate;
             // Re-latch reorder mode to the CURRENT autotile screen. Per-context
             // SetDragBehavior means two autotile screens can differ (start Reorder,

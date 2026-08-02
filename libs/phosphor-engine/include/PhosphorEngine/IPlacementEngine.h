@@ -591,6 +591,20 @@ public:
         return false;
     }
 
+    /// The window currently under a compositor interactive move (the whole
+    /// drag, preview or not). Empty clears. While set, an engine that still
+    /// models the window as tiled must neither emit geometry for it nor
+    /// reconcile its geometry acks — KWin's interactive move owns the frame
+    /// until drop, and fighting it yanks the window from the cursor (and a
+    /// per-ack reconcile pins size intents to transient drag frames). The
+    /// daemon sets it at beginDrag and clears it before the drop is
+    /// finalized, so commit/float paths apply normally. Default no-op for
+    /// engines whose drag flows never retile mid-drag.
+    virtual void setInteractiveDragWindow(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Algorithm / mode identity (override if engine has switchable algorithms)
     // ═══════════════════════════════════════════════════════════════════════════

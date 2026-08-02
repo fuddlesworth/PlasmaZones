@@ -367,6 +367,9 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
     // If this window was being dragged, clean up drag state
     if (windowId == m_draggedWindowId) {
         cancelDragInsertIfActive();
+        if (m_scrollEngine) {
+            m_scrollEngine->setInteractiveDragWindow(QString());
+        }
         // Drag-teardown: only drop the shared Escape grab if no picker / snap
         // assist still needs it. A layout picker can be open over an in-flight
         // drag, and it holds kCancelOverlayId — an unconditional release here

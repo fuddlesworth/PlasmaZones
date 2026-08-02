@@ -48,6 +48,7 @@ private Q_SLOTS:
     void nudgeDragScrollShiftsView();
     void windowClosedDropsPreview();
     void screenSetChangeCancelsPreview();
+    void interactiveDragMarkSuppressesEmitAndReconcile();
 
 private:
     static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
@@ -426,6 +427,52 @@ void TestScrollEngineDragInsert::screenSetChangeCancelsPreview()
     // teardown, not dangle into a released context.
     engine->setActiveScreens({QStringLiteral("S2")});
     QVERIFY(!engine->hasDragInsertPreview());
+}
+
+void TestScrollEngineDragInsert::interactiveDragMarkSuppressesEmitAndReconcile()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    engine->setInteractiveDragWindow(QStringLiteral("a"));
+
+    // Retiles while the mark is set never emit the marked window's rect —
+    // KWin's interactive move owns the frame, and re-emitting the slot rect
+    // was the mid-drag teleport fight.
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    engine->retile(QStringLiteral("S1"));
+    for (const auto& emission : tiledSpy) {
+        QVERIFY(!emission.first().toString().contains(QStringLiteral("\"a\"")));
+    }
+
+    // A drag-frame ack for the marked window must not reconcile: without
+    // the gate this pinned the column width intent to the transient drag
+    // rect (Fixed pixels) and scheduled another fighting retile.
+    const ColumnWidth widthBefore =
+        state->strip().columns().at(state->strip().columnOfWindow(QStringLiteral("a"))).width;
+    engine->onWindowResized(QStringLiteral("a"), QRect(0, 0, 595, 800), QRect(400, 300, 300, 200),
+                            QStringLiteral("S1"));
+    const ColumnWidth widthAfter =
+        state->strip().columns().at(state->strip().columnOfWindow(QStringLiteral("a"))).width;
+    QVERIFY(widthBefore == widthAfter);
+
+    // Clearing the mark restores normal emission on the next retile. Change
+    // a's column width so emit-on-change genuinely has a new rect to say
+    // (the marked retile retained a's last-applied memory, so an identical
+    // relayout would stay silent for every window).
+    engine->setInteractiveDragWindow(QString());
+    tiledSpy.clear();
+    state->strip().focusWindow(QStringLiteral("a"), defaultParams());
+    state->strip().setActiveColumnWidth(ColumnWidth::makeProportion(0.4));
+    engine->retile(QStringLiteral("S1"));
+    bool emittedA = false;
+    for (const auto& emission : tiledSpy) {
+        emittedA = emittedA || emission.first().toString().contains(QStringLiteral("\"a\""));
+    }
+    QVERIFY(emittedA);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineDragInsert)

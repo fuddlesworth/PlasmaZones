@@ -358,12 +358,15 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         }
     };
 
-    // Live drag-insert preview: the dragged window's geometry stays under
-    // KWin's interactive move — skip it in the batch (and leave its
-    // m_lastAppliedRect memory alone) while neighbours animate around the
-    // previewed slot. commitDragInsertPreview resets the preview BEFORE its
-    // re-apply, so the commit relayout runs unfiltered and finally emits
-    // the dragged window's rect.
+    // A window under a compositor interactive move keeps its geometry with
+    // KWin — skip it in the batch (and leave its m_lastAppliedRect memory
+    // alone) while neighbours animate. Two sources, one contract: the live
+    // drag-insert preview's window, and the daemon's whole-drag interactive
+    // mark (which covers trigger-not-held stretches of the same drag, where
+    // the window is still modelled as a strip tile the effect merely floats
+    // visually). commitDragInsertPreview resets the preview BEFORE its
+    // re-apply, and the daemon clears the mark BEFORE the drop settles, so
+    // the finalizing relayout runs unfiltered.
     const QString dragPreviewSkip = (m_dragInsertPreview && m_dragInsertPreview->targetScreenId == screenId)
         ? m_dragInsertPreview->windowId
         : QString();
@@ -372,7 +375,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     bool anyRectMoved = false;
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
-            if (!dragPreviewSkip.isEmpty() && tile.windowId == dragPreviewSkip) {
+            if ((!dragPreviewSkip.isEmpty() && tile.windowId == dragPreviewSkip)
+                || (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow)) {
                 continue;
             }
             QRect rect = tile.rect;

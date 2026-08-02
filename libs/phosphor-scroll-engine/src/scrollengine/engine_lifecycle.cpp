@@ -533,6 +533,15 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // retile the wrong strip.
     Q_UNUSED(screenId)
     const QString windowId = canonicalizeForLookup(rawWindowId);
+    // A window under a compositor interactive move: its frames are drag
+    // motion, not a size the user settled on. Reconciling them pinned the
+    // column's width/height intents to transient drag rects, and the
+    // refused-ack arm below re-emitted the slot rect against the move —
+    // the ~1 Hz mid-drag teleport fight. The daemon clears the mark before
+    // the drop settles, and the drop paths re-apply authoritative geometry.
+    if (!m_interactiveDragWindow.isEmpty() && windowId == m_interactiveDragWindow) {
+        return;
+    }
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state || state->isFloating(windowId)) {
