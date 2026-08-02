@@ -289,12 +289,14 @@ public:
 
     /// Animate only the focused window's decoration; unfocused windows hold their
     /// last composite. Divides the continuous redraw by the number of decorated
-    /// windows on screen. Off by default: it visibly changes what the desktop
-    /// looks like (only the window you are using shimmers), so it is the user's
-    /// call, not ours.
+    /// windows on screen — the single biggest lever this group has while the user
+    /// is still at the machine. ON by default: on integrated GPUs the every-window
+    /// continuous redraw is the difference between a usable desktop and a lagging
+    /// one, and a user who wants every unfocused window shimmering is making the
+    /// deliberate (and cheap-to-make) choice, not the other way around.
     static bool decorationAnimateFocusedOnly()
     {
-        return false;
+        return true;
     }
 
     /// Stop animating the decoration chain once the session has been idle for

@@ -202,10 +202,10 @@ private Q_SLOTS:
         // Flip every key away from its default (120 is in-range and distinct from the
         // default of 30).
         settings.setDecorationPauseWhenIdle(false);
-        settings.setDecorationAnimateFocusedOnly(true);
+        settings.setDecorationAnimateFocusedOnly(false);
         settings.setDecorationIdleTimeoutSec(120);
         QCOMPARE(settings.decorationPauseWhenIdle(), false);
-        QCOMPARE(settings.decorationAnimateFocusedOnly(), true);
+        QCOMPARE(settings.decorationAnimateFocusedOnly(), false);
         QCOMPARE(settings.decorationIdleTimeoutSec(), 120);
 
         settings.reset();
