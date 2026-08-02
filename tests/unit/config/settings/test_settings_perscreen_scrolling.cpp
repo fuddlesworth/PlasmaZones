@@ -337,12 +337,14 @@ private Q_SLOTS:
                  ConfigDefaults::scrollingDefaultColumnWidthFixedPx());
     }
 
-    /// A screen that overrides the VALUE alone is repaired against the global
-    /// kind, which is the resolution the daemon's merge performs: an absent
-    /// per-screen kind means the app-wide setting is in force. Without that
-    /// stand-in the sweep would judge the lone value against nothing and let a
-    /// pixel count through under a global Proportion kind.
-    void loadRepairsValueOnlyOverrideAgainstGlobalKind()
+    /// A screen that overrides the VALUE alone is left UNTOUCHED by the load
+    /// repair: the engine gates the whole per-screen width channel on the
+    /// per-screen Kind key's presence (effectiveDefaultColumnWidth returns
+    /// the global width wholesale without it), so the lone value never
+    /// applies — and "repairing" it against the global kind would destroy
+    /// the retained figure the engine would use the moment the user re-adds
+    /// a per-screen kind.
+    void loadRetainsValueOnlyOverrideUntouched()
     {
         IsolatedConfigGuard guard;
         const QString screen = QStringLiteral("DP-globalkind");
@@ -366,8 +368,10 @@ private Q_SLOTS:
         file.close();
 
         Settings reloaded;
+        // The pixel-magnitude figure survives verbatim: no per-screen Kind
+        // key exists, so the repair must not touch it.
         QCOMPARE(reloaded.getPerScreenScrollingSettings(screen).value(key(K::DefaultColumnWidthValue)).toDouble(),
-                 ConfigDefaults::scrollingDefaultColumnWidthValue());
+                 1200.0);
     }
 
     /// Clear removes the whole entry (the map holds one card's keys, so there

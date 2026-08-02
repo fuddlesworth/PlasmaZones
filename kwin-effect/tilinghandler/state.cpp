@@ -56,6 +56,13 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     ++m_suppressMaximizeChanged;
     kw->maximize(KWin::MaximizeRestore);
     --m_suppressMaximizeChanged;
+    // The gate suppressed the VS-crossing detectors, whose early return sits
+    // BEFORE their m_trackedScreenPerWindow write — and unlike a daemon
+    // apply this move is not transient, so the tracker must be re-seeded
+    // here (the pairing daemon_apply.cpp documents). Post-move resolve is
+    // authoritative on this path: no daemon rotation is in flight, so the
+    // restore rect's position is the answer.
+    m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
     m_effect->m_daemonGate.inGeometryApply = prevInApply;
 }
 
@@ -80,6 +87,11 @@ void TilingHandler::restoreAllMonocleMaximized()
             KWin::Window* kw = w->window();
             if (kw) {
                 kw->maximize(KWin::MaximizeRestore);
+                // Same tracker re-seed as unmaximizeMonocleWindow, and more
+                // load-bearing here: the daemon-loss caller has no apply
+                // path left to heal a stale entry, and onDaemonReady keeps
+                // this map across the restart.
+                m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
             }
         }
     }
@@ -251,58 +263,85 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     }
 }
 
-void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QString& windowId)
+void TilingHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QString& windowId,
+                                                const QString& capturedScreenId)
 {
     QPointer<KWin::EffectWindow> safeW = w;
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
                                                    QStringLiteral("getValidatedPreTileGeometry"), {windowId}),
         this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, safeW, windowId](QDBusPendingCallWatcher* pw) {
-        pw->deleteLater();
-        QDBusPendingReply<bool, int, int, int, int> reply = *pw;
-        if (!reply.isValid() || reply.count() < 5 || !reply.argumentAt<0>()) {
-            return;
-        }
-        const int rw = reply.argumentAt<3>();
-        const int rh = reply.argumentAt<4>();
-        if (rw <= 0 || rh <= 0 || !safeW || safeW->isDeleted()) {
-            return;
-        }
-        // Anything that took (back) ownership of the window during the
-        // round-trip supersedes this orphan restore: another desktop
-        // switch, a re-tile (re-notified), the screen re-entering
-        // autotile, a snap commit, a float toggle, or the user actively
-        // moving/resizing it.
-        if (!safeW->isOnCurrentDesktop() || !safeW->isOnCurrentActivity() || m_notifiedWindows.contains(windowId)
-            || m_managedScreens.contains(m_effect->getWindowScreenId(safeW))
-            || m_effect->isWindowMarkedSnapped(windowId) || m_effect->isWindowFloating(windowId) || safeW->isUserMove()
-            || safeW->isUserResize()) {
-            return;
-        }
-        // Suppress the VS-crossing detectors across the synchronous
-        // frameGeometryChanged this apply emits — same rationale as the
-        // local-bucket restore path in slotScreensChanged.
-        // Save/restore, not set/clear: a clearing guard nested inside an outer
-        // apply would hand the outer scope back an un-flagged window.
-        const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-        m_effect->m_daemonGate.inGeometryApply = true;
-        const auto geomGuard = qScopeGuard([this, prevInApply] {
-            m_effect->m_daemonGate.inGeometryApply = prevInApply;
-        });
-        // Clear any lingering KWin maximize flag first or KWin re-asserts
-        // the maximize-area rect and defeats the restore (discussion #461).
-        if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
-            ++m_suppressMaximizeChanged;
-            kw->maximize(KWin::MaximizeRestore);
-            --m_suppressMaximizeChanged;
-        }
-        // Snap-out: leaving zone-managed sizing.
-        m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh),
-                                      /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                      PhosphorAnimation::ProfilePaths::WindowSnapOut);
-        qCInfo(lcEffect) << "Desktop switch: restored pre-snap geometry from daemon for orphaned window" << windowId;
-    });
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, safeW, windowId, capturedScreenId](QDBusPendingCallWatcher* pw) {
+                pw->deleteLater();
+                QDBusPendingReply<bool, int, int, int, int> reply = *pw;
+                // No arity term: QDBusPendingReply<...>::count() is the compile-time
+                // sizeof...(Types), so a "count() < 5" test can never fire. isValid
+                // plus the success flag plus the positive-extent check below cover
+                // the short/mis-typed-reply failure modes (a signature mismatch
+                // default-constructs argumentAt<0>() to false).
+                if (!reply.isValid() || !reply.argumentAt<0>()) {
+                    return;
+                }
+                const int rw = reply.argumentAt<3>();
+                const int rh = reply.argumentAt<4>();
+                if (rw <= 0 || rh <= 0 || !safeW || safeW->isDeleted()) {
+                    return;
+                }
+                // Anything that took (back) ownership of the window during the
+                // round-trip supersedes this orphan restore: another desktop
+                // switch, a re-tile (re-notified), the screen re-entering
+                // autotile, a snap commit, a float toggle, or the user actively
+                // moving/resizing it.
+                // capturedScreenId, not a fresh getWindowScreenId(): the caller
+                // resolved the screen while the engine-authoritative override was
+                // still live, and by now the same loop iteration has demoted the
+                // window's tracking, so a re-resolve of a parked (off-canvas) frame
+                // can positionally land on a neighbouring output — skipping the
+                // restore and stranding the window at its parked rect.
+                if (!safeW->isOnCurrentDesktop() || !safeW->isOnCurrentActivity()
+                    || m_notifiedWindows.contains(windowId) || m_managedScreens.contains(capturedScreenId)
+                    || m_effect->isWindowMarkedSnapped(windowId) || m_effect->isWindowFloating(windowId)
+                    || safeW->isUserMove() || safeW->isUserResize()) {
+                    return;
+                }
+                // Suppress the VS-crossing detectors across the synchronous
+                // frameGeometryChanged this apply emits — same rationale as the
+                // local-bucket restore path in slotScreensChanged.
+                // Save/restore, not set/clear: a clearing guard nested inside an outer
+                // apply would hand the outer scope back an un-flagged window.
+                const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+                m_effect->m_daemonGate.inGeometryApply = true;
+                const auto geomGuard = qScopeGuard([this, prevInApply] {
+                    m_effect->m_daemonGate.inGeometryApply = prevInApply;
+                });
+                // Clear any lingering KWin maximize flag first or KWin re-asserts
+                // the maximize-area rect and defeats the restore (discussion #461).
+                if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                    ++m_suppressMaximizeChanged;
+                    kw->maximize(KWin::MaximizeRestore);
+                    --m_suppressMaximizeChanged;
+                }
+                // Snap-out: leaving zone-managed sizing.
+                m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh),
+                                              /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                              PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                // Re-seed the tracked screen from the applied position: the gate
+                // above suppressed the VS-crossing detectors whose early return sits
+                // before their tracker write, and applyWindowGeometry does not
+                // self-seed (the daemon-apply and engine-flip callers re-seed
+                // themselves; this restore must too). Re-check the QPointer: this
+                // lambda runs after an ASYNC D-Bus round-trip, and the window can be
+                // closed at any point around it — a nullptr key would have no
+                // destroyed-cleanup to remove it. (The synchronous monocle re-seeds
+                // above need no such guard: their pointer comes from a resolve
+                // moments earlier and maximize() cannot delete an EffectWindow.)
+                if (safeW) {
+                    m_effect->m_trackedScreenPerWindow[safeW.data()] = m_effect->getWindowScreenId(safeW.data());
+                }
+                qCInfo(lcEffect) << "Desktop switch: restored pre-snap geometry from daemon for orphaned window"
+                                 << windowId;
+            });
 }
 
 QRectF TilingHandler::findPreTileGeometry(const QString& windowId, QString* bucketScreenId) const
@@ -403,18 +442,21 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
 void TilingHandler::updateScrollWheelShortcuts()
 {
     // The enable setting folds into the want predicate so turning it off
-    // genuinely releases the axis chords back to the compositor (KWin's
-    // zoom effect can reclaim Meta+wheel), rather than swallowing them.
+    // genuinely releases the axis chords back to the compositor, rather
+    // than swallowing them.
     const bool want = m_wheelFocusEnabled && !m_scrollingScreens.isEmpty();
     if (want == !m_scrollWheelActions.isEmpty()) {
         return;
     }
     if (!want) {
         // Destroying the QAction unregisters the axis shortcut (KWin's
-        // shortcut manager tracks action lifetime), releasing Meta+wheel
-        // back to other consumers (e.g. the zoom effect). deleteLater rather
-        // than a manual delete: these are parented QObjects, and a delete
-        // here would run inside whatever emitted the mode change.
+        // shortcut manager erases entries on QAction::destroyed), releasing
+        // the chord for any later registrant. deleteLater rather than a
+        // manual delete: these are parented QObjects, and a delete here
+        // would run inside whatever emitted the mode change. The sub-turn
+        // window before the deferred delete lands is benign — KWin APPENDS
+        // duplicate registrations and matches the FIRST, and a still-live
+        // doomed action drives the same wheelFocusColumn as its replacement.
         for (QAction* action : std::as_const(m_scrollWheelActions)) {
             action->deleteLater();
         }
@@ -424,13 +466,20 @@ void TilingHandler::updateScrollWheelShortcuts()
     }
     // niri's default Mod+wheel bindings: wheel down / right focuses the
     // next column to the right, wheel up / left the previous one. The
-    // horizontal pair covers tilted wheels and two-finger horizontal
-    // touchpad scrolls. Registered under BOTH Meta and Meta+Alt: KWin's
-    // zoom effect claims Meta+WheelUp/Down at compositor startup on
-    // default setups and KWin silently drops a duplicate axis
-    // registration, so plain Meta+wheel only wins where zoom is disabled
-    // or rebound — Meta+Alt+wheel matches the rest of the scrolling
-    // shortcut family and is conflict-free.
+    // horizontal pair covers tilted wheels, and horizontal touchpad scrolls
+    // once the accumulated delta clears KWin's 1.0 threshold (processAxis
+    // only fires on |delta| >= 1.0).
+    //
+    // Meta ONLY — no Meta+Alt fallback, and the mechanics matter (verified
+    // against KWin 6.7 source): KWin's GlobalShortcutsManager APPENDS
+    // duplicate axis registrations and match() returns the FIRST entry, so
+    // whoever registered earlier wins. KWin core registers
+    // Meta+Alt+WheelUp/Down for Switch to Next/Previous Desktop at init,
+    // before any effect loads — a Meta+Alt pair here could only ever lose
+    // that match and sit dead. Plain Meta is free on a stock setup: the
+    // zoom effect's axis modifiers default to Meta+Ctrl, not Meta. A user
+    // who rebinds zoom onto plain Meta creates a duplicate whose winner is
+    // whichever effect registered earlier in the session.
     const auto add = [this](Qt::KeyboardModifiers mods, KWin::PointerAxisDirection axis, int delta,
                             const QString& name) {
         auto* action = new QAction(this);
@@ -441,24 +490,22 @@ void TilingHandler::updateScrollWheelShortcuts()
         KWin::effects->registerAxisShortcut(mods, axis, action);
         m_scrollWheelActions.append(action);
     };
-    for (const Qt::KeyboardModifiers mods :
-         {Qt::KeyboardModifiers(Qt::MetaModifier), Qt::MetaModifier | Qt::AltModifier}) {
-        const bool alt = mods.testFlag(Qt::AltModifier);
-        add(mods, KWin::PointerAxisDown, 1,
-            alt ? QStringLiteral("pz-scroll-column-right-alt") : QStringLiteral("pz-scroll-column-right"));
-        add(mods, KWin::PointerAxisUp, -1,
-            alt ? QStringLiteral("pz-scroll-column-left-alt") : QStringLiteral("pz-scroll-column-left"));
-        add(mods, KWin::PointerAxisRight, 1,
-            alt ? QStringLiteral("pz-scroll-column-right-h-alt") : QStringLiteral("pz-scroll-column-right-h"));
-        add(mods, KWin::PointerAxisLeft, -1,
-            alt ? QStringLiteral("pz-scroll-column-left-h-alt") : QStringLiteral("pz-scroll-column-left-h"));
-    }
-    qCInfo(lcEffect) << "Scroll wheel shortcuts registered (Meta+wheel and Meta+Alt+wheel focus columns)";
+    add(Qt::MetaModifier, KWin::PointerAxisDown, 1, QStringLiteral("pz-scroll-column-right"));
+    add(Qt::MetaModifier, KWin::PointerAxisUp, -1, QStringLiteral("pz-scroll-column-left"));
+    add(Qt::MetaModifier, KWin::PointerAxisRight, 1, QStringLiteral("pz-scroll-column-right-h"));
+    add(Qt::MetaModifier, KWin::PointerAxisLeft, -1, QStringLiteral("pz-scroll-column-left-h"));
+    qCInfo(lcEffect) << "Scroll wheel shortcuts registered (Meta+wheel focuses columns)";
 }
 
 void TilingHandler::wheelFocusColumn(int delta)
 {
     if (!m_effect->m_daemonGate.serviceRegistered) {
+        return;
+    }
+    // Re-gate on the enable flag: between setWheelFocusEnabled(false)'s
+    // deleteLater and the deferred delete actually landing, the doomed
+    // action is still registered and can fire one more tick.
+    if (!m_wheelFocusEnabled) {
         return;
     }
     if (m_wheelFocusInverted) {
@@ -511,23 +558,27 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
     if (rejectedOnlyBecauseMinimized) {
         *rejectedOnlyBecauseMinimized = false;
     }
+    // Null first, so the gates below need no per-gate `w &&` prefix.
+    if (!w) {
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (null window)";
+        return false;
+    }
     // Close-grabbed dying windows survive in the stacking order for the
     // close-animation duration; announcing one as opened would insert an
     // orphan into the tiling tree (shrinking live tiles) until a later
     // retile cleans it up.
-    if (w && w->isDeleted()) {
+    if (w->isDeleted()) {
         return false;
     }
     // Early-out: KWin internal surfaces (overlay QQuickViews, zone overlays, etc.)
     // are never eligible for autotile notification. KWin's InternalWindow::minSize()
     // segfaults when the backing QWindow is null. See discussion #511.
-    if (w && w->window() && w->window()->isInternal()) {
+    if (w->window() && w->window()->isInternal()) {
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (internal window)" << m_effect->getWindowId(w);
         return false;
     }
-    if (!w || !m_effect->shouldHandleWindow(w)) {
-        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (not handleable)"
-                          << (w ? m_effect->getWindowId(w) : QStringLiteral("null"));
+    if (!m_effect->shouldHandleWindow(w)) {
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (not handleable)" << m_effect->getWindowId(w);
         return false;
     }
     if (!m_effect->isTileableWindow(w)) {

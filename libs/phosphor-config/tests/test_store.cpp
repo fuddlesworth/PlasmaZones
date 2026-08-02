@@ -142,6 +142,242 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
     }
 
+    /// Sparse persistence: a value equal to the schema default is stored as
+    /// key ABSENCE. A stored default freezes the value at whatever the
+    /// default was on the day it was written, so a later default retune
+    /// never reaches a store that has been saved since — the exact
+    /// shadowing that kept retuned shortcut defaults from reaching
+    /// existing installs.
+    void write_defaultEqualValueStoredAsAbsence()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+        QSignalSpy spy(&store, &Store::changed);
+
+        // Writing the default onto a pristine key is a full no-op: nothing
+        // stored, nothing announced.
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 800);
+        QCOMPARE(spy.count(), 0);
+        {
+            auto g = backend.group(QStringLiteral("Window"));
+            QVERIFY(!g->hasKey(QStringLiteral("Width")));
+        }
+
+        // A non-default value persists and announces.
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
+        QCOMPARE(spy.count(), 1);
+        {
+            auto g = backend.group(QStringLiteral("Window"));
+            QVERIFY(g->hasKey(QStringLiteral("Width")));
+        }
+
+        // Writing the default back DELETES the key and announces (the
+        // observable value moved from 1024 to 800), and the read path keeps
+        // answering the default from absence.
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 800);
+        QCOMPARE(spy.count(), 2);
+        {
+            auto g = backend.group(QStringLiteral("Window"));
+            QVERIFY(!g->hasKey(QStringLiteral("Width")));
+        }
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 800);
+    }
+
+    /// A frozen default — a stored value equal to the CURRENT default,
+    /// stamped by an older materialise-everything save — is pruned by the
+    /// flush-loop write pattern (write of the value just read), silently:
+    /// the observable value does not move, so no changed() fires, but the
+    /// key leaves the file so a future default retune reaches this store.
+    void write_prunesFrozenDefaultSilently()
+    {
+        JsonBackend backend(m_path);
+        {
+            auto g = backend.group(QStringLiteral("Window"));
+            g->writeInt(QStringLiteral("Width"), 800);
+        }
+        Store store(&backend, makeSchema());
+        QSignalSpy spy(&store, &Store::changed);
+
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"),
+                    store.readVariant(QStringLiteral("Window"), QStringLiteral("Width")));
+
+        QCOMPARE(spy.count(), 0);
+        auto g = backend.group(QStringLiteral("Window"));
+        QVERIFY(!g->hasKey(QStringLiteral("Width")));
+    }
+
+    /// reset() deletes the stored key rather than stamping the default —
+    /// the deletion IS the reset under sparse persistence.
+    void reset_deletesStoredKey()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
+        store.reset(QStringLiteral("Window"), QStringLiteral("Width"));
+
+        {
+            auto g = backend.group(QStringLiteral("Window"));
+            QVERIFY(!g->hasKey(QStringLiteral("Width")));
+        }
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 800);
+    }
+
+    /// resetGroup() shares reset()'s delete-not-stamp shape: the value
+    /// read-back alone cannot distinguish the two, so pin the persistence
+    /// shape directly.
+    void resetGroup_deletesStoredKeys()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
+        store.write(QStringLiteral("Window"), QStringLiteral("Height"), 768);
+        store.resetGroup(QStringLiteral("Window"));
+
+        auto g = backend.group(QStringLiteral("Window"));
+        QVERIFY(!g->hasKey(QStringLiteral("Width")));
+        QVERIFY(!g->hasKey(QStringLiteral("Height")));
+    }
+
+    /// resetAll() covers every declared group, and a group whose last key is
+    /// deleted vanishes from the document entirely (deleteKey prunes emptied
+    /// groups) while reads keep answering the schema defaults.
+    void resetAll_deletesEveryStoredKeyAndPrunesEmptyGroups()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
+        store.write(QStringLiteral("Appearance"), QStringLiteral("FontSize"), 14.0);
+
+        store.resetAll();
+
+        QVERIFY(!backend.groupList().contains(QStringLiteral("Window")));
+        QVERIFY(!backend.groupList().contains(QStringLiteral("Appearance")));
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 800);
+        QCOMPARE(store.read<double>(QStringLiteral("Appearance"), QStringLiteral("FontSize")), 12.0);
+    }
+
+    /// The canonicalDefault line in write(): a NON-canonical schema default
+    /// must still compare equal to a canonical write, so the key stores as
+    /// absence. Mutating the compare to the raw defaultValue fails this.
+    void write_nonCanonicalDefaultStillPrunes()
+    {
+        Schema s;
+        s.version = 1;
+        auto canonicalise = [](const QVariant& v) -> QVariant {
+            QStringList parts = v.toString().split(QLatin1Char(','));
+            for (auto& p : parts) {
+                p = p.trimmed();
+            }
+            parts.removeAll(QString());
+            return QVariant(parts.join(QLatin1Char(',')));
+        };
+        s.groups[QStringLiteral("L")] = {
+            // Deliberately non-canonical default spelling.
+            {QStringLiteral("Items"), QStringLiteral(" a , b "), QMetaType::QString, QString(), canonicalise},
+        };
+
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
+
+        store.write(QStringLiteral("L"), QStringLiteral("Items"), QStringLiteral("a,b"));
+        auto g = backend.group(QStringLiteral("L"));
+        QVERIFY(!g->hasKey(QStringLiteral("Items")));
+    }
+
+    /// Cross-type default equality, the QVariantMap trigger-list shape: the
+    /// stored JSON round-trip yields Double-typed members while the written
+    /// map carries Int members. The prune must still fire for a default-equal
+    /// list, or sparse persistence silently skips the whole family.
+    void write_variantListWithIntMembersPrunesAgainstJsonRoundTrip()
+    {
+        const QVariantMap trigger{{QStringLiteral("modifier"), 3}, {QStringLiteral("mouseButton"), 0}};
+        const QVariantList defaultList{trigger};
+
+        Schema s;
+        s.version = 1;
+        KeyDef def;
+        def.key = QStringLiteral("Triggers");
+        def.defaultValue = QVariant(defaultList);
+        def.expectedType = QMetaType::QVariantList;
+        s.groups[QStringLiteral("T")] = {def};
+
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
+
+        // Store a NON-default value first so the key is present, then write
+        // the default back: the delete branch compares the JSON-round-tripped
+        // stored value (Double members) against the Int-membered default.
+        store.write(QStringLiteral("T"), QStringLiteral("Triggers"),
+                    QVariantList{QVariantMap{{QStringLiteral("modifier"), 5}, {QStringLiteral("mouseButton"), 0}}});
+        {
+            auto g = backend.group(QStringLiteral("T"));
+            QVERIFY(g->hasKey(QStringLiteral("Triggers")));
+        }
+        store.write(QStringLiteral("T"), QStringLiteral("Triggers"), QVariant(defaultList));
+        {
+            auto g = backend.group(QStringLiteral("T"));
+            QVERIFY2(!g->hasKey(QStringLiteral("Triggers")),
+                     "default-equal trigger list must prune despite Int-vs-Double member types");
+        }
+        // And a pristine write of the default is a full no-op.
+        store.write(QStringLiteral("T"), QStringLiteral("Triggers"), QVariant(defaultList));
+        {
+            auto g = backend.group(QStringLiteral("T"));
+            QVERIFY(!g->hasKey(QStringLiteral("Triggers")));
+        }
+    }
+
+    /// The documented absent-vs-malformed asymmetry of read<QVariantMap>:
+    /// absent answers the (populated) schema default, a present-but-corrupt
+    /// blob answers an EMPTY map so callers can substitute their own
+    /// defaults instead of stamping the schema default over corrupt data.
+    void read_variantMapAbsentVsMalformed()
+    {
+        const QVariantMap populatedDefault{{QStringLiteral("a"), 1}, {QStringLiteral("b"), 2}};
+        Schema s;
+        s.version = 1;
+        KeyDef def;
+        def.key = QStringLiteral("Blob");
+        def.defaultValue = QVariant(populatedDefault);
+        def.expectedType = QMetaType::QVariantMap;
+        s.groups[QStringLiteral("G")] = {def};
+
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
+
+        // Absent: the populated schema default.
+        QCOMPARE(store.read<QVariantMap>(QStringLiteral("G"), QStringLiteral("Blob")), populatedDefault);
+
+        // Malformed (a scalar where an object belongs): EMPTY, not the default.
+        {
+            auto g = backend.group(QStringLiteral("G"));
+            g->writeString(QStringLiteral("Blob"), QStringLiteral("not an object"));
+        }
+        QVERIFY(store.read<QVariantMap>(QStringLiteral("G"), QStringLiteral("Blob")).isEmpty());
+    }
+
+    /// Exotic-typed keys (QDateTime here) round-trip as a QString per the
+    /// readVariant docstring — the write side stringifies and the read side
+    /// returns the string. Pin it so the type change is a documented contract
+    /// rather than an accident.
+    void write_exoticTypeRoundTripsAsString()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+
+        // A NON-default stamp, or write() would take the sparse absent-key
+        // no-op and nothing would ever be stringified.
+        const QDateTime stamp = QDateTime::fromSecsSinceEpoch(1760000000, QTimeZone::utc());
+        store.write(QStringLiteral("Appearance"), QStringLiteral("Stamp"), stamp);
+
+        const QVariant got = store.readVariant(QStringLiteral("Appearance"), QStringLiteral("Stamp"));
+        QCOMPARE(got.typeId(), static_cast<int>(QMetaType::QString));
+        QCOMPARE(QDateTime::fromString(got.toString(), Qt::ISODateWithMs), stamp);
+    }
+
     void exportToJsonIncludesEveryDeclaredKey()
     {
         JsonBackend backend(m_path);
@@ -202,10 +438,17 @@ private Q_SLOTS:
         // An unknown group — should be ignored.
         snapshot[QStringLiteral("UnknownGroup")] = QJsonObject{{QStringLiteral("k"), 1}};
 
-        store.importFromJson(snapshot);
+        QVERIFY(store.importFromJson(snapshot));
 
         QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 1920);
         QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Height")), 1080);
+        // "Ignored" means ignored: neither the unknown key nor the unknown
+        // group may reach the backend.
+        {
+            auto g = backend.group(QStringLiteral("Window"));
+            QVERIFY(!g->hasKey(QStringLiteral("UnknownKey")));
+        }
+        QVERIFY(!backend.groupList().contains(QStringLiteral("UnknownGroup")));
     }
 
     void validator_clampsOnRead()

@@ -504,11 +504,13 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
         // and only rule-store sync point, so the snapping-exclusion gate
         // refreshes here too rather than chasing a second D-Bus fetch. The
         // filter keeps only enabled rules with a terminal Exclude action;
-        // setRules bumps the bound rule set's revision so
-        // m_snappingExclusionEvaluator's per-revision sort index rebuilds
-        // on its next walk (these evaluators call uncached `resolve()`, so
-        // there is no per-window match cache to drop — the sort index is
-        // the only revision-keyed artifact).
+        // setRules bumps the bound rule set's revision, which makes every
+        // stale entry in m_snappingExclusionEvaluator's PER-WINDOW MATCH
+        // CACHE (window_filtering.cpp resolves through resolveCached) read
+        // as a miss and rebuilds the per-revision sort index. Rule EDITS
+        // are therefore covered by the revision bump alone; PLACEMENT
+        // changes are not, which is why rule_invalidation.cpp clears that
+        // cache explicitly.
         m_snappingExclusionRuleSet.setRules(PhosphorRules::ExclusionRules::excludeRulesFrom(*setOpt).rules());
 
         // Same refresh for the animation-side exclusion rule set, sliced

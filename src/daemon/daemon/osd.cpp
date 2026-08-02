@@ -1007,8 +1007,9 @@ void Daemon::showCheatsheetOnCursorScreen()
 
     const auto mode = currentModeFor(screenId);
     const bool autotileAvailable = m_settings && m_settings->autotileEnabled();
+    const bool scrollingAvailable = m_settings && m_settings->scrollingEnabled();
     m_overlayService->showCheatsheet(screenId, m_shortcutManager->cheatsheetModel(), cheatsheetModeString(mode),
-                                     autotileAvailable);
+                                     autotileAvailable, scrollingAvailable);
 
     // Bind Escape only if the sheet actually became visible — showCheatsheet
     // bails on missing screen/shell/catalog, and the only releaser is
@@ -1039,8 +1040,9 @@ void Daemon::refreshCheatsheetIfVisible()
     }
     const auto mode = currentModeFor(screenId);
     const bool autotileAvailable = m_settings && m_settings->autotileEnabled();
+    const bool scrollingAvailable = m_settings && m_settings->scrollingEnabled();
     m_overlayService->refreshCheatsheet(m_shortcutManager->cheatsheetModel(), cheatsheetModeString(mode),
-                                        autotileAvailable);
+                                        autotileAvailable, scrollingAvailable);
 }
 
 void Daemon::onCheatsheetDismissed()

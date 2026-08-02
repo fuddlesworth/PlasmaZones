@@ -224,6 +224,8 @@ Item {
         PopupCardTitle {
             id: titleLabel
 
+            fontFamily: root.fontFamily
+            fontSizeScale: root.fontSizeScale
             anchors.top: parent.top
             anchors.topMargin: metrics.paddingSide
             anchors.horizontalCenter: parent.horizontalCenter
