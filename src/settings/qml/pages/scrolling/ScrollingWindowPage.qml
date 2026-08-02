@@ -21,11 +21,11 @@ SettingsFlickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        ScrollingWindowHandlingCard {
+        ScrollingDragInsertCard {
             Layout.fillWidth: true
         }
 
-        ScrollingDragInsertCard {
+        ScrollingWindowHandlingCard {
             Layout.fillWidth: true
         }
 
