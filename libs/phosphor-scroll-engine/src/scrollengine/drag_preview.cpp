@@ -315,7 +315,38 @@ void ScrollEngine::updateDragInsertPreview(const DragInsertTarget& target)
     // Refresh the carried intents from the live slot so a mid-drag width or
     // height change (unlikely but possible via shortcuts) travels along.
     preview.carried = captureDragSlot(strip, preview.windowId);
-    const int oldViewX = strip.relayout(params).viewX;
+    const ResolvedStrip before = strip.relayout(params);
+    const int oldViewX = before.viewX;
+
+    // View-stability reference for JOIN targets: the join column must stay
+    // stationary under the cursor. The take below removes the dragged
+    // window's own solo column first, and when that column sat LEFT of the
+    // join target the strip contracts leftward — a bare viewX hold then
+    // slides the target out from under the cursor, the next tick's hit-test
+    // reads "right of the strip", and the window is expelled straight back
+    // out (a stack into a right-hand column could never form). Pin the join
+    // column through a surviving tile instead. newSlot inserts keep the
+    // plain viewX hold: there the inserted column itself lands under the
+    // cursor.
+    QString referenceWindow;
+    int referenceXBefore = 0;
+    if (!target.newSlot) {
+        const int joinIdx = std::clamp(target.primary, 0, strip.columnCount() - 1);
+        const Column& joinColumn = strip.columns().at(joinIdx);
+        for (const Tile& tile : joinColumn.tiles) {
+            if (tile.windowId != preview.windowId) {
+                referenceWindow = tile.windowId;
+                break;
+            }
+        }
+        for (const ResolvedColumn& rc : before.columns) {
+            if (rc.columnIndex == joinIdx) {
+                referenceXBefore = rc.rect.x();
+                break;
+            }
+        }
+    }
+
     strip.takeWindow(preview.windowId, params);
 
     bool inserted = false;
@@ -349,7 +380,35 @@ void ScrollEngine::updateDragInsertPreview(const DragInsertTarget& target)
     preview.lastTarget.secondary = landed.tiles.size() > 1 ? landed.indexOfWindow(preview.windowId) : -1;
     preview.lastTarget.newSlot = false;
 
-    holdViewX(strip, params, oldViewX);
+    bool held = false;
+    if (!referenceWindow.isEmpty()) {
+        // Re-anchor so the reference column's screen X is unchanged:
+        // screenX = stripX - viewX, so absorbing the drift into viewX means
+        // shrinking the anchor by the same amount (viewX = colX(active) -
+        // anchor). Raw restore, same contract as holdViewX.
+        const ResolvedStrip after = strip.relayout(params);
+        for (const ResolvedColumn& rc : after.columns) {
+            bool containsReference = false;
+            for (const ResolvedTile& rt : rc.tiles) {
+                if (rt.windowId == referenceWindow) {
+                    containsReference = true;
+                    break;
+                }
+            }
+            if (!containsReference) {
+                continue;
+            }
+            const int adjust = rc.rect.x() - referenceXBefore;
+            if (adjust != 0) {
+                strip.restoreViewAnchor(strip.viewAnchor() - adjust, params);
+            }
+            held = true;
+            break;
+        }
+    }
+    if (!held) {
+        holdViewX(strip, params, oldViewX);
+    }
     applyLayout(preview.targetScreenId, false);
 }
 

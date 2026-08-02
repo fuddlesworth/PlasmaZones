@@ -36,6 +36,7 @@ private Q_SLOTS:
     void sameScreenBeginKeepsSlotAndSkipsGeometry();
     void updateNewColumnMovesAndCommitPersists();
     void updateJoinColumnStacks();
+    void joinRightColumnStaysUnderCursor();
     void cancelRestoresSoloColumnSlot();
     void cancelRestoresStackedTileSlot();
     void floatingBeginAdoptsAndCancelRefloats();
@@ -161,6 +162,41 @@ void TestScrollEngineDragInsert::updateJoinColumnStacks()
     engine->commitDragInsertPreview();
     QCOMPARE(state->strip().columnOfWindow(QStringLiteral("c")), state->strip().columnOfWindow(QStringLiteral("a")));
     QCOMPARE(state->strip().columnCount(), 2);
+}
+
+void TestScrollEngineDragInsert::joinRightColumnStaysUnderCursor()
+{
+    // Two columns, drag the LEFT window onto the RIGHT column. The join
+    // removes the dragged window's own column, contracting the strip
+    // leftward — without the join-column view pin, the merged column slides
+    // out from under the stationary cursor, the next tick's hit-test reads
+    // "right of the strip", and the window is expelled straight back out
+    // (the right-column stack could never be formed).
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
+    const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
+    QVERIFY(!rectB.isNull());
+    const QPoint cursor = rectB.center();
+
+    const DragTarget join = engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), cursor);
+    QCOMPARE(join.primary, 1);
+    QVERIFY(!join.newSlot);
+    engine->updateDragInsertPreview(join);
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("a")), state->strip().columnOfWindow(QStringLiteral("b")));
+
+    // The STATIONARY cursor must still resolve inside the merged column —
+    // never to a new column beyond the strip end.
+    const DragTarget next = engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), cursor);
+    QVERIFY(!next.newSlot);
+    engine->updateDragInsertPreview(next);
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("a")), state->strip().columnOfWindow(QStringLiteral("b")));
+    QCOMPARE(state->strip().columnCount(), 1);
+    engine->cancelDragInsertPreview();
 }
 
 void TestScrollEngineDragInsert::cancelRestoresSoloColumnSlot()
