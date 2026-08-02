@@ -158,6 +158,7 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
     out.multipass = obj.value(QLatin1String("multipass")).toBool(false);
     out.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
     out.depthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
+    out.halfFloatBuffers = obj.value(QLatin1String("halfFloatBuffers")).toBool(true);
     out.wallpaper = obj.value(QLatin1String("wallpaper")).toBool(false);
     out.bufferScale = obj.value(QLatin1String("bufferScale")).toDouble(1.0);
     out.bufferWrap = obj.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp"));

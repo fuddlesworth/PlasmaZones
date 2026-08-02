@@ -521,6 +521,28 @@ void ShaderNodeRhi::setBufferScale(qreal scale)
         return;
     }
     m_bufferScale = clamped;
+    resetBufferTargets();
+}
+
+void ShaderNodeRhi::setHalfFloatBuffers(bool enable)
+{
+    if (m_halfFloatBuffers == enable) {
+        return;
+    }
+    m_halfFloatBuffers = enable;
+    // The format is baked into every buffer texture AND its render-pass
+    // descriptor (pipelines are compiled against the pass format), so a flip
+    // rebuilds the same set a size change does.
+    resetBufferTargets();
+}
+
+// Shared teardown for any change that invalidates the buffer-pass targets
+// (size via setBufferScale, texel format via setHalfFloatBuffers): textures,
+// render targets, pass descriptors, the pipelines compiled against them, and
+// every SRB that references a buffer texture. ensureBufferTarget rebuilds
+// lazily on the next frame.
+void ShaderNodeRhi::resetBufferTargets()
+{
     m_bufferTexture.reset();
     m_bufferTextureB.reset();
     m_bufferRenderTarget.reset();

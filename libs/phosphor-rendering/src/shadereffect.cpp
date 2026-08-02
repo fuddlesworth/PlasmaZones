@@ -12,7 +12,9 @@
 #include <QElapsedTimer>
 #include <QMutexLocker>
 #include <QPainter>
+#include <QPointer>
 #include <QQuickWindow>
+#include <QRunnable>
 #if QT_VERSION < QT_VERSION_CHECK(6, 11, 0)
 #include <QScreen>
 #endif
@@ -203,6 +205,14 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
                     if (ShaderNodeRhi* node = m_renderNode.load(std::memory_order_acquire)) {
                         node->releaseResources();
                     }
+                    // The invalidation that follows this signal deletes the
+                    // scene graph's nodes, so the tracked pointer is about to
+                    // dangle. Null it here (render thread, before deletion)
+                    // so late readers — the destructor's sever-backpointer
+                    // guard, releaseIdleGraphicsResources' render job — see
+                    // null instead of freed memory. The next updatePaintNode
+                    // re-registers whatever node it gets handed.
+                    m_renderNode.store(nullptr, std::memory_order_release);
                     m_shaderDirty.store(true);
                 },
                 Qt::DirectConnection);
@@ -664,6 +674,58 @@ void ShaderEffect::reloadShader()
     update();
 }
 
+void ShaderEffect::releaseIdleGraphicsResources()
+{
+    QQuickWindow* win = window();
+    if (!win) {
+        return;
+    }
+    // The node is owned and only ever touched by the scene-graph thread, and
+    // an idle (typically invisible) item never reaches updatePaintNode — so
+    // the release must travel as a render job, which the render loop runs on
+    // that thread at the next opportunity even when no frame is pending
+    // (QQuickWindow::NoStage).
+    //
+    // Lifetime, spelled out because it is the whole safety argument:
+    //   • The job re-reads m_renderNode when it RUNS, on the render thread —
+    //     the same thread that deletes nodes — so it can never race a node
+    //     teardown. Every path that can retire the node without immediately
+    //     re-storing (updatePaintNode's width<=0 branch, windowChanged, and
+    //     scene-graph invalidation via the sceneGraphAboutToStop hook above)
+    //     nulls the atomic first.
+    //   • The QPointer guards effect deletion. A ShaderEffect dies either
+    //     with its window (whose destructor stops the render thread and
+    //     flushes or discards pending jobs before QML content is deleted) or
+    //     under an alive window on the GUI thread while that window's render
+    //     loop is between frames — in both orders the deref happens-after
+    //     the QPointer clear or before the delete begins.
+    //   • Mirrors the sceneGraphAboutToStop hook's body: resources released,
+    //     m_shaderDirty raised so the next painted frame re-bakes.
+    class ReleaseIdleResourcesJob : public QRunnable
+    {
+    public:
+        explicit ReleaseIdleResourcesJob(ShaderEffect* effect)
+            : m_effect(effect)
+        {
+        }
+        void run() override
+        {
+            ShaderEffect* effect = m_effect.data();
+            if (!effect) {
+                return;
+            }
+            if (ShaderNodeRhi* node = effect->m_renderNode.load(std::memory_order_acquire)) {
+                node->releaseResources();
+            }
+            effect->m_shaderDirty.store(true);
+        }
+
+    private:
+        QPointer<ShaderEffect> m_effect;
+    };
+    win->scheduleRenderJob(new ReleaseIdleResourcesJob(this), QQuickWindow::NoStage);
+}
+
 // ============================================================================
 // Status Management
 // ============================================================================
@@ -815,6 +877,7 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setBufferShaderPaths(effectivePaths);
     node->setBufferFeedback(m_bufferFeedback);
     node->setBufferScale(m_bufferScale);
+    node->setHalfFloatBuffers(m_halfFloatBuffers);
     node->setBufferWrap(m_bufferWrap);
     if (!m_bufferWraps.isEmpty()) {
         node->setBufferWraps(m_bufferWraps);

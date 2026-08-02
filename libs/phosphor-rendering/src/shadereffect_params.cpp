@@ -385,6 +385,16 @@ void ShaderEffect::setBufferScale(qreal scale)
     update();
 }
 
+void ShaderEffect::setHalfFloatBuffers(bool enable)
+{
+    if (m_halfFloatBuffers == enable) {
+        return;
+    }
+    m_halfFloatBuffers = enable;
+    Q_EMIT halfFloatBuffersChanged();
+    update();
+}
+
 void ShaderEffect::setBufferWrap(const QString& wrap)
 {
     const QString use = ShaderNodeRhi::normalizeWrapMode(wrap);

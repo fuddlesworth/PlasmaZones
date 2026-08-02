@@ -6,6 +6,7 @@
     "author": "PlasmaZones",
     "version": "1.0",
     "multipass": true,
+    "halfFloatBuffers": false,
     "bufferShaders": [
         "pass0.frag",
         "pass1.frag",

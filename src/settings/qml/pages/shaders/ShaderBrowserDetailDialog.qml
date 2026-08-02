@@ -633,6 +633,7 @@ Kirigami.Dialog {
                                     "bufferShaderPaths": root._shaderInfo.bufferShaderPaths || [],
                                     "bufferFeedback": root._shaderInfo.bufferFeedback || false,
                                     "bufferScale": root._shaderInfo.bufferScale !== undefined ? root._shaderInfo.bufferScale : 1,
+                                    "halfFloatBuffers": root._shaderInfo.halfFloatBuffers !== undefined ? root._shaderInfo.halfFloatBuffers : true,
                                     "bufferWrap": root._shaderInfo.bufferWrap || "clamp",
                                     "bufferWraps": root._shaderInfo.bufferWraps || [],
                                     "bufferFilter": root._shaderInfo.bufferFilter || "linear",

@@ -230,6 +230,7 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(info.bufferShaderPaths));
     writeQmlProperty(window, QStringLiteral("bufferFeedback"), info.bufferFeedback);
     writeQmlProperty(window, QStringLiteral("bufferScale"), info.bufferScale);
+    writeQmlProperty(window, QStringLiteral("halfFloatBuffers"), info.halfFloatBuffers);
     writeQmlProperty(window, QStringLiteral("bufferWrap"), info.bufferWrap);
     writeQmlProperty(window, QStringLiteral("bufferWraps"), QVariant::fromValue(info.bufferWraps));
     writeQmlProperty(window, QStringLiteral("bufferFilter"), info.bufferFilter);

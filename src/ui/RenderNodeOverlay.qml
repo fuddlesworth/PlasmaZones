@@ -35,6 +35,7 @@ Window {
     property var bufferShaderPaths: []
     property bool bufferFeedback: false
     property real bufferScale: 1
+    property bool halfFloatBuffers: true
     property string bufferWrap: "clamp"
     property var zones: []
     property int zoneCount: 0
@@ -97,6 +98,7 @@ Window {
         bufferShaderPaths: root.bufferShaderPaths
         bufferFeedback: root.bufferFeedback
         bufferScale: root.bufferScale
+        halfFloatBuffers: root.halfFloatBuffers
         bufferWrap: root.bufferWrap
         zones: root.zones
         zoneCount: root.zoneCount

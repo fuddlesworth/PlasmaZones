@@ -247,6 +247,7 @@ void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetad
         }
         effect.setBufferFeedback(md.bufferFeedback);
         effect.setBufferScale(md.bufferScale);
+        effect.setHalfFloatBuffers(md.halfFloatBuffers);
         effect.setBufferWrap(md.bufferWrap);
         if (!md.bufferWraps.isEmpty())
             effect.setBufferWraps(md.bufferWraps);

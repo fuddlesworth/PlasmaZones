@@ -266,6 +266,22 @@ private Q_SLOTS:
         QVERIFY(qFuzzyCompare(item.bufferScale(), 0.5));
     }
 
+    void testZoneShaderItem_halfFloatBuffersDefaultsTrue()
+    {
+        ZoneShaderItem item;
+
+        // Half-float buffers are the safe default: a pack that never declared
+        // the key keeps RGBA16F intermediates (HDR / signed-data / feedback
+        // safe). Only an explicit "halfFloatBuffers": false opts into RGBA8.
+        QCOMPARE(item.halfFloatBuffers(), true);
+
+        item.setHalfFloatBuffers(false);
+        QCOMPARE(item.halfFloatBuffers(), false);
+
+        item.setHalfFloatBuffers(true);
+        QCOMPARE(item.halfFloatBuffers(), true);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // P2: Edge cases
     // ═══════════════════════════════════════════════════════════════════════════

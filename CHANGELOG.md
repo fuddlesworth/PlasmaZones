@@ -17,6 +17,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **Breaking D-Bus interface split**: the shared engine transport moved from org.plasmazones.Autotile to the engine-neutral org.plasmazones.Tiling interface, which serves every tiling-family engine. The moved surface covers the window lifecycle calls (windowOpened, windowsOpenedBatch, windowClosed, windowMinSizeUpdated, notifyWindowFocused), the tile-request and float signals (windowsTileRequested, focusWindowRequested, windowFloatingChanged, tilingChanged, windowsReleasedFromTiling), the retile methods, the enabled property with its change signal, and the screen set, now published as the union property managedScreens. The org.plasmazones.Autotile name still exists but is narrower now, carrying algorithm selection, master operations, focus cycling, and autotile configuration beside the new org.plasmazones.Scrolling interface. Check any external script against the new interface files before relying on it ([#852](https://github.com/fuddlesworth/PlasmaZones/pull/852)).
+- **Decoration animations now play on the focused window only by default**: continuously animated decoration packs used to redraw every decorated window on every frame. The new default animates just the window you are working in, and unfocused windows hold their last frame. The old behavior is one switch away in Settings under Window Appearance.
+- **The zone overlay frees its graphics memory when idle**: after a drag ends and the short grace period passes, the overlay now releases its render targets and textures instead of holding them for the daemon's whole lifetime. On integrated graphics that memory comes out of system RAM, so an idle PlasmaZones now gives it back.
+- **Overlay shader packs can declare 8-bit buffers**: a multipass overlay pack whose intermediate buffers hold plain color can set `"halfFloatBuffers": false` in its metadata to halve the memory bandwidth its buffer passes consume. The bundled Nexus Cascade pack does so. Packs that never set the key keep full half-float precision, so nothing changes visually unless a pack opts in.
+
+### Fixed
+
+- **Much less GPU work during window animations, especially on integrated graphics**: while any window animation played, PlasmaZones forced a full repaint of every monitor on every frame, and a decorated window was fully re-rendered and re-composited each frame even when its content had not changed. Animations now repaint only the screens they actually touch, and a decorated window's cached content survives the animation. On laptops and other machines with integrated graphics this is the difference between a stuttering move animation and a smooth one.
 
 ## [3.3.3] - 2026-07-31
 

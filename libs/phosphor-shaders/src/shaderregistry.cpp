@@ -255,6 +255,11 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     info.bufferScale = qBound(kMinBufferScale, scale, kMaxBufferScale);
     info.bufferWrap = normalizeWrapMode(root.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp")));
     info.useDepthBuffer = root.value(QLatin1String("depthBuffer")).toBool(false);
+    // Default TRUE: a buffer may store HDR radiance, signed data, or a
+    // feedback accumulator, none of which survive RGBA8. A pack whose buffers
+    // hold plain clamped [0,1] colour declares "halfFloatBuffers": false to
+    // halve its buffer bandwidth.
+    info.halfFloatBuffers = root.value(QLatin1String("halfFloatBuffers")).toBool(true);
 
     const QJsonArray bufferWrapsArray = root.value(QLatin1String("bufferWraps")).toArray();
     if (!bufferWrapsArray.isEmpty()) {
@@ -306,6 +311,7 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
         info.bufferScale = 1.0;
         info.bufferWrap = QStringLiteral("clamp");
         info.bufferFilter = QStringLiteral("linear");
+        info.halfFloatBuffers = true;
     }
 
     // Parameters
@@ -857,6 +863,7 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
     map[QStringLiteral("bufferShaderPaths")] = info.bufferShaderPaths;
     map[QStringLiteral("bufferFeedback")] = info.bufferFeedback;
     map[QStringLiteral("bufferScale")] = info.bufferScale;
+    map[QStringLiteral("halfFloatBuffers")] = info.halfFloatBuffers;
     map[QStringLiteral("bufferWrap")] = info.bufferWrap;
     if (!info.bufferWraps.isEmpty()) {
         map[QStringLiteral("bufferWraps")] = QVariant::fromValue(info.bufferWraps);

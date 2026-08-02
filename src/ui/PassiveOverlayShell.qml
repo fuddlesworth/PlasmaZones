@@ -1015,6 +1015,7 @@ Window {
         property var bufferShaderPaths: []
         property bool bufferFeedback: false
         property real bufferScale: 1
+        property bool halfFloatBuffers: true
         property string bufferWrap: "clamp"
         property int zoneCount: 0
         property int highlightedCount: 0
@@ -1041,6 +1042,14 @@ Window {
         function reloadShader() {
             if (mainOverlayLoader.item && mainOverlayLoader.item.reloadShader)
                 mainOverlayLoader.item.reloadShader();
+        }
+
+        // Idle-quiesce hook (OverlayService::scheduleIdleQuiesce): frees the
+        // shader item's GPU resources after the idle grace window. No-op for
+        // the rectangle content, which has no releaseIdleGraphicsResources.
+        function releaseIdleGraphicsResources() {
+            if (mainOverlayLoader.item && mainOverlayLoader.item.releaseIdleGraphicsResources)
+                mainOverlayLoader.item.releaseIdleGraphicsResources();
         }
 
         anchors.fill: parent
@@ -1100,6 +1109,7 @@ Window {
                 bufferShaderPaths: mainOverlaySlot.bufferShaderPaths
                 bufferFeedback: mainOverlaySlot.bufferFeedback
                 bufferScale: mainOverlaySlot.bufferScale
+                halfFloatBuffers: mainOverlaySlot.halfFloatBuffers
                 bufferWrap: mainOverlaySlot.bufferWrap
                 zones: mainOverlaySlot.zones
                 zoneCount: mainOverlaySlot.zoneCount

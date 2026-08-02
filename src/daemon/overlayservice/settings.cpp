@@ -465,6 +465,19 @@ void OverlayService::scheduleIdleQuiesce()
             if (m_audioProvider && m_audioProvider->isRunning()) {
                 m_audioProvider->stop();
             }
+            // Timers alone leave the GPU memory pinned: the kept-alive windows'
+            // shader nodes hold full-screen buffer FBOs, pipelines, and uploaded
+            // wallpaper/label textures for the daemon's whole lifetime after the
+            // first drag — on an iGPU that is system RAM taken from the shared
+            // pool. Free them now; they rebuild lazily on the first frame of the
+            // next show, well inside the grace window's cost model (a quick
+            // re-trigger cancels this timer before it fires, so a warm resume
+            // never pays the rebuild).
+            for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+                if (QQuickItem* slot = it.value().mainOverlaySlot()) {
+                    QMetaObject::invokeMethod(slot, "releaseIdleGraphicsResources");
+                }
+            }
         });
     }
     m_idleQuiesceTimer->start();

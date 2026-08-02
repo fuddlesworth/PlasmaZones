@@ -104,6 +104,8 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
                    bufferShaderPathsChanged FINAL)
     Q_PROPERTY(bool bufferFeedback READ bufferFeedback WRITE setBufferFeedback NOTIFY bufferFeedbackChanged FINAL)
     Q_PROPERTY(qreal bufferScale READ bufferScale WRITE setBufferScale NOTIFY bufferScaleChanged FINAL)
+    Q_PROPERTY(
+        bool halfFloatBuffers READ halfFloatBuffers WRITE setHalfFloatBuffers NOTIFY halfFloatBuffersChanged FINAL)
     Q_PROPERTY(QString bufferWrap READ bufferWrap WRITE setBufferWrap NOTIFY bufferWrapChanged FINAL)
     Q_PROPERTY(QStringList bufferWraps READ bufferWraps WRITE setBufferWraps NOTIFY bufferWrapsChanged FINAL)
     Q_PROPERTY(QString bufferFilter READ bufferFilter WRITE setBufferFilter NOTIFY bufferFilterChanged FINAL)
@@ -376,6 +378,12 @@ public:
     }
     void setBufferScale(qreal scale);
 
+    bool halfFloatBuffers() const
+    {
+        return m_halfFloatBuffers;
+    }
+    void setHalfFloatBuffers(bool enable);
+
     QString bufferWrap() const
     {
         return m_bufferWrap;
@@ -642,6 +650,24 @@ public:
     /** Force reload of shader from source (callable from QML). */
     Q_INVOKABLE void reloadShader();
 
+    /**
+     * Release the render node's RHI resources (buffer FBOs, pipelines,
+     * uploaded textures) while the item sits idle, without destroying the
+     * node, the item, or the window. Safe to call from the GUI thread: the
+     * release runs as a scheduled render job on the scene-graph thread, the
+     * only thread allowed to touch the node. Everything re-creates lazily
+     * through the ensure* paths on the next painted frame (the same recovery
+     * the device-loss path exercises), so the cost of calling this on a
+     * window that immediately resumes is one warm-up frame, not a teardown.
+     *
+     * Intended for long-lived, kept-alive windows whose content goes
+     * invisible for long stretches (the daemon's idle-quiesced overlays):
+     * an invisible item never reaches updatePaintNode, so without this its
+     * full-screen render targets stay pinned in (shared, on an iGPU) memory
+     * for the window's whole lifetime.
+     */
+    Q_INVOKABLE void releaseIdleGraphicsResources();
+
 Q_SIGNALS:
     void iTimeChanged();
     void iTimeDeltaChanged();
@@ -659,6 +685,7 @@ Q_SIGNALS:
     void bufferShaderPathsChanged();
     void bufferFeedbackChanged();
     void bufferScaleChanged();
+    void halfFloatBuffersChanged();
     void bufferWrapChanged();
     void bufferWrapsChanged();
     void bufferFilterChanged();
@@ -847,6 +874,7 @@ private:
     QStringList m_bufferShaderPaths;
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
+    bool m_halfFloatBuffers = true;
     QString m_bufferWrap = QStringLiteral("clamp");
     QStringList m_bufferWraps;
     QString m_bufferFilter = QStringLiteral("linear");

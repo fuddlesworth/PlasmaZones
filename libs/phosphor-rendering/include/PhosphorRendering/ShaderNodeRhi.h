@@ -266,6 +266,10 @@ public:
     void setBufferShaderPaths(const QStringList& paths);
     void setBufferFeedback(bool enable);
     void setBufferScale(qreal scale);
+    /// Buffer-pass texel format: RGBA16F when true (the default — safe for HDR,
+    /// signed-data, and feedback buffers), RGBA8 when a pack's metadata declares
+    /// its buffers hold plain clamped colour (`"halfFloatBuffers": false`).
+    void setHalfFloatBuffers(bool enable);
     void setBufferWrap(const QString& wrap);
     void setBufferWraps(const QStringList& wraps);
     void setBufferFilter(const QString& filter);
@@ -339,6 +343,10 @@ private:
     bool ensureBufferTarget();
     bool ensureDummyChannelResources(QRhi* rhi);
     bool ensureBufferSampler(QRhi* rhi, int index);
+    /// Drop every buffer-pass target and everything compiled against it
+    /// (render targets, pass descriptors, pipelines, SRBs). Shared by
+    /// setBufferScale and setHalfFloatBuffers; ensureBufferTarget rebuilds.
+    void resetBufferTargets();
     /// Snapshot the node's live members into a UboFrameState and hand it to the
     /// installed UBO profile's fill(). @p rhi supplies the NDC Y-orientation
     /// the profile folds into qt_Matrix.
@@ -448,6 +456,12 @@ private:
     QStringList m_bufferPaths;
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
+    // Buffer-pass texel format. Half-float by default so packs that store HDR
+    // radiance, signed data, or feedback accumulators keep full precision; a
+    // pack whose buffers hold plain clamped [0,1] colour opts down to RGBA8
+    // via metadata to halve buffer bandwidth (which is what integrated GPUs
+    // are starved of).
+    bool m_halfFloatBuffers = true;
     std::array<QString, kMaxBufferPasses> m_bufferWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
                                                            QStringLiteral("clamp"), QStringLiteral("clamp")};
     QString m_bufferWrapDefault = QStringLiteral("clamp");

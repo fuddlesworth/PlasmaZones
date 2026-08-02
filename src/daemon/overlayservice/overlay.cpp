@@ -779,6 +779,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
         writeQmlProperty(slot, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(QStringList()));
         writeQmlProperty(slot, QStringLiteral("bufferFeedback"), false);
         writeQmlProperty(slot, QStringLiteral("bufferScale"), 1.0);
+        writeQmlProperty(slot, QStringLiteral("halfFloatBuffers"), true);
         writeQmlProperty(slot, QStringLiteral("bufferWrap"), QStringLiteral("clamp"));
         writeQmlProperty(slot, QStringLiteral("bufferWraps"), QStringList());
         writeQmlProperty(slot, QStringLiteral("bufferFilter"), QStringLiteral("linear"));

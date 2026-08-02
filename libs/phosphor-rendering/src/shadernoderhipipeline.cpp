@@ -100,11 +100,19 @@ bool ShaderNodeRhi::ensureBufferTarget()
                 << "buffer passes: only the last pass's depth output will be available in the image pass";
         }
     }
-    auto createTextureAndRT = [rhi, bufferSize, this](std::unique_ptr<QRhiTexture>& tex,
-                                                      std::unique_ptr<QRhiTextureRenderTarget>& rt,
-                                                      std::unique_ptr<QRhiRenderPassDescriptor>& rpd) -> bool {
-        tex.reset(rhi->newTexture(QRhiTexture::RGBA16F, bufferSize, 1,
-                                  QRhiTexture::RenderTarget | QRhiTexture::UsedWithLoadStore));
+    // Buffer texel format: RGBA16F unless the pack's metadata declares its
+    // buffers hold plain clamped [0,1] colour ("halfFloatBuffers": false).
+    // At full resolution a half-float buffer pass writes+reads twice the
+    // bytes RGBA8 does, and buffer bandwidth is the scarce resource on
+    // integrated GPUs — but the format is a per-pack contract, because a
+    // buffer can legitimately store HDR radiance, signed data, or a feedback
+    // accumulator whose decay quantises to a standstill at 8 bits.
+    const QRhiTexture::Format bufferFormat = m_halfFloatBuffers ? QRhiTexture::RGBA16F : QRhiTexture::RGBA8;
+    auto createTextureAndRT = [rhi, bufferSize, bufferFormat,
+                               this](std::unique_ptr<QRhiTexture>& tex, std::unique_ptr<QRhiTextureRenderTarget>& rt,
+                                     std::unique_ptr<QRhiRenderPassDescriptor>& rpd) -> bool {
+        tex.reset(
+            rhi->newTexture(bufferFormat, bufferSize, 1, QRhiTexture::RenderTarget | QRhiTexture::UsedWithLoadStore));
         if (!tex->create()) {
             return false;
         }

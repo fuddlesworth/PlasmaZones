@@ -21,6 +21,7 @@ Item {
     property var bufferShaderPaths: []
     property bool bufferFeedback: false
     property real bufferScale: 1
+    property bool halfFloatBuffers: true
     property string bufferWrap: "clamp"
     property var zones: []
     property int zoneCount: 0
@@ -77,6 +78,13 @@ Item {
 
     function reloadShader() {
         zoneShaderRenderer.reloadShader();
+    }
+
+    // Idle-quiesce hook: the daemon calls this (via the hosting slot) after
+    // the idle grace window so the shader item's GPU resources are freed
+    // while the overlay sits invisible. They rebuild on the next painted frame.
+    function releaseIdleGraphicsResources() {
+        zoneShaderRenderer.releaseIdleGraphicsResources();
     }
 
     // Mirrors ZoneOverlayContent.isZoneHighlighted() so the ZoneItem
@@ -136,6 +144,7 @@ Item {
             property var bufferShaderPaths: root.bufferShaderPaths
             property bool bufferFeedback: root.bufferFeedback
             property real bufferScale: root.bufferScale
+            property bool halfFloatBuffers: root.halfFloatBuffers
             property string bufferWrap: root.bufferWrap
             property var zones: root.zones
             property int hoveredZoneIndex: root.hoveredZoneIndex
