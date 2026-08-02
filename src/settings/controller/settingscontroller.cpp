@@ -13,6 +13,7 @@
 #include "settings/pages/snappingzoneselectorcontroller.h"
 #include "settings/pages/tilingalgorithmcontroller.h"
 #include "settings/pages/windowappearancecontroller.h"
+#include "settings/pages/scrollingbehaviorcontroller.h"
 #include "settings/pages/tilingbehaviorcontroller.h"
 #include "settings/utils/virtualscreenutils.h"
 #include "config/configbackends.h"
@@ -543,6 +544,7 @@ SettingsController::SettingsController(QObject* parent)
     // trigger-list conversion.
     m_snappingBehaviorPage = new SnappingBehaviorController(m_settings, this);
     m_tilingBehaviorPage = new TilingBehaviorController(m_settings, this);
+    m_scrollingBehaviorPage = new ScrollingBehaviorController(m_settings, this);
 
     // Snapping→Zone Selector page sub-controller. Pure CONSTANT bounds
     // facade over ConfigDefaults — no Settings wiring required.

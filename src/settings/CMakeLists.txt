@@ -147,6 +147,8 @@ set(plasmazones_settings_SRCS
     pages/tilingalgorithmcontroller.cpp
     pages/tilingbehaviorcontroller.h
     pages/tilingbehaviorcontroller.cpp
+    pages/scrollingbehaviorcontroller.h
+    pages/scrollingbehaviorcontroller.cpp
     # PhosphorControl integration scaffold. PageAdapter wraps existing
     # plain-QObject page controllers so they can be registered with
     # PhosphorControl::PageRegistry without changing each controller's
@@ -327,6 +329,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/scrolling/ScrollingTabsPage.qml
         qml/pages/scrolling/ScrollingWindowPage.qml
         qml/pages/scrolling/ScrollingWindowHandlingCard.qml
+        qml/pages/scrolling/ScrollingDragInsertCard.qml
         qml/pages/scrolling/ScrollingFocusCard.qml
         qml/pages/scrolling/PresetListEditor.qml
         qml/pages/scrolling/TabIndicatorColorRow.qml

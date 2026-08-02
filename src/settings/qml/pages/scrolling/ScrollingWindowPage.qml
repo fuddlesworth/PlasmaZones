@@ -25,6 +25,10 @@ SettingsFlickable {
             Layout.fillWidth: true
         }
 
+        ScrollingDragInsertCard {
+            Layout.fillWidth: true
+        }
+
         ScrollingFocusCard {
             Layout.fillWidth: true
         }
