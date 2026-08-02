@@ -139,6 +139,22 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// transparent, so a pack must style a fallback on that gate.
     bool needsBackdrop = false;
 
+    /// Declares that the pack never writes a texel with alpha below the
+    /// input's alpha INSIDE the window's natural frame rect — its drawing is
+    /// confined to the transparent outer margin (shadow, glow: their halo is
+    /// gated on `1 - base.a`), so the client's own opaque region remains
+    /// truthful for the composited output. When EVERY drawing pack in a
+    /// window's chain declares this (and nothing else thins the interior:
+    /// no live transition, no resolved opacity below 1), the kwin effect
+    /// skips `setTranslucent()` on the window, which keeps KWin's occlusion
+    /// culling alive — windows fully behind it are neither damage-tracked
+    /// nor repainted. A pack that draws ANYWHERE inside the frame at partial
+    /// alpha (every border pack: the outer-radius corner arc and the band
+    /// feather both thin frame texels; glass/frost/opacity-tint: they dim
+    /// content) must leave this false, or stale pixels ghost through its
+    /// translucent texels. Default false — the safe direction.
+    bool interiorOpaque = false;
+
     /// Declares that the pack draws a window border of its own (the border
     /// family: border, border-sweep, border-rgb, ...). Semantic contract
     /// flag, deliberately NOT keyed off the browsing category: a

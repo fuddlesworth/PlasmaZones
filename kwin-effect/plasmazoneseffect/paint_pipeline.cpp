@@ -581,8 +581,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         }
     }
 
-    // A decorated window is TRANSLUCENT. Clear its opaque region so KWin keeps
-    // compositing whatever sits behind it.
+    // A decorated window is TRANSLUCENT — unless its whole chain proves otherwise.
+    // Clear its opaque region so KWin keeps compositing whatever sits behind it.
     //
     // This is an OCCLUSION hint, not a rendering one, and it cannot be expressed in
     // the fragment stage: KWin decides what to composite BEHIND a window before any
@@ -590,9 +590,15 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // already skipped whatever is underneath and the pack blends against stale
     // framebuffer pixels.
     //
-    // It is unconditional because EVERY chain is in fact translucent, and that is a
-    // property of the shader, not a conservative guess. Reading
-    // data/surface/shared/surface_lib.glsl:
+    // The cost is real and double-ended. In KWin 6.7's workspacescene.cpp, a
+    // PAINT_WINDOW_TRANSLUCENT window contributes nothing to the opaque
+    // accumulation in BOTH collectDamage() (damage from windows underneath is
+    // never culled away) and paintSimpleScreen() (`visible -= deviceOpaque` is
+    // skipped, so windows underneath are genuinely painted). A video playing
+    // fully behind a maximized decorated window keeps driving full composites.
+    //
+    // Why the default is still translucent: for most chains it is a property of
+    // the shader, not a conservative guess. Reading data/surface/shared/surface_lib.glsl:
     //
     //   borderComposite  ba = edge * insideMask * col.a — the band's output alpha IS
     //                    the border colour's alpha, and a translucent border colour is
@@ -604,12 +610,18 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     //                    the outermost ring of the frame partially transparent
     //                    regardless.
     //
-    // So a chain covering every texel of the frame would need a zero-width border —
-    // one that draws nothing — and even that is feathered. Deriving a per-window
-    // "is it opaque" flag was tried and deleted: its true branch could not fire, and
-    // it read as a fix while changing nothing. Proving opacity would need a pack
-    // metadata contract that does not exist (metadata declares what a pack NEEDS —
-    // needsBackdrop, handlesOpacity, padding — never that its output is total).
+    // So every border-family chain thins frame texels and must stay translucent. But
+    // the margin-only packs (shadow, glow) provably do NOT: their halo is gated on
+    // `1 - base.a` (haloFalloff) and composited additively over the transparent
+    // margin (marginComposite), so the interior passes through byte-for-byte and
+    // the client's own opaque region stays truthful. That is exactly the metadata
+    // contract an earlier attempt at this flag lacked: packs now declare
+    // `interiorOpaque` (SurfaceShaderEffect), the chain sweep in
+    // updateWindowDecoration ANDs it into WindowDecoration::chainInteriorOpaque,
+    // and a chain that qualifies keeps KWin's occlusion culling — PROVIDED the
+    // folded opacity is at rest, since the failed-compile fail-safe dims the
+    // CAPTURE itself (see foldedOpacity's doc) and that thins the interior with
+    // no pack involved.
     //
     // Note what this is NOT for. It used to be set to keep the window in KWin's paint
     // set so drawWindow kept firing on idle frames. That was a repaint-scheduling hack
@@ -618,7 +630,10 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // The cases where the composite changes with no window damage (a focus cross-fade,
     // an iTime pack, a backdrop refresh) schedule their own repaints in postPaintScreen.
     if (!transformDriven && decorated) {
-        data.setTranslucent();
+        const bool interiorOpaque = decoIt->chainInteriorOpaque && decoIt->foldedOpacity >= 1.0;
+        if (!interiorOpaque) {
+            data.setTranslucent();
+        }
     }
 
     OffscreenEffect::prePaintWindow(view, w, data);

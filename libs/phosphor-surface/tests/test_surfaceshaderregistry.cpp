@@ -223,6 +223,31 @@ private Q_SLOTS:
         QVERIFY(!s.toJson().contains(QLatin1String("needsBackdrop")));
     }
 
+    void interiorOpaque_flag_parses_and_roundtrips()
+    {
+        // "interiorOpaque" is the margin-only promise (shadow / glow): the
+        // pack never thins a texel inside the natural frame rect, so a chain
+        // of such packs keeps the client's opaque region truthful and the
+        // compositor can skip setTranslucent(). Pin the parse, the FALSE
+        // default (the safe direction: an undeclared pack is assumed to
+        // thin the interior), and the toJson round-trip.
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("shadow"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("interiorOpaque"), true);
+
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(meta);
+        QVERIFY(e.interiorOpaque);
+        QVERIFY(SurfaceShaderEffect::fromJson(e.toJson()).interiorOpaque);
+
+        QJsonObject metaPlain;
+        metaPlain.insert(QLatin1String("id"), QStringLiteral("border"));
+        metaPlain.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        const SurfaceShaderEffect s = SurfaceShaderEffect::fromJson(metaPlain);
+        QVERIFY(!s.interiorOpaque);
+        QVERIFY(!s.toJson().contains(QLatin1String("interiorOpaque")));
+    }
+
     void providesBorder_flag_parses_and_roundtrips()
     {
         // "providesBorder" marks a decoration pack that renders the window

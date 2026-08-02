@@ -450,6 +450,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
     int outerPadding = 0;
     bool needsBackdrop = false;
+    // AND over the chain's DRAWING packs: a registry-unknown pack draws
+    // nothing, so it neither qualifies nor vetoes. An all-unknown chain folds
+    // nothing and presents the raw capture, whose interior is exactly the
+    // client's content — interior-opaque by construction, so `true` is the
+    // right answer there too.
+    bool chainInteriorOpaque = true;
     // Theme colours for the pack flag resolver (below). Accent / inactive come
     // from the daemon-plumbed border colours (same source the plain-border layer
     // uses); background / foreground come from the compositor's palette, which
@@ -467,6 +473,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // Any needsBackdrop pack in the chain switches the window onto the
         // composite path with a per-frame backdrop capture (see paintWindow).
         needsBackdrop = needsBackdrop || eff.needsBackdrop;
+        chainInteriorOpaque = chainInteriorOpaque && eff.interiorOpaque;
         QVariantMap packOverrides = allPackParams.value(packId).toMap();
         // Honour the pack's host-consumed theme flags (border useThemeNeutral /
         // useSystemAccent, glow/shadow useThemeTint) via the shared resolver, so
@@ -495,6 +502,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
+    wb.chainInteriorOpaque = chainInteriorOpaque;
     // The plain opacity-tint layer folds the window's resolved opacity
     // (config default, SetOpacity rule winning) into its pack param — the
     // chain BAKES the window's opacity. The flag's one runtime job is the
