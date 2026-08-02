@@ -544,11 +544,13 @@ void Settings::save()
 {
     purgeStaleKeys();
 
-    // Flush every Store-declared key so the on-disk file always carries
-    // the complete declared set after save, not just the keys a user
-    // happened to mutate. Keys that haven't been written yet fall back to
-    // the schema default via Store::readVariant, and the write path runs
-    // the validator so clamped/normalized values land as the canonical form.
+    // Flush every Store-declared key through write() so clamp /
+    // canonicalization applies to whatever the file holds. Persistence is
+    // SPARSE: write() stores a default-equal value as absence, so this loop
+    // also prunes frozen defaults (values an older version's save stamped
+    // that still equal the current default) — a later default retune then
+    // reaches existing installs instead of being shadowed. Only values that
+    // differ from their schema default land on disk.
     //
     // INVARIANT: this loop iterates schema-declared keys only. Any key
     // present in the backing store but NOT in the schema is ignored here

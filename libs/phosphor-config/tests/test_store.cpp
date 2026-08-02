@@ -142,6 +142,87 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
     }
 
+    /// Sparse persistence: a value equal to the schema default is stored as
+    /// key ABSENCE. A stored default freezes the value at whatever the
+    /// default was on the day it was written, so a later default retune
+    /// never reaches a store that has been saved since — the exact
+    /// shadowing that kept retuned shortcut defaults from reaching
+    /// existing installs.
+    void write_defaultEqualValueStoredAsAbsence()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+        QSignalSpy spy(&store, &Store::changed);
+
+        // Writing the default onto a pristine key is a full no-op: nothing
+        // stored, nothing announced.
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 800);
+        QCOMPARE(spy.count(), 0);
+        {
+            auto g = backend.group(QStringLiteral("Window"));
+            QVERIFY(!g->hasKey(QStringLiteral("Width")));
+        }
+
+        // A non-default value persists and announces.
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
+        QCOMPARE(spy.count(), 1);
+        {
+            auto g = backend.group(QStringLiteral("Window"));
+            QVERIFY(g->hasKey(QStringLiteral("Width")));
+        }
+
+        // Writing the default back DELETES the key and announces (the
+        // observable value moved from 1024 to 800), and the read path keeps
+        // answering the default from absence.
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 800);
+        QCOMPARE(spy.count(), 2);
+        {
+            auto g = backend.group(QStringLiteral("Window"));
+            QVERIFY(!g->hasKey(QStringLiteral("Width")));
+        }
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 800);
+    }
+
+    /// A frozen default — a stored value equal to the CURRENT default,
+    /// stamped by an older materialise-everything save — is pruned by the
+    /// flush-loop write pattern (write of the value just read), silently:
+    /// the observable value does not move, so no changed() fires, but the
+    /// key leaves the file so a future default retune reaches this store.
+    void write_prunesFrozenDefaultSilently()
+    {
+        JsonBackend backend(m_path);
+        {
+            auto g = backend.group(QStringLiteral("Window"));
+            g->writeInt(QStringLiteral("Width"), 800);
+        }
+        Store store(&backend, makeSchema());
+        QSignalSpy spy(&store, &Store::changed);
+
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"),
+                    store.readVariant(QStringLiteral("Window"), QStringLiteral("Width")));
+
+        QCOMPARE(spy.count(), 0);
+        auto g = backend.group(QStringLiteral("Window"));
+        QVERIFY(!g->hasKey(QStringLiteral("Width")));
+    }
+
+    /// reset() deletes the stored key rather than stamping the default —
+    /// the deletion IS the reset under sparse persistence.
+    void reset_deletesStoredKey()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
+        store.reset(QStringLiteral("Window"), QStringLiteral("Width"));
+
+        {
+            auto g = backend.group(QStringLiteral("Window"));
+            QVERIFY(!g->hasKey(QStringLiteral("Width")));
+        }
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 800);
+    }
+
     void exportToJsonIncludesEveryDeclaredKey()
     {
         JsonBackend backend(m_path);

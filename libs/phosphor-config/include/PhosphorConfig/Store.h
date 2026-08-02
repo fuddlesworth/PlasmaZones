@@ -93,7 +93,14 @@ public:
 
     /// Write a value. If the schema declares an @c expectedType for this
     /// key and @p value has a different @c typeId, a warning is logged but
-    /// the write proceeds (Qt will coerce on read back). Emits @c changed.
+    /// the write proceeds (Qt will coerce on read back). Emits @c changed
+    /// when the observable value moves.
+    ///
+    /// Persistence is SPARSE: a value equal to the schema default is stored
+    /// as key ABSENCE (an existing key is deleted), so a stored file never
+    /// freezes a default. The read path answers absence with the schema
+    /// default, making the two indistinguishable to consumers — and letting
+    /// a later default retune reach every store that has no explicit value.
     void write(const QString& group, const QString& key, const QVariant& value);
 
     /// Reset one key to its schema default. No-op when the key is undeclared.

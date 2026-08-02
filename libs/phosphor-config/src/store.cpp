@@ -404,26 +404,51 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
         qWarning("PhosphorConfig::Store: write to %s/%s with type %s, schema expected %s", qPrintable(group),
                  qPrintable(key), QMetaType(coerced.typeId()).name(), QMetaType(def->expectedType).name());
     }
+    // Sparse persistence: a value equal to the schema default is stored as
+    // ABSENCE, never as an explicit key. A persisted default freezes the
+    // value at whatever the default was on the day it was written, so a
+    // later default retune never reaches any store that has been saved
+    // since — exactly the shadowing that kept retuned shortcut chords from
+    // reaching existing installs. The read path answers absence with the
+    // schema default, so no consumer can tell the difference.
+    //
+    // Compared against the validator-canonicalized default: defaults are
+    // authored canonical, but the validator is the single source of truth
+    // for canonical form and a non-canonical default spelling must not
+    // defeat the equality.
+    const QVariant canonicalDefault = def->validator ? def->validator(def->defaultValue) : def->defaultValue;
     {
         auto g = d->backend->group(group);
-        // Skip the write (and the changed() emission) when the on-disk value
-        // already exactly matches what we'd write. The comparison is against
-        // the RAW disk value, not validator-coerced: this lets a canonicalising
-        // flush loop overwrite a non-canonical disk value (e.g. " a , b "
-        // re-written as "a,b") instead of being short-circuited by the
-        // validator on both sides agreeing on the same canonical form.
-        //
-        // Unlike reset() / resetGroup(), this path does NOT skip writing on
-        // (absent && coerced == default) — a consumer's save path that purges
-        // stale keys relies on write() materialising every declared key onto
-        // disk so the purge can run from a fully-populated baseline.
-        if (g->hasKey(key)) {
-            const QVariant current = readVariantAs(*g, key, def->defaultValue, def->expectedType);
-            if (current == coerced) {
+        const bool present = g->hasKey(key);
+        if (coerced == canonicalDefault) {
+            if (!present) {
+                // Reads already answer the default; nothing to store or announce.
                 return;
             }
+            const QVariant current = readVariantAs(*g, key, def->defaultValue, def->expectedType);
+            g->deleteKey(key);
+            if (current == coerced) {
+                // Pruning a frozen default (a stored value that still equals
+                // the current default): the observable value is unchanged, so
+                // the file slims down without a changed() emission.
+                return;
+            }
+        } else {
+            // Skip the write (and the changed() emission) when the on-disk
+            // value already exactly matches what we'd write. The comparison is
+            // against the RAW disk value, not validator-coerced: this lets a
+            // canonicalising flush loop overwrite a non-canonical disk value
+            // (e.g. " a , b " re-written as "a,b") instead of being
+            // short-circuited by the validator on both sides agreeing on the
+            // same canonical form.
+            if (present) {
+                const QVariant current = readVariantAs(*g, key, def->defaultValue, def->expectedType);
+                if (current == coerced) {
+                    return;
+                }
+            }
+            writeVariantTo(*g, key, coerced);
         }
-        writeVariantTo(*g, key, coerced);
     }
     Q_EMIT changed(group, key);
 }
@@ -441,11 +466,13 @@ void Store::reset(const QString& group, const QString& key)
         auto g = d->backend->group(group);
         if (!g->hasKey(key)) {
             // Key isn't on disk, so the read path already returns the default.
-            // Skipping the write avoids stamping a default-valued key and
-            // dirtying the backend on otherwise-idempotent reset() calls.
+            // Skipping the delete avoids dirtying the backend on
+            // otherwise-idempotent reset() calls.
             return;
         }
-        writeVariantTo(*g, key, def->defaultValue);
+        // Delete rather than stamp the default: default-equal values are
+        // stored as absence (see write()), and reset IS "back to default".
+        g->deleteKey(key);
     }
     Q_EMIT changed(group, key);
 }
@@ -465,12 +492,13 @@ void Store::resetGroup(const QString& group)
         auto g = d->backend->group(group);
         for (const KeyDef& def : *it) {
             // Skip absent keys for the same reason as reset() — otherwise
-            // resetGroup() on a pristine install stamps every default to disk
-            // with no observable behavior change but a full file rewrite.
+            // resetGroup() on a pristine install dirties the backend with no
+            // observable behavior change.
             if (!g->hasKey(def.key)) {
                 continue;
             }
-            writeVariantTo(*g, def.key, def.defaultValue);
+            // Delete rather than stamp the default — see reset().
+            g->deleteKey(def.key);
             resetKeys.append(def.key);
         }
     }
