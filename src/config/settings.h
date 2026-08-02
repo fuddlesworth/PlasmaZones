@@ -1657,7 +1657,7 @@ public:
 
     // Persistence
     void load() override;
-    void save() override;
+    bool save() override;
     /// Restore factory defaults. Returns false when the cleared configuration
     /// could not be written to disk — in that case NOTHING was reset: the
     /// deletions are dropped, the store is reparsed from disk, and the session

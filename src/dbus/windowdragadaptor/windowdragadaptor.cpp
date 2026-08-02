@@ -518,26 +518,30 @@ void WindowDragAdaptor::ensureLayoutPickerNavShortcutsRegistered(std::function<v
     if (!m_shortcutRegistrar || !moveCb || !confirmCb) {
         return;
     }
-    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerLeftId, QKeySequence(Qt::Key_Left),
-                                               PhosphorI18n::tr("Layout Picker: Move Left"), [moveCb] {
-                                                   moveCb(-1, 0);
-                                               });
-    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerRightId, QKeySequence(Qt::Key_Right),
-                                               PhosphorI18n::tr("Layout Picker: Move Right"), [moveCb] {
-                                                   moveCb(1, 0);
-                                               });
-    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerUpId, QKeySequence(Qt::Key_Up),
-                                               PhosphorI18n::tr("Layout Picker: Move Up"), [moveCb] {
-                                                   moveCb(0, -1);
-                                               });
-    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerDownId, QKeySequence(Qt::Key_Down),
-                                               PhosphorI18n::tr("Layout Picker: Move Down"), [moveCb] {
-                                                   moveCb(0, 1);
-                                               });
-    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerReturnId, QKeySequence(Qt::Key_Return),
-                                               PhosphorI18n::tr("Layout Picker: Confirm"), confirmCb);
-    m_shortcutRegistrar->registerAdhocShortcut(kLayoutPickerEnterId, QKeySequence(Qt::Key_Enter),
-                                               PhosphorI18n::tr("Layout Picker: Confirm"), confirmCb);
+    // One batch, one backend flush: six per-id registrations would issue six
+    // Portal BindShortcuts requests, each superseding the prior in-flight
+    // Response (see IAdhocRegistrar::registerAdhocShortcuts).
+    using AdhocBinding = PhosphorShortcutsIntegration::IAdhocRegistrar::AdhocBinding;
+    m_shortcutRegistrar->registerAdhocShortcuts(QVector<AdhocBinding>{
+        {kLayoutPickerLeftId, QKeySequence(Qt::Key_Left), PhosphorI18n::tr("Layout Picker: Move Left"),
+         [moveCb] {
+             moveCb(-1, 0);
+         }},
+        {kLayoutPickerRightId, QKeySequence(Qt::Key_Right), PhosphorI18n::tr("Layout Picker: Move Right"),
+         [moveCb] {
+             moveCb(1, 0);
+         }},
+        {kLayoutPickerUpId, QKeySequence(Qt::Key_Up), PhosphorI18n::tr("Layout Picker: Move Up"),
+         [moveCb] {
+             moveCb(0, -1);
+         }},
+        {kLayoutPickerDownId, QKeySequence(Qt::Key_Down), PhosphorI18n::tr("Layout Picker: Move Down"),
+         [moveCb] {
+             moveCb(0, 1);
+         }},
+        {kLayoutPickerReturnId, QKeySequence(Qt::Key_Return), PhosphorI18n::tr("Layout Picker: Confirm"), confirmCb},
+        {kLayoutPickerEnterId, QKeySequence(Qt::Key_Enter), PhosphorI18n::tr("Layout Picker: Confirm"), confirmCb},
+    });
 }
 
 void WindowDragAdaptor::releaseLayoutPickerNavShortcuts()
@@ -545,12 +549,9 @@ void WindowDragAdaptor::releaseLayoutPickerNavShortcuts()
     if (!m_shortcutRegistrar) {
         return;
     }
-    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerLeftId);
-    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerRightId);
-    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerUpId);
-    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerDownId);
-    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerReturnId);
-    m_shortcutRegistrar->unregisterAdhocShortcut(kLayoutPickerEnterId);
+    m_shortcutRegistrar->unregisterAdhocShortcuts({QString(kLayoutPickerLeftId), QString(kLayoutPickerRightId),
+                                                   QString(kLayoutPickerUpId), QString(kLayoutPickerDownId),
+                                                   QString(kLayoutPickerReturnId), QString(kLayoutPickerEnterId)});
 }
 
 void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)

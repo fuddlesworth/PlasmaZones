@@ -31,7 +31,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Center the focused column")
             searchAnchor: "centerFocusedColumn"
-            description: i18n("With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.")
+            description: i18nc("the words Never, Always, and On overflow must match the option labels shown in the picker beside this text", "With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.")
 
             WideComboBox {
                 Accessible.name: i18n("Center the focused column")
@@ -48,7 +48,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Center a lone column")
             searchAnchor: "alwaysCenterSingleColumn"
-            description: i18n("When the strip holds a single column, center it even when Center the focused column is set to Never.")
+            description: i18nc("the quoted phrase Center the focused column and the word Never must match the sibling row's title and option label", "When the strip holds a single column, center it even when Center the focused column is set to Never.")
 
             SettingsSwitch {
                 checked: appSettings.scrollingAlwaysCenterSingleColumn
@@ -64,7 +64,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Focus new windows")
             searchAnchor: "scrollingFocusNewWindows"
-            description: i18n("Focus a window when it opens")
+            description: i18n("Focus a window when it opens.")
 
             SettingsSwitch {
                 checked: appSettings.scrollingFocusNewWindows
@@ -80,7 +80,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Focus follows mouse")
             searchAnchor: "scrollingFocusFollowsMouse"
-            description: i18n("Moving the mouse pointer over a window gives it focus")
+            description: i18n("Moving the mouse pointer over a window gives it focus.")
 
             SettingsSwitch {
                 checked: appSettings.scrollingFocusFollowsMouse
@@ -96,7 +96,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Scroll columns with the mouse wheel")
             searchAnchor: "wheelFocusEnabled"
-            description: i18n("Hold Meta or Meta+Alt and scroll to move column focus along the strip. When this is off, the compositor keeps those wheel shortcuts.")
+            description: i18n("Hold Meta and scroll to move column focus along the strip. When this is off, the compositor keeps the Meta+wheel shortcut.")
 
             SettingsSwitch {
                 checked: appSettings.scrollingWheelFocusEnabled
@@ -110,11 +110,15 @@ SettingsCard {
         // Dependent row: it hugs the row that gates it (no separator between
         // them, the card's convention) and stays visible while disabled rather
         // than taking SettingsRow's default collapse, because it carries a
-        // search anchor a deep link must reveal.
+        // search anchor a deep link must reveal. CAVEAT the sanctioned
+        // `visible: true` idiom hides: this override drops BOTH of
+        // SettingsRow's gates, so marking this row advancedOnly later would
+        // silently keep it visible in simple mode — re-plumb the visible
+        // binding if that curation ever happens.
         SettingsRow {
             title: i18n("Invert wheel direction")
             searchAnchor: "wheelFocusInverted"
-            description: i18n("Scrolling down focuses the previous column instead of the next one")
+            description: i18n("Scrolling down focuses the previous column instead of the next one.")
             enabled: appSettings.scrollingWheelFocusEnabled
             visible: true
 

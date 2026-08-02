@@ -73,8 +73,12 @@ public:
      * table. Used by subsystems that need a transient grab bound to a UI state
      * (e.g. the cancel-overlay Escape grab bound while the layout picker or
      * snap assist is showing). Batches with an immediate flush to the backend.
-     * Idempotent — re-registering the same id updates the callback and
-     * description in place.
+     * Idempotent — re-registering the same id updates the callback in place;
+     * the description is updated in the registry record but is not re-sent to
+     * the backend for an already-registered id (Registry::bind contract).
+     * Ids colliding with the settings-driven table or the indexed slot
+     * prefixes are rejected with a warning: an adhoc unregister on such an id
+     * would purge the persistent binding's saved kglobalshortcutsrc record.
      */
     void registerAdhocShortcut(const QString& id, const QKeySequence& sequence, const QString& description,
                                std::function<void()> callback) override;
@@ -85,6 +89,14 @@ public:
      */
     void unregisterAdhocShortcut(const QString& id) override;
 
+    /// Batch forms: every entry goes through the per-id path with the backend
+    /// flush deferred to one trailing call, so a multi-chord burst (the six
+    /// layout-picker navigation grabs) costs one Portal round-trip instead of
+    /// superseding its own in-flight Responses.
+    void registerAdhocShortcuts(
+        const QVector<PhosphorShortcutsIntegration::IAdhocRegistrar::AdhocBinding>& bindings) override;
+    void unregisterAdhocShortcuts(const QStringList& ids) override;
+
     /**
      * Catalog of every settings-driven shortcut for the cheatsheet overlay,
      * one QVariantMap per row, sorted by display category:
@@ -93,23 +105,43 @@ public:
      *   triggers (QStringList — the user's EFFECTIVE keys via backend
      *   read-back, falling back to the config value), assigned (bool),
      *   mode ("all" | "snapping" | "autotile" | "scrolling" — which tiling mode the
-     *   action is meaningful in; the overlay filters on it).
-     * Ad-hoc/transient grabs never appear. Empty before registerShortcuts().
+     *   action is meaningful in; the overlay filters on it),
+     *   description (translated QString — plain-prose explanation shown as
+     *   the row's tooltip; always present, empty when the action needs none).
+     * Ad-hoc/transient grabs never appear. Empty before registerShortcuts()
+     * and again after unregisterShortcuts() (the daemon stop path).
      */
     QVariantList cheatsheetModel() const;
 
     /// One collapsible cheatsheet family: parallel id / expected-final-token
-    /// lists, the combined row label, and the tail token for the merged chip.
+    /// lists, the combined row label, the tail token for the merged chip,
+    /// and an optional combined tooltip for the merged row.
     struct CheatsheetFamily
     {
         QStringList ids;
         QStringList expectedLastTokens;
         QString combinedLabel;
         QString tailToken;
+        // Optional tooltip for the merged row. The merged row otherwise
+        // keeps the FIRST member's description, which for an opposed pair
+        // describes only one direction; a family that carries per-member
+        // descriptions should supply a combined wording here. Empty = keep
+        // the first member's.
+        //
+        // The default-member-initializer (= {}) is load-bearing, same as
+        // KeyDef's trailing members: the directional/digit FamilySpecs are
+        // 4-field aggregate initializers that omit this trailing field, and
+        // GCC's -Wmissing-field-initializers fires per init site when an
+        // omitted field lacks an NSDMI.
+        QString combinedDescription = {};
     };
 
     /**
-     * Every action id in the registration table, in declaration order.
+     * Every action id in the file-local STATIC registration table, in
+     * declaration order. The two indexed slot families (quick_layout_N,
+     * snap_to_zone_N, kIndexedSlotCount ids each) are registered separately
+     * by buildEntries() and are NOT returned here — this is the static
+     * portion of the registration surface, not all of it.
      *
      * The table is a file-local array with internal linkage, and
      * cheatsheetModel() is a COMPRESSED view of it (an opposed pair collapses
@@ -137,6 +169,11 @@ public:
      * exact IBackend calls the manager makes — in particular that
      * unregisterShortcuts() never purges persistent bindings via
      * IBackend::unregisterShortcut (discussion #851).
+     *
+     * unregisterShortcuts() DESTROYS the injected backend along with the
+     * registry; a later registerShortcuts() falls back to the real platform
+     * backend (KGlobalAccel / Portal / session bus) from inside the test.
+     * Re-inject after every teardown before re-registering.
      */
     void setBackendForTesting(std::unique_ptr<PhosphorShortcuts::IBackend> backend);
 
@@ -291,6 +328,9 @@ private:
 
     bool m_registrationInProgress = false;
     bool m_settingsDirty = false;
+    // Set by the adhoc batch forms while their loop runs the per-id paths,
+    // so those paths skip their trailing flush and the batch flushes once.
+    bool m_suppressAdhocFlush = false;
 };
 
 } // namespace PlasmaZones

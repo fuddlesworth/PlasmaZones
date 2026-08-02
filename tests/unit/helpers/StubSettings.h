@@ -2194,8 +2194,9 @@ public:
     void load() override
     {
     }
-    void save() override
+    bool save() override
     {
+        return true;
     }
     bool reset() override
     {

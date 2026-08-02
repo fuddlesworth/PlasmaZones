@@ -2,10 +2,10 @@
     "releases": [
         {
             "version": "3.4.0",
-            "date": "2026-07-30",
+            "date": "2026-08-02",
             "highlights": [
                 "New: Scrolling mode, a third placement mode modeled on the niri compositor. Windows form columns on an endless horizontal strip and the screen scrolls along it, so opening a window never resizes the ones you have. Assign it to a screen from the Monitors page (#852)",
-                "New: scrolling columns cycle through width presets, maximize, or expand into the free space, and the windows in a column split its height or show one at a time as tabs. Consume and expel shortcuts move windows between columns, all on the Meta+Alt family (#852)",
+                "New: scrolling columns cycle through width presets, maximize, or grow into the empty space on screen, and the windows in a column split its height or show one at a time as tabs. Consume and expel shortcuts move windows between columns, all on the Meta+Alt family (#852)",
                 "New: hold Meta and scroll the mouse wheel on a scrolling screen to move through columns, the same way niri binds Mod+wheel (#852)",
                 "New: scrolling is a full third mode with its own settings section and enable switch, and the mode toggle shortcut cycles through all three modes. Rule actions let an app open at a chosen width or in a tabbed column, or join the focused column directly (#852)",
                 "New: the indicator marking a tabbed column's windows is fully configurable, matching niri's tab-indicator options. Pick which edge it sits on, its thickness, how much of the edge it spans, the gaps, the corner radius and the tab colors, or switch from the segment bar to titled chips that name each window. Click a tab to switch to it (#871)",

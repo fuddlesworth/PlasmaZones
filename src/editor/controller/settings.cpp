@@ -150,10 +150,14 @@ void EditorController::loadEditorSettings()
         bool edgeEnabled =
             editorSnapping->readBool(ConfigDefaults::edgeEnabledKey(), ConfigDefaults::editorEdgeSnappingEnabled());
 
+        // ConfigDefaults accessors, not EditorConstants::DefaultSnapInterval:
+        // under sparse persistence an at-default key is ABSENT, so the
+        // fallback here is the value most installs actually run with, and a
+        // divergent second spelling would silently fork on a future retune.
         qreal snapIntX =
-            editorSnapping->readDouble(ConfigDefaults::intervalXKey(), EditorConstants::DefaultSnapInterval);
+            editorSnapping->readDouble(ConfigDefaults::intervalXKey(), ConfigDefaults::editorSnapIntervalX());
         qreal snapIntY =
-            editorSnapping->readDouble(ConfigDefaults::intervalYKey(), EditorConstants::DefaultSnapInterval);
+            editorSnapping->readDouble(ConfigDefaults::intervalYKey(), ConfigDefaults::editorSnapIntervalY());
 
         m_snappingService->setGridSnappingEnabled(gridEnabled);
         m_snappingService->setEdgeSnappingEnabled(edgeEnabled);

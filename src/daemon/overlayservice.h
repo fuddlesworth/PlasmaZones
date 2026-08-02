@@ -406,16 +406,18 @@ public:
     // Daemon-mediated push: the caller resolves the catalog + current mode
     // (per-screen tri-state) and hands them in; the service owns only slot
     // lifecycle. `currentMode` is "snapping" | "autotile" | "scrolling";
-    // `autotileAvailable` mirrors the global feature gate (when false the
-    // Autotile group hides regardless of mode).
+    // `autotileAvailable` / `scrollingAvailable` mirror the global feature
+    // gates (when false the matching group hides regardless of mode — the
+    // mode string alone lags the engine teardown on a disable).
     void showCheatsheet(const QString& screenId, const QVariantList& model, const QString& currentMode,
-                        bool autotileAvailable);
+                        bool autotileAvailable, bool scrollingAvailable);
     void hideCheatsheet() override;
     bool isCheatsheetVisible() const override;
     /// Re-push model/mode into an already-visible cheatsheet (live refilter
     /// on mode switch or rebind). No-op when hidden — the next show
     /// re-resolves everything anyway.
-    void refreshCheatsheet(const QVariantList& model, const QString& currentMode, bool autotileAvailable);
+    void refreshCheatsheet(const QVariantList& model, const QString& currentMode, bool autotileAvailable,
+                           bool scrollingAvailable);
     /// Screen the visible cheatsheet is bound to; empty when hidden.
     QString cheatsheetScreenId() const;
 
