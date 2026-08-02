@@ -237,9 +237,6 @@ struct SurfaceFoldPlan
     /// The clock this fold pushes as iTime — the window's OWN, which stops while it is
     /// not animating. Never a raw shared-clock read. See SurfaceMultipassState.
     float foldTime = 0.0f;
-    /// Can the window capture be reused across frames? False under a live transition,
-    /// which re-captures every frame.
-    bool captureCacheable = true;
     /// Which texture the capture belongs in THIS fold — compositeTex[0] when no pack
     /// compiles (nothing folds, so the capture is the composite), captureTex otherwise.
     /// A chain can cross that line at runtime, and a capture cached on the wrong side of
@@ -610,6 +607,18 @@ struct WindowDecoration
     /// other path reads the value through packParamValues like any pack
     /// param.
     double foldedOpacity = 1.0;
+
+    /// Every drawing pack in the chain declares `interiorOpaque` (its output
+    /// never thins a texel inside the natural frame rect — shadow/glow, whose
+    /// halo is confined to the transparent margin). Computed by the
+    /// updateWindowDecoration chain sweep; a pack the registry does not know
+    /// draws nothing and cannot thin the interior, so it does not veto.
+    /// prePaintWindow uses this (with foldedOpacity at rest) to SKIP
+    /// setTranslucent(): the client's own opaque region stays truthful for
+    /// such a chain, and keeping it preserves KWin's occlusion culling —
+    /// both its damage-cull and paint-cull halves (verified against the KWin
+    /// 6.7.3 sources, workspacescene.cpp collectDamage/paintSimpleScreen).
+    bool chainInteriorOpaque = false;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but

@@ -155,42 +155,7 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
         return false;
     }
 
-    out.multipass = obj.value(QLatin1String("multipass")).toBool(false);
-    out.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
-    out.depthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
-    out.wallpaper = obj.value(QLatin1String("wallpaper")).toBool(false);
-    out.bufferScale = obj.value(QLatin1String("bufferScale")).toDouble(1.0);
-    out.bufferWrap = obj.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp"));
-    out.bufferFilter = obj.value(QLatin1String("bufferFilter")).toString(QStringLiteral("linear"));
-
-    if (obj.contains(QLatin1String("bufferShader"))) {
-        out.bufferShader = resolveRelative(metadataDir, obj.value(QLatin1String("bufferShader")).toString());
-    }
-    if (obj.contains(QLatin1String("bufferShaders"))) {
-        const QJsonArray arr = obj.value(QLatin1String("bufferShaders")).toArray();
-        for (const auto& v : arr) {
-            // resolveRelative returns an empty string for a rejected path
-            // traversal; skip those so the renderer never receives an empty
-            // buffer-pass path (the single-bufferShader form is guarded
-            // downstream by an isEmpty check, this list is not).
-            const QString resolved = resolveRelative(metadataDir, v.toString());
-            if (!resolved.isEmpty()) {
-                out.bufferShaders.append(resolved);
-            }
-        }
-    }
-    if (obj.contains(QLatin1String("bufferWraps"))) {
-        const QJsonArray arr = obj.value(QLatin1String("bufferWraps")).toArray();
-        for (const auto& v : arr)
-            out.bufferWraps.append(v.toString());
-    }
-    if (obj.contains(QLatin1String("bufferFilters"))) {
-        const QJsonArray arr = obj.value(QLatin1String("bufferFilters")).toArray();
-        for (const auto& v : arr)
-            out.bufferFilters.append(v.toString());
-    }
-
-    // ── Per-parameter defaults ──────────────────────────────────
+    // ── Per-parameter defaults + buffer/wallpaper config ────────
     // Slot resolution is delegated to the daemon's own parser:
     // ShaderRegistry::parsePackMetadata applies the registry's T1.1 automatic
     // assignment (explicit slots reserved first, slotless params packed into
@@ -212,6 +177,31 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
         qCWarning(lcMetadataLoader) << "parameter parse failed for" << metadataPath << ":" << parseError;
         return false;
     }
+
+    // Buffer/wallpaper fields come from the daemon's own parser rather than a
+    // hand-maintained re-read of the JSON: parsePackMetadata applies the same
+    // normalisations the daemon applies (bufferScale clamping, wrap/filter
+    // token normalisation, buffer-path resolution, and the single-pass
+    // coherence reset that forces all buffer state — including depthBuffer
+    // and halfFloatBuffers — back to defaults for a non-multipass pack), so
+    // the preview cannot drift from the daemon's assembly.
+    out.multipass = packInfo.isMultipass;
+    out.bufferFeedback = packInfo.bufferFeedback;
+    out.depthBuffer = packInfo.useDepthBuffer;
+    out.halfFloatBuffers = packInfo.halfFloatBuffers;
+    out.wallpaper = packInfo.useWallpaper;
+    out.bufferScale = packInfo.bufferScale;
+    out.bufferWrap = packInfo.bufferWrap;
+    out.bufferFilter = packInfo.bufferFilter;
+    // Only the plural field is populated: bufferShaderPaths is the daemon's
+    // single source of truth for the pass list (the single-form key is folded
+    // into it at parse), and the renderer prefers bufferShaders — a 1-element
+    // list through setBufferShaderPaths is equivalent to the single-path
+    // setter. Keeping bufferShader empty preserves the two fields' documented
+    // distinction instead of making them always agree.
+    out.bufferShaders = packInfo.bufferShaderPaths;
+    out.bufferWraps = packInfo.bufferWraps;
+    out.bufferFilters = packInfo.bufferFilters;
 
     for (const auto& p : packInfo.parameters) {
         if (p.slot < 0) {

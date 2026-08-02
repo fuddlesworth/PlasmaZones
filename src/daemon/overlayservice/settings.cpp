@@ -43,6 +43,14 @@ void OverlayService::setSettings(ISettings* settings)
         // Connect to new settings signals
         if (m_settings) {
             auto refreshZoneSelectors = [this]() {
+                // Hidden selectors are skipped, matching refreshVisibleWindows:
+                // showZoneSelector() runs updateZoneSelectorWindow itself before
+                // showing, so a hidden selector needs no live re-push and the
+                // catch-all would otherwise pay ~20 property lookups per screen
+                // on every settings keystroke.
+                if (!m_zoneSelectorVisible) {
+                    return;
+                }
                 for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
                     updateZoneSelectorWindow(it.key());
                 }
@@ -94,7 +102,20 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::scrollingTabIndicatorUrgentColorChanged, this,
                     &OverlayService::replayScrollTabStrips);
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
-            connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
+            // Frame rate drives BOTH the CAVA capture rate and the shader
+            // render loop's interval. syncCavaState covers the first; the
+            // second is applied only inside startShaderAnimation, so a live
+            // overlay must restart the loop or the new rate silently waits for
+            // the next stop/start cycle. Guard on isActive(): starting the
+            // loop on a hidden or warm-idled overlay would undo the quiesce
+            // (startShaderAnimation also re-pushes the rate into a running
+            // CAVA, so ordering after syncCavaState is safe either way).
+            connect(m_settings, &ISettings::shaderFrameRateChanged, this, [this]() {
+                syncCavaState();
+                if (m_shaderUpdateTimer && m_shaderUpdateTimer->isActive()) {
+                    startShaderAnimation();
+                }
+            });
             // The full CAVA analysis parameter set (Shaders.Audio). Every knob
             // routes through the same reconcile: setOptions no-ops on an
             // unchanged set and restarts capture at most once per change.
@@ -169,9 +190,9 @@ void OverlayService::setSettings(ISettings* settings)
             // shadersChanged(). We tell each overlay window's ZoneShaderItem to
             // re-read its source from disk by invoking reloadShader() (inherited
             // Q_INVOKABLE from PhosphorRendering::ShaderEffect).
-            // Daemon must call setShaderRegistry() before the first updateSettings()
-            // - without it, this branch is silently skipped and on-disk shader edits
-            // won't propagate until the next daemon restart.
+            // m_shaderRegistry is constructor-injected (overlayservice.cpp), so
+            // this branch is a null guard for test doubles built without a
+            // registry - for them, on-disk shader edits simply don't hot-reload.
             if (m_shaderRegistry) {
                 m_shadersChangedConnection = connect(m_shaderRegistry, &ShaderRegistry::shadersChanged, this, [this]() {
                     qCInfo(lcOverlay) << "Shader files changed on disk, triggering hot-reload";
@@ -401,13 +422,16 @@ void OverlayService::syncCavaState()
         return;
     }
 
-    // Audio-viz turned OFF entirely: stop now and clear any stale spectrum from
-    // the surfaces. Merely idle/hidden (still enabled): defer via the grace
-    // timer so a quick re-trigger keeps it warm.
+    // Audio-viz turned OFF entirely: stop the capture now and clear any stale
+    // spectrum from the surfaces. Merely idle/hidden (still enabled): the grace
+    // timer defers the stop so a quick re-trigger keeps it warm. Either way,
+    // fall through to scheduleIdleQuiesce() at the tail — the quiesce also owns
+    // the render-loop stop and the idle GPU-resource release, which are
+    // independent of CAVA. This branch used to cancel a pending quiesce and
+    // return, which meant any OSD/popup show inside the grace window (every
+    // such path calls syncCavaState, and snap-assist shows at exactly drag-end)
+    // silently killed the release with nothing re-arming it.
     if (!m_settings->enableAudioVisualizer()) {
-        if (m_idleQuiesceTimer) {
-            m_idleQuiesceTimer->stop();
-        }
         if (m_audioProvider->isRunning()) {
             m_audioProvider->stop();
             for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
@@ -433,7 +457,6 @@ void OverlayService::syncCavaState()
                                  QVariantList());
             }
         }
-        return;
     }
     scheduleIdleQuiesce();
 }
@@ -465,9 +488,45 @@ void OverlayService::scheduleIdleQuiesce()
             if (m_audioProvider && m_audioProvider->isRunning()) {
                 m_audioProvider->stop();
             }
+            // Timers alone leave the GPU memory pinned: the kept-alive windows'
+            // shader nodes hold full-screen buffer FBOs, pipelines, and uploaded
+            // wallpaper/label textures for the daemon's whole lifetime after the
+            // first drag — on an iGPU that is system RAM taken from the shared
+            // pool. Free them now; they rebuild lazily on the first frame of the
+            // next show, well inside the grace window's cost model (a quick
+            // re-trigger cancels this timer before it fires, so a warm resume
+            // never pays the rebuild).
+            for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                if (QQuickItem* slot = it.value().mainOverlaySlot()) {
+                    // A false return means the installed shell QML no longer
+                    // declares the forwarder (version skew) - without the log
+                    // the PR's whole memory win would vanish untraceably.
+                    if (!QMetaObject::invokeMethod(slot, "releaseIdleGraphicsResources")) {
+                        qCDebug(lcOverlay) << "idle quiesce: releaseIdleGraphicsResources not invokable on slot"
+                                           << "(installed shell QML out of date?)";
+                    }
+                }
+            }
+            // The editor's shader-preview window rides the same render loop;
+            // when it is alive but not displaying (isOverlayDisplaying() was
+            // false above, so it is not visible), release its shader FBOs
+            // too rather than leaving it the one surface that pins them.
+            if (m_shaderPreviewWindow) {
+                if (!QMetaObject::invokeMethod(m_shaderPreviewWindow, "releaseIdleGraphicsResources")) {
+                    qCDebug(lcOverlay) << "idle quiesce: releaseIdleGraphicsResources not invokable on preview window";
+                }
+            }
         });
     }
-    m_idleQuiesceTimer->start();
+    // Arm only when not already pending: the grace window measures from the
+    // FIRST idle, not from the last settings poke or OSD hide - syncCavaState
+    // funnels ~18 settings signals plus every decoration show/hide through
+    // here, and restarting on each would postpone the release indefinitely.
+    // A genuine resume (refreshFromIdle, wantRun) stops the timer, so the next
+    // idle re-arms a fresh window.
+    if (!m_idleQuiesceTimer->isActive()) {
+        m_idleQuiesceTimer->start();
+    }
 }
 
 } // namespace PlasmaZones

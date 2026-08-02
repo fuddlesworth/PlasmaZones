@@ -101,6 +101,7 @@ set(phosphorshaders_SRCS
     src/shaderparampreamble.cpp
     src/shaderregistry.cpp
     src/shaderregistry_params.cpp
+    src/shaderregistry_parse.cpp
     src/shaderregistry_wallpaper.cpp
     src/wallpaperprovider.cpp
 )

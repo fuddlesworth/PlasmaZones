@@ -124,6 +124,20 @@ bool WindowAnimator::hasAnimation(KWin::EffectWindow* handle) const
     return m_animations.contains(handle);
 }
 
+bool WindowAnimator::hasAnimationsIntersecting(const QRectF& region) const
+{
+    for (const auto& [handle, anim] : m_animations) {
+        // Same bounds the repaint sites damage: the full swept range padded
+        // out to the expanded geometry, so a cross-screen morph counts on
+        // both outputs for its whole flight.
+        const QRectF bounds = anim.bounds().marginsAdded(expandedPadding(handle, anim));
+        if (bounds.isValid() && bounds.intersects(region)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool WindowAnimator::startAnimation(KWin::EffectWindow* handle, const QRectF& oldFrame, const QRectF& newFrame,
                                     const PhosphorAnimation::Profile* profileOverride)
 {
@@ -560,6 +574,13 @@ bool WindowAnimator::isHandleValid(KWin::EffectWindow* window) const
 QMarginsF WindowAnimator::expandedPadding(KWin::EffectWindow* window,
                                           const PhosphorAnimation::AnimatedValue<QRectF>& anim) const
 {
+    // CONSERVATIVE, not exact: the margins compare the live expandedGeometry
+    // against anim.to(), which agree only while the window actually sits at
+    // the animation's target. A moveResize away from a live animation's `to`
+    // (large scrolling-engine column moves) inflates the derived margins by
+    // the travel distance. The qMax(0.0, ...) floor makes the error one-sided
+    // — bounds only GROW, so the per-output transformed-windows flag can be
+    // over-set on a neighbouring output but never missed.
     const QRectF expanded = (window && !window->isDeleted()) ? QRectF(window->expandedGeometry()) : anim.to();
 
     const QRectF frameGeo = anim.to();
