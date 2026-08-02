@@ -280,6 +280,45 @@ private Q_SLOTS:
 
         item.setHalfFloatBuffers(true);
         QCOMPARE(item.halfFloatBuffers(), true);
+
+        // COVERAGE LIMIT: this pins the item-side property contract only. The
+        // behaviour the flag exists for — ensureBufferTarget choosing RGBA8
+        // over RGBA16F and rebuilding the buffer targets on a flip — lives on
+        // the render node behind a live scene graph, reachable only through
+        // the opt-in GPU harness (PLASMAZONES_GPU_TESTS=1).
+    }
+
+    void testZoneShaderItem_halfFloatBuffersChangeGuard()
+    {
+        ZoneShaderItem item;
+
+        QSignalSpy spy(&item, &ZoneShaderItem::halfFloatBuffersChanged);
+        // Repeat of the current value must be suppressed ("emit only on
+        // change"), a genuine flip must emit exactly once. Same pattern the
+        // labelsTexture suppression test below establishes.
+        item.setHalfFloatBuffers(true);
+        QCOMPARE(spy.count(), 0);
+        item.setHalfFloatBuffers(false);
+        QCOMPARE(spy.count(), 1);
+        item.setHalfFloatBuffers(false);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void testZoneShaderItem_releaseIdleGraphicsResourcesWithoutWindow()
+    {
+        ZoneShaderItem item;
+        item.setShaderSource(QUrl(QStringLiteral("qrc:/does/not/matter.frag")));
+        const auto statusBefore = item.status();
+        const QString errorBefore = item.errorLog();
+
+        // The daemon's idle quiesce reaches this Q_INVOKABLE via the QML
+        // forwarder chain. Windowless (headless) it must be a clean no-op:
+        // the win guard returns before any render job is scheduled, and
+        // neither status nor errorLog moves.
+        item.releaseIdleGraphicsResources();
+
+        QCOMPARE(item.status(), statusBefore);
+        QCOMPARE(item.errorLog(), errorBefore);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

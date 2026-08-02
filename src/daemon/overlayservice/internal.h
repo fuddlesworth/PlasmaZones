@@ -114,7 +114,7 @@ inline void writeAutotileMetadata(QObject* window, bool showMasterDot, bool prod
 }
 
 // Fallback config when ISettings* is null (e.g. during teardown).
-// Uses ConfigDefaults to stay in sync with the .kcfg single source of truth.
+// Uses ConfigDefaults, the single source of truth for default values.
 inline ZoneSelectorConfig defaultZoneSelectorConfig()
 {
     return {ConfigDefaults::position(),          ConfigDefaults::layoutMode(),   ConfigDefaults::sizeMode(),
@@ -148,10 +148,10 @@ inline QScreen* resolveTargetScreen(PhosphorScreens::ScreenManager* mgr, const Q
 /// physical screen's origin. This is the vocabulary wlr-layer-shell
 /// understands — it has no "position window within output" verb.
 ///
-/// Extracted because four independent call sites (overlay create, overlay
-/// geometryChanged, overlay rekey, snap-assist create) previously inlined
-/// the same math. Any drift between them showed up as virtual-screen
-/// overlays landing on the wrong spot after a hot-plug.
+/// Extracted because three independent call sites (overlay create, overlay
+/// geometryChanged, overlay rekey) previously inlined the same math. Any
+/// drift between them showed up as virtual-screen overlays landing on the
+/// wrong spot after a hot-plug.
 struct VsLayerPlacement
 {
     PhosphorLayer::Anchors anchors;
@@ -203,8 +203,9 @@ inline QRect resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, const QS
     return screen ? screen->geometry() : QRect();
 }
 
-// Write shader properties (shaderSource, bufferShaderPath, bufferShaderPaths,
-// bufferFeedback, bufferScale, bufferWrap, shaderParams) from ShaderInfo to a QML window.
+// Write all shader-config properties from ShaderInfo to a QML window (every
+// buffer/wallpaper/param field ShaderInfo carries, plus the generated param
+// preamble - see the writes below rather than an enumeration that rots).
 // Replaces 3 occurrences of the shader-info-to-window property push pattern.
 //
 // @p vsGeom / @p physGeom identify the target screen. When they differ (i.e.
@@ -222,7 +223,20 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     // with the new (incompatible) config. Without this, switching from a multipass
     // shader tears down buffer FBOs while the old shader still references them,
     // which can crash NVIDIA's EGL driver in beginFrame().
-    writeQmlProperty(window, QStringLiteral("shaderSource"), QUrl());
+    //
+    // Guarded on the URL actually changing: this helper also runs on every
+    // geometry/layout refresh (updateGeometries -> updateOverlayWindow, ~60 Hz
+    // during an editor zone drag), and an unconditional clear-then-restore of
+    // the SAME url is two genuine transitions per call - the empty write
+    // defeats ShaderEffect::setShaderSource's equality guard, re-raises
+    // shaderDirty/Loading each time, and toggles ZoneShaderRenderer's
+    // layer.enabled (destroying and recreating its ShaderEffectSource). The
+    // teardown rationale above only applies when the shader is changing; the
+    // trailing same-url write below already no-ops via the equality guard.
+    const bool shaderChanging = window->property("shaderSource").toUrl() != info.shaderUrl;
+    if (shaderChanging) {
+        writeQmlProperty(window, QStringLiteral("shaderSource"), QUrl());
+    }
 
     // Set all auxiliary props BEFORE shaderSource — see shader.cpp comment
     writeQmlProperty(window, QStringLiteral("bufferShaderPath"),
@@ -248,6 +262,12 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
         const QImage wp = ShaderRegistry::loadWallpaperImage(vsGeom, physGeom);
         if (!wp.isNull()) {
             writeQmlProperty(window, QStringLiteral("wallpaperTexture"), QVariant::fromValue(wp));
+        } else {
+            // The dismiss path collapses wallpaperTexture to a 1x1 placeholder,
+            // so a failed load here means the shader samples black where it
+            // used to keep the previous session's image. Diagnosable > silent.
+            qCWarning(lcOverlay) << "applyShaderInfoToWindow: wallpaper load failed for a useWallpaper pack;"
+                                 << "shader will sample an empty wallpaper texture";
         }
     }
     // shaderSource LAST — triggers statusChanged() → QML binding cascade

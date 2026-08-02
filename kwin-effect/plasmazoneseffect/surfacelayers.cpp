@@ -208,6 +208,17 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         return compiledPack(packId, *profile);
     };
 
+    // Reference into an unordered_map: stable across rehash (unlike the QHash
+    // iterator the decoration copy above defends against), invalidated only by
+    // an ERASE of this entry. No traced path reaches an erase from inside the
+    // nested capture draw — paintWindow's m_capturingSnapshot early-return
+    // blocks the fold/teardown chain during the re-entry — but the hazard
+    // class is the same one the copy above exists for. If a synchronous
+    // updateWindowDecoration/removeWindowDecoration path from inside the
+    // capture is ever demonstrated, this reference needs the matching
+    // treatment: re-find(windowId) after captureWindowSurface and abandon the
+    // fold when the entry is gone (the shape ensureSurfaceTargets' dangling
+    // alloc-failure path already documents).
     SurfaceMultipassState& state = m_surfaceMultipass[windowId];
     state.canvasGeo = logicalGeometry;
 
@@ -229,8 +240,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // longer exists — and left releaseDecorationGl's addRepaintFull unflagged,
             // which only failed to invalidate the capture cache because the state had
             // already been erased one line earlier. That is an accident, not a design.
-            // removeWindowDecoration disconnects both, releases the GL, and takes the
-            // self-repaint scope for us.
+            // removeWindowDecoration disconnects both and releases the GL; the
+            // self-repaint scope taken HERE is what flags the addRepaintFull the
+            // teardown issues (removeWindowDecoration does not take one itself).
             const auto selfRepaint = selfRepaintScope();
             removeWindowDecoration(windowId, w);
         }

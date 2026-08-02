@@ -41,8 +41,7 @@ Item {
         // Render to a private layer FBO so multipass shaders' buffer passes
         // get an isolated rendering context. Without this, the scene graph's
         // batch renderer internal pass-tracking state desynchronizes when the
-        // render node manages its own passes. Matches the working editor
-        // preview pattern (ShaderSettingsDialog.qml layer.enabled).
+        // render node manages its own passes.
         layer.enabled: shaderSource.toString() !== ""
         layer.textureMirroring: ShaderEffectSource.NoMirroring
         shaderSource: root.safeConfig.shaderSource || ""

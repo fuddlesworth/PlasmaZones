@@ -401,6 +401,14 @@ void ShaderNodeRhi::setUseWallpaper(bool use)
         return;
     }
     m_useWallpaper = use;
+    // The wallpaper texture + sampler are deliberately NOT freed on the OFF
+    // flip: their only creation site is the !m_initialized block in prepare(),
+    // so a free here would leave a later ON flip with no binding-11 resources
+    // for the node's whole life (the upload path is gated on the objects
+    // existing and never creates them). The retention is bounded — the idle
+    // release path (releaseRhiResources) frees them and clears m_initialized,
+    // which is the one recreate trigger that exists. Freeing eagerly needs a
+    // lazy ensureWallpaperResources() first.
     resetAllBindingsAndPipelines();
     markDirty(QSGNode::DirtyMaterial);
 }
@@ -413,7 +421,17 @@ void ShaderNodeRhi::setUseDepthBuffer(bool use)
     m_useDepthBuffer = use;
     m_depthTexture.reset();
     m_depthSampler.reset();
-    resetAllBindingsAndPipelines();
+    // The buffer render targets were created WITH the depth texture as their
+    // second colour attachment (createTextureAndRT), and the buffer pipelines'
+    // target-blend count is keyed on m_useDepthBuffer. A bare
+    // resetAllBindingsAndPipelines() left the RTs alive holding a raw pointer
+    // to the just-destroyed depth texture AND let the rebuilt pipeline's
+    // attachment count disagree with the stale pass descriptor — a depth-only
+    // metadata flip on a reused item (animation attach hot-reload) never
+    // changes buffer size or paths, so nothing else recreated them.
+    // resetBufferTargets() drops the full dependent set; ensureBufferTarget
+    // rebuilds lazily next frame, exactly as setHalfFloatBuffers relies on.
+    resetBufferTargets();
     markDirty(QSGNode::DirtyMaterial);
 }
 
@@ -552,6 +570,11 @@ void ShaderNodeRhi::resetBufferTargets()
     m_bufferPipeline.reset();
     m_bufferSrb.reset();
     m_bufferSrbB.reset();
+    // m_pipeline (the image pass) was compiled against m_srb, destroyed just
+    // below — keep them in lockstep like resetAllBindingsAndPipelines and
+    // setBufferShaderPaths do, or the retained pipeline holds a pointer to a
+    // destroyed QRhiShaderResourceBindings across a format/scale flip.
+    m_pipeline.reset();
     m_srb.reset();
     m_srbB.reset();
     m_bufferFeedbackCleared = false;

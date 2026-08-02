@@ -288,16 +288,26 @@ private Q_SLOTS:
 
         PlasmaZones::ShaderRender::ShaderMetadata mdSingle;
         QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(singlePath, mdSingle));
-        QVERIFY(mdSingle.bufferShader.endsWith(QStringLiteral("buffer.frag")));
-        QVERIFY(mdSingle.bufferShaders.isEmpty());
+        // Buffer config now comes from the daemon's own parser
+        // (parsePackMetadata), whose single source of truth is the pass
+        // LIST: the single-form "bufferShader" key is folded into it at
+        // parse, and the loader populates only the plural field. The
+        // renderer prefers bufferShaders and a 1-element list is equivalent
+        // to the single-path form.
+        QVERIFY(mdSingle.bufferShader.isEmpty());
+        QCOMPARE(mdSingle.bufferShaders.size(), 1);
+        QVERIFY(mdSingle.bufferShaders[0].endsWith(QStringLiteral("buffer.frag")));
     }
 
     void traversalEscapeOnBufferShadersIsDropped()
     {
-        // A bufferShaders entry that escapes the metadata directory is
-        // rejected by the traversal guard and must be skipped, not appended
-        // as an empty path the renderer would try to load. Entries that
-        // resolve inside the directory survive.
+        // A bufferShaders entry that escapes the metadata directory now
+        // fails the WHOLE list and disables multipass — daemon parity: the
+        // list is positionally aligned with per-buffer wrap/filter
+        // overrides, so compacting one entry out (the tool's old behaviour)
+        // would shift every later override onto the wrong buffer. Refusing
+        // the pack's multipass outright is what the daemon's parser does,
+        // and the preview must match it byte for byte.
         QTemporaryDir dir;
         writeFile(dir, QStringLiteral("effect.frag"));
         writeFile(dir, QStringLiteral("bufA.frag"));
@@ -310,12 +320,8 @@ private Q_SLOTS:
 
         PlasmaZones::ShaderRender::ShaderMetadata md;
         QVERIFY(PlasmaZones::ShaderRender::loadShaderMetadata(path, md));
-        QCOMPARE(md.bufferShaders.size(), 1);
-        QVERIFY(md.bufferShaders[0].endsWith(QStringLiteral("bufA.frag")));
-        for (const auto& bufPath : md.bufferShaders) {
-            QVERIFY(!bufPath.isEmpty());
-            QVERIFY(!bufPath.contains(QStringLiteral("/etc/")));
-        }
+        QVERIFY(md.bufferShaders.isEmpty());
+        QVERIFY(!md.multipass);
     }
 
     void missingFragmentShaderFails()

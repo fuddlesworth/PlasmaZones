@@ -68,8 +68,14 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
     // accident (an empty textureSize returns before this, so captureScale is never 0), and
     // an accident is not a contract.
     constexpr qreal kScaleEpsilon = 1e-6;
+    // `!state.captureTex` completes the defensive pair the fold's srcTex bind
+    // relies on (mirroring the composite-pair terms beside it): the invariant
+    // that captureTex is allocated whenever the pair is holds today by
+    // construction, but a null capture texture reaching the bind would be a
+    // null deref inside the compositor — the same reasoning the prefixTex
+    // guard in surfacelayers.cpp spells out.
     if (state.compositeSize != textureSize || std::abs(state.captureScaleKey - captureScale) > kScaleEpsilon
-        || !state.compositeTex[0] || !state.compositeTex[1]) {
+        || !state.compositeTex[0] || !state.compositeTex[1] || !state.captureTex) {
         bool allocFailed = false;
         for (size_t i = 0; i < state.compositeTex.size(); ++i) {
             auto& t = state.compositeTex[i];
@@ -341,9 +347,20 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     //     postPaintScreen damage at SCREEN level and never trip it.
     // The transition's own motion (WindowAnimator transform, vertex-stage sweep) is
     // applied downstream of the composite and is never baked into the capture, so it
-    // cannot stale it. One-shot window-level repaints (transition install, animation
-    // start, mesh settle) still invalidate once each — that costs one re-capture per
-    // edge, not one per frame.
+    // cannot stale it. One-shot window-level repaints (transition install, and
+    // animation start via onAnimationStarted's unscoped addRepaintFull) still
+    // invalidate once each — that costs one re-capture per edge, not one per
+    // frame. (The mesh settle-edge repaint is selfRepaintScope'd and does not
+    // invalidate.) The BACKDROP is a third input with no invalidator here, and
+    // deliberately so: the backdrop is not part of the CAPTURE (it is sampled
+    // by the fold each refold), and a chain that links a backdrop uniform is
+    // classified per-frame by packVariesPerFrame regardless of pause state, so
+    // its composite is never served from this cache. Two known residuals at
+    // fractional output scale, accepted pending a live check: a pure MOVE
+    // during a held drag keeps the capture's sub-pixel rasterization phase
+    // from when it was taken (snapping is relaxed for the duration, pulling
+    // the same direction), and the capture's edge texels blend with the
+    // transparent canvas under a bufferScale < 1 downsample.
 
     // How many packs in the chain actually compiled and therefore draw? A pack that
     // failed to compile folds nothing, so it cannot make the composite time-varying and
@@ -436,6 +453,21 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
         ? foldCursorFor(w, state.canvasGeo, decorationMayAnimate(w), m_shaderManager.m_cachedCursorGlobal)
         : kCursorOutside;
     const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
+    if (!chainReadsFocus) {
+        // Terminate a STRANDED ramp. advanceFocusFade is this map's only
+        // advancer, and it is unreachable for a chain with no compiled
+        // focus-reading pack — so if the chain stopped reading focus with a
+        // fade mid-flight (a chain edit, or the focus pack's compile failing
+        // on a hot-reload), the entry would sit strictly between 0 and 1
+        // forever, focusRampInFlight would keep windowSurfaceAnimates true
+        // unconditionally, and the repaint driver would bypass the
+        // Decorations.Performance gate at vsync rate with nothing able to
+        // stop it. The driver's own repaint reaches this fold, so the drop
+        // lands on the first frame of the runaway; a focus-reading pack
+        // returning later re-seeds the -1 snap sentinel, matching the
+        // undecorated→decorated scrub in updateWindowDecoration.
+        m_focusFade.remove(windowId);
+    }
     plan.foldFocus = chainReadsFocus ? advanceFocusFade(windowId, focusedNow) : 0.0f;
     // The effective opacity, folded into the opacity-tint pack param and carried on the
     // decoration. It is a fold cache key: a change re-folds, and on the fail-safe path (where

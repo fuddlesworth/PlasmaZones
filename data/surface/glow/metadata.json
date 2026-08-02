@@ -1,9 +1,9 @@
 {
     "id": "glow",
     "name": "Glow",
-    "description": "A soft coloured shadow that hugs the surface's edge, brightest against the window and fading out over the glow size. It follows the frame's rounded corners and dims when the surface loses focus.",
+    "description": "A soft coloured halo that hugs the surface's edge, brightest against the window and fading out over the glow size. It follows the frame's rounded corners and dims when the surface loses focus.",
     "author": "PlasmaZones",
-    "version": "1.1",
+    "version": "1.2",
     "category": "Ambience",
     "fragmentShader": "effect.frag",
     "interiorOpaque": true,

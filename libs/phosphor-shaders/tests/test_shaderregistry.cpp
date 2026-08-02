@@ -183,6 +183,33 @@ private Q_SLOTS:
         QVERIFY(info.bufferFilters.isEmpty());
         QVERIFY(!info.bufferFeedback);
         QVERIFY(!info.useDepthBuffer);
+        QVERIFY(info.halfFloatBuffers);
+    }
+
+    void testHalfFloatBuffersParseDefaultAndOptOut()
+    {
+        // Absent key: the safe RGBA16F default.
+        const QString defDir = makePack(baseMeta(), QStringLiteral("hfbdefault"));
+        QVERIFY(ShaderRegistry::parsePackMetadata(defDir).halfFloatBuffers);
+
+        // Explicit opt-out on a MULTIPASS pack survives (the coherence reset
+        // only strips buffer state from single-pass packs).
+        QJsonObject meta = baseMeta();
+        meta.insert(QLatin1String("multipass"), true);
+        meta.insert(QLatin1String("bufferShaders"), QJsonArray{QStringLiteral("effect.frag")});
+        meta.insert(QLatin1String("halfFloatBuffers"), false);
+        const QString mpDir = makePack(meta, QStringLiteral("hfboptout"));
+        const auto mpInfo = ShaderRegistry::parsePackMetadata(mpDir);
+        QVERIFY(mpInfo.isMultipass);
+        QVERIFY(!mpInfo.halfFloatBuffers);
+
+        // On a SINGLE-PASS pack the declaration is orphan buffer state and
+        // the coherence reset forces it back to true, exactly like its
+        // bufferScale/bufferWrap siblings.
+        QJsonObject sp = baseMeta();
+        sp.insert(QLatin1String("halfFloatBuffers"), false);
+        const QString spDir = makePack(sp, QStringLiteral("hfbsinglepass"));
+        QVERIFY(ShaderRegistry::parsePackMetadata(spDir).halfFloatBuffers);
     }
 
     /// translateParamsToUniforms — first direct coverage of the zone

@@ -276,7 +276,13 @@ void seedShaderEffect(PhosphorRendering::ShaderEffect& effect, const ShaderMetad
     }
     for (int i = 0; i < 4; ++i) {
         if (!md.userTextures[i].isEmpty()) {
-            QImage img(md.userTextures[i]);
+            // Route through the daemon's texture loader rather than a bare
+            // QImage ctor: loadUserTextureFile owns the SVG/SVGZ rasterise
+            // path, the byte-budget downscale, and the guaranteed RGBA8888
+            // result — a bare ctor would make an .svg image param preview
+            // differently from the daemon (or not at all).
+            const QImage img = PhosphorRendering::ShaderEffect::loadUserTextureFile(
+                md.userTextures[i], PhosphorRendering::kDefaultUserTextureSvgSize);
             if (!img.isNull()) {
                 effect.setUserTexture(i, img);
                 effect.setUserTextureWrap(i, md.userTextureWraps[i]);

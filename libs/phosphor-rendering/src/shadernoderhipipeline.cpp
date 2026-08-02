@@ -77,6 +77,11 @@ bool ShaderNodeRhi::ensureBufferTarget()
                                                  QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
             if (!m_depthSampler->create()) {
                 qCWarning(lcShaderNode) << "Failed to create depth sampler";
+                // Drop the failed object (matching ensureDummyChannelResources
+                // and ensureBufferSampler): the enclosing branch is gated on
+                // the TEXTURE's state, so a latched failed sampler would never
+                // be re-created yet still pass appendDepthBinding's null check.
+                m_depthSampler.reset();
                 return false;
             }
         }
@@ -484,19 +489,19 @@ bool ShaderNodeRhi::ensurePipeline()
         return srb->create() ? std::move(srb) : nullptr;
     };
 
-    if (hasMultipass) {
-        if (!ensureDummyChannelResources(rhi)) {
-            return false;
-        }
-    }
-    // The dummy 1x1 transparent texture also backs UNSUPPLIED user-texture
+    // The dummy 1x1 transparent texture backs UNSUPPLIED user-texture
     // slots 1-3 (appendUserTextureBindings): a shader that references
     // uTexture<N> without a loaded texture must read the documented
     // transparent black rather than leave the declared binding without an
     // SRB entry (strict backends reject the mismatch; lenient ones sample
-    // undefined). Best-effort — a failed create falls back to the previous
-    // omit-the-binding behaviour.
+    // undefined). Single call for both consumers: for a single-pass shader a
+    // failed create is best-effort (falls back to omit-the-binding), while a
+    // multipass shader hard-requires it (unwritten iChannel slots bind the
+    // dummy), so its absence fails the build below.
     ensureDummyChannelResources(rhi);
+    if (hasMultipass && (!m_dummyChannelTexture || !m_dummyChannelSampler)) {
+        return false;
+    }
 
     if (!m_srb) {
         if (multiBufferMode) {

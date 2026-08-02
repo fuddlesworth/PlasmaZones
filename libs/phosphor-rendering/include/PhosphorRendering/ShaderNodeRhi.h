@@ -98,6 +98,13 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * safe to call from the GUI thread outside the sync phase (it is the only flag
  * exposed as std::atomic).
  *
+ * One sanctioned entry point runs on the render thread OUTSIDE the sync phase:
+ * releaseResources(), reached via ShaderEffect::releaseIdleGraphicsResources'
+ * QQuickWindow::NoStage render job while the GUI thread is NOT blocked. That
+ * is safe because no GUI-thread path mutates node members directly — every
+ * ShaderEffect setter stages into the item's own members and defers the node
+ * push to the next sync — so the job cannot race a concurrent member write.
+ *
  * (Setters on the sibling ShaderEffect class are a different story — those run
  * on the GUI thread and stage their changes into ShaderEffect's own members, to
  * be pushed down to this node during the next sync phase.)

@@ -161,6 +161,7 @@ QImage ShaderEffect::loadUserTextureFile(const QString& path, int svgMaxDim)
 ShaderEffect::ShaderEffect(QQuickItem* parent)
     : QQuickItem(parent)
 {
+    m_selfToken->store(this, std::memory_order_release);
     setFlag(ItemHasContents, true);
 
     m_userTextureSvgSizes.fill(kDefaultUserTextureSvgSize);
@@ -222,6 +223,11 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
 
 ShaderEffect::~ShaderEffect()
 {
+    // FIRST statement, before any member teardown: invalidate the liveness
+    // token so a queued ReleaseIdleResourcesJob that runs from here on
+    // observes null and never touches this object (see m_selfToken's doc).
+    m_selfToken->store(nullptr, std::memory_order_release);
+
     // Disconnect the DirectConnection sceneGraphAboutToStop callback FIRST.
     // That lambda executes on the render thread and touches this object.
     //
@@ -693,37 +699,54 @@ void ShaderEffect::releaseIdleGraphicsResources()
     //     re-storing (updatePaintNode's width<=0 branch, windowChanged, and
     //     scene-graph invalidation via the sceneGraphAboutToStop hook above)
     //     nulls the atomic first.
-    //   • The QPointer guards effect deletion. A ShaderEffect dies either
-    //     with its window (whose destructor stops the render thread and
-    //     flushes or discards pending jobs before QML content is deleted) or
-    //     under an alive window on the GUI thread while that window's render
-    //     loop is between frames — in both orders the deref happens-after
-    //     the QPointer clear or before the delete begins.
-    //   • Mirrors the sceneGraphAboutToStop hook's body: resources released,
-    //     m_shaderDirty raised so the next painted frame re-bakes.
+    //   • The self-token guards effect deletion. A QPointer is not documented
+    //     thread-safe against concurrent destruction, and a queued NoStage job
+    //     can sit for an unbounded interval (destroyPassiveShell on screen
+    //     removal is a real path that deletes overlay content on the GUI
+    //     thread with a quiesce job pending). The job captures the shared
+    //     token by value; the destructor nulls it as its FIRST statement.
+    //     Honest framing: this NARROWS the race window to the destructor
+    //     body (the QPointer it replaces cleared inside ~QObject, LAST) —
+    //     it does not close it, since nothing synchronises the job's load
+    //     against a destructor that begins immediately after. Mirrors the
+    //     narrow-not-closed framing of the disconnect argument in the
+    //     destructor itself.
+    //   • Recovery is node-side: releaseRhiResources() retains the shader
+    //     sources and re-arms the node's own dirty flags, so the next painted
+    //     frame re-bakes from cached source with zero file I/O. The item-side
+    //     m_shaderDirty is deliberately NOT raised here — that would force
+    //     updatePaintNode's needLoad branch, a synchronous QFile read +
+    //     include expansion in the sync phase on the first frame of the next
+    //     drag. (The sceneGraphAboutToStop hook DOES raise it, because there
+    //     the node object itself is about to be destroyed.)
     class ReleaseIdleResourcesJob : public QRunnable
     {
     public:
-        explicit ReleaseIdleResourcesJob(ShaderEffect* effect)
-            : m_effect(effect)
+        explicit ReleaseIdleResourcesJob(std::shared_ptr<std::atomic<ShaderEffect*>> token)
+            : m_token(std::move(token))
         {
         }
         void run() override
         {
-            ShaderEffect* effect = m_effect.data();
+            ShaderEffect* effect = m_token->load(std::memory_order_acquire);
             if (!effect) {
                 return;
             }
+            // Field-verifiable: whether the render loop dispatches a NoStage
+            // job for an idle (mapped-but-undamaged, or unexposed) window is
+            // a Qt-version-dependent behaviour the release depends on. This
+            // line is the check — if it never appears after the idle grace
+            // fires, the reclaim is a no-op in that configuration.
+            qCDebug(lcShaderNode) << "ReleaseIdleResourcesJob: releasing idle shader GPU resources";
             if (ShaderNodeRhi* node = effect->m_renderNode.load(std::memory_order_acquire)) {
                 node->releaseResources();
             }
-            effect->m_shaderDirty.store(true);
         }
 
     private:
-        QPointer<ShaderEffect> m_effect;
+        std::shared_ptr<std::atomic<ShaderEffect*>> m_token;
     };
-    win->scheduleRenderJob(new ReleaseIdleResourcesJob(this), QQuickWindow::NoStage);
+    win->scheduleRenderJob(new ReleaseIdleResourcesJob(m_selfToken), QQuickWindow::NoStage);
 }
 
 // ============================================================================
@@ -951,6 +974,11 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     // errors retry on the next shaderSource change.
     const bool wasDirty = m_shaderDirty.exchange(false);
     const bool needLoad = wasDirty || freshNode;
+    // Set only by a SUCCESSFUL load in this sync. The status block below must
+    // not report the node's resident shaderError against a load that just
+    // succeeded — that error belongs to the PREVIOUS shader (the node clears
+    // it only inside prepare()'s bake, which has not run yet).
+    bool loadSucceededThisSync = false;
     if (needLoad) {
         if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
             const QString fragPath = localPathFromShaderUrl(m_shaderSource);
@@ -981,6 +1009,14 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                 if (node->loadFragmentShader(fragPath)) {
                     node->invalidateShader();
                     setStatus(Status::Ready);
+                    loadSucceededThisSync = true;
+                    // One extra frame so prepare()'s bake can report its real
+                    // outcome (Ready stands, or a genuine compile error lands
+                    // via the status block on that next sync). Without it a
+                    // static (playing=false) item never paints again after
+                    // this frame, so a compile failure would go unreported —
+                    // and a stale previous-shader error could stand forever.
+                    update();
                 } else {
                     QString errorMsg = node->shaderError();
                     if (errorMsg.isEmpty()) {
@@ -1021,7 +1057,7 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     const Status currentStatus = m_status.load(std::memory_order_acquire);
     if (node->isShaderReady() && currentStatus != Status::Ready) {
         setStatus(Status::Ready);
-    } else if (!node->shaderError().isEmpty() && currentStatus != Status::Error) {
+    } else if (!loadSucceededThisSync && !node->shaderError().isEmpty() && currentStatus != Status::Error) {
         setError(node->shaderError());
     }
 
@@ -1053,9 +1089,19 @@ void ShaderEffect::itemChange(ItemChange change, const ItemChangeData& value)
     QQuickItem::itemChange(change, value);
 
     if (change == ItemVisibleHasChanged && value.boolValue) {
-        // Item became visible — force scene graph update. On Vulkan, window hide
-        // destroys the swapchain; update() calls during the hidden period are lost.
-        m_shaderDirty = true;
+        // Item became visible — force scene graph update (update() calls
+        // during the hidden period are lost). Only force a full reload when
+        // the node is actually gone: an unconditional m_shaderDirty here
+        // re-read the shader file and re-expanded every include synchronously
+        // in the sync phase on EVERY show, while the resident node's bake was
+        // still perfectly valid. The two real teardown paths are covered
+        // independently — scene-graph invalidation (Vulkan window hide) goes
+        // through the sceneGraphAboutToStop hook, which raises m_shaderDirty
+        // and nulls the node; and any path that leaves the node null makes
+        // the next updatePaintNode's freshNode branch load regardless.
+        if (!m_renderNode.load(std::memory_order_acquire)) {
+            m_shaderDirty = true;
+        }
         update();
     } else if (change == ItemSceneChange) {
         // Re-hook the playing-mode tick connection to whatever window the

@@ -1013,8 +1013,12 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
         return ShaderBranchOutcome::Handled;
     }
     // Expiry fall-through: an installed-but-expired, non-minimized leg. The
-    // queued teardown above owns the unredirect; paintWindow continues to the
-    // decoration fold and the normal paint-chain continuation.
+    // queued teardown above owns the unredirect. paintWindow SKIPS the
+    // decoration fold for this window (its fold gate excludes any window with
+    // an installed transition, and the leg is still installed on the expiry
+    // frame) and continues the paint chain; the drawWindow override presents
+    // the transition's final-progress composite instead, which is the
+    // intended "consume the redirected end state" behaviour.
     return ShaderBranchOutcome::Continue;
 }
 

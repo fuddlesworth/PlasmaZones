@@ -246,6 +246,15 @@ private Q_SLOTS:
         const SurfaceShaderEffect s = SurfaceShaderEffect::fromJson(metaPlain);
         QVERIFY(!s.interiorOpaque);
         QVERIFY(!s.toJson().contains(QLatin1String("interiorOpaque")));
+
+        // The flag participates in operator== — that equality is what the
+        // registry reconcile and the decoration profile diff use to decide a
+        // pack changed, so dropping it from the comparison would leave the
+        // kwin effect's chainInteriorOpaque sweep never re-evaluated after a
+        // metadata-only flip.
+        SurfaceShaderEffect flipped = e;
+        flipped.interiorOpaque = false;
+        QVERIFY(!(flipped == e));
     }
 
     void providesBorder_flag_parses_and_roundtrips()

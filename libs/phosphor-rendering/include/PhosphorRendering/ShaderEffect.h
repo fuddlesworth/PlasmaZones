@@ -734,10 +734,11 @@ protected:
     qreal effectiveResolutionScale() const;
 
     /**
-     * @brief Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) to a render node.
+     * @brief Sync base properties (time, params, colors, audio, multipass, depth, wallpaper,
+     *        user textures, uniform extension) to a render node.
      *
-     * Does NOT sync user textures, uniform extension, or shader source — these differ
-     * between ShaderEffect and subclasses (e.g. ZoneShaderItem).
+     * Does NOT sync shader source — that load is owned by updatePaintNode's
+     * needLoad branch (and differs between ShaderEffect and subclasses).
      *
      * Called from updatePaintNode(); subclasses that override updatePaintNode should call
      * this instead of duplicating the property sync.
@@ -981,6 +982,16 @@ private:
     // QPointer defends against reparent/teardown storms where the window is
     // destroyed out from under us before windowChanged(nullptr) fires.
     QPointer<QQuickWindow> m_connectedWindow;
+    /// Liveness token for render jobs queued via releaseIdleGraphicsResources.
+    /// A QPointer is not documented thread-safe against concurrent destruction
+    /// (a NoStage job can sit queued for an unbounded interval and pass a
+    /// QPointer null-check just as ~QObject begins on the GUI thread). The
+    /// job captures this shared_ptr by value and bails when the atomic loads
+    /// null; the destructor stores null as its FIRST statement, before any
+    /// member teardown. This NARROWS the destruction race to the destructor
+    /// body (versus QPointer's clear inside ~QObject, last) — it does not
+    /// close it; closing it needs real synchronisation and a design pass.
+    std::shared_ptr<std::atomic<ShaderEffect*>> m_selfToken = std::make_shared<std::atomic<ShaderEffect*>>(nullptr);
 
     // ── Thread-safe dirty flags for main -> render thread sync ───────
     std::atomic<bool> m_shaderDirty{false};

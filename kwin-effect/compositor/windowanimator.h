@@ -145,7 +145,19 @@ public:
     /// at all: the mode only affects REDIRECTED (decorated) windows'
     /// offscreen presentation, so an undecorated window's morph should not
     /// un-snap the decorated bystanders. O(#animations), single digits.
-    bool hasAnimationMatching(const std::function<bool(KWin::EffectWindow*)>& pred) const;
+    /// A template rather than std::function: the caller sits on the hottest
+    /// per-frame hook (prePaintScreen, once per output per vsync), where the
+    /// type-erased indirect call was pure overhead for the single call site.
+    template<typename Pred>
+    bool hasAnimationMatching(Pred&& pred) const
+    {
+        for (const auto& entry : m_animations) {
+            if (pred(entry.first)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /// Start an animation. When @p profileOverride is non-null, the per-call
     /// curve / duration / minDistance / sequence overrides on it replace the

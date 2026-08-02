@@ -233,7 +233,7 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
 
     /// Maximum number of buffer passes a pack may declare.
     ///
-    /// Bounded because every declared pass costs a canvas-sized RGBA8 texture and a
+    /// Bounded because every declared pass costs a canvas-sized RGBA16F texture and a
     /// fullscreen draw PER DECORATED WINDOW, PER FRAME, and the count comes from an
     /// installable pack's JSON — an unvalidated system boundary, and previously the
     /// one uncapped axis (bufferScale, outerPadding and the texture slots are all

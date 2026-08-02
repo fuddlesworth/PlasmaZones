@@ -906,6 +906,18 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (!isSameWindowSupersession) {
         redirect(window);
     }
+    // shaderApplied is deliberately NOT cleared here. The flag is
+    // double-booked: it means "the decoration owns the offscreen slot" to
+    // the paint drivers, but removeWindowDecoration's release gate also
+    // reads it as "decoration GL exists" — and a close transition's deleted
+    // path tears the decoration down through exactly that gate, so clearing
+    // the flag at install time silently skipped releaseDecorationGl (the
+    // unredirect + padded-band damage) on every animated close, leaving the
+    // halo band on screen. The cost of keeping it true is one redundant
+    // per-frame repaint from the postPaintScreen decoration driver for the
+    // transition's duration, which the driver's own screen-level damage
+    // already subsumes visually. See the redirected-animating predicate
+    // comment in paint_pipeline.cpp for the matching proxy caveat.
     // setShader replaces any prior shader pointer (idempotent for the
     // same shader, so same-effect supersession is correct here). Vertex-
     // deform transitions go through KWin's default texture shader so

@@ -4,7 +4,7 @@
     "category": "Energy",
     "description": "Layered plasma energy with distortion, chromatic aberration, bloom, and zone masking",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "multipass": true,
     "halfFloatBuffers": false,
     "bufferShaders": [
@@ -231,7 +231,7 @@
         {
             "id": "signalSpeed",
             "name": "Signal Speed",
-            "group": "Animation",
+            "group": "Labels",
             "type": "float",
             "slot": 19,
             "default": 6.0,
