@@ -946,7 +946,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 // the animator's current rect is what the draw transforms by.
                 animatedFrame = m_windowAnimator->currentValue(w, QRectF());
             }
-            captureWindowBackdrop(renderTarget, viewport, w, *backIt, animatedFrame);
+            captureWindowBackdrop(renderTarget, viewport, w, *backIt, deviceRegion, animatedFrame);
         }
     }
 

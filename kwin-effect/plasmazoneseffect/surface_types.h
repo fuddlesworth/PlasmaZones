@@ -456,14 +456,21 @@ struct SurfaceMultipassState
     /// means "no capture this frame" and pushes uHasBackdrop = 0.
     QVector4D backdropRect;
 
-    /// Every output that has blitted into the CURRENT accumulation generation.
+    /// Every output that has blitted a FULL canvas slice into the CURRENT
+    /// accumulation generation.
     ///
     /// This, and NOT a clock, is what separates one generation from the next. A canvas
     /// straddling several outputs is blitted once per output, and those slices must UNION
-    /// into one valid rect — but a blit from an output ALREADY in this generation is the next
-    /// frame for that output and must RESTART the rect, or a window that has moved keeps
-    /// claiming canvas it no longer captures. Outputs have independent frame clocks, so no
-    /// clock can tell those two cases apart.
+    /// into one valid rect — but a FULL slice from an output ALREADY in this generation is
+    /// the next frame for that output and must RESTART the rect, or a window that has moved
+    /// keeps claiming canvas it no longer captures. Outputs have independent frame clocks,
+    /// so no clock can tell those two cases apart.
+    ///
+    /// Only FULL slices (damage covering the whole visible canvas) participate: the capture
+    /// is clipped to the frame's damage region, and a partial slice unions without touching
+    /// this set — restarting on one would collapse the valid rect to a damage sliver.
+    /// Contraction still happens promptly, because full slices are routine (the ~30fps
+    /// backdrop driver damages the whole canvas; animations force full repaints).
     ///
     /// A SET, not "the last output that blitted". With two outputs both covering the canvas
     /// the blits alternate A, B, A, B — so "different from the last one" is true every single
