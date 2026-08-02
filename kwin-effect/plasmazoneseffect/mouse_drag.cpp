@@ -24,9 +24,14 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
                                          Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
                                          Qt::KeyboardModifiers oldmodifiers)
 {
-    Q_UNUSED(oldmodifiers)
-
-    const bool modifiersChanged = (m_currentModifiers != modifiers);
+    // A REAL keyboard transition is modifiers != oldmodifiers — the event's
+    // own before/after pair. Comparing against the m_currentModifiers cache
+    // instead made every keyboard-stateless pointer event (KWin reports
+    // modifiers=0 on those during an interactive move) read as a "change"
+    // that RESET the cached Alt to 0 — so a drag-insert trigger held for a
+    // whole drag reached the daemon as held for exactly one tick per
+    // physical press, and the preview begin/cancel churned with it.
+    const bool modifiersChanged = (modifiers != oldmodifiers);
     const bool buttonsChanged = (oldbuttons != buttons);
 
     // Wake any hover-reactive decoration. Its repaint driver stands down once the folded
