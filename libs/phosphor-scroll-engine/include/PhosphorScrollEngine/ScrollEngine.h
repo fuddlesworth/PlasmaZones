@@ -638,6 +638,20 @@ private:
     /// Refreshes the clamp on an existing entry rather than overwriting a
     /// real remembered slot with a slotless one.
     void seedFloatRestoreForOpen(const QString& windowId, int minWidth, int minHeight);
+    /// Accept-predicate term for a FLOATING scroll slot in the open-time
+    /// restore branches (autotile's rule, term for term): same-instance
+    /// records restore unconditionally, FIFO consumption additionally needs a
+    /// real float-back rect, and the record's screen must match @p screenId
+    /// (or be unscreened).
+    bool acceptsFloatingRecord(const PhosphorEngine::WindowPlacement& p, const QString& windowId,
+                               const QString& screenId) const;
+    /// Consume the window's FLOATING placement record on an engine-decided
+    /// float at open (oversized / rule / sticky) and apply the gated
+    /// float-back position restore — the same record consumption and
+    /// geometry emit the record-float branch of insertOpenedWindow performs.
+    /// Without it an engine-decided float leaves the record stale in the
+    /// FIFO and forgets the remembered position autotile restores.
+    void restoreFloatRecordForOpen(const QString& windowId, const QString& screenId);
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
                              const QString& screenId);
     bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,

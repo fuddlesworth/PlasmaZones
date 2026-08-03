@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <QCoreApplication>
+#include <QSignalSpy>
 #include <QTest>
 
 #include <PhosphorEngine/WindowPlacement.h>
@@ -98,6 +99,44 @@ private Q_SLOTS:
         engine->windowOpened(QStringLiteral("term|t2"), screen, 0, 0);
         QVERIFY(state->isFloating(QStringLiteral("term|t2")));
         QVERIFY(!state->strip().containsWindow(QStringLiteral("term|t2")));
+        // The consumed record was re-bound to the live uuid (takeForReopen
+        // rule 2), so the float-back geometry survives for the next reopen.
+        const auto rebound = tracker.placementStore().peekExact(QStringLiteral("term|t2"));
+        QVERIFY(rebound.has_value());
+        QCOMPARE(rebound->freeGeometryFor(screen), QRect(40, 40, 500, 300));
+    }
+
+    void ruleFloatedReopenRestoresRememberedPosition()
+    {
+        // A "Float this app" rule floats the arrival before the tiled/record
+        // ladder runs. The engine-decided float must still consume the
+        // window's FLOATING record and restore the remembered position, the
+        // outcome autotile reaches through its record branch. Regression:
+        // the rule exit used to skip the store entirely, so a rule-floated
+        // reopen forgot its position and left the record stale in the FIFO.
+        QObject owner;
+        FakeStickyWindowTracking tracker;
+        ScrollEngine* engine = makeEngine(&owner, &tracker);
+        const QString screen = QLatin1String(Screen);
+        engine->setFloatPredicate([](const QString& windowId, const QString&) {
+            return windowId.startsWith(QLatin1String("term|"));
+        });
+
+        engine->windowOpened(QStringLiteral("term|t1"), screen, 0, 0);
+        ScrollState* state = stateFor(engine, screen);
+        QVERIFY(state);
+        QVERIFY(state->isFloating(QStringLiteral("term|t1"))); // rule float
+        captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300));
+
+        QSignalSpy restoreSpy(engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+        engine->windowOpened(QStringLiteral("term|t2"), screen, 0, 0);
+        QVERIFY(state->isFloating(QStringLiteral("term|t2")));
+        QCOMPARE(restoreSpy.count(), 1);
+        QCOMPARE(restoreSpy.at(0).at(0).toString(), QStringLiteral("term|t2"));
+        QCOMPARE(restoreSpy.at(0).at(1).toRect(), QRect(40, 40, 500, 300));
+        // Consumed and re-bound, not left stale in the FIFO.
+        QVERIFY(tracker.placementStore().peekExact(QStringLiteral("term|t2")).has_value());
+        QCOMPARE(tracker.placementStore().size(), 1);
     }
 
     void reopenWithSameUuidStaysFloating()

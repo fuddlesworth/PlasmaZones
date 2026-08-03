@@ -39,6 +39,50 @@ void ScrollEngine::seedFloatRestoreForOpen(const QString& windowId, int minWidth
     m_floatRestore.insert(windowId, restore);
 }
 
+bool ScrollEngine::acceptsFloatingRecord(const PhosphorEngine::WindowPlacement& p, const QString& windowId,
+                                         const QString& screenId) const
+{
+    // A geometry-less floating record is meaningful for the SAME instance
+    // (restore floating in place), but consumed by a FIFO sibling it floats a
+    // fresh window at its spawn rect for no user-visible reason while burning
+    // a slot a real placement may need.
+    const bool sameInstance = PhosphorIdentity::WindowId::extractInstanceId(p.windowId)
+        == PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    if (!sameInstance && !p.anyFreeGeometry().isValid()) {
+        return false;
+    }
+    return p.screenId.isEmpty() || p.screenId == screenId;
+}
+
+void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QString& screenId)
+{
+    const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+    if (!m_windowTracker || appId.isEmpty() || appId == windowId) {
+        return;
+    }
+    using PhosphorEngine::WindowPlacement;
+    // FLOATING-only accept: the window floats regardless (the caller already
+    // decided that), so a tiled record must neither be consumed nor block a
+    // later tiled reopen — a rejected exact record simply leaves the store
+    // untouched via takeForReopen's exact-final gate.
+    const auto accept = [&](const WindowPlacement& p) {
+        return p.slotFor(engineId()).state == WindowPlacement::stateFloating()
+            && acceptsFloatingRecord(p, windowId, screenId);
+    };
+    const auto record = m_windowTracker->placementStore().takeForReopen(windowId, appId, accept);
+    if (!record) {
+        return;
+    }
+    // Same gate and screen-local rule as the record-float branch of
+    // insertOpenedWindow (which documents both).
+    const QString restoreScreen = record->screenId.isEmpty() ? screenId : record->screenId;
+    const QRect freeGeo = record->freeGeometryFor(restoreScreen);
+    const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
+    if (freeGeo.isValid() && restorePosition) {
+        Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+    }
+}
+
 bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId,
                                       int minWidth, int minHeight)
 {
@@ -72,22 +116,29 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // list never empties and the stale entry survives every later mode
         // transition.
         consumePendingInitialOrder(screenId, windowId);
+        // An engine-decided float still consumes its FLOATING placement
+        // record and restores the remembered float-back — autotile reaches
+        // the same outcome through its record branch (record first, rule
+        // float layered on top); this engine floats before ever consulting
+        // the store, so the consumption happens here or never.
+        restoreFloatRecordForOpen(windowId, screenId);
         Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
         return true;
     }
 
     // Unified-placement restore: a window recorded tiled in scrolling mode
     // reopens at its recorded column slot; a floating record reopens
-    // floating (the shared free geometry is restored by the common layer).
+    // floating, with the recorded float-back applied through this engine's
+    // own gated geometryRestoreRequested emit below (the daemon's passive
+    // float-sync arm deliberately restores no geometry).
     // Resolved via the store's takeForReopen so a close/reopen — fresh KWin
     // uuid, appId-FIFO match — restores exactly like a daemon restart's
     // uuid-exact match. peekExact alone covered only the restart case: a
     // reopened floated window missed its record and fell through to a tile
     // insert. The accept predicate is autotile's (insert.cpp), term for term:
-    // a floating slot restores on a screen match (FIFO consumption also needs
-    // a real float-back rect — a geometry-less floating residue restored onto
-    // a fresh sibling would float it at its spawn rect for no visible
-    // reason); a tiled slot restores only in the SAME full context.
+    // a floating slot restores per acceptsFloatingRecord (screen match, and
+    // FIFO consumption needs a real float-back rect); a tiled slot restores
+    // only in the SAME full context.
     int restoreColumn = -1;
     const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
     if (m_windowTracker && !appId.isEmpty() && appId != windowId) {
@@ -96,12 +147,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         const auto accept = [&](const WindowPlacement& p) {
             const PhosphorEngine::EngineSlot s = p.slotFor(engineId());
             if (s.state == WindowPlacement::stateFloating()) {
-                const bool sameInstance = PhosphorIdentity::WindowId::extractInstanceId(p.windowId)
-                    == PhosphorIdentity::WindowId::extractInstanceId(windowId);
-                if (!sameInstance && !p.anyFreeGeometry().isValid()) {
-                    return false;
-                }
-                return p.screenId.isEmpty() || p.screenId == screenId;
+                return acceptsFloatingRecord(p, windowId, screenId);
             }
             if (s.state == WindowPlacement::stateTiled()) {
                 return p.screenId == currentKey.screenId && p.virtualDesktop == currentKey.desktop

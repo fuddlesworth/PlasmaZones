@@ -64,9 +64,12 @@ public:
                                         const std::function<bool(const WindowPlacement&)>& accept = {},
                                         const std::function<bool(const WindowPlacement&)>& preferred = {});
 
-    /// Reopen resolve: the shared consumption pattern every engine's open-time
-    /// restore must use — take() wrapped in the two rules that make a
-    /// close/reopen (fresh uuid, appId-FIFO match) behave correctly:
+    /// Reopen resolve: the shared consumption pattern the TILING engines'
+    /// open-time restores use (SnapEngine::resolveWindowRestore keeps its own
+    /// take + re-bind: its snapped records restore cross-screen and its accept
+    /// depends on a mode-defer bypass, so rule 1 below does not fit it) —
+    /// take() wrapped in the two rules that make a close/reopen (fresh uuid,
+    /// appId-FIFO match) behave correctly:
     ///
     ///   1. A REJECTED exact record is FINAL — no FIFO fallback past it. The
     ///      fallback exists for a reopen, whose fresh uuid by definition has no
