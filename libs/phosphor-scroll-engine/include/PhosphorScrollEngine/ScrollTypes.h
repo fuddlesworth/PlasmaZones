@@ -384,15 +384,20 @@ struct ColumnWidth
         Proportion = 0,
         /// Absolute pixel width.
         Fixed = 1,
-        /// Index into the preset-proportion list (resolved at relayout, so a
-        /// preset-list settings change reflows preset-width columns).
+        /// Fraction ANCHOR snapped to the nearest entry of the screen's
+        /// effective preset list at relayout. Value-anchored (not an index)
+        /// so the intent survives vocabulary changes: a template swap
+        /// reflows the column onto the nearest new entry, clearing the
+        /// template restores the original width, and a cross-screen move
+        /// needs no remap. Cycling steps between vocabulary entries and
+        /// writes the NEW entry's value as the anchor.
         Preset = 2,
     };
 
     Kind kind = Proportion;
     qreal proportion = 0.5; ///< Kind::Proportion
     int fixedPx = 0; ///< Kind::Fixed
-    int presetIdx = 0; ///< Kind::Preset
+    qreal presetFraction = 0.5; ///< Kind::Preset
 
     static constexpr ColumnWidth makeProportion(qreal p)
     {
@@ -408,11 +413,11 @@ struct ColumnWidth
         w.fixedPx = px;
         return w;
     }
-    static constexpr ColumnWidth makePreset(int idx)
+    static constexpr ColumnWidth makePreset(qreal fraction)
     {
         ColumnWidth w;
         w.kind = Preset;
-        w.presetIdx = idx;
+        w.presetFraction = fraction;
         return w;
     }
 
@@ -427,7 +432,10 @@ struct ColumnWidth
         case Fixed:
             return fixedPx == other.fixedPx;
         case Preset:
-            return presetIdx == other.presetIdx;
+            // Anchors are always copied FROM vocabulary values, so the cycle
+            // no-op gate compares identical doubles in practice; fuzzy keeps
+            // JSON round-trips honest.
+            return qFuzzyCompare(presetFraction, other.presetFraction);
         }
         return false;
     }
@@ -443,14 +451,16 @@ struct WindowHeight
         Auto = 0,
         /// Absolute pixel height.
         Fixed = 1,
-        /// Index into the preset-proportion list.
+        /// Fraction anchor snapped to the nearest entry of the effective
+        /// preset list at relayout — same value-anchored contract as
+        /// ColumnWidth::Preset.
         Preset = 2,
     };
 
     Kind kind = Auto;
     qreal weight = 1.0; ///< Kind::Auto
     int fixedPx = 0; ///< Kind::Fixed
-    int presetIdx = 0; ///< Kind::Preset
+    qreal presetFraction = 0.5; ///< Kind::Preset
 
     static WindowHeight makeAuto(qreal w = 1.0)
     {
@@ -466,11 +476,11 @@ struct WindowHeight
         h.fixedPx = px;
         return h;
     }
-    static WindowHeight makePreset(int idx)
+    static WindowHeight makePreset(qreal fraction)
     {
         WindowHeight h;
         h.kind = Preset;
-        h.presetIdx = idx;
+        h.presetFraction = fraction;
         return h;
     }
 
@@ -485,11 +495,31 @@ struct WindowHeight
         case Fixed:
             return fixedPx == other.fixedPx;
         case Preset:
-            return presetIdx == other.presetIdx;
+            return qFuzzyCompare(presetFraction, other.presetFraction);
         }
         return false;
     }
 };
+
+/// Shared nearest-entry resolution for the fraction anchors above — the ONE
+/// implementation behind preset resolution, cycling, and height-fraction
+/// probes (it replaced three per-site variants). Empty list returns
+/// @p fallback, matching the old presetAt clamp's 0.5 answer.
+inline int nearestPresetIndex(const QList<qreal>& presets, qreal fraction)
+{
+    int best = 0;
+    for (int i = 1; i < presets.size(); ++i) {
+        if (qAbs(presets.at(i) - fraction) < qAbs(presets.at(best) - fraction)) {
+            best = i;
+        }
+    }
+    return best;
+}
+
+inline qreal nearestPresetValue(const QList<qreal>& presets, qreal fraction, qreal fallback = 0.5)
+{
+    return presets.isEmpty() ? fallback : presets.at(nearestPresetIndex(presets, fraction));
+}
 
 /// One window in a column.
 struct Tile

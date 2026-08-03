@@ -397,13 +397,15 @@ void TestScrollEnginePerScreen::absentTrioSlotsFallBackPerSlotToTheGlobal()
     QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
     QVERIFY(columnExists(engine, kS2, QStringLiteral("app|b")));
 
+    // Index 2 of the stub's 0.25/0.5/0.75 lists resolves to the VALUE
+    // anchor 0.75 at construction (value-anchored preset intent).
     const ColumnWidth inherited = openedWidth(engine, kS1, QStringLiteral("app|a"));
     QCOMPARE(inherited.kind, ColumnWidth::Preset);
-    QCOMPARE(inherited.presetIdx, 2);
+    QCOMPARE(inherited.presetFraction, 0.75);
 
     const WindowHeight inheritedHeight = openedHeight(engine, kS1, QStringLiteral("app|a"));
     QCOMPARE(inheritedHeight.kind, WindowHeight::Preset);
-    QCOMPARE(inheritedHeight.presetIdx, 2);
+    QCOMPARE(inheritedHeight.presetFraction, 0.75);
 
     const ColumnWidth kindHonoured = openedWidth(engine, kS2, QStringLiteral("app|b"));
     QCOMPARE(kindHonoured.kind, ColumnWidth::Proportion);
@@ -415,7 +417,8 @@ void TestScrollEnginePerScreen::presetIndexIsClampedToTheLivePresetList()
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     // Two presets, so a stored index of 9 (written when the list was longer)
-    // must land on the last live entry rather than reading past it.
+    // must RESOLVE to the last live entry's value rather than reading past
+    // it — the spin index turns into a value anchor at construction.
     settings->widthPresets = QStringList{QStringLiteral("0.25"), QStringLiteral("0.5")};
     ScrollEngine* engine = makeEngine(&owner, settings);
 
@@ -436,11 +439,11 @@ void TestScrollEnginePerScreen::presetIndexIsClampedToTheLivePresetList()
 
     const ColumnWidth clampedHigh = openedWidth(engine, kS1, QStringLiteral("app|a"));
     QCOMPARE(clampedHigh.kind, ColumnWidth::Preset);
-    QCOMPARE(clampedHigh.presetIdx, 1);
+    QCOMPARE(clampedHigh.presetFraction, 0.5);
 
     const ColumnWidth clampedLow = openedWidth(engine, kS2, QStringLiteral("app|b"));
     QCOMPARE(clampedLow.kind, ColumnWidth::Preset);
-    QCOMPARE(clampedLow.presetIdx, 0);
+    QCOMPARE(clampedLow.presetFraction, 0.25);
 }
 
 void TestScrollEnginePerScreen::fixedKindWithAProportionValueFallsThroughToTheGlobal()
@@ -542,12 +545,17 @@ void TestScrollEnginePerScreen::templatePresetHeightsReplaceSettingsHeights()
     engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
     engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
 
+    // The seeded INTENT is a value anchor now: no per-screen spin override
+    // exists here, so BOTH screens inherit the global anchor (settings list
+    // index 1 → 0.5). What differs is resolution — the template screen
+    // SNAPS the anchor into its {0.3, 0.6} vocabulary (→ 0.6, asserted on
+    // the rects below) while the settings screen resolves it verbatim.
     const WindowHeight onTemplate = openedHeight(engine, kS1, QStringLiteral("app|a"));
     QCOMPARE(onTemplate.kind, WindowHeight::Preset);
-    QCOMPARE(onTemplate.presetIdx, 1);
+    QCOMPARE(onTemplate.presetFraction, 0.5);
     const WindowHeight onSettings = openedHeight(engine, kS2, QStringLiteral("app|b"));
     QCOMPARE(onSettings.kind, WindowHeight::Preset);
-    QCOMPARE(onSettings.presetIdx, 1);
+    QCOMPARE(onSettings.presetFraction, 0.5);
 
     const QVector<QRect> templateRects = engine->visibleTileRects(kS1);
     QCOMPARE(templateRects.size(), 1);

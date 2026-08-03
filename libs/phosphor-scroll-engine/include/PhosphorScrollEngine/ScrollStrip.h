@@ -339,12 +339,9 @@ private:
     /// from @p prevIdx at @p oldViewX (strip coords) to the current active.
     void reanchorAfterFocusChange(int prevIdx, int oldViewX, const ScrollLayoutParams& params);
     // scrollstrip_sizing.cpp
-    /// Nearest preset index to the current pixel width of @p c (for entering
-    /// the preset cycle from a non-preset width).
-    int nearestPresetWidthIdx(const Column& c, const ScrollLayoutParams& params) const;
-    int nearestPresetHeightIdx(const Tile& t, const ScrollLayoutParams& params) const;
     /// The tile's current height as a fraction of the column height, or -1
-    /// when it has no determinate fraction (Auto weight).
+    /// when it has no determinate fraction (Auto weight). Preset anchors
+    /// answer their SNAPPED value (nearestPresetValue), matching relayout.
     qreal currentHeightFraction(const Tile& t, const ScrollLayoutParams& params) const;
 
     Column* activeColumnMutable();

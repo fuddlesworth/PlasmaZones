@@ -11,6 +11,7 @@
 
 #include "scrollstriptestutils.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QtTest>
@@ -31,6 +32,9 @@ private Q_SLOTS:
     void pruneSpareStashStagedFromPersistence();
     void unclaimedStashTilesExpireAfterThreeSessions();
     void coTenantClaimDoesNotRenewSiblingLease();
+    void presetIntentRoundTripsExactly();
+    void legacyPresetIndexBlobResolvesAgainstEffectiveList();
+    void outOfRangePresetFractionIsClampedAtTheBoundary();
 
 private:
     /// The state for a screen, or nullptr. QVERIFY'd at every call site: a
@@ -101,6 +105,114 @@ void TestScrollEnginePersistence::modeRoundTripRestoresFocusAndAnchor()
     QCOMPARE(after->strip().columns().at(0).display, ColumnDisplay::Tabbed);
     QCOMPARE(after->strip().activeWindowId(), QStringLiteral("app|c"));
     QCOMPARE(after->strip().viewAnchor(), anchorBefore);
+}
+
+void TestScrollEnginePersistence::presetIntentRoundTripsExactly()
+{
+    // Width/height blob coverage (previously unpinned by any test): a
+    // value-anchored Preset intent survives serialize → restore → claim
+    // BYTE-EXACT, and a Fixed height rides beside it untouched.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    ScrollState* live = stateFor(engine1, QStringLiteral("S1"));
+    QVERIFY(live);
+    QVERIFY(live->strip().setActiveColumnWidth(ColumnWidth::makePreset(0.42)));
+    QVERIFY(live->strip().setActiveWindowHeight(WindowHeight::makeFixed(333)));
+
+    const QJsonObject blob = engine1->serializeStripState();
+    QVERIFY(!blob.isEmpty());
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    engine2->windowOpened(QStringLiteral("app|n1"), QStringLiteral("S1"), 0, 0);
+
+    ScrollState* state = stateFor(engine2, QStringLiteral("S1"));
+    QVERIFY(state);
+    QCOMPARE(state->strip().columns().size(), 1);
+    const Column& col = state->strip().columns().first();
+    QCOMPARE(col.width.kind, ColumnWidth::Preset);
+    QCOMPARE(col.width.presetFraction, 0.42);
+    QCOMPARE(col.tiles.first().height.kind, WindowHeight::Fixed);
+    QCOMPARE(col.tiles.first().height.fixedPx, 333);
+}
+
+void TestScrollEnginePersistence::legacyPresetIndexBlobResolvesAgainstEffectiveList()
+{
+    // A pre-value-anchor blob carries "presetIdx" and no "presetFraction":
+    // the claim-site fixup resolves the index against the restoring screen's
+    // EFFECTIVE preset list. Build the legacy shape by hand (no code writes
+    // it anymore) inside an otherwise-modern blob.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    QJsonObject blob = engine1->serializeStripState();
+    QVERIFY(!blob.isEmpty());
+
+    // Rewrite the one column's width to the legacy index form (index 2 of
+    // the default 1/3, 1/2, 2/3 vocabulary).
+    const QString key = blob.keys().first();
+    QJsonObject strip = blob.value(key).toObject();
+    QJsonArray columns = strip.value(QLatin1String("columns")).toArray();
+    QJsonObject colObj = columns.first().toObject();
+    QJsonObject widthObj;
+    widthObj.insert(QLatin1String("kind"), static_cast<int>(ColumnWidth::Preset));
+    widthObj.insert(QLatin1String("presetIdx"), 2);
+    colObj.insert(QLatin1String("width"), widthObj);
+    columns.replace(0, colObj);
+    strip.insert(QLatin1String("columns"), columns);
+    blob.insert(key, strip);
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    engine2->windowOpened(QStringLiteral("app|n1"), QStringLiteral("S1"), 0, 0);
+
+    ScrollState* state = stateFor(engine2, QStringLiteral("S1"));
+    QVERIFY(state);
+    QCOMPARE(state->strip().columns().size(), 1);
+    const ColumnWidth width = state->strip().columns().first().width;
+    QCOMPARE(width.kind, ColumnWidth::Preset);
+    // Default vocabulary entry 2 is 2/3.
+    QCOMPARE(width.presetFraction, engine2->effectivePresetColumnWidths(QStringLiteral("S1")).at(2));
+}
+
+void TestScrollEnginePersistence::outOfRangePresetFractionIsClampedAtTheBoundary()
+{
+    // Persisted config is user-writable: a hand-edited fraction outside
+    // [0.05, 1.0] is bounded at the read, like every other numeric in the
+    // blob.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    QJsonObject blob = engine1->serializeStripState();
+
+    const QString key = blob.keys().first();
+    QJsonObject strip = blob.value(key).toObject();
+    QJsonArray columns = strip.value(QLatin1String("columns")).toArray();
+    QJsonObject colObj = columns.first().toObject();
+    QJsonObject widthObj;
+    widthObj.insert(QLatin1String("kind"), static_cast<int>(ColumnWidth::Preset));
+    widthObj.insert(QLatin1String("presetFraction"), 47.0);
+    colObj.insert(QLatin1String("width"), widthObj);
+    columns.replace(0, colObj);
+    strip.insert(QLatin1String("columns"), columns);
+    blob.insert(key, strip);
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    engine2->windowOpened(QStringLiteral("app|n1"), QStringLiteral("S1"), 0, 0);
+
+    ScrollState* state = stateFor(engine2, QStringLiteral("S1"));
+    QVERIFY(state);
+    const ColumnWidth width = state->strip().columns().first().width;
+    QCOMPARE(width.kind, ColumnWidth::Preset);
+    QCOMPARE(width.presetFraction, 1.0);
 }
 
 void TestScrollEnginePersistence::serializedStripRestoreSurvivesIdDrift()

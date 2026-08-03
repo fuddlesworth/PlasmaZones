@@ -688,10 +688,12 @@ void ScrollEngine::refreshConfigFromSettings()
     if (widthKind == DefaultWidthKind::Fixed) {
         m_defaultColumnWidth = ColumnWidth::makeFixed(qMax(1, qRound(widthValue)));
     } else if (widthKind == DefaultWidthKind::Preset) {
-        // Preset list is parsed above, so the clamp is against the live
-        // list; makePreset re-clamps at relayout if the list later shrinks.
-        m_defaultColumnWidth = ColumnWidth::makePreset(qBound(0, settings->scrollingDefaultColumnWidthPresetIndex(),
-                                                              qMax(0, int(m_presetColumnWidths.size()) - 1)));
+        // Config stays index-based (the spin names a slot in the list the
+        // user edits on the same page); the VALUE anchor is resolved here,
+        // against the freshly parsed list (guaranteed non-empty), and
+        // relayout snaps it into whatever vocabulary a screen ends up with.
+        m_defaultColumnWidth = ColumnWidth::makePreset(m_presetColumnWidths.at(
+            qBound(0, settings->scrollingDefaultColumnWidthPresetIndex(), int(m_presetColumnWidths.size()) - 1)));
     } else {
         m_defaultColumnWidth = ColumnWidth::makeProportion(qBound<qreal>(MinColumnWidthFraction, widthValue, 1.0));
     }
@@ -704,8 +706,9 @@ void ScrollEngine::refreshConfigFromSettings()
     if (heightKind == static_cast<int>(DefaultHeightKind::Fixed)) {
         m_defaultWindowHeight = WindowHeight::makeFixed(qMax(1, qRound(settings->scrollingDefaultWindowHeightValue())));
     } else if (heightKind == static_cast<int>(DefaultHeightKind::Preset)) {
-        m_defaultWindowHeight = WindowHeight::makePreset(qBound(0, settings->scrollingDefaultWindowHeightPresetIndex(),
-                                                                qMax(0, int(m_presetWindowHeights.size()) - 1)));
+        // Same idx-to-value resolution as the width twin above.
+        m_defaultWindowHeight = WindowHeight::makePreset(m_presetWindowHeights.at(
+            qBound(0, settings->scrollingDefaultWindowHeightPresetIndex(), int(m_presetWindowHeights.size()) - 1)));
     } else {
         m_defaultWindowHeight = WindowHeight{};
     }
@@ -787,7 +790,8 @@ namespace {
 /// Shared validation for both template preset lists: every entry must clear
 /// the given floor (the same bound the settings parser applies), and an
 /// empty or entirely-invalid list means "no template" — never an empty
-/// preset vocabulary, which would break cycling and nearestPresetWidthIdx.
+/// preset vocabulary, which would break cycling (the cycle verbs step
+/// through this list).
 /// Length is capped like the other public-API override ingresses in this
 /// file: the daemon's extractor caps its own output, but applyPerScreenConfig
 /// is exported LGPL surface and an embedder-supplied map must not make every
@@ -885,17 +889,18 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrid
             }
         }
         if (kind == static_cast<int>(DefaultWidthKind::Preset)) {
-            const int presetIdx = presetIt != overrides.constEnd()
-                ? presetIt->toInt()
-                : (m_defaultColumnWidth.kind == ColumnWidth::Preset ? m_defaultColumnWidth.presetIdx : 0);
-            // Clamp against the EFFECTIVE list: a template override changes
-            // the vocabulary this index resolves into (presetAt re-clamps at
-            // relayout either way, so this only tightens the stored intent).
-            // qMax belt: the effective lists cannot be empty today (both
-            // fallbacks are guaranteed non-empty), but qBound with lo > hi
-            // asserts in debug and this is exported API.
-            return ColumnWidth::makePreset(
-                qBound(0, presetIdx, qMax(0, int(effectivePresetColumnWidths(overrides).size()) - 1)));
+            // The per-screen SPIN is an index into this screen's EFFECTIVE
+            // vocabulary; resolve it to a value anchor here. An absent spin
+            // inherits the global slot, which is already a fraction —
+            // relayout snaps it into this screen's vocabulary. The .value
+            // fallback is a belt: the effective lists cannot be empty today.
+            const QList<qreal> vocab = effectivePresetColumnWidths(overrides);
+            if (presetIt != overrides.constEnd()) {
+                return ColumnWidth::makePreset(
+                    vocab.isEmpty() ? 0.5 : vocab.at(qBound(0, presetIt->toInt(), int(vocab.size()) - 1)));
+            }
+            return m_defaultColumnWidth.kind == ColumnWidth::Preset ? m_defaultColumnWidth
+                                                                    : ColumnWidth::makePreset(vocab.value(0, 0.5));
         }
         if (kind == static_cast<int>(DefaultWidthKind::Proportion)) {
             const qreal value = valueIt != overrides.constEnd()
@@ -909,14 +914,8 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrid
         // range) falls through to the global — the open path handles
         // client-decides via screenPinsWidth.
     }
-    if (m_defaultColumnWidth.kind == ColumnWidth::Preset) {
-        // Same effective-list clamp as the per-screen branch above: the
-        // stored global index was validated against the SETTINGS list and can
-        // exceed a shorter template vocabulary. presetAt re-clamps at relayout
-        // either way; this keeps both paths returning the same intent.
-        return ColumnWidth::makePreset(
-            qBound(0, m_defaultColumnWidth.presetIdx, qMax(0, int(effectivePresetColumnWidths(overrides).size()) - 1)));
-    }
+    // The global default is a value anchor now — no effective-list clamp
+    // needed; resolution snaps it into whatever vocabulary is live.
     return m_defaultColumnWidth;
 }
 
@@ -952,22 +951,19 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overr
                 return WindowHeight::makeFixed(qRound(value));
             }
         } else if (kind == static_cast<int>(DefaultHeightKind::Preset)) {
-            const int presetIdx = presetIt != overrides.constEnd()
-                ? presetIt->toInt()
-                : (m_defaultWindowHeight.kind == WindowHeight::Preset ? m_defaultWindowHeight.presetIdx : 0);
-            // Effective list for the same reason as the width twin above.
-            return WindowHeight::makePreset(
-                qBound(0, presetIdx, qMax(0, int(effectivePresetWindowHeights(overrides).size()) - 1)));
+            // Same spin-to-value resolution as the width twin above.
+            const QList<qreal> vocab = effectivePresetWindowHeights(overrides);
+            if (presetIt != overrides.constEnd()) {
+                return WindowHeight::makePreset(
+                    vocab.isEmpty() ? 0.5 : vocab.at(qBound(0, presetIt->toInt(), int(vocab.size()) - 1)));
+            }
+            return m_defaultWindowHeight.kind == WindowHeight::Preset ? m_defaultWindowHeight
+                                                                      : WindowHeight::makePreset(vocab.value(0, 0.5));
         } else if (kind == static_cast<int>(DefaultHeightKind::Auto)) {
             return WindowHeight{};
         }
     }
-    if (m_defaultWindowHeight.kind == WindowHeight::Preset) {
-        // Effective-list clamp on the global fallback, mirroring the width
-        // twin above.
-        return WindowHeight::makePreset(qBound(0, m_defaultWindowHeight.presetIdx,
-                                               qMax(0, int(effectivePresetWindowHeights(overrides).size()) - 1)));
-    }
+    // Value anchor: no clamp, resolution snaps (see the width twin).
     return m_defaultWindowHeight;
 }
 

@@ -82,7 +82,14 @@ inline QLatin1String kFixedPx()
 }
 inline QLatin1String kPresetIdx()
 {
+    // LEGACY read-only key: pre-value-anchor blobs stored the preset INDEX.
+    // New blobs write kPresetFraction; the readers resolve a legacy index
+    // against the restoring screen's effective list (claim-site fixup).
     return QLatin1String("presetIdx");
+}
+inline QLatin1String kPresetFraction()
+{
+    return QLatin1String("presetFraction");
 }
 inline QLatin1String kWidth()
 {
@@ -99,11 +106,17 @@ QJsonObject widthToJson(const ColumnWidth& w)
     obj.insert(kKind(), static_cast<int>(w.kind));
     obj.insert(kProportion(), w.proportion);
     obj.insert(kFixedPx(), w.fixedPx);
-    obj.insert(kPresetIdx(), w.presetIdx);
+    obj.insert(kPresetFraction(), w.presetFraction);
     return obj;
 }
 
-ColumnWidth widthFromJson(const QJsonObject& obj)
+/// @p legacyVocab: the restoring screen's effective preset-width list, used
+/// ONLY to resolve a pre-value-anchor blob's stored index into a fraction
+/// (fromJson stays pure — the vocabulary is a parameter, threaded in by
+/// restoreStripState which knows the screen). Version-free additive per the
+/// policy above; a blob written by this build is unreadable-as-preset by
+/// older builds (stash entries expire after three sessions regardless).
+ColumnWidth widthFromJson(const QJsonObject& obj, const QList<qreal>& legacyVocab)
 {
     // Persisted config is user-writable, so this is a system boundary: every
     // numeric field is bounded to the range its producers already enforce
@@ -118,7 +131,17 @@ ColumnWidth widthFromJson(const QJsonObject& obj)
                                                                          : ColumnWidth::Proportion;
     w.proportion = qBound<qreal>(0.05, obj.value(kProportion()).toDouble(0.5), 1.0);
     w.fixedPx = qMax(0, obj.value(kFixedPx()).toInt(0));
-    w.presetIdx = qMax(0, obj.value(kPresetIdx()).toInt(0));
+    if (obj.contains(kPresetFraction())) {
+        w.presetFraction = qBound<qreal>(0.05, obj.value(kPresetFraction()).toDouble(0.5), 1.0);
+    } else {
+        // Legacy blob: resolve the stored index against the current
+        // vocabulary. If the list changed since the write the anchor lands on
+        // a slightly different value — accepted degradation, smoothed by
+        // snap-at-resolve.
+        const int legacyIdx = qMax(0, obj.value(kPresetIdx()).toInt(0));
+        w.presetFraction =
+            legacyVocab.isEmpty() ? 0.5 : legacyVocab.at(qBound(0, legacyIdx, int(legacyVocab.size()) - 1));
+    }
     return w;
 }
 
@@ -128,11 +151,12 @@ QJsonObject heightToJson(const WindowHeight& h)
     obj.insert(kKind(), static_cast<int>(h.kind));
     obj.insert(kWeight(), h.weight);
     obj.insert(kFixedPx(), h.fixedPx);
-    obj.insert(kPresetIdx(), h.presetIdx);
+    obj.insert(kPresetFraction(), h.presetFraction);
     return obj;
 }
 
-WindowHeight heightFromJson(const QJsonObject& obj)
+/// Same legacy-vocabulary contract as widthFromJson.
+WindowHeight heightFromJson(const QJsonObject& obj, const QList<qreal>& legacyVocab)
 {
     WindowHeight h;
     const int kind = obj.value(kKind()).toInt(static_cast<int>(WindowHeight::Auto));
@@ -143,7 +167,13 @@ WindowHeight heightFromJson(const QJsonObject& obj)
     // fixedPx/presetIdx indexes out of range.
     h.weight = qBound<qreal>(0.01, obj.value(kWeight()).toDouble(1.0), 100.0);
     h.fixedPx = qMax(0, obj.value(kFixedPx()).toInt(0));
-    h.presetIdx = qMax(0, obj.value(kPresetIdx()).toInt(0));
+    if (obj.contains(kPresetFraction())) {
+        h.presetFraction = qBound<qreal>(0.05, obj.value(kPresetFraction()).toDouble(0.5), 1.0);
+    } else {
+        const int legacyIdx = qMax(0, obj.value(kPresetIdx()).toInt(0));
+        h.presetFraction =
+            legacyVocab.isEmpty() ? 0.5 : legacyVocab.at(qBound(0, legacyIdx, int(legacyVocab.size()) - 1));
+    }
     return h;
 }
 
@@ -322,6 +352,11 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
             continue;
         }
         const QJsonObject obj = it.value().toObject();
+        // Effective vocabularies for the LEGACY presetIdx fixup in the two
+        // fromJson calls below — resolved once per key; the screen is in
+        // scope here, which is why the fixup lives at this claim site.
+        const QList<qreal> widthVocab = effectivePresetColumnWidths(key.screenId);
+        const QList<qreal> heightVocab = effectivePresetWindowHeights(key.screenId);
         StashedStrip stash;
         stash.focusedWindowId = obj.value(kFocused()).toString();
         // Same boundary hardening as widthFromJson. The anchor is deliberately
@@ -337,7 +372,7 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
             }
             const QJsonObject colObj = colVal.toObject();
             StashedColumn col;
-            col.width = widthFromJson(colObj.value(kWidth()).toObject());
+            col.width = widthFromJson(colObj.value(kWidth()).toObject(), widthVocab);
             col.display = colObj.value(kDisplay()).toInt(0) == static_cast<int>(ColumnDisplay::Tabbed)
                 ? ColumnDisplay::Tabbed
                 : ColumnDisplay::Normal;
@@ -349,7 +384,7 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
                 const QJsonObject tileObj = tileVal.toObject();
                 StashedTile tile;
                 tile.windowId = tileObj.value(kWindowId()).toString();
-                tile.height = heightFromJson(tileObj.value(kHeight()).toObject());
+                tile.height = heightFromJson(tileObj.value(kHeight()).toObject(), heightVocab);
                 tile.minimized = tileObj.value(kMinimized()).toBool(false);
                 // PER-TILE lease, bounded at the system boundary like every
                 // other numeric in this file (persisted config is
