@@ -67,6 +67,18 @@ inline PhosphorScrollEngine::ScrollEngine* makeProviderEngine(QObject* parent, c
     }
     auto* engine = new PhosphorScrollEngine::ScrollEngine(nullptr, nullptr, parent);
     engine->setScreenGeometryProviders(availableGeometry, screenGeometry);
+    // A well-behaved compositor answers every activation request with a
+    // windowFocused report (the effect relays each KWin windowActivated back
+    // through notifyWindowFocused). The engine pairs those echoes against its
+    // pending-self-activation queue, so a fixture that never echoes leaves
+    // the queue populated and the NEXT simulated user focus of that window
+    // is consumed as the missing echo. Direct connection is safe: the echo
+    // handler consumes the queue entry and returns before touching strip
+    // state, so the re-entry into the engine mid-applyLayout mutates nothing.
+    QObject::connect(engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, engine,
+                     [engine](const QString& windowId) {
+                         engine->windowFocused(windowId, engine->screenForTrackedWindow(windowId));
+                     });
     engine->setActiveScreens(screens);
     return engine;
 }

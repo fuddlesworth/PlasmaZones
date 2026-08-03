@@ -10,6 +10,9 @@
 
 #include "scrollenginelogging.h"
 
+#include <algorithm>
+#include <utility>
+
 namespace PhosphorScrollEngine {
 
 void ScrollEngine::seedFloatRestoreForOpen(const QString& windowId, int minWidth, int minHeight)
@@ -395,13 +398,55 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     if (arrivalTookFocus) {
         m_activeScreen = screenId;
     }
-    applyLayout(screenId, arrivalTookFocus);
+    // Inside an arrival burst (daemon-restart re-announce, mode flip) the
+    // apply is deferred to the outermost endArrivalBurst: each arrival here
+    // splices into a PARTIAL strip, and applying per arrival marches every
+    // already-placed window through N intermediate layouts the user can see
+    // even when the restored strip resolves to exactly the pre-restart rects.
+    if (m_arrivalBurstDepth > 0) {
+        auto it = m_burstPendingApplies.find(screenId);
+        if (it == m_burstPendingApplies.end()) {
+            m_burstPendingApplies.insert(screenId, arrivalTookFocus);
+        } else {
+            it.value() = it.value() || arrivalTookFocus;
+        }
+    } else {
+        applyLayout(screenId, arrivalTookFocus);
+    }
     Q_EMIT placementChanged(screenId);
+}
+
+void ScrollEngine::beginArrivalBurst()
+{
+    ++m_arrivalBurstDepth;
+}
+
+void ScrollEngine::endArrivalBurst()
+{
+    if (m_arrivalBurstDepth == 0 || --m_arrivalBurstDepth > 0) {
+        return;
+    }
+    const QHash<QString, bool> pending = std::move(m_burstPendingApplies);
+    m_burstPendingApplies.clear();
+    // Sorted, not hash order: with focus-taking arrivals on two screens the
+    // LAST activation request wins the compositor's focus, and hash order
+    // would make that winner vary run to run.
+    QStringList screens = pending.keys();
+    std::sort(screens.begin(), screens.end());
+    for (const QString& screenId : std::as_const(screens)) {
+        // The screen may have left the scrolling set mid-burst (mode flip
+        // races); applyLayout's own state/work-area guards make that a no-op.
+        applyLayout(screenId, pending.value(screenId));
+    }
 }
 
 void ScrollEngine::windowClosed(const QString& rawWindowId)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
+    // A pending self-activation for a window that closes before its echo
+    // lands can never be answered; without this a later genuine focus of a
+    // reused id would be eaten as that echo.
+    m_pendingSelfActivations.removeAll(windowId);
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
@@ -443,6 +488,21 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     if (!screenId.isEmpty() && m_scrollingScreens.contains(screenId)) {
         m_activeScreen = screenId;
     }
+    // Self-activation echo filter (the m_pendingSelfActivations doc): a
+    // report answering this engine's own activateWindowRequested carries no
+    // new information — the strip already reflects it, or has legitimately
+    // moved past it on a rapid focus scroll, and focusWindow below would
+    // rewind the active column to the stale echo. Entries ahead of the match
+    // go with it: their echoes were dropped by the effect and can never
+    // arrive after this one on the ordered connection.
+    if (const int selfIdx = m_pendingSelfActivations.indexOf(windowId); selfIdx >= 0) {
+        m_pendingSelfActivations.erase(m_pendingSelfActivations.begin(),
+                                       m_pendingSelfActivations.begin() + selfIdx + 1);
+        return;
+    }
+    // A genuine focus report implies every previously-sent echo already
+    // landed, so whatever is left in the queue was dropped — reclaim it.
+    m_pendingSelfActivations.clear();
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state || state->isFloating(windowId)) {

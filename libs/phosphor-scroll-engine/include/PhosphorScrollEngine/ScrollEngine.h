@@ -123,6 +123,8 @@ public:
 
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
+    void beginArrivalBurst() override;
+    void endArrivalBurst() override;
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
@@ -669,6 +671,32 @@ private:
     PhosphorEngine::ScreenContextTracker m_context;
     QSet<QString> m_scrollingScreens;
     QString m_activeScreen;
+    /// FIFO of window ids this engine asked the compositor to activate
+    /// (applyLayout's focusWindowAfter arm) whose windowFocused report has
+    /// not come back yet. The effect reports EVERY activation back through
+    /// notifyWindowFocused, including ones this engine initiated, and the
+    /// round trip is asynchronous: on a rapid focus scroll the strip has
+    /// already advanced past the echoed window by the time the report lands,
+    /// and treating that stale echo as user focus rewinds the active column —
+    /// the next scroll step then advances from the rewound column and skips
+    /// one. windowFocused consumes a matching entry and drops the report; a
+    /// NON-matching report clears the whole queue, which is sound because the
+    /// effect's calls share one ordered D-Bus connection — any echo sent
+    /// earlier has already arrived, so a leftover entry means the effect
+    /// dropped that activation (show desktop, window gone). The tab-click
+    /// path is unaffected: its activation goes out via the adaptor's
+    /// focusWindowRequested, never through this engine's emit, so its echo
+    /// is never queued and still drives the strip (signals.cpp documents
+    /// that contract).
+    QStringList m_pendingSelfActivations;
+    /// Arrival-burst bracket depth (IPlacementEngine::beginArrivalBurst).
+    /// While positive, windowOpened defers its per-arrival applyLayout into
+    /// m_burstPendingApplies (screen → whether any deferred arrival took
+    /// focus) and the outermost endArrivalBurst applies once per screen —
+    /// a daemon-restart re-announce then resolves the restored strip in one
+    /// geometry batch instead of N visible partial-strip intermediates.
+    int m_arrivalBurstDepth = 0;
+    QHash<QString, bool> m_burstPendingApplies;
     /// Armed by the context setters (desktop/activity switch), consumed by
     /// setActiveScreens so the identical-set re-emit only claims
     /// isDesktopSwitch=true for a REAL switch — same contract as
