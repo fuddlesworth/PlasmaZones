@@ -214,6 +214,8 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule)
             entry.snappingLayout = action.params.value(PWR::ActionParam::LayoutId).toString();
         } else if (action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
             entry.tilingAlgorithm = action.params.value(PWR::ActionParam::Algorithm).toString();
+        } else if (action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate)) {
+            entry.scrollingTemplateLayout = action.params.value(PWR::ActionParam::LayoutId).toString();
         }
     }
     return entry;

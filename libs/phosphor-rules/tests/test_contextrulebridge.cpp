@@ -119,6 +119,30 @@ private Q_SLOTS:
         QCOMPARE(actionCount(layoutOnly, ActionType::SetTilingAlgorithm), 0);
     }
 
+    void testMakeAssignmentActions_scrollingTemplateAction()
+    {
+        // The four-field lossless set: mode + snapping layout + algorithm +
+        // scrolling template, each in its own action.
+        const QList<RuleAction> actions =
+            CRB::makeAssignmentActions(QStringLiteral("scrolling"), QStringLiteral("layout-a"),
+                                       QStringLiteral("algo-b"), QStringLiteral("template-c"));
+        QCOMPARE(actions.size(), 4);
+        QCOMPARE(modeToken(actions), QStringLiteral("scrolling"));
+        QCOMPARE(actionCount(actions, ActionType::SetScrollingTemplate), 1);
+        for (const RuleAction& action : actions) {
+            if (action.type == QString(ActionType::SetScrollingTemplate)) {
+                QCOMPARE(action.params.value(ActionParam::LayoutId).toString(), QStringLiteral("template-c"));
+            }
+        }
+
+        // Empty template (the default) emits no action — the pre-template
+        // three-action shape is unchanged.
+        const QList<RuleAction> withoutTemplate = CRB::makeAssignmentActions(
+            QStringLiteral("scrolling"), QStringLiteral("layout-a"), QStringLiteral("algo-b"));
+        QCOMPARE(withoutTemplate.size(), 3);
+        QCOMPARE(actionCount(withoutTemplate, ActionType::SetScrollingTemplate), 0);
+    }
+
     // ─── makeAssignmentRule ───────────────────────────────────────────────
 
     void testMakeAssignmentRule_isValidAndContextOnly()

@@ -123,6 +123,15 @@ struct AssignmentEntry
     Mode mode = Snapping;
     QString snappingLayout; // UUID string of manual layout
     QString tilingAlgorithm; // e.g. "dwindle", "wide", "tall"
+    /// UUID of the manual layout a Scrolling context consumes as its
+    /// column-width TEMPLATE (zone extents become the strip's preset
+    /// vocabulary). Deliberately its own field, never a reuse of
+    /// snappingLayout: the lossless mode-toggle contract preserves the
+    /// snapping choice across mode flips, and the "scrolling:" sentinel in
+    /// activeLayoutId() stays payload-free (rules match on the bare
+    /// sentinel). Empty = no template; the engine falls back to the
+    /// settings preset lists.
+    QString scrollingTemplateLayout;
 
     QString activeLayoutId() const
     {
@@ -164,7 +173,8 @@ struct AssignmentEntry
     }
     bool operator==(const AssignmentEntry& other) const
     {
-        return mode == other.mode && snappingLayout == other.snappingLayout && tilingAlgorithm == other.tilingAlgorithm;
+        return mode == other.mode && snappingLayout == other.snappingLayout && tilingAlgorithm == other.tilingAlgorithm
+            && scrollingTemplateLayout == other.scrollingTemplateLayout;
     }
 
     /** @brief Update an existing AssignmentEntry from a layoutId, preserving the "other" field.

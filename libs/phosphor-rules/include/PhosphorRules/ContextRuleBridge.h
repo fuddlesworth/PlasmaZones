@@ -263,7 +263,8 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  * `ruleaction_builtins_p.h` — round-trips end-to-end through the consumer.
  */
 inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const QString& snappingLayout,
-                                               const QString& tilingAlgorithm)
+                                               const QString& tilingAlgorithm,
+                                               const QString& scrollingTemplate = QString())
 {
     QList<RuleAction> actions;
 
@@ -284,6 +285,12 @@ inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const Q
         tilingAction.params.insert(ActionParam::Algorithm, tilingAlgorithm);
         actions.append(tilingAction);
     }
+    if (!scrollingTemplate.isEmpty()) {
+        RuleAction templateAction;
+        templateAction.type = QString(ActionType::SetScrollingTemplate);
+        templateAction.params.insert(ActionParam::LayoutId, scrollingTemplate);
+        actions.append(templateAction);
+    }
     return actions;
 }
 
@@ -298,7 +305,8 @@ inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const Q
  */
 inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int virtualDesktop,
                                const QString& activity, const QString& modeToken, const QString& snappingLayout,
-                               const QString& tilingAlgorithm, int priority)
+                               const QString& tilingAlgorithm, int priority,
+                               const QString& scrollingTemplate = QString())
 {
     Rule rule;
     // Deterministic id derived from the source context identity — identical
@@ -308,7 +316,7 @@ inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int
     rule.enabled = true;
     rule.priority = priority;
     rule.match = makeContextMatch(screenId, virtualDesktop, activity);
-    rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm);
+    rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm, scrollingTemplate);
     return rule;
 }
 

@@ -224,6 +224,13 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         return layoutId.isEmpty() ? PhosphorI18n::tr("Snapping layout")
                                   : PhosphorI18n::tr("Snapping: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
+    if (action.type == ActionType::SetScrollingTemplate) {
+        // Same UUID value shape as SetSnappingLayout, so the same lookup
+        // resolves the layout name.
+        const QString layoutId = action.params.value(PhosphorRules::ActionParam::LayoutId).toString();
+        return layoutId.isEmpty() ? PhosphorI18n::tr("Scrolling template")
+                                  : PhosphorI18n::tr("Template: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
+    }
     if (action.type == ActionType::SetTilingAlgorithm) {
         const QString algo = action.params.value(PhosphorRules::ActionParam::Algorithm).toString();
         // Algorithms are wire tokens (`bsp`, `grid`, …). The dedicated

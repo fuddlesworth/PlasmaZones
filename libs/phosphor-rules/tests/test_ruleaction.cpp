@@ -30,6 +30,9 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetEngineMode,
     ActionType::SetSnappingLayout,
     ActionType::SetTilingAlgorithm,
+    // Scrolling template — context-domain like its assignment siblings,
+    // decoded by entryFromRuleMatchActions into the AssignmentEntry.
+    ActionType::SetScrollingTemplate,
     ActionType::DisableEngine,
     // Layout lock — context-domain, resolved during the screen/desktop/
     // activity pass (mode-agnostic) like the other context actions.

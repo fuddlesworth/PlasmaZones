@@ -330,7 +330,15 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // Use per-screen layout as reference for cycling so each screen cycles independently
     PhosphorZones::Layout* currentLayout = nullptr;
     if (!resolvedScreenId.isEmpty()) {
-        currentLayout = layoutForScreen(resolvedScreenId, desktop, m_currentActivity);
+        // On a scrolling screen the cycle walks TEMPLATES, so the reference
+        // is the assigned template (layoutForScreen yields nullptr there —
+        // its cascade settles on a non-Snapping entry). Without this, every
+        // cycle press restarted from the default layout instead of stepping.
+        if (modeForScreen(resolvedScreenId, desktop, m_currentActivity) == AssignmentEntry::Scrolling) {
+            currentLayout = scrollingTemplateForContext(resolvedScreenId, desktop, m_currentActivity);
+        } else {
+            currentLayout = layoutForScreen(resolvedScreenId, desktop, m_currentActivity);
+        }
     }
     if (!currentLayout) {
         currentLayout = defaultLayout();
@@ -355,10 +363,10 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // shared with applyQuickLayout. Cycling with an empty screenId
     // (uncommon but not invalid — happens when no focused screen is
     // known) just updates the global active layout.
-    // Report what was actually COMMITTED: applyLayoutToScreen refuses the
-    // write on a Scrolling-mode screen, and returning newLayout there claimed
-    // a switch that never happened. Both current callers discard the value,
-    // so this only makes the contract honest for the next one.
+    // Report what was actually COMMITTED: applyLayoutToScreen routes a
+    // Scrolling-mode screen to a template assignment (and can still refuse a
+    // null layout there); returning newLayout on a refusal would claim a
+    // switch that never happened.
     if (!applyLayoutToScreen(resolvedScreenId, newLayout)) {
         return nullptr;
     }
@@ -375,17 +383,26 @@ bool LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones:
         // applyQuickLayout via LayoutAdaptor) pass an already idForName-resolved
         // screenId, matching the per-output map's key.
         const int desktop = currentVirtualDesktopForScreen(screenId);
-        // Scrolling gate. A manual Layout* means nothing on a scrolling screen,
-        // and assignLayout below would classify its UUID as Snapping and flip
-        // the screen off the scrolling engine — a layout cycle or a quick-slot
-        // press must never change which engine owns a screen. Both callers
-        // already resolve the mode before they get here, so this is the
-        // invariant made LOCAL rather than a live path. Mirrors the way
-        // layoutForShortcut refuses an autotile slot for the same reason.
+        // Scrolling routing. A manual Layout* is not a PLACEMENT input on a
+        // scrolling screen — assignLayout below would classify its UUID as
+        // Snapping and flip the screen off the scrolling engine, and a layout
+        // cycle or quick-slot press must never change which engine owns a
+        // screen. Instead the layout becomes the context's sizing TEMPLATE
+        // (zone extents = the strip's preset vocabulary): the engine stays
+        // Scrolling, the mode-toggle contract keeps the snapping choice, and
+        // assignScrollingTemplate's layoutAssigned emit re-derives the
+        // engine's per-screen push. The global active-layout pointer below is
+        // deliberately NOT updated: it feeds the snap overlay / zone-detector
+        // queries, which a template choice must not repoint.
         if (modeForScreen(screenId, desktop, m_currentActivity) == AssignmentEntry::Scrolling) {
-            qCInfo(lcZonesLib) << "applyLayoutToScreen: screen" << screenId
-                               << "is in scrolling mode — manual layouts do not apply";
-            return false;
+            if (!layout) {
+                return false;
+            }
+            if (!m_currentActivity.isEmpty()) {
+                clearAssignment(screenId, desktop, m_currentActivity);
+            }
+            assignScrollingTemplate(screenId, desktop, QString(), layout->id().toString());
+            return true;
         }
         // Write per-desktop assignment with empty activity so it applies
         // regardless of which activity is active. Activity-specific
@@ -615,7 +632,7 @@ PhosphorZones::Layout* LayoutRegistry::layoutForShortcut(AssignmentEntry::Mode m
 {
     const auto idx = slotIndexFor(mode);
     if (!idx) {
-        return nullptr; // Scrolling carries no quick slots
+        return nullptr; // defensive: slotIndexFor currently maps every mode
     }
     const auto& slots = m_quickLayoutSlots[*idx];
     if (slots.contains(number)) {
@@ -659,7 +676,7 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
 
     const auto idx = slotIndexFor(mode);
     if (!idx) {
-        qCWarning(lcZonesLib) << "setQuickLayoutSlot: Scrolling carries no quick slots — ignored";
+        qCWarning(lcZonesLib) << "setQuickLayoutSlot: no slot array for mode" << mode << "— ignored";
         return;
     }
     auto& slots = m_quickLayoutSlots[*idx];

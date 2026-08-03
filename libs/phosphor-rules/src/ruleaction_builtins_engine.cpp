@@ -88,6 +88,29 @@ void ActionRegistry::registerBuiltinsEngine()
         .tags = {QString(Tag::LayoutEngine)},
     });
 
+    // ── scrolling-template slot ──
+    // The manual layout a Scrolling context consumes as its column-width
+    // template. Value shape is a manual-layout UUID exactly like
+    // SetSnappingLayout — the param kind is reused so the settings UI's
+    // layout-picker editor and name resolution apply — but the action fills
+    // its OWN slot: the lossless assignment set stores it beside the snapping
+    // layout in one rule (see ActionSlot::ScrollingTemplate).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollingTemplate),
+        .slotFor = constantSlot(ActionSlot::ScrollingTemplate),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, ActionParam::LayoutId);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::LayoutId)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::LayoutId), .kind = QStringLiteral("snappingLayout")}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 3,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+
     // ── engine-enable slot ──
     // `mode` records which engine the rule disables. The recognised tokens
     // are the wire vocabulary `PhosphorZones::modeFromWireString` accepts —

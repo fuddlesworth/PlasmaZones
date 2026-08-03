@@ -60,7 +60,8 @@ void LayoutRegistry::clearAutotileAssignments()
         // everything that is not an assignment slot.
         const PWR::Rule previous = rule;
         rule.actions = PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(AssignmentEntry::Snapping),
-                                                                     entry.snappingLayout, entry.tilingAlgorithm);
+                                                                     entry.snappingLayout, entry.tilingAlgorithm,
+                                                                     entry.scrollingTemplateLayout);
         carryOverNonAssignmentActions(rule, previous);
         changed = true;
 
@@ -277,7 +278,7 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         const int priority = hadOld ? oldSnapshot.priority : seedPriority++;
         PWR::Rule rebuilt = PWR::ContextRuleBridge::makeAssignmentRule(
             QString(), ctx.screenId, ctx.virtualDesktop, ctx.activity, modeToWireString(entry.mode),
-            entry.snappingLayout, entry.tilingAlgorithm, priority);
+            entry.snappingLayout, entry.tilingAlgorithm, priority, entry.scrollingTemplateLayout);
         // Preserve the prior `enabled` flag — `makeAssignmentRule` always
         // stamps `enabled = true`. Mirrors the upsertAssignmentRule
         // precedent. If there's no prior snapshot (new assignment), the
@@ -505,7 +506,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         const int priority = hadOld ? oldSnapshot.priority : seedPriority++;
         PWR::Rule rebuilt = PWR::ContextRuleBridge::makeAssignmentRule(
             QString(), key.screenId, key.virtualDesktop, key.activity, modeToWireString(entry.mode),
-            entry.snappingLayout, entry.tilingAlgorithm, priority);
+            entry.snappingLayout, entry.tilingAlgorithm, priority, entry.scrollingTemplateLayout);
         rebuilt.enabled = oldSnapshot.enabled;
         if (hadOld && !oldSnapshot.id.isNull()) {
             rebuilt.id = oldSnapshot.id;

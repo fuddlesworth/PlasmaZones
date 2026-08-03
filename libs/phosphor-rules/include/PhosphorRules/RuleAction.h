@@ -299,6 +299,13 @@ namespace ActionType {
 inline constexpr QLatin1StringView SetEngineMode{"setEngineMode"};
 inline constexpr QLatin1StringView SetSnappingLayout{"setSnappingLayout"};
 inline constexpr QLatin1StringView SetTilingAlgorithm{"setTilingAlgorithm"};
+/// Scrolling-mode template layout for the matched context: the manual layout
+/// whose zones become the strip's preset column-width vocabulary. Carries a
+/// LayoutId param like SetSnappingLayout (same value shape, so the settings
+/// UI reuses the layout-picker editor), but fills its own cascade slot — the
+/// lossless mode-toggle contract stores it BESIDE the snapping layout in one
+/// rule, and sharing the layout slot would shadow one of the pair.
+inline constexpr QLatin1StringView SetScrollingTemplate{"setScrollingTemplate"};
 inline constexpr QLatin1StringView DisableEngine{"disableEngine"};
 /// Lock the active layout for the matched screen/desktop/activity context so
 /// it can't be switched — the rule-driven equivalent of the manual
@@ -638,7 +645,8 @@ inline constexpr QLatin1StringView Value{"value"};
 // SetEngineMode / DisableEngine engine-token key — the wire token vocabulary
 // is `PhosphorZones::modeToWireString(Mode)` (snapping / autotile / scrolling).
 inline constexpr QLatin1StringView Mode{"mode"};
-// SetSnappingLayout layout-id key — wire is a `{uuid-with-braces}` string.
+// SetSnappingLayout / SetScrollingTemplate layout-id key — wire is a
+// `{uuid-with-braces}` string.
 inline constexpr QLatin1StringView LayoutId{"layoutId"};
 // SetTilingAlgorithm algorithm-token key — wire is the algorithm registry id.
 inline constexpr QLatin1StringView Algorithm{"algorithm"};
@@ -839,6 +847,11 @@ inline constexpr QLatin1StringView Accent{"accent"};
 namespace ActionSlot {
 inline constexpr QLatin1StringView EngineMode{"engine-mode"};
 inline constexpr QLatin1StringView Layout{"layout"};
+/// Context-domain scrolling-template slot — filled by
+/// `ActionType::SetScrollingTemplate`. Its own slot (not `Layout`): the
+/// lossless assignment set can carry a snapping layout AND a scrolling
+/// template in one rule, and per-slot accumulation would drop one of them.
+inline constexpr QLatin1StringView ScrollingTemplate{"scrolling-template"};
 inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
 /// Context-domain layout-lock slot — filled by `ActionType::LockContext`.
 /// A single boolean: a winning rule with `value == true` locks the context.

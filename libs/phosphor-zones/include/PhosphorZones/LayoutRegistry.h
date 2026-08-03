@@ -405,6 +405,18 @@ public:
     void setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
                                   const AssignmentEntry& entry);
 
+    /// Assign @p layoutId as the context's scrolling TEMPLATE (the layout
+    /// whose zones become the strip's preset vocabulary) and flip the mode to
+    /// Scrolling. The sibling fields survive per the lossless-toggle
+    /// contract, and activeLayoutId() stays the bare "scrolling:" sentinel.
+    /// Impl in layoutregistry_assignments.cpp.
+    void assignScrollingTemplate(const QString& screenId, int virtualDesktop, const QString& activity,
+                                 const QString& layoutId);
+    /// The resolved template Layout* for a scrolling context, or nullptr when
+    /// the cascade has no entry, the entry names no template, or the named
+    /// layout no longer exists (deleted-template fallback: "no template").
+    Layout* scrollingTemplateForContext(const QString& screenId, int virtualDesktop, const QString& activity) const;
+
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;
 
@@ -688,9 +700,11 @@ public:
     // Quick slots are keyed by tiling mode: Snapping slots hold manual-layout
     // UUIDs, Autotile slots hold autotile algorithm IDs. The two sets are
     // independent so the same Meta+Alt+N can map to a zone layout in snapping
-    // mode and an autotile algorithm in autotile mode. SCROLLING carries no
-    // slots at all — every entry point no-ops for it via slotIndexFor, so a
-    // Meta+Alt+N press on a scrolling screen does nothing.
+    // mode and an autotile algorithm in autotile mode. SCROLLING shares the
+    // Snapping array: its slots hold manual-layout UUIDs too (the template
+    // vocabulary), and applyLayoutToScreen routes a scrolling-screen apply to
+    // assignScrollingTemplate — the slot press changes the screen's template,
+    // never the engine.
 
     /// quicklayouts.json top-level keys: one nested slot object per tiling
     /// mode. This is the ONLY on-disk shape — there is no flat legacy variant.
@@ -705,10 +719,6 @@ public:
     void setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QHash<int, QString>& slots);
     QHash<int, QString> quickLayoutSlots(AssignmentEntry::Mode mode) const
     {
-        // Scrolling carries NO quick slots: a Meta+Alt+N press on a
-        // scrolling screen must be a no-op, not a silent application of
-        // the SNAPPING slot (which would assign a zone layout and flip
-        // the screen out of scrolling with no user intent).
         const auto idx = slotIndexFor(mode);
         if (!idx) {
             return {};
@@ -814,16 +824,15 @@ private:
     QString layoutSettingsFilePath() const;
     void readQuickLayouts();
     void writeQuickLayouts();
-    /// Map a tiling mode to its @ref m_quickLayoutSlots array index, or
-    /// nullopt for Scrolling — the ONE authority every quick-slot entry
-    /// point (read, apply, shortcut lookup, both writers) consults, so a
-    /// Scrolling caller can never read, apply, or overwrite the SNAPPING
-    /// array through the old clamp.
+    /// Map a tiling mode to its @ref m_quickLayoutSlots array index — the
+    /// ONE authority every quick-slot entry point (read, apply, shortcut
+    /// lookup, both writers) consults. Scrolling shares the SNAPPING array
+    /// (index 0): slots hold manual-layout UUIDs, which is exactly the
+    /// template vocabulary a scrolling screen consumes, and
+    /// applyLayoutToScreen routes the apply to assignScrollingTemplate
+    /// there — a slot press changes the template, never the engine.
     static constexpr std::optional<int> slotIndexFor(AssignmentEntry::Mode mode)
     {
-        if (mode == AssignmentEntry::Scrolling) {
-            return std::nullopt;
-        }
         return mode == AssignmentEntry::Autotile ? 1 : 0;
     }
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
@@ -1181,10 +1190,10 @@ private:
     Layout* m_activeLayout = nullptr;
     Layout* m_previousLayout = nullptr; ///< Active layout before last setActiveLayout (for resnap)
     /// Quick-layout slots keyed by mode: index 0 = Snapping (zone-layout
-    /// UUIDs), index 1 = Autotile (autotile algorithm IDs); Scrolling has
-    /// no slot array (no per-slot artefact to assign — see @ref
-    /// slotIndexFor, the one authority for this mapping). Each maps slot
-    /// number (1..9) → layout/algorithm ID.
+    /// UUIDs, shared by Scrolling as its template vocabulary), index 1 =
+    /// Autotile (autotile algorithm IDs) — see @ref slotIndexFor, the one
+    /// authority for this mapping. Each maps slot number (1..9) →
+    /// layout/algorithm ID.
     QHash<int, QString> m_quickLayoutSlots[2];
     /// Per-layout settings sidecar (layout-settings.json), keyed by layout UUID.
     /// Settings are split out of the structural layout file on save and merged

@@ -98,9 +98,9 @@ bool LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
     // title from the rule's match (with lookup-resolved screen/activity
     // labels). Stamping a raw `screenId · Desktop N · Activity` here would
     // bake connector strings and activity UUIDs into the stored rule.
-    PWR::Rule rule =
-        PWR::ContextRuleBridge::makeAssignmentRule(QString(), screenId, virtualDesktop, activity, modeToken,
-                                                   entry.snappingLayout, entry.tilingAlgorithm, priority);
+    PWR::Rule rule = PWR::ContextRuleBridge::makeAssignmentRule(QString(), screenId, virtualDesktop, activity,
+                                                                modeToken, entry.snappingLayout, entry.tilingAlgorithm,
+                                                                priority, entry.scrollingTemplateLayout);
 
     if (existing == nullptr) {
         // A rule may already hold this DETERMINISTIC id without being claimable
@@ -187,11 +187,12 @@ bool LayoutRegistry::removeAssignmentRule(const QString& screenId, int virtualDe
 
 bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
 {
-    // A snap layout was deleted. Every rule whose SetSnappingLayout action
-    // carries this id must lose that reference — but NOT the whole rule, and
-    // NOT its other actions.
+    // A manual layout was deleted. Every rule referencing it — as a snapping
+    // layout (SetSnappingLayout) or as a scrolling template
+    // (SetScrollingTemplate, same UUID value shape) — must lose that
+    // reference, but NOT the whole rule, and NOT its other actions.
     //
-    // Two rule shapes can carry a SetSnappingLayout action for the deleted id:
+    // Two rule shapes can carry such an action for the deleted id:
     //
     //  1. A pure context-assignment rule (per-screen / -desktop / -activity).
     //     An Autotile-mode context rule can still carry a stale
@@ -225,7 +226,8 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         const bool referencesDeleted =
             std::any_of(rule.actions.cbegin(), rule.actions.cend(), [&layoutId](const PWR::RuleAction& action) {
-                return action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+                return (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+                        || action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate))
                     && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId;
             });
         if (!referencesDeleted) {
@@ -244,15 +246,23 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
         // other action verbatim.
         if (isContextAssignmentRule(rule) && isPureAssignmentRule(rule)) {
             // Shape 1: rebuild the lossless context-action set with the dead
-            // snapping reference cleared; mode + tilingAlgorithm survive.
-            const AssignmentEntry entry = entryFromRuleMatchActions(rule);
+            // reference(s) cleared; every slot that does not point at the
+            // deleted layout survives.
+            AssignmentEntry entry = entryFromRuleMatchActions(rule);
+            if (entry.snappingLayout == layoutId) {
+                entry.snappingLayout.clear();
+            }
+            if (entry.scrollingTemplateLayout == layoutId) {
+                entry.scrollingTemplateLayout.clear();
+            }
             const ContextDims dims = decodeDims(rule.match);
             // Track the affected (screen, desktop) for the post-update
             // layoutAssigned emit — every observer keyed on this rule's
             // context needs to refresh, whether the rule was dropped or just
             // rebuilt.
             affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
-            if (entry.mode == AssignmentEntry::Snapping && entry.tilingAlgorithm.isEmpty()) {
+            if (entry.mode == AssignmentEntry::Snapping && entry.tilingAlgorithm.isEmpty()
+                && entry.scrollingTemplateLayout.isEmpty()) {
                 // Nothing meaningful remains — a bare Snapping engine-mode is
                 // the default. Drop the whole rule.
                 qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped context rule" << rule.id.toString()
@@ -260,11 +270,12 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
                 continue;
             }
             PWR::Rule rebuilt = rule;
-            rebuilt.actions = PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(entry.mode), QString(),
-                                                                            entry.tilingAlgorithm);
+            rebuilt.actions =
+                PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(entry.mode), entry.snappingLayout,
+                                                              entry.tilingAlgorithm, entry.scrollingTemplateLayout);
             kept.append(rebuilt);
             qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: rebuilt context rule" << rule.id.toString()
-                                << "— cleared deleted snapping layout, preserved mode/tilingAlgorithm";
+                                << "— cleared the deleted layout's references, preserved the other slots";
             continue;
         }
 
@@ -282,13 +293,14 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
             affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
         }
         PWR::Rule trimmed = rule;
-        trimmed.actions.erase(std::remove_if(trimmed.actions.begin(), trimmed.actions.end(),
-                                             [&layoutId](const PWR::RuleAction& action) {
-                                                 return action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
-                                                     && action.params.value(PWR::ActionParam::LayoutId).toString()
-                                                     == layoutId;
-                                             }),
-                              trimmed.actions.end());
+        trimmed.actions.erase(
+            std::remove_if(trimmed.actions.begin(), trimmed.actions.end(),
+                           [&layoutId](const PWR::RuleAction& action) {
+                               return (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+                                       || action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate))
+                                   && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId;
+                           }),
+            trimmed.actions.end());
         if (trimmed.actions.isEmpty()) {
             // The rule's only action was the dead snapping reference — nothing
             // meaningful remains, so drop it.
@@ -381,6 +393,41 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
     } else {
         assignLayout(screenId, virtualDesktop, activity, layoutById(QUuid::fromString(layoutId)));
     }
+}
+
+void LayoutRegistry::assignScrollingTemplate(const QString& screenId, int virtualDesktop, const QString& activity,
+                                             const QString& layoutId)
+{
+    // Seed from the exact-shape rule so the sibling mode's stored fields
+    // survive (the lossless-toggle contract), exactly like assignLayoutById's
+    // sentinel branch. The mode flips to Scrolling: picking a template from
+    // the picker IS choosing scrolling semantics for the context, and a
+    // template on a non-scrolling entry would be dead data the cascade never
+    // reads.
+    AssignmentEntry entry;
+    if (const PWR::Rule* rule = findExactContextRule(screenId, virtualDesktop, activity)) {
+        entry = entryFromRuleMatchActions(*rule);
+    }
+    entry.mode = AssignmentEntry::Scrolling;
+    entry.scrollingTemplateLayout = layoutId;
+    upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
+    // Emit unconditionally — see assignLayout: the write suppression is real,
+    // but layoutAssigned drives the engine-screen re-derive (which pushes the
+    // template vocabulary), and an idempotent re-apply must still reach it.
+    Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
+}
+
+PhosphorZones::Layout* LayoutRegistry::scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
+                                                                   const QString& activity) const
+{
+    const auto entry = resolveAssignmentEntry(screenId, virtualDesktop, activity);
+    if (!entry || entry->mode != AssignmentEntry::Scrolling || entry->scrollingTemplateLayout.isEmpty()) {
+        return nullptr;
+    }
+    // A deleted or unknown template id degrades to "no template" — the
+    // caller falls back to the settings preset lists. layoutById returns
+    // nullptr for unknown ids, so no extra validation is needed.
+    return layoutById(QUuid::fromString(entry->scrollingTemplateLayout));
 }
 
 void LayoutRegistry::setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
