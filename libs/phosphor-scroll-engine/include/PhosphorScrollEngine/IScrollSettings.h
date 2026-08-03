@@ -62,7 +62,11 @@ public:
     virtual int scrollingInsertPosition() const = 0;
     /// ColumnDisplay new columns open in (0 = normal, 1 = tabbed).
     virtual int scrollingDefaultColumnDisplay() const = 0;
-    /// Preset proportion lists, serialized as decimal strings.
+    /// Preset proportion lists, serialized as decimal strings. These are the
+    /// FALLBACK vocabulary: a screen whose context resolves a template layout
+    /// gets a per-screen replacement list pushed through the TEMPLATE channel
+    /// (ScrollPerScreenKeys::presetColumnWidths / presetWindowHeights), which
+    /// wholesale replaces the matching list here for that screen.
     virtual QStringList scrollingPresetColumnWidths() const = 0;
     virtual QStringList scrollingPresetWindowHeights() const = 0;
 

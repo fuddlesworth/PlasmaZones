@@ -324,13 +324,23 @@ public:
 
     // Layout capability (see IPlacementEngine's Layout capability section)
     /// The strip consumes layouts as sizing TEMPLATES: a layout's zone
-    /// extents become the screen's preset column-width vocabulary, never
-    /// window placement. Explicit override — the capability is load-bearing
+    /// x-extents become the screen's preset column-width vocabulary (and its
+    /// stacked-zone heights the height vocabulary, when it defines any),
+    /// never window placement. Explicit override — the capability is load-bearing
     /// for the daemon's layout-selection gates, not an inherited absence.
     LayoutSupport layoutSupport() const override
     {
         return LayoutSupport::Templates;
     }
+
+    /// Effective preset vocabulary for a screen: the per-screen TEMPLATE
+    /// override when the daemon pushed a usable one (every entry validated
+    /// against the same floor as the settings parser), else the cached
+    /// settings list. Wholesale replacement, never a merge — see
+    /// ScrollPerScreenKeys. Public for D-Bus/introspection consumers
+    /// (ScrollingAdaptor::presetVocabularyJson).
+    QList<qreal> effectivePresetColumnWidths(const QString& screenId) const;
+    QList<qreal> effectivePresetWindowHeights(const QString& screenId) const;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Cross-engine handoff
@@ -489,13 +499,15 @@ public:
     }
 
     // Per-screen overrides layered over the config defaults, one map per
-    // screen with two producer channels the daemon merges (rules win): the
+    // screen with three producer channels the daemon merges (rules win): the
     // RULE channel (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
     // SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
-    // SetScrollDefaultWindowHeight) and the SETTINGS channel (the per-monitor
-    // New-columns sizing trio pairs). Key spellings live in
-    // ScrollPerScreenKeys (ScrollTypes.h) — the accessor comments there are
-    // the authoritative key list.
+    // SetScrollDefaultWindowHeight), the SETTINGS channel (the per-monitor
+    // New-columns sizing trio pairs), and the TEMPLATE channel (the
+    // presetColumnWidths / presetWindowHeights lists extracted from the
+    // context's assigned template layout; wholesale per-list replacement).
+    // Key spellings live in ScrollPerScreenKeys (ScrollTypes.h) — the
+    // accessor comments there are the authoritative key list.
     void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides) override;
     void clearPerScreenConfig(const QString& screenId) override;
     QVariantMap perScreenOverrides(const QString& screenId) const override
@@ -912,12 +924,6 @@ private:
     /// Per-property override, so a rule that sets only the position leaves the
     /// other six geometry fields on their configured values.
     TabIndicatorParams effectiveTabIndicator(const QString& screenId) const;
-    /// Template channel: the per-screen preset list when the daemon pushed a
-    /// usable one (every entry validated against the same floor as the
-    /// settings parser), else the cached settings list. Wholesale
-    /// replacement, never a merge — see ScrollPerScreenKeys.
-    QList<qreal> effectivePresetColumnWidths(const QString& screenId) const;
-    QList<qreal> effectivePresetWindowHeights(const QString& screenId) const;
 
     QHash<QString, QVariantMap> m_perScreenOverrides;
     std::function<void()> m_persistSaveFn;

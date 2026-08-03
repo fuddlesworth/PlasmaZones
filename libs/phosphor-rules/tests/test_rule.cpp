@@ -242,6 +242,34 @@ private Q_SLOTS:
         // The window-domain floatAction at index 2 must not be flagged.
     }
 
+    void testValidationIssues_duplicateSameTypeSlotActionsFlagged()
+    {
+        // Two SetScrollingTemplate actions on one rule fill the same slot with
+        // the same type — the growth shape a buggy assignment rebuild
+        // accretes. The SECOND occurrence is flagged.
+        const Rule r = makeRule(QStringLiteral("doubled template"), 300,
+                                MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+                                {engineMode(QStringLiteral("scrolling")), scrollingTemplate(QStringLiteral("{a}")),
+                                 scrollingTemplate(QStringLiteral("{b}"))});
+        const auto issues = r.validationIssues();
+        QCOMPARE(issues.size(), 1);
+        QCOMPARE(issues.first().code, ValidationIssue::Code::DuplicateSlotActions);
+        QCOMPARE(issues.first().actionType, QString(ActionType::SetScrollingTemplate));
+        QCOMPARE(issues.first().actionIndex, 2);
+    }
+
+    void testValidationIssues_losslessLayoutPairNotFlagged()
+    {
+        // SetSnappingLayout and SetTilingAlgorithm share the layout slot BY
+        // DESIGN (the lossless mode-toggle pair; the active mode picks
+        // between them) — different types on one slot must not be flagged.
+        const Rule r = makeRule(QStringLiteral("lossless pair"), 300,
+                                MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+                                {engineMode(QStringLiteral("autotile")), snappingLayout(QStringLiteral("{a}")),
+                                 tilingAlgorithm(QStringLiteral("dwindle")), scrollingTemplate(QStringLiteral("{b}"))});
+        QVERIFY(r.validationIssues().isEmpty());
+    }
+
     void testValidationIssues_terminalWithSlotActionFlagged()
     {
         // A terminal Exclude co-located with a slot-filling action: the terminal

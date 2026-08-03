@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls as QQC2
+import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import "../../js/PresetList.js" as PresetList
@@ -68,18 +68,24 @@ SettingsFlickable {
     // A preset list can shrink under a stored index. The spin would then
     // display-clamp without firing onValueModified, leaving config holding an
     // index the user can no longer see, so write the clamped value back.
-    function clampPresetIndex(key, count, globalValue, globalSetter) {
+    function clampPresetIndex(count, globalValue, globalSetter) {
         if (!root.built)
             return;
         var maxIndex = root.presetSpinCeiling(count) - 1;
-        if (root.settingValue(key, globalValue) > maxIndex)
-            root.writeSetting(key, maxIndex, globalSetter);
+        // Clamp the GLOBAL value through the global setter directly. Routing
+        // through writeSetting while a monitor happens to be scoped would
+        // materialize a stray per-screen override holding the clamp and leave
+        // the global index unclamped. A scoped override past the ceiling
+        // display-clamps in the spin and re-clamps at relayout, so it needs
+        // no write-back here.
+        if (globalValue > maxIndex)
+            globalSetter(maxIndex);
     }
 
-    onWidthPresetCountChanged: root.clampPresetIndex("DefaultColumnWidthPresetIndex", root.widthPresetCount, appSettings.scrollingDefaultColumnWidthPresetIndex, function (v) {
+    onWidthPresetCountChanged: root.clampPresetIndex(root.widthPresetCount, appSettings.scrollingDefaultColumnWidthPresetIndex, function (v) {
         appSettings.scrollingDefaultColumnWidthPresetIndex = v;
     })
-    onHeightPresetCountChanged: root.clampPresetIndex("DefaultWindowHeightPresetIndex", root.heightPresetCount, appSettings.scrollingDefaultWindowHeightPresetIndex, function (v) {
+    onHeightPresetCountChanged: root.clampPresetIndex(root.heightPresetCount, appSettings.scrollingDefaultWindowHeightPresetIndex, function (v) {
         appSettings.scrollingDefaultWindowHeightPresetIndex = v;
     })
 
@@ -214,7 +220,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset width")
                     searchAnchor: "defaultColumnWidthPresetIndex"
-                    description: i18n("Which entry of the column width presets a new column opens at, counted from 1. Columns opened this way follow later preset changes.")
+                    description: i18n("Which entry of the column width presets a new column opens at, counted from 1. Columns opened this way follow later preset changes. On a screen with a layout template the number counts into the template's widths instead.")
                     enabled: newColumnsCard.effectiveWidthKind === root.widthKindPreset
                     visible: true
 
@@ -308,7 +314,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset height")
                     searchAnchor: "defaultWindowHeightPresetIndex"
-                    description: i18n("Which entry of the window height presets a new window opens at, counted from 1")
+                    description: i18n("Which entry of the window height presets a new window opens at, counted from 1. On a screen with a layout template the number counts into the template's heights instead.")
                     enabled: newColumnsCard.effectiveHeightKind === root.heightKindPreset
                     visible: true
 
@@ -348,16 +354,16 @@ SettingsFlickable {
 
                 // Template precedence note. Plain label rather than an
                 // InlineMessage: this is standing behavior, not a condition
-                // the page can detect (templates are per screen and per
-                // desktop, the lists here are app-wide).
-                QQC2.Label {
+                // the page can detect (templates resolve per screen, desktop
+                // and activity, the lists here are app-wide).
+                Label {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    text: i18n("Screens with an assigned layout template use the template's column widths and heights instead of these presets.")
+                    text: i18n("Screens with a layout template assigned through the layout picker use the template's column widths instead of these presets. The window heights are replaced too when the template has stacked zones.")
                     font: Kirigami.Theme.smallFont
-                    opacity: 0.7
-                    wrapMode: Text.WordWrap
+                    color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.Wrap
                 }
 
                 // Section header + full-width card grid, the Virtual Screens

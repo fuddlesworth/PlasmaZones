@@ -373,9 +373,13 @@ private Q_SLOTS:
         const QString uuid = layout->id().toString();
         const auto snapping = PhosphorZones::AssignmentEntry::Snapping;
         const auto autotile = PhosphorZones::AssignmentEntry::Autotile;
+        const auto scrolling = PhosphorZones::AssignmentEntry::Scrolling;
 
         mgr->setQuickLayoutSlot(snapping, 1, uuid); // each set writes the sidecar
         mgr->setQuickLayoutSlot(autotile, 2, QStringLiteral("autotile:bsp"));
+        // Scrolling shares the snapping array — a scrolling-mode write must
+        // persist into the "snapping" key, not invent a third on-disk object.
+        mgr->setQuickLayoutSlot(scrolling, 3, uuid);
 
         // A fresh registry on the SAME guard-isolated dirs reloads the sidecar
         // (quicklayouts.json lives next to rules.json, not in the layout
@@ -389,6 +393,11 @@ private Q_SLOTS:
         // Modes stay independent across the round trip.
         QVERIFY(!mgr2->quickLayoutSlots(snapping).contains(2));
         QVERIFY(!mgr2->quickLayoutSlots(autotile).contains(1));
+        // The scrolling-mode write round-trips through the shared snapping
+        // array and reads back through both mode arguments.
+        QCOMPARE(mgr2->quickLayoutSlots(scrolling).value(3), uuid);
+        QCOMPARE(mgr2->quickLayoutSlots(snapping).value(3), uuid);
+        QVERIFY(!mgr2->quickLayoutSlots(autotile).contains(3));
     }
 
     // A pre-mode (flat) quicklayouts.json is NOT a supported format: the reader

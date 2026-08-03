@@ -134,7 +134,7 @@ void ActionRegistry::registerBuiltinsEngine()
                      .kind = QStringLiteral("enum"),
                      .enumWireValues = engineModeOptions()}},
         .category = QStringLiteral("layoutEngine"),
-        .displayOrder = 3,
+        .displayOrder = 4,
         .tags = {QString(Tag::LayoutEngine)},
     });
 
@@ -162,7 +162,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
         .category = QStringLiteral("layoutEngine"),
-        .displayOrder = 4,
+        .displayOrder = 5,
         .tags = {QString(Tag::LayoutEngine)},
     });
 
@@ -191,7 +191,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
         .category = QStringLiteral("layoutEngine"),
-        .displayOrder = 5,
+        .displayOrder = 6,
         .tags = {QString(Tag::LayoutEngine)},
     });
 

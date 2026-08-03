@@ -68,7 +68,7 @@ PickerCategory actionCategory(const QString& type)
         }
         if (type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::SetCenterFocusedColumn
             || type == ActionType::SetScrollDefaultColumnDisplay || type == ActionType::SetScrollInsertPosition
-            || type == ActionType::SetScrollDefaultWindowHeight) {
+            || type == ActionType::SetScrollDefaultWindowHeight || type == ActionType::SetScrollingTemplate) {
             return {PhosphorI18n::tr("Scrolling", "tiling mode name"), 4};
         }
         // The per-app open actions are WINDOW-domain: they must sit in the
@@ -149,6 +149,9 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::SetTilingAlgorithm && key == ActionParam::Algorithm) {
         return PhosphorI18n::tr("Tiling algorithm");
+    }
+    if (type == ActionType::SetScrollingTemplate && key == ActionParam::LayoutId) {
+        return PhosphorI18n::tr("Template layout");
     }
     if (type == ActionType::SetAlgorithmParam && key == ActionParam::Algorithm) {
         return PhosphorI18n::tr("Algorithm");
@@ -479,6 +482,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetTilingAlgorithm) {
         return PhosphorI18n::tr("Set tiling algorithm");
+    }
+    if (type == ActionType::SetScrollingTemplate) {
+        return PhosphorI18n::tr("Set scrolling template");
     }
     if (type == ActionType::SetMaxWindows) {
         return PhosphorI18n::tr("Set max tiled windows");

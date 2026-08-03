@@ -343,6 +343,37 @@ private Q_SLOTS:
         QCOMPARE(activateSpy.count(), 1);
     }
 
+    void testPresetVocabularyJson_gatesAndShape()
+    {
+        // Same silent ownership gates as focusColumn: foreign and empty
+        // screen ids answer the empty object.
+        QCOMPARE(m_adaptor->presetVocabularyJson(QStringLiteral("HDMI-2")), QStringLiteral("{}"));
+        QCOMPARE(m_adaptor->presetVocabularyJson(QString()), QStringLiteral("{}"));
+
+        // Capture the fallback heights BEFORE the template push, so the
+        // mixed-vocabulary assertion below can pin that the heights are
+        // byte-identical to the fallback rather than merely non-empty.
+        const QJsonObject before =
+            QJsonDocument::fromJson(m_adaptor->presetVocabularyJson(QStringLiteral("DP-1")).toUtf8()).object();
+        const QJsonArray fallbackHeights = before.value(QLatin1String("windowHeights")).toArray();
+        QVERIFY(!fallbackHeights.isEmpty());
+
+        // The owned screen answers both lists. With a widths-only template
+        // override pushed, the widths are the template's and the heights
+        // stay on the fallback (mixed vocabulary).
+        QVariantMap templ;
+        templ.insert(PhosphorScrollEngine::ScrollPerScreenKeys::presetColumnWidths(), QVariantList{0.2, 0.8});
+        m_engine->applyPerScreenConfig(QStringLiteral("DP-1"), templ);
+
+        const QString payload = m_adaptor->presetVocabularyJson(QStringLiteral("DP-1"));
+        const QJsonObject obj = QJsonDocument::fromJson(payload.toUtf8()).object();
+        const QJsonArray widths = obj.value(QLatin1String("columnWidths")).toArray();
+        QCOMPARE(widths.size(), 2);
+        QCOMPARE(widths.at(0).toDouble(), 0.2);
+        QCOMPARE(widths.at(1).toDouble(), 0.8);
+        QCOMPARE(obj.value(QLatin1String("windowHeights")).toArray(), fallbackHeights);
+    }
+
     // Which WAY each delta goes, not just that something moved: -1 is left
     // and +1 is right, per the XML's DocString.
     void testFocusColumn_mapsDeltaToDirection()

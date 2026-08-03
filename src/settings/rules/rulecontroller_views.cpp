@@ -124,12 +124,12 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         // disable for one engine mask the disable for the engine the screen
         // actually runs, on nothing better than store order.
         QSet<QString> disabledEngineModes;
-        // Engine mode + BOTH layout tokens come from ONE rule: the highest-
+        // Engine mode + ALL layout tokens come from ONE rule: the highest-
         // priority rule on this screen carrying a SetEngineMode action — the
         // daemon's per-screen assignment winner. LayoutRegistry::
         // resolveContextAssignment picks it via highestPriorityMatch filtered to
         // `hasEngineModeAction(rule) && !isCatchAll`, then entryFromRuleMatchActions
-        // reads the whole entry from that one rule, keeping BOTH layout tokens so
+        // reads the whole entry from that one rule, keeping ALL layout tokens so
         // the active mode picks which applies. A bare layout rule with NO
         // SetEngineMode is never that winner, so the daemon never applies its
         // layout — and neither does the tile. Tracking engineMode and the layout
@@ -140,6 +140,7 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         QString engineMode;
         QString snappingLayout;
         QString tilingAlgorithm;
+        QString scrollingTemplate;
         // Layout-lock state from the highest-priority matching `LockContext`
         // rule on this screen. `lockResolved` is the first-wins guard (indices
         // are priority-DESC, so the first LockContext rule seen is the winner of
@@ -246,7 +247,7 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
             }
             // Engine/layout: capture from the FIRST rule (highest priority) that
             // carries a SetEngineMode action — the assignment winner. Read its
-            // mode AND both layout tokens together so the tile can never compose
+            // mode AND every layout token together so the tile can never compose
             // a layout from a different rule than the engine, nor surface a bare
             // layout rule (no SetEngineMode) the daemon's assignment discards.
             if (!s.assignmentResolved && ruleHasEngineMode) {
@@ -258,6 +259,8 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
                         s.snappingLayout = a.params.value(PhosphorRules::ActionParam::LayoutId).toString();
                     else if (a.type == ActionType::SetTilingAlgorithm)
                         s.tilingAlgorithm = a.params.value(PhosphorRules::ActionParam::Algorithm).toString();
+                    else if (a.type == ActionType::SetScrollingTemplate)
+                        s.scrollingTemplate = a.params.value(PhosphorRules::ActionParam::LayoutId).toString();
                 }
             }
         }
@@ -290,8 +293,9 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         tile[QStringLiteral("screenId")] = screenId;
         // Show the assignment winner's layout, picked by ITS engine mode — a
         // snapping engine shows the winner's snapping layout, an autotile engine
-        // its algorithm, scrolling neither — mirroring how the daemon's
-        // AssignmentEntry (which carries both tokens) is consumed. No assignment
+        // its algorithm, a scrolling engine its template layout — mirroring how
+        // the daemon's AssignmentEntry (which carries all three tokens) is
+        // consumed. No assignment
         // winner (no rule with a SetEngineMode action) → no engine pin → no
         // layout label, so a bare layout rule the daemon's cascade discards never
         // resurfaces. modeFromWireString defaults an unrecognised token to
@@ -310,8 +314,12 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
             } else if (mode == PhosphorZones::AssignmentEntry::Autotile) {
                 layoutLabel = summary.tilingAlgorithm;
                 labelLookup = &m_tilingAlgorithmLookup;
+            } else if (mode == PhosphorZones::AssignmentEntry::Scrolling) {
+                // Templates are ordinary manual layouts, so the snapping
+                // lookup resolves the UUID to its display name.
+                layoutLabel = summary.scrollingTemplate;
+                labelLookup = &m_snappingLayoutLookup;
             }
-            // Scrolling: no layout/algorithm to label.
         }
         // The token is the raw layoutId / algorithm name from the rule's
         // action params — resolve it to a user-facing label when a lookup

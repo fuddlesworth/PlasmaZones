@@ -189,7 +189,7 @@ public:
 
     /// Inject the daemon-owned tile-algorithm registry. Required when
     /// autotile entries should appear in @ref visibleLayoutCount /
-    /// @ref layoutListForScreen output. Borrowed - caller owns it and
+    /// @ref buildLayoutsList output. Borrowed - caller owns it and
     /// must keep it alive for the service's lifetime.
     void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
 
@@ -261,12 +261,15 @@ public:
     void setCurrentActivity(const QString& activityId);
 
     /**
-     * @brief Set which layout types appear in the zone picker
+     * @brief Seed which layout types appear in the zone picker
      *
-     * When autotile mode is active, show only dynamic layouts.
-     * When manual mode is active, show only manual layouts.
-     * The autotile feature gate (KCM setting) controls whether dynamic layouts
-     * are ever visible.
+     * A global SEED only: the per-screen truth is
+     * resolvePerScreenLayoutInclude, which narrows these flags per screen —
+     * autotile screens keep only the algorithm cards, snapping and Templates
+     * (scrolling) screens keep only the manual list (a Templates screen
+     * browses it as template candidates), and a LayoutSupport::None engine
+     * empties both. The autotile feature gate (KCM setting) controls whether
+     * dynamic layouts are ever visible.
      */
     void setLayoutFilter(bool includeManual, bool includeAutotile);
 
@@ -450,6 +453,16 @@ public:
                            bool scrollingAvailable, bool layoutsAvailable);
     /// Screen the visible cheatsheet is bound to; empty when hidden.
     QString cheatsheetScreenId() const;
+
+    /// Screen the visible layout picker is bound to; empty when hidden.
+    /// The picker-apply handler re-binds the controller to THIS screen
+    /// before applying — the controller's currentScreenName is a single
+    /// mutable slot that desktop switches and cycle presses on other
+    /// screens retarget while the picker sits open.
+    QString layoutPickerScreenId() const
+    {
+        return m_layoutPickerScreenId;
+    }
 
     /// Tab indicators for tabbed scrolling columns on @p screenId (per
     /// screen, NOT a singleton). @p strips is a list of maps with x / y /
@@ -702,16 +715,23 @@ private:
     /// The id the layout picker / zone selector highlights as active on @p
     /// screenId. In autotile mode this is the resolved "autotile:<algorithm>"
     /// assignment id (matching the autotile cards); in snapping mode it is the
-    /// resolved Layout's UUID (matching the manual cards). Snapping resolves
+    /// resolved Layout's UUID (matching the manual cards); on a LIVE Templates
+    /// (scrolling) screen it is the context's resolved TEMPLATE layout UUID —
+    /// or the bare "scrolling:" sentinel when no template is assigned, which
+    /// matches no card — so the picker highlights the
+    /// template card. Snapping resolves
     /// through resolveScreenLayout() so its fallback chain is preserved, while
     /// autotile uses the assignment id directly because no Layout object backs
     /// an algorithm.
     QString activeLayoutIdForScreen(const QString& screenId) const;
 
     /// True when the snapping overlay must NOT show on @p screenId for the current
-    /// desktop/activity: either the context is on a disable list, OR its default
+    /// desktop/activity: the context is on a disable list, OR its default
     /// layout assignment is suppressed (the global "don't assign by default"
-    /// setting, or a per-context rule) and nothing is explicitly assigned.
+    /// setting, or a per-context rule) and nothing is explicitly assigned, OR
+    /// the screen's LIVE engine consumes layouts as Templates (the scroll
+    /// engine owns the screen, so snap zones mean nothing there; a scrolling
+    /// ASSIGNMENT downgraded to snapping by the router keeps its overlay).
     /// Consumed by the OVERLAY activation sites; the zone SELECTOR is
     /// deliberately disabled-list-only (isSnappingContextDisabled) — a
     /// suppressed-default context still allows an explicit drag to pick a

@@ -287,6 +287,32 @@ private Q_SLOTS:
         QVERIFY(!m_router->isAutotileMode(QStringLiteral("DP-1")));
     }
 
+    void engineFor_layoutSupport_followsTheLiveEngine()
+    {
+        // The daemon's layoutSupportForScreen gates read
+        // engineFor(screen)->layoutSupport(); pin the router-level capability
+        // answer for all three engines, and that a downgraded scrolling
+        // cascade answers Placement (the snap engine's), never Templates.
+        using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
+        QCOMPARE(m_router->engineFor(QStringLiteral("DP-1"))->layoutSupport(), LayoutSupport::Placement);
+
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-1")});
+        QCOMPARE(m_router->engineFor(QStringLiteral("DP-1"))->layoutSupport(), LayoutSupport::Templates);
+
+        m_scrollEngine->setActiveScreens({});
+        m_autotileEngine->setAutotileScreens({QStringLiteral("DP-1")});
+        QCOMPARE(m_router->engineFor(QStringLiteral("DP-1"))->layoutSupport(), LayoutSupport::Placement);
+        m_autotileEngine->setAutotileScreens({});
+
+        // Cascade Scrolling, engine not claiming: the downgrade must reach
+        // the capability too, or the picker would apply templates on a
+        // screen the snap engine actually owns.
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-6"), 0, QString(), entry);
+        QCOMPARE(m_router->engineFor(QStringLiteral("DP-6"))->layoutSupport(), LayoutSupport::Placement);
+    }
+
     void modeFor_cascadeScrollingWithoutEngineClaim_downgradesToSnapping()
     {
         // The cascade says Scrolling but the engine's live set does not

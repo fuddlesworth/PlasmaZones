@@ -3,11 +3,11 @@
 
 #pragma once
 
+#include <phosphorscrollengine_export.h>
+
 #include <QList>
 #include <QRectF>
 #include <QVector>
-
-#include "phosphorscrollengine_export.h"
 
 namespace PhosphorScrollEngine {
 
@@ -16,9 +16,11 @@ namespace PhosphorScrollEngine {
  *
  * The daemon resolves a scrolling screen's assigned template layout, projects
  * its zones to normalized 0–1 rects (Zone::normalizedGeometry) and hands them
- * to extractTemplateVocabulary; the result replaces the settings-configured
- * preset lists wholesale for that screen (ScrollLayoutParams::presetColumnWidths
- * / presetWindowHeights). The input is deliberately plain QRectF so this
+ * to extractTemplateVocabulary; each NON-EMPTY result list replaces the
+ * matching settings-configured preset list wholesale for that screen
+ * (ScrollLayoutParams::presetColumnWidths / presetWindowHeights). A template
+ * with widths but no height entries therefore yields a MIXED vocabulary:
+ * template widths beside the settings height list. The input is deliberately plain QRectF so this
  * library takes no dependency on the zones library — the semantics that live
  * here (MinColumnWidthFraction clamping, ascending preset order) are this
  * library's contract, not the layout model's.

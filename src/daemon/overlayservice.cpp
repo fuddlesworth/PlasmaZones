@@ -659,12 +659,14 @@ QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
 {
     // Autotile contexts have no backing Layout object — their active id is the
     // resolved "autotile:<algorithm>" assignment id, which matches the autotile
-    // cards in the picker / selector. Manual contexts keep the existing
-    // Layout-based resolution (its fallback chain to default/global is what makes
-    // snapping highlight correctly).
+    // cards in the picker / selector. Live-Templates scrolling contexts answer
+    // with the resolved TEMPLATE layout's UUID (the arm below). Manual contexts
+    // keep the existing Layout-based resolution (its fallback chain to
+    // default/global is what makes snapping highlight correctly).
     if (m_layoutManager && !screenId.isEmpty()) {
-        const QString assignmentId = m_layoutManager->assignmentIdForScreen(
-            screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
+        const int virtualDesktop = currentVirtualDesktopForScreen(screenId);
+        const QString assignmentId =
+            m_layoutManager->assignmentIdForScreen(screenId, virtualDesktop, m_currentActivity);
         if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
             return assignmentId;
         }
@@ -681,8 +683,8 @@ QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
             const bool liveTemplates =
                 !m_layoutSupportResolver || m_layoutSupportResolver(screenId) == LayoutSupportTemplates;
             if (liveTemplates) {
-                if (PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(
-                        screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
+                if (PhosphorZones::Layout* templ =
+                        m_layoutManager->scrollingTemplateForContext(screenId, virtualDesktop, m_currentActivity)) {
                     return templ->id().toString();
                 }
                 return assignmentId;
@@ -705,8 +707,8 @@ void OverlayService::hideDisabledAndRefresh()
     // both clear the per-screen sentinel on completion.
     // The zone selector / layout picker is gated ONLY by the disabled list (it
     // is how a layout gets assigned, so suppress must not hide it); the snap
-    // overlay is additionally gated by suppress / autotile mode via
-    // isSnappingContextInactive.
+    // overlay is additionally gated by suppress and by the engine modes
+    // (autotile, and live-Templates scrolling) via isSnappingContextInactive.
     // No m_settings gate here: neither context predicate reads settings (both
     // fail closed on their own null members), and skipping the destroy loop on
     // a null settings pointer would leave stale selector/overlay slots up.
@@ -773,7 +775,8 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     // here so the trigger geometry matches the rendered popup row count.
     // The brace-init seeds BOTH fields from the settings-backed member
     // toggles (so the struct's in-class defaults never apply here); the
-    // resolution below only narrows them per screen.
+    // per-screen arms below then ASSIGN both fields outright — the seed is
+    // the answer only for a screen no arm claims.
     LayoutIncludeFlags flags{m_includeManualLayouts, m_includeAutotileLayouts};
     const QString resolvedId = PhosphorScreens::ScreenIdentity::isConnectorName(screenId)
         ? PhosphorScreens::ScreenIdentity::idForName(screenId)
@@ -831,10 +834,18 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
     // for the identity id and rows for the raw name.
     QString resolvedId;
     const auto inc = resolvePerScreenLayoutInclude(screenId, &resolvedId);
+    // Aspect filtering is a placement heuristic (does this zone layout fit
+    // this screen shape); on a Templates screen the same layouts are a
+    // SIZING vocabulary, where a portrait-classed column layout is a
+    // perfectly good template for an ultrawide, and filtering can empty the
+    // candidate list so the picker bails silently. Skip the filter there.
+    // Mirrored in visibleLayoutCount below — the two must agree row-for-row.
+    const bool templatesScreen =
+        m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportTemplates;
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity,
         inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
-        m_settings && m_settings->filterLayoutsByAspectRatio(),
+        !templatesScreen && m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource,
         autotilePreviewCanvas);
     return PlasmaZones::toVariantList(entries);
@@ -868,11 +879,14 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
     QString resolvedId;
     const auto inc = resolvePerScreenLayoutInclude(screenId, &resolvedId);
     // Ordering doesn't affect count - skip custom order for performance.
-    // Same gate/rows id agreement as buildLayoutsList.
+    // Same gate/rows id agreement as buildLayoutsList, including the
+    // Templates-screen aspect-filter skip.
+    const bool templatesScreen =
+        m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportTemplates;
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity,
         inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
-        m_settings && m_settings->filterLayoutsByAspectRatio(),
+        !templatesScreen && m_settings && m_settings->filterLayoutsByAspectRatio(),
         /*customOrder=*/{}, m_autotileLayoutSource);
     return entries.size();
 }

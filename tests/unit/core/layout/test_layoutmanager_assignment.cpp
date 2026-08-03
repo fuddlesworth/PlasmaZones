@@ -32,8 +32,8 @@ private Q_SLOTS:
     // a name, managed=true, and a non-assignment action (SetOpacity) — must
     // survive every assignment write shape: upsert, batch rebuild, the
     // clear's STRIP path, and a re-assign after the strip. Every rebuild
-    // routes through makeAssignmentRule, which emits only the three slot
-    // actions, so each path must carry the rest across
+    // routes through makeAssignmentRule, which emits only the assignment
+    // slot actions, so each path must carry the rest across
     // (carryOverNonAssignmentActions) or the user's edits silently die.
     void testMixedRuleSurvivesAssignmentRoundTrips()
     {
@@ -98,8 +98,10 @@ private Q_SLOTS:
         QVERIFY(ruleHasOpacity(afterClear));
         for (const PWR::RuleAction& a : afterClear->actions) {
             QVERIFY2(a.type != QLatin1String(PWR::ActionType::SetEngineMode)
-                         && a.type != QLatin1String(PWR::ActionType::SetSnappingLayout),
-                     "the clear must strip the assignment slots");
+                         && a.type != QLatin1String(PWR::ActionType::SetSnappingLayout)
+                         && a.type != QLatin1String(PWR::ActionType::SetTilingAlgorithm)
+                         && a.type != QLatin1String(PWR::ActionType::SetScrollingTemplate),
+                     "the clear must strip all four assignment slots");
         }
 
         // RE-ASSIGN after the strip: the deterministic id is occupied by the
@@ -408,6 +410,14 @@ private Q_SLOTS:
         mgr->setQuickLayoutSlot(snapping, 1, QString());
         QVERIFY(!mgr->quickLayoutSlots(snapping).contains(1));
         QCOMPARE(mgr->quickLayoutSlots(autotile).value(1), QStringLiteral("autotile:bsp"));
+
+        // The WRITE leg of the shared array: a manual UUID bound through the
+        // Scrolling mode lands in the snapping array (and reads back through
+        // both mode arguments), because slotIndexFor maps both to index 0.
+        mgr->setQuickLayoutSlot(scrolling, 2, layoutId);
+        QCOMPARE(mgr->quickLayoutSlots(scrolling).value(2), layoutId);
+        QCOMPARE(mgr->quickLayoutSlots(snapping).value(2), layoutId);
+        QCOMPARE(mgr->quickLayoutSlots(autotile).value(2), QString());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -572,6 +582,87 @@ private Q_SLOTS:
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Scrolling);
         QVERIFY(entry.scrollingTemplateLayout.isEmpty());
         QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), 0, QString()), nullptr);
+    }
+
+    void testAssignmentEntry_scrollingTemplate_deleteScrubOnSnappingContext()
+    {
+        // The template survives a toggle back to Snapping (stored-but-dormant
+        // per the lossless contract). Deleting the template layout THERE must
+        // scrub the dormant reference while the live snapping assignment
+        // survives untouched — the purge's drop test must not misread a
+        // Snapping rule that carries a template as droppable.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+        auto* templ = createTestLayout(QStringLiteral("Template"));
+        mgr->addLayout(templ);
+
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), templ->id().toString());
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout); // back to Snapping
+        auto seeded = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(seeded.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(seeded.scrollingTemplateLayout, templ->id().toString());
+
+        mgr->removeLayout(templ);
+        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QVERIFY(entry.scrollingTemplateLayout.isEmpty());
+        QCOMPARE(entry.snappingLayout, layout->id().toString());
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 0, QString()), layout);
+    }
+
+    void testApplyQuickLayout_onScrollingScreen_routesToTemplate()
+    {
+        // A quick-slot press on a Scrolling screen swaps the TEMPLATE and
+        // never flips the engine: applyQuickLayout resolves the shared-array
+        // slot to a manual layout and applyLayoutToScreen routes it to
+        // assignScrollingTemplate.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+
+        // applyLayoutToScreen writes to the screen's CURRENT desktop, so the
+        // seed and the assertions must resolve the same one.
+        const int desktop = mgr->currentVirtualDesktopForScreen(QStringLiteral("DP-1"));
+        mgr->assignLayoutById(QStringLiteral("DP-1"), desktop, QString(),
+                              QString(PhosphorLayout::LayoutId::ScrollingId));
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), desktop), PhosphorZones::AssignmentEntry::Scrolling);
+
+        mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Scrolling, 1, layoutB->id().toString());
+        mgr->applyQuickLayout(PhosphorZones::AssignmentEntry::Scrolling, 1, QStringLiteral("DP-1"));
+
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), desktop), PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()), layoutB);
+    }
+
+    void testCycleToNextLayout_onScrollingScreen_stepsTemplate()
+    {
+        // The library-level cycle steps the TEMPLATE on a Scrolling screen,
+        // anchored on the currently-assigned template, and leaves the mode
+        // alone.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+
+        // The cycle writes to the screen's CURRENT desktop; seed and assert
+        // against the same one.
+        const int desktop = mgr->currentVirtualDesktopForScreen(QStringLiteral("DP-1"));
+        mgr->assignLayoutById(QStringLiteral("DP-1"), desktop, QString(),
+                              QString(PhosphorLayout::LayoutId::ScrollingId));
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), desktop, QString(), layoutA->id().toString());
+
+        mgr->cycleToNextLayout(QStringLiteral("DP-1"));
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), desktop), PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()), layoutB);
+
+        mgr->cycleToNextLayout(QStringLiteral("DP-1"));
+        QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()), layoutA);
     }
 
     void testAssignmentEntry_modeForScreen_delegates()
@@ -881,11 +972,12 @@ private Q_SLOTS:
     // P6: The "scrolling:" sentinel
     // ═══════════════════════════════════════════════════════════════════════════
     //
-    // Scrolling has no layout entity, so its whole id is the bare sentinel.
-    // Unlike "autotile:", the sentinel carries NO payload, and the classifier
-    // is an exact compare rather than a prefix test. Pin both halves: the
-    // sentinel routes as Scrolling end to end, and a prefix-shaped impostor
-    // ("scrolling:junk") does NOT.
+    // A Scrolling context's activeLayoutId is the bare sentinel (its
+    // TEMPLATE layout lives in a separate assignment slot and never rides
+    // the id). Unlike "autotile:", the sentinel carries NO payload, and the
+    // classifier is an exact compare rather than a prefix test. Pin both
+    // halves: the sentinel routes as Scrolling end to end, and a
+    // prefix-shaped impostor ("scrolling:junk") does NOT.
 
     void testScrollingSentinel_assignsScrollingModeWithEmptyLayout()
     {
@@ -896,12 +988,14 @@ private Q_SLOTS:
         QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Scrolling);
         QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 0), QStringLiteral("scrolling:"));
 
-        // No layout entity: both layout fields stay empty, and the cascade
-        // resolves no Layout* for the screen.
+        // A fresh sentinel assign carries no payload in ANY slot — including
+        // the template, whose emptiness is the canary for a rebuild path
+        // inventing or duplicating SetScrollingTemplate actions.
         const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Scrolling);
         QVERIFY(entry.snappingLayout.isEmpty());
         QVERIFY(entry.tilingAlgorithm.isEmpty());
+        QVERIFY(entry.scrollingTemplateLayout.isEmpty());
     }
 
     void testScrollingSentinel_prefixImpostorIsNotScrolling()
@@ -968,8 +1062,9 @@ private Q_SLOTS:
         QString idA = layoutA->id().toString();
         QString idB = layoutB->id().toString();
 
-        // Base screen: autotile with snapping preserved
+        // Base screen: autotile with snapping AND a dormant template preserved
         mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), idB);
         mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:wide"));
 
         // Per-desktop: snapping with tiling preserved
@@ -996,11 +1091,13 @@ private Q_SLOTS:
         mgr2->setLayoutDirectory(layoutDir2);
         mgr2->loadAssignments();
 
-        // Verify base screen
+        // Verify base screen — including the dormant template, whose survival
+        // through save/load is the canary for the whole four-slot rule shape.
         auto base = mgr2->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
         QCOMPARE(base.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(base.snappingLayout, idA);
         QCOMPARE(base.tilingAlgorithm, QStringLiteral("wide"));
+        QCOMPARE(base.scrollingTemplateLayout, idB);
 
         // Verify per-desktop
         auto desk2 = mgr2->assignmentEntryForScreen(QStringLiteral("DP-1"), 2);

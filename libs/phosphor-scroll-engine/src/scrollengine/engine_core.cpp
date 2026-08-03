@@ -891,6 +891,14 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) c
         // range) falls through to the global — the open path handles
         // client-decides via screenPinsWidth.
     }
+    if (m_defaultColumnWidth.kind == ColumnWidth::Preset) {
+        // Same effective-list clamp as the per-screen branch above: the
+        // stored global index was validated against the SETTINGS list and can
+        // exceed a shorter template vocabulary. presetAt re-clamps at relayout
+        // either way; this keeps both paths returning the same intent.
+        return ColumnWidth::makePreset(
+            qBound(0, m_defaultColumnWidth.presetIdx, qMax(0, int(effectivePresetColumnWidths(screenId).size()) - 1)));
+    }
     return m_defaultColumnWidth;
 }
 
@@ -931,6 +939,12 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId,
         } else if (kind == static_cast<int>(DefaultHeightKind::Auto)) {
             return WindowHeight{};
         }
+    }
+    if (m_defaultWindowHeight.kind == WindowHeight::Preset) {
+        // Effective-list clamp on the global fallback, mirroring the width
+        // twin above.
+        return WindowHeight::makePreset(qBound(0, m_defaultWindowHeight.presetIdx,
+                                               qMax(0, int(effectivePresetWindowHeights(screenId).size()) - 1)));
     }
     return m_defaultWindowHeight;
 }

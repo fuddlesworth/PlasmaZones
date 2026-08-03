@@ -51,6 +51,15 @@ struct PHOSPHORRULES_EXPORT ValidationIssue
         /// onto its own rule. (Name kept for wire stability; the check is not
         /// limited to Tag::Effect actions.)
         TerminalActionWithEffectActions = 1,
+        /// Two or more SAME-TYPE actions on one rule resolve to the same
+        /// slot. Slot decoding is single-winner per (rule, type), so at most
+        /// one of the duplicates takes effect (which one depends on the
+        /// consumer's decode order) and the rest are dead weight. Distinct
+        /// types sharing a slot (the SetSnappingLayout / SetTilingAlgorithm
+        /// lossless pair) are NOT flagged. The flagged shape is what a buggy
+        /// rule rebuild accretes, so surfacing it keeps such growth from
+        /// surviving save/load silently.
+        DuplicateSlotActions = 2,
     };
 
     Code code = Code::ContextActionWithWindowMatch;
@@ -117,6 +126,9 @@ struct PHOSPHORRULES_EXPORT Rule
      *  - @ref ValidationIssue::Code::TerminalActionWithEffectActions — a terminal
      *    action (Exclude / ExcludeAnimations) co-located with any non-terminal
      *    slot-filling action, which the terminal action's early-out may drop.
+     *  - @ref ValidationIssue::Code::DuplicateSlotActions — two same-type
+     *    actions on the same rule resolving to the same slot; slot decoding
+     *    is single-winner per type, so all but one duplicate are dead weight.
      *
      * An empty list means no issues — the rule is well-formed at both layers.
      */

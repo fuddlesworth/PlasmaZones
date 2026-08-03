@@ -267,12 +267,15 @@ Q_SIGNALS:
     // changes").
     void activeLayoutChanged(Layout* layout);
 
-    // Assignment churn. Fires when a (screenId, virtualDesktop)
-    // assignment changes; activity context is intentionally omitted
-    // from the signal - consumers that care about activity-keyed
-    // assignments re-query via @c layoutForScreen with their current
-    // activity. Concrete impl emits only on actual change (matches the
-    // project "emit only when value changes" rule).
+    // Assignment churn. Fires when a (screenId, virtualDesktop) assignment
+    // is WRITTEN; activity context is intentionally omitted from the signal -
+    // consumers that care about activity-keyed assignments re-query via
+    // @c layoutForScreen with their current activity. Deliberately NOT an
+    // emit-on-change signal: the emitters fire unconditionally on every
+    // assignment write, because consumers use it as a re-derive trigger
+    // (engine screen sets, layout filters, template vocabulary pushes) whose
+    // inputs go beyond the (screen, desktop, layout) payload - an identical
+    // payload can still mean a changed template or activity-keyed entry.
     void layoutAssigned(const QString& screenId, int virtualDesktop, Layout* layout);
 };
 

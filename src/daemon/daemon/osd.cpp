@@ -666,21 +666,15 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
             } else if (!PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-                // A scrolling screen sets neither flag here; the
-                // includeManual fallback below (manualActive ||
-                // !autotileActive) would still offer the MANUAL list, but
-                // that no longer reaches the user: the two entry points
-                // that consult this filter with a screen in hand — the
-                // layout cycle (handleCycleLayout) and the picker — are
-                // gated on layoutSupportForScreen() first, and the
-                // popup/picker list itself resolves through the
-                // capability-aware resolvePerScreenLayoutInclude in
-                // overlayservice.cpp. (Quick slots set the controller
-                // filter directly and layout lock touches no filter; both
-                // carry the same gate at their own call sites.) The old
-                // "manual list as the exit door out of scrolling" policy is
-                // gone; mode changes go through the Monitors page, a rule,
-                // or the mode-toggle shortcut.
+                // A scrolling screen sets neither flag; the includeManual
+                // fallback below (manualActive || !autotileActive) then
+                // still offers the MANUAL list — which is CORRECT under
+                // LayoutSupport::Templates: the manual list is exactly what
+                // a scrolling screen's picker browses (template candidates,
+                // no autotile cards). The authoritative per-screen decision
+                // lives in resolvePerScreenLayoutInclude in
+                // overlayservice.cpp; this controller-level filter only has
+                // to avoid contradicting it.
                 manualActive = true;
             }
         } else {

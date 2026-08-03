@@ -98,7 +98,8 @@ bool matchIsExactContext(const PWR::MatchExpression& match, const QString& scree
 // user-authored catch-all engine rule is handled by priority alone.
 bool hasEngineModeAction(const PWR::Rule& rule);
 
-// True if @p rule carries a SetSnappingLayout / SetTilingAlgorithm action. The
+// True if @p rule carries a SetSnappingLayout / SetTilingAlgorithm /
+// SetScrollingTemplate action. The
 // per-slot assignment resolver reads each layout slot independently of the
 // engine-mode slot, so a layout-only rule (no SetEngineMode) sets the layout
 // for its engine in a context without forcing the engine mode.

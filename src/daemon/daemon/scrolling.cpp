@@ -5,10 +5,11 @@
 // Daemon — scrolling-engine screen-set management
 //
 // The scrolling counterpart of updateEngineScreens' engine push: order
-// seeding across mode transitions, per-context rule-param resolution, and
-// the setActiveScreens handoff. Driven from updateEngineScreens (one
-// cascade walk derives both engines' sets) so the two sets always flip in
-// the same recompute.
+// seeding across mode transitions, per-context rule-param resolution, the
+// TEMPLATE vocabulary push (each screen's resolved template layout extracted
+// into per-screen preset lists), and the setActiveScreens handoff. Driven
+// from updateEngineScreens (one cascade walk derives both engines' sets) so
+// the two sets always flip in the same recompute.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"
@@ -125,10 +126,13 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         }
     }
 
-    // Three-way precedence, collapsed daemon-side exactly like autotile's
-    // updateEngineScreens: per-screen SETTINGS seed the map first, per-context
-    // RULES overwrite where a slot is filled, and the engine's effective*
-    // readers keep the final two-way `override ?? global-config` fallback.
+    // Four-tier precedence, collapsed daemon-side exactly like autotile's
+    // updateEngineScreens: per-screen SETTINGS seed the map first,
+    // per-context RULES overwrite where a slot is filled, the context's
+    // TEMPLATE vocabulary adds its two preset-list keys (disjoint from every
+    // rule slot, so its position in the merge cannot collide), and the
+    // engine's effective* readers keep the final two-way
+    // `override ?? global-config` fallback.
     // The settings map is engine-spelled (PerScreenScrollingKey ==
     // ScrollPerScreenKeys settings channel), so the seed is a plain copy;
     // rules write their own channel keys (bare-fraction width/height plus the

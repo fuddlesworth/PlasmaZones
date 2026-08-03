@@ -196,10 +196,11 @@ bool isUnresolvedEnumToken(const QString& token, const QString& label)
 }
 
 /// Human label for one action ("Snapping", "Float", "Excluded"). @p
-/// snappingLayoutLookup resolves SetSnappingLayout's layoutId UUIDs;
-/// @p tilingAlgorithmLookup resolves SetTilingAlgorithm's wire tokens
-/// ("bsp", …) — split so a stray cross-resolve can't surface an algorithm
-/// name in a snapping action's label or vice versa.
+/// snappingLayoutLookup resolves SetSnappingLayout's AND
+/// SetScrollingTemplate's layoutId UUIDs (templates are ordinary manual
+/// layouts); @p tilingAlgorithmLookup resolves SetTilingAlgorithm's wire
+/// tokens ("bsp", …) — split so a stray cross-resolve can't surface an
+/// algorithm name in a layout action's label or vice versa.
 QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snappingLayoutLookup,
                     const RuleModel::LabelLookup& tilingAlgorithmLookup,
                     const RuleModel::LabelLookup& shaderEffectLookup, const RuleModel::LabelLookup& overlayShaderLookup,
@@ -228,8 +229,9 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // Same UUID value shape as SetSnappingLayout, so the same lookup
         // resolves the layout name.
         const QString layoutId = action.params.value(PhosphorRules::ActionParam::LayoutId).toString();
-        return layoutId.isEmpty() ? PhosphorI18n::tr("Scrolling template")
-                                  : PhosphorI18n::tr("Template: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
+        return layoutId.isEmpty()
+            ? PhosphorI18n::tr("Scrolling template")
+            : PhosphorI18n::tr("Scrolling template: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
     if (action.type == ActionType::SetTilingAlgorithm) {
         const QString algo = action.params.value(PhosphorRules::ActionParam::Algorithm).toString();

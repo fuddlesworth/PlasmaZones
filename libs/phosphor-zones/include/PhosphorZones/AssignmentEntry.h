@@ -92,11 +92,13 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 }
 
 /**
- * @brief Explicit per-context assignment entry storing both mode fields
+ * @brief Explicit per-context assignment entry storing every mode's payload
  *
- * Each screen/desktop/activity context stores an explicit Mode, SnappingLayout (UUID),
- * and PhosphorTiles::TilingAlgorithm. Toggling between modes only flips the mode field —
- * the other field is preserved, eliminating the need for shadow assignments.
+ * Each screen/desktop/activity context stores an explicit Mode plus all three
+ * per-mode payloads: SnappingLayout (UUID), PhosphorTiles::TilingAlgorithm,
+ * and ScrollingTemplateLayout (UUID). Toggling between modes only flips the
+ * mode field — the other fields are preserved, eliminating the need for
+ * shadow assignments.
  */
 struct AssignmentEntry
 {
@@ -116,8 +118,10 @@ struct AssignmentEntry
         /// form columns on an endless horizontal strip per context.
         /// `ScreenModeRouter::engineFor` hands Scrolling screens to the
         /// live ScrollEngine; the (Mode, Family) settings table here still
-        /// drives all downstream config routing. Scrolling has no layout
-        /// entity of its own — the mode lookup is the discriminator.
+        /// drives all downstream config routing. Scrolling consumes manual
+        /// layouts only as sizing TEMPLATES (scrollingTemplateLayout below);
+        /// its activeLayoutId() stays the bare "scrolling:" sentinel and the
+        /// mode lookup is the discriminator.
         Scrolling = 2
     };
     Mode mode = Snapping;
@@ -166,7 +170,10 @@ struct AssignmentEntry
     /// This is NOT the cascade's visibility predicate — that is
     /// activeLayoutId() non-empty, which a payload-less Scrolling entry
     /// satisfies through the "scrolling:" sentinel while isValid() stays
-    /// false. Kept for tests/tooling; no production caller branches on it.
+    /// false. scrollingTemplateLayout is deliberately EXCLUDED: a template
+    /// never feeds activeLayoutId(), so counting it would make an entry
+    /// "valid" that still resolves to nothing on a Snapping/Autotile
+    /// context. Kept for tests/tooling; no production caller branches on it.
     bool isValid() const
     {
         return !snappingLayout.isEmpty() || !tilingAlgorithm.isEmpty();
@@ -190,7 +197,7 @@ struct AssignmentEntry
             entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
         } else if (PhosphorLayout::LayoutId::isScrolling(layoutId)) {
             // The "scrolling:" sentinel carries no layout entity — flip the
-            // mode and preserve both layout fields (the lossless-toggle
+            // mode and preserve all three layout fields (the lossless-toggle
             // contract), so a get→set round-trip cannot degrade a Scrolling
             // assignment into Snapping-pointing-at-a-bogus-id.
             entry.mode = Scrolling;

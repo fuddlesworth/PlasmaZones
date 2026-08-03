@@ -7,9 +7,9 @@
  *
  * Exercises every bridge function: makeContextMatch (single-leaf collapse vs
  * makeAll vs catch-all), makeAssignmentActions / makeAssignmentRule
- * (three-action losslessness + empty-field omission + caller-supplied
- * priority), makeDisableRule, and the makeContextMatch → contextDimsOf /
- * disableRuleMode round-trips.
+ * (assignment-slot losslessness across all four slots + empty-field omission
+ * + caller-supplied priority), makeDisableRule, and the makeContextMatch →
+ * contextDimsOf / disableRuleMode round-trips.
  */
 
 #include <QTest>
@@ -144,6 +144,23 @@ private Q_SLOTS:
     }
 
     // ─── makeAssignmentRule ───────────────────────────────────────────────
+
+    void testMakeAssignmentRule_carriesScrollingTemplate()
+    {
+        // The trailing defaulted template parameter forwards into a
+        // SetScrollingTemplate action — this leg guards the silent-omission
+        // shape a call site that forgets the fourth argument produces.
+        const Rule rule = CRB::makeAssignmentRule(
+            QStringLiteral("Scrolling rule"), QStringLiteral("DP-1"), 2, QStringLiteral("act-x"),
+            QStringLiteral("scrolling"), QStringLiteral("layout-a"), QString(), 350, QStringLiteral("template-c"));
+        QVERIFY(rule.isValid());
+        QCOMPARE(actionCount(rule.actions, ActionType::SetScrollingTemplate), 1);
+        for (const RuleAction& action : rule.actions) {
+            if (action.type == QString(ActionType::SetScrollingTemplate)) {
+                QCOMPARE(action.params.value(ActionParam::LayoutId).toString(), QStringLiteral("template-c"));
+            }
+        }
+    }
 
     void testMakeAssignmentRule_isValidAndContextOnly()
     {

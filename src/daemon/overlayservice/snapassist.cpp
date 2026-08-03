@@ -527,11 +527,18 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     const QString resolvedId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
 
-    // Same-screen re-request while visible is a no-op; a request for a
+    // Same-screen re-request while visible is a visual no-op; a request for a
     // DIFFERENT screen migrates the picker there (dismiss + reshow below),
     // mirroring showSnapAssist's cross-screen singleton handling instead of
-    // silently dropping the request.
+    // silently dropping the request. The highlight can still have gone stale
+    // under the open picker (a quick-slot press swaps the template or layout
+    // without closing it), so re-push the active id before bailing.
     if (m_layoutPickerVisible && m_layoutPickerScreenId == resolvedId) {
+        auto it = m_screenStates.find(resolvedId);
+        if (it != m_screenStates.end() && it->shell && it->layoutPickerSlot()) {
+            writeQmlProperty(it->layoutPickerSlot(), QStringLiteral("activeLayoutId"),
+                             activeLayoutIdForScreen(resolvedId));
+        }
         return;
     }
 
@@ -718,8 +725,12 @@ void OverlayService::onLayoutPickerDismissRequested()
 void OverlayService::onLayoutPickerSelected(const QString& layoutId)
 {
     qCInfo(lcOverlay) << "Layout picker selected=" << layoutId;
+    // Capture the bound screen BEFORE the hide clears it — the consumer
+    // re-binds the layout controller to this screen so the pick cannot
+    // land on a screen a mid-pick desktop switch retargeted.
+    const QString boundScreenId = m_layoutPickerScreenId;
     hideLayoutPicker();
-    Q_EMIT layoutPickerSelected(layoutId);
+    Q_EMIT layoutPickerSelected(layoutId, boundScreenId);
 }
 
 void OverlayService::pickerMoveSelection(int dx, int dy)

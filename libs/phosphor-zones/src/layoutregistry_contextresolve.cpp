@@ -1048,7 +1048,7 @@ const PhosphorRules::Rule* LayoutRegistry::findExactContextRule(const QString& s
     // LockContext alongside the assignment slots — is still the rule that
     // assigns this context, so it is claimed like any other. The gate used
     // to sit on the shape fallback because the rebuild paths emit only the
-    // three slot actions and would strip the rest; they now carry
+    // assignment slot actions and would strip the rest; they now carry
     // non-assignment actions across (carryOverNonAssignmentActions), so the
     // rebuild is lossless and refusing to claim buys nothing. It also cost
     // something: an unclaimed mixed rule sent upsertAssignmentRule down the

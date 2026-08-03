@@ -18,6 +18,7 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorScreens/Manager.h>
@@ -131,7 +132,7 @@ void Daemon::connectLayoutSignals()
     // start() calls this one FIRST (lifecycle.cpp), so the clear lives here
     // and connectOverlaySignals() only appends.
     //
-    // Scope note: this list covers the five connections below.
+    // Scope note: this list covers every connection appended below.
     // initializeAutotile()'s eight shortcut lambdas get the same treatment
     // from their own list, because start() calls it BEFORE this function
     // clears here, so a shared list would drop them right after install.
@@ -149,13 +150,44 @@ void Daemon::connectLayoutSignals()
     // re-pushed (updateScrollingScreens runs per pass; the identical-set
     // retile makes the push take effect). Assignment writes are covered by
     // layoutAssigned below; this covers zone-geometry edits that change no
-    // assignment. m_layoutAdaptor is created in initCoreAdaptors (init())
-    // and only re-newed there, so the handle is valid whenever start() runs.
+    // assignment. NARROWED to the template case: layoutChanged also fires
+    // on every active-layout switch and on autotile-overrides saves, and an
+    // unconditional handler ran a full engine recompute per emit — so the
+    // payload's layout id is matched against the live scrolling screens'
+    // resolved templates first. m_layoutAdaptor is created in
+    // initCoreAdaptors (init()) and only re-newed there, so the handle is
+    // valid whenever start() runs.
     if (m_layoutAdaptor) {
-        m_restartScopedConnections << connect(m_layoutAdaptor, &LayoutAdaptor::layoutChanged, this,
-                                              [this](const QString&) {
-                                                  updateEngineScreens();
-                                              });
+        m_restartScopedConnections << connect(
+            m_layoutAdaptor, &LayoutAdaptor::layoutChanged, this, [this](const QString& layoutJson) {
+                if (!m_scrollEngine || !m_layoutManager) {
+                    return;
+                }
+                const QSet<QString> scrollingScreens = m_scrollEngine->activeScreens();
+                if (scrollingScreens.isEmpty()) {
+                    return;
+                }
+                const QString changedId =
+                    QJsonDocument::fromJson(layoutJson.toUtf8()).object().value(QLatin1String("id")).toString();
+                if (changedId.isEmpty()) {
+                    return; // malformed payload — nothing to match
+                }
+                if (PhosphorLayout::LayoutId::isAutotile(changedId)) {
+                    // Autotile-overrides saves re-emit the incoming payload
+                    // whose id is the "autotile:<algo>" string; no template
+                    // can match it, so skip the per-screen resolve loop.
+                    return;
+                }
+                const QString activity = currentActivity();
+                for (const QString& screenId : scrollingScreens) {
+                    PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(
+                        screenId, currentDesktopForScreen(screenId), activity);
+                    if (templ && templ->id().toString() == changedId) {
+                        updateEngineScreens();
+                        return;
+                    }
+                }
+            });
     }
     m_restartScopedConnections << connect(
         m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,

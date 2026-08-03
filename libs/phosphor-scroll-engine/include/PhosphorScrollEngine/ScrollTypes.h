@@ -136,7 +136,10 @@ inline constexpr qreal MinColumnWidthFraction = 0.05;
 /// work area. The height twin of MinColumnWidthFraction, deliberately its own
 /// name: the two bounds happen to share a value today, and a caller that
 /// clamps a HEIGHT against the width constant would silently follow a later
-/// width-only change.
+/// width-only change. KEEP IN SYNC with PhosphorRules::MinColumnWidthRatio
+/// (RuleAction.h), which the rules-side height validation currently uses for
+/// BOTH fractions; like the width constant above, the bound is hand-mirrored
+/// because the dependency runs the other way.
 inline constexpr qreal MinWindowHeightFraction = 0.05;
 
 /// Persistent view-centering policy for the focused column (niri's

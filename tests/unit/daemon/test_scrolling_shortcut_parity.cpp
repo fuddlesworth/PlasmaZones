@@ -192,11 +192,17 @@ private Q_SLOTS:
 
     /// Pins the layout-capability tag split the daemon's layoutSupportForScreen
     /// gates rely on: the four layout-selection ids plus the quick-layout
-    /// digit family carry mode "layouts" (hidden on a non-layout screen),
-    /// while the two engine-routed layout-group rows stay "all" (Reapply
-    /// routes through reapplyLayout and Arrange All through snapAllWindows,
-    /// which every engine implements). A silent retag in either direction
-    /// would make the sheet advertise a refusing key or hide a working one.
+    /// digit family carry the capability tag "layouts", while the two
+    /// engine-routed layout-group rows stay "all" (Reapply routes through
+    /// reapplyLayout and Arrange All through snapAllWindows, which every
+    /// engine implements). The "layouts" rows show whenever the bound
+    /// screen's engine consumes layouts at all — Placement AND Templates
+    /// (scrolling screens included, where the keys drive the template) —
+    /// and hide only for a LayoutSupport::None engine, which no shipped
+    /// engine reports today; the tag is still load-bearing because it is
+    /// what an embedder's None engine keys off. A silent retag in either
+    /// direction would make the sheet advertise a refusing key or hide a
+    /// working one.
     void layoutCapabilityTagsMatchTheGates()
     {
         IsolatedConfigGuard guard;

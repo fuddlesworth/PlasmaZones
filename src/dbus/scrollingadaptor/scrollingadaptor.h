@@ -102,6 +102,24 @@ public Q_SLOTS:
      */
     QString visibleStripJson(const QString& screenId) const;
 
+    /**
+     * @brief The screen's effective preset vocabulary, for inspection
+     *
+     * Returns a JSON object {"columnWidths": [...], "windowHeights": [...]}
+     * of 0.0 to 1.0 fractions. Each list resolves independently: a list the
+     * context's resolved template layout supplies is the template's, and a
+     * list it does not supply falls back to the configured preset list, so a
+     * template with no stacked zones yields template widths beside the
+     * configured heights. This is the vocabulary the cycle-preset-width and
+     * cycle-preset-height shortcuts walk on that screen. Same silent
+     * ownership gate as focusColumn: an empty object when the screen is not
+     * scrolling.
+     *
+     * @param screenId Screen whose vocabulary to describe
+     * @return JSON object string
+     */
+    QString presetVocabularyJson(const QString& screenId) const;
+
 Q_SIGNALS:
     /**
      * @brief Emitted when the set of screens using the scrolling engine changes

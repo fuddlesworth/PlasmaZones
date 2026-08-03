@@ -192,6 +192,14 @@ void UnifiedLayoutController::cycle(bool forward)
 
     int currentIndex = findCurrentIndex();
     if (currentIndex < 0) {
+        // No current selection (a fresh Templates screen with no template,
+        // or an unmatched id): the first FORWARD press applies the first
+        // entry rather than skipping past it to the second; backward wraps
+        // to the last, which clamping to 0 already produces.
+        if (forward) {
+            applyLayoutByIndex(0);
+            return;
+        }
         currentIndex = 0;
     }
 

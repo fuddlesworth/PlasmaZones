@@ -300,7 +300,8 @@ inline constexpr QLatin1StringView SetEngineMode{"setEngineMode"};
 inline constexpr QLatin1StringView SetSnappingLayout{"setSnappingLayout"};
 inline constexpr QLatin1StringView SetTilingAlgorithm{"setTilingAlgorithm"};
 /// Scrolling-mode template layout for the matched context: the manual layout
-/// whose zones become the strip's preset column-width vocabulary. Carries a
+/// whose zones become the strip's preset column-width vocabulary (and its
+/// height vocabulary, where the layout has stacked zones). Carries a
 /// LayoutId param like SetSnappingLayout (same value shape, so the settings
 /// UI reuses the layout-picker editor), but fills its own cascade slot — the
 /// lossless mode-toggle contract stores it BESIDE the snapping layout in one

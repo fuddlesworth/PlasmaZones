@@ -277,6 +277,13 @@ PhosphorZones::Layout* LayoutRegistry::defaultLayout() const
 // Helper for layout cycling
 // direction: -1 for previous, +1 for next
 // Filters out hidden layouts and respects visibility allow-lists
+//
+// NOTE: reachable in production only through cycleToPrevious/NextLayout,
+// which currently have no daemon-side callers — the daemon's cycle shortcut
+// runs UnifiedLayoutController::cycle() instead (a richer list: autotile
+// cards, custom order, template exemptions). This impl stays as the
+// library-level fallback for embedders and is exercised by the registry
+// tests; keep its scrolling routing in step with the controller's.
 PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, int direction)
 {
     if (m_layouts.isEmpty()) {
@@ -540,14 +547,14 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
         }
     } else {
         // Truly deleted — clean up rules and shortcuts referencing this layout.
-        // A context rule references the layout iff its SetSnappingLayout action
-        // carries this layout's UUID string. The rule is NOT blanket-deleted:
-        // an Autotile-mode context rule can carry a stale SetSnappingLayout
-        // (the mode-toggle losslessness invariant), so dropping the whole rule
-        // would lose its SetEngineMode + SetTilingAlgorithm autotile intent.
-        // purgeSnappingLayoutFromAssignments rebuilds each affected rule with
-        // only the snapping layout cleared, dropping a rule only when nothing
-        // meaningful remains.
+        // A context rule references the layout iff its SetSnappingLayout or
+        // SetScrollingTemplate action carries this layout's UUID string. The
+        // rule is NOT blanket-deleted: an Autotile-mode context rule can carry
+        // a stale SetSnappingLayout (the mode-toggle losslessness invariant),
+        // so dropping the whole rule would lose its SetEngineMode +
+        // SetTilingAlgorithm autotile intent. purgeSnappingLayoutFromAssignments
+        // rebuilds each affected rule with only the referencing layout slots
+        // cleared, dropping a rule only when nothing meaningful remains.
         purgeSnappingLayoutFromAssignments(layoutIdStr);
 
         // A deleted manual layout's UUID only ever lives in the Snapping
@@ -630,11 +637,7 @@ void LayoutRegistry::setActiveLayoutById(const QUuid& id)
 
 PhosphorZones::Layout* LayoutRegistry::layoutForShortcut(AssignmentEntry::Mode mode, int number) const
 {
-    const auto idx = slotIndexFor(mode);
-    if (!idx) {
-        return nullptr; // defensive: slotIndexFor currently maps every mode
-    }
-    const auto& slots = m_quickLayoutSlots[*idx];
+    const auto& slots = m_quickLayoutSlots[slotIndexFor(mode)];
     if (slots.contains(number)) {
         const QString& id = slots[number];
         if (PhosphorLayout::LayoutId::isAutotile(id))
@@ -653,10 +656,13 @@ void LayoutRegistry::applyQuickLayout(AssignmentEntry::Mode mode, int number, co
     // no-op — falling back to m_layouts.at(number-1) silently resurrects
     // a layout the user deliberately unbound.
     //
-    // Only manual (Snapping) slots can be applied here: an autotile slot
+    // Only manual-layout slots can be applied here: an autotile slot
     // resolves to an algorithm ID with no Layout*, and switching algorithms
     // needs the autotile engine, which lives in the daemon. The daemon's
-    // shortcut handler applies autotile slots directly; see daemon/shortcuts_wiring.cpp.
+    // shortcut handler applies autotile slots directly; see
+    // daemon/shortcuts_wiring.cpp. A SCROLLING screen also lands here (it
+    // shares the Snapping slot array): applyLayoutToScreen routes the manual
+    // layout to assignScrollingTemplate, so the press swaps the template.
     auto layout = layoutForShortcut(mode, number);
     if (!layout) {
         qCInfo(lcZonesLib) << "Quick slot" << number << "is unset or not directly applicable — no-op";
@@ -674,12 +680,7 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
         return;
     }
 
-    const auto idx = slotIndexFor(mode);
-    if (!idx) {
-        qCWarning(lcZonesLib) << "setQuickLayoutSlot: no slot array for mode" << mode << "— ignored";
-        return;
-    }
-    auto& slots = m_quickLayoutSlots[*idx];
+    auto& slots = m_quickLayoutSlots[slotIndexFor(mode)];
 
     if (layoutId.isEmpty()) {
         // Clear the slot
@@ -713,12 +714,7 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
 
 void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QHash<int, QString>& slots)
 {
-    const auto idx = slotIndexFor(mode);
-    if (!idx) {
-        qCWarning(lcZonesLib) << "setAllQuickLayoutSlots: no slot array for mode" << mode << "— ignored";
-        return;
-    }
-    auto& target = m_quickLayoutSlots[*idx];
+    auto& target = m_quickLayoutSlots[slotIndexFor(mode)];
 
     // Clear all existing slots for this mode first
     target.clear();

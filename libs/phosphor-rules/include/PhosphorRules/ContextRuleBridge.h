@@ -232,9 +232,10 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
 /**
  * @brief Build the lossless action list for a migrated zone Assignment.
  *
- * The `AssignmentEntry` invariant is mode-toggle losslessness: it stores both
- * `snappingLayout` and `tilingAlgorithm` so flipping mode never drops the
- * other field. The migrated rule therefore carries up to **three** actions:
+ * The `AssignmentEntry` invariant is mode-toggle losslessness: it stores
+ * `snappingLayout`, `tilingAlgorithm` and `scrollingTemplateLayout` so
+ * flipping mode never drops the other fields. The migrated rule therefore
+ * carries up to **four** actions:
  *
  *   - `SetEngineMode` — always (the mode token, e.g. "snapping" / "autotile"
  *     / "scrolling").
@@ -242,6 +243,8 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  *     action descriptor rejects an empty `layoutId`).
  *   - `SetTilingAlgorithm` — only when @p tilingAlgorithm is non-empty (the
  *     descriptor rejects an empty `algorithm`).
+ *   - `SetScrollingTemplate` — only when @p scrollingTemplate is non-empty
+ *     (same `layoutId` shape as `SetSnappingLayout`).
  *
  * A mode-only entry (both layout fields empty — the KCM "autotile, default
  * algorithm" shape) yields a single `SetEngineMode` action; the mode token
@@ -297,7 +300,8 @@ inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const Q
 /**
  * @brief Build a complete migrated zone-Assignment `Rule`.
  *
- * The match is context-only; the actions are the lossless three-action set.
+ * The match is context-only; the actions are the lossless assignment set
+ * from @ref makeAssignmentActions.
  * @p name is a human-readable label for the settings UI. @p modeToken is the
  * wire string for the assignment's mode (see `makeAssignmentActions` for
  * vocabulary contract). @p priority is the rule's precedence verbatim — the

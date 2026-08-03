@@ -3,6 +3,7 @@
 
 #include <PhosphorRules/Rule.h>
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonValue>
 
@@ -115,6 +116,44 @@ QList<ValidationIssue> Rule::validationIssues() const
                                 .arg(action.type);
             issues.append(issue);
         }
+    }
+
+    // Duplicate slot fill: two SAME-TYPE actions on one rule resolving to the
+    // SAME slot. Slot decoding is single-winner per (rule, type), so at most
+    // one duplicate takes effect (which one depends on the consumer's decode
+    // order) and the rest are dead weight — the exact shape a buggy rule
+    // rebuild accretes. The key is (slot, type), NOT slot alone: distinct
+    // types deliberately share a slot (SetSnappingLayout and
+    // SetTilingAlgorithm both fill the layout slot — the lossless
+    // mode-toggle pair — and the active mode picks between them), and the
+    // animation actions' event-scoped resolvers separate legitimate
+    // same-type pairs into distinct slots. A repeated SetAlgorithmParam IS
+    // flagged — its slot is constant, and the context resolver reads it
+    // single-winner, so the second copy really is dead. Unresolvable
+    // actions (empty slot) are skipped — the structural isValid() pass
+    // already rejects those.
+    QHash<QPair<QString, QString>, int> firstActionBySlotAndType;
+    for (int i = 0; i < actions.size(); ++i) {
+        const RuleAction& action = actions.at(i);
+        const QString slot = ActionRegistry::instance().slotFor(action);
+        if (slot.isEmpty()) {
+            continue;
+        }
+        const auto key = qMakePair(slot, action.type);
+        const auto it = firstActionBySlotAndType.constFind(key);
+        if (it == firstActionBySlotAndType.constEnd()) {
+            firstActionBySlotAndType.insert(key, i);
+            continue;
+        }
+        ValidationIssue issue;
+        issue.code = ValidationIssue::Code::DuplicateSlotActions;
+        issue.actionIndex = i;
+        issue.actionType = action.type;
+        issue.message = QStringLiteral(
+                            "Action `%1` fills slot `%2`, which an earlier action of the same type "
+                            "on this rule already fills; only one of them takes effect.")
+                            .arg(action.type, slot);
+        issues.append(issue);
     }
     return issues;
 }

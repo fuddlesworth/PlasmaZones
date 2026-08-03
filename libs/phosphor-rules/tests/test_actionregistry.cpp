@@ -147,6 +147,27 @@ private Q_SLOTS:
         QVERIFY(!reg.validate(makeAction(ActionType::SetOpacity, badOpacity)));
     }
 
+    void testSetScrollingTemplateAction()
+    {
+        const ActionRegistry& reg = ActionRegistry::instance();
+        // Same layoutId-keyed value shape as SetSnappingLayout, but its OWN
+        // slot — sharing the layout slot would shadow the snapping half of
+        // the lossless pair.
+        QJsonObject layout;
+        layout.insert(QStringLiteral("layoutId"), QStringLiteral("{x}"));
+        QVERIFY(reg.validate(makeAction(ActionType::SetScrollingTemplate, layout)));
+        QCOMPARE(reg.slotFor(makeAction(ActionType::SetScrollingTemplate, layout)),
+                 QString(ActionSlot::ScrollingTemplate));
+
+        // Missing and empty layoutId both fail, mirroring SetSnappingLayout's
+        // validator: an empty template is expressed by OMITTING the action,
+        // never by an empty param.
+        QVERIFY(!reg.validate(makeAction(ActionType::SetScrollingTemplate)));
+        QJsonObject emptyLayout;
+        emptyLayout.insert(QStringLiteral("layoutId"), QString());
+        QVERIFY(!reg.validate(makeAction(ActionType::SetScrollingTemplate, emptyLayout)));
+    }
+
     void testRestorePositionAction()
     {
         const ActionRegistry& reg = ActionRegistry::instance();

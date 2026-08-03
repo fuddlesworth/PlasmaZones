@@ -603,8 +603,11 @@ public:
         /// algorithm cards): the classic picker semantics.
         Placement,
         /// Layouts are consumed as sizing templates (the scrolling engine's
-        /// column-width vocabulary): the picker applies a layout as the
-        /// screen's template rather than as window placement.
+        /// column-width vocabulary, plus a height vocabulary when the layout
+        /// has stacked zones): the picker applies a layout as the screen's
+        /// template rather than as window placement. The daemon routes such
+        /// applies to the assignment's template slot and keeps the manual
+        /// layout list (no autotile cards) as the candidate set.
         Templates
     };
 
@@ -759,7 +762,7 @@ public:
     }
 
     // Per-window restore persistence is unified: engines implement
-    // capturePlacement()/restorePlacement() (below) and the common
+    // capturePlacement()/restorePlacement() (above) and the common
     // WindowPlacementStore handles capture timing, serialization, and the single
     // WindowPlacements config key. No engine-specific serialize/deserialize hooks.
 

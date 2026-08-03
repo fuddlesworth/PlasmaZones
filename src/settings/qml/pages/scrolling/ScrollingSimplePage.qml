@@ -159,7 +159,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset width")
                     searchAnchor: "simpleDefaultColumnWidthPresetIndex"
-                    description: i18n("Which entry of the column width presets a new column opens at, counted from 1. The presets themselves are edited on the Columns page in advanced mode.")
+                    description: i18n("Which entry of the column width presets a new column opens at, counted from 1. The presets themselves are edited on the Columns page in advanced mode. On a screen with a layout template the number counts into the template's widths instead.")
                     enabled: appSettings.scrollingDefaultColumnWidthKind === root.widthKindPreset
                     visible: true
 

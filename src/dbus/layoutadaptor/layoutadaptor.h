@@ -534,12 +534,16 @@ private:
     /// getLayoutPreview* D-Bus output).
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
 
-    // Suppress screenLayoutChanged D-Bus signal during setAssignmentEntry —
-    // the KCM initiated the change and doesn't need the echo back.
+    // Suppress screenLayoutChanged D-Bus signal while a KCM-driven batch is
+    // in flight (armed via setSuppressScreenLayoutSignal around any of the
+    // assignment writers) — the KCM initiated the change and doesn't need
+    // the echo back.
     bool m_suppressScreenLayoutSignal = false;
 
     // Track which screens had assignments modified during the current batch.
-    // Populated by setAssignmentEntry/clearAssignment, consumed by applyAssignmentChanges.
+    // Populated by every assignment writer in assignment.cpp (single-context
+    // setters/clears, the batch setters, setScrollingTemplateLayout, ...),
+    // consumed by applyAssignmentChanges.
     QSet<QString> m_changedScreenIds;
 
     // JSON caching for performance

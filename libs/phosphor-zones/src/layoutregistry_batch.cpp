@@ -70,11 +70,9 @@ void LayoutRegistry::clearAutotileAssignments()
     }
 
     // Drop autotile quick-layout slots — clearing autotile everywhere
-    // includes the per-mode autotile bindings. Snapping slots are untouched.
-    // The unchecked deref is safe by construction: Autotile is a
-    // compile-time argument with a slot array (only Scrolling yields
-    // nullopt).
-    auto& autotileSlots = m_quickLayoutSlots[*slotIndexFor(AssignmentEntry::Autotile)];
+    // includes the per-mode autotile bindings. Snapping slots (shared with
+    // Scrolling as the template vocabulary) are untouched.
+    auto& autotileSlots = m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)];
     if (!autotileSlots.isEmpty()) {
         autotileSlots.clear();
         changed = true;
@@ -161,7 +159,7 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         int priority = 0;
         QUuid id;
         // Every action of the prior rule that is NOT an assignment slot.
-        // makeAssignmentRule emits only the three slot actions and the rebuilt
+        // makeAssignmentRule emits only the assignment slot actions and the rebuilt
         // rule carries the deterministic context id, so it lands on the stored
         // rule whether or not the family drop spared it — a wholesale replace
         // therefore destroys a mixed rule's extra actions even when the purity
@@ -224,8 +222,8 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         // LockContext or an animation override) satisfies the two family tests
         // but is not this batch's to own. Dropping it deleted the rule
         // outright when the incoming batch had no key for that context, and
-        // rebuilt it through makeAssignmentRule — which emits only the three
-        // slot actions — when it did, silently stripping the user's other
+        // rebuilt it through makeAssignmentRule — which emits only the
+        // assignment slot actions — when it did, silently stripping the user's other
         // actions. Both sibling paths (findExactContextRule's shape fallback
         // and purgeSnappingLayoutFromAssignments) guard the same way.
         if (hasEngineModeAction(rule) && familyMatches(rule.match) && isPureAssignmentRule(rule)) {
@@ -409,7 +407,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         int priority = 0;
         QUuid id;
         // Every action of the prior rule that is NOT an assignment slot.
-        // makeAssignmentRule emits only the three slot actions and the rebuilt
+        // makeAssignmentRule emits only the assignment slot actions and the rebuilt
         // rule carries the deterministic context id, so it lands on the stored
         // rule whether or not the family drop spared it — a wholesale replace
         // therefore destroys a mixed rule's extra actions even when the purity
@@ -458,7 +456,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     // erased contexts so a drop without a rebuild still signals, and the
     // isPureAssignmentRule gate so a MIXED rule (context match + SetEngineMode
     // + SetOpacity or LockContext) is left alone. Without that third gate the
-    // rebuild below emits only the three slot actions and the user's extra
+    // rebuild below emits only the assignment slot actions and the user's extra
     // action is destroyed with no diagnostic.
     QList<PWR::Rule> kept;
     QHash<QUuid, int> keptIndexById;

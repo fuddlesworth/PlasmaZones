@@ -81,6 +81,43 @@ StackSlot stackSlotOf(const ScrollStrip& strip, const QString& windowId)
     return slot;
 }
 
+/// Cross-screen Preset remap. A Preset intent carries an INDEX into the
+/// owning screen's preset vocabulary, and with per-screen template overrides
+/// the two screens' lists can differ — carrying the bare index across the
+/// boundary would silently resize the column/tile to whatever fraction
+/// happens to sit at that index on the other side. Re-anchor on the VALUE:
+/// resolve the fraction under the source list, then pick the nearest entry
+/// in the target list. Non-Preset intents and empty lists pass through
+/// unchanged (relayout's presetAt already clamps a stale index).
+int nearestPresetIdx(const QList<qreal>& presets, qreal value)
+{
+    int best = 0;
+    for (int i = 1; i < presets.size(); ++i) {
+        if (qAbs(presets.at(i) - value) < qAbs(presets.at(best) - value)) {
+            best = i;
+        }
+    }
+    return best;
+}
+
+ColumnWidth remapPresetWidth(const ColumnWidth& width, const QList<qreal>& source, const QList<qreal>& target)
+{
+    if (width.kind != ColumnWidth::Preset || source.isEmpty() || target.isEmpty()) {
+        return width;
+    }
+    const qreal fraction = source.at(qBound(0, width.presetIdx, int(source.size()) - 1));
+    return ColumnWidth::makePreset(nearestPresetIdx(target, fraction));
+}
+
+WindowHeight remapPresetHeight(const WindowHeight& height, const QList<qreal>& source, const QList<qreal>& target)
+{
+    if (height.kind != WindowHeight::Preset || source.isEmpty() || target.isEmpty()) {
+        return height;
+    }
+    const qreal fraction = source.at(qBound(0, height.presetIdx, int(source.size()) - 1));
+    return WindowHeight::makePreset(nearestPresetIdx(target, fraction));
+}
+
 } // namespace
 
 // Shared preamble for every strip operation: resolve the target screen and
@@ -307,12 +344,17 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     // preserves the user's width/display/height choices and the client's
     // clamp (the float round-trip does the same through FloatRestore).
     const QSize windowMinSize = state->strip().windowMinimumSize(windowId);
-    const WindowHeight windowHeight = heightIntentOf(state->strip(), windowId);
+    const WindowHeight windowHeight = remapPresetHeight(
+        heightIntentOf(state->strip(), windowId), sourceParams.presetWindowHeights, targetParams.presetWindowHeights);
     const int sourceColIdx = state->strip().columnOfWindow(windowId);
     ColumnWidth windowWidth = effectiveDefaultColumnWidth(target);
     ColumnDisplay windowDisplay = effectiveDefaultColumnDisplay(target);
     if (sourceColIdx >= 0) {
-        windowWidth = state->strip().columns().at(sourceColIdx).width;
+        // Source-captured intent crossing to the target vocabulary; the
+        // default-width fallback above is already target-scoped, so only
+        // this branch remaps.
+        windowWidth = remapPresetWidth(state->strip().columns().at(sourceColIdx).width, sourceParams.presetColumnWidths,
+                                       targetParams.presetColumnWidths);
         windowDisplay = state->strip().columns().at(sourceColIdx).display;
     }
     state->strip().takeWindow(windowId, sourceParams);
@@ -331,10 +373,15 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         const int partnerColIdx = targetState->strip().columnOfWindow(partner);
         columnIdx = qMax(0, partnerColIdx);
         partnerMinSize = targetState->strip().windowMinimumSize(partner);
-        partnerHeight = heightIntentOf(targetState->strip(), partner);
+        // Mirror of the mover's remap, opposite direction: the partner's
+        // intent was captured under the TARGET vocabulary and lands on the
+        // source screen.
+        partnerHeight = remapPresetHeight(heightIntentOf(targetState->strip(), partner),
+                                          targetParams.presetWindowHeights, sourceParams.presetWindowHeights);
         moverLandingSlot = stackSlotOf(targetState->strip(), partner);
         if (partnerColIdx >= 0) {
-            partnerWidth = targetState->strip().columns().at(partnerColIdx).width;
+            partnerWidth = remapPresetWidth(targetState->strip().columns().at(partnerColIdx).width,
+                                            targetParams.presetColumnWidths, sourceParams.presetColumnWidths);
             partnerDisplay = targetState->strip().columns().at(partnerColIdx).display;
         }
         targetState->strip().takeWindow(partner, targetParams);

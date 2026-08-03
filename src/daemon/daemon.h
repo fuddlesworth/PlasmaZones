@@ -352,11 +352,12 @@ private:
      */
     PhosphorZones::AssignmentEntry::Mode currentModeFor(const QString& screenId) const;
 
+    using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
     /**
      * @brief How the engine owning @p screenId relates to user-selectable
      * layouts (IPlacementEngine::layoutSupport). Gates the layout picker
      * and the layout-selection shortcuts (cycle, quick slots, layout lock),
-     * feeds the OverlayService's injected LayoutsProvidedResolver (the
+     * feeds the OverlayService's injected LayoutSupportResolver (the
      * picker/drag-popup layout lists) and the cheatsheet's layouts-row
      * filter — so no surface assumes snap semantics on a screen whose
      * engine has no layout concept or falls through to the manual layout
@@ -364,7 +365,6 @@ private:
      * window; same Snapping fallback as currentModeFor) — engineFor itself
      * never returns null for a routed screen.
      */
-    using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
     LayoutSupport layoutSupportForScreen(const QString& screenId) const;
 
     /**
@@ -447,9 +447,11 @@ private:
     /// engine (scrolling_init.cpp).
     void connectScrollingShortcuts();
     /// Push the derived scrolling screen set into the scroll engine —
-    /// order seeding, per-context rule params, setActiveScreens
-    /// (scrolling.cpp). Called from updateEngineScreens so both
-    /// engines' sets flip atomically per context recompute.
+    /// order seeding, per-context rule params, the TEMPLATE vocabulary
+    /// (each screen's resolved template layout extracted into per-screen
+    /// preset lists), setActiveScreens (scrolling.cpp). Called from
+    /// updateEngineScreens so both engines' sets flip atomically per
+    /// context recompute.
     void updateScrollingScreens(const QSet<QString>& scrollingScreens);
     /// Shared capture phase: store leaving-scrolling screens' column order
     /// into m_lastEngineOrders BEFORE either engine seeds (see

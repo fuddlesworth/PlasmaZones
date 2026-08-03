@@ -61,11 +61,12 @@ void Daemon::connectShortcutSignals()
             m_layoutAdaptor->openEditor();
         }
     });
-    // Quick layout shortcuts (Meta+Alt+1-9). Quick slots are per mode: in
-    // snapping mode the slot holds a zone-layout UUID, in autotile mode an
-    // autotile algorithm ID. Resolve the cursor screen's current mode, look up
-    // that mode's slot, and apply the explicitly-bound layout — NOT the Nth
-    // layout in priority order.
+    // Quick layout shortcuts (Meta+Alt+1-9). Quick slots are per slot ARRAY:
+    // in snapping mode the slot holds a zone-layout UUID, in autotile mode an
+    // autotile algorithm ID, and scrolling shares the snapping array (the
+    // same manual-layout UUIDs double as template vocabulary). Resolve the
+    // cursor screen's current mode, look up that mode's slot, and apply the
+    // explicitly-bound layout — NOT the Nth layout in priority order.
     connect(m_shortcutManager.get(), &ShortcutManager::quickLayoutRequested, this, [this](int number) {
         if (!m_unifiedLayoutController || !m_layoutManager) {
             return;
@@ -363,43 +364,54 @@ void Daemon::connectShortcutSignals()
             m_windowDragAdaptor->releaseLayoutPickerNavShortcuts();
         }
     });
-    connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
-        if (!m_unifiedLayoutController) {
-            return;
-        }
-        // Check if screen is locked for its current mode. Route through
-        // the resolver's `handleFor(screenId)` — it composes the live
-        // (mode, desktop, activity) tuple via the bound IModeProvider /
-        // IWorkspaceState adapters, so this site stops re-stitching the
-        // 3-step cascade the resolver was introduced to collapse.
-        QString screenId = m_unifiedLayoutController->currentScreenName();
-        if (!screenId.isEmpty() && m_contextResolver) {
-            if (m_contextResolver->isLocked(m_contextResolver->handleFor(screenId))) {
-                showLockedPreviewOsd(screenId);
-                return;
-            }
-        }
-        // Capability re-check at APPLY time: the picker cannot open on a
-        // capability-less screen (gated at request time, and an empty list
-        // bails the show), but a KCM apply, rule reconcile or per-screen
-        // desktop switch can strip the bound screen's capability while the
-        // picker sits open. A Placement↔Templates flip mid-pick is fine —
-        // applyEntry re-resolves the mode and routes accordingly.
-        if (!screenId.isEmpty() && layoutSupportForScreen(screenId) == LayoutSupport::None) {
-            showLayoutsUnavailableOsd(screenId);
-            return;
-        }
-        // Screen name was already set when the picker opened; RE-push the
-        // live capability at apply time — a KCM apply or rule reconcile can
-        // flip the screen's engine while the picker sits open.
-        if (!screenId.isEmpty()) {
-            m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
-        }
-        if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
-            return;
-        }
-        resnapIfManualMode();
-    });
+    connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this,
+            [this](const QString& layoutId, const QString& pickerScreenId) {
+                if (!m_unifiedLayoutController) {
+                    return;
+                }
+                // Re-bind the controller to the screen the picker was BOUND to when
+                // the pick was made: currentScreenName is a single mutable slot that
+                // syncModeFromAssignments retargets on every desktop or activity
+                // switch, so without the re-bind a mid-pick switch applied the pick
+                // to whatever screen last grabbed the slot.
+                if (!pickerScreenId.isEmpty() && pickerScreenId != m_unifiedLayoutController->currentScreenName()) {
+                    m_unifiedLayoutController->setCurrentScreenName(pickerScreenId);
+                }
+                // Check if screen is locked for its current mode. Route through
+                // the resolver's `handleFor(screenId)` — it composes the live
+                // (mode, desktop, activity) tuple via the bound IModeProvider /
+                // IWorkspaceState adapters, so this site stops re-stitching the
+                // 3-step cascade the resolver was introduced to collapse.
+                QString screenId =
+                    pickerScreenId.isEmpty() ? m_unifiedLayoutController->currentScreenName() : pickerScreenId;
+                if (!screenId.isEmpty() && m_contextResolver) {
+                    if (m_contextResolver->isLocked(m_contextResolver->handleFor(screenId))) {
+                        showLockedPreviewOsd(screenId);
+                        return;
+                    }
+                }
+                // Capability re-check at APPLY time: the picker cannot open on a
+                // capability-less screen (gated at request time, and an empty list
+                // bails the show), but a KCM apply, rule reconcile or per-screen
+                // desktop switch can strip the bound screen's capability while the
+                // picker sits open. A Placement↔Templates flip mid-pick is fine —
+                // applyEntry re-resolves the mode and routes accordingly.
+                if (!screenId.isEmpty() && layoutSupportForScreen(screenId) == LayoutSupport::None) {
+                    showLayoutsUnavailableOsd(screenId);
+                    return;
+                }
+                // Screen name was re-bound above from the picker's own bound screen;
+                // RE-push the live capability at apply time too — a KCM apply or
+                // rule reconcile can flip the screen's engine while the picker sits
+                // open.
+                if (!screenId.isEmpty()) {
+                    m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
+                }
+                if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
+                    return;
+                }
+                resnapIfManualMode();
+            });
 
     // Toggle layout lock shortcut — locks/unlocks current screen at screen-level for current mode
     connect(m_shortcutManager.get(), &ShortcutManager::toggleLayoutLockRequested, this, [this]() {

@@ -1,11 +1,12 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-# PhosphorScrollEngine unit tests. Headless throughout: two files exercise the
-# pure strip model, three drive the engine through null daemon dependencies and
-# the geometry-provider seam. None needs a QPA platform, so the strip tests run
-# APPLESS and the engine tests GUILESS (they need an event dispatcher for the
-# coalesced retile and the prunes' deleteLater).
+# PhosphorScrollEngine unit tests. Headless throughout, in three categories:
+# two files exercise the pure strip model, four drive the engine through null
+# daemon dependencies and the geometry-provider seam, and one covers the pure
+# template-vocabulary extractor. None needs a QPA platform, so the strip and
+# extractor tests run APPLESS and the engine tests GUILESS (they need an event
+# dispatcher for the coalesced retile and the prunes' deleteLater).
 #
 # These route through phosphor_apply_test_isolation like every other
 # libs/phosphor-*/tests tree. Nothing here touches the session bus today, so
@@ -44,9 +45,9 @@ pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp)
 pse_add_test(test_scrolltemplate test_scrolltemplate.cpp)
 
-# Shared fixture header, listed so IDE/target file listings see it (every test
-# here includes it; it carries no Q_OBJECT, so automoc scans it and produces
-# nothing).
+# Shared fixture header, listed so IDE/target file listings see it (every
+# strip and engine test includes it — the pure extractor test does not; it
+# carries no Q_OBJECT, so automoc scans it and produces nothing).
 target_sources(test_scrollstrip_core PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollstrip_ops PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollengine_smoke PRIVATE scrollstriptestutils.h)

@@ -808,6 +808,10 @@ void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& scree
 void LayoutAdaptor::setScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId,
                                                const QString& layoutId)
 {
+    // idForName passthrough: a connector name that matches no known screen
+    // comes back verbatim and IS stored — the same contract as every sibling
+    // assignment setter here, where a not-yet-connected monitor's assignment
+    // must survive until the screen appears.
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     if (resolvedId.isEmpty()) {
         qCWarning(lcDbusLayout) << "setScrollingTemplateLayout: empty screen ID for" << screenId;

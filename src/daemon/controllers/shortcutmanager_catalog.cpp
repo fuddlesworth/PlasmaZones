@@ -130,8 +130,9 @@ CatalogMeta catalogMetaForId(const QString& id)
         // "layouts" is a capability tag, not a mode name: the rows show
         // whenever the bound screen's engine consumes user-selectable
         // layouts (IPlacementEngine::layoutSupport, pushed to the sheet
-        // as layoutsAvailable). On a scrolling screen these keys answer
-        // with a "not available" OSD, so the sheet hides them there.
+        // as layoutsAvailable). That now includes scrolling screens, where
+        // the same keys pick/cycle the TEMPLATE layout (LayoutSupport::
+        // Templates); the rows hide only on a LayoutSupport::None engine.
         add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
         add(kIdNextLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
         add(kIdLayoutPicker, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
@@ -255,10 +256,11 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones", "Switches the focused column between stacked windows and tabs."));
         add(kIdScrollCycleColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"),
-            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the preset widths."));
+            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the screen's width presets."));
         add(kIdScrollCycleColumnWidthBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width Back"),
-            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the preset widths in reverse."));
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Steps the focused column through the screen's width presets in reverse."));
         add(kIdScrollIncreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Widens the focused column by the configured step."));
         add(kIdScrollDecreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
@@ -278,10 +280,11 @@ CatalogMeta catalogMetaForId(const QString& id)
                               "Other columns keep their size."));
         add(kIdScrollCycleWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height"),
-            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused window through the preset heights."));
+            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused window through the screen's height presets."));
         add(kIdScrollCycleWindowHeightBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height Back"),
-            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused window through the preset heights in reverse."));
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Steps the focused window through the screen's height presets in reverse."));
         add(kIdScrollIncreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Makes the focused window taller by the configured step."));
         add(kIdScrollDecreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,

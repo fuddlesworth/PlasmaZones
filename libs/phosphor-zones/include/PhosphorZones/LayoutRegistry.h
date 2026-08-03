@@ -672,8 +672,9 @@ public:
                                      const QString& activity = QString()) const override;
 
     /// Flip mode to @c Snapping for every entry currently in @c Autotile
-    /// (preserves @c snappingLayout + @c tilingAlgorithm). Emits
-    /// @c layoutAssigned per affected screen; one save at end.
+    /// (preserves @c snappingLayout + @c tilingAlgorithm +
+    /// @c scrollingTemplateLayout). Emits @c layoutAssigned per affected
+    /// screen; one save at end.
     void clearAutotileAssignments();
 
     /// Batch setters - clear existing, set new, save once at end.
@@ -707,8 +708,9 @@ public:
     // assignScrollingTemplate — the slot press changes the screen's template,
     // never the engine.
 
-    /// quicklayouts.json top-level keys: one nested slot object per tiling
-    /// mode. This is the ONLY on-disk shape — there is no flat legacy variant.
+    /// quicklayouts.json top-level keys: one nested slot object per slot
+    /// ARRAY ("snapping", shared by Scrolling, and "autotile"). This is the
+    /// ONLY on-disk shape — there is no flat legacy variant.
     /// Shared with a consumer's v3→v4 schema migration, which writes the same
     /// nested format, so reader and migration cannot drift.
     static constexpr QLatin1String QuickSlotsSnappingKey{"snapping"};
@@ -720,11 +722,7 @@ public:
     void setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QHash<int, QString>& slots);
     QHash<int, QString> quickLayoutSlots(AssignmentEntry::Mode mode) const
     {
-        const auto idx = slotIndexFor(mode);
-        if (!idx) {
-            return {};
-        }
-        return m_quickLayoutSlots[*idx];
+        return m_quickLayoutSlots[slotIndexFor(mode)];
     }
 
     // ─── Layout cycling ───────────────────────────────────────────────────
@@ -832,7 +830,9 @@ private:
     /// template vocabulary a scrolling screen consumes, and
     /// applyLayoutToScreen routes the apply to assignScrollingTemplate
     /// there — a slot press changes the template, never the engine.
-    static constexpr std::optional<int> slotIndexFor(AssignmentEntry::Mode mode)
+    /// Total function: every mode maps to an array index (Autotile → 1,
+    /// everything else → 0), so callers index unconditionally.
+    static constexpr int slotIndexFor(AssignmentEntry::Mode mode)
     {
         return mode == AssignmentEntry::Autotile ? 1 : 0;
     }
@@ -853,9 +853,12 @@ private:
      * applyQuickLayout and cycleLayoutImpl were open-coding before the
      * extraction.
      */
-    /// @return false when the write was REFUSED because the screen is in
-    /// scrolling mode (a manual Layout* means nothing there and must not flip
-    /// the engine); true when the assignment was applied.
+    /// @return true when the assignment was applied. A Scrolling-mode screen
+    /// is not refused: the apply is ROUTED to assignScrollingTemplate (the
+    /// layout becomes the screen's template vocabulary, the engine mode never
+    /// flips) and reports true; false only when a Scrolling-mode screen is
+    /// handed a null layout (a null layout elsewhere is the clear path and
+    /// reports true).
     bool applyLayoutToScreen(const QString& screenId, Layout* layout);
     /// One-time idempotent fold of the retired autotile-overrides.json into the
     /// unified layout-settings.json sidecar; deletes the legacy file when done.
@@ -871,8 +874,8 @@ private:
     /// layout / tiling action slots of the resolved action set. The winner of
     /// each slot is the highest-priority matching rule (priority wins, ties by
     /// list order). Returns nullopt when no rule of any shape fills any of the
-    /// three slots, so a genuine miss stays distinguishable and routes to the
-    /// gated default. @p screenId is taken verbatim — connector / VS fallback is
+    /// four assignment slots, so a genuine miss stays distinguishable and
+    /// routes to the gated default. @p screenId is taken verbatim — connector / VS fallback is
     /// the caller's (layoutForScreen) retry loop.
     ///
     /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
@@ -921,8 +924,8 @@ private:
     /// any match carrying a window-property leaf — only a pure context-only
     /// match is an exact context rule. NOTE: the shape fallback also claims
     /// a LAYOUT-ONLY rule (one with no SetEngineMode action); an explicit
-    /// KCM assignment for that tuple then rebuilds it as a full three-action
-    /// rule — deliberate, since an explicit per-context assignment owns its
+    /// KCM assignment for that tuple then rebuilds it as a full
+    /// assignment-slot rule — deliberate, since an explicit per-context assignment owns its
     /// tuple, but it does mean a hand-authored "set the layout without
     /// forcing the mode" rule loses that property on the next KCM write.
     const PhosphorRules::Rule* findExactContextRule(const QString& screenId, int virtualDesktop,
@@ -954,7 +957,9 @@ private:
     /// Upsert a context assignment rule: replace the exact-shape rule if one
     /// exists, else add a new one. Persists through the store.
     ///
-    /// @return true when the store was actually written. An update whose
+    /// @return true when a write was ISSUED to the store (the update arm does
+    /// not re-check RuleSet::updateRule's own result — the rule is known to
+    /// exist because the upsert just found it). An update whose
     /// rebuilt rule equals the stored one returns FALSE without writing —
     /// RuleSet::updateRule has no equality check, so an identical re-apply
     /// would otherwise bump the revision (dropping every context cache and
@@ -991,12 +996,13 @@ private:
                                FamilyFn familyMatches, int emitDesktop, const char* label);
 
     /// Drop @p layoutId from every assignment rule's @c SetSnappingLayout
-    /// action when a snap layout is deleted. A rule that still carries
-    /// meaningful intent (an Autotile engine-mode, or a preserved
-    /// tilingAlgorithm) is rebuilt with only the snapping layout cleared —
-    /// the mode + tiling intent survives, preserving mode-toggle
-    /// losslessness. A rule left with nothing but a default (Snapping)
-    /// engine-mode is dropped entirely. Returns true if the rule set changed.
+    /// and @c SetScrollingTemplate actions when a manual layout is deleted.
+    /// A rule that still carries meaningful intent (an Autotile engine-mode,
+    /// a preserved tilingAlgorithm, or the other surviving layout slot) is
+    /// rebuilt with only the referencing slots cleared — the mode + remaining
+    /// intent survives, preserving mode-toggle losslessness. A rule left with
+    /// nothing but a default (Snapping) engine-mode and no payload is dropped
+    /// entirely. Returns true if the rule set changed.
     bool purgeSnappingLayoutFromAssignments(const QString& layoutId);
 
     /// Synthesize the level-1 global default into an AssignmentEntry,
