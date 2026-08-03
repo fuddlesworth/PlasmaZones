@@ -430,6 +430,11 @@ QVariantList RuleController::validationIssuesForJson(const QVariantMap& ruleJson
         m[QStringLiteral("code")] = static_cast<int>(issue.code);
         m[QStringLiteral("actionIndex")] = issue.actionIndex;
         m[QStringLiteral("actionType")] = issue.actionType;
+        // Friendly picker label for the same action, so the status bar can
+        // name the action the way the picker did instead of echoing the raw
+        // wire token ("excludePlacement") into user-facing prose. Falls back
+        // to the wire token for an unknown type.
+        m[QStringLiteral("actionLabel")] = RuleAuthoring::actionTypeLabel(issue.actionType);
         m[QStringLiteral("message")] = issue.message;
         out.append(m);
     }

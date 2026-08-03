@@ -189,9 +189,10 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     PhosphorAnimation::PhosphorAnimation
     # PhosphorRules: the unified LGPL rule engine. The effect resolves
     # its per-window animation overrides AND its exclusion gates through
-    # RuleEvaluator over slices of rules.json — the snap-drag gate
-    # binds to `ExclusionRules::excludeRulesFrom`, the animation gate to
-    # `ExclusionRules::excludeAnimationsRulesFrom`, both filtering the
+    # RuleEvaluator over slices of rules.json — the snap-drag gate binds
+    # `ExclusionRules::excludePlacementRulesFrom`, the decoration gate
+    # `ExclusionRules::excludeDecorationsRulesFrom`, and the animation gate
+    # `ExclusionRules::excludeAnimationsRulesFrom`, all filtering the
     # same unified rule-store push that drives the OverrideAnimation*
     # pipeline. Both the effect and the daemon link this one library so
     # there is exactly one match-code implementation (GPL->LGPL link is
