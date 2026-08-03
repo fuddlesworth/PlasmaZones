@@ -42,6 +42,7 @@ pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp)
+pse_add_test(test_scrolltemplate test_scrolltemplate.cpp)
 
 # Shared fixture header, listed so IDE/target file listings see it (every test
 # here includes it; it carries no Q_OBJECT, so automoc scans it and produces

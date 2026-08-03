@@ -27,6 +27,8 @@ add_library(PhosphorScrollEngine SHARED
     include/PhosphorScrollEngine/ScrollState.h
     include/PhosphorScrollEngine/ScrollEngine.h
     include/PhosphorScrollEngine/IScrollSettings.h
+    include/PhosphorScrollEngine/ScrollTemplate.h
+    src/scrolltemplate.cpp
     src/scrollstrip_structure.cpp
     src/scrollstrip_navigation.cpp
     src/scrollstrip_relayout.cpp
