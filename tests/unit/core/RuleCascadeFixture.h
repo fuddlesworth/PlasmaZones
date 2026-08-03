@@ -118,8 +118,9 @@ protected:
         mixed.match = PWR::MatchExpression::makeAll(
             {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId),
              PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals, appId)});
-        mixed.actions = CRB::makeAssignmentActions(
-            autotileMode ? QStringLiteral("autotile") : QStringLiteral("snapping"), snappingLayout, tilingAlgorithm);
+        mixed.actions =
+            CRB::makeAssignmentActions(autotileMode ? QStringLiteral("autotile") : QStringLiteral("snapping"),
+                                       snappingLayout, tilingAlgorithm, QString());
         return mixed;
     }
 
@@ -138,7 +139,7 @@ protected:
         r.priority = priority;
         r.match = PWR::MatchExpression(); // default-constructed → empty All{} catch-all
         r.actions = CRB::makeAssignmentActions(autotileMode ? QStringLiteral("autotile") : QStringLiteral("snapping"),
-                                               snappingLayout, tilingAlgorithm);
+                                               snappingLayout, tilingAlgorithm, QString());
         return r;
     }
 };

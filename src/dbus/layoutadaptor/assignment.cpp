@@ -506,7 +506,8 @@ QVariantMap LayoutAdaptor::getAllDesktopAssignments()
         // getAllActivityAssignments below; convert the desktop int to
         // a string up-front so both helpers use the same call shape.
         QString key = QStringLiteral("%1|%2").arg(it.key().first, QString::number(it.key().second));
-        result[key] = it.value();
+        result[key] = QVariantMap{{QStringLiteral("layoutId"), it.value().activeLayoutId()},
+                                  {QStringLiteral("scrollingTemplate"), it.value().scrollingTemplateLayout}};
     }
 
     return result;
@@ -519,7 +520,8 @@ QVariantMap LayoutAdaptor::getAllActivityAssignments()
     const auto assignments = m_layoutManager->activityAssignments();
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         QString key = QStringLiteral("%1|%2").arg(it.key().first, it.key().second);
-        result[key] = it.value();
+        result[key] = QVariantMap{{QStringLiteral("layoutId"), it.value().activeLayoutId()},
+                                  {QStringLiteral("scrollingTemplate"), it.value().scrollingTemplateLayout}};
     }
 
     return result;
@@ -702,7 +704,8 @@ QVariantMap LayoutAdaptor::getAllCombinedAssignments()
         // and activity ids are UUIDs.
         const QString key =
             QStringLiteral("%1|%2|%3").arg(it.key().screenId).arg(it.key().virtualDesktop).arg(it.key().activity);
-        result[key] = it.value();
+        result[key] = QVariantMap{{QStringLiteral("layoutId"), it.value().activeLayoutId()},
+                                  {QStringLiteral("scrollingTemplate"), it.value().scrollingTemplateLayout}};
     }
     return result;
 }

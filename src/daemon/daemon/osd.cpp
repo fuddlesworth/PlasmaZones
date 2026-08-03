@@ -1042,7 +1042,8 @@ void Daemon::showCheatsheetOnCursorScreen()
 
     const CheatsheetPushState push = cheatsheetPushStateFor(screenId);
     m_overlayService->showCheatsheet(screenId, m_shortcutManager->cheatsheetModel(), push.modeString,
-                                     push.autotileAvailable, push.scrollingAvailable, push.layoutsAvailable);
+                                     push.autotileAvailable, push.scrollingAvailable, push.layoutsAvailable,
+                                     push.layoutsAreTemplates);
 
     // Bind Escape only on a successful show — showCheatsheet bails on
     // missing screen/shell/catalog, and the sheet's own dismiss path is the
@@ -1075,7 +1076,7 @@ void Daemon::refreshCheatsheetIfVisible()
     }
     const CheatsheetPushState push = cheatsheetPushStateFor(screenId);
     m_overlayService->refreshCheatsheet(m_shortcutManager->cheatsheetModel(), push.modeString, push.autotileAvailable,
-                                        push.scrollingAvailable, push.layoutsAvailable);
+                                        push.scrollingAvailable, push.layoutsAvailable, push.layoutsAreTemplates);
 }
 
 Daemon::CheatsheetPushState Daemon::cheatsheetPushStateFor(const QString& screenId) const
@@ -1083,8 +1084,10 @@ Daemon::CheatsheetPushState Daemon::cheatsheetPushStateFor(const QString& screen
     // Single resolver for everything both cheatsheet push sites hand the
     // overlay: show and refresh MUST agree (a divergence shows up as a sheet
     // whose filter changes on refresh), so neither site open-codes the set.
+    const LayoutSupport support = layoutSupportForScreen(screenId);
     return {cheatsheetModeString(currentModeFor(screenId)), m_settings && m_settings->autotileEnabled(),
-            m_settings && m_settings->scrollingEnabled(), layoutSupportForScreen(screenId) != LayoutSupport::None};
+            m_settings && m_settings->scrollingEnabled(), support != LayoutSupport::None,
+            support == LayoutSupport::Templates};
 }
 
 void Daemon::onCheatsheetDismissed()

@@ -110,6 +110,10 @@ struct LayoutOsdContentParams
     bool autoAssign = false; ///< per-layout autoAssign flag (raw, pre-OR with global)
     bool globalAutoAssign = false; ///< master "auto-assign for all layouts" toggle (#370)
     bool locked = false; ///< draws lock badge + " (Locked)" suffix
+    /// True on a live-Templates (scrolling) screen: the layout shown is the
+    /// screen's sizing TEMPLATE, and the OSD captions it "Column template"
+    /// so a template pick never reads as a snap-layout switch.
+    bool isTemplate = false;
     qreal screenAspectRatio = 16.0 / 9.0;
     QString aspectRatioClass = QStringLiteral("any");
     bool showMasterDot = false;

@@ -164,6 +164,19 @@ void Daemon::initLayoutAndSettingsWiring()
         }
         return geom.height() > geom.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
     });
+    // Per-screen current-desktop provider (#648): the registry (and the
+    // overlay service through it) resolves per-output desktops straight from
+    // the VirtualDesktopManager — ONE authority, replacing the push-updated
+    // mirror the daemon used to maintain from the screenDesktopChanged
+    // handler. nullopt (no VDM, unknown screen) falls back to the registry's
+    // global desktop, matching the old empty-mirror behavior.
+    m_layoutManager->setCurrentVirtualDesktopProvider([this](const QString& screenId) -> std::optional<int> {
+        if (!m_virtualDesktopManager) {
+            return std::nullopt;
+        }
+        const int desktop = m_virtualDesktopManager->currentDesktopForScreen(screenId);
+        return desktop >= 1 ? std::optional<int>(desktop) : std::nullopt;
+    });
     // Snapping-preferred provider — separate from defaultLayoutIdProvider
     // because the user can have snapping enabled WITHOUT a global default
     // snap layout id (per-screen assignments cover everything). Without

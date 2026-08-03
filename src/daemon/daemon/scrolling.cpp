@@ -18,6 +18,7 @@
 // Complete type needed for setScrollTabIndicatorOverrides — daemon.h forward
 // declares OverlayService only.
 #include "daemon/overlayservice.h"
+#include "scrollingtemplateprojection.h"
 #include "seedorderfilter.h"
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -183,40 +184,17 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // engine keeps the settings preset lists — deleted, degenerate or
         // row-only templates fail soft.
         if (PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity)) {
-            QRectF referenceRect;
-            if (m_screenManager) {
-                referenceRect = templ->useFullScreenGeometry()
-                    ? QRectF(m_screenManager->screenGeometry(screenId))
-                    : QRectF(m_screenManager->screenAvailableGeometry(screenId));
-            }
-            QVector<QRectF> zoneRects;
-            zoneRects.reserve(templ->zones().size());
-            for (const PhosphorZones::Zone* zone : templ->zones()) {
-                if (zone) {
-                    zoneRects.append(zone->normalizedGeometry(referenceRect));
-                }
-            }
-            const PhosphorScrollEngine::ScrollTemplateVocabulary vocab =
-                PhosphorScrollEngine::extractTemplateVocabulary(zoneRects);
-            if (!vocab.columnWidths.isEmpty()) {
-                QVariantList widths;
-                widths.reserve(vocab.columnWidths.size());
-                for (qreal w : vocab.columnWidths) {
-                    widths.append(w);
-                }
-                overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::presetColumnWidths(), widths);
-            }
-            // Sibling guard, deliberately NOT nested under the widths one:
-            // the extractor cannot produce heights without widths today, but
-            // encoding that invariant as caller control flow would silently
-            // drop height pushes if the extractor ever changed.
-            if (!vocab.windowHeights.isEmpty()) {
-                QVariantList heights;
-                heights.reserve(vocab.windowHeights.size());
-                for (qreal h : vocab.windowHeights) {
-                    heights.append(h);
-                }
-                overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::presetWindowHeights(), heights);
+            // The projection itself (reference-rect selection, zone
+            // normalization, vocabulary extraction, key insertion) lives in
+            // scrollingtemplateprojection.cpp so it is unit-testable without
+            // a Daemon; this site owns only WHICH template the context
+            // resolves and the screen-geometry lookups.
+            const QRect fullGeometry = m_screenManager ? m_screenManager->screenGeometry(screenId) : QRect();
+            const QRect availableGeometry =
+                m_screenManager ? m_screenManager->screenAvailableGeometry(screenId) : QRect();
+            const QVariantMap templateOverrides = scrollingTemplateOverrides(templ, fullGeometry, availableGeometry);
+            for (auto it = templateOverrides.cbegin(); it != templateOverrides.cend(); ++it) {
+                overrides.insert(it.key(), it.value());
             }
         }
         // The tab indicator's GEOMETRY overrides. Only these seven reach the

@@ -88,7 +88,7 @@ protected:
         QVERIFY(store != nullptr);
         const PWR::Rule rule = PWR::ContextRuleBridge::makeAssignmentRule(
             QStringLiteral("test-mode"), screenId, virtualDesktop, activity, modeToken, QString(), QString(),
-            PWR::ContextRuleBridge::kContextBandBase);
+            PWR::ContextRuleBridge::kContextBandBase, QString());
         QVERIFY(store->addRule(rule));
     }
 

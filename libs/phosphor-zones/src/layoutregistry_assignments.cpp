@@ -297,7 +297,13 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
         // some non-assignment action) lands here too — it fails
         // isPureAssignmentRule but still carries a context whose observers
         // must refresh, so record it in `affected` for the layoutAssigned
-        // emit below, exactly like the Shape-1 branch.
+        // emit below, exactly like the Shape-1 branch. A PURE window-property
+        // rule deliberately gets no entry: it has no context dims to key on,
+        // and it cannot influence context resolution anyway (the windowless
+        // context query never matches its window leaves, and slotMatch drops
+        // window-negating rules), so there is no engine state to re-derive —
+        // the store write's rulesChanged still reaches every projection
+        // consumer.
         if (isContextAssignmentRule(rule)) {
             const ContextDims dims = decodeDims(rule.match);
             affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
@@ -447,6 +453,11 @@ void LayoutRegistry::assignScrollingTemplate(const QString& screenId, int virtua
 PhosphorZones::Layout* LayoutRegistry::scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
                                                                    const QString& activity) const
 {
+    // Mode-gated BY DESIGN: a template preserved on a non-Scrolling context
+    // (the lossless-toggle contract) must not resolve — the engine push and
+    // the picker consume the LIVE template only. The raw field-inspection
+    // twin is scrollingTemplateLayoutForScreen, which reads the stored field
+    // regardless of mode (parity with snappingLayoutForScreen).
     const auto entry = resolveAssignmentEntry(screenId, virtualDesktop, activity);
     if (!entry || entry->mode != AssignmentEntry::Scrolling || entry->scrollingTemplateLayout.isEmpty()) {
         return nullptr;
@@ -679,6 +690,12 @@ QString LayoutRegistry::tilingAlgorithmForScreen(const QString& screenId, int vi
                                                  const QString& activity) const
 {
     return assignmentEntryForScreen(screenId, virtualDesktop, activity).tilingAlgorithm;
+}
+
+QString LayoutRegistry::scrollingTemplateLayoutForScreen(const QString& screenId, int virtualDesktop,
+                                                         const QString& activity) const
+{
+    return assignmentEntryForScreen(screenId, virtualDesktop, activity).scrollingTemplateLayout;
 }
 
 bool LayoutRegistry::hasMatchingAssignmentRule(const QString& screenId, int virtualDesktop,

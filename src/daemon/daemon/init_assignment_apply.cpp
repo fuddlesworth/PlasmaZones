@@ -44,6 +44,14 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
 
     const QString activity = currentActivity();
 
+    // The PRE-apply snapshot, captured before the tail's diffActiveAssignments
+    // refresh: the template-only OSD gate below compares against it. On the
+    // rule-driven path reconcileActiveAssignments refreshed the snapshot just
+    // before invoking this handler, so previous == current there and the gate
+    // is inert — exactly right, since that path only forwards id-changed
+    // screens.
+    const QHash<QString, ActiveAssignmentSnapshot> previousAssignments = m_activeAssignmentByScreen;
+
     // Collect ENGINE-MANAGED screens (autotile AND scrolling — both
     // must be excluded from the snap resnap below) and per-screen OSD
     // data in one pass.
@@ -69,6 +77,11 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
         // this context), and the OSD must explain that rather than
         // announce the fallback snapping layout.
         PhosphorZones::AssignmentEntry::Mode declaredMode = PhosphorZones::AssignmentEntry::Snapping;
+        // True when this apply changed ONLY the scrolling template (same
+        // sentinel assignment id as before, different resolved template):
+        // the mode-switch OSD would announce a switch that did not happen,
+        // so the OSD loop announces the template instead.
+        bool templateOnly = false;
     };
     QVector<ScreenOsd> osdEntries;
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
@@ -107,7 +120,23 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
             ? PhosphorZones::AssignmentEntry::Scrolling
             : (PhosphorLayout::LayoutId::isAutotile(assignmentId) ? PhosphorZones::AssignmentEntry::Autotile
                                                                   : PhosphorZones::AssignmentEntry::Snapping);
-        osdEntries.append({screenId, mode, algoId, why, desktop, declared});
+        // Template-only detection: the pre-apply snapshot held the same
+        // sentinel id but a different resolved template. A screen absent
+        // from the snapshot (fresh screen, first apply) is NOT template-only
+        // — the mode card is the honest announcement there.
+        bool templateOnly = false;
+        if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+            const auto previousIt = previousAssignments.constFind(screenId);
+            if (previousIt != previousAssignments.constEnd() && previousIt->assignmentId == assignmentId) {
+                QString currentTemplateId;
+                if (PhosphorZones::Layout* templ =
+                        m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity)) {
+                    currentTemplateId = templ->id().toString();
+                }
+                templateOnly = previousIt->templateId != currentTemplateId;
+            }
+        }
+        osdEntries.append({screenId, mode, algoId, why, desktop, declared, templateOnly});
     }
 
     // Resnap only the snapping-mode screens whose assignments actually changed.
@@ -197,10 +226,21 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
         } else if (!osdEnabled) {
             continue;
         } else if (osd.mode == PhosphorZones::AssignmentEntry::Scrolling) {
-            // Scrolling has no layout entity to announce; the mode
-            // switch itself is the OSD content (mirrors
-            // cheatsheetModeString's three-way handling).
-            showScrollingModeOsd(osd.screenId, OsdTrigger::LayoutSwitch);
+            if (osd.templateOnly) {
+                // Template-only apply: the engine did not switch, only the
+                // strip's sizing vocabulary did. Announce the template (the
+                // overlay captions it "Column template" on a live-Templates
+                // screen), or stay silent on a clear — a mode-switch card
+                // for either would announce a switch that did not happen.
+                if (PhosphorZones::Layout* templ =
+                        m_layoutManager->scrollingTemplateForContext(osd.screenId, osd.desktop, activity)) {
+                    showLayoutOsd(templ, osd.screenId);
+                }
+            } else {
+                // The mode switch itself is the OSD content (mirrors
+                // cheatsheetModeString's three-way handling).
+                showScrollingModeOsd(osd.screenId, OsdTrigger::LayoutSwitch);
+            }
         } else if (osd.mode == PhosphorZones::AssignmentEntry::Autotile) {
             if (!osd.algoId.isEmpty()) {
                 // Resolve the algorithm's human-readable display

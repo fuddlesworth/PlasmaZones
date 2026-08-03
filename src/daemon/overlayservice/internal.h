@@ -75,6 +75,7 @@ inline void resetOsdOverlayState(QObject* window)
     // reset; the reset stays as a safety net for any future call site that
     // forgets to set one of the states.
     writeQmlProperty(window, QStringLiteral("locked"), false);
+    writeQmlProperty(window, QStringLiteral("isTemplate"), false);
     writeQmlProperty(window, QStringLiteral("disabled"), false);
     writeQmlProperty(window, QStringLiteral("disabledReason"), QString());
 }

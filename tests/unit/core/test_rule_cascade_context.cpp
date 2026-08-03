@@ -23,6 +23,10 @@
 #include <QUuid>
 #include <limits>
 
+#include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
+
 #include "RuleCascadeFixture.h"
 
 class TestRuleCascadeContext : public QObject, public RuleCascadeFixture
@@ -166,6 +170,65 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).isEmpty());
     }
 
+    // ─── The scrolling TEMPLATE rides the ActiveLayout stamp, prefixed ────────
+    // A Scrolling context stamps "scrolling:<templateUuid>" (parity with
+    // autotile's "autotile:<algo>"), so a rule can target one specific
+    // template; the bare sentinel now means "scrolling with no template".
+    void testContextActiveLayout_scrollingTemplateStamp()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        auto* templ = new PhosphorZones::Layout(QStringLiteral("Template"));
+        auto* zone = new PhosphorZones::Zone();
+        zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
+        templ->addZone(zone);
+        f.registry->addLayout(templ);
+        const QString templId = templ->id().toString();
+
+        const auto gapRuleForActiveLayout = [](const QString& id) {
+            PWR::RuleAction gapAction;
+            gapAction.type = QString(PWR::ActionType::SetInnerGap);
+            gapAction.params.insert(QString(PWR::ActionParam::Value), 21);
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = QStringLiteral("template gap");
+            r.enabled = true;
+            r.priority = 400;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ActiveLayout, PWR::Operator::Equals, id);
+            r.actions = {gapAction};
+            return r;
+        };
+        const auto innerGapOn = [&f](const QString& screenId) {
+            return f.registry->resolveContextGaps(screenId, 0, QString());
+        };
+
+        // Scrolling context, no template yet: the BARE sentinel matches.
+        // The gap rules are added/removed individually — the ASSIGNMENT lives
+        // in the same rule store, so a setAllRules would wipe it.
+        f.registry->assignLayoutById(QStringLiteral("DP-1"), 0, QString(),
+                                     QString(PhosphorLayout::LayoutId::ScrollingId));
+        const PWR::Rule bareRule = gapRuleForActiveLayout(QString(PhosphorLayout::LayoutId::ScrollingId));
+        QVERIFY(f.store->addRule(bareRule));
+        QVERIFY(innerGapOn(QStringLiteral("DP-1")).innerGap.has_value());
+
+        // Assign the template: the stamp becomes the PREFIXED form — the bare
+        // rule stops matching, the prefixed rule fires. Every write here goes
+        // through the rule store, so the gap cache's revision compare
+        // refreshes it on its own.
+        f.registry->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), templId);
+        QVERIFY(!innerGapOn(QStringLiteral("DP-1")).innerGap.has_value());
+        QVERIFY(f.store->removeRule(bareRule.id));
+        const PWR::Rule prefixedRule = gapRuleForActiveLayout(PhosphorLayout::LayoutId::makeScrollingId(templId));
+        QVERIFY(f.store->addRule(prefixedRule));
+        const PhosphorZones::ContextGapOverride onTemplate = innerGapOn(QStringLiteral("DP-1"));
+        QVERIFY(onTemplate.innerGap.has_value());
+        QCOMPARE(*onTemplate.innerGap, 21);
+
+        // Clearing the template restores the bare stamp: the prefixed rule
+        // goes inert again.
+        f.registry->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), QString());
+        QVERIFY(!innerGapOn(QStringLiteral("DP-1")).innerGap.has_value());
+    }
+
     // ─── An ActiveLayout-referencing rule must NOT drive the assignment ───────
     // The assignment resolver leaves Field::ActiveLayout unstamped (it IS the
     // resolver's output — stamping would recurse). An assignment rule whose match
@@ -194,7 +257,7 @@ private Q_SLOTS:
         screenPinned.match =
             PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
         screenPinned.actions =
-            CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"));
+            CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"), QString());
         QVERIFY(f.store->setAllRules({screenPinned}));
         QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).mode,
                  PhosphorZones::AssignmentEntry::Autotile);
@@ -210,7 +273,8 @@ private Q_SLOTS:
             r.enabled = true;
             r.priority = 500;
             r.match = match;
-            r.actions = CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"));
+            r.actions =
+                CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"), QString());
             return r;
         };
 
@@ -305,9 +369,9 @@ private Q_SLOTS:
         // One explicit context rule on the MONITOR axis: (DP-1, no desktop, no
         // activity), so its match is a bare ScreenId leaf that every desktop on
         // DP-1 inherits.
-        const PWR::Rule assign =
-            CRB::makeAssignmentRule(QStringLiteral("layout DP-1"), QStringLiteral("DP-1"), 0, QString(),
-                                    QStringLiteral("snapping"), QStringLiteral("{explicit-layout}"), QString(), 301);
+        const PWR::Rule assign = CRB::makeAssignmentRule(
+            QStringLiteral("layout DP-1"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"),
+            QStringLiteral("{explicit-layout}"), QString(), 301, QString());
         QVERIFY(f.store->setAllRules({assign}));
 
         // (1) The exact tuple → the stored entry comes back.
@@ -355,9 +419,9 @@ private Q_SLOTS:
             return QStringLiteral("{provider-snap-default}");
         });
 
-        PWR::Rule assign =
-            CRB::makeAssignmentRule(QStringLiteral("layout DP-1"), QStringLiteral("DP-1"), 0, QString(),
-                                    QStringLiteral("snapping"), QStringLiteral("{explicit-layout}"), QString(), 301);
+        PWR::Rule assign = CRB::makeAssignmentRule(QStringLiteral("layout DP-1"), QStringLiteral("DP-1"), 0, QString(),
+                                                   QStringLiteral("snapping"), QStringLiteral("{explicit-layout}"),
+                                                   QString(), 301, QString());
         assign.enabled = false;
         QVERIFY(f.store->setAllRules({assign}));
 
@@ -860,9 +924,9 @@ private Q_SLOTS:
             PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-7"));
         lock.actions = {lockAction};
 
-        const PWR::Rule assign =
-            CRB::makeAssignmentRule(QStringLiteral("layout DP-7"), QStringLiteral("DP-7"), 0, QString(),
-                                    QStringLiteral("snapping"), QStringLiteral("{ctx-layout}"), QString(), 301);
+        const PWR::Rule assign = CRB::makeAssignmentRule(QStringLiteral("layout DP-7"), QStringLiteral("DP-7"), 0,
+                                                         QString(), QStringLiteral("snapping"),
+                                                         QStringLiteral("{ctx-layout}"), QString(), 301, QString());
         QVERIFY(f.store->setAllRules({lock, assign}));
 
         // The lock surfaces (Locked slot) ...

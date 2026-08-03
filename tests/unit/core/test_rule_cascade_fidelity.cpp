@@ -66,13 +66,14 @@ private Q_SLOTS:
         // Display default for DP-1.
         rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1"), QStringLiteral("DP-1"), 0, QString(),
                                              QStringLiteral("snapping"), QStringLiteral("{screen-layout}"), QString(),
-                                             301));
+                                             301, QString()));
         // Desktop 2 on DP-1.
         rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1 d2"), QStringLiteral("DP-1"), 2, QString(),
                                              QStringLiteral("snapping"), QStringLiteral("{desktop-layout}"), QString(),
-                                             303));
+                                             303, QString()));
         rules.append(CRB::makeAssignmentRule(QStringLiteral("Default"), QString(), 0, QString(),
-                                             QStringLiteral("snapping"), QStringLiteral("{global}"), QString(), 1));
+                                             QStringLiteral("snapping"), QStringLiteral("{global}"), QString(), 1,
+                                             QString()));
 
         PWR::RuleSet set;
         set.setRules(rules);
@@ -98,11 +99,11 @@ private Q_SLOTS:
         // Desktop 2 on DP-1 (priority 303).
         rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1 d2"), QStringLiteral("DP-1"), 2, QString(),
                                              QStringLiteral("snapping"), QStringLiteral("{desktop-two}"), QString(),
-                                             303));
+                                             303, QString()));
         // Activity "work" on DP-1, any desktop (priority 304).
         rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1 work"), QStringLiteral("DP-1"), 0,
                                              QStringLiteral("work-uuid"), QStringLiteral("snapping"),
-                                             QStringLiteral("{activity-work}"), QString(), 304));
+                                             QStringLiteral("{activity-work}"), QString(), 304, QString()));
 
         PWR::RuleSet set;
         set.setRules(rules);
@@ -125,11 +126,11 @@ private Q_SLOTS:
         // Monitor default for DP-1.
         rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1"), QStringLiteral("DP-1"), 0, QString(),
                                              QStringLiteral("snapping"), QStringLiteral("{monitor-default}"), QString(),
-                                             301));
+                                             301, QString()));
         // Work activity on DP-1.
         rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1 work"), QStringLiteral("DP-1"), 0,
                                              QStringLiteral("activity-work"), QStringLiteral("snapping"),
-                                             QStringLiteral("{work-activity}"), QString(), 304));
+                                             QStringLiteral("{work-activity}"), QString(), 304, QString()));
 
         PWR::RuleSet set;
         set.setRules(rules);
@@ -160,7 +161,7 @@ private Q_SLOTS:
         // mode-toggle-lossless shape).
         rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1"), QStringLiteral("DP-1"), 0, QString(),
                                              QStringLiteral("autotile"), QStringLiteral("{snap-preserved}"),
-                                             QStringLiteral("dwindle"), 301));
+                                             QStringLiteral("dwindle"), 301, QString()));
 
         PWR::RuleSet set;
         set.setRules(rules);
@@ -191,7 +192,7 @@ private Q_SLOTS:
     {
         QList<PWR::Rule> rules;
         rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1"), QStringLiteral("DP-1"), 0, QString(),
-                                             QStringLiteral("autotile"), QString(), QString(), 301));
+                                             QStringLiteral("autotile"), QString(), QString(), 301, QString()));
         PWR::RuleSet set;
         set.setRules(rules);
         PWR::RuleEvaluator evaluator(set);
@@ -212,11 +213,12 @@ private Q_SLOTS:
         QList<PWR::Rule> rules;
         // One pinned rule for DP-1 only.
         rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1"), QStringLiteral("DP-1"), 0, QString(),
-                                             QStringLiteral("snapping"), QStringLiteral("{dp1-layout}"), QString(),
-                                             301));
+                                             QStringLiteral("snapping"), QStringLiteral("{dp1-layout}"), QString(), 301,
+                                             QString()));
         // Autotile catch-all floor.
         rules.append(CRB::makeAssignmentRule(QStringLiteral("Default"), QString(), 0, QString(),
-                                             QStringLiteral("autotile"), QString(), QStringLiteral("bsp"), 1));
+                                             QStringLiteral("autotile"), QString(), QStringLiteral("bsp"), 1,
+                                             QString()));
 
         PWR::RuleSet set;
         set.setRules(rules);
@@ -239,11 +241,13 @@ private Q_SLOTS:
     {
         QList<PWR::Rule> rules;
         rules.append(CRB::makeAssignmentRule(QStringLiteral("Default"), QString(), 0, QString(),
-                                             QStringLiteral("snapping"), QStringLiteral("{global}"), QString(), 1));
+                                             QStringLiteral("snapping"), QStringLiteral("{global}"), QString(), 1,
+                                             QString()));
         // Add the pinned rule AFTER the floor so list order would favour the
         // floor if priority were ignored — priority must still win.
         rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1 d2"), QStringLiteral("DP-1"), 2, QString(),
-                                             QStringLiteral("snapping"), QStringLiteral("{specific}"), QString(), 303));
+                                             QStringLiteral("snapping"), QStringLiteral("{specific}"), QString(), 303,
+                                             QString()));
 
         PWR::RuleSet set;
         set.setRules(rules);
@@ -258,13 +262,14 @@ private Q_SLOTS:
     void testDisabledRuleSkipped()
     {
         QList<PWR::Rule> rules;
-        PWR::Rule pinned =
-            CRB::makeAssignmentRule(QStringLiteral("DP-1 d2"), QStringLiteral("DP-1"), 2, QString(),
-                                    QStringLiteral("snapping"), QStringLiteral("{specific}"), QString(), 303);
+        PWR::Rule pinned = CRB::makeAssignmentRule(QStringLiteral("DP-1 d2"), QStringLiteral("DP-1"), 2, QString(),
+                                                   QStringLiteral("snapping"), QStringLiteral("{specific}"), QString(),
+                                                   303, QString());
         pinned.enabled = false; // disabled — must be skipped
         rules.append(pinned);
         rules.append(CRB::makeAssignmentRule(QStringLiteral("Default"), QString(), 0, QString(),
-                                             QStringLiteral("snapping"), QStringLiteral("{global}"), QString(), 1));
+                                             QStringLiteral("snapping"), QStringLiteral("{global}"), QString(), 1,
+                                             QString()));
 
         PWR::RuleSet set;
         set.setRules(rules);
@@ -295,13 +300,13 @@ private Q_SLOTS:
             {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1")),
              PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals,
                                             QStringLiteral("org.kde.konsole"))});
-        composite.actions =
-            CRB::makeAssignmentActions(QStringLiteral("snapping"), QStringLiteral("{window-rule-layout}"), QString());
+        composite.actions = CRB::makeAssignmentActions(QStringLiteral("snapping"),
+                                                       QStringLiteral("{window-rule-layout}"), QString(), QString());
         rules.append(composite);
         // A plain context rule for the same screen.
         rules.append(CRB::makeAssignmentRule(QStringLiteral("DP-1"), QStringLiteral("DP-1"), 0, QString(),
                                              QStringLiteral("snapping"), QStringLiteral("{context-layout}"), QString(),
-                                             301));
+                                             301, QString()));
 
         PWR::RuleSet set;
         set.setRules(rules);
@@ -323,9 +328,11 @@ private Q_SLOTS:
         QList<PWR::Rule> rules;
         // Two screen-only rules for DP-1 — same priority (301).
         rules.append(CRB::makeAssignmentRule(QStringLiteral("first"), QStringLiteral("DP-1"), 0, QString(),
-                                             QStringLiteral("snapping"), QStringLiteral("{first}"), QString(), 301));
+                                             QStringLiteral("snapping"), QStringLiteral("{first}"), QString(), 301,
+                                             QString()));
         rules.append(CRB::makeAssignmentRule(QStringLiteral("second"), QStringLiteral("DP-1"), 0, QString(),
-                                             QStringLiteral("snapping"), QStringLiteral("{second}"), QString(), 301));
+                                             QStringLiteral("snapping"), QStringLiteral("{second}"), QString(), 301,
+                                             QString()));
         PWR::RuleSet set;
         set.setRules(rules);
         PWR::RuleEvaluator evaluator(set);
@@ -433,9 +440,9 @@ private Q_SLOTS:
     {
         RegistryFixture f = makeRegistryFixture();
         // Context-only snapping rule at the screen-only band (priority 301).
-        const PWR::Rule contextOnly =
-            CRB::makeAssignmentRule(QStringLiteral("DP-3 default"), QStringLiteral("DP-3"), 0, QString(),
-                                    QStringLiteral("snapping"), QStringLiteral("{context-only-snap}"), QString(), 301);
+        const PWR::Rule contextOnly = CRB::makeAssignmentRule(
+            QStringLiteral("DP-3 default"), QStringLiteral("DP-3"), 0, QString(), QStringLiteral("snapping"),
+            QStringLiteral("{context-only-snap}"), QString(), 301, QString());
         // Mixed rule at far higher priority — but its AppId leaf gates a
         // windowless query out.
         const PWR::Rule mixed = makeMixedScreenAppRule(QStringLiteral("DP-3"), QStringLiteral("firefox"),
@@ -548,9 +555,9 @@ private Q_SLOTS:
         {
             RegistryFixture f = makeRegistryFixture();
             // Screen-only pin at the screen band (301) ...
-            const PWR::Rule pinned =
-                CRB::makeAssignmentRule(QStringLiteral("DP-5"), QStringLiteral("DP-5"), 0, QString(),
-                                        QStringLiteral("snapping"), QStringLiteral("{screen-pin}"), QString(), 301);
+            const PWR::Rule pinned = CRB::makeAssignmentRule(QStringLiteral("DP-5"), QStringLiteral("DP-5"), 0,
+                                                             QString(), QStringLiteral("snapping"),
+                                                             QStringLiteral("{screen-pin}"), QString(), 301, QString());
             // ... versus the user catch-all floor at priority 1, well below it.
             const PWR::Rule catchAll =
                 makeUserCatchAllRule(/*autotileMode=*/false, QStringLiteral("{grid-2x2}"), QString(), 1);
@@ -631,9 +638,9 @@ private Q_SLOTS:
         {
             RegistryFixture f = makeRegistryFixture();
             // Pinned engine-only rule (autotile, default algorithm) on DP-4.
-            const PWR::Rule pinnedMode =
-                CRB::makeAssignmentRule(QStringLiteral("DP-4 autotile"), QStringLiteral("DP-4"), 0, QString(),
-                                        QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"), 301);
+            const PWR::Rule pinnedMode = CRB::makeAssignmentRule(
+                QStringLiteral("DP-4 autotile"), QStringLiteral("DP-4"), 0, QString(), QStringLiteral("autotile"),
+                QString(), QStringLiteral("dwindle"), 301, QString());
             // Catch-all layout-only snapping rule.
             PWR::Rule layoutOnly =
                 makeUserCatchAllRule(/*autotileMode=*/false, QStringLiteral("{columns-3}"), QString(), 1);

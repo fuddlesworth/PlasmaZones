@@ -161,10 +161,11 @@ void Daemon::connectScreenSignals()
                 // physical output ids), matching removedScreenId. The overlay service
                 // delegates to the layout registry, so clearing it there suffices.
                 if (m_virtualDesktopManager) {
+                    // The VDM is the ONE per-output desktop authority: the
+                    // layout registry (and the overlay service through it)
+                    // resolves per-screen desktops via the injected provider
+                    // that reads this manager, so this removal covers them.
                     m_virtualDesktopManager->removeScreenDesktop(removedScreenId);
-                }
-                if (m_layoutManager) {
-                    m_layoutManager->clearCurrentVirtualDesktopForScreen(removedScreenId);
                 }
 
                 // All three engines need the explicit whole-output reap:
@@ -321,10 +322,12 @@ void Daemon::connectDesktopActivity()
                 if (m_scrollEngine) {
                     m_scrollEngine->setCurrentDesktopForScreen(screenId, desktop);
                 }
-                // [SEQ D] Per-screen layout/overlay resolution context. The
-                // overlay service delegates to the layout registry for per-output
-                // desktop resolution, so this one push drives both (#648).
-                m_layoutManager->setCurrentVirtualDesktopForScreen(screenId, desktop);
+                // [SEQ D] Per-screen layout/overlay resolution context needs no
+                // push anymore: the layout registry (and the overlay service
+                // through it) resolves per-output desktops via the injected
+                // provider reading the VirtualDesktopManager, which this
+                // handler's own signal already updated — one authority, no
+                // mirror to lag (#648).
                 // [SEQ E] Per-desktop assignments may differ — recompute autotile
                 // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateEngineScreens();

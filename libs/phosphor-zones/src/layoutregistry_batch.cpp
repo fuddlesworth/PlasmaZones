@@ -549,16 +549,15 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     qCInfo(lcZonesLib) << "Batch set" << count << "combined assignments";
 }
 
-// NOTE (shared by the three projections below): the value is the entry's
-// activeLayoutId(), which for a Scrolling context is the bare "scrolling:"
-// sentinel — the scrolling TEMPLATE is not projected. Deliberate for now:
-// the value shape is a D-Bus wire contract (getAll*Assignments) and no
-// consumer reads a per-desktop/activity template yet; the batch WRITE round
-// trip is lossless regardless (rebuilds seed from the stored entry). Extend
-// the value shape when the settings app grows per-context template UI.
-QHash<CombinedAssignmentKey, QString> LayoutRegistry::combinedAssignments() const
+// NOTE (shared by the three projections below): the value is the decoded
+// AssignmentEntry — mode plus all three payload fields — so the D-Bus
+// getters can expose the scrolling template beside the activeLayoutId()
+// (which for a Scrolling context stays the bare "scrolling:" sentinel).
+// The batch SETTERS remain id-string-keyed; the rebuild seeds the template
+// from the stored entry, so the write round trip is lossless either way.
+QHash<CombinedAssignmentKey, AssignmentEntry> LayoutRegistry::combinedAssignments() const
 {
-    QHash<CombinedAssignmentKey, QString> result;
+    QHash<CombinedAssignmentKey, AssignmentEntry> result;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         // Strict Combined-only classifier — Activity-only and Desktop-only
         // rules stay in their own projections.
@@ -576,14 +575,14 @@ QHash<CombinedAssignmentKey, QString> LayoutRegistry::combinedAssignments() cons
         }
         const ContextDims dims = decodeDims(rule.match);
         result[CombinedAssignmentKey{dims.screenId, dims.virtualDesktop, dims.activity}] =
-            entryFromRuleMatchActions(rule).activeLayoutId();
+            entryFromRuleMatchActions(rule);
     }
     return result;
 }
 
-QHash<QPair<QString, int>, QString> LayoutRegistry::desktopAssignments() const
+QHash<QPair<QString, int>, AssignmentEntry> LayoutRegistry::desktopAssignments() const
 {
-    QHash<QPair<QString, int>, QString> result;
+    QHash<QPair<QString, int>, AssignmentEntry> result;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         // Use the same per-desktop family classifier the batch setter uses,
         // so a window-property rule carrying an engine-mode action plus an
@@ -593,14 +592,14 @@ QHash<QPair<QString, int>, QString> LayoutRegistry::desktopAssignments() const
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);
-        result[qMakePair(dims.screenId, dims.virtualDesktop)] = entryFromRuleMatchActions(rule).activeLayoutId();
+        result[qMakePair(dims.screenId, dims.virtualDesktop)] = entryFromRuleMatchActions(rule);
     }
     return result;
 }
 
-QHash<QPair<QString, QString>, QString> LayoutRegistry::activityAssignments() const
+QHash<QPair<QString, QString>, AssignmentEntry> LayoutRegistry::activityAssignments() const
 {
-    QHash<QPair<QString, QString>, QString> result;
+    QHash<QPair<QString, QString>, AssignmentEntry> result;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         // Use the STRICT per-activity classifier (Activity-only, no
         // Combined) so screen+desktop+activity rules are NOT projected
@@ -614,7 +613,7 @@ QHash<QPair<QString, QString>, QString> LayoutRegistry::activityAssignments() co
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);
-        result[qMakePair(dims.screenId, dims.activity)] = entryFromRuleMatchActions(rule).activeLayoutId();
+        result[qMakePair(dims.screenId, dims.activity)] = entryFromRuleMatchActions(rule);
     }
     return result;
 }

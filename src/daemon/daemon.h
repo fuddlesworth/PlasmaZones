@@ -201,6 +201,10 @@ private:
         bool autotileAvailable = false;
         bool scrollingAvailable = false;
         bool layoutsAvailable = false;
+        /// True when the bound screen's engine consumes layouts as sizing
+        /// TEMPLATES (LayoutSupport::Templates): the sheet swaps the layouts
+        /// rows' tooltips for template wording.
+        bool layoutsAreTemplates = false;
     };
     CheatsheetPushState cheatsheetPushStateFor(const QString& screenId) const;
     /**
@@ -1271,12 +1275,25 @@ private:
     /// Set between a scheduleScrollTabEnrichmentRefresh() and its queued run.
     bool m_scrollTabEnrichmentPending = false;
 
-    // Last-applied active assignment id per effective screen (resolved for that
+    /// One screen's last-applied assignment state: the resolved assignment id
+    /// plus, for Scrolling contexts, the resolved template layout id (empty
+    /// elsewhere — the template resolver is mode-gated). The template rides
+    /// the snapshot so the KCM apply path can tell a template-only change
+    /// (same sentinel id, different template) from a genuine mode/layout
+    /// switch and skip the mode-switch OSD for it; the diff's CHANGED set
+    /// stays keyed on assignmentId alone (only an id change moves windows).
+    struct ActiveAssignmentSnapshot
+    {
+        QString assignmentId;
+        QString templateId;
+        bool operator==(const ActiveAssignmentSnapshot&) const = default;
+    };
+    // Last-applied active assignment per effective screen (resolved for that
     // screen's current desktop/activity). Diffed on rulesChanged to find the
     // screens a rule edit actually moved; refreshed on context switches and
     // after any apply so a later edit doesn't falsely re-resnap. See
     // reconcileActiveAssignments / diffActiveAssignments.
-    QHash<QString, QString> m_activeAssignmentByScreen;
+    QHash<QString, ActiveAssignmentSnapshot> m_activeAssignmentByScreen;
 
     // Compression latch for the deferred rulesChanged → reconcile pass. The
     // store emits rulesChanged synchronously from inside every mutation, and

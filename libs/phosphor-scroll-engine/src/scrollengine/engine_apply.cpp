@@ -112,13 +112,17 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
     params.workArea = (adjusted.width() > 0 && adjusted.height() > 0) ? adjusted : QRect();
     params.gap = innerGap;
     params.respectMinimumSize = m_respectMinimumSize;
-    params.defaultWindowHeight = effectiveDefaultWindowHeight(screenId, params.workArea);
-    params.presetColumnWidths = effectivePresetColumnWidths(screenId);
-    params.presetWindowHeights = effectivePresetWindowHeights(screenId);
-    params.centerFocusedColumn = effectiveCenterFocusedColumn(screenId);
+    // The override map resolved ONCE for all six effective* reads below —
+    // the accessors' screenId wrappers would otherwise re-fetch it per call
+    // on this per-relayout path.
+    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    params.defaultWindowHeight = effectiveDefaultWindowHeight(overrides, params.workArea);
+    params.presetColumnWidths = effectivePresetColumnWidths(overrides);
+    params.presetWindowHeights = effectivePresetWindowHeights(overrides);
+    params.centerFocusedColumn = effectiveCenterFocusedColumn(overrides);
     params.alwaysCenterSingleColumn = m_alwaysCenterSingleColumn;
-    params.defaultColumnWidth = effectiveDefaultColumnWidth(screenId);
-    params.tabIndicator = effectiveTabIndicator(screenId);
+    params.defaultColumnWidth = effectiveDefaultColumnWidth(overrides);
+    params.tabIndicator = effectiveTabIndicator(overrides);
     return params;
 }
 

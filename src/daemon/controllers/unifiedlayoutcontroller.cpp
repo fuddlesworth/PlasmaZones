@@ -221,10 +221,11 @@ void UnifiedLayoutController::cycle(bool forward)
 QString UnifiedLayoutController::displayIdForAssignment(const QString& screenId, const QString& assignmentId) const
 {
     if (m_layoutManager && !screenId.isEmpty() && PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-        if (PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(
-                screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
-            return templ->id().toString();
-        }
+        // Shared authority with OverlayService::activeLayoutIdForScreen:
+        // template UUID when one resolves, else the sentinel (== the
+        // assignment id we were handed, matching no card).
+        return m_layoutManager->scrollingDisplayIdForContext(
+            screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity);
     }
     return assignmentId;
 }

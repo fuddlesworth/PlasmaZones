@@ -171,6 +171,11 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
         m_layoutSupportResolver && m_layoutSupportResolver(effectiveScreenId) == LayoutSupportTemplates;
     p.autoAssign = !templatesScreen && layout->autoAssign();
     p.globalAutoAssign = !templatesScreen && m_settings && m_settings->autoAssignAllLayouts();
+    // Every layout OSD on a live-Templates screen is announcing a TEMPLATE
+    // (picker apply, quick slot, cycle, KCM apply all route here), so the
+    // caption derives from the live capability rather than threading a flag
+    // through each caller chain.
+    p.isTemplate = templatesScreen;
     p.locked = locked;
     p.screenAspectRatio = aspectRatio;
     p.aspectRatioClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
@@ -303,6 +308,7 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     // would otherwise leave `locked` or `disabled` stuck on.
     resetOsdOverlayState(osdSlot);
     writeQmlProperty(osdSlot, QStringLiteral("locked"), p.locked);
+    writeQmlProperty(osdSlot, QStringLiteral("isTemplate"), p.isTemplate);
     writeQmlProperty(osdSlot, QStringLiteral("layoutId"), p.id);
     writeQmlProperty(osdSlot, QStringLiteral("layoutName"), p.name);
     writeQmlProperty(osdSlot, QStringLiteral("screenAspectRatio"), p.screenAspectRatio);

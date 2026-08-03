@@ -670,6 +670,14 @@ public:
                                     const QString& activity = QString()) const;
     QString tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString()) const override;
+    /// Raw template-field sibling of the two getters above: NOT mode-gated,
+    /// so a dormant template preserved on a non-Scrolling context (the
+    /// lossless-toggle contract) reads back. The mode-gated
+    /// @ref scrollingTemplateForContext is the resolver the engine push and
+    /// picker use; this is the field-inspection twin, parity with
+    /// snappingLayoutForScreen returning a preserved layout in autotile mode.
+    QString scrollingTemplateLayoutForScreen(const QString& screenId, int virtualDesktop = 0,
+                                             const QString& activity = QString()) const;
 
     /// Flip mode to @c Snapping for every entry currently in @c Autotile
     /// (preserves @c snappingLayout + @c tilingAlgorithm +
@@ -690,12 +698,18 @@ public:
     /// batches.
     void setAllCombinedAssignments(const QHash<CombinedAssignmentKey, QString>& assignments);
 
-    QHash<QPair<QString, int>, QString> desktopAssignments() const;
-    QHash<QPair<QString, QString>, QString> activityAssignments() const;
+    /// The three projection readers return the FULL AssignmentEntry per
+    /// context (mode + all three payload fields), so consumers see the
+    /// scrolling template beside the activeLayoutId() the batch setters
+    /// round-trip on. The setters stay id-string-keyed: the template travels
+    /// through assignScrollingTemplate / setScrollingTemplateLayout, and the
+    /// batch rebuild preserves it from the stored entry.
+    QHash<QPair<QString, int>, AssignmentEntry> desktopAssignments() const;
+    QHash<QPair<QString, QString>, AssignmentEntry> activityAssignments() const;
     /// Strict Combined-context reader. See @ref setAllCombinedAssignments
     /// for the round-trip contract. Returns ONLY rules with all three
     /// dimensions pinned (screen + desktop + activity).
-    QHash<CombinedAssignmentKey, QString> combinedAssignments() const;
+    QHash<CombinedAssignmentKey, AssignmentEntry> combinedAssignments() const;
 
     // ─── Quick-layout slots (1..9) ────────────────────────────────────────
     //
@@ -749,25 +763,26 @@ public:
     {
         m_currentVirtualDesktop = desktop;
     }
-    /// This screen's current virtual desktop, falling back to the global
-    /// m_currentVirtualDesktop when no per-output value is set (#648).
+    /// This screen's current virtual desktop, resolved through the injected
+    /// provider (the daemon wires it to the VirtualDesktopManager — ONE
+    /// authority, no push-updated mirror to lag) and falling back to the
+    /// global m_currentVirtualDesktop when no provider is installed
+    /// (KCM/editor-hosted registries) or the provider has no answer (#648).
     int currentVirtualDesktopForScreen(const QString& screenId) const override
     {
-        const auto it = m_screenVirtualDesktop.constFind(screenId);
-        return it != m_screenVirtualDesktop.constEnd() ? it.value() : m_currentVirtualDesktop;
-    }
-    /// Record a single screen's current virtual desktop (per-output virtual
-    /// desktops). Pushed by the daemon's per-screen desktop handler.
-    void setCurrentVirtualDesktopForScreen(const QString& screenId, int desktop)
-    {
-        if (!screenId.isEmpty() && desktop >= 1) {
-            m_screenVirtualDesktop.insert(screenId, desktop);
+        if (m_currentVirtualDesktopProvider) {
+            if (const auto desktop = m_currentVirtualDesktopProvider(screenId); desktop && *desktop >= 1) {
+                return *desktop;
+            }
         }
+        return m_currentVirtualDesktop;
     }
-    /// Drop a screen's per-output desktop, reverting it to the global value.
-    void clearCurrentVirtualDesktopForScreen(const QString& screenId)
+    /// Inject the per-screen desktop resolver above. Same pattern and
+    /// main-thread contract as @ref setScreenOrientationProvider; the daemon
+    /// installs it at service init and clears it before teardown.
+    void setCurrentVirtualDesktopProvider(std::function<std::optional<int>(const QString& screenId)> provider)
     {
-        m_screenVirtualDesktop.remove(screenId);
+        m_currentVirtualDesktopProvider = std::move(provider);
     }
     void setCurrentActivity(const QString& activity)
     {
@@ -811,6 +826,14 @@ Q_SIGNALS:
     void layoutsSaved();
 
 private:
+    /// The RULES-VISIBLE ActiveLayout value the context resolvers stamp onto
+    /// their windowless queries: the assignment id, except that a Scrolling
+    /// context with a resolved template substitutes the PREFIXED
+    /// "scrolling:<templateUuid>" (LayoutId::makeScrollingId) — parity with
+    /// autotile's "autotile:<algorithmId>" stamp, so a rule can target one
+    /// template. Assignment ids on every other surface stay the bare
+    /// sentinel. Impl in layoutregistry_contextresolve.cpp.
+    QString rulesVisibleActiveLayoutId(const QString& screenId, int virtualDesktop, const QString& activity) const;
     /// Post-construction setup: path validation, evaluator binding, signal
     /// wiring.
     void initCommon();
@@ -1208,10 +1231,11 @@ private:
     /// back in on load — see layoutregistry_persistence.cpp.
     LayoutSettingsStore m_layoutSettings;
     int m_currentVirtualDesktop = 1;
-    /// Per-screen current virtual desktop (screenId → 1-based) under Plasma 6.7
-    /// per-output virtual desktops (#648). Empty unless the daemon pushes
-    /// per-screen values, so resolveLayoutForScreen falls back to the global.
-    QHash<QString, int> m_screenVirtualDesktop;
+    /// Per-screen current-desktop resolver under Plasma 6.7 per-output
+    /// virtual desktops (#648). The daemon wires it to the
+    /// VirtualDesktopManager; unset (KCM/editor hosts) falls back to the
+    /// global m_currentVirtualDesktop.
+    std::function<std::optional<int>(const QString&)> m_currentVirtualDesktopProvider;
     QString m_currentActivity;
 };
 

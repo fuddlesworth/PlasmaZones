@@ -480,7 +480,7 @@ QSet<QString> Daemon::diffActiveAssignments()
         return changed;
     }
     const QString activity = currentActivity();
-    QHash<QString, QString> next;
+    QHash<QString, ActiveAssignmentSnapshot> next;
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     next.reserve(effectiveIds.size());
     for (const QString& screenId : effectiveIds) {
@@ -490,9 +490,19 @@ QSet<QString> Daemon::diffActiveAssignments()
         // "autotile:<algo>"), so this fires only when the visible layout changes
         // — e.g. a tiling-algorithm edit while the screen is in snapping mode
         // resolves to the same snapping id and is correctly ignored.
-        const QString id = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        next.insert(screenId, id);
-        if (m_activeAssignmentByScreen.value(screenId) != id) {
+        ActiveAssignmentSnapshot snapshot;
+        snapshot.assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        // The resolved template rides the snapshot for the KCM apply's
+        // template-only OSD gate. Mode-gated resolver: empty on every
+        // non-Scrolling context. Deliberately NOT part of the `changed` key —
+        // a template swap moves no windows, so it must not trigger the
+        // resnap/OSD apply below (the engine re-derives its vocabulary via
+        // the unconditional updateEngineScreens either way).
+        if (PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity)) {
+            snapshot.templateId = templ->id().toString();
+        }
+        next.insert(screenId, snapshot);
+        if (m_activeAssignmentByScreen.value(screenId).assignmentId != snapshot.assignmentId) {
             changed.insert(screenId);
         }
     }

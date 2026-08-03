@@ -715,11 +715,13 @@ RowLayout {
         WideComboBox {
             id: layoutCombo
 
-            // Picker over `appSettings.layouts` (snapping layouts and autotile
-            // entries); the wire value stays the layout id (snap UUID or
-            // "autotile:<algo>") so it matches the id the daemon resolves for the
-            // screen. Mirrors the activity picker.
-            readonly property var _layouts: leaf.appSettings ? leaf.appSettings.layouts : []
+            // Picker over `appSettings.activeLayoutMatchOptions` (snapping
+            // layouts, autotile entries, and one derived "scrolling:<uuid>"
+            // template entry per manual layout); the wire value stays the id
+            // the daemon's context resolvers stamp for the screen (snap UUID,
+            // "autotile:<algo>", bare "scrolling:", or the prefixed template
+            // form). Mirrors the activity picker.
+            readonly property var _layouts: leaf.appSettings ? leaf.appSettings.activeLayoutMatchOptions : []
 
             model: _layouts
             textRole: "displayName"

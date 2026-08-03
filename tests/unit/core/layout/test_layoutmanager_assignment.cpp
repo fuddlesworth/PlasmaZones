@@ -24,6 +24,20 @@ class TestLayoutManagerAssignment : public LayoutManagerAssignmentFixture
 {
     Q_OBJECT
 
+private:
+    /// The projection readers return full AssignmentEntry values; the batch
+    /// setters accept id strings. This maps a projection back to the setter
+    /// shape (activeLayoutId per key) for the round-trip legs.
+    template<typename K>
+    static QHash<K, QString> assignmentIds(const QHash<K, PhosphorZones::AssignmentEntry>& entries)
+    {
+        QHash<K, QString> out;
+        for (auto it = entries.begin(); it != entries.end(); ++it) {
+            out.insert(it.key(), it.value().activeLayoutId());
+        }
+        return out;
+    }
+
 private Q_SLOTS:
 
     // ─── Mixed-rule survival through the assignment paths ────────────────
@@ -143,15 +157,15 @@ private Q_SLOTS:
         mgr->assignLayout(QStringLiteral("DP-1"), 0, QStringLiteral("work"), layoutB);
         mgr->assignLayout(QStringLiteral("DP-1"), 5, QString(), layoutB);
 
-        // Reader returns only the Combined rule.
+        // Reader returns only the Combined rule, as a full entry.
         const auto combined = mgr->combinedAssignments();
         QCOMPARE(combined.size(), 1);
         PhosphorZones::CombinedAssignmentKey key{QStringLiteral("DP-1"), 3, QStringLiteral("work")};
         QVERIFY(combined.contains(key));
-        QCOMPARE(combined.value(key), layoutA->id().toString());
+        QCOMPARE(combined.value(key).activeLayoutId(), layoutA->id().toString());
 
-        // Round-trip: re-assign the same hash → state must be byte-identical.
-        mgr->setAllCombinedAssignments(combined);
+        // Round-trip: re-assign the projected ids → state must be identical.
+        mgr->setAllCombinedAssignments(assignmentIds(combined));
         const auto roundTripped = mgr->combinedAssignments();
         QCOMPARE(roundTripped, combined);
 
@@ -218,10 +232,10 @@ private Q_SLOTS:
         QCOMPARE(projection.size(), 1);
         QVERIFY(projection.contains(qMakePair(screen, activity)));
 
-        // Round-trip the projection back through setAllActivityAssignments.
+        // Round-trip the projected ids back through setAllActivityAssignments.
         // The Combined rule must still be reachable on desktop 3, untouched
         // by the Activity batch family classifier.
-        mgr->setAllActivityAssignments(projection);
+        mgr->setAllActivityAssignments(assignmentIds(projection));
         QCOMPARE(mgr->layoutForScreen(screen, 3, activity)->name(), QStringLiteral("CombinedLayout"));
         QCOMPARE(mgr->layoutForScreen(screen, 1, activity)->name(), QStringLiteral("ActivityLayout"));
     }
@@ -560,8 +574,12 @@ private Q_SLOTS:
         auto back = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
         QCOMPARE(back.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(back.scrollingTemplateLayout, templ->id().toString());
-        // ...but the resolver answers null for a non-Scrolling context.
+        // ...the mode-gated resolver answers null for a non-Scrolling
+        // context, while the RAW field getter still reads the dormant
+        // template — parity with snappingLayoutForScreen returning a
+        // preserved layout in autotile mode.
         QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), 0, QString()), nullptr);
+        QCOMPARE(mgr->scrollingTemplateLayoutForScreen(QStringLiteral("DP-1"), 0), templ->id().toString());
     }
 
     void testAssignmentEntry_scrollingTemplate_deleteScrubs()
@@ -910,14 +928,33 @@ private Q_SLOTS:
 
         const auto projection = mgr->desktopAssignments();
         QCOMPARE(projection.size(), 1);
-        QCOMPARE(projection.value(qMakePair(QStringLiteral("DP-1"), 4)), QString());
+        QCOMPARE(projection.value(qMakePair(QStringLiteral("DP-1"), 4)).activeLayoutId(), QString());
 
-        mgr->setAllDesktopAssignments(projection);
+        mgr->setAllDesktopAssignments(assignmentIds(projection));
 
         QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 4, QString()));
         QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 4), PhosphorZones::AssignmentEntry::Snapping);
         // Still exactly one rule — the rebuild replaced it, it did not duplicate.
         QCOMPARE(mgr->desktopAssignments().size(), 1);
+    }
+
+    void testProjections_carryScrollingTemplate()
+    {
+        // The projection readers expose the full entry, so a templated
+        // Scrolling context projects the bare sentinel AND its template —
+        // the D-Bus getters' {layoutId, scrollingTemplate} value shape.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* templ = createTestLayout(QStringLiteral("Template"));
+        mgr->addLayout(templ);
+
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 2, QString(), QString(PhosphorLayout::LayoutId::ScrollingId));
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 2, QString(), templ->id().toString());
+
+        const auto projection = mgr->desktopAssignments();
+        const auto entry = projection.value(qMakePair(QStringLiteral("DP-1"), 2));
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(entry.activeLayoutId(), QString(PhosphorLayout::LayoutId::ScrollingId));
+        QCOMPARE(entry.scrollingTemplateLayout, templ->id().toString());
     }
 
     // A LAYOUT-ONLY exact-context rule (no SetEngineMode) is claimed by
@@ -1014,6 +1051,30 @@ private Q_SLOTS:
 
         // The bare sentinel, by contrast, is accepted.
         QVERIFY(PhosphorLayout::LayoutId::isScrolling(QStringLiteral("scrolling:")));
+    }
+
+    void testScrollingFamily_queryStampHelpers()
+    {
+        // The rules-visible template stamp lives in its own helper family:
+        // isScrollingFamily is the PREFIX classifier (rules side), while
+        // isScrolling stays the exact-compare ASSIGNMENT classifier. The two
+        // must keep disagreeing on the prefixed form.
+        namespace LayoutId = PhosphorLayout::LayoutId;
+        const QString uuid = QStringLiteral("{11111111-2222-3333-4444-555555555555}");
+
+        QCOMPARE(LayoutId::makeScrollingId(uuid), QStringLiteral("scrolling:") + uuid);
+        QCOMPARE(LayoutId::extractTemplateId(LayoutId::makeScrollingId(uuid)), uuid);
+        // Empty payload round-trips to the bare sentinel, mirroring
+        // makeAutotileId's empty-algorithm contract.
+        QCOMPARE(LayoutId::makeScrollingId(QString()), QString(LayoutId::ScrollingId));
+        QCOMPARE(LayoutId::extractTemplateId(QString(LayoutId::ScrollingId)), QString());
+
+        QVERIFY(LayoutId::isScrollingFamily(QString(LayoutId::ScrollingId)));
+        QVERIFY(LayoutId::isScrollingFamily(LayoutId::makeScrollingId(uuid)));
+        QVERIFY(LayoutId::isScrollingFamily(QStringLiteral("scrolling:junk")));
+        QVERIFY(!LayoutId::isScrollingFamily(QStringLiteral("autotile:bsp")));
+        // The assignment classifier keeps rejecting every payload-carrying form.
+        QVERIFY(!LayoutId::isScrolling(LayoutId::makeScrollingId(uuid)));
     }
 
     void testAssignmentEntry_fromLayoutId_scrollingRoundTrips()

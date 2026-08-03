@@ -103,6 +103,17 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
         if (PhosphorLayout::LayoutId::isScrolling(value)) {
             // The bare mode sentinel has no layout entity to look up.
             label = PhosphorI18n::tr("Scrolling", "tiling mode name");
+        } else if (PhosphorLayout::LayoutId::isScrollingFamily(value)) {
+            // The prefixed "scrolling:<uuid>" template stamp: resolve the
+            // template layout's name through the same manual-layout lookup
+            // (templates ARE manual layouts). Raw-id fallback mirrors the
+            // deleted-layout behavior below.
+            if (layoutLookup) {
+                const QString resolved = layoutLookup(PhosphorLayout::LayoutId::extractTemplateId(value));
+                if (!resolved.isEmpty() && resolved != PhosphorLayout::LayoutId::extractTemplateId(value)) {
+                    label = PhosphorI18n::tr("Template: %1").arg(resolved);
+                }
+            }
         } else if (PhosphorLayout::LayoutId::isAutotile(value)) {
             if (tilingAlgorithmLookup) {
                 const QString resolved = tilingAlgorithmLookup(PhosphorLayout::LayoutId::extractAlgorithmId(value));

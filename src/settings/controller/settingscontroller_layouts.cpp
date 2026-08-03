@@ -576,4 +576,29 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
 {
     return m_algorithmService->createNewAlgorithm(name, baseTemplate, capabilities);
 }
+
+QVariantList SettingsController::activeLayoutMatchOptions() const
+{
+    // Every layouts() entry as-is, then one derived template entry per MANUAL
+    // layout: id "scrolling:<uuid>" (LayoutId::makeScrollingId), the value the
+    // context resolvers stamp for a scrolling context with that template
+    // active. Autotile entries and the bare scrolling sentinel derive nothing
+    // (algorithms are not templates; the sentinel already sits in the base
+    // list as "scrolling with no template").
+    QVariantList out = m_layouts;
+    for (const QVariant& lv : m_layouts) {
+        const QVariantMap m = lv.toMap();
+        const QString id = m.value(QStringLiteral("id")).toString();
+        if (id.isEmpty() || PhosphorLayout::LayoutId::isAutotile(id)
+            || PhosphorLayout::LayoutId::isScrollingFamily(id)) {
+            continue;
+        }
+        QVariantMap derived;
+        derived[QStringLiteral("id")] = PhosphorLayout::LayoutId::makeScrollingId(id);
+        derived[QStringLiteral("displayName")] =
+            PhosphorI18n::tr("Template: %1").arg(m.value(QStringLiteral("displayName")).toString());
+        out.append(derived);
+    }
+    return out;
+}
 } // namespace PlasmaZones

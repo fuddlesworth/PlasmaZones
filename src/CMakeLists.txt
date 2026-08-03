@@ -486,6 +486,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/autotile_init.cpp
     daemon/daemon/scrolling_init.cpp
     daemon/daemon/scrolling.cpp
+    daemon/daemon/scrollingtemplateprojection.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/shader_warmup.cpp
     daemon/daemon/animation_profiles.cpp

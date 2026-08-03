@@ -676,7 +676,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 
             rules.append(PhosphorRules::ContextRuleBridge::makeAssignmentRule(
                 assignmentRuleName(screenId, desktop, activity), screenId, desktop, activity,
-                PhosphorZones::modeToWireString(mode), snappingLayout, tilingAlgorithm, priority));
+                PhosphorZones::modeToWireString(mode), snappingLayout, tilingAlgorithm, priority,
+                // v4 configs predate the scrolling-template concept, so there
+                // is genuinely no template to migrate — explicit rather than
+                // a defaulted argument that could silently absorb a future
+                // caller's omission.
+                QString()));
         }
     }
 

@@ -91,6 +91,10 @@ Item {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     property bool locked: false
+    // True when the layout shown is a scrolling screen's sizing TEMPLATE
+    // (live-Templates capability): the name label captions it "Column
+    // template" so a template pick never reads as a snap-layout switch.
+    property bool isTemplate: false
     property bool disabled: false
     property string disabledReason: ""
     // The glyph that means "refused" — the one icon the overlay tints grey.
@@ -259,7 +263,12 @@ Item {
                 readonly property int maxWidth: Kirigami.Units.gridUnit * 16
 
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.disabled ? root.disabledReason : (root.locked ? i18n("%1 (Locked)", root.layoutName) : root.layoutName)
+                text: {
+                    if (root.disabled)
+                        return root.disabledReason;
+                    var name = root.isTemplate ? i18n("Column template: %1", root.layoutName) : root.layoutName;
+                    return root.locked ? i18n("%1 (Locked)", name) : name;
+                }
                 font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
                 font.weight: Font.Medium
                 color: root.textColor

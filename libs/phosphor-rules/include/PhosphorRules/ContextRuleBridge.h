@@ -266,8 +266,7 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  * `ruleaction_builtins_p.h` — round-trips end-to-end through the consumer.
  */
 inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const QString& snappingLayout,
-                                               const QString& tilingAlgorithm,
-                                               const QString& scrollingTemplate = QString())
+                                               const QString& tilingAlgorithm, const QString& scrollingTemplate)
 {
     QList<RuleAction> actions;
 
@@ -309,8 +308,7 @@ inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const Q
  */
 inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int virtualDesktop,
                                const QString& activity, const QString& modeToken, const QString& snappingLayout,
-                               const QString& tilingAlgorithm, int priority,
-                               const QString& scrollingTemplate = QString())
+                               const QString& tilingAlgorithm, int priority, const QString& scrollingTemplate)
 {
     Rule rule;
     // Deterministic id derived from the source context identity — identical

@@ -129,6 +129,22 @@ public:
         return nullptr;
     }
 
+    /// The id the layout PICKER highlights for a scrolling context: the
+    /// resolved template's bare UUID, or the "scrolling:" sentinel (matches
+    /// no card) when no template resolves. The shared authority for the
+    /// picker-highlight sites (UnifiedLayoutController::displayIdForAssignment
+    /// and OverlayService::activeLayoutIdForScreen) — callers keep their own
+    /// live-capability gates. Distinct from the rules-visible query stamp,
+    /// which uses the PREFIXED "scrolling:<uuid>" form. Non-virtual on
+    /// purpose: a pure convenience over the virtual resolver above.
+    QString scrollingDisplayIdForContext(const QString& screenId, int virtualDesktop, const QString& activity) const
+    {
+        if (Layout* templ = scrollingTemplateForContext(screenId, virtualDesktop, activity)) {
+            return templ->id().toString();
+        }
+        return QString(PhosphorLayout::LayoutId::ScrollingId);
+    }
+
     /// Effective global default layout (snap-only fallback).
     virtual Layout* defaultLayout() const = 0;
 

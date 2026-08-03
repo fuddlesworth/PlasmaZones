@@ -443,14 +443,15 @@ public:
     // tagged "layouts" hide, because those shortcuts answer with a
     // "not available" OSD on that screen.
     void showCheatsheet(const QString& screenId, const QVariantList& model, const QString& currentMode,
-                        bool autotileAvailable, bool scrollingAvailable, bool layoutsAvailable);
+                        bool autotileAvailable, bool scrollingAvailable, bool layoutsAvailable,
+                        bool layoutsAreTemplates);
     void hideCheatsheet() override;
     bool isCheatsheetVisible() const override;
     /// Re-push model/mode into an already-visible cheatsheet (live refilter
     /// on mode switch or rebind). No-op when hidden — the next show
     /// re-resolves everything anyway.
     void refreshCheatsheet(const QVariantList& model, const QString& currentMode, bool autotileAvailable,
-                           bool scrollingAvailable, bool layoutsAvailable);
+                           bool scrollingAvailable, bool layoutsAvailable, bool layoutsAreTemplates);
     /// Screen the visible cheatsheet is bound to; empty when hidden.
     QString cheatsheetScreenId() const;
 

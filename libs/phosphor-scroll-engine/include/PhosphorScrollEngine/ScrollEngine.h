@@ -913,17 +913,31 @@ private:
     QHash<QString, QString> m_lastTabStripPayload;
 
     /// Effective per-screen values: the rule override when present, else the
-    /// cached config default.
+    /// cached config default. Each accessor is a thin screenId wrapper over a
+    /// map-taking overload, so a caller resolving several values for one
+    /// screen (layoutParamsForScreen resolves six per relayout) fetches the
+    /// override map ONCE and threads it through instead of re-looking it up
+    /// per accessor.
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
+    CenterFocusedColumn effectiveCenterFocusedColumn(const QVariantMap& overrides) const;
     ColumnWidth effectiveDefaultColumnWidth(const QString& screenId) const;
+    ColumnWidth effectiveDefaultColumnWidth(const QVariantMap& overrides) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QString& screenId) const;
+    ColumnDisplay effectiveDefaultColumnDisplay(const QVariantMap& overrides) const;
     /// Height needs the work area: the rule channel's bare fraction is
     /// committed as Fixed pixels against the live work area.
     WindowHeight effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const;
+    WindowHeight effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea) const;
     ScrollInsertPosition effectiveInsertPosition(const QString& screenId) const;
+    ScrollInsertPosition effectiveInsertPosition(const QVariantMap& overrides) const;
     /// Per-property override, so a rule that sets only the position leaves the
     /// other six geometry fields on their configured values.
     TabIndicatorParams effectiveTabIndicator(const QString& screenId) const;
+    TabIndicatorParams effectiveTabIndicator(const QVariantMap& overrides) const;
+    /// Map-taking overloads of the two PUBLIC preset accessors (declared in
+    /// the public section above), private because the override map is.
+    QList<qreal> effectivePresetColumnWidths(const QVariantMap& overrides) const;
+    QList<qreal> effectivePresetWindowHeights(const QVariantMap& overrides) const;
 
     QHash<QString, QVariantMap> m_perScreenOverrides;
     std::function<void()> m_persistSaveFn;

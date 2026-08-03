@@ -127,6 +127,11 @@ class SettingsController : public QObject
 
     // PhosphorZones::Layout management
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
+    // The rule editor's ActiveLayout value-picker model: every entry of
+    // `layouts` plus one derived "scrolling:<uuid>" template entry per manual
+    // layout, so a rule can target a specific scrolling template the way it
+    // targets a snap layout or an autotile algorithm.
+    Q_PROPERTY(QVariantList activeLayoutMatchOptions READ activeLayoutMatchOptions NOTIFY layoutsChanged)
 
     // Screen management
     Q_PROPERTY(QVariantList screens READ screens NOTIFY screensChanged)
@@ -349,6 +354,11 @@ public:
     {
         return m_layouts;
     }
+
+    /// The rules-editor ActiveLayout picker model. Impl in
+    /// settingscontroller_layouts.cpp; recomputed per read (rule editing is
+    /// not a hot path) and change-notified by layoutsChanged.
+    QVariantList activeLayoutMatchOptions() const;
 
     /// The options an enum-valued setting's picker should offer, as
     /// `[{ text, value }, ...]` in declaration order — a WideComboBox model

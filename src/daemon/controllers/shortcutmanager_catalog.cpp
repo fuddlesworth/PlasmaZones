@@ -92,8 +92,14 @@ struct CatalogMeta
     // it (KGlobalAccel carries only the action name), so the registration
     // description still has to stand alone without this. nullptr = no
     // tooltip; reserved for actions whose name alone does not tell a reader
-    // what will happen (today that is the scrolling column vocabulary).
+    // what will happen (the scrolling column vocabulary, and the layouts
+    // rows whose meaning shifts per capability).
     const char* explanation = nullptr;
+    // Optional Templates-capability variant of `explanation`: shown instead
+    // of it when the bound screen's engine consumes layouts as sizing
+    // templates (a scrolling screen), where the same key picks a TEMPLATE
+    // rather than a placement layout. nullptr = `explanation` serves both.
+    const char* templatesExplanation = nullptr;
 };
 
 CatalogMeta catalogMetaForId(const QString& id)
@@ -102,8 +108,9 @@ CatalogMeta catalogMetaForId(const QString& id)
         QHash<QString, CatalogMeta> m;
         const auto add = [&m](const char* id, const char* category, int order, const char* mode,
                               const char* categoryDisambiguation = nullptr, const char* shortLabel = nullptr,
-                              const char* explanation = nullptr) {
-            m.insert(QLatin1String(id), {category, order, mode, categoryDisambiguation, shortLabel, explanation});
+                              const char* explanation = nullptr, const char* templatesExplanation = nullptr) {
+            m.insert(QLatin1String(id),
+                     {category, order, mode, categoryDisambiguation, shortLabel, explanation, templatesExplanation});
         };
         // The scrolling category word needs the "tiling mode name"
         // disambiguation or it inherits the scrollbar-sense translation.
@@ -133,10 +140,25 @@ CatalogMeta catalogMetaForId(const QString& id)
         // as layoutsAvailable). That now includes scrolling screens, where
         // the same keys pick/cycle the TEMPLATE layout (LayoutSupport::
         // Templates); the rows hide only on a LayoutSupport::None engine.
-        add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
-        add(kIdNextLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
-        add(kIdLayoutPicker, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
-        add(kIdToggleLayoutLock, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
+        add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Switches this screen to the previous layout in the list."),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Switches this screen's column template to the previous layout. The "
+                              "template's zone widths become the preset widths columns cycle through."));
+        add(kIdNextLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Switches this screen to the next layout in the list."),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Switches this screen's column template to the next layout. The "
+                              "template's zone widths become the preset widths columns cycle through."));
+        add(kIdLayoutPicker, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Opens a picker to choose this screen's layout."),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Opens a picker to choose this screen's column template. The template's "
+                              "zone widths become the preset widths columns cycle through."));
+        add(kIdToggleLayoutLock, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Locks this screen's layout so nothing switches it until unlocked."),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Locks this screen's column template so nothing switches it until unlocked."));
         // Resnap stays "all": it routes through the engine's reapplyLayout
         // intent, which every engine implements (scrolling re-lays the strip).
         add(kIdResnapToNewLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
@@ -384,6 +406,11 @@ QVariantList ShortcutManager::cheatsheetModel() const
         // Always present (possibly empty) so the QML tooltip binding never
         // reads an undefined role.
         row.insert(QStringLiteral("description"), meta.explanation ? PhosphorI18n::tr(meta.explanation) : QString());
+        // Templates-capability tooltip variant; falls back to the plain
+        // explanation so QML can bind one expression per row.
+        row.insert(QStringLiteral("templatesDescription"),
+                   meta.templatesExplanation ? PhosphorI18n::tr(meta.templatesExplanation)
+                                             : (meta.explanation ? PhosphorI18n::tr(meta.explanation) : QString()));
         row.insert(QStringLiteral("category"), PhosphorI18n::tr(meta.category, meta.categoryDisambiguation));
         row.insert(QStringLiteral("categoryOrder"), meta.categoryOrder);
         row.insert(QStringLiteral("triggers"), triggers);

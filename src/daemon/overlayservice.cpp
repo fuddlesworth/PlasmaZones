@@ -683,11 +683,9 @@ QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
             const bool liveTemplates =
                 !m_layoutSupportResolver || m_layoutSupportResolver(screenId) == LayoutSupportTemplates;
             if (liveTemplates) {
-                if (PhosphorZones::Layout* templ =
-                        m_layoutManager->scrollingTemplateForContext(screenId, virtualDesktop, m_currentActivity)) {
-                    return templ->id().toString();
-                }
-                return assignmentId;
+                // Shared authority with UnifiedLayoutController::
+                // displayIdForAssignment: template UUID or the sentinel.
+                return m_layoutManager->scrollingDisplayIdForContext(screenId, virtualDesktop, m_currentActivity);
             }
             // Downgraded: fall through to the manual resolution below, which
             // highlights the live snapping layout.

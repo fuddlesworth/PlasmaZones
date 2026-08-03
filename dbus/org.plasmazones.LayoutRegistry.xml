@@ -288,13 +288,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="setAllDesktopAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-desktop assignments (saves once). Canonical key format: 'screenId|desktopNumber' ('screenId:desktopNumber' is accepted as a legacy fallback but misparses virtual-screen ids — do not emit it)."/>
             <arg name="assignments" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|desktop' keys to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|desktop' keys to a map {layoutId, scrollingTemplate}: layoutId is the assignment id the matching batch setter accepts (a Scrolling context stays the bare 'scrolling:' sentinel), scrollingTemplate the context's template layout UUID or empty. The getter value is deliberately wider than the setter's plain layoutId string; the template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <method name="getAllDesktopAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Get all per-desktop assignments."/>
             <arg name="assignments" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|desktop' keys to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|desktop' keys to a map {layoutId, scrollingTemplate}: layoutId is the assignment id the matching batch setter accepts (a Scrolling context stays the bare 'scrolling:' sentinel), scrollingTemplate the context's template layout UUID or empty. The getter value is deliberately wider than the setter's plain layoutId string; the template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <method name="getVirtualDesktopCount">
@@ -453,13 +453,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="setAllActivityAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-activity assignments (saves once). Key format: 'screenId|activityId' (legacy ':' fallback accepted)."/>
             <arg name="assignments" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|activityId' keys to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|activityId' keys to a map {layoutId, scrollingTemplate}: layoutId is the assignment id the matching batch setter accepts (a Scrolling context stays the bare 'scrolling:' sentinel), scrollingTemplate the context's template layout UUID or empty. The getter value is deliberately wider than the setter's plain layoutId string; the template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <method name="getAllActivityAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Get all per-activity assignments."/>
             <arg name="assignments" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|activityId' keys to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|activityId' keys to a map {layoutId, scrollingTemplate}: layoutId is the assignment id the matching batch setter accepts (a Scrolling context stays the bare 'scrolling:' sentinel), scrollingTemplate the context's template layout UUID or empty. The getter value is deliberately wider than the setter's plain layoutId string; the template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <method name="setAllCombinedAssignments">
@@ -471,7 +471,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="getAllCombinedAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Get all per-(screen,desktop,activity) Combined assignments. Returns ONLY rules with all three dimensions pinned."/>
             <arg name="assignments" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' keys to a map {layoutId, scrollingTemplate}: layoutId is the assignment id the matching batch setter accepts (a Scrolling context stays the bare 'scrolling:' sentinel), scrollingTemplate the context's template layout UUID or empty. The getter value is deliberately wider than the setter's plain layoutId string; the template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <!-- Full assignment (screen + desktop + activity) -->

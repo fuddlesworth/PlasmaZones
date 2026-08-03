@@ -102,7 +102,7 @@ ColumnLayout {
     ///   - screen → `appSettings.screens.displayLabel` for the matching name
     ///   - activity → `appSettings.activities.name` for the matching id
     ///   - windowType → the enum option's label from the field entry
-    ///   - layout → `appSettings.layouts.displayName` for the matching id
+    ///   - layout → `appSettings.activeLayoutMatchOptions` displayName for the matching id
     ///   - mode / orientation → the token's option label from the field entry
     ///   - everything else (string, number) → `String(value)`
     /// Falls back to the raw wire value when a lookup misses (e.g. the
@@ -142,7 +142,10 @@ ColumnLayout {
             }
         }
         if (kind === "layout" && root.appSettings) {
-            var layouts = root.appSettings.layouts;
+            // activeLayoutMatchOptions carries every layouts entry PLUS the
+            // derived "scrolling:<uuid>" template entries, so both id shapes
+            // resolve to the same friendly names the editor picker offered.
+            var layouts = root.appSettings.activeLayoutMatchOptions;
             if (layouts) {
                 for (var L = 0; L < layouts.length; ++L) {
                     if (layouts[L].id === value)

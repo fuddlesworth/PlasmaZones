@@ -189,8 +189,9 @@ QString fieldDescription(Field f)
             "algorithm on a rotated screen.");
     case Field::ActiveLayout:
         return PhosphorI18n::tr(
-            "The layout currently active on the monitor. Lets a rule change gaps, the overlay or the lock state for "
-            "the screen showing a given layout. It cannot change which layout is assigned (that would be circular).");
+            "The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change "
+            "gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change "
+            "which layout is assigned (that would be circular).");
     }
     return QString();
 }
@@ -556,11 +557,13 @@ QVariantList matchFields()
             }
             entry[QStringLiteral("options")] = options;
         } else if (f == Field::ActiveLayout) {
-            // The value is a layout id (snap UUID, "autotile:<algo>", or the
-            // bare "scrolling:" sentinel a Scrolling assignment carries). The QML
-            // editor swaps this for a layout-picker ComboBox driven by
-            // `settingsController.layouts` (like the screen / activity pickers), so
-            // the user picks a friendly name while the wire value stays the id.
+            // The value is a layout id (snap UUID, "autotile:<algo>", the
+            // bare "scrolling:" sentinel of a template-less Scrolling
+            // context, or the prefixed "scrolling:<uuid>" template stamp).
+            // The QML editor swaps this for a layout-picker ComboBox driven
+            // by `settingsController.activeLayoutMatchOptions` (like the
+            // screen / activity pickers), so the user picks a friendly name
+            // while the wire value stays the id.
             kind = QStringLiteral("layout");
         }
         entry[QStringLiteral("valueKind")] = kind;
