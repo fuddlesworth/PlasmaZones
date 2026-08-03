@@ -64,6 +64,33 @@ public:
                                         const std::function<bool(const WindowPlacement&)>& accept = {},
                                         const std::function<bool(const WindowPlacement&)>& preferred = {});
 
+    /// Reopen resolve: the shared consumption pattern the TILING engines'
+    /// open-time restores use (SnapEngine::resolveWindowRestore keeps its own
+    /// take + re-bind: its snapped records restore cross-screen and its accept
+    /// depends on a mode-defer bypass, so rule 1 below does not fit it) —
+    /// take() wrapped in the two rules that make a close/reopen (fresh uuid,
+    /// appId-FIFO match) behave correctly:
+    ///
+    ///   1. A REJECTED exact record is FINAL — no FIFO fallback past it. The
+    ///      fallback exists for a reopen, whose fresh uuid by definition has no
+    ///      exact record. A LIVE window whose own record was rejected on
+    ///      context (tiled on another desktop, say) is not that case: falling
+    ///      through would consume a SIBLING's record, and the re-bind below
+    ///      would re-record it under this window's id, where the merge
+    ///      overwrites the window's own other-context slot.
+    ///   2. The consumed record is RE-BOUND to the live @p windowId and
+    ///      re-recorded, so the other engines' slots + per-screen free/float
+    ///      geometry survive the reopen. Re-binding appends under the live id
+    ///      (newest in the appId bucket), so a SECOND instance of the same app
+    ///      still takes an OLDER sibling record first on its own reopen —
+    ///      multi-instance FIFO distribution is preserved.
+    ///
+    /// Returns the consumed record (already re-recorded), or nullopt when no
+    /// record passed. `accept`/`preferred` as in take().
+    std::optional<WindowPlacement> takeForReopen(const QString& windowId, const QString& appId,
+                                                 const std::function<bool(const WindowPlacement&)>& accept = {},
+                                                 const std::function<bool(const WindowPlacement&)>& preferred = {});
+
     /// Non-consuming lookup (unlike take): the record for the same live instance, else
     /// the NEWEST record in the appId bucket whose `accept` passes. Leaves the
     /// store unchanged — for live reads such as the float-back geometry lookup,

@@ -253,6 +253,72 @@ private Q_SLOTS:
         QCOMPARE(store.size(), 0); // consumed
     }
 
+    void testTakeForReopen_fifoMatchRebindsToLiveUuid()
+    {
+        // The shared reopen resolve: a close/reopen (fresh uuid) consumes the
+        // appId-FIFO record AND re-records it bound to the live uuid, so the
+        // engine slots + free geometry survive the reopen instead of being
+        // consumed away.
+        WindowPlacementStore store;
+        store.record(makePlacement(QStringLiteral("app|old"), QStringLiteral("app"), WindowPlacement::stateFloating(),
+                                   WindowPlacement::scrollingEngineId()));
+
+        auto p = store.takeForReopen(QStringLiteral("app|new"), QStringLiteral("app"));
+        QVERIFY(p.has_value());
+        QCOMPARE(p->windowId, QStringLiteral("app|new")); // already re-bound
+        QCOMPARE(store.size(), 1); // re-recorded, not consumed away
+
+        // The re-recorded copy answers an exact lookup under the LIVE uuid.
+        auto rebound = store.peekExact(QStringLiteral("app|new"));
+        QVERIFY(rebound.has_value());
+        QCOMPARE(rebound->slotFor(WindowPlacement::scrollingEngineId()).state,
+                 QString(WindowPlacement::stateFloating()));
+        QVERIFY(!store.peekExact(QStringLiteral("app|old")).has_value());
+    }
+
+    void testTakeForReopen_rejectedExactRecordIsFinal()
+    {
+        // A LIVE window whose own record fails the accept predicate must NOT
+        // fall through to a sibling's FIFO record: consuming it would re-bind
+        // the sibling's placement under this window's id, where the store's
+        // merge overwrites the window's own other-context slot.
+        WindowPlacementStore store;
+        store.record(makePlacement(QStringLiteral("app|live"), QStringLiteral("app"), WindowPlacement::stateTiled(),
+                                   WindowPlacement::autotileEngineId(), QStringLiteral("DP-2")));
+        store.record(makePlacement(QStringLiteral("app|sibling"), QStringLiteral("app"), WindowPlacement::stateTiled(),
+                                   WindowPlacement::autotileEngineId(), QStringLiteral("DP-1")));
+
+        auto p = store.takeForReopen(QStringLiteral("app|live"), QStringLiteral("app"), [](const WindowPlacement& r) {
+            return r.screenId == QStringLiteral("DP-1"); // rejects app|live's own DP-2 record
+        });
+        QVERIFY(!p.has_value());
+        QCOMPARE(store.size(), 2); // sibling untouched
+        QVERIFY(store.peekExact(QStringLiteral("app|sibling")).has_value());
+    }
+
+    void testTakeForReopen_secondInstanceStillTakesOlderSibling()
+    {
+        // Re-binding appends under the live uuid (newest in the bucket), so a
+        // SECOND instance of the same app reopening still takes the OLDER
+        // sibling record first — multi-instance FIFO distribution holds.
+        WindowPlacementStore store;
+        store.record(makePlacement(QStringLiteral("app|a"), QStringLiteral("app"), WindowPlacement::stateFloating(),
+                                   WindowPlacement::scrollingEngineId(), QStringLiteral("DP-1"), QRect(0, 0, 10, 10)));
+        store.record(makePlacement(QStringLiteral("app|b"), QStringLiteral("app"), WindowPlacement::stateFloating(),
+                                   WindowPlacement::scrollingEngineId(), QStringLiteral("DP-1"),
+                                   QRect(50, 50, 10, 10)));
+
+        auto first = store.takeForReopen(QStringLiteral("app|n1"), QStringLiteral("app"));
+        QVERIFY(first.has_value());
+        QCOMPARE(first->freeGeometryFor(QStringLiteral("DP-1")), QRect(0, 0, 10, 10)); // oldest first
+
+        auto second = store.takeForReopen(QStringLiteral("app|n2"), QStringLiteral("app"));
+        QVERIFY(second.has_value());
+        QCOMPARE(second->freeGeometryFor(QStringLiteral("DP-1")),
+                 QRect(50, 50, 10, 10)); // NOT the just-re-bound n1 record
+        QCOMPARE(store.size(), 2);
+    }
+
     void testTake_preferredOutranksOlderAcceptedSibling()
     {
         // Regression: cross-screen snapped restore at login. A window snapped on
