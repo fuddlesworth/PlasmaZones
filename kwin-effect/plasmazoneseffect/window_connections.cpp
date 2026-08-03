@@ -297,10 +297,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (!m_shaderManager.animationRuleSet().isEmpty()) {
                 m_shaderManager.animationRuleEvaluator().clearCache();
             }
-            // The exclusion verdict cache keys on the same frozen id and the
+            // The exclusion verdict caches key on the same frozen id and the
             // WindowClass matcher — a class swap can flip an Exclude verdict.
             if (!m_snappingExclusionRuleSet.isEmpty()) {
                 m_snappingExclusionEvaluator.clearCache();
+            }
+            if (!m_decorationExclusionRuleSet.isEmpty()) {
+                m_decorationExclusionEvaluator.clearCache();
             }
             // The cache drop alone revives nothing: appearance slots (opacity,
             // tint, border colour) bake into the decoration at

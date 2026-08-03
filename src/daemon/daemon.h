@@ -757,8 +757,9 @@ private:
     // rule-backed assignment cascade — construction order must build the
     // store first. The RuleAdaptor borrows it too.
     std::unique_ptr<PhosphorRules::RuleStore> m_ruleStore;
-    // Filtered slice of m_ruleStore — only rules with a terminal `Exclude`
-    // action, built via `PhosphorRules::ExclusionRules::excludeRulesFrom` and
+    // Filtered slice of m_ruleStore — only rules with a terminal `Exclude` or
+    // `ExcludePlacement` action, built via
+    // `PhosphorRules::ExclusionRules::excludePlacementRulesFrom` and
     // kept in lockstep with the store via the rulesChanged subscription wired
     // in init(). SnapEngine borrows a pointer into this set for isAppIdExcluded;
     // the WindowTrackingAdaptor's pruneExcludedPendingRestores receives the

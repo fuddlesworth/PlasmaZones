@@ -52,11 +52,40 @@ RuleSet rulesWithAction(const RuleSet& source, QLatin1StringView actionType)
     return derived;
 }
 
+// Two-action variant for the union slices (Exclude ∪ ExcludePlacement,
+// Exclude ∪ ExcludeDecorations). Kept separate from rulesWithAction rather
+// than generalised to a list parameter: two callers, both exactly two
+// types, and the flat second check keeps the per-rule cost at two
+// non-allocating comparisons.
+RuleSet rulesWithEitherAction(const RuleSet& source, QLatin1StringView actionTypeA, QLatin1StringView actionTypeB)
+{
+    QList<Rule> kept;
+    kept.reserve(source.count());
+    for (const Rule& rule : source.rules()) {
+        if (rule.enabled && (ruleHasAction(rule, actionTypeA) || ruleHasAction(rule, actionTypeB))) {
+            kept.append(rule);
+        }
+    }
+    RuleSet derived;
+    derived.setRules(kept);
+    return derived;
+}
+
 } // namespace
 
 RuleSet excludeRulesFrom(const RuleSet& source)
 {
     return rulesWithAction(source, ActionType::Exclude);
+}
+
+RuleSet excludePlacementRulesFrom(const RuleSet& source)
+{
+    return rulesWithEitherAction(source, ActionType::Exclude, ActionType::ExcludePlacement);
+}
+
+RuleSet excludeDecorationsRulesFrom(const RuleSet& source)
+{
+    return rulesWithEitherAction(source, ActionType::Exclude, ActionType::ExcludeDecorations);
 }
 
 RuleSet excludeAnimationsRulesFrom(const RuleSet& source)
@@ -76,7 +105,8 @@ QStringList applicationExcludePatternsFrom(const RuleSet& source)
         // since callers may hand this helper an unfiltered set
         // (e.g. straight from the unified store) rather than the
         // already-sliced exclude set.
-        if (!rule.enabled || !ruleHasAction(rule, ActionType::Exclude)) {
+        if (!rule.enabled
+            || !(ruleHasAction(rule, ActionType::Exclude) || ruleHasAction(rule, ActionType::ExcludePlacement))) {
             continue;
         }
         const MatchExpression& match = rule.match;

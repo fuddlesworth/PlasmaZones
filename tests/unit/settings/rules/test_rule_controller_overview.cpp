@@ -644,13 +644,15 @@ void TestRuleControllerOverview::templatesProduceSeededRules()
     QCOMPARE(algoActions.at(1).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setTilingAlgorithm"));
 
     // `excludeApp` is the per-app exclusion template (Application subject +
-    // Exclude action). Single action, no params required.
+    // ExcludePlacement action — placement-only, as the template's title and
+    // description promise; decorations and animations stay). Single action,
+    // no params required.
     const QVariantMap excludeRule = controller.newRuleFromTemplate(QStringLiteral("excludeApp"));
     QCOMPARE(excludeRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
              QStringLiteral("appId"));
     const QVariantList excludeActions = excludeRule.value(QStringLiteral("actions")).toList();
     QCOMPARE(excludeActions.size(), 1);
-    QCOMPARE(excludeActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("exclude"));
+    QCOMPARE(excludeActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("excludePlacement"));
 
     // `excludeSmallFromAnimations` showcases the new Width numeric match field:
     // a `Width LessThan 300` leaf + a single terminal ExcludeAnimations action.

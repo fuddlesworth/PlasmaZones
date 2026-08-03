@@ -591,6 +591,9 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::Exclude) {
         return PhosphorI18n::tr("Exclude window");
     }
+    if (type == ActionType::ExcludePlacement) {
+        return PhosphorI18n::tr("Exclude from tiling, snapping, and scrolling");
+    }
     if (type == ActionType::Float) {
         return PhosphorI18n::tr("Float window");
     }
@@ -656,6 +659,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::ExcludeAnimations) {
         return PhosphorI18n::tr("Exclude from animations");
+    }
+    if (type == ActionType::ExcludeDecorations) {
+        return PhosphorI18n::tr("Exclude from decorations");
     }
     if (type == ActionType::SetHideTitleBar) {
         // Affirmative verb phrase like the other boolean action labels (e.g.

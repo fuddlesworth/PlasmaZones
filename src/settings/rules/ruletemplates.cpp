@@ -147,7 +147,8 @@ QVariantList ruleTemplates()
                      PhosphorI18n::tr("Keep one application's windows floating instead of tiled. The windows stay "
                                       "managed, unlike a full exclusion."),
                      QLatin1String("window-restore")));
-    out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from tiling"),
+    out.append(entry(QLatin1String("excludeApp"),
+                     PhosphorI18n::tr("Exclude an app from tiling, snapping, and scrolling"),
                      PhosphorI18n::tr("Keep one application's windows out of window placement entirely."),
                      QLatin1String("edit-delete-remove")));
     out.append(entry(QLatin1String("excludeSmallFromAnimations"), PhosphorI18n::tr("Don't animate small windows"),
@@ -255,11 +256,16 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         action.type = QString::fromLatin1(ActionType::Float);
         rule.actions.append(action);
     } else if (templateId == QLatin1String("excludeApp")) {
-        rule.name = PhosphorI18n::tr("Exclude an app from tiling");
+        rule.name = PhosphorI18n::tr("Exclude an app from tiling, snapping, and scrolling");
         rule.priority = kApplicationBandBase;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
+        // ExcludePlacement, not the blanket Exclude: the template's title and
+        // description promise a placement-only exclusion, and stripping
+        // decorations/animations too was the pre-split behavior of the only
+        // action available then. Rules already created from this template keep
+        // their stored blanket action.
         RuleAction action;
-        action.type = QString::fromLatin1(ActionType::Exclude);
+        action.type = QString::fromLatin1(ActionType::ExcludePlacement);
         rule.actions.append(action);
     } else if (templateId == QLatin1String("excludeSmallFromAnimations")) {
         rule.name = PhosphorI18n::tr("Don't animate small windows");

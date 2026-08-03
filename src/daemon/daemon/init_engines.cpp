@@ -340,7 +340,7 @@ void Daemon::initEnginesAndWiring()
     //     pair seeds the filter and drains any restore queue entries
     //     populated by WTA::loadState above.
     snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
-    m_excludeRuleSet.setRules(PhosphorRules::ExclusionRules::excludeRulesFrom(m_ruleStore->ruleSet()).rules());
+    m_excludeRuleSet.setRules(PhosphorRules::ExclusionRules::excludePlacementRulesFrom(m_ruleStore->ruleSet()).rules());
     m_windowTrackingAdaptor->pruneExcludedPendingRestores(
         PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
 
@@ -365,14 +365,14 @@ void Daemon::initEnginesAndWiring()
         }
         // Equality-guard against no-op edits: every rulesChanged emission
         // (rename, priority change, non-Exclude action edit, …) fires
-        // this lambda, but only changes that affect the Exclude slice
-        // should bump the evaluator's revision and walk the (potentially
-        // long) pending-restore queues. The guard below compares the two
-        // `QList<Rule>` slices element-wise (the same semantics as
-        // `RuleSet::operator==`, which delegates to this list compare) —
-        // exactly the rules-list-only comparison we want.
+        // this lambda, but only changes that affect the placement-exclusion
+        // slice (Exclude ∪ ExcludePlacement) should bump the evaluator's
+        // revision and walk the (potentially long) pending-restore queues.
+        // The guard below compares the two `QList<Rule>` slices element-wise
+        // (the same semantics as `RuleSet::operator==`, which delegates to
+        // this list compare) — exactly the rules-list-only comparison we want.
         const QList<PhosphorRules::Rule> newSlice =
-            PhosphorRules::ExclusionRules::excludeRulesFrom(m_ruleStore->ruleSet()).rules();
+            PhosphorRules::ExclusionRules::excludePlacementRulesFrom(m_ruleStore->ruleSet()).rules();
         if (newSlice == m_excludeRuleSet.rules()) {
             return;
         }

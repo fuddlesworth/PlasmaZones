@@ -380,11 +380,16 @@ private:
      *                     true return. @see shouldHandleWindow.
      */
     bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
-    // Cached user-Exclude-rule verdict shared by shouldHandleWindow and
-    // shouldAnimateWindow. Fast-paths on an empty exclusion slice; otherwise
-    // resolves through the exclusion evaluator's per-window cache (same
-    // freshness contract as the animation verdicts — see the implementation).
+    // Cached placement-exclusion verdict (Exclude ∪ ExcludePlacement slice)
+    // consumed by shouldHandleWindow's drag gate. Fast-paths on an empty
+    // exclusion slice; otherwise resolves through the exclusion evaluator's
+    // per-window cache (same freshness contract as the animation verdicts —
+    // see the implementation).
     bool isExcludedBySnappingRule(KWin::EffectWindow* w) const;
+    // Cached decoration-exclusion verdict (Exclude ∪ ExcludeDecorations
+    // slice) consumed by shouldDecorateWindow. Same empty-slice fast path
+    // and per-window cache contract as isExcludedBySnappingRule.
+    bool isExcludedByDecorationRule(KWin::EffectWindow* w) const;
 
     /// Classify a window's structural kind for the snap-restore consume gate.
     PhosphorEngine::WindowKind classifyWindowKind(KWin::EffectWindow* w) const;
@@ -2031,16 +2036,29 @@ private:
     // beginDrag is called unconditionally at drag-start; the deferred-send
     // optimization is obsolete now that the daemon always knows about the drag.
 
-    // Drag-gate exclusion rule set — the Exclude-shaped slice of the
-    // unified Rule store the effect mirrors over D-Bus. Filled by
-    // loadRuleAnimationsFromDbus's parse step (which already
-    // deserialises the full rule set for the animation override path),
-    // via `PhosphorRules::ExclusionRules::excludeRulesFrom`. The
+    // Drag-gate exclusion rule set — the placement-exclusion slice
+    // (Exclude ∪ ExcludePlacement) of the unified Rule store the effect
+    // mirrors over D-Bus. Filled by loadRuleAnimationsFromDbus's parse step
+    // (which already deserialises the full rule set for the animation
+    // override path), via
+    // `PhosphorRules::ExclusionRules::excludePlacementRulesFrom`. The
     // bound RuleEvaluator drives shouldHandleWindow()'s exclusion gate.
     // Declaration ORDER MATTERS — the rule set must precede (and outlive)
     // the evaluator that binds a reference to it.
     PhosphorRules::RuleSet m_snappingExclusionRuleSet;
     PhosphorRules::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
+
+    // Decoration exclusion rule set — the decoration-exclusion slice
+    // (Exclude ∪ ExcludeDecorations) of the unified Rule store, filled at
+    // the same loadRuleAnimationsFromDbus sync point via
+    // `PhosphorRules::ExclusionRules::excludeDecorationsRulesFrom`. The
+    // bound RuleEvaluator drives shouldDecorateWindow()'s exclusion gate:
+    // blanket Exclude keeps stripping decorations (the behavior from when
+    // that gate reused the snapping slice), while the scoped
+    // ExcludeDecorations strips only decorations. Same declaration-order
+    // contract as the pair above.
+    PhosphorRules::RuleSet m_decorationExclusionRuleSet;
+    PhosphorRules::RuleEvaluator m_decorationExclusionEvaluator{m_decorationExclusionRuleSet};
 
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForTilingNotify() to prevent small utility
@@ -2079,9 +2097,8 @@ private:
     // (loadCachedSettings). Initialised to the config defaults so a pre-D-Bus
     // decoration pass matches the prior behavior: transients were already never
     // decorated (exclude-transient on), and no size threshold was ever applied
-    // (min-size 0). The transient/min-size filters here reuse the snapping
-    // exclusion rule set (m_snappingExclusionEvaluator) rather than a dedicated
-    // decoration rule slice, so no new rule action is involved.
+    // (min-size 0). The rule-driven exclusion gate binds the dedicated
+    // decoration slice (m_decorationExclusionEvaluator above).
     bool m_decorationExcludeTransientWindows = true;
     int m_decorationMinWindowWidth = 0;
     int m_decorationMinWindowHeight = 0;

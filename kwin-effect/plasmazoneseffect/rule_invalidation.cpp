@@ -69,6 +69,11 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
     if (!m_snappingExclusionRuleSet.isEmpty()) {
         m_snappingExclusionEvaluator.clearCache();
     }
+    // The decoration-exclusion verdicts share the placement-scoped staleness
+    // (an ExcludeDecorations match can pin IsSnapped / IsFloating / Zone).
+    if (!m_decorationExclusionRuleSet.isEmpty()) {
+        m_decorationExclusionEvaluator.clearCache();
+    }
     if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault() && !hasDecorationTreeContent()) {
         return;
     }
@@ -137,6 +142,9 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
     // stores leave the animation set empty and no layer snapshots).
     if (!m_snappingExclusionRuleSet.isEmpty()) {
         m_snappingExclusionEvaluator.clearCache();
+    }
+    if (!m_decorationExclusionRuleSet.isEmpty()) {
+        m_decorationExclusionEvaluator.clearCache();
     }
     if (m_shaderManager.animationRuleSet().isEmpty() && m_ruleWindowLayerSnapshots.isEmpty()) {
         return;

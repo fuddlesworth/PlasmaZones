@@ -100,10 +100,13 @@ private Q_SLOTS:
     void testTerminalFlag()
     {
         const ActionRegistry& reg = ActionRegistry::instance();
-        // Exclude and ExcludeAnimations are the terminal builtins — every other
-        // builtin must be non-terminal, so evaluation continues past a match.
+        // The four Exclude-family actions are the terminal builtins — every
+        // other builtin must be non-terminal, so evaluation continues past a
+        // match.
         QVERIFY(reg.isTerminal(makeAction(ActionType::Exclude)));
+        QVERIFY(reg.isTerminal(makeAction(ActionType::ExcludePlacement)));
         QVERIFY(reg.isTerminal(makeAction(ActionType::ExcludeAnimations)));
+        QVERIFY(reg.isTerminal(makeAction(ActionType::ExcludeDecorations)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::Float)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetEngineMode)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetSnappingLayout)));

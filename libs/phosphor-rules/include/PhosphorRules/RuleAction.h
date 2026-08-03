@@ -321,6 +321,17 @@ inline constexpr QLatin1StringView LockContext{"lockContext"};
 /// `LayoutRegistry::resolveContextDefaultAssignment`, mirroring `LockContext`.
 inline constexpr QLatin1StringView DefaultLayoutAssignment{"defaultLayoutAssignment"};
 inline constexpr QLatin1StringView Exclude{"exclude"};
+/// Exclude a matched window from the placement engines ONLY — snapping,
+/// autotile and scrolling all treat it as unmanaged (open path, drag gate,
+/// keyboard navigation), so it stays floating — while decorations and
+/// animations still apply. The scoped sibling of the blanket `Exclude`,
+/// which additionally strips decorations. Terminal like `Exclude`, and
+/// sliced into the same placement-exclusion set consumers bind
+/// (`ExclusionRules::excludePlacementRulesFrom` returns Exclude ∪
+/// ExcludePlacement rules). Distinct from `Float`, which is an open-path
+/// placement verdict on a MANAGED window (a floated window can still be
+/// dragged into a zone; an excluded one cannot).
+inline constexpr QLatin1StringView ExcludePlacement{"excludePlacement"};
 inline constexpr QLatin1StringView Float{"float"};
 /// Snap a matched window into one or more zones on open. Carries a non-empty
 /// list of 1-based zone ordinals (`ActionParam::Zones`); a single ordinal snaps
@@ -401,6 +412,18 @@ inline constexpr QLatin1StringView SetOverlayShowZoneNumbers{"setOverlayShowZone
 /// animationExcludedApplications / animationExcludedWindowClasses
 /// settings lists by the v3→v4 chain.
 inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
+
+/// Disable window decorations (the border + surface-pack chain) on a matched
+/// window — the decoration mirror of `ExcludeAnimations`. The KWin effect's
+/// `shouldDecorateWindow` gate binds the decoration-exclusion slice
+/// (`ExclusionRules::excludeDecorationsRulesFrom`, Exclude ∪
+/// ExcludeDecorations), so the blanket `Exclude` keeps stripping decorations
+/// while this action strips ONLY decorations — placement and animations are
+/// untouched. Like ExcludeAnimations it deliberately omits `Tag::Effect`:
+/// carrying it would admit the rule into the effect's animation rule set,
+/// whose "any match force-animates" opt-in gate must not fire for a
+/// decoration opt-out. Terminal.
+inline constexpr QLatin1StringView ExcludeDecorations{"excludeDecorations"};
 
 /// Per-window override for floated-position restore on login. A boolean `value`
 /// action: true forces the window's previous floated position (and original
@@ -991,6 +1014,13 @@ inline constexpr QLatin1StringView DecorationChain{"decoration-chain"};
 /// terminal (e.g. composing with override actions) would start
 /// filling the slot, so the id stays load-bearing for that path.
 inline constexpr QLatin1StringView AnimExclude{"anim-exclude"};
+/// Window-scoped. Declared for ActionDescriptor completeness the same way
+/// AnimExclude is — ExcludeDecorations is `.terminal = true`, so
+/// `RuleEvaluator::resolve` calls `markExcluded()` and breaks before
+/// `fillSlot()` runs. The effect's `shouldDecorateWindow` gates on
+/// `ResolvedActions::isExcluded()` over the dedicated decoration-exclusion
+/// evaluator, never on this slot id.
+inline constexpr QLatin1StringView DecorationExclude{"decoration-exclude"};
 } // namespace ActionSlot
 
 } // namespace PhosphorRules

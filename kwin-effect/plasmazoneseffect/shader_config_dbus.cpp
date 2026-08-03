@@ -492,26 +492,36 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
         qCDebug(lcEffect) << "loadRuleAnimationsFromDbus: forwarded" << m_shaderManager.animationRuleSet().count()
                           << "total animation rules to the evaluator";
 
-        // Per-window border / title-bar rules ride the same animation rule set
-        // (Tag::Effect admits them). Refresh borders so an edited /
-        // added / removed SetBorder* / SetHideTitleBar rule applies immediately
-        // — updateAllDecorations re-merges every window and reconciles rule-hidden
-        // title bars against the fresh evaluator.
-        updateAllDecorations();
-
         // Update the drag-gate exclusion rule set from the same unified
         // payload — `loadRuleAnimationsFromDbus` is the effect's one
         // and only rule-store sync point, so the snapping-exclusion gate
         // refreshes here too rather than chasing a second D-Bus fetch. The
-        // filter keeps only enabled rules with a terminal Exclude action;
-        // setRules bumps the bound rule set's revision, which makes every
-        // stale entry in m_snappingExclusionEvaluator's PER-WINDOW MATCH
-        // CACHE (window_filtering.cpp resolves through resolveCached) read
+        // filter keeps only enabled rules with a terminal Exclude or
+        // ExcludePlacement action; setRules bumps the bound rule set's
+        // revision, which makes every stale entry in
+        // m_snappingExclusionEvaluator's PER-WINDOW MATCH CACHE
+        // (window_filtering.cpp resolves through resolveCached) read
         // as a miss and rebuilds the per-revision sort index. Rule EDITS
         // are therefore covered by the revision bump alone; PLACEMENT
         // changes are not, which is why rule_invalidation.cpp clears that
         // cache explicitly.
-        m_snappingExclusionRuleSet.setRules(PhosphorRules::ExclusionRules::excludeRulesFrom(*setOpt).rules());
+        m_snappingExclusionRuleSet.setRules(PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*setOpt).rules());
+
+        // Same refresh for the decoration-exclusion rule set (Exclude ∪
+        // ExcludeDecorations), which shouldDecorateWindow gates on. Must land
+        // BEFORE the updateAllDecorations() sweep below so an added or
+        // removed exclusion applies to every window on this very edit, not on
+        // the next incidental sweep.
+        m_decorationExclusionRuleSet.setRules(
+            PhosphorRules::ExclusionRules::excludeDecorationsRulesFrom(*setOpt).rules());
+
+        // Per-window border / title-bar rules ride the same animation rule set
+        // (Tag::Effect admits them). Refresh borders so an edited /
+        // added / removed SetBorder* / SetHideTitleBar rule applies immediately
+        // — updateAllDecorations re-merges every window and reconciles rule-hidden
+        // title bars against the fresh evaluator (and re-checks the freshly
+        // sliced decoration exclusions above).
+        updateAllDecorations();
 
         // Same refresh for the animation-side exclusion rule set, sliced
         // for `ExcludeAnimations`-action rules. The two slices stay

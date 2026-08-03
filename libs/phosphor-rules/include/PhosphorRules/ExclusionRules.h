@@ -56,6 +56,26 @@ namespace ExclusionRules {
 /// Rule ids, priorities, and matches are preserved verbatim.
 PHOSPHORRULES_EXPORT RuleSet excludeRulesFrom(const RuleSet& source);
 
+/// Slice @p source down to rules carrying a terminal `Exclude` OR
+/// `ExcludePlacement` action — the full set of rules that make a window
+/// unmanaged by the placement engines (snapping, autotile, scrolling).
+/// This is the slice the daemon's engines and the KWin effect's drag
+/// gate bind: blanket Exclude keeps its historical placement effect,
+/// and the scoped ExcludePlacement joins it without also stripping
+/// decorations. Same disabled-skip + verbatim-preservation contract as
+/// @ref excludeRulesFrom, which remains the Exclude-only slice for
+/// consumers that need the blanket shape alone.
+PHOSPHORRULES_EXPORT RuleSet excludePlacementRulesFrom(const RuleSet& source);
+
+/// Slice @p source down to rules carrying a terminal `Exclude` OR
+/// `ExcludeDecorations` action — the set the KWin effect's
+/// `shouldDecorateWindow` gate binds. Blanket Exclude keeps stripping
+/// decorations (preserving the behavior from when the decoration path
+/// reused the snapping slice); the scoped ExcludeDecorations strips
+/// only decorations. Same disabled-skip + verbatim-preservation
+/// contract as @ref excludeRulesFrom.
+PHOSPHORRULES_EXPORT RuleSet excludeDecorationsRulesFrom(const RuleSet& source);
+
 /// Slice @p source down to rules with a terminal `ExcludeAnimations`
 /// action — the action the v4 fold introduced for the legacy
 /// animationExcludedApplications / animationExcludedWindowClasses
@@ -65,7 +85,9 @@ PHOSPHORRULES_EXPORT RuleSet excludeRulesFrom(const RuleSet& source);
 PHOSPHORRULES_EXPORT RuleSet excludeAnimationsRulesFrom(const RuleSet& source);
 
 /// Return the AppId pattern of every `AppId AppIdMatches <pattern>` leaf
-/// that lives on an enabled `Exclude`-action rule in @p source. Mirrors
+/// that lives on an enabled `Exclude`- or `ExcludePlacement`-action rule
+/// in @p source (both shapes make the window unmanaged by placement, and
+/// the pending-restore prune this feeds is a placement concern). Mirrors
 /// the deleted runtime bridge's flat-string output so a consumer that
 /// needs a flat list of patterns (the WTA pending-restore prune) can
 /// derive one from the unified store.

@@ -186,6 +186,22 @@ void ActionRegistry::registerBuiltinsEngine()
         .displayOrder = 0,
     });
 
+    // ── manage slot — terminal, the placement-only sibling of Exclude. Shares
+    //    the Manage slot deliberately: both mean "unmanaged by the placement
+    //    engines", and the slices that bind them (excludePlacementRulesFrom)
+    //    resolve through `isExcluded()`, never through the slot. Free-form for
+    //    the same future-param reason as Exclude. ──
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::ExcludePlacement),
+        .slotFor = constantSlot(ActionSlot::Manage),
+        .validate = &acceptAny,
+        .terminal = true,
+        .allowedKeys = {},
+        .domain = ActionDomain::Window,
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 5,
+    });
+
     // ── float slot — intentionally free-form (future float-geometry hints);
     //    empty `allowedKeys` opts out of the strict-key check. ──
     registerAction(ActionDescriptor{
@@ -382,6 +398,26 @@ void ActionRegistry::registerBuiltinsEngine()
         .category = QStringLiteral("animation"),
         .displayOrder = 3,
         .tags = {QString(Tag::Animation)},
+    });
+
+    // ── decoration-exclude slot — the decoration mirror of ExcludeAnimations.
+    // A rule with `ExcludeDecorations` suppresses the border + surface-pack
+    // chain for matched windows via the effect's shouldDecorateWindow gate,
+    // which binds the Exclude ∪ ExcludeDecorations slice
+    // (ExclusionRules::excludeDecorationsRulesFrom). Terminal for the same
+    // reason ExcludeAnimations is; deliberately NOT Tag::Effect so it never
+    // enters the effect's animation rule set (whose any-match gate
+    // force-animates — wrong for a decoration opt-out).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::ExcludeDecorations),
+        .slotFor = constantSlot(ActionSlot::DecorationExclude),
+        .validate = &acceptAny,
+        .terminal = true,
+        .allowedKeys = {},
+        .domain = ActionDomain::Window,
+        .category = QStringLiteral("borderAppearance"),
+        .displayOrder = 9,
+        .tags = {QString(Tag::Border)},
     });
 
     // ── opacity slot ──

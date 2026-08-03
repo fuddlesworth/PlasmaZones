@@ -98,6 +98,11 @@ const QList<QLatin1StringView> kContextDomainTypes = {
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
+    // Scoped exclusion siblings — window-domain like the blanket Exclude:
+    // placement-only (daemon engines + drag gate) and decoration-only
+    // (shouldDecorateWindow) respectively.
+    ActionType::ExcludePlacement,
+    ActionType::ExcludeDecorations,
     ActionType::Float,
     ActionType::SnapToZone,
     // Open-routing actions are window-domain — resolved per window on the

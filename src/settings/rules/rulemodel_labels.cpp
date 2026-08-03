@@ -248,9 +248,16 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     if (action.type == ActionType::Exclude) {
         return PhosphorI18n::tr("Excluded");
     }
+    if (action.type == ActionType::ExcludePlacement) {
+        // Terminal, no Value param — like Exclude, its presence IS the effect.
+        return PhosphorI18n::tr("No tiling, snapping, or scrolling");
+    }
     if (action.type == ActionType::ExcludeAnimations) {
         // Terminal, no Value param — like Exclude, its presence IS the effect.
         return PhosphorI18n::tr("No animations");
+    }
+    if (action.type == ActionType::ExcludeDecorations) {
+        return PhosphorI18n::tr("No decorations");
     }
     if (action.type == ActionType::Float) {
         return PhosphorI18n::tr("Float");

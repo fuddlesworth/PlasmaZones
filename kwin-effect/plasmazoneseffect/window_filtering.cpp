@@ -439,6 +439,28 @@ bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w) const
     return m_snappingExclusionEvaluator.resolveCached(windowId, ruleQuery(w)).isExcluded();
 }
 
+bool PlasmaZonesEffect::isExcludedByDecorationRule(KWin::EffectWindow* w) const
+{
+    // Mirrors isExcludedBySnappingRule over the decoration slice (Exclude ∪
+    // ExcludeDecorations): empty-slice fast path, then the per-window verdict
+    // cache. The cache shares the snapping evaluator's freshness contract —
+    // revision-keyed for rule edits, cleared by the same placement /
+    // class-swap invalidation paths (flushPendingRuleInvalidations,
+    // invalidateAllRuleCaches, the metadataChanged lambda).
+    if (m_decorationExclusionRuleSet.isEmpty()) {
+        return false;
+    }
+    const QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return m_decorationExclusionEvaluator.resolve(ruleQuery(w)).isExcluded();
+    }
+    if (std::optional<PhosphorRules::ResolvedActions> cached =
+            m_decorationExclusionEvaluator.resolveCachedIfPresent(windowId)) {
+        return cached->isExcluded();
+    }
+    return m_decorationExclusionEvaluator.resolveCached(windowId, ruleQuery(w)).isExcluded();
+}
+
 bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
                                             std::optional<PhosphorRules::WindowQuery>* sharedQuery) const
 {
@@ -640,12 +662,13 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
         return false;
     }
 
-    // User Exclude rules — reuse the SAME snapping exclusion slice
-    // shouldHandleWindow gates on, so a window the user excluded from
-    // management is not decorated either (preserves prior behavior, since the
-    // decoration path used to run through shouldHandleWindow). No dedicated
-    // decoration rule slice, so no new rule action.
-    if (isExcludedBySnappingRule(w)) {
+    // User exclusion rules — the dedicated decoration slice (Exclude ∪
+    // ExcludeDecorations). Blanket Exclude still strips decorations, keeping
+    // the behavior from when this gate reused the snapping slice; the scoped
+    // ExcludeDecorations strips only decorations, and the scoped
+    // ExcludePlacement (which lives in the SNAPPING slice, not this one)
+    // deliberately leaves decorations alone.
+    if (isExcludedByDecorationRule(w)) {
         return false;
     }
 
