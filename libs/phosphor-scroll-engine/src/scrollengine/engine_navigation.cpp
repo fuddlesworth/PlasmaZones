@@ -577,7 +577,17 @@ void ScrollEngine::snapAllWindows(const PhosphorEngine::NavigationContext& ctx)
     if (!state) {
         return;
     }
+    // Same feedback contract as the snap path (snaphandler.cpp): nothing to
+    // pull → the shared "snap_all"/"no_unsnapped_windows" failure OSD; a
+    // successful pull needs no OSD — the windows visibly moving is the
+    // feedback. A no-strip-state screen stays silent above, matching snap's
+    // missing-screen behaviour.
     const QStringList floating = state->floatingWindows();
+    if (floating.isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("no_unsnapped_windows"),
+                                  ctx.windowId, QString(), screen);
+        return;
+    }
     bool any = false;
     for (const QString& windowId : floating) {
         // Batched: one relayout + one placementChanged for the whole pull,
@@ -587,6 +597,10 @@ void ScrollEngine::snapAllWindows(const PhosphorEngine::NavigationContext& ctx)
     if (any) {
         applyLayout(screen, false);
         Q_EMIT placementChanged(screen);
+    } else {
+        // Floating windows existed but none could re-enter the strip —
+        // surface it with the shared generic snap_all failure copy.
+        Q_EMIT navigationFeedback(false, QStringLiteral("snap_all"), QString(), ctx.windowId, QString(), screen);
     }
 }
 
