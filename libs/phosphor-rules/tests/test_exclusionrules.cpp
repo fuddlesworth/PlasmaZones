@@ -20,9 +20,10 @@
  *      whitespace / non-leaf / non-AppId / non-AppIdMatches / disabled /
  *      other-action rules; trims surviving patterns)
  *
- * The internal `ruleHasAction` / `rulesWithAction` predicates are
- * file-local in `src/exclusionrules.cpp` — they're exercised
- * transitively through the three public slicers above.
+ * The internal predicates (`ruleHasAction`, `rulesWithAction`,
+ * `rulesWithEitherAction`, `isPlacementExclusion`) are file-local in
+ * `src/exclusionrules.cpp` — they're exercised transitively through the
+ * four public slicers plus the pattern harvester above.
  *
  * The v3→v4 migration tests (`test_migration_v3_to_v4.cpp`) exercise
  * the end-to-end id derivation; these tests cover the slicers in
@@ -45,26 +46,10 @@ class TestExclusionRules : public QObject
     Q_OBJECT
 
 private:
-    static RuleAction excludeAnimationsActionInstance()
-    {
-        RuleAction a;
-        a.type = QString(ActionType::ExcludeAnimations);
-        return a;
-    }
-
-    static RuleAction excludePlacementActionInstance()
-    {
-        RuleAction a;
-        a.type = QString(ActionType::ExcludePlacement);
-        return a;
-    }
-
-    static RuleAction excludeDecorationsActionInstance()
-    {
-        RuleAction a;
-        a.type = QString(ActionType::ExcludeDecorations);
-        return a;
-    }
+    // Action constructors live in RuleTestHelpers.h with the rest of the
+    // suite's shared shapes (excludeAction / floatAction /
+    // excludePlacementAction / excludeDecorationsAction /
+    // excludeAnimationsAction).
 
     static Rule appIdExcludeRule(const QString& pattern, int priority = 0, bool enabled = true)
     {
@@ -78,7 +63,7 @@ private:
     {
         return makeRule(QStringLiteral("anim-") + pattern, 0,
                         MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, pattern),
-                        {excludeAnimationsActionInstance()});
+                        {excludeAnimationsAction()});
     }
 
     static Rule floatRule()
@@ -196,11 +181,11 @@ private Q_SLOTS:
         const Rule p = makeRule(
             QStringLiteral("placement"), 0,
             MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("org.deskflow.deskflow")),
-            {excludePlacementActionInstance()});
+            {excludePlacementAction()});
         const Rule d =
             makeRule(QStringLiteral("deco"), 0,
                      MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("mpv")),
-                     {excludeDecorationsActionInstance()});
+                     {excludeDecorationsAction()});
         QVERIFY(source.addRule(p));
         QVERIFY(source.addRule(d));
         QVERIFY(ER::excludeRulesFrom(source).isEmpty());
@@ -219,11 +204,11 @@ private Q_SLOTS:
         const Rule scoped = makeRule(
             QStringLiteral("placement"), 0,
             MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("org.deskflow.deskflow")),
-            {excludePlacementActionInstance()});
+            {excludePlacementAction()});
         const Rule deco =
             makeRule(QStringLiteral("deco"), 0,
                      MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("mpv")),
-                     {excludeDecorationsActionInstance()});
+                     {excludeDecorationsAction()});
         const Rule anim = windowClassContainsAnimExcludeRule(QStringLiteral("steam"));
         const Rule f = floatRule();
         QVERIFY(source.addRule(blanket));
@@ -252,11 +237,11 @@ private Q_SLOTS:
         const Rule scoped =
             makeRule(QStringLiteral("deco"), 0,
                      MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("mpv")),
-                     {excludeDecorationsActionInstance()});
+                     {excludeDecorationsAction()});
         const Rule placement = makeRule(
             QStringLiteral("placement"), 0,
             MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("org.deskflow.deskflow")),
-            {excludePlacementActionInstance()});
+            {excludePlacementAction()});
         const Rule anim = windowClassContainsAnimExcludeRule(QStringLiteral("steam"));
         QVERIFY(source.addRule(blanket));
         QVERIFY(source.addRule(scoped));
@@ -279,12 +264,12 @@ private Q_SLOTS:
         Rule disabledScoped =
             makeRule(QStringLiteral("placement-off"), 0,
                      MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("firefox")),
-                     {excludePlacementActionInstance()});
+                     {excludePlacementAction()});
         disabledScoped.enabled = false;
         Rule disabledDeco =
             makeRule(QStringLiteral("deco-off"), 0,
                      MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("mpv")),
-                     {excludeDecorationsActionInstance()});
+                     {excludeDecorationsAction()});
         disabledDeco.enabled = false;
         QVERIFY(source.addRule(disabledScoped));
         QVERIFY(source.addRule(disabledDeco));
@@ -300,7 +285,7 @@ private Q_SLOTS:
         RuleSet source;
         Rule both = makeRule(QStringLiteral("both"), 0,
                              MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("firefox")),
-                             {excludeAction(), excludePlacementActionInstance()});
+                             {excludeAction(), excludePlacementAction()});
         QVERIFY(source.addRule(both));
 
         const RuleSet sliced = ER::excludePlacementRulesFrom(source);
@@ -327,12 +312,39 @@ private Q_SLOTS:
         QVERIFY(!containsRuleId(sliced, f.id));
     }
 
+    void testExcludePlacementRulesFrom_preservesIdsPriorityAndMatch()
+    {
+        // Preservation parity for the union path: the placement slicer walks
+        // its own loop (shared membership predicate with the harvester), so
+        // pin id/priority/match preservation independently of the
+        // rulesWithAction tests — a regression that reconstructed rules
+        // instead of copying them would otherwise pass the whole suite.
+        RuleSet source;
+        Rule scoped = makeRule(
+            QStringLiteral("placement-pri"), /*priority=*/220,
+            MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("org.deskflow.deskflow")),
+            {excludePlacementAction()});
+        QVERIFY(source.addRule(scoped));
+
+        const RuleSet sliced = ER::excludePlacementRulesFrom(source);
+        QCOMPARE(sliced.count(), 1);
+        const Rule out = sliced.rules().first();
+        QCOMPARE(out.id, scoped.id);
+        QCOMPARE(out.priority, 220);
+        QCOMPARE(out.match.kind(), MatchExpression::Kind::Leaf);
+        QCOMPARE(out.match.predicate().field, Field::AppId);
+        QCOMPARE(out.match.predicate().op, Operator::AppIdMatches);
+        QCOMPARE(out.match.predicate().value.toString(), QStringLiteral("org.deskflow.deskflow"));
+    }
+
     void testExcludeAnimationsRulesFrom_disjointFromExcludeRulesFrom()
     {
-        // A rule carries either Exclude or ExcludeAnimations (or neither)
-        // for the migration-produced shape. The two slicers must produce
-        // disjoint result sets so the snap-gate and the animation-gate
-        // never see the same rule.
+        // For the migration-produced ONE-ACTION-PER-RULE shape, a rule
+        // carries either Exclude or ExcludeAnimations, so the two slicers
+        // produce disjoint result sets. This is a property of that shape,
+        // not a universal — a hand-authored rule carrying BOTH actions
+        // appears in both slices, pinned by
+        // testSlicers_ruleWithBothExcludeAndExcludeAnimationsAppearsInBothSlices.
         RuleSet source;
         QVERIFY(source.addRule(appIdExcludeRule(QStringLiteral("firefox"))));
         QVERIFY(source.addRule(windowClassContainsAnimExcludeRule(QStringLiteral("steam"))));
@@ -363,7 +375,7 @@ private Q_SLOTS:
         RuleSet source;
         Rule a = makeRule(QStringLiteral("anim-pri"), /*priority=*/175,
                           MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("steam")),
-                          {excludeAnimationsActionInstance()});
+                          {excludeAnimationsAction()});
         QVERIFY(source.addRule(a));
 
         const RuleSet sliced = ER::excludeAnimationsRulesFrom(source);
@@ -386,7 +398,7 @@ private Q_SLOTS:
         Rule multi =
             makeRule(QStringLiteral("multi-anim"), 0,
                      MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
-                     {floatAction(), excludeAnimationsActionInstance()});
+                     {floatAction(), excludeAnimationsAction()});
         QVERIFY(source.addRule(multi));
 
         const RuleSet sliced = ER::excludeAnimationsRulesFrom(source);
@@ -408,7 +420,7 @@ private Q_SLOTS:
         RuleSet source;
         Rule both = makeRule(QStringLiteral("both"), 0,
                              MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("firefox")),
-                             {excludeAction(), excludeAnimationsActionInstance()});
+                             {excludeAction(), excludeAnimationsAction()});
         QVERIFY(source.addRule(both));
 
         const RuleSet snapSlice = ER::excludeRulesFrom(source);
@@ -447,6 +459,21 @@ private Q_SLOTS:
         QCOMPARE(patterns, QStringList{} << QStringLiteral("firefox") << QStringLiteral("konsole"));
     }
 
+    void testApplicationExcludePatternsFrom_deduplicatesAcrossRuleShapes()
+    {
+        // A blanket Exclude rule and a scoped ExcludePlacement rule for the
+        // SAME app pattern (the natural pairing after the excludeApp template
+        // retarget) harvest one entry, not two — the prune is idempotent, so
+        // this pins the redundant-sweep removal, not a correctness property.
+        RuleSet source;
+        QVERIFY(source.addRule(appIdExcludeRule(QStringLiteral("firefox"))));
+        QVERIFY(source.addRule(
+            makeRule(QStringLiteral("placement-dup"), 10,
+                     MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("firefox")),
+                     {excludePlacementAction()})));
+        QCOMPARE(ER::applicationExcludePatternsFrom(source), QStringList{} << QStringLiteral("firefox"));
+    }
+
     void testApplicationExcludePatternsFrom_harvestsExcludePlacementRules()
     {
         // ExcludePlacement makes a window unmanaged by placement exactly
@@ -457,7 +484,7 @@ private Q_SLOTS:
         QVERIFY(source.addRule(makeRule(
             QStringLiteral("placement"), 0,
             MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("org.deskflow.deskflow")),
-            {excludePlacementActionInstance()})));
+            {excludePlacementAction()})));
         QCOMPARE(ER::applicationExcludePatternsFrom(source), QStringList{} << QStringLiteral("org.deskflow.deskflow"));
     }
 
@@ -470,7 +497,7 @@ private Q_SLOTS:
         QVERIFY(source.addRule(
             makeRule(QStringLiteral("deco"), 0,
                      MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("firefox")),
-                     {excludeDecorationsActionInstance()})));
+                     {excludeDecorationsAction()})));
         QCOMPARE(ER::applicationExcludePatternsFrom(source), QStringList{});
     }
 

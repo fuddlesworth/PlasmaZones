@@ -48,7 +48,8 @@ public:
     /// same as an unfilled slot.
     std::optional<RuleAction> slot(const QString& slot) const;
 
-    /// True if a terminal Exclude action matched — the window is unmanaged.
+    /// True if an in-scope terminal exclusion action matched — the window is
+    /// excluded from the resolving consumer's concern.
     bool isExcluded() const
     {
         return m_excluded;
@@ -79,7 +80,7 @@ public:
     /// Returns true if it filled the slot, false if the slot was already filled.
     bool fillSlot(const QString& slot, const RuleAction& action);
 
-    /// Marks the result excluded (a terminal Exclude action matched).
+    /// Marks the result excluded (an in-scope terminal exclusion matched).
     void markExcluded()
     {
         m_excluded = true;
@@ -101,7 +102,9 @@ private:
  *
  * `resolve()` walks the rule set in **descending priority** (ties broken by
  * list order via a stable sort), accumulating the first action that fills
- * each slot. A matching rule with a terminal `Exclude` action stops the walk
+ * each slot. A matching rule with a terminal exclusion action in the
+ * evaluator's terminal-action scope (any terminal action when no scope is
+ * set — see setTerminalActionScope) stops the walk
  * and the result is marked excluded. The descending-priority index is
  * computed once per rule-set revision and reused, so back-to-back resolves
  * against an unchanged set do not re-sort.
@@ -226,6 +229,43 @@ public:
     /// rule-set revision does not reflect.
     void clearCache() const;
 
+    /// Drop ONE window's cache entry. The targeted sibling of clearCache()
+    /// for high-frequency per-window edges (frame-geometry ticks): a change
+    /// that can only alter this window's verdict must not cold-start every
+    /// other window's. No-op when the window has no entry.
+    void evictCached(const QString& windowId) const
+    {
+        m_cache.remove(windowId);
+    }
+
+    /**
+     * @brief Restrict which terminal action TYPES this evaluator honours.
+     *
+     * With no scope set (the default), any terminal action in a matching rule
+     * marks the result excluded and stops the walk — correct for the sliced
+     * exclusion evaluators, whose bound sets contain only rules of their own
+     * exclusion family. An evaluator bound to the FULL rule store must narrow
+     * this: the Exclude family is scoped by consumer concern (placement /
+     * decorations / animations), and honouring an out-of-scope terminal action
+     * would let, say, a decoration-only opt-out cancel placement resolution
+     * for every lower-priority rule — the exact leak the scoped actions'
+     * documentation promises cannot happen.
+     *
+     * With a scope set, a terminal action whose type is NOT in @p honoredTypes
+     * is skipped entirely during resolution: it fills no slot (its slot ids are
+     * declared for registry completeness only) and does not stop the walk, so
+     * the rule's other actions and all lower-priority rules still apply.
+     *
+     * Set the scope immediately after construction, before the first resolve —
+     * the per-window match cache memoises verdicts computed under the scope in
+     * force at resolve time, so this call defensively drops the cache.
+     */
+    void setTerminalActionScope(QSet<QString> honoredTypes)
+    {
+        m_terminalScope = std::move(honoredTypes);
+        clearCache();
+    }
+
     /// Number of live cache entries — for tests / benchmarks.
     int cacheSize() const
     {
@@ -245,6 +285,11 @@ public:
 
 private:
     const RuleSet& m_ruleSet;
+
+    /// When engaged, only terminal action types in this set stop the walk —
+    /// see @ref setTerminalActionScope. Disengaged = honour every terminal
+    /// action (the sliced-evaluator default).
+    std::optional<QSet<QString>> m_terminalScope;
 
     struct CacheEntry
     {

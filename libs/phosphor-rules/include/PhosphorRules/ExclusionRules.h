@@ -3,41 +3,52 @@
 
 #pragma once
 
-#include <QList>
-#include <QString>
 #include <QStringList>
 
 #include "phosphorrules_export.h"
 
 /**
  * @file ExclusionRules.h
- * @brief Slicers that pull the `Exclude`- or `ExcludeAnimations`-action
- *        rules out of a unified `RuleSet`. The snap-engine and the
- *        KWin effect's drag gate bind the Exclude slice to their match
- *        evaluators; the KWin effect's `shouldAnimateWindow` gate binds
- *        the ExcludeAnimations slice. The flat-string variant
- *        (`applicationExcludePatternsFrom`) extracts the bare AppId
- *        patterns the WTA pending-restore prune walks.
+ * @brief Slicers that pull the exclusion-family rules out of a unified
+ *        `RuleSet`, one slice per consumer concern:
+ *         - `excludePlacementRulesFrom` (Exclude ∪ ExcludePlacement) —
+ *           bound by the snap engine and the KWin effect's drag gate;
+ *         - `excludeDecorationsRulesFrom` (Exclude ∪ ExcludeDecorations)
+ *           — bound by the effect's `shouldDecorateWindow` gate;
+ *         - `excludeAnimationsRulesFrom` — bound by the effect's
+ *           `shouldAnimateWindow` gate;
+ *         - `excludeRulesFrom` — the blanket-Exclude-only slice, retained
+ *           for consumers that need exactly that shape.
+ *        The flat-string variant (`applicationExcludePatternsFrom`)
+ *        extracts the bare AppId patterns the WTA pending-restore prune
+ *        walks, over the same placement-exclusion membership.
  *
  * After v4 (configmigration.cpp), exclusion rules live exclusively in
  * the unified Rule store — the legacy `excludedApplications` /
  * `excludedWindowClasses` and their animation-side siblings
  * `animationExcludedApplications` / `animationExcludedWindowClasses`
  * QStringList settings retired alongside the bridge that derived rules
- * from them. Consumers ask THIS header "give me the Exclude- or
- * ExcludeAnimations-shaped slice of the user's unified rule store".
+ * from them. Consumers ask THIS header "give me the slice of the user's
+ * unified rule store shaped for my exclusion concern".
+ *
+ * LIFETIME / REVISION CONTRACT: every slicer returns a derived `RuleSet`
+ * BY VALUE whose revision is always 1. Sink it into a caller-owned
+ * long-lived set via `setRules(slice.rules())` — which bumps the owner's
+ * monotonic revision, invalidating any bound evaluator's caches — and
+ * never bind a `RuleEvaluator` to the returned temporary (the evaluator
+ * stores a reference; binding the temporary dangles).
  *
  * Declarations only — bodies live in `src/exclusionrules.cpp` so
  * consumers pay one link edge (not a per-TU inline cost) and the
- * internal `ruleHasAction` / `rulesWithAction` predicates stay
- * file-local. A previous shape had bodies inline in this header; that
- * forced every consumer TU through the full transitive include chain
- * (`MatchExpression.h`, `RuleAction.h`, `Rule.h`, …) and
- * instantiated three function bodies under hidden visibility per TU.
- * The slicers are not on a perf-critical path — the daemon calls them
- * once per `RuleStore::rulesChanged` emission, not per
- * resolution — so the inline win was zero and the include cost was
- * real.
+ * internal predicates (`ruleHasAction`, `rulesWithAction`,
+ * `rulesWithEitherAction`, `isPlacementExclusion`) stay file-local. A
+ * previous shape had bodies inline in this header; that forced every
+ * consumer TU through the full transitive include chain
+ * (`MatchExpression.h`, `RuleAction.h`, `Rule.h`, …) and instantiated
+ * the function bodies under hidden visibility per TU. The slicers are
+ * not on a perf-critical path — the daemon calls them once per
+ * `RuleStore::rulesChanged` emission, not per resolution — so the
+ * inline win was zero and the include cost was real.
  */
 
 namespace PhosphorRules {
@@ -46,13 +57,17 @@ class RuleSet;
 
 namespace ExclusionRules {
 
-/// Slice @p source down to rules with a terminal `Exclude` action.
-/// Used by SnapEngine and the KWin effect's drag gate. Disabled rules
-/// are skipped at slicing time so the derived set is the minimum
-/// admitted by the user — carrying disabled rules through the slice
-/// would inflate the downstream `RuleEvaluator`'s priority-order index
-/// and would lie to `!isEmpty()` fast-path callers (e.g. users who
-/// have disabled all of one shape — all snapping Excludes off).
+/// Slice @p source down to rules with a terminal `Exclude` action — the
+/// BLANKET-only shape. RETAINED PUBLIC API with no in-tree production
+/// consumer: the snap engine and the effect's drag gate migrated to the
+/// placement union slice below, so today only tests call this. It stays
+/// exported for the same reason the unread Tag:: constants do (see
+/// RuleAction.h's retained-API note) — this is installed LGPL API and a
+/// third-party consumer may legitimately want exactly the blanket slice.
+/// Disabled rules are skipped at slicing time so the derived set is the
+/// minimum admitted by the user — carrying disabled rules through the
+/// slice would inflate the downstream `RuleEvaluator`'s priority-order
+/// index and would lie to `!isEmpty()` fast-path callers.
 /// Rule ids, priorities, and matches are preserved verbatim.
 PHOSPHORRULES_EXPORT RuleSet excludeRulesFrom(const RuleSet& source);
 
@@ -109,7 +124,9 @@ PHOSPHORRULES_EXPORT RuleSet excludeAnimationsRulesFrom(const RuleSet& source);
 /// evaluating the RuleSet directly against each queued
 /// WindowQuery, would close that gap.
 ///
-/// Empty / whitespace-only / disabled rules are dropped.
+/// Empty / whitespace-only / disabled rules are dropped, and duplicate
+/// patterns are collapsed (first occurrence wins) — a blanket Exclude and a
+/// scoped ExcludePlacement rule for the same app harvest one entry.
 PHOSPHORRULES_EXPORT QStringList applicationExcludePatternsFrom(const RuleSet& source);
 
 } // namespace ExclusionRules

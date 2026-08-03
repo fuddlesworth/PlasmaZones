@@ -22,7 +22,8 @@ ColumnLayout {
     required property bool canSave
     /// Per-rule validation issues from the controller's
     /// `validationIssuesForJson`. Each entry: `{ code, actionIndex,
-    /// actionType, message }`. Non-empty triggers the Warning message.
+    /// actionType, actionLabel, message }`. Non-empty triggers the Warning
+    /// message.
     required property var validationIssues
     /// The working rule itself — read to disambiguate the completeness
     /// message between "no actions", "action without a type" and "blank
@@ -97,10 +98,14 @@ ColumnLayout {
             var lines = [];
             for (var i = 0; i < root.validationIssues.length; ++i) {
                 var issue = root.validationIssues[i];
+                // Prefer the friendly picker label the controller resolves per
+                // issue; older payload shapes without it fall back to the wire
+                // token.
+                var name = issue.actionLabel && issue.actionLabel.length > 0 ? issue.actionLabel : issue.actionType;
                 if (issue.code === 1) {
-                    lines.push("• " + i18n("Action “%1” may not take effect because this rule also excludes the window. Put the exclusion on a separate rule.", issue.actionType));
+                    lines.push("• " + i18n("Action “%1” may not take effect because this rule also has an exclusion that stops the rest of the rule from applying. Put the exclusion on a separate rule.", name));
                 } else {
-                    lines.push("• " + i18n("Action “%1” is a context action, but the rule matches window properties, so it never fires.", issue.actionType));
+                    lines.push("• " + i18n("Action “%1” is a context action, but the rule matches window properties, so it never fires.", name));
                 }
             }
             var heading = root.validationIssues.length === 1 ? i18n("This rule has a problem:") : i18n("This rule has problems:");

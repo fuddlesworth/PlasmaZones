@@ -29,13 +29,20 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
     // resolves through), so a snap / unsnap / zone change must re-resolve the
     // window's appearance. With none of them, a placement change can't change any
     // window's appearance — skip.
-    // The exclusion term matters: exclusion verdicts are ALSO cached per
+    // The exclusion terms matter: exclusion verdicts are ALSO cached per
     // (windowId, revision) — window_filtering.cpp resolves them through
-    // resolveCached — and an Exclude rule can scope on the same placement
+    // resolveCached — and an exclusion rule can scope on the same placement
     // fields, so an exclusion-only session must still enqueue (the flush
-    // then does only the cheap cache clear).
+    // then does only the cheap cache clears). BOTH slices are terms so the
+    // gate admits exactly what the flush clears. A decoration-exclusion-only
+    // session's stale verdict is unobservable today (with the other three
+    // terms false, nothing can decorate at all), but that coupling runs
+    // through hasWindowAppearanceDefault + hasDecorationTreeContent +
+    // Tag::Effect admission and would silently break the moment any future
+    // decoration source falls outside those three — so the gate carries its
+    // own term rather than borrowing the coupling.
     if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault() && !hasDecorationTreeContent()
-        && m_snappingExclusionRuleSet.isEmpty()) {
+        && m_snappingExclusionRuleSet.isEmpty() && m_decorationExclusionRuleSet.isEmpty()) {
         return;
     }
     // Coalesce: a single float toggle emits BOTH windowFloatingChanged and
@@ -53,6 +60,32 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
             flushPendingRuleInvalidations();
         });
     }
+}
+
+void PlasmaZonesEffect::invalidateRuleCachesForWindowGeometry(const QString& windowId, KWin::EffectWindow* w)
+{
+    // See the header doc: per-window eviction only — never a global clear on
+    // this per-drag-tick edge. The three evictions cover every cached
+    // verdict a geometry-scoped rule can produce (appearance/animation
+    // overrides, placement exclusion, decoration exclusion).
+    m_shaderManager.animationRuleEvaluator().evictCached(windowId);
+    m_snappingExclusionEvaluator.evictCached(windowId);
+    m_decorationExclusionEvaluator.evictCached(windowId);
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    // Same per-window re-drive set as flushPendingRuleInvalidations' body.
+    // The liveId re-derivation is DEFENSIVE here, not load-bearing: today's
+    // only caller (flushPendingFrameGeometry) already keys by getWindowId,
+    // so this is a no-op — it exists so the helper stays correct if a
+    // future caller hands it a daemon-supplied id, the hazard the flush's
+    // findWindowById path documents.
+    const QString liveId = getWindowId(w);
+    if (w->isOnCurrentDesktop()) {
+        updateWindowDecoration(liveId, w);
+    }
+    reconcileRuleHiddenTitleBar(liveId, w);
+    reconcileRuleWindowLayer(liveId, w);
 }
 
 void PlasmaZonesEffect::flushPendingRuleInvalidations()

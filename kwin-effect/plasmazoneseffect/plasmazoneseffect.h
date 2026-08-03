@@ -446,8 +446,10 @@ private:
      * with it off the effect draws borders onto dialogs / popups. Rejects the
      * always-wrong surfaces (own overlay / editor, xdg-portal, plasma-shell,
      * special / desktop / dock / fullscreen / skipSwitcher, notification / OSD),
-     * honours the same user Exclude rule slice shouldHandleWindow uses (so an
-     * excluded app stays undecorated), then applies the transient toggle and the
+     * honours the dedicated decoration-exclusion slice (Exclude ∪
+     * ExcludeDecorations via m_decorationExclusionEvaluator — blanket Exclude
+     * still leaves an app undecorated, the scoped ExcludePlacement
+     * deliberately does not), then applies the transient toggle and the
      * min-size threshold. Defaults preserve the prior behavior (transient on,
      * size off), so a default config decorates exactly what it did before.
      */
@@ -1666,11 +1668,27 @@ private:
     /// Those are rule MATCH inputs now, so without this a window stays resolved
     /// at its prior state (e.g. a `WHEN isSnapped` border never reverting on
     /// unsnap). Mirrors slotWindowActivated's focus invalidation. A no-op only when the
-    /// window has nothing that could re-resolve: no rules AND no config-default window
-    /// appearance AND no decoration tree content. The last two matter — a config-default
-    /// border scoped to tiled windows must still reconcile on a snap flip with an empty
-    /// rule set.
+    /// window has nothing that could re-resolve: no animation/appearance rules AND no
+    /// config-default window appearance AND no decoration tree content AND both
+    /// exclusion slices empty (their verdicts are cached the same way and can scope on
+    /// placement fields). The appearance terms matter — a config-default border scoped
+    /// to tiled windows must still reconcile on a snap flip with an empty rule set.
     void invalidateRuleCacheForStateChange(const QString& windowId);
+
+    /// Targeted sibling of invalidateRuleCacheForStateChange for the
+    /// frame-geometry edge: evicts ONLY @p windowId's entry from the three
+    /// per-window verdict caches and re-drives that window's decoration,
+    /// title-bar and layer reconciles directly. The coalesced helper above
+    /// clears the GLOBAL animation match cache per flush — fine for discrete
+    /// placement flips, but the geometry edge fires per 50 ms flush for the
+    /// whole duration of a drag, and a global clear there cold-starts every
+    /// other window's verdict twenty times a second (the same cost argument
+    /// that keeps caption changes from clearing at all). The layer and
+    /// title-bar reconciles are change-gated; updateWindowDecoration re-runs
+    /// its chain resolve but keeps the cached prefix fold when the fold
+    /// inputs have not moved, and the extra damage lands on a window that is
+    /// already repainting every frame of its own motion.
+    void invalidateRuleCachesForWindowGeometry(const QString& windowId, KWin::EffectWindow* w);
 
     /// Bulk analog of invalidateRuleCacheForStateChange for placement changes that
     /// affect EVERY window at once — daemon loss (the zone / floating caches are
@@ -1685,8 +1703,10 @@ private:
     /// bake into the decoration at updateWindowDecoration time, so each caller
     /// pairs this with its own decoration path: daemon loss tears the
     /// decorations down (clearAllDecorations), the daemon-ready re-seeds
-    /// schedule a border sweep to re-fold against the fresh placement. No-op
-    /// when there are no animation rules and no rule-held layer snapshots.
+    /// schedule a border sweep to re-fold against the fresh placement. Always
+    /// drops both exclusion evaluators' caches first (they are cleared even
+    /// when the early return below fires); the rest is a no-op when there are
+    /// no animation rules and no rule-held layer snapshots.
     void invalidateAllRuleCaches();
 
     /// Flush coalesced per-rule-cache invalidations queued by
@@ -1873,9 +1893,19 @@ private:
     void loadShaderProfileFromDbus();
     void loadMotionProfileTreeFromDbus();
     void loadShaderRegistryFromDbus();
+    /// @param outOwnsResolvedLeg when non-null, receives true iff the live
+    /// transition after this call is THIS event's leg — either freshly
+    /// installed, or the same-effect short-circuit kept a leg whose cached
+    /// shader IS this event's resolved pack (the identity test heldMove
+    /// stamping uses). False on every early return (no shader assigned,
+    /// applicability refusal, compile failure, filter rejection). Callers
+    /// that mutate the transition after this call (the maximize morph
+    /// endpoint writes) MUST gate on it: findTransition alone hands back
+    /// whatever leg is live, and mutating an unrelated event's leg
+    /// re-anchors its drawn rect mid-flight.
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                 bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false,
-                                bool animateMinimized = false);
+                                bool animateMinimized = false, bool* outOwnsResolvedLeg = nullptr);
     /// Arm the duration teardown for a time-driven transition, generation-guarded.
     ///
     /// Re-arms itself when the transition's own clock says the leg is not finished.
@@ -2059,6 +2089,19 @@ private:
     // contract as the pair above.
     PhosphorRules::RuleSet m_decorationExclusionRuleSet;
     PhosphorRules::RuleEvaluator m_decorationExclusionEvaluator{m_decorationExclusionRuleSet};
+
+    // True when any enabled rule in the unified store references a frame-
+    // geometry match field (Width / Height / PositionX / PositionY).
+    // Recomputed at the loadRuleAnimationsFromDbus sync point. Gates the
+    // geometry-edge rule-cache invalidation in flushPendingFrameGeometry:
+    // those fields are stamped live into the per-window query but the
+    // verdict caches key on (windowId, ruleSet revision), so without an
+    // invalidation edge a `Width LessThan N` appearance or exclusion verdict
+    // pins at the window's first resolve. The per-tick geometry lambda must
+    // NEVER invalidate directly (discussion #816 — animated geometry fires
+    // hundreds of ticks per second); the 50 ms flush plus this set-level
+    // gate keeps the no-geometry-rules user at zero cost.
+    bool m_hasGeometryScopedRules = false;
 
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForTilingNotify() to prevent small utility
@@ -2275,10 +2318,16 @@ private Q_SLOTS:
     /// Fetch the unified Rule store via `org.plasmazones.Rules.
     /// getAllRules`, filter to rules carrying any effect-consumed
     /// (Tag::Effect) action, and forward them to the shader manager — the
-    /// sole source of per-window effect overrides. Called once at bringup; the bringup also
-    /// subscribes to the interface's `rulesChanged` signal (via a debounce
-    /// timer — see m_animationRulesRefreshDebounce) so a settings-UI edit
-    /// takes effect without restarting the effect.
+    /// sole source of per-window effect overrides. The effect's ONE
+    /// rule-store sync point: the same parsed payload also refreshes the
+    /// three exclusion slices (placement = Exclude ∪ ExcludePlacement for the
+    /// drag gate, decoration = Exclude ∪ ExcludeDecorations for
+    /// shouldDecorateWindow, animation = the ExcludeAnimations slice for
+    /// shouldAnimateWindow) and the geometry-scoped-rules gate. Called once
+    /// at bringup; the bringup also subscribes to the interface's
+    /// `rulesChanged` signal (via a debounce timer — see
+    /// m_animationRulesRefreshDebounce) so a settings-UI edit takes effect
+    /// without restarting the effect.
     void loadRuleAnimationsFromDbus();
 
     /// D-Bus signal handler for `Rules.rulesChanged`. Re-arms the

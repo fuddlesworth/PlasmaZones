@@ -898,6 +898,34 @@ private Q_SLOTS:
         QVERIFY(!RuleAction::fromJson(stray).has_value());
     }
 
+    void testScopedExclusions_fromJsonRoundTrip()
+    {
+        // The two scoped exclusion wire strings ("excludePlacement" /
+        // "excludeDecorations") load through the public fromJson boundary —
+        // the path a saved rules.json takes. Both are free-form (empty
+        // allowedKeys opts out of the strict-key check, matching Exclude and
+        // Float), so a bare payload AND a payload carrying a stray future
+        // param both load; that acceptance is the deliberate contract, pinned
+        // here for the first time. A typo in either ActionType constant, or a
+        // future validator tightened away from acceptAny, fails this before
+        // it can break loading saved rules silently.
+        for (const QLatin1StringView type : {ActionType::ExcludePlacement, ActionType::ExcludeDecorations}) {
+            QJsonObject bare;
+            bare.insert(QStringLiteral("type"), QString(type));
+            const auto action = RuleAction::fromJson(bare);
+            QVERIFY2(action.has_value(), type.data());
+            QCOMPARE(action->type, QString(type));
+            const auto roundTripped = RuleAction::fromJson(action->toJson());
+            QVERIFY2(roundTripped.has_value(), type.data());
+            QCOMPARE(roundTripped->type, QString(type));
+
+            QJsonObject stray;
+            stray.insert(QStringLiteral("type"), QString(type));
+            stray.insert(QStringLiteral("futureParam"), QStringLiteral("x"));
+            QVERIFY2(RuleAction::fromJson(stray).has_value(), type.data());
+        }
+    }
+
     void testLockContext_fromJsonRoundTrip()
     {
         // LockContext is a context-domain boolean: it must validate through the

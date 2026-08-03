@@ -62,7 +62,8 @@ namespace {
 /// odd one out — it issues a raw `QDBusMessage::createMethodCall` to
 /// `getAllRules` and parses with `QJsonDocument::fromJson` directly,
 /// because it slices the parsed rules through
-/// `excludeRulesFrom` / `excludeAnimationsRulesFrom` before sinking.
+/// `excludePlacementRulesFrom` / `excludeDecorationsRulesFrom` /
+/// `excludeAnimationsRulesFrom` before sinking.
 ///
 /// The `name` argument feeds the warning so the failure site is
 /// identifiable in journals; pass the same `SettingProperty` constant
@@ -118,8 +119,14 @@ bool PlasmaZonesEffect::resolvedShaderAppliesToEvent(const QString& effectId, co
 
 void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                                bool reverse, bool holdCloseGrab, bool holdAddedGrab,
-                                               bool animateMinimized)
+                                               bool animateMinimized, bool* outOwnsResolvedLeg)
 {
+    // Fail-closed default: every early return below leaves the out-param
+    // false, so a caller that mutates the transition afterwards (the
+    // maximize morph endpoints) cannot touch an unrelated live leg.
+    if (outOwnsResolvedLeg) {
+        *outOwnsResolvedLeg = false;
+    }
     if (!window || durationMs <= 0) {
         // Defensive guard. The current call sites all pass
         // `animationDurationMs()` which the daemon-bringup loader
@@ -291,6 +298,12 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         const auto cacheIt = m_shaderManager.m_shaderCache.find(profile.effectiveEffectId());
         ownsResolvedLeg = cacheIt != m_shaderManager.m_shaderCache.end() && cacheIt->second.shader
             && transition->cached == &cacheIt->second;
+    }
+    // Same identity verdict, exported for callers that mutate the transition
+    // after this call (the maximize morph endpoint writes) — see the header
+    // doc for why they must not trust findTransition alone.
+    if (outOwnsResolvedLeg) {
+        *outOwnsResolvedLeg = transition != nullptr && ownsResolvedLeg;
     }
     if (transition && ownsResolvedLeg && profilePath == PhosphorAnimation::ProfilePaths::WindowMove) {
         transition->heldMove = true;
@@ -495,7 +508,11 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
         // Update the drag-gate exclusion rule set from the same unified
         // payload — `loadRuleAnimationsFromDbus` is the effect's one
         // and only rule-store sync point, so the snapping-exclusion gate
-        // refreshes here too rather than chasing a second D-Bus fetch. The
+        // refreshes here too rather than chasing a second D-Bus fetch.
+        // (The error-path returns ABOVE deliberately leave all three
+        // exclusion slices at their previous contents rather than blanking
+        // them — the same last-known-rules-stay-authoritative policy the
+        // daemon-loss handler documents.) The
         // filter keeps only enabled rules with a terminal Exclude or
         // ExcludePlacement action; setRules bumps the bound rule set's
         // revision, which makes every stale entry in
@@ -514,6 +531,22 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
         // the next incidental sweep.
         m_decorationExclusionRuleSet.setRules(
             PhosphorRules::ExclusionRules::excludeDecorationsRulesFrom(*setOpt).rules());
+
+        // Recompute the geometry-scoped-rules gate for the frame-geometry
+        // flush (see the member doc). Walked over the full parsed set, once
+        // per rulesChanged — never per geometry tick.
+        {
+            static const QSet<PhosphorRules::Field> kGeometryFields = {
+                PhosphorRules::Field::Width, PhosphorRules::Field::Height, PhosphorRules::Field::PositionX,
+                PhosphorRules::Field::PositionY};
+            m_hasGeometryScopedRules = false;
+            for (const PhosphorRules::Rule& rule : setOpt->rules()) {
+                if (rule.enabled && rule.match.referencesAnyField(kGeometryFields)) {
+                    m_hasGeometryScopedRules = true;
+                    break;
+                }
+            }
+        }
 
         // Per-window border / title-bar rules ride the same animation rule set
         // (Tag::Effect admits them). Refresh borders so an edited /

@@ -589,7 +589,9 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Default layout assignment");
     }
     if (type == ActionType::Exclude) {
-        return PhosphorI18n::tr("Exclude window");
+        // Name the blanket scope so it reads distinctly beside the scoped
+        // siblings in the same picker bucket.
+        return PhosphorI18n::tr("Exclude window (placement and decorations)");
     }
     if (type == ActionType::ExcludePlacement) {
         return PhosphorI18n::tr("Exclude from tiling, snapping, and scrolling");
@@ -661,7 +663,10 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Exclude from animations");
     }
     if (type == ActionType::ExcludeDecorations) {
-        return PhosphorI18n::tr("Exclude from decorations");
+        // "borders and decoration packs" rather than "decorations": KWin's
+        // own vocabulary uses "decoration" for the title bar + frame, which
+        // this action does not touch (SetHideTitleBar owns the title bar).
+        return PhosphorI18n::tr("Exclude from borders and decoration packs");
     }
     if (type == ActionType::SetHideTitleBar) {
         // Affirmative verb phrase like the other boolean action labels (e.g.
@@ -780,6 +785,11 @@ QString boolActionStateLabel(const QString& type, bool on)
                   : PhosphorI18n::tr("Tab indicator beside the column");
     }
     return QString();
+}
+
+QString actionTypeLabel(const QString& typeWire)
+{
+    return actionTypeLabelImpl(typeWire);
 }
 
 QVariantList actionTypes()

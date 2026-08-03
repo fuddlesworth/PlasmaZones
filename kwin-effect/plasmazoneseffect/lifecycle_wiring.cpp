@@ -901,6 +901,14 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         m_idCaches.screenIdCache.clear();
         m_idCaches.connectedPhysicalIdsValid = false;
         m_lastEffectiveScreenId.clear();
+        // A rotation or mode change keeps the same connector and EDID id, so
+        // no per-window outputChanged fires — yet ScreenOrientation is a
+        // matchable rule field stamped live from the output geometry, and
+        // every verdict cache keys on (windowId, ruleSet revision) only.
+        // Drop the caches and sweep the borders so orientation-scoped rules
+        // re-resolve, mirroring the daemon-ready re-seed pattern.
+        invalidateAllRuleCaches();
+        scheduleBorderSweep();
     });
 }
 

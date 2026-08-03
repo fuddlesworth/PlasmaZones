@@ -400,25 +400,9 @@ void ActionRegistry::registerBuiltinsEngine()
         .tags = {QString(Tag::Animation)},
     });
 
-    // ── decoration-exclude slot — the decoration mirror of ExcludeAnimations.
-    // A rule with `ExcludeDecorations` suppresses the border + surface-pack
-    // chain for matched windows via the effect's shouldDecorateWindow gate,
-    // which binds the Exclude ∪ ExcludeDecorations slice
-    // (ExclusionRules::excludeDecorationsRulesFrom). Terminal for the same
-    // reason ExcludeAnimations is; deliberately NOT Tag::Effect so it never
-    // enters the effect's animation rule set (whose any-match gate
-    // force-animates — wrong for a decoration opt-out).
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::ExcludeDecorations),
-        .slotFor = constantSlot(ActionSlot::DecorationExclude),
-        .validate = &acceptAny,
-        .terminal = true,
-        .allowedKeys = {},
-        .domain = ActionDomain::Window,
-        .category = QStringLiteral("borderAppearance"),
-        .displayOrder = 9,
-        .tags = {QString(Tag::Border)},
-    });
+    // (ExcludeDecorations, the decoration mirror of ExcludeAnimations, is
+    // registered in ruleaction_builtins_appearance.cpp with the rest of the
+    // borderAppearance category.)
 
     // ── opacity slot ──
     registerAction(ActionDescriptor{

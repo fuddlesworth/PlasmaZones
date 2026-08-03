@@ -320,8 +320,9 @@ void Daemon::initEnginesAndWiring()
     // skew, mirroring how AutotileEngine canonicalizes tiling state (issue #628).
     snapEngine->setWindowRegistry(m_windowRegistry.get());
 
-    // Filter the unified rule store down to its Exclude-shaped slice and
-    // hand the address to SnapEngine for its isAppIdExcluded probe. The
+    // Filter the unified rule store down to its placement-exclusion slice
+    // (Exclude ∪ ExcludePlacement) and hand the address to SnapEngine for
+    // its isAppIdExcluded probe. The
     // filtered slice is held as a stable Daemon member (m_excludeRuleSet)
     // and refreshed in-place via setRules so the bound RuleEvaluator's
     // per-revision sort index and resolve cache actually invalidate on
@@ -339,6 +340,10 @@ void Daemon::initEnginesAndWiring()
     //   - The first `setRules` + `pruneExcludedPendingRestores` priming
     //     pair seeds the filter and drains any restore queue entries
     //     populated by WTA::loadState above.
+    // m_ruleStore is ctor-owned and non-null for the daemon's lifetime (same
+    // one-comment contract as m_overlayService above), so this function
+    // derefs it unguarded; the refilter lambda's null check below exists
+    // only for a future refactor that moves store ownership.
     snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
     m_excludeRuleSet.setRules(PhosphorRules::ExclusionRules::excludePlacementRulesFrom(m_ruleStore->ruleSet()).rules());
     m_windowTrackingAdaptor->pruneExcludedPendingRestores(
@@ -353,6 +358,10 @@ void Daemon::initEnginesAndWiring()
         // the QPointer pattern used by the persistence-delegate and
         // signal-relay lambdas below.
         if (!snapEnginePtr) {
+            // Deliberate coupling: a null engine also freezes the slice and
+            // skips the prune. Correct today — the engine is only null after
+            // stop(), where the WTA is being torn down too, and the next
+            // init() re-primes both unconditionally.
             return;
         }
         // Symmetric guard for the rule store. `m_ruleStore` is a
@@ -364,7 +373,7 @@ void Daemon::initEnginesAndWiring()
             return;
         }
         // Equality-guard against no-op edits: every rulesChanged emission
-        // (rename, priority change, non-Exclude action edit, …) fires
+        // (rename, priority change, non-placement-exclusion action edit, …) fires
         // this lambda, but only changes that affect the placement-exclusion
         // slice (Exclude ∪ ExcludePlacement) should bump the evaluator's
         // revision and walk the (potentially long) pending-restore queues.
@@ -383,8 +392,8 @@ void Daemon::initEnginesAndWiring()
         // — the pointer was wired once at init above.
         m_excludeRuleSet.setRules(newSlice);
         // Prune any pending-restore queues for apps now covered by an
-        // Exclude rule. Snap-engine's resolveWindowRestore already refuses
-        // them at runtime, but stale queue entries spam logs and bloat the
+        // Exclude or ExcludePlacement rule. Snap-engine's resolveWindowRestore
+        // already refuses them at runtime, but stale queue entries spam logs and bloat the
         // saved state. The autotile-side queues don't exist yet at init
         // — daemon/signals.cpp's finalizeStartup re-runs the prune once
         // AutotileEngine::loadState has populated them.
@@ -1118,7 +1127,8 @@ void Daemon::refreshScrollTabEnrichment()
     // refresh only ever replays non-empty cached payloads, and re-parsing the
     // same JSON is deterministic), so the remove that would actually
     // invalidate an iterator cannot fire today. Cheap to keep: QHash is
-    // implicitly shared and nothing here detaches it.
+    // implicitly shared, and when the member's insert detaches it from this
+    // copy, the copy's iteration stays valid — which is the point.
     const QHash<QString, QString> cached = m_lastScrollTabStripsJson;
     for (auto it = cached.constBegin(); it != cached.constEnd(); ++it) {
         applyScrollTabStrips(it.key(), it.value());

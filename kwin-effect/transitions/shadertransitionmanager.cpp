@@ -11,6 +11,19 @@ ShaderTransitionManager::ShaderTransitionManager(PlasmaZonesEffect* effect)
     // Pool initialization happens in PlasmaZonesEffect's constructor
     // (lifecycle.cpp) where the setMaxThreadCount(1) call lives, since
     // the pool start logic references effect internals (QPointer<effect>).
+
+    // The animation/appearance evaluator resolves per-window OVERRIDES
+    // (animation shader/timing/curve, opacity, border, layer). Its bound set
+    // admits any rule carrying a Tag::Effect action, and such a rule may
+    // co-carry a terminal exclusion from another scope (hand-edited
+    // rules.json; the editor's validator blocks saving the shape). Honour
+    // only the blanket Exclude and the animation-scoped ExcludeAnimations as
+    // walk-stoppers here — a placement- or decoration-scoped exclusion must
+    // not cancel animation/appearance resolution, per those actions'
+    // documented scope. The dedicated exclusion evaluators still enforce
+    // their own families regardless of what happens in this one.
+    m_animationRuleEvaluator.setTerminalActionScope(
+        {QString(PhosphorRules::ActionType::Exclude), QString(PhosphorRules::ActionType::ExcludeAnimations)});
 }
 
 ShaderTransitionManager::~ShaderTransitionManager() = default;

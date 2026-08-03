@@ -287,9 +287,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // OverrideAnimation* rule for the post-rename class silently
         // never applies (Electron/CEF/Steam family). pushLatest already
         // refreshes the daemon's WindowRegistry record; mirror that
-        // refresh on the effect's local resolver cache. Caption /
-        // desktops / activities / role changes don't feed the
-        // WindowClass matcher so they don't need the cache drop.
+        // refresh on the effect's local resolver cache. Desktop / activity /
+        // role changes get their own invalidation connects below.
+        //
+        // CAPTION is the deliberate exception: Title and CaptionNormal ARE
+        // matchable fields stamped live into the query, so a Title-scoped
+        // verdict IS knowingly left stale until the next natural invalidation
+        // (focus change, placement change, rule edit). A per-caption clear is
+        // strictly worse than the staleness: terminals and browsers rewrite
+        // their title every frame, and each clear drops the GLOBAL per-window
+        // cache — one noisy terminal would cold-start every other window's
+        // verdict at title-tick rate.
         auto invalidateRuleCache = [this, safeW]() {
             // Gate each clear on its own rule set, mirroring the sibling
             // invalidation in slotWindowActivated: the no-rules case pays
@@ -320,6 +328,14 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 if (safeW->isOnCurrentDesktop()) {
                     updateWindowDecoration(wid, safeW);
                 }
+                // Title-bar override rides the same appearance resolve as the
+                // decoration re-fold, but updateWindowDecoration deliberately
+                // does not resolve it (decorations.cpp documents the split) —
+                // without this, a SetHideTitleBar rule keyed to the real
+                // post-swap class waits for the next focus-driven sweep.
+                // Outside the desktop gate, matching updateAllDecorations:
+                // title-bar state is persistent and survives desktop switches.
+                reconcileRuleHiddenTitleBar(wid, safeW);
                 reconcileRuleWindowLayer(wid, safeW);
             }
         };
@@ -334,6 +350,26 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         connect(kw, &KWin::Window::desktopsChanged, this, pushLatest);
         connect(kw, &KWin::Window::activitiesChanged, this, pushLatest);
         connect(kw, &KWin::Window::windowRoleChanged, this, pushLatest);
+        // VirtualDesktop and Activity are matchable rule fields stamped live
+        // into the per-window query, but the verdict caches key on
+        // (windowId, ruleSet revision) — neither moves on a desktop or
+        // activity move, so a `WHEN VirtualDesktop Equals N` exclusion or
+        // appearance verdict would pin stale across the move. Enqueue the
+        // coalesced per-window invalidation, mirroring the outputChanged
+        // handler; the flush clears the caches and re-drives decoration /
+        // title bar / layer for exactly this window.
+        auto invalidateForContextMove = [this, safeW]() {
+            if (safeW && !safeW->isDeleted()) {
+                invalidateRuleCacheForStateChange(getWindowId(safeW));
+            }
+        };
+        connect(kw, &KWin::Window::desktopsChanged, this, invalidateForContextMove);
+        connect(kw, &KWin::Window::activitiesChanged, this, invalidateForContextMove);
+        // WindowRole is likewise matchable and stamped live; role changes are
+        // rare (X11 clients setting WM_WINDOW_ROLE post-map), so the heavier
+        // immediate class-swap invalidation is fine here and keeps the
+        // identity-change family on one code path.
+        connect(kw, &KWin::Window::windowRoleChanged, this, invalidateRuleCache);
 
         // Diagnostic dump on identity change — but ONLY for class / desktop-file,
         // never caption. CEF/Electron apps (Steam included) map with a
@@ -673,6 +709,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     return; // intermediate axis-only flip, no shader
                 }
                 m_shaderManager.m_lastFullyMaximized.insert(window, fullyMaximized);
+                // IsMaximized is a matchable rule field with the same
+                // cache-key staleness as IsMinimized (see the minimizedChanged
+                // metadata lambda below) — invalidate on the genuine
+                // full-maximize edge, after the tracking write and before the
+                // interactive-gesture early return (the verdict must refresh
+                // even when the shader is skipped).
+                invalidateRuleCacheForStateChange(getWindowId(window));
                 // Drag-restore guard: KWin unmaximizes a window mid interactive
                 // move when the user grabs the maximized title bar and pulls
                 // ("restore on drag"). The drag already owns the visuals — the
@@ -857,6 +900,16 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             return;
         }
         pushWindowMetadata(safeW.data());
+        // IsMinimized is a matchable rule field stamped live into the
+        // per-window query, but the verdict caches key on (windowId, ruleSet
+        // revision) — neither moves on a minimize edge, so an
+        // `IsMinimized`-scoped exclusion or appearance verdict would pin
+        // stale (buildWindowMap consults the placement gate for minimized
+        // windows, so the wrong verdict IS produced and cached). The managed
+        // paths' float-flip invalidation only covers engine-managed windows
+        // and only when the float bit actually flips; this covers every
+        // window on every edge, coalesced by the flush.
+        invalidateRuleCacheForStateChange(getWindowId(safeW.data()));
     });
 
     // Autotile: track minimize/unminimize to remove/re-add windows from tiling
@@ -907,14 +960,27 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
     // satisfies both families with the same values, and keeps the grid
     // anchoring contract intact (apply() builds the deform grid on
     // iToRect == the live frame).
+    bool ownsMaximizeLeg = false;
     tryBeginShaderForEvent(window, PhosphorAnimation::ProfilePaths::WindowMaximize, animationDurationMs(),
-                           /*reverse=*/false);
+                           /*reverse=*/false, /*holdCloseGrab=*/false, /*holdAddedGrab=*/false,
+                           /*animateMinimized=*/false, &ownsMaximizeLeg);
     // Geometry-morph endpoints — sibling of the drag-snap wiring in
     // drag_snap.cpp. window.maximize is a geometry-contract event, so every
     // assignable pack derives its drawn rect from iFromRect/iToRect; leaving
     // them default-invalid pushes zero vec4s and a morph pack masks every
     // fragment outside a 0×0 rect at the origin — the window paints fully
     // transparent for the whole leg and pops in on teardown.
+    //
+    // Gate on the IDENTITY verdict, not on findTransition liveness: with no
+    // window.maximize pack assigned, tryBeginShaderForEvent installs nothing
+    // and findTransition hands back whatever unrelated leg is in flight
+    // (window.open on a self-maximizing app is the reachable case). Writing
+    // morph endpoints onto that leg re-anchors its drawn rect mid-flight and
+    // — for a non-morph leg — switches it into morph mode. Same rule as the
+    // heldMove stamp on the drag path.
+    if (!ownsMaximizeLeg) {
+        return;
+    }
     auto* st = m_shaderManager.findTransition(window);
     if (!st || !st->cached || st->cached->iFromRectLoc < 0) {
         return;

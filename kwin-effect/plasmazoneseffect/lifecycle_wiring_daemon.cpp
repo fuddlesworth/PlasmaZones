@@ -259,7 +259,8 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         m_tilingHandler->restoreAllMonocleMaximized();
         clearAllDecorations();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
-        // `m_animationExclusionRuleSet`, or the shader manager's animation
+        // `m_decorationExclusionRuleSet`, `m_animationExclusionRuleSet`, or
+        // the shader manager's animation
         // rule set. Across a daemon restart the user's last-known rule set
         // remains authoritative — clearing here would briefly drop every
         // exclusion / animation override during the bringup race, flashing

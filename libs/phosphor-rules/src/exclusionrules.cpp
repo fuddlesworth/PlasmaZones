@@ -15,10 +15,12 @@ namespace ExclusionRules {
 namespace {
 
 // True iff @p rule carries at least one action whose `type` matches
-// @p actionType. File-local: the two slicers below are the canonical
-// callers, and the only external caller a future addition could justify
-// is a "match against an arbitrary action type" predicate that we don't
-// have today. Promoted only when a second caller appears.
+// @p actionType. File-local, with five call sites across the three helper
+// predicates below (rulesWithAction, rulesWithEitherAction,
+// isPlacementExclusion), which the public slicers and the pattern harvester
+// reach transitively; it stays here because every caller is in this file
+// and the predicate is meaningless without a concrete action-type
+// vocabulary to apply it to.
 bool ruleHasAction(const Rule& rule, QLatin1StringView actionType)
 {
     for (const RuleAction& action : rule.actions) {
@@ -52,11 +54,13 @@ RuleSet rulesWithAction(const RuleSet& source, QLatin1StringView actionType)
     return derived;
 }
 
-// Two-action variant for the union slices (Exclude ∪ ExcludePlacement,
-// Exclude ∪ ExcludeDecorations). Kept separate from rulesWithAction rather
-// than generalised to a list parameter: two callers, both exactly two
-// types, and the flat second check keeps the per-rule cost at two
-// non-allocating comparisons.
+// Two-action variant for the decoration union slice (Exclude ∪
+// ExcludeDecorations). Kept separate from rulesWithAction rather than
+// generalised to a list parameter: one caller with exactly two types, and
+// the flat second check keeps the per-rule cost at two non-allocating
+// comparisons. (The placement union walks its own loop through
+// isPlacementExclusion below, because its membership predicate is shared
+// with the pattern harvester.)
 RuleSet rulesWithEitherAction(const RuleSet& source, QLatin1StringView actionTypeA, QLatin1StringView actionTypeB)
 {
     QList<Rule> kept;
@@ -71,6 +75,17 @@ RuleSet rulesWithEitherAction(const RuleSet& source, QLatin1StringView actionTyp
     return derived;
 }
 
+// The ONE placement-exclusion membership predicate, shared by
+// `excludePlacementRulesFrom` and `applicationExcludePatternsFrom` so the
+// slice the engines bind and the AppId harvest the pending-restore prune
+// walks can never diverge — a third placement-exclusion action added to
+// one and not the other would let the engines refuse windows whose stale
+// queued restores are never pruned.
+bool isPlacementExclusion(const Rule& rule)
+{
+    return ruleHasAction(rule, ActionType::Exclude) || ruleHasAction(rule, ActionType::ExcludePlacement);
+}
+
 } // namespace
 
 RuleSet excludeRulesFrom(const RuleSet& source)
@@ -80,7 +95,18 @@ RuleSet excludeRulesFrom(const RuleSet& source)
 
 RuleSet excludePlacementRulesFrom(const RuleSet& source)
 {
-    return rulesWithEitherAction(source, ActionType::Exclude, ActionType::ExcludePlacement);
+    // Membership must stay in lockstep with applicationExcludePatternsFrom's
+    // harvest filter — both go through isPlacementExclusion.
+    QList<Rule> kept;
+    kept.reserve(source.count());
+    for (const Rule& rule : source.rules()) {
+        if (rule.enabled && isPlacementExclusion(rule)) {
+            kept.append(rule);
+        }
+    }
+    RuleSet derived;
+    derived.setRules(kept);
+    return derived;
 }
 
 RuleSet excludeDecorationsRulesFrom(const RuleSet& source)
@@ -101,23 +127,25 @@ QStringList applicationExcludePatternsFrom(const RuleSet& source)
         // consumes the returned patterns to discard queued restores for
         // matching apps, so harvesting from a disabled rule would prune
         // restores the user explicitly opted into keeping. Mirrors the
-        // disabled-rule skip in `rulesWithAction` above for symmetry,
-        // since callers may hand this helper an unfiltered set
-        // (e.g. straight from the unified store) rather than the
-        // already-sliced exclude set.
-        if (!rule.enabled
-            || !(ruleHasAction(rule, ActionType::Exclude) || ruleHasAction(rule, ActionType::ExcludePlacement))) {
+        // disabled-rule skip in the slicers above. Every in-tree caller
+        // currently hands this helper the ALREADY-sliced placement set, so
+        // the enabled and membership re-checks are defensive against a
+        // future caller passing the unfiltered store — redundant today,
+        // idempotent, and the shared isPlacementExclusion predicate keeps
+        // them in lockstep with the slice regardless.
+        if (!rule.enabled || !isPlacementExclusion(rule)) {
             continue;
         }
         const MatchExpression& match = rule.match;
-        // KNOWN LIMITATION (EXCL-3): only a single `AppId AppIdMatches` leaf is
-        // harvested into the pattern list. WindowClass / Equals / composite
-        // Exclude rules contribute no pattern, so their stale queued
-        // pending-restores aren't pruned through THIS path. Not a leak — the
-        // snap engine re-checks each queued placement against the live RuleSet
-        // at restore time and discards excluded ones, so growth self-heals
-        // (just delayed). A full fix evaluates the Exclude RuleSet against each
-        // queued WindowQuery instead of harvesting strings — deferred.
+        // KNOWN LIMITATION (EXCL-3): only a single `AppId AppIdMatches` leaf
+        // is harvested into the pattern list. WindowClass / Equals /
+        // composite Exclude or ExcludePlacement rules contribute no pattern,
+        // so their stale queued pending-restores aren't pruned through THIS
+        // path. Not a leak — the snap engine re-checks each queued placement
+        // against the live RuleSet at restore time and discards excluded
+        // ones, so growth self-heals (just delayed). A full fix evaluates
+        // the placement-exclusion RuleSet against each queued WindowQuery
+        // instead of harvesting strings — deferred.
         if (match.kind() != MatchExpression::Kind::Leaf) {
             continue;
         }
@@ -131,6 +159,12 @@ QStringList applicationExcludePatternsFrom(const RuleSet& source)
         }
         patterns.append(pattern);
     }
+    // De-duplicate: a blanket Exclude rule and a scoped ExcludePlacement rule
+    // for the same app (the natural result of the excludeApp template
+    // retarget landing next to a v4-migrated rule) would otherwise walk the
+    // prune's removeIf twice for one pattern. The prune is idempotent, so
+    // this only saves the redundant sweep.
+    patterns.removeDuplicates();
     return patterns;
 }
 

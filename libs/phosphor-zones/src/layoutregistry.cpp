@@ -72,6 +72,17 @@ void LayoutRegistry::initCommon()
         qFatal("LayoutRegistry: a rule store is required — every context resolver evaluates against it");
     }
     m_evaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    // Context resolution honours only the blanket Exclude as a walk-stopper.
+    // The scoped exclusions (ExcludePlacement / ExcludeDecorations /
+    // ExcludeAnimations) are per-window concerns resolved by their dedicated
+    // sliced evaluators; letting one of them terminate a context cascade
+    // (gaps, overlay, tiling params, engine mode) via a hand-edited mixed
+    // rule would contradict their documented scope. The context resolvers'
+    // carries-the-slot admit predicates already reject rules without a
+    // relevant action, so this scope only matters for a mixed rule carrying
+    // both a context action and a scoped exclusion — the shape the rule
+    // validator warns about but a hand-edited rules.json can still load.
+    m_evaluator->setTerminalActionScope({QString(PhosphorRules::ActionType::Exclude)});
 
     // Forward the detailed layoutsChanged signal into the unified
     // ILayoutSourceRegistry::contentsChanged notifier so any subscribed

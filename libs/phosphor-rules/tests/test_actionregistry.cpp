@@ -40,11 +40,19 @@ private Q_SLOTS:
         const ActionRegistry& reg = ActionRegistry::instance();
         // Assert each builtin individually — never an absolute
         // `registeredTypes().size()`, see the singleton-pollution note above.
+        // Note a same-type DOUBLE registration across the two builtin TUs is
+        // not detectable post-hoc (registerAction is register-or-replace and
+        // the hash dedupes); a duplicate whose descriptor DIFFERS surfaces
+        // through the per-type behaviour tests (slots, terminal flag, domain
+        // pins) rather than through any count here.
         QVERIFY(reg.isRegistered(QString(ActionType::SetEngineMode)));
         QVERIFY(reg.isRegistered(QString(ActionType::SetSnappingLayout)));
         QVERIFY(reg.isRegistered(QString(ActionType::SetTilingAlgorithm)));
         QVERIFY(reg.isRegistered(QString(ActionType::DisableEngine)));
         QVERIFY(reg.isRegistered(QString(ActionType::Exclude)));
+        QVERIFY(reg.isRegistered(QString(ActionType::ExcludePlacement)));
+        QVERIFY(reg.isRegistered(QString(ActionType::ExcludeAnimations)));
+        QVERIFY(reg.isRegistered(QString(ActionType::ExcludeDecorations)));
         QVERIFY(reg.isRegistered(QString(ActionType::Float)));
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationShader)));
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationTiming)));
@@ -74,6 +82,37 @@ private Q_SLOTS:
 
         QCOMPARE(reg.slotFor(makeAction(ActionType::Float)), QString(ActionSlot::Float));
         QCOMPARE(reg.slotFor(makeAction(ActionType::Exclude)), QString(ActionSlot::Manage));
+        // The scoped exclusion siblings: ExcludePlacement deliberately shares
+        // the Manage slot (same "unmanaged by placement" concept, and both are
+        // terminal so neither ever fills it); ExcludeDecorations gets its own
+        // declared-for-completeness slot. A copy-pasted wrong constantSlot is
+        // exactly the failure this test exists to catch.
+        QCOMPARE(reg.slotFor(makeAction(ActionType::ExcludePlacement)), QString(ActionSlot::Manage));
+        QCOMPARE(reg.slotFor(makeAction(ActionType::ExcludeDecorations)), QString(ActionSlot::DecorationExclude));
+    }
+
+    void testTerminalFlagCompleteness()
+    {
+        // Canary over the LIVE registry: the terminal bit is the highest-
+        // consequence descriptor field (a terminal action stops a resolve
+        // walk), so pin the exact membership — isTerminal iff the type is one
+        // of the four Exclude-family builtins. A future action registered
+        // terminal by copy-paste, or an Exclude-family member losing the
+        // flag, fails here rather than surfacing as a silent behaviour
+        // change. Iterates registeredTypes() so no absolute count is
+        // asserted (singleton-pollution note above); a non-builtin sentinel
+        // registered terminal by another test in this process would trip
+        // this canary, which is the correct outcome — tests that register
+        // sentinels unregister them (see unregisterAction below).
+        const ActionRegistry& reg = ActionRegistry::instance();
+        const QSet<QString> terminalFamily = {QString(ActionType::Exclude), QString(ActionType::ExcludePlacement),
+                                              QString(ActionType::ExcludeAnimations),
+                                              QString(ActionType::ExcludeDecorations)};
+        for (const QString& type : reg.registeredTypes()) {
+            RuleAction probe;
+            probe.type = type;
+            QCOMPARE(reg.isTerminal(probe), terminalFamily.contains(type));
+        }
     }
 
     void testAnimationSlotsAreEventScoped()

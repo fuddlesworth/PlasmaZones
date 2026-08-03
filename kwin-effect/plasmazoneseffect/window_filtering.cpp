@@ -400,12 +400,13 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         return rejectedBecause(rejectReason, "keep-above window");
     }
 
-    // Check user-authored / migrated Exclude rules (needed for drag gating —
+    // Check user-authored / migrated exclusion rules (needed for drag gating —
     // daemon also enforces these for keyboard navigation, but the effect
     // must filter for drag operations and lifecycle reporting).
-    // `m_snappingExclusionRuleSet` mirrors the Exclude-shaped slice of the
-    // unified Rule store, refreshed on every rulesChanged via
-    // loadRuleAnimationsFromDbus (see shader_config_dbus.cpp).
+    // `m_snappingExclusionRuleSet` mirrors the placement-exclusion slice
+    // (Exclude ∪ ExcludePlacement) of the unified Rule store, refreshed on
+    // every rulesChanged via loadRuleAnimationsFromDbus (see
+    // shader_config_dbus.cpp).
     if (isExcludedBySnappingRule(w)) {
         return rejectedBecause(rejectReason, "user exclusion rule match");
     }
