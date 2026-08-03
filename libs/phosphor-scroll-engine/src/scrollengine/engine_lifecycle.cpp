@@ -10,6 +10,9 @@
 
 #include "scrollenginelogging.h"
 
+#include <algorithm>
+#include <utility>
+
 namespace PhosphorScrollEngine {
 
 void ScrollEngine::seedFloatRestoreForOpen(const QString& windowId, int minWidth, int minHeight)
@@ -425,10 +428,15 @@ void ScrollEngine::endArrivalBurst()
     }
     const QHash<QString, bool> pending = std::move(m_burstPendingApplies);
     m_burstPendingApplies.clear();
-    for (auto it = pending.cbegin(); it != pending.cend(); ++it) {
+    // Sorted, not hash order: with focus-taking arrivals on two screens the
+    // LAST activation request wins the compositor's focus, and hash order
+    // would make that winner vary run to run.
+    QStringList screens = pending.keys();
+    std::sort(screens.begin(), screens.end());
+    for (const QString& screenId : std::as_const(screens)) {
         // The screen may have left the scrolling set mid-burst (mode flip
         // races); applyLayout's own state/work-area guards make that a no-op.
-        applyLayout(it.key(), it.value());
+        applyLayout(screenId, pending.value(screenId));
     }
 }
 

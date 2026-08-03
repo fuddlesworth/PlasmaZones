@@ -172,8 +172,18 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
             // re-parked.
             if (!m_unclaimedOpens.isEmpty()) {
                 const auto parked = std::exchange(m_unclaimedOpens, {});
+                // Burst bracket, same as windowsOpenedBatch: a flip can park a
+                // whole screen's opens, and replaying them per-arrival would
+                // march the strip through the partial intermediates the
+                // bracket exists to suppress.
+                for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
+                    engine->beginArrivalBurst();
+                }
                 for (const auto& entry : parked) {
                     dispatchOpenToClaimingEngine(entry, /*allowPark=*/false);
+                }
+                for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
+                    engine->endArrivalBurst();
                 }
             }
         },
