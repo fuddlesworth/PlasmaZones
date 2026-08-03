@@ -185,7 +185,10 @@ void Daemon::connectLayoutSignals()
             }
             const QString assignmentId =
                 m_layoutManager->assignmentIdForScreen(focusedScreenId, curDesktop, currentActivity());
-            m_unifiedLayoutController->syncFromExternalState(assignmentId);
+            // Template substitution for the "scrolling:" sentinel — see
+            // displayIdForAssignment.
+            m_unifiedLayoutController->syncFromExternalState(
+                m_unifiedLayoutController->displayIdForAssignment(focusedScreenId, assignmentId));
         });
 
     // Connect unified layout controller signals for OSD display

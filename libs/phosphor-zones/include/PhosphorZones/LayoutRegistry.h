@@ -415,7 +415,8 @@ public:
     /// The resolved template Layout* for a scrolling context, or nullptr when
     /// the cascade has no entry, the entry names no template, or the named
     /// layout no longer exists (deleted-template fallback: "no template").
-    Layout* scrollingTemplateForContext(const QString& screenId, int virtualDesktop, const QString& activity) const;
+    Layout* scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
+                                        const QString& activity) const override;
 
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;

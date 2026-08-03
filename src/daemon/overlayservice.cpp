@@ -660,10 +660,15 @@ QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
             return assignmentId;
         }
         if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-            // Scrolling has no layout entity: no picker card is "active", so
-            // return the sentinel (matches nothing) rather than falling into
-            // the manual resolution, which would highlight a snap layout the
-            // screen is not using.
+            // A scrolling screen's active picker card is its assigned
+            // TEMPLATE layout, when one exists. With no template, return the
+            // sentinel (matches nothing) rather than falling into the manual
+            // resolution, which would highlight a snap layout the screen is
+            // not using.
+            if (PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(
+                    screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
+                return templ->id().toString();
+            }
             return assignmentId;
         }
     }
@@ -785,11 +790,11 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
         flags.manual = false;
         flags.autotile = true;
     } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-        // Unwired-resolver fallback only (the daemon injects the resolver at
-        // engine init, which answers first for live scrolling screens). Keep
-        // the manual list rather than guessing an empty one: without the
-        // capability answer this arm cannot distinguish a live scrolling
-        // screen from a stale assignment.
+        // The live Templates arm: a scrolling screen's picker/popup offers
+        // the MANUAL list as template candidates and drops the autotile
+        // cards (algorithms are not templates). Also the unwired-resolver
+        // fallback, where keeping the manual list beats guessing an empty
+        // one for a possibly-stale assignment.
         flags.manual = true;
         flags.autotile = false;
     } else {

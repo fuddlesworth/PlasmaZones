@@ -77,9 +77,11 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "QuickLayout shortcut: no screen info";
             return;
         }
-        // Quick slots only exist for placement-layout engines; a scrolling
-        // screen answers with feedback instead of resolving a snap slot.
-        if (layoutSupportForScreen(screenId) != LayoutSupport::Placement) {
+        // Quick slots need an engine with a layout concept. On a Templates
+        // screen (scrolling) the slot's manual layout applies as the
+        // screen's sizing template via applyEntry's scrolling branch; only
+        // a capability-less engine answers with feedback.
+        if (layoutSupportForScreen(screenId) == LayoutSupport::None) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }
@@ -233,11 +235,12 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
             return;
         }
-        // The picker browses layouts, which this screen's engine does not
-        // consume as placement (IPlacementEngine::layoutSupport) — feedback
-        // instead of offering the manual list as an exit door out of
-        // scrolling mode.
-        if (layoutSupportForScreen(screenId) != LayoutSupport::Placement) {
+        // The picker opens for any engine with a layout concept: Placement
+        // screens pick a placement layout, Templates screens (scrolling)
+        // pick the sizing template — the apply path routes per mode, so the
+        // picker is no longer an exit door out of scrolling. Only a
+        // capability-less engine gets feedback.
+        if (layoutSupportForScreen(screenId) == LayoutSupport::None) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }
@@ -363,12 +366,12 @@ void Daemon::connectShortcutSignals()
             }
         }
         // Capability re-check at APPLY time: the picker cannot open on a
-        // non-layout screen (gated at request time, and an empty list bails
-        // the show), but a KCM apply, rule reconcile or per-screen desktop
-        // switch can flip the bound screen into Scrolling while the picker
-        // sits open — this pick would then install a snap layout on a live
-        // scrolling screen, the exact state the request-time gate prevents.
-        if (!screenId.isEmpty() && layoutSupportForScreen(screenId) != LayoutSupport::Placement) {
+        // capability-less screen (gated at request time, and an empty list
+        // bails the show), but a KCM apply, rule reconcile or per-screen
+        // desktop switch can strip the bound screen's capability while the
+        // picker sits open. A Placement↔Templates flip mid-pick is fine —
+        // applyEntry re-resolves the mode and routes accordingly.
+        if (!screenId.isEmpty() && layoutSupportForScreen(screenId) == LayoutSupport::None) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }
@@ -387,9 +390,10 @@ void Daemon::connectShortcutSignals()
         if (screenId.isEmpty() || !m_settings || !m_contextResolver) {
             return;
         }
-        // Layout lock pins a screen's layout choice — nothing to pin on a
-        // screen whose engine has no layout concept.
-        if (layoutSupportForScreen(screenId) != LayoutSupport::Placement) {
+        // Layout lock pins a screen's layout choice (its template, on a
+        // Templates screen) — nothing to pin only when the engine has no
+        // layout concept at all.
+        if (layoutSupportForScreen(screenId) == LayoutSupport::None) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }

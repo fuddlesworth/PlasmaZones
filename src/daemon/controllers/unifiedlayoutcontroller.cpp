@@ -210,6 +210,17 @@ void UnifiedLayoutController::cycle(bool forward)
     applyLayoutByIndex(nextIndex);
 }
 
+QString UnifiedLayoutController::displayIdForAssignment(const QString& screenId, const QString& assignmentId) const
+{
+    if (m_layoutManager && !screenId.isEmpty() && PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        if (PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(
+                screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
+            return templ->id().toString();
+        }
+    }
+    return assignmentId;
+}
+
 void UnifiedLayoutController::syncFromExternalState(std::optional<QString> overrideId)
 {
     if (overrideId.has_value()) {
@@ -254,10 +265,15 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
         // clears rather than leaving the previous screen's id latched.
         // currentVirtualDesktopForScreen already falls back to the registry's
         // global desktop for an empty screen id, so no branch is needed for it.
+        // displayIdForAssignment substitutes the template UUID for the
+        // "scrolling:" sentinel so a Templates screen cycles relative to its
+        // current template instead of restarting from the first entry.
         setCurrentLayoutId(
             m_layoutManager && !screenId.isEmpty()
-                ? m_layoutManager->assignmentIdForScreen(
-                      screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity)
+                ? displayIdForAssignment(
+                      screenId,
+                      m_layoutManager->assignmentIdForScreen(
+                          screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity))
                 : QString());
     }
 }
@@ -338,13 +354,29 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
         PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
+                const int desktop = m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName);
+                if (m_layoutManager->modeForScreen(m_currentScreenName, desktop, m_currentActivity)
+                    == PhosphorZones::AssignmentEntry::Scrolling) {
+                    // Templates semantics: on a scrolling screen a manual
+                    // layout is the screen's sizing TEMPLATE, never a
+                    // placement assignment — assignLayout would classify the
+                    // UUID as Snapping and flip the screen off the engine.
+                    // The template write keeps the mode, preserves the
+                    // snapping choice (lossless toggle) and re-derives the
+                    // engine's vocabulary push via layoutAssigned.
+                    m_layoutManager->assignScrollingTemplate(m_currentScreenName, desktop, m_currentActivity,
+                                                             preview.id);
+                    setCurrentLayoutId(preview.id);
+                    qCInfo(lcDaemon) << "Applied scrolling template=" << preview.displayName
+                                     << "screen=" << m_currentScreenName;
+                    Q_EMIT layoutApplied(layout);
+                    return true;
+                }
                 // Write to the current context (screen, desktop, activity).
                 // Only the per-context assignment is stored — the global
                 // activeLayout pointer is NOT updated so that other screens
                 // and contexts keep their existing fallback layout.
-                m_layoutManager->assignLayout(m_currentScreenName,
-                                              m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName),
-                                              m_currentActivity, layout);
+                m_layoutManager->assignLayout(m_currentScreenName, desktop, m_currentActivity, layout);
             }
             setCurrentLayoutId(preview.id);
             qCInfo(lcDaemon) << "Applied unified layout=" << preview.displayName << "screen=" << m_currentScreenName;

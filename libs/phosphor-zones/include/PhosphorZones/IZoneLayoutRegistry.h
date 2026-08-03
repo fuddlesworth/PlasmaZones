@@ -115,6 +115,20 @@ public:
     virtual QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                           const QString& activity = QString()) const = 0;
 
+    /// The resolved scrolling TEMPLATE layout for a context (the layout
+    /// whose zones are the strip's preset vocabulary), or nullptr when the
+    /// context is not Scrolling, names no template, or the named layout no
+    /// longer exists. Default nullptr so lightweight test stubs need not
+    /// implement the template feature.
+    virtual Layout* scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
+                                                const QString& activity) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(virtualDesktop)
+        Q_UNUSED(activity)
+        return nullptr;
+    }
+
     /// Effective global default layout (snap-only fallback).
     virtual Layout* defaultLayout() const = 0;
 

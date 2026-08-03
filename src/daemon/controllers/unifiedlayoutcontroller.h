@@ -168,6 +168,19 @@ public:
     void syncFromExternalState(std::optional<QString> overrideId = std::nullopt);
 
     /**
+     * @brief The id the picker/cycling machinery should treat as @p screenId's
+     * current selection for a stored @p assignmentId.
+     *
+     * Identity for every id except the bare "scrolling:" sentinel, which
+     * substitutes the context's assigned TEMPLATE layout UUID when one exists
+     * — the sentinel matches no picker card, and without the substitution a
+     * Templates screen's cycle always restarted from the first entry and its
+     * picker showed no active card. A template-less scrolling context keeps
+     * the sentinel (correctly matches nothing).
+     */
+    QString displayIdForAssignment(const QString& screenId, const QString& assignmentId) const;
+
+    /**
      * @brief Get current screen name
      */
     QString currentScreenName() const

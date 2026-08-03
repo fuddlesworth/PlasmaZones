@@ -48,11 +48,12 @@ Item {
     /// refresh has already re-pushed the model — gating on the setting keeps
     /// the Scrolling group from surviving its own master switch.
     property bool scrollingAvailable: true
-    /// Whether the bound screen's engine consumes user-selectable layouts
-    /// (IPlacementEngine::layoutSupport, pushed by the daemon). Gates the
-    /// rows tagged mode === "layouts": on a screen without the capability
-    /// (scrolling) those shortcuts answer with a "not available" OSD, so
-    /// advertising them here would be noise.
+    /// Whether the bound screen's engine has any layout concept
+    /// (IPlacementEngine::layoutSupport is not None, pushed by the daemon).
+    /// Gates the rows tagged mode === "layouts": scrolling screens now
+    /// consume layouts as sizing templates, so their rows show too; only a
+    /// capability-less engine answers those shortcuts with a "not
+    /// available" OSD, and advertising them there would be noise.
     property bool layoutsAvailable: true
     property string fontFamily: ""
     property real fontSizeScale: 1

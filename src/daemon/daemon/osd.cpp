@@ -1074,7 +1074,7 @@ Daemon::CheatsheetPushState Daemon::cheatsheetPushStateFor(const QString& screen
     // overlay: show and refresh MUST agree (a divergence shows up as a sheet
     // whose filter changes on refresh), so neither site open-codes the set.
     return {cheatsheetModeString(currentModeFor(screenId)), m_settings && m_settings->autotileEnabled(),
-            m_settings && m_settings->scrollingEnabled(), layoutSupportForScreen(screenId) == LayoutSupport::Placement};
+            m_settings && m_settings->scrollingEnabled(), layoutSupportForScreen(screenId) != LayoutSupport::None};
 }
 
 void Daemon::onCheatsheetDismissed()
