@@ -95,6 +95,23 @@ public:
         windowOpened(windowId, screenId, 0, 0);
     }
 
+    /// Bracket a BURST of windowOpened calls delivered together (the
+    /// adaptor's windowsOpenedBatch / deferred-open flush loops — daemon
+    /// bring-up re-announce and mode flips). An engine that applies geometry
+    /// per arrival may defer those applies until endArrivalBurst so a
+    /// restore of an unchanged session resolves one final layout instead of
+    /// N visible intermediates marching across the screen. Defaults are
+    /// no-ops: an engine whose arrivals already coalesce (autotile's queued
+    /// retile) needs nothing. Brackets may nest; only the outermost end
+    /// flushes. Model state is fully updated during the burst either way —
+    /// only the compositor-facing geometry apply is deferred.
+    virtual void beginArrivalBurst()
+    {
+    }
+    virtual void endArrivalBurst()
+    {
+    }
+
     /// A window was closed.
     virtual void windowClosed(const QString& windowId) = 0;
 

@@ -384,8 +384,16 @@ void TilingAdaptor::flushPendingWindowOpens()
     const PhosphorProtocol::WindowOpenedList toFlush = std::move(m_pendingOpens);
     m_pendingOpens.clear();
     qCInfo(lcDbusTiling) << "flushPendingWindowOpens: processing" << toFlush.size() << "deferred windows";
+    // Same burst bracket as windowsOpenedBatch — this flush IS the batch
+    // path whenever the opens were queued behind the panel-geometry gate.
+    for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
+        engine->beginArrivalBurst();
+    }
     for (const auto& entry : toFlush) {
         dispatchWindowOpened(entry);
+    }
+    for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
+        engine->endArrivalBurst();
     }
 }
 
@@ -438,8 +446,18 @@ void TilingAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
 
     qCInfo(lcDbusTiling) << "windowsOpenedBatch: processing" << entries.size() << "windows";
 
+    // Burst bracket (IPlacementEngine::beginArrivalBurst): engines that
+    // apply geometry per arrival defer to one apply per screen, so a
+    // daemon-restart re-announce of an unchanged session does not march
+    // windows through partial intermediate layouts.
+    for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
+        engine->beginArrivalBurst();
+    }
     for (const auto& entry : entries) {
         dispatchWindowOpened(entry);
+    }
+    for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
+        engine->endArrivalBurst();
     }
 }
 

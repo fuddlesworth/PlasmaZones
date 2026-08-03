@@ -26,6 +26,7 @@ class TestScrollEnginePersistence : public QObject
 private Q_SLOTS:
     void modeRoundTripRestoresFocusAndAnchor();
     void serializedStripRestoreSurvivesIdDrift();
+    void arrivalBurstRestoreAppliesOnce();
     void pruneSweepsStashedTilesForClosedWindows();
     void pruneSpareStashStagedFromPersistence();
     void unclaimedStashTilesExpireAfterThreeSessions();
@@ -152,6 +153,49 @@ void TestScrollEnginePersistence::serializedStripRestoreSurvivesIdDrift()
     QCOMPARE(tabbed.tiles.at(tabbed.activeTileIdx).windowId, QStringLiteral("app|n2"));
     // The stashed focus (other|u3) followed its claimed successor.
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("other|n3"));
+}
+
+void TestScrollEnginePersistence::arrivalBurstRestoreAppliesOnce()
+{
+    // Daemon-restart re-announce: the adaptor brackets the whole open batch
+    // with begin/endArrivalBurst, and the engine must resolve the restored
+    // strip in ONE geometry batch — the per-arrival applies otherwise march
+    // every already-placed window through partial-strip intermediates the
+    // user sees as a restore-time retile even when nothing changed.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("app|u2"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("other|u3"), QStringLiteral("S1"), 0, 0);
+    const QRect r1 = engine1->lastManagedRect(QStringLiteral("app|u1"));
+    const QRect r2 = engine1->lastManagedRect(QStringLiteral("app|u2"));
+    const QRect r3 = engine1->lastManagedRect(QStringLiteral("other|u3"));
+    QVERIFY(r1.isValid() && r2.isValid() && r3.isValid());
+    const QJsonObject blob = engine1->serializeStripState();
+    QVERIFY(!blob.isEmpty());
+
+    // Fresh engine, same window ids (same-session daemon reload — KWin kept
+    // the windows, only the daemon restarted).
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    QSignalSpy tiledSpy(engine2, &ScrollEngine::windowsTiled);
+    engine2->beginArrivalBurst();
+    engine2->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("app|u2"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("other|u3"), QStringLiteral("S1"), 0, 0);
+    // Model state is fully live during the burst; only geometry is deferred.
+    QCOMPARE(tiledSpy.count(), 0);
+    engine2->endArrivalBurst();
+    QCOMPARE(tiledSpy.count(), 1);
+
+    // The one batch resolves the FINAL restored layout: identical rects to
+    // the pre-restart strip, so the compositor's same-rect skip makes the
+    // whole restore invisible.
+    QCOMPARE(engine2->lastManagedRect(QStringLiteral("app|u1")), r1);
+    QCOMPARE(engine2->lastManagedRect(QStringLiteral("app|u2")), r2);
+    QCOMPARE(engine2->lastManagedRect(QStringLiteral("other|u3")), r3);
 }
 
 void TestScrollEnginePersistence::pruneSweepsStashedTilesForClosedWindows()
