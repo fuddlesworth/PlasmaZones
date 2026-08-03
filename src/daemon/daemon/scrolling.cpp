@@ -23,8 +23,12 @@
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorScrollEngine/ScrollTemplate.h>
+#include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Zone.h>
 
 namespace PlasmaZones {
 
@@ -159,6 +163,42 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         if (params.defaultWindowHeight) {
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultWindowHeight(),
                              *params.defaultWindowHeight);
+        }
+        // TEMPLATE channel: the context's assigned template layout, resolved
+        // through the same cascade walk, becomes the screen's preset
+        // vocabulary. The zone rects normalize against the FULL screen
+        // geometry (the same basis layouts are authored against); an invalid
+        // rect degrades normalizedGeometry to the stored relative geometry,
+        // which only matters for Fixed-geometry zones. An extraction that
+        // yields no usable widths inserts nothing, so the engine keeps the
+        // settings preset lists — deleted or degenerate templates fail soft.
+        if (PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity)) {
+            const QRectF screenRect = m_screenManager ? QRectF(m_screenManager->screenGeometry(screenId)) : QRectF();
+            QVector<QRectF> zoneRects;
+            zoneRects.reserve(templ->zones().size());
+            for (const PhosphorZones::Zone* zone : templ->zones()) {
+                if (zone) {
+                    zoneRects.append(zone->normalizedGeometry(screenRect));
+                }
+            }
+            const PhosphorScrollEngine::ScrollTemplateVocabulary vocab =
+                PhosphorScrollEngine::extractTemplateVocabulary(zoneRects);
+            if (!vocab.columnWidths.isEmpty()) {
+                QVariantList widths;
+                widths.reserve(vocab.columnWidths.size());
+                for (qreal w : vocab.columnWidths) {
+                    widths.append(w);
+                }
+                overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::presetColumnWidths(), widths);
+                if (!vocab.windowHeights.isEmpty()) {
+                    QVariantList heights;
+                    heights.reserve(vocab.windowHeights.size());
+                    for (qreal h : vocab.windowHeights) {
+                        heights.append(h);
+                    }
+                    overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::presetWindowHeights(), heights);
+                }
+            }
         }
         // The tab indicator's GEOMETRY overrides. Only these seven reach the
         // engine: the six paint fields alongside them in ContextScrollingParams

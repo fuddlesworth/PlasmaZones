@@ -131,7 +131,7 @@ void Daemon::connectLayoutSignals()
     // start() calls this one FIRST (lifecycle.cpp), so the clear lives here
     // and connectOverlaySignals() only appends.
     //
-    // Scope note: this list covers the four connections below.
+    // Scope note: this list covers the five connections below.
     // initializeAutotile()'s eight shortcut lambdas get the same treatment
     // from their own list, because start() calls it BEFORE this function
     // clears here, so a shared list would drop them right after install.
@@ -143,6 +143,20 @@ void Daemon::connectLayoutSignals()
         disconnect(c);
     }
     m_restartScopedConnections.clear();
+    // Layout CONTENT edits (an editor save via the D-Bus updateLayout path)
+    // re-derive the engine screens so a scrolling screen whose assigned
+    // TEMPLATE layout changed gets its preset vocabulary re-extracted and
+    // re-pushed (updateScrollingScreens runs per pass; the identical-set
+    // retile makes the push take effect). Assignment writes are covered by
+    // layoutAssigned below; this covers zone-geometry edits that change no
+    // assignment. m_layoutAdaptor is created in initCoreAdaptors (init())
+    // and only re-newed there, so the handle is valid whenever start() runs.
+    if (m_layoutAdaptor) {
+        m_restartScopedConnections << connect(m_layoutAdaptor, &LayoutAdaptor::layoutChanged, this,
+                                              [this](const QString&) {
+                                                  updateEngineScreens();
+                                              });
+    }
     m_restartScopedConnections << connect(
         m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
         [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
