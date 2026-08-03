@@ -147,12 +147,11 @@ QVariantList ruleTemplates()
                      PhosphorI18n::tr("Keep one application's windows floating instead of tiled. The windows stay "
                                       "managed, so they can still be dragged into a zone."),
                      QLatin1String("window-restore")));
-    out.append(entry(QLatin1String("excludeApp"),
-                     PhosphorI18n::tr("Exclude an app from tiling, snapping, and scrolling"),
+    out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from placement"),
                      PhosphorI18n::tr("Keep one application's windows out of tiling, snapping, and scrolling. "
                                       "Borders, decoration packs, and animations still apply."),
                      QLatin1String("edit-delete-remove")));
-    out.append(entry(QLatin1String("undecorateApp"), PhosphorI18n::tr("Undecorate an app"),
+    out.append(entry(QLatin1String("undecorateApp"), PhosphorI18n::tr("Remove decorations from an app"),
                      PhosphorI18n::tr("Turn off borders and decoration packs for one application's windows. "
                                       "Tiling, snapping, scrolling, and animations still apply."),
                      QLatin1String("edit-delete-remove")));
@@ -264,11 +263,6 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         // The id predates the ExcludePlacement retarget and is not persisted
         // anywhere (newRuleFromTemplate returns plain rule JSON), so it keeps
         // its historical spelling.
-        //
-        // The one template whose seeded NAME diverges from its card title:
-        // the title enumerates all three engines and is too long for the
-        // rules-list Name column, so the name compresses it. Every sibling
-        // seeds a name identical to its title.
         rule.name = PhosphorI18n::tr("Exclude an app from placement");
         rule.priority = kApplicationBandBase;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
@@ -281,7 +275,7 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         action.type = QString::fromLatin1(ActionType::ExcludePlacement);
         rule.actions.append(action);
     } else if (templateId == QLatin1String("undecorateApp")) {
-        rule.name = PhosphorI18n::tr("Undecorate an app");
+        rule.name = PhosphorI18n::tr("Remove decorations from an app");
         rule.priority = kApplicationBandBase;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
         // The decoration mirror of excludeApp: ExcludeDecorations strips the

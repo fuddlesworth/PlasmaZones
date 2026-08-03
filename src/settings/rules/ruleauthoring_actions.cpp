@@ -589,12 +589,16 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Default layout assignment");
     }
     if (type == ActionType::Exclude) {
-        // Name the blanket scope so it reads distinctly beside the scoped
-        // siblings in the same picker bucket.
-        return PhosphorI18n::tr("Exclude window (placement and decorations)");
+        // The exclusion family shares one shape ("Exclude from <scope>") built
+        // on the app's own umbrella terms: "placement" covers the tiling,
+        // snapping, and scrolling engines (the excludeApp template description
+        // spells that out), "decorations" covers borders and decoration packs.
+        // The blanket form names both scopes so it reads distinctly beside the
+        // placement-only sibling in the same picker bucket.
+        return PhosphorI18n::tr("Exclude from placement and decorations");
     }
     if (type == ActionType::ExcludePlacement) {
-        return PhosphorI18n::tr("Exclude from tiling, snapping, and scrolling");
+        return PhosphorI18n::tr("Exclude from placement");
     }
     if (type == ActionType::Float) {
         return PhosphorI18n::tr("Float window");
@@ -663,10 +667,12 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Exclude from animations");
     }
     if (type == ActionType::ExcludeDecorations) {
-        // "borders and decoration packs" rather than "decorations": KWin's
-        // own vocabulary uses "decoration" for the title bar + frame, which
-        // this action does not touch (SetHideTitleBar owns the title bar).
-        return PhosphorI18n::tr("Exclude from borders and decoration packs");
+        // "Decorations" here means the app's own decorations (borders and
+        // decoration packs), matching the blanket Exclude label. It does NOT
+        // touch the title bar, which KWin's vocabulary also calls the window
+        // decoration; SetHideTitleBar owns that, and the undecorateApp
+        // template description spells out the real scope.
+        return PhosphorI18n::tr("Exclude from decorations");
     }
     if (type == ActionType::SetHideTitleBar) {
         // Affirmative verb phrase like the other boolean action labels (e.g.
