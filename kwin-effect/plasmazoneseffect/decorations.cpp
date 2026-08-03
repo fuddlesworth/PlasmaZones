@@ -284,7 +284,9 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
 
     // Rule-resolved decoration-chain override: a matched
     // OverrideDecorationChain rule REPLACES the tree's user packs wholesale
-    // (its empty-chain sentinel blocks decoration outright), and its
+    // (its empty-chain sentinel strips the CUSTOM packs and falls back to
+    // easy mode's config-backed layers — see the mode split below; turning
+    // decorations off entirely is ExcludeDecorations' job), and its
     // per-pack params override the tree profile's map below. A rule chain may
     // name any pack, "border" / "opacity-tint" included, and the tree's
     // per-layer disable set deliberately does not apply — a

@@ -202,6 +202,13 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
         query.isMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
         // KWin::Window-only accessory / capability flags (not exposed on
         // EffectWindow). Always engaged when the underlying window exists.
+        // NO INVALIDATION EDGE, deliberately: these flags rarely change
+        // after map (X11 clients and KWin window rules can flip them), and
+        // no change-signal is connected for them — a verdict scoped on one
+        // refreshes at the next natural invalidation (focus, placement,
+        // class swap, rule edit) rather than on its own edge. Accepted
+        // staleness; wiring five rarely-firing signals was judged not worth
+        // the connection overhead per window.
         query.skipTaskbar = kw->skipTaskbar();
         query.skipPager = kw->skipPager();
         query.isResizable = kw->isResizable();
@@ -237,9 +244,29 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     query.isNotification = w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay();
     // Stacking / accessory flags read straight off EffectWindow. Always engaged
     // when the window exists, like the other bool flags above.
+    //
+    // keepAbove / keepBelow are substituted with the window's pre-rule
+    // snapshot by the caller's applyOwnLayerFlags pass when a SetWindowLayer
+    // rule owns the window — see window_filtering.cpp — so a `WHEN KeepAbove`
+    // predicate never reads its own rule's effect. A MANUAL keep-above toggle
+    // (window menu) has no cache-invalidation edge, deliberately: routing it
+    // through invalidateRuleCacheForStateChange would re-run the layer
+    // reconcile and instantly re-assert the rule over the user's toggle,
+    // which the reconcile's own docs rule out. A verdict scoped on these
+    // flags refreshes at the next natural invalidation instead.
     query.keepAbove = w->keepAbove();
     query.keepBelow = w->keepBelow();
     query.isModal = w->isModal();
+    // KNOWN SELF-FEED HAZARD, unresolved: hasDecoration is rule OUTPUT
+    // (SetHideTitleBar reaches KWin::Window::setNoBorder through the
+    // decoration bridge) stamped back in as rule INPUT with no snapshot
+    // substitution — the exact shape applyOwnLayerFlags neutralises for the
+    // layer flags. Whether it actually oscillates depends on whether
+    // setNoBorder(true) flips EffectWindow::hasDecoration(), which is
+    // KWin-version behaviour this code cannot verify statically. Do not
+    // scope a SetHideTitleBar rule on HasDecoration; a substitution needs a
+    // pre-rule snapshot sourced from the DecorationManager's restore state
+    // if this ever bites in practice.
     query.hasDecoration = w->hasDecoration();
     query.skipSwitcher = w->isSkipSwitcher();
     const QRectF frame = w->frameGeometry();
@@ -266,6 +293,16 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     if (!activities.isEmpty()) {
         query.activity = activities.first();
     }
+    // DELIBERATELY NOT STAMPED effect-side:
+    //  - activeLayout: a context-resolution field, stamped only by the
+    //    daemon's LayoutRegistry context resolvers. Effect-side it stays the
+    //    empty string, so an `ActiveLayout Equals X` leaf never matches here
+    //    (fine) and a NEGATED ActiveLayout leaf matches every window (the
+    //    dangerous direction — it silently widens an exclusion or appearance
+    //    rule). Author ActiveLayout predicates on context rules only.
+    //  - tiledWindowCount: optional and left disengaged, so a positive count
+    //    leaf is inert here by design; the context resolvers exclude negated
+    //    references structurally for the same absence-polarity reason.
     return query;
 }
 

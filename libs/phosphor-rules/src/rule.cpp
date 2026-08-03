@@ -89,7 +89,7 @@ QList<ValidationIssue> Rule::validationIssues() const
         }
     }
 
-    // A terminal action (Exclude / ExcludeAnimations) co-located with any
+    // A terminal action (any of the Exclude family) co-located with any
     // non-terminal slot-filling action: a terminal action stops the evaluator's
     // resolve walk the moment it matches, so any other action on the same rule
     // may be dropped (the appearance/animation evaluator drops border / opacity /
@@ -109,8 +109,8 @@ QList<ValidationIssue> Rule::validationIssues() const
             issue.actionIndex = i;
             issue.actionType = action.type;
             issue.message = QStringLiteral(
-                                "Action `%1` may not take effect: the rule also has a terminal action "
-                                "(Exclude / ExcludeAnimations) that stops resolution before later actions apply. "
+                                "Action `%1` may not take effect: the rule also has a terminal exclusion action "
+                                "that stops the rest of the rule from applying. "
                                 "Put the exclusion on a separate rule.")
                                 .arg(action.type);
             issues.append(issue);

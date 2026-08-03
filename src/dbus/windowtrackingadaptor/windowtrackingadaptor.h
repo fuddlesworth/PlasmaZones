@@ -946,7 +946,8 @@ public:
      *      before the `rulesChanged` subscription connects, pruning what loadState
      *      just deserialized into the store.
      *   2. Daemon::init's `refilterExcludeRules` lambda, fired on every
-     *      `RuleStore::rulesChanged` whose post-filter Exclude slice differs
+     *      `RuleStore::rulesChanged` whose post-filter placement-exclusion
+     *      slice (Exclude ∪ ExcludePlacement) differs
      *      from the cached one (equality-guarded). Drives live rule edits into the prune.
      *   3. Daemon::finalizeStartup, after AutotileEngine::loadState has restored its
      *      placement records, so any autotile records loaded then are pruned too.
@@ -1444,7 +1445,21 @@ private:
     // use. Reset in setRuleStore only when the store pointer actually
     // changes (a same-store rebind keeps the evaluator).
     PhosphorRules::RuleStore* m_ruleStore = nullptr;
+    /// Full-store evaluator serving all ten per-window policy resolvers,
+    /// scope-narrowed to the placement-exclusion family — construction and
+    /// scope both live in ensureRuleEvaluator() below.
     std::unique_ptr<PhosphorRules::RuleEvaluator> m_ruleEvaluator;
+
+    /// Build m_ruleEvaluator on first use (no-op when already built). The one
+    /// construction site for the full-store evaluator, so the terminal-action
+    /// scope is set in exactly one place: this adaptor resolves PLACEMENT
+    /// policy (open placement, routing, restore, scroll open params), so only
+    /// the placement-exclusion family (Exclude / ExcludePlacement) may stop
+    /// its walks. Without the scope, a terminal ExcludeDecorations /
+    /// ExcludeAnimations action on a matching rule would cancel every
+    /// lower-priority rule's placement actions — the leak the scoped actions'
+    /// docs promise cannot happen. Callers must check m_ruleStore first.
+    void ensureRuleEvaluator();
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Persistence (adaptor responsibility: session.json save/load)

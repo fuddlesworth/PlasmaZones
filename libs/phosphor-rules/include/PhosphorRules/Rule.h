@@ -42,7 +42,7 @@ struct PHOSPHORRULES_EXPORT ValidationIssue
         /// resolution (window fields are absent on the windowless query), so
         /// the action's slot is never filled.
         ContextActionWithWindowMatch = 0,
-        /// A terminal action (Exclude / ExcludeAnimations) on the same rule as
+        /// A terminal action (any of the Exclude family) on the same rule as
         /// one or more non-terminal slot-filling actions (border / opacity /
         /// animation override, but also gap / overlay / engine actions). A
         /// terminal action stops the evaluator's resolve walk the moment it
@@ -97,7 +97,9 @@ struct PHOSPHORRULES_EXPORT Rule
     /// every action validates against the registry.
     bool isValid() const;
 
-    /// True if any of this rule's actions is terminal (Exclude).
+    /// True if any of this rule's actions is terminal (one of the Exclude
+    /// family — Exclude / ExcludePlacement / ExcludeAnimations /
+    /// ExcludeDecorations).
     bool hasTerminalAction() const;
 
     /**
@@ -115,7 +117,7 @@ struct PHOSPHORRULES_EXPORT Rule
      *    `MatchExpression::isContextOnly()`; an empty catch-all match is
      *    context-only and so is compatible.
      *  - @ref ValidationIssue::Code::TerminalActionWithEffectActions — a terminal
-     *    action (Exclude / ExcludeAnimations) co-located with any non-terminal
+     *    action (any of the Exclude family) co-located with any non-terminal
      *    slot-filling action, which the terminal action's early-out may drop.
      *
      * An empty list means no issues — the rule is well-formed at both layers.

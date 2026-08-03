@@ -511,7 +511,35 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 }
             }
             if (snapShaderApplies) {
-                beginShaderTransition(window, shaderProfile);
+                const bool installed = beginShaderTransition(window, shaderProfile);
+                // Identity gate before mutating the live leg — the same rule
+                // as the heldMove stamp and the maximize morph endpoints. The
+                // applicability gate above filtered the empty/refused shapes,
+                // but beginShaderTransition can still return false for a
+                // compile failure, the sticky null-shader sentinel, a
+                // registry miss, or a collapsed surface — and in those cases
+                // findTransition hands back an UNRELATED leg (a maximize
+                // morph mid-flight is the reachable one). Retargeting that
+                // leg's endpoints toward this snap would mutate a foreign
+                // event's animation; but leaving a foreign GEOMETRY leg alive
+                // is the frozen-stale-morph hazard the declined branch below
+                // documents, because the window has already moved. So: owned
+                // leg → retarget; foreign geometry-owning leg → tear down,
+                // exactly as the animator-declined branch does.
+                bool ownsSnapLeg = installed;
+                auto* mt = m_shaderManager.findTransition(window);
+                if (!ownsSnapLeg && mt) {
+                    const auto cacheIt = m_shaderManager.m_shaderCache.find(snapShaderId);
+                    ownsSnapLeg = cacheIt != m_shaderManager.m_shaderCache.end() && cacheIt->second.shader
+                        && mt->cached == &cacheIt->second;
+                }
+                if (!ownsSnapLeg) {
+                    if (mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
+                        endShaderTransition(window);
+                    }
+                    repaintSnapRegions(window, oldFrame, geo);
+                    return;
+                }
                 // If the installed shader is a geometry morph (declares
                 // iFromRect), hand it the old/new frames and request the
                 // old-content snapshot. The morph then owns the visual
@@ -521,8 +549,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // C++ WindowAnimator translate+scale for this window. The
                 // WindowAnimator still runs (durationMs == 0) purely to drive
                 // the morph's progress timeline.
-                if (auto* mt = m_shaderManager.findTransition(window);
-                    mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
+                if (mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
                     // Always retarget the morph to the new destination.
                     mt->toGeometry = targetFrame;
                     // On a RETARGET mid-morph, beginShaderTransition short-

@@ -104,11 +104,20 @@ ResolvedActions RuleEvaluator::resolveFiltered(const WindowQuery& query,
         if (!rule.match.evaluate(query)) {
             continue;
         }
-        // A matching rule's actions accumulate per slot. A terminal Exclude
-        // action stops the entire walk.
+        // A matching rule's actions accumulate per slot. A terminal action in
+        // this evaluator's scope (any terminal action when no scope is set)
+        // stops the entire walk.
         bool terminate = false;
         for (const RuleAction& action : rule.actions) {
             if (registry.isTerminal(action)) {
+                // An out-of-scope terminal action is inert HERE: it neither
+                // fills a slot (its slot id exists for registry completeness
+                // only) nor stops the walk, so the rule's remaining actions
+                // and every lower-priority rule still apply. The evaluator
+                // bound to that action's own exclusion slice still honours it.
+                if (m_terminalScope && !m_terminalScope->contains(action.type)) {
+                    continue;
+                }
                 result.markExcluded();
                 terminate = true;
                 break;

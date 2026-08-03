@@ -186,6 +186,22 @@ void ActionRegistry::registerBuiltinsEngine()
         .displayOrder = 0,
     });
 
+    // ── manage slot — terminal, the placement-only sibling of Exclude. Shares
+    //    the Manage slot deliberately: both mean "unmanaged by the placement
+    //    engines", and the slices that bind them (excludePlacementRulesFrom)
+    //    resolve through `isExcluded()`, never through the slot. Free-form for
+    //    the same future-param reason as Exclude. ──
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::ExcludePlacement),
+        .slotFor = constantSlot(ActionSlot::Manage),
+        .validate = &acceptAny,
+        .terminal = true,
+        .allowedKeys = {},
+        .domain = ActionDomain::Window,
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 5,
+    });
+
     // ── float slot — intentionally free-form (future float-geometry hints);
     //    empty `allowedKeys` opts out of the strict-key check. ──
     registerAction(ActionDescriptor{
@@ -383,6 +399,10 @@ void ActionRegistry::registerBuiltinsEngine()
         .displayOrder = 3,
         .tags = {QString(Tag::Animation)},
     });
+
+    // (ExcludeDecorations, the decoration mirror of ExcludeAnimations, is
+    // registered in ruleaction_builtins_appearance.cpp with the rest of the
+    // borderAppearance category.)
 
     // ── opacity slot ──
     registerAction(ActionDescriptor{

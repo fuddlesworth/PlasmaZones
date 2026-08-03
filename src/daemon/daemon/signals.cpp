@@ -431,8 +431,9 @@ void Daemon::finalizeStartup()
 
     // Now that AutotileEngine::loadState has restored autotile placement records,
     // re-run the exclusion-rule prune so any loaded WindowPlacement records for apps
-    // an Exclude rule covers are dropped from the unified store. The init-prologue
-    // priming call (daemon.cpp's setExcludeRuleSet/setRules/prune sequence, run
+    // an Exclude or ExcludePlacement rule covers are dropped from the unified
+    // store. The init-prologue priming call (init_engines.cpp's
+    // setExcludeRuleSet/setRules/prune sequence, run
     // synchronously before the rulesChanged subscription wires) already pruned what
     // was loaded then; this re-run covers records that landed during the later
     // autotile load. Patterns derive from the unified Rule store via
