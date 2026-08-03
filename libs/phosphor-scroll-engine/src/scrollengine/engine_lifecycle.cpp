@@ -79,9 +79,37 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // Unified-placement restore: a window recorded tiled in scrolling mode
     // reopens at its recorded column slot; a floating record reopens
     // floating (the shared free geometry is restored by the common layer).
+    // Resolved via the store's takeForReopen so a close/reopen — fresh KWin
+    // uuid, appId-FIFO match — restores exactly like a daemon restart's
+    // uuid-exact match. peekExact alone covered only the restart case: a
+    // reopened floated window missed its record and fell through to a tile
+    // insert. The accept predicate is autotile's (insert.cpp), term for term:
+    // a floating slot restores on a screen match (FIFO consumption also needs
+    // a real float-back rect — a geometry-less floating residue restored onto
+    // a fresh sibling would float it at its spawn rect for no visible
+    // reason); a tiled slot restores only in the SAME full context.
     int restoreColumn = -1;
-    if (m_windowTracker) {
-        if (const auto record = m_windowTracker->placementStore().peekExact(windowId)) {
+    const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+    if (m_windowTracker && !appId.isEmpty() && appId != windowId) {
+        using PhosphorEngine::WindowPlacement;
+        const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
+        const auto accept = [&](const WindowPlacement& p) {
+            const PhosphorEngine::EngineSlot s = p.slotFor(engineId());
+            if (s.state == WindowPlacement::stateFloating()) {
+                const bool sameInstance = PhosphorIdentity::WindowId::extractInstanceId(p.windowId)
+                    == PhosphorIdentity::WindowId::extractInstanceId(windowId);
+                if (!sameInstance && !p.anyFreeGeometry().isValid()) {
+                    return false;
+                }
+                return p.screenId.isEmpty() || p.screenId == screenId;
+            }
+            if (s.state == WindowPlacement::stateTiled()) {
+                return p.screenId == currentKey.screenId && p.virtualDesktop == currentKey.desktop
+                    && p.activity == currentKey.activity;
+            }
+            return false;
+        };
+        if (const auto record = m_windowTracker->placementStore().takeForReopen(windowId, appId, accept)) {
             const PhosphorEngine::EngineSlot slot = record->slotFor(engineId());
             if (slot.state == PhosphorEngine::WindowPlacement::stateFloating()) {
                 state->addFloating(windowId);
