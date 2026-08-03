@@ -55,7 +55,7 @@ using namespace ShortcutIds;
 //    display), hard no-ops off scrolling
 //  - "layouts" is a CAPABILITY tag, not a mode name: rows shown whenever
 //    the bound screen's engine consumes user-selectable layouts
-//    (IPlacementEngine::providesLayouts, pushed to the sheet as
+//    (IPlacementEngine::layoutSupport, pushed to the sheet as
 //    layoutsAvailable). Covers the layout cycle pair, the picker, the
 //    layout lock, and the quick-layout digits — on a non-layout screen
 //    those keys answer with a "not available" OSD, so the sheet hides them.
@@ -73,7 +73,7 @@ struct CatalogMeta
     int categoryOrder;
     // "all" | "snapping" | "autotile" | "scrolling" | "layouts" — string form
     // matches what the QML filter consumes; no enum round-trip needed. The
-    // last value is a capability tag (engine providesLayouts), not a mode;
+    // last value is a capability tag (engine layoutSupport), not a mode;
     // see the contract block above.
     const char* mode;
     // Optional tr() disambiguation for the category word (e.g. the mode
@@ -129,7 +129,7 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdToggleAutotile, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         // "layouts" is a capability tag, not a mode name: the rows show
         // whenever the bound screen's engine consumes user-selectable
-        // layouts (IPlacementEngine::providesLayouts, pushed to the sheet
+        // layouts (IPlacementEngine::layoutSupport, pushed to the sheet
         // as layoutsAvailable). On a scrolling screen these keys answer
         // with a "not available" OSD, so the sheet hides them there.
         add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");

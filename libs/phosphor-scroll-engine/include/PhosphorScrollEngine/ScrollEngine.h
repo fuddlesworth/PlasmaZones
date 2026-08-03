@@ -322,6 +322,16 @@ public:
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 
+    // Layout capability (see IPlacementEngine's Layout capability section)
+    /// The strip consumes layouts as sizing TEMPLATES: a layout's zone
+    /// extents become the screen's preset column-width vocabulary, never
+    /// window placement. Explicit override — the capability is load-bearing
+    /// for the daemon's layout-selection gates, not an inherited absence.
+    LayoutSupport layoutSupport() const override
+    {
+        return LayoutSupport::Templates;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // Cross-engine handoff
     // ═══════════════════════════════════════════════════════════════════════

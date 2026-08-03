@@ -353,18 +353,19 @@ private:
     PhosphorZones::AssignmentEntry::Mode currentModeFor(const QString& screenId) const;
 
     /**
-     * @brief Whether the engine owning @p screenId consumes user-selectable
-     * layouts (IPlacementEngine::providesLayouts). Gates the layout picker
+     * @brief How the engine owning @p screenId relates to user-selectable
+     * layouts (IPlacementEngine::layoutSupport). Gates the layout picker
      * and the layout-selection shortcuts (cycle, quick slots, layout lock),
      * feeds the OverlayService's injected LayoutsProvidedResolver (the
      * picker/drag-popup layout lists) and the cheatsheet's layouts-row
      * filter — so no surface assumes snap semantics on a screen whose
-     * engine has no layout concept (scrolling) or falls through to the
-     * manual layout list. Only a null ROUTER falls back to true (the
-     * shutdown window; same Snapping fallback as currentModeFor) —
-     * engineFor itself never returns null for a routed screen.
+     * engine has no layout concept or falls through to the manual layout
+     * list. Only a null ROUTER falls back to Placement (the shutdown
+     * window; same Snapping fallback as currentModeFor) — engineFor itself
+     * never returns null for a routed screen.
      */
-    bool engineProvidesLayouts(const QString& screenId) const;
+    using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
+    LayoutSupport layoutSupportForScreen(const QString& screenId) const;
 
     /**
      * @brief Failure OSD for a layout-selection shortcut pressed on a screen

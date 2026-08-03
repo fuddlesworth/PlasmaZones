@@ -662,7 +662,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
                 // that no longer reaches the user: the two entry points
                 // that consult this filter with a screen in hand — the
                 // layout cycle (handleCycleLayout) and the picker — are
-                // gated on engineProvidesLayouts() first, and the
+                // gated on layoutSupportForScreen() first, and the
                 // popup/picker list itself resolves through the
                 // capability-aware resolvePerScreenLayoutInclude in
                 // overlayservice.cpp. (Quick slots set the controller
@@ -1074,7 +1074,7 @@ Daemon::CheatsheetPushState Daemon::cheatsheetPushStateFor(const QString& screen
     // overlay: show and refresh MUST agree (a divergence shows up as a sheet
     // whose filter changes on refresh), so neither site open-codes the set.
     return {cheatsheetModeString(currentModeFor(screenId)), m_settings && m_settings->autotileEnabled(),
-            m_settings && m_settings->scrollingEnabled(), engineProvidesLayouts(screenId)};
+            m_settings && m_settings->scrollingEnabled(), layoutSupportForScreen(screenId) == LayoutSupport::Placement};
 }
 
 void Daemon::onCheatsheetDismissed()

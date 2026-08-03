@@ -223,7 +223,7 @@ public:
     }
 
     /// Whether the engine owning a screen consumes user-selectable layouts
-    /// (IPlacementEngine::providesLayouts). Daemon-injected so the overlay
+    /// (IPlacementEngine::layoutSupport). Daemon-injected so the overlay
     /// stays engine-agnostic; resolvePerScreenLayoutInclude answers "no
     /// layouts at all" for a screen whose engine returns false (scrolling),
     /// which empties the layout picker's list so its show bails. (The
@@ -425,7 +425,7 @@ public:
     // gates (when false the matching group hides regardless of mode — the
     // mode string alone lags the engine teardown on a disable).
     // `layoutsAvailable` is the bound screen's engine capability
-    // (IPlacementEngine::providesLayouts): when false the catalog rows
+    // (IPlacementEngine::layoutSupport): when false the catalog rows
     // tagged "layouts" hide, because those shortcuts answer with a
     // "not available" OSD on that screen.
     void showCheatsheet(const QString& screenId, const QVariantList& model, const QString& currentMode,

@@ -762,7 +762,7 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     }
     // Engine capability gate FIRST — ahead of the layout-manager guard,
     // which the resolver does not need: a screen whose engine does not
-    // consume layouts (IPlacementEngine::providesLayouts — scrolling) gets
+    // consume layouts (IPlacementEngine::layoutSupport — scrolling) gets
     // no layout list at all, so the picker's show bails on the empty list.
     // (The drag-time popup is already suppressed on engine-owned screens by
     // WindowDragAdaptor's dragMoved gate; here that is defence in depth.)

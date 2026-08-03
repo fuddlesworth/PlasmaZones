@@ -273,7 +273,7 @@ Item {
         } else if (action === "layout") {
             // Daemon-level gate: a layout-selection shortcut (picker, cycle,
             // quick slot, layout lock) fired on a screen whose engine has no
-            // layout concept (IPlacementEngine::providesLayouts is false).
+            // layout concept (IPlacementEngine::layoutSupport is None).
             // Sole reason today is not_supported; the fallthrough keeps any
             // future reason from rendering the generic "Failed".
             return i18n("Layouts are not available in this mode");

@@ -190,7 +190,7 @@ private Q_SLOTS:
                                 .arg(uncatalogued.join(QStringLiteral(", ")))));
     }
 
-    /// Pins the layout-capability tag split the daemon's engineProvidesLayouts
+    /// Pins the layout-capability tag split the daemon's layoutSupportForScreen
     /// gates rely on: the four layout-selection ids plus the quick-layout
     /// digit family carry mode "layouts" (hidden on a non-layout screen),
     /// while the two engine-routed layout-group rows stay "all" (Reapply

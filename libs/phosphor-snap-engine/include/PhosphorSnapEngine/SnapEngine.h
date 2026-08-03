@@ -317,9 +317,9 @@ public:
 
     // Layout capability (see IPlacementEngine's Layout capability section)
     /// Snap placement is driven by user-selectable zone layouts.
-    bool providesLayouts() const override
+    LayoutSupport layoutSupport() const override
     {
-        return true;
+        return LayoutSupport::Placement;
     }
 
     // Cross-engine handoff

@@ -579,7 +579,7 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     // Layout cycling is meaningless on a screen whose engine has no layout
     // concept (scrolling) — answer with feedback instead of applying a snap
     // layout there (the old one-way-door-out-of-scrolling policy).
-    if (!engineProvidesLayouts(screenId)) {
+    if (layoutSupportForScreen(screenId) != LayoutSupport::Placement) {
         showLayoutsUnavailableOsd(screenId);
         return;
     }

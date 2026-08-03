@@ -49,23 +49,23 @@ PhosphorZones::AssignmentEntry::Mode Daemon::currentModeFor(const QString& scree
     return PhosphorZones::AssignmentEntry::Snapping;
 }
 
-bool Daemon::engineProvidesLayouts(const QString& screenId) const
+PhosphorEngine::IPlacementEngine::LayoutSupport Daemon::layoutSupportForScreen(const QString& screenId) const
 {
     if (m_screenModeRouter) {
         if (const auto* engine = m_screenModeRouter->engineFor(screenId)) {
-            return engine->providesLayouts();
+            return engine->layoutSupport();
         }
     }
     // Only the null-ROUTER case (the shutdown window) reaches this line:
     // engineFor's mode switch is exhaustive over ctor-checked engine
     // pointers and never returns nullptr for a routed screen (the inner
-    // check above is cheap defence, not a contract). Fall back to true —
-    // same Snapping fallback as currentModeFor, and snap provides layouts.
-    // Note the three null-router fallbacks in this file deliberately
-    // differ: isAutotileScreen probes the live engine, currentModeFor
-    // answers Snapping, this answers true — each is the safe default for
-    // its own consumers.
-    return true;
+    // check above is cheap defence, not a contract). Fall back to
+    // Placement — same Snapping fallback as currentModeFor, and snap's
+    // layouts are placement layouts. Note the three null-router fallbacks
+    // in this file deliberately differ: isAutotileScreen probes the live
+    // engine, currentModeFor answers Snapping, this answers Placement —
+    // each is the safe default for its own consumers.
+    return PhosphorEngine::IPlacementEngine::LayoutSupport::Placement;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

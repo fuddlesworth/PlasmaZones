@@ -186,7 +186,7 @@ public:
     /// Bring every unmanaged window on the screen back under this engine's
     /// placement (zones for snap, the strip for scrolling). Stated
     /// layout-neutrally on purpose: an engine without a layout concept
-    /// (providesLayouts() == false) still implements this intent.
+    /// (layoutSupport() == LayoutSupport::None) still implements this intent.
     virtual void snapAllWindows(const NavigationContext& ctx) = 0;
 
     /// Cycle keyboard focus through managed windows.
@@ -589,19 +589,29 @@ public:
     // OPTIONAL: Layout capability (UI-facing; distinct from algorithm identity)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Whether this engine's placement is driven by user-selectable layouts
-    /// — zone layouts or autotile algorithm cards, the entries the layout
-    /// picker, drag layout popup, quick-layout slots and layout cycle
+    /// How this engine relates to user-selectable layouts — the entries the
+    /// layout picker, drag layout popup, quick-layout slots and layout cycle
     /// operate on. The daemon consults this per screen (via the router's
-    /// engineFor) to decide whether layout-selection UI and shortcuts are
-    /// meaningful there; on a screen whose engine returns false (scrolling:
-    /// the strip has no layout concept) it suppresses the picker/popup and
-    /// answers the layout shortcuts with a "not available" OSD instead of
-    /// falling back to snap-layout semantics. Default false: an engine must
-    /// opt in to being a layout consumer.
-    virtual bool providesLayouts() const
+    /// engineFor) to decide what layout-selection UI and shortcuts mean
+    /// there.
+    enum class LayoutSupport {
+        /// No layout concept at all: the daemon suppresses the picker/popup
+        /// and answers the layout shortcuts with a "not available" OSD
+        /// instead of falling back to snap-layout semantics.
+        None,
+        /// Layouts drive window placement (snap zone layouts, autotile
+        /// algorithm cards): the classic picker semantics.
+        Placement,
+        /// Layouts are consumed as sizing templates (the scrolling engine's
+        /// column-width vocabulary): the picker applies a layout as the
+        /// screen's template rather than as window placement.
+        Templates
+    };
+
+    /// Default None: an engine must opt in to being a layout consumer.
+    virtual LayoutSupport layoutSupport() const
     {
-        return false;
+        return LayoutSupport::None;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

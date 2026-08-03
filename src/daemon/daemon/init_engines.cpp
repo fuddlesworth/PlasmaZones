@@ -209,7 +209,7 @@ void Daemon::initEnginesAndWiring()
     // (a disabled scrolling assignment downgrades to snapping and keeps its
     // layouts). Cleared alongside the scroll-zones provider in stop().
     m_overlayService->setLayoutsProvidedResolver([this](const QString& screenId) {
-        return engineProvidesLayouts(screenId);
+        return layoutSupportForScreen(screenId) == LayoutSupport::Placement;
     });
 
     // Autotile provider. setContextGapProvider is derived-only

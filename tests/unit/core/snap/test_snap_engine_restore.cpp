@@ -19,13 +19,14 @@ private Q_SLOTS:
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         // Capability contract the daemon's layout-selection gates rest on:
         // zone layouts ARE snap's placement input, so the engine must
-        // override the interface's default-false providesLayouts. Asserted
+        // override the interface's default-None layoutSupport. Asserted
         // through the base pointer too — the daemon dispatches via
         // IPlacementEngine*, and a dropped `override` with a shadowing
         // non-virtual would pass the concrete check while the interface
-        // call reverted to false.
-        QVERIFY(engine.providesLayouts());
-        QVERIFY(static_cast<PhosphorEngine::IPlacementEngine*>(&engine)->providesLayouts());
+        // call reverted to None.
+        using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
+        QCOMPARE(engine.layoutSupport(), LayoutSupport::Placement);
+        QCOMPARE(static_cast<PhosphorEngine::IPlacementEngine*>(&engine)->layoutSupport(), LayoutSupport::Placement);
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 

@@ -267,7 +267,7 @@ Item {
         property bool autotileAvailable: true
         property bool scrollingAvailable: true
         // Engine capability of the bound screen (IPlacementEngine::
-        // providesLayouts), pushed per show and re-pushed on refresh; gates
+        // layoutSupport), pushed per show and re-pushed on refresh; gates
         // the rows the catalog tags mode === "layouts".
         property bool layoutsAvailable: true
         // Card corner radius the surface decoration rounds to (see osdSlot

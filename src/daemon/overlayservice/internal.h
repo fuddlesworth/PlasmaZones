@@ -284,7 +284,7 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
 /// @param currentMode  The mode to check: 0 = manual, 1 = autotile, -1 = check both lockable modes
 ///                     (default). Scrolling (mode 2) is deliberately absent from this enumeration:
 ///                     layout locks only exist for layout-consuming modes (the layout-lock shortcut
-///                     is capability-gated on IPlacementEngine::providesLayouts), so a "2:" key is
+///                     is capability-gated on IPlacementEngine::layoutSupport), so a "2:" key is
 ///                     never written by current builds and a stale one from an older build is inert.
 ///
 /// When currentMode is -1 (default), BOTH lockable modes are checked. This is intentional (PR #247):

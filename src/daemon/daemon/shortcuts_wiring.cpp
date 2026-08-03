@@ -77,9 +77,9 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "QuickLayout shortcut: no screen info";
             return;
         }
-        // Quick slots only exist for layout-consuming engines; a scrolling
+        // Quick slots only exist for placement-layout engines; a scrolling
         // screen answers with feedback instead of resolving a snap slot.
-        if (!engineProvidesLayouts(screenId)) {
+        if (layoutSupportForScreen(screenId) != LayoutSupport::Placement) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }
@@ -234,9 +234,10 @@ void Daemon::connectShortcutSignals()
             return;
         }
         // The picker browses layouts, which this screen's engine does not
-        // consume (IPlacementEngine::providesLayouts) — feedback instead of
-        // offering the manual list as an exit door out of scrolling mode.
-        if (!engineProvidesLayouts(screenId)) {
+        // consume as placement (IPlacementEngine::layoutSupport) — feedback
+        // instead of offering the manual list as an exit door out of
+        // scrolling mode.
+        if (layoutSupportForScreen(screenId) != LayoutSupport::Placement) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }
@@ -367,7 +368,7 @@ void Daemon::connectShortcutSignals()
         // switch can flip the bound screen into Scrolling while the picker
         // sits open — this pick would then install a snap layout on a live
         // scrolling screen, the exact state the request-time gate prevents.
-        if (!screenId.isEmpty() && !engineProvidesLayouts(screenId)) {
+        if (!screenId.isEmpty() && layoutSupportForScreen(screenId) != LayoutSupport::Placement) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }
@@ -388,7 +389,7 @@ void Daemon::connectShortcutSignals()
         }
         // Layout lock pins a screen's layout choice — nothing to pin on a
         // screen whose engine has no layout concept.
-        if (!engineProvidesLayouts(screenId)) {
+        if (layoutSupportForScreen(screenId) != LayoutSupport::Placement) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }

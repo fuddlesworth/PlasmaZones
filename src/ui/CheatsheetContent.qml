@@ -49,7 +49,7 @@ Item {
     /// the Scrolling group from surviving its own master switch.
     property bool scrollingAvailable: true
     /// Whether the bound screen's engine consumes user-selectable layouts
-    /// (IPlacementEngine::providesLayouts, pushed by the daemon). Gates the
+    /// (IPlacementEngine::layoutSupport, pushed by the daemon). Gates the
     /// rows tagged mode === "layouts": on a screen without the capability
     /// (scrolling) those shortcuts answer with a "not available" OSD, so
     /// advertising them here would be noise.
