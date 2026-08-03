@@ -96,8 +96,9 @@ public:
     }
 
     /// Bracket a BURST of windowOpened calls delivered together (the
-    /// adaptor's windowsOpenedBatch / deferred-open flush loops — daemon
-    /// bring-up re-announce and mode flips). An engine that applies geometry
+    /// adaptor's three dispatch loops: windowsOpenedBatch, the deferred-open
+    /// flush, and the parked-open replay — daemon bring-up re-announce and
+    /// mode flips). An engine that applies geometry
     /// per arrival may defer those applies until endArrivalBurst so a
     /// restore of an unchanged session resolves one final layout instead of
     /// N visible intermediates marching across the screen. Defaults are
