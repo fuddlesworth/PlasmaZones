@@ -49,6 +49,25 @@ PhosphorZones::AssignmentEntry::Mode Daemon::currentModeFor(const QString& scree
     return PhosphorZones::AssignmentEntry::Snapping;
 }
 
+bool Daemon::engineProvidesLayouts(const QString& screenId) const
+{
+    if (m_screenModeRouter) {
+        if (const auto* engine = m_screenModeRouter->engineFor(screenId)) {
+            return engine->providesLayouts();
+        }
+    }
+    // Only the null-ROUTER case (the shutdown window) reaches this line:
+    // engineFor's mode switch is exhaustive over ctor-checked engine
+    // pointers and never returns nullptr for a routed screen (the inner
+    // check above is cheap defence, not a contract). Fall back to true —
+    // same Snapping fallback as currentModeFor, and snap provides layouts.
+    // Note the three null-router fallbacks in this file deliberately
+    // differ: isAutotileScreen probes the live engine, currentModeFor
+    // answers Snapping, this answers true — each is the safe default for
+    // its own consumers.
+    return true;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation handlers — single code path per operation, dispatched through
 // ScreenModeRouter::engineFor() so there's no mode-branching in the daemon
@@ -257,9 +276,9 @@ void Daemon::handlePush()
         if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
-        // Autotile adapter's impl is a deliberate no-op — empty zones don't
-        // exist in autotile mode — so this shortcut is harmlessly absorbed
-        // on autotile screens instead of the daemon branching at entry.
+        // Off snapping, empty zones don't exist; both non-snap engines
+        // answer with a "push"/"not_supported" feedback emit (the policy
+        // the interface documents) instead of the daemon branching at entry.
         nav->pushToEmptyZone(ctx);
     }
 }
@@ -591,8 +610,11 @@ void Daemon::flushPendingSnapZoneRestores()
             zoneEntries.append(e);
         }
     }
-    // The float half was already emitted by the updateEngineScreens tail
-    // drain on every path that reaches here; clear wholesale regardless so a
+    // The EMITTABLE float half was already emitted by the updateEngineScreens
+    // tail drain on every path that reaches here; HELD float entries (the
+    // RestoreSentinel ones the drain re-queues) are deliberately dropped by
+    // this clear, per the drop policy documented at
+    // emitPendingSnapFloatRestoresForResnapBuffer. Clear wholesale so a
     // leftover entry can never be replayed by a later unrelated consumer.
     m_pendingSnapFloatRestores.clear();
     if (zoneEntries.isEmpty()) {

@@ -62,6 +62,15 @@ private Q_SLOTS:
         manager.start();
 
         AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
+        // Capability contract the daemon's layout-selection gates rest on:
+        // algorithm cards are autotile's picker entries, so the engine must
+        // override the interface's default-false providesLayouts. Asserted
+        // through the base pointer too — the daemon dispatches via
+        // IPlacementEngine*, and a dropped `override` with a shadowing
+        // non-virtual would pass the concrete check while the interface
+        // call reverted to false.
+        QVERIFY(engine.providesLayouts());
+        QVERIFY(static_cast<PhosphorEngine::IPlacementEngine*>(&engine)->providesLayouts());
         engine.setAutotileScreens({QStringLiteral("DP-1")});
         engine.setAlgorithm(QLatin1String("theater"));
         engine.windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));

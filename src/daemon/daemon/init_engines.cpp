@@ -204,6 +204,14 @@ void Daemon::initEnginesAndWiring()
         return StripZones::numberMapsForTiles(scroll->visibleTiles(screenId));
     });
 
+    // Engine layout-capability resolver for the layout picker / drag popup:
+    // routes through the router so the answer tracks the LIVE owning engine
+    // (a disabled scrolling assignment downgrades to snapping and keeps its
+    // layouts). Cleared alongside the scroll-zones provider in stop().
+    m_overlayService->setLayoutsProvidedResolver([this](const QString& screenId) {
+        return engineProvidesLayouts(screenId);
+    });
+
     // Autotile provider. setContextGapProvider is derived-only
     // (AutotileEngine); m_autotileEngine is held as the base
     // PlacementEngineBase, so use the derived `autotileEngine` pointer
@@ -453,6 +461,14 @@ void Daemon::initEnginesAndWiring()
         m_reconcileAssignmentsPending = true;
         QTimer::singleShot(0, this, [this]() {
             m_reconcileAssignmentsPending = false;
+            // A rule edit landing in the same event-loop turn as stop()
+            // leaves this single-shot queued past teardown; without the gate
+            // a non-empty diff would drive a full assignment-apply pass on a
+            // stopped daemon (m_layoutAdaptor is Qt-parented and outlives
+            // the per-sender connection sweep).
+            if (m_shuttingDown) {
+                return;
+            }
             reconcileActiveAssignments();
         });
     });

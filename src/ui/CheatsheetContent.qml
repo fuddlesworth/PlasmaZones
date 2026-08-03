@@ -12,12 +12,12 @@ import org.plasmazones.common as QFZCommon
  * Shortcut cheatsheet content — Item-rooted body hosted in
  * PassiveOverlayShell's cheatsheetSlot. Display-only: a centered card
  * listing every global shortcut grouped by category, filtered by the
- * tiling mode of the screen the sheet opened on.
+ * tiling mode and the layout capability of the screen the sheet opened on.
  *
  * Data arrives via the host slot's bindings (C++ pushes `shortcuts`,
- * `currentMode`, `autotileAvailable`, and `scrollingAvailable` onto
- * cheatsheetSlot; live mode switches re-push and the group filter
- * re-evaluates reactively).
+ * `currentMode`, `autotileAvailable`, `scrollingAvailable`, and
+ * `layoutsAvailable` onto cheatsheetSlot; live mode switches re-push and
+ * the group filter re-evaluates reactively).
  *
  * Keyboard: the shell surface is kbd-None, so Escape routes via the
  * daemon's dedicated ad-hoc grab (start.cpp); QML Shortcuts can never
@@ -29,9 +29,11 @@ Item {
     /// Catalog rows from ShortcutManager::cheatsheetModel(): one object per
     /// shortcut with id, label, category, categoryOrder, triggers (list of
     /// display strings), assigned (bool), mode
-    /// ("all"|"snapping"|"autotile"|"scrolling"), and description (translated
+    /// ("all"|"snapping"|"autotile"|"scrolling"|"layouts"), and description (translated
     /// plain-prose explanation for the row tooltip; empty when the action
-    /// needs none).
+    /// needs none). "layouts" is a capability tag rather than a fourth
+    /// tiling mode: currentMode can never equal it, and rows carrying it
+    /// are gated purely by layoutsAvailable, independent of currentMode.
     property var shortcuts: []
     /// Tiling mode of the screen the sheet opened on:
     /// "snapping" | "autotile" | "scrolling".
@@ -46,6 +48,12 @@ Item {
     /// refresh has already re-pushed the model — gating on the setting keeps
     /// the Scrolling group from surviving its own master switch.
     property bool scrollingAvailable: true
+    /// Whether the bound screen's engine consumes user-selectable layouts
+    /// (IPlacementEngine::providesLayouts, pushed by the daemon). Gates the
+    /// rows tagged mode === "layouts": on a screen without the capability
+    /// (scrolling) those shortcuts answer with a "not available" OSD, so
+    /// advertising them here would be noise.
+    property bool layoutsAvailable: true
     property string fontFamily: ""
     property real fontSizeScale: 1
 
@@ -59,7 +67,7 @@ Item {
     /// null. Sheet-level identity rather than a per-row bool so a second
     /// long-press on another row REPLACES the open tooltip instead of
     /// stacking a second one that nothing on a touch device would close.
-    property var latchedRow: null
+    property Item latchedRow: null
 
     signal dismissRequested
 
@@ -99,13 +107,15 @@ Item {
             return root.currentMode === "snapping";
         if (row.mode === "scrolling")
             return root.scrollingAvailable && root.currentMode === "scrolling";
+        if (row.mode === "layouts")
+            return root.layoutsAvailable;
         return true;
     }
 
     /// Rows regrouped into [{name, rows}] preserving the model's category
     /// order, with mode-inapplicable rows dropped. Recomputes reactively on
-    /// shortcuts / currentMode / autotileAvailable / scrollingAvailable
-    /// changes.
+    /// shortcuts / currentMode / autotileAvailable / scrollingAvailable /
+    /// layoutsAvailable changes.
     readonly property var groups: {
         var byCat = [];
         // Keyed on categoryOrder (identity), never on the translated display

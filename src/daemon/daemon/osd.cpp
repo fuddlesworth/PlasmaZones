@@ -128,8 +128,8 @@ void pushScrollingStripOsd(OverlayService* overlay, PhosphorScreens::ScreenManag
                            PhosphorI18n::tr("Scrolling", "tiling mode name"), zones,
                            static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId, false, false,
                            isSketch ? QStringLiteral("none") : QStringLiteral("all"), 1);
-    qCInfo(lcDaemon) << "Showing scrolling-mode strip preview OSD: screen=" << screenId << "tiles=" << zones.size()
-                     << "sketch=" << isSketch;
+    qCInfo(lcDaemon) << "Showing scrolling-mode strip preview OSD: screen=" << screenId << "tiles=" << tiles.size()
+                     << "zones=" << zones.size() << "sketch=" << isSketch;
 }
 
 } // namespace
@@ -301,6 +301,21 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
 
     // Fall back to text OSD
     showLockedOsd(screenId);
+}
+
+void Daemon::showLayoutsUnavailableOsd(const QString& screenId)
+{
+    // Logged ahead of the settings gate: with navigation OSDs off the
+    // refusal would otherwise be indistinguishable from a broken keybinding.
+    qCDebug(lcDaemon) << "Layout shortcut ignored — engine provides no layouts for screen" << screenId;
+    // Same gate as the navigationFeedback relay in signals.cpp — this is a
+    // navigation-style failure OSD, not a layout-switch OSD, so it follows
+    // the showNavigationOsd toggle rather than osdStyle (and, like the whole
+    // navigation-OSD family, it carries no shouldSuppressOsd gate).
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+        m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("not_supported"), QString(),
+                                            QString(), screenId);
+    }
 }
 
 void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity,
@@ -641,17 +656,21 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
             } else if (!PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-                // A scrolling screen sets neither flag here, but the
+                // A scrolling screen sets neither flag here; the
                 // includeManual fallback below (manualActive ||
-                // !autotileActive) still offers the MANUAL list for it —
-                // deliberately: picking a snap layout is the exit from
-                // scrolling mode (same policy as
-                // resolvePerScreenLayoutInclude in overlayservice.cpp).
-                // The Meta+Alt+[ / ] layout CYCLE inherits this and is
-                // therefore a one-way door out of scrolling (no cycle
-                // entry represents Scrolling; re-entry is via the Monitors
-                // page, a rule, or the mode-toggle shortcut) — an accepted
-                // trade-off, matching how autotile screens cycle too.
+                // !autotileActive) would still offer the MANUAL list, but
+                // that no longer reaches the user: the two entry points
+                // that consult this filter with a screen in hand — the
+                // layout cycle (handleCycleLayout) and the picker — are
+                // gated on engineProvidesLayouts() first, and the
+                // popup/picker list itself resolves through the
+                // capability-aware resolvePerScreenLayoutInclude in
+                // overlayservice.cpp. (Quick slots set the controller
+                // filter directly and layout lock touches no filter; both
+                // carry the same gate at their own call sites.) The old
+                // "manual list as the exit door out of scrolling" policy is
+                // gone; mode changes go through the Monitors page, a rule,
+                // or the mode-toggle shortcut.
                 manualActive = true;
             }
         } else {
@@ -752,6 +771,12 @@ void Daemon::syncModeFromAssignments()
     }
 
     updateLayoutFilter();
+    // Context switches (per-screen desktop, activity) and KCM applies all
+    // funnel through here without emitting layoutApplied/autotileApplied, so
+    // this is the one site that keeps an OPEN cheatsheet's mode filter and
+    // layouts capability current across them. Self-guarding: the refresh
+    // returns immediately while the sheet is hidden.
+    refreshCheatsheetIfVisible();
 }
 
 void Daemon::showDesktopSwitchOsd(const QString& activity)
@@ -1005,17 +1030,17 @@ void Daemon::showCheatsheetOnCursorScreen()
         m_overlayService->hideSnapAssist();
     }
 
-    const auto mode = currentModeFor(screenId);
-    const bool autotileAvailable = m_settings && m_settings->autotileEnabled();
-    const bool scrollingAvailable = m_settings && m_settings->scrollingEnabled();
-    m_overlayService->showCheatsheet(screenId, m_shortcutManager->cheatsheetModel(), cheatsheetModeString(mode),
-                                     autotileAvailable, scrollingAvailable);
+    const CheatsheetPushState push = cheatsheetPushStateFor(screenId);
+    m_overlayService->showCheatsheet(screenId, m_shortcutManager->cheatsheetModel(), push.modeString,
+                                     push.autotileAvailable, push.scrollingAvailable, push.layoutsAvailable);
 
-    // Bind Escape only if the sheet actually became visible — showCheatsheet
-    // bails on missing screen/shell/catalog, and the only releaser is
-    // cheatsheetDismissed, which never fires for an invisible sheet. Binding
-    // on a failed show would leak the Escape grab system-wide (same hazard
-    // the picker guards against).
+    // Bind Escape only on a successful show — showCheatsheet bails on
+    // missing screen/shell/catalog, and the sheet's own dismiss path is the
+    // intended releaser. (A grab bound on a failed show would in practice
+    // still be released by the next picker or snap-assist open, whose
+    // unconditional hideCheatsheet emits cheatsheetDismissed even for a
+    // hidden sheet; the guard just avoids a grab with no sheet in the
+    // meantime.)
     if (m_overlayService->isCheatsheetVisible()) {
         m_shortcutManager->registerAdhocShortcut(kCheatsheetDismissId, QKeySequence(Qt::Key_Escape),
                                                  PhosphorI18n::tr("Dismiss Shortcut Cheatsheet"), [this] {
@@ -1038,11 +1063,18 @@ void Daemon::refreshCheatsheetIfVisible()
     if (screenId.isEmpty()) {
         return;
     }
-    const auto mode = currentModeFor(screenId);
-    const bool autotileAvailable = m_settings && m_settings->autotileEnabled();
-    const bool scrollingAvailable = m_settings && m_settings->scrollingEnabled();
-    m_overlayService->refreshCheatsheet(m_shortcutManager->cheatsheetModel(), cheatsheetModeString(mode),
-                                        autotileAvailable, scrollingAvailable);
+    const CheatsheetPushState push = cheatsheetPushStateFor(screenId);
+    m_overlayService->refreshCheatsheet(m_shortcutManager->cheatsheetModel(), push.modeString, push.autotileAvailable,
+                                        push.scrollingAvailable, push.layoutsAvailable);
+}
+
+Daemon::CheatsheetPushState Daemon::cheatsheetPushStateFor(const QString& screenId) const
+{
+    // Single resolver for everything both cheatsheet push sites hand the
+    // overlay: show and refresh MUST agree (a divergence shows up as a sheet
+    // whose filter changes on refresh), so neither site open-codes the set.
+    return {cheatsheetModeString(currentModeFor(screenId)), m_settings && m_settings->autotileEnabled(),
+            m_settings && m_settings->scrollingEnabled(), engineProvidesLayouts(screenId)};
 }
 
 void Daemon::onCheatsheetDismissed()

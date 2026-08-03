@@ -481,6 +481,24 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
             ++it;
         }
     }
+    // Tab-strip teardown for every matching screen — the third step of the
+    // sweepStatelessScreenBookkeeping helper this function open-codes, and
+    // the one both sibling prunes get via that helper. Without it the dead
+    // screen never receives its "[]" tabStripsChanged, so the daemon's
+    // m_lastScrollTabStripsJson keeps the departed screen and every later
+    // enrichment tick re-pushes its strips into the overlay. Snapshot the
+    // matching ids first: clearTabStripsForScreen mutates the set.
+    const QSet<QString> tabStripScreens = m_screensWithTabStrips;
+    for (const QString& stripScreen : tabStripScreens) {
+        if (matches(stripScreen)) {
+            clearTabStripsForScreen(stripScreen);
+        }
+    }
+    // The payload cache can hold matching screens the latch set no longer
+    // names; sweep those too so nothing keyed on the dead output survives.
+    for (auto it = m_lastTabStripPayload.begin(); it != m_lastTabStripPayload.end();) {
+        it = matches(it.key()) ? m_lastTabStripPayload.erase(it) : std::next(it);
+    }
     m_context.removeScreensIf(matches);
     // A dead screen id must not keep feeding the hint-less shortcut paths
     // (autotile's twin clears the same way).

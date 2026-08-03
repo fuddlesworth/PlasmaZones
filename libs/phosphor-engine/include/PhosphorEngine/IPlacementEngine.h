@@ -57,13 +57,22 @@ class ICrossSurfaceResolver;
 /// is the same — the interface names the request and each engine fulfills
 /// it in its own terms.
 ///
-/// All methods are idempotent with respect to "no focused window" — each
-/// implementation emits navigation feedback with a sensible reason code
-/// when there's nothing to act on, rather than erroring out.
+/// The REQUIRED navigation intents are idempotent with respect to "no
+/// focused window" — each engine's implementation emits navigation
+/// feedback with a sensible reason code when there's nothing to act on,
+/// rather than erroring out. The OPTIONAL surface below does not share
+/// that promise: its defaults are deliberately silent no-ops.
 class PHOSPHORENGINE_EXPORT IPlacementEngine
 {
+protected:
+    IPlacementEngine() = default;
+
 public:
     virtual ~IPlacementEngine() = default;
+    // Polymorphic base: never copied or moved (every concrete engine is a
+    // QObject anyway; this makes slicing a compile error at the interface).
+    IPlacementEngine(const IPlacementEngine&) = delete;
+    IPlacementEngine& operator=(const IPlacementEngine&) = delete;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Screen ownership
@@ -156,13 +165,20 @@ public:
     /// Re-apply the current layout to all managed windows.
     virtual void reapplyLayout(const NavigationContext& ctx) = 0;
 
-    /// Snap every unmanaged window on the screen to the current layout.
+    /// Bring every unmanaged window on the screen back under this engine's
+    /// placement (zones for snap, the strip for scrolling). Stated
+    /// layout-neutrally on purpose: an engine without a layout concept
+    /// (providesLayouts() == false) still implements this intent.
     virtual void snapAllWindows(const NavigationContext& ctx) = 0;
 
     /// Cycle keyboard focus through managed windows.
     virtual void cycleFocus(bool forward, const NavigationContext& ctx) = 0;
 
-    /// Move the focused window to the first empty slot.
+    /// Move the focused window to the first empty slot. Engines whose
+    /// placement has no empty-slot concept answer with a
+    /// "push"/"not_supported" feedback emit rather than silence — the
+    /// shortcut must not read as broken (same policy the span default
+    /// documents above).
     virtual void pushToEmptyZone(const NavigationContext& ctx) = 0;
 
     /// Restore the focused window out of its managed state.
@@ -383,9 +399,10 @@ public:
     /// - Autotile: equivalent to isWindowTiled (floating windows excluded).
     /// - Scrolling: the window occupies a strip column (floating windows
     ///   excluded), same shape as autotile.
-    /// - Snap: a window assigned to a zone (including floated-in-zone).
+    /// - Snap: NOT implemented — SnapEngine keeps the inherited false.
     /// Callers that need a consistent cross-engine check for "engine owns
-    /// this window at all" should use isWindowTracked instead.
+    /// this window at all" should use isWindowTracked instead; that is also
+    /// the only correct check on a snap screen.
     virtual bool isWindowManaged(const QString& windowId) const
     {
         Q_UNUSED(windowId)
@@ -603,6 +620,25 @@ public:
     virtual void setInteractiveDragWindow(const QString& windowId)
     {
         Q_UNUSED(windowId)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPTIONAL: Layout capability (UI-facing; distinct from algorithm identity)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Whether this engine's placement is driven by user-selectable layouts
+    /// — zone layouts or autotile algorithm cards, the entries the layout
+    /// picker, drag layout popup, quick-layout slots and layout cycle
+    /// operate on. The daemon consults this per screen (via the router's
+    /// engineFor) to decide whether layout-selection UI and shortcuts are
+    /// meaningful there; on a screen whose engine returns false (scrolling:
+    /// the strip has no layout concept) it suppresses the picker/popup and
+    /// answers the layout shortcuts with a "not available" OSD instead of
+    /// falling back to snap-layout semantics. Default false: an engine must
+    /// opt in to being a layout consumer.
+    virtual bool providesLayouts() const
+    {
+        return false;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

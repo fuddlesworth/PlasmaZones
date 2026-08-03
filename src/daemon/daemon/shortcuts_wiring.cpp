@@ -77,6 +77,12 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "QuickLayout shortcut: no screen info";
             return;
         }
+        // Quick slots only exist for layout-consuming engines; a scrolling
+        // screen answers with feedback instead of resolving a snap slot.
+        if (!engineProvidesLayouts(screenId)) {
+            showLayoutsUnavailableOsd(screenId);
+            return;
+        }
         const PhosphorZones::AssignmentEntry::Mode mode = currentModeFor(screenId);
         const QString slotId = m_layoutManager->quickLayoutSlots(mode).value(number);
         if (slotId.isEmpty()) {
@@ -120,10 +126,11 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "PreviousLayout shortcut: no screen info";
             return;
         }
-        // Restart once a screen resolves — handleCycleLayout's own locked
-        // path still shows a locked-preview OSD, which counts as the
-        // dispatch this window throttles (unlike handleSpan's guards,
-        // which reject with no user-visible effect).
+        // Restart once a screen resolves — handleCycleLayout's own refusal
+        // paths (the layouts-unavailable OSD on a non-layout engine, and the
+        // locked-preview OSD on a locked screen) both count as the dispatch
+        // this window throttles (unlike handleSpan's guards, which reject
+        // with no user-visible effect).
         m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, false);
     });
@@ -138,10 +145,11 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "NextLayout shortcut: no screen info";
             return;
         }
-        // Restart once a screen resolves — handleCycleLayout's own locked
-        // path still shows a locked-preview OSD, which counts as the
-        // dispatch this window throttles (unlike handleSpan's guards,
-        // which reject with no user-visible effect).
+        // Restart once a screen resolves — handleCycleLayout's own refusal
+        // paths (the layouts-unavailable OSD on a non-layout engine, and the
+        // locked-preview OSD on a locked screen) both count as the dispatch
+        // this window throttles (unlike handleSpan's guards, which reject
+        // with no user-visible effect).
         m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, true);
     });
@@ -223,6 +231,13 @@ void Daemon::connectShortcutSignals()
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
         if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
+            return;
+        }
+        // The picker browses layouts, which this screen's engine does not
+        // consume (IPlacementEngine::providesLayouts) — feedback instead of
+        // offering the manual list as an exit door out of scrolling mode.
+        if (!engineProvidesLayouts(screenId)) {
+            showLayoutsUnavailableOsd(screenId);
             return;
         }
         // At most one Escape-consuming modal at a time — the cheatsheet's
@@ -346,6 +361,16 @@ void Daemon::connectShortcutSignals()
                 return;
             }
         }
+        // Capability re-check at APPLY time: the picker cannot open on a
+        // non-layout screen (gated at request time, and an empty list bails
+        // the show), but a KCM apply, rule reconcile or per-screen desktop
+        // switch can flip the bound screen into Scrolling while the picker
+        // sits open — this pick would then install a snap layout on a live
+        // scrolling screen, the exact state the request-time gate prevents.
+        if (!screenId.isEmpty() && !engineProvidesLayouts(screenId)) {
+            showLayoutsUnavailableOsd(screenId);
+            return;
+        }
         // Screen name was already set when the picker opened.
         if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
             return;
@@ -359,6 +384,12 @@ void Daemon::connectShortcutSignals()
         // See layoutPickerRequested above for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
         if (screenId.isEmpty() || !m_settings || !m_contextResolver) {
+            return;
+        }
+        // Layout lock pins a screen's layout choice — nothing to pin on a
+        // screen whose engine has no layout concept.
+        if (!engineProvidesLayouts(screenId)) {
+            showLayoutsUnavailableOsd(screenId);
             return;
         }
         // Read the live mode through the resolver's frozen snapshot so this

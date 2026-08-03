@@ -741,7 +741,8 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 // assertWindowOnScreen / handleScreenAdded / destroyAllWindowsForPhysicalScreen
 // / handleScreenRemoved) live in overlayservice/screens.cpp.
 
-OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude(const QString& screenId) const
+OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude(const QString& screenId,
+                                                                                 QString* resolvedIdOut) const
 {
     // Both buildLayoutsList (populates the popup) and visibleLayoutCount
     // (used by isNearTriggerEdge to size the keep-visible bar) go through
@@ -750,13 +751,32 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     // toggles (so the struct's in-class defaults never apply here); the
     // resolution below only narrows them per screen.
     LayoutIncludeFlags flags{m_includeManualLayouts, m_includeAutotileLayouts};
-    if (!m_layoutManager) {
-        return flags;
-    }
     const QString resolvedId = PhosphorScreens::ScreenIdentity::isConnectorName(screenId)
         ? PhosphorScreens::ScreenIdentity::idForName(screenId)
         : screenId;
-    if (resolvedId.isEmpty()) {
+    if (resolvedIdOut) {
+        // The id the include decision was made for — callers must build
+        // their layout lists with THIS id, or a connector-name caller gets
+        // its flags decided for one id and its rows for another.
+        *resolvedIdOut = resolvedId.isEmpty() ? screenId : resolvedId;
+    }
+    // Engine capability gate FIRST — ahead of the layout-manager guard,
+    // which the resolver does not need: a screen whose engine does not
+    // consume layouts (IPlacementEngine::providesLayouts — scrolling) gets
+    // no layout list at all, so the picker's show bails on the empty list.
+    // (The drag-time popup is already suppressed on engine-owned screens by
+    // WindowDragAdaptor's dragMoved gate; here that is defence in depth.)
+    // The daemon-injected resolver routes through
+    // ScreenModeRouter::engineFor, so a disabled/gated scrolling assignment
+    // correctly downgrades to snapping and keeps its manual list — the raw
+    // assignmentId check below cannot see that downgrade, which is why the
+    // resolver answers before it.
+    if (!resolvedId.isEmpty() && m_layoutsProvidedResolver && !m_layoutsProvidedResolver(resolvedId)) {
+        flags.manual = false;
+        flags.autotile = false;
+        return flags;
+    }
+    if (!m_layoutManager || resolvedId.isEmpty()) {
         return flags;
     }
     const QString assignmentId = m_layoutManager->assignmentIdForScreen(
@@ -765,10 +785,11 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
         flags.manual = false;
         flags.autotile = true;
     } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-        // Same flags as the snapping arm below — the branch exists to carry
-        // the policy, not to differ behaviourally: offer the manual list
-        // (picking one is the exit from scrolling mode) but no autotile
-        // cards; nothing is highlighted active (see activeLayoutIdForScreen).
+        // Unwired-resolver fallback only (the daemon injects the resolver at
+        // engine init, which answers first for live scrolling screens). Keep
+        // the manual list rather than guessing an empty one: without the
+        // capability answer this arm cannot distinguish a live scrolling
+        // screen from a stale assignment.
         flags.manual = true;
         flags.autotile = false;
     } else {
@@ -780,10 +801,14 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
 
 QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize autotilePreviewCanvas) const
 {
-    const auto inc = resolvePerScreenLayoutInclude(screenId);
+    // Gate and rows keyed on the SAME id: the include resolver hands back
+    // the id it decided for, so a connector-name caller cannot get flags
+    // for the identity id and rows for the raw name.
+    QString resolvedId;
+    const auto inc = resolvePerScreenLayoutInclude(screenId, &resolvedId);
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, m_algorithmRegistry, screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity,
-        inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_layoutManager, m_algorithmRegistry, resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity,
+        inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
         m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource,
         autotilePreviewCanvas);
@@ -815,11 +840,13 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
     // sum of both, inflating the row count and blowing barHeight up to
     // ~screen height. isNearTriggerEdge then kept the popup visible
     // wherever the cursor was during the drag.
-    const auto inc = resolvePerScreenLayoutInclude(screenId);
+    QString resolvedId;
+    const auto inc = resolvePerScreenLayoutInclude(screenId, &resolvedId);
     // Ordering doesn't affect count - skip custom order for performance.
+    // Same gate/rows id agreement as buildLayoutsList.
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, m_algorithmRegistry, screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity,
-        inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_layoutManager, m_algorithmRegistry, resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity,
+        inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
         m_settings && m_settings->filterLayoutsByAspectRatio(),
         /*customOrder=*/{}, m_autotileLayoutSource);
     return entries.size();

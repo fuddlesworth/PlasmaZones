@@ -158,6 +158,9 @@ public:
     void moveFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void swapFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void moveFocusedToPosition(int position, const PhosphorEngine::NavigationContext& ctx) override;
+    /// Zone spanning has no strip analogue; reports a "not_supported" span
+    /// OSD like AutotileEngine so the shortcut is not a silent press.
+    void spanFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx) override;
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
     void snapAllWindows(const PhosphorEngine::NavigationContext& ctx) override;
@@ -166,6 +169,14 @@ public:
     void restoreFocusedWindow(const PhosphorEngine::NavigationContext& ctx) override;
     void toggleFocusedFloat(const PhosphorEngine::NavigationContext& ctx) override;
 
+private:
+    /// Shared body of toggleFocusedFloat and restoreFocusedWindow: resolve
+    /// the focused window and toggle its float state, reporting the
+    /// no-window failure under @p failureAction so each verb's OSD carries
+    /// its own token ("float" vs "restore").
+    void toggleFocusedFloatAs(const PhosphorEngine::NavigationContext& ctx, const QString& failureAction);
+
+public:
     // ═══════════════════════════════════════════════════════════════════════
     // Scroll-specific vocabulary (concrete type; daemon reaches these via a
     // mode check + cast, per the IPlacementEngine extension policy)

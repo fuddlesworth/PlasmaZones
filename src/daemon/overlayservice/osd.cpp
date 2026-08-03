@@ -836,6 +836,12 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
     writeQmlProperty(osdSlot, QStringLiteral("zones"), zonesList);
 
+    // User overlay font settings: navigation OSDs do not route through
+    // pushLayoutOsdContent, so without this explicit write the slot keeps
+    // whatever the last layout-OSD show left there and the nav card ignores
+    // the user's family/scale entirely.
+    writeFontProperties(osdSlot, m_settings, /*includeLabelFontColor=*/false);
+
     // Stage d: resolve + push the OSD surface decoration. Navigation OSDs do
     // not route through pushLayoutOsdContent, so apply it explicitly here (same
     // decoration the layout-OSD paths get via pushLayoutOsdContent).
