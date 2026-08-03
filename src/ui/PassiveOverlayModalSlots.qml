@@ -265,6 +265,7 @@ Item {
         property string currentMode: "snapping"
         property bool autotileAvailable: true
         property bool scrollingAvailable: true
+        property bool layoutsAvailable: true
         // Card corner radius the surface decoration rounds to (see osdSlot).
         property real cardCornerRadius: Kirigami.Units.largeSpacing * 2
         property string fontFamily: ""
@@ -317,6 +318,7 @@ Item {
                 currentMode: cheatsheetSlot.currentMode
                 autotileAvailable: cheatsheetSlot.autotileAvailable
                 scrollingAvailable: cheatsheetSlot.scrollingAvailable
+                layoutsAvailable: cheatsheetSlot.layoutsAvailable
                 fontFamily: cheatsheetSlot.fontFamily
                 fontSizeScale: cheatsheetSlot.fontSizeScale
             }

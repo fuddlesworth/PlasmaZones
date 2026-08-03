@@ -49,6 +49,18 @@ PhosphorZones::AssignmentEntry::Mode Daemon::currentModeFor(const QString& scree
     return PhosphorZones::AssignmentEntry::Snapping;
 }
 
+bool Daemon::engineProvidesLayouts(const QString& screenId) const
+{
+    if (m_screenModeRouter) {
+        if (const auto* engine = m_screenModeRouter->engineFor(screenId)) {
+            return engine->providesLayouts();
+        }
+    }
+    // No router / unrouted screen — same Snapping fallback as currentModeFor,
+    // and snap provides layouts.
+    return true;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation handlers — single code path per operation, dispatched through
 // ScreenModeRouter::engineFor() so there's no mode-branching in the daemon

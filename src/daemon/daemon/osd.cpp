@@ -303,6 +303,17 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
     showLockedOsd(screenId);
 }
 
+void Daemon::showLayoutsUnavailableOsd(const QString& screenId)
+{
+    // Same gate as the navigationFeedback relay in signals.cpp — this is a
+    // navigation-style failure OSD, not a layout-switch OSD, so it follows
+    // the showNavigationOsd toggle rather than osdStyle.
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+        m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("not_supported"), QString(),
+                                            QString(), screenId);
+    }
+}
+
 void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity,
                                     DisabledReason reason)
 {
@@ -641,17 +652,17 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
             } else if (!PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-                // A scrolling screen sets neither flag here, but the
+                // A scrolling screen sets neither flag here; the
                 // includeManual fallback below (manualActive ||
-                // !autotileActive) still offers the MANUAL list for it —
-                // deliberately: picking a snap layout is the exit from
-                // scrolling mode (same policy as
-                // resolvePerScreenLayoutInclude in overlayservice.cpp).
-                // The Meta+Alt+[ / ] layout CYCLE inherits this and is
-                // therefore a one-way door out of scrolling (no cycle
-                // entry represents Scrolling; re-entry is via the Monitors
-                // page, a rule, or the mode-toggle shortcut) — an accepted
-                // trade-off, matching how autotile screens cycle too.
+                // !autotileActive) would still offer the MANUAL list, but
+                // that no longer reaches the user: every layout-selection
+                // entry point (cycle, picker, quick slots, layout lock) is
+                // gated on engineProvidesLayouts() before this filter is
+                // consulted, and the popup/picker list resolves through the
+                // capability-aware resolvePerScreenLayoutInclude in
+                // overlayservice.cpp. The old "manual list as the exit door
+                // out of scrolling" policy is gone; mode changes go through
+                // the Monitors page, a rule, or the mode-toggle shortcut.
                 manualActive = true;
             }
         } else {
@@ -1009,7 +1020,7 @@ void Daemon::showCheatsheetOnCursorScreen()
     const bool autotileAvailable = m_settings && m_settings->autotileEnabled();
     const bool scrollingAvailable = m_settings && m_settings->scrollingEnabled();
     m_overlayService->showCheatsheet(screenId, m_shortcutManager->cheatsheetModel(), cheatsheetModeString(mode),
-                                     autotileAvailable, scrollingAvailable);
+                                     autotileAvailable, scrollingAvailable, engineProvidesLayouts(screenId));
 
     // Bind Escape only if the sheet actually became visible — showCheatsheet
     // bails on missing screen/shell/catalog, and the only releaser is
@@ -1042,7 +1053,7 @@ void Daemon::refreshCheatsheetIfVisible()
     const bool autotileAvailable = m_settings && m_settings->autotileEnabled();
     const bool scrollingAvailable = m_settings && m_settings->scrollingEnabled();
     m_overlayService->refreshCheatsheet(m_shortcutManager->cheatsheetModel(), cheatsheetModeString(mode),
-                                        autotileAvailable, scrollingAvailable);
+                                        autotileAvailable, scrollingAvailable, engineProvidesLayouts(screenId));
 }
 
 void Daemon::onCheatsheetDismissed()

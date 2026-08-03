@@ -557,6 +557,13 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     if (!m_unifiedLayoutController) {
         return;
     }
+    // Layout cycling is meaningless on a screen whose engine has no layout
+    // concept (scrolling) — answer with feedback instead of applying a snap
+    // layout there (the old one-way-door-out-of-scrolling policy).
+    if (!engineProvidesLayouts(screenId)) {
+        showLayoutsUnavailableOsd(screenId);
+        return;
+    }
     m_unifiedLayoutController->setCurrentScreenName(screenId);
     if (isScreenLockedForLayoutChange(screenId)) {
         return;

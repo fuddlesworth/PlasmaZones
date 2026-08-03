@@ -29,7 +29,7 @@ Item {
 
     // ── Data properties ───────────────────────────────────────────────────
     property bool success: true
-    property string action: "" // one of the tokens handled by successMessage() / failureMessage(): "rotate", "move", "span", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "snap_assist", "snap_all", "swap_vs", "rotate_vs"
+    property string action: "" // one of the tokens handled by successMessage() / failureMessage(): "rotate", "move", "span", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "snap_assist", "snap_all", "swap_vs", "rotate_vs", "layout"
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/tiled/unfloated/overflow)
     property var zones: []
     property var highlightedZoneIds: [] // Zone IDs involved (target zones)
@@ -247,6 +247,13 @@ Item {
                 return i18n("Virtual screen rotation failed");
 
             return i18n("No virtual screens to rotate");
+        } else if (action === "layout") {
+            // Daemon-level gate: a layout-selection shortcut (picker, cycle,
+            // quick slot, layout lock) fired on a screen whose engine has no
+            // layout concept (IPlacementEngine::providesLayouts is false).
+            // Sole reason today is not_supported; the fallthrough keeps any
+            // future reason from rendering the generic "Failed".
+            return i18n("Layouts are not available in this mode");
         } else if (action === "focus_master")
             return i18n("No windows to focus");
         else if (action === "swap_master") {

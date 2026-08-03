@@ -77,6 +77,12 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "QuickLayout shortcut: no screen info";
             return;
         }
+        // Quick slots only exist for layout-consuming engines; a scrolling
+        // screen answers with feedback instead of resolving a snap slot.
+        if (!engineProvidesLayouts(screenId)) {
+            showLayoutsUnavailableOsd(screenId);
+            return;
+        }
         const PhosphorZones::AssignmentEntry::Mode mode = currentModeFor(screenId);
         const QString slotId = m_layoutManager->quickLayoutSlots(mode).value(number);
         if (slotId.isEmpty()) {
@@ -225,6 +231,13 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
             return;
         }
+        // The picker browses layouts, which this screen's engine does not
+        // consume (IPlacementEngine::providesLayouts) — feedback instead of
+        // offering the manual list as an exit door out of scrolling mode.
+        if (!engineProvidesLayouts(screenId)) {
+            showLayoutsUnavailableOsd(screenId);
+            return;
+        }
         // At most one Escape-consuming modal at a time — the cheatsheet's
         // dedicated Escape grab would key-conflict with the picker's shared
         // cancel-overlay grab (KGlobalAccel routes one action per key).
@@ -359,6 +372,12 @@ void Daemon::connectShortcutSignals()
         // See layoutPickerRequested above for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
         if (screenId.isEmpty() || !m_settings || !m_contextResolver) {
+            return;
+        }
+        // Layout lock pins a screen's layout choice — nothing to pin on a
+        // screen whose engine has no layout concept.
+        if (!engineProvidesLayouts(screenId)) {
+            showLayoutsUnavailableOsd(screenId);
             return;
         }
         // Read the live mode through the resolver's frozen snapshot so this

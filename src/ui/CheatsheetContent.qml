@@ -29,7 +29,7 @@ Item {
     /// Catalog rows from ShortcutManager::cheatsheetModel(): one object per
     /// shortcut with id, label, category, categoryOrder, triggers (list of
     /// display strings), assigned (bool), mode
-    /// ("all"|"snapping"|"autotile"|"scrolling"), and description (translated
+    /// ("all"|"snapping"|"autotile"|"scrolling"|"layouts"), and description (translated
     /// plain-prose explanation for the row tooltip; empty when the action
     /// needs none).
     property var shortcuts: []
@@ -46,6 +46,12 @@ Item {
     /// refresh has already re-pushed the model — gating on the setting keeps
     /// the Scrolling group from surviving its own master switch.
     property bool scrollingAvailable: true
+    /// Whether the bound screen's engine consumes user-selectable layouts
+    /// (IPlacementEngine::providesLayouts, pushed by the daemon). Gates the
+    /// rows tagged mode === "layouts": on a screen without the capability
+    /// (scrolling) those shortcuts answer with a "not available" OSD, so
+    /// advertising them here would be noise.
+    property bool layoutsAvailable: true
     property string fontFamily: ""
     property real fontSizeScale: 1
 
@@ -99,6 +105,8 @@ Item {
             return root.currentMode === "snapping";
         if (row.mode === "scrolling")
             return root.scrollingAvailable && root.currentMode === "scrolling";
+        if (row.mode === "layouts")
+            return root.layoutsAvailable;
         return true;
     }
 

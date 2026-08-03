@@ -119,10 +119,17 @@ CatalogMeta catalogMetaForId(const QString& id)
         // thing is still to show the key, because what fixes it is turning a
         // mode back on in settings, not a missing row.
         add(kIdToggleAutotile, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
-        add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
-        add(kIdNextLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
-        add(kIdLayoutPicker, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
-        add(kIdToggleLayoutLock, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
+        // "layouts" is a capability tag, not a mode name: the rows show
+        // whenever the bound screen's engine consumes user-selectable
+        // layouts (IPlacementEngine::providesLayouts, pushed to the sheet
+        // as layoutsAvailable). On a scrolling screen these keys answer
+        // with a "not available" OSD, so the sheet hides them there.
+        add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
+        add(kIdNextLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
+        add(kIdLayoutPicker, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
+        add(kIdToggleLayoutLock, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
+        // Resnap stays "all": it routes through the engine's reapplyLayout
+        // intent, which every engine implements (scrolling re-lays the strip).
         add(kIdResnapToNewLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
         // Mode-neutral sheet label: the registration description names zones
         // (System Settings lists it standalone), but the row is tagged "all"
@@ -287,7 +294,8 @@ CatalogMeta catalogMetaForId(const QString& id)
     // tests together instead of compiling clean and quietly dumping the whole
     // family into the "Other" bucket below.
     if (id.startsWith(QLatin1String(kQuickLayoutPrefix))) {
-        return {QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all"};
+        // Same capability tag as the enumerated Layouts rows above.
+        return {QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts"};
     }
     if (id.startsWith(QLatin1String(kSnapToZonePrefix))) {
         // Every engine implements moveFocusedToPosition: zone N in

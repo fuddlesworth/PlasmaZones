@@ -313,6 +313,11 @@ public:
     {
         return QStringLiteral("snap");
     }
+    /// Snap placement is driven by user-selectable zone layouts.
+    bool providesLayouts() const override
+    {
+        return true;
+    }
     void handoffReceive(const HandoffContext& ctx) override;
     void handoffRelease(const QString& windowId) override;
     QString screenForTrackedWindow(const QString& windowId) const override;

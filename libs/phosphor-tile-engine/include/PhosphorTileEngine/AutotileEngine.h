@@ -517,6 +517,12 @@ public:
     {
         return QStringLiteral("autotile");
     }
+    /// Autotile algorithms appear as cards in the layout picker / quick
+    /// slots, so this engine is a layout consumer too.
+    bool providesLayouts() const override
+    {
+        return true;
+    }
     void handoffReceive(const HandoffContext& ctx) override;
     void handoffRelease(const QString& windowId) override;
     QString screenForTrackedWindow(const QString& windowId) const override

@@ -221,6 +221,19 @@ public:
     {
         m_scrollZonesProvider = std::move(provider);
     }
+
+    /// Whether the engine owning a screen consumes user-selectable layouts
+    /// (IPlacementEngine::providesLayouts). Daemon-injected so the overlay
+    /// stays engine-agnostic; resolvePerScreenLayoutInclude answers "no
+    /// layouts at all" for a screen whose engine returns false (scrolling),
+    /// which empties the layout picker and the drag layout popup there.
+    /// Unset falls back to the assignment-based resolution. Same
+    /// clear-before-destroy contract as the other injected closures.
+    using LayoutsProvidedResolver = std::function<bool(const QString& screenId)>;
+    void setLayoutsProvidedResolver(LayoutsProvidedResolver resolver)
+    {
+        m_layoutsProvidedResolver = std::move(resolver);
+    }
     PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager;
@@ -409,15 +422,19 @@ public:
     // `autotileAvailable` / `scrollingAvailable` mirror the global feature
     // gates (when false the matching group hides regardless of mode — the
     // mode string alone lags the engine teardown on a disable).
+    // `layoutsAvailable` is the bound screen's engine capability
+    // (IPlacementEngine::providesLayouts): when false the catalog rows
+    // tagged "layouts" hide, because those shortcuts answer with a
+    // "not available" OSD on that screen.
     void showCheatsheet(const QString& screenId, const QVariantList& model, const QString& currentMode,
-                        bool autotileAvailable, bool scrollingAvailable);
+                        bool autotileAvailable, bool scrollingAvailable, bool layoutsAvailable);
     void hideCheatsheet() override;
     bool isCheatsheetVisible() const override;
     /// Re-push model/mode into an already-visible cheatsheet (live refilter
     /// on mode switch or rebind). No-op when hidden — the next show
     /// re-resolves everything anyway.
     void refreshCheatsheet(const QVariantList& model, const QString& currentMode, bool autotileAvailable,
-                           bool scrollingAvailable);
+                           bool scrollingAvailable, bool layoutsAvailable);
     /// Screen the visible cheatsheet is bound to; empty when hidden.
     QString cheatsheetScreenId() const;
 
@@ -761,6 +778,7 @@ private:
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
     ScrollZonesProvider m_scrollZonesProvider;
+    LayoutsProvidedResolver m_layoutsProvidedResolver;
     /// Borrowed from Daemon. stop() detaches this even when init never reached start().
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutManager =

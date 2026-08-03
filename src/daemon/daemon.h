@@ -340,6 +340,24 @@ private:
     PhosphorZones::AssignmentEntry::Mode currentModeFor(const QString& screenId) const;
 
     /**
+     * @brief Whether the engine owning @p screenId consumes user-selectable
+     * layouts (IPlacementEngine::providesLayouts). Gates the layout picker
+     * and the layout-selection shortcuts (cycle, quick slots, layout lock)
+     * so they neither assume snap semantics on a screen whose engine has no
+     * layout concept (scrolling) nor silently fall through to the manual
+     * layout list. Null router falls back to true — same Snapping fallback
+     * as currentModeFor.
+     */
+    bool engineProvidesLayouts(const QString& screenId) const;
+
+    /**
+     * @brief Failure OSD for a layout-selection shortcut pressed on a screen
+     * whose engine does not provide layouts. Honours the showNavigationOsd
+     * setting like the navigationFeedback relay in signals.cpp.
+     */
+    void showLayoutsUnavailableOsd(const QString& screenId);
+
+    /**
      * @brief Per-context disable cascade gate for navigation shortcuts.
      *
      * Returns true when the handler should silently no-op — either the

@@ -707,6 +707,9 @@ void Daemon::stop()
     // clear-before-teardown contract its siblings below rely on.
     if (m_overlayService) {
         m_overlayService->setScrollZonesProvider({});
+        // Same contract: the layouts-provided resolver captures `this` and
+        // reads the router, which is reset before the engines below.
+        m_overlayService->setLayoutsProvidedResolver({});
     }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.

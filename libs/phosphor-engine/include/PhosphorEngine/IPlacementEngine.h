@@ -554,6 +554,21 @@ public:
     // OPTIONAL: Algorithm / mode identity (override if engine has switchable algorithms)
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// Whether this engine's placement is driven by user-selectable layouts
+    /// — zone layouts or autotile algorithm cards, the entries the layout
+    /// picker, drag layout popup, quick-layout slots and layout cycle
+    /// operate on. The daemon consults this per screen (via the router's
+    /// engineFor) to decide whether layout-selection UI and shortcuts are
+    /// meaningful there; on a screen whose engine returns false (scrolling:
+    /// the strip has no layout concept) it suppresses the picker/popup and
+    /// answers the layout shortcuts with a "not available" OSD instead of
+    /// falling back to snap-layout semantics. Default false: an engine must
+    /// opt in to being a layout consumer.
+    virtual bool providesLayouts() const
+    {
+        return false;
+    }
+
     virtual QString algorithmId() const
     {
         return {};

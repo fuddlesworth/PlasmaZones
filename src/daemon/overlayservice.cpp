@@ -759,16 +759,29 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     if (resolvedId.isEmpty()) {
         return flags;
     }
+    // Engine capability gate: a screen whose engine does not consume layouts
+    // (IPlacementEngine::providesLayouts — scrolling) gets no layout list at
+    // all, so the picker bails and the drag popup renders empty there. The
+    // daemon-injected resolver routes through ScreenModeRouter::engineFor, so
+    // a disabled/gated scrolling assignment correctly downgrades to snapping
+    // and keeps its manual list — the raw assignmentId check below cannot see
+    // that downgrade, which is why the resolver is consulted first.
+    if (m_layoutsProvidedResolver && !m_layoutsProvidedResolver(resolvedId)) {
+        flags.manual = false;
+        flags.autotile = false;
+        return flags;
+    }
     const QString assignmentId = m_layoutManager->assignmentIdForScreen(
         resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity);
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         flags.manual = false;
         flags.autotile = true;
     } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-        // Same flags as the snapping arm below — the branch exists to carry
-        // the policy, not to differ behaviourally: offer the manual list
-        // (picking one is the exit from scrolling mode) but no autotile
-        // cards; nothing is highlighted active (see activeLayoutIdForScreen).
+        // Unwired-resolver fallback only (the daemon injects the resolver at
+        // engine init, which answers first for live scrolling screens). Keep
+        // the manual list rather than guessing an empty one: without the
+        // capability answer this arm cannot distinguish a live scrolling
+        // screen from a stale assignment.
         flags.manual = true;
         flags.autotile = false;
     } else {
