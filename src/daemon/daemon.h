@@ -171,18 +171,21 @@ public:
 
     // Shortcut cheatsheet overlay (impls in daemon/osd.cpp).
     /// Toggle the cheatsheet on the cursor's screen. Show path resolves the
-    /// screen's tiling mode + the shortcut catalog and pushes both into the
+    /// screen's tiling mode, the two feature gates, the engine layouts
+    /// capability and the shortcut catalog, and pushes them all into the
     /// overlay (daemon-mediated push), dismisses any other Escape-consuming
     /// modal first (picker / snap assist — at most one Escape grab consumer
     /// at a time), then binds the sheet's dedicated Escape ad-hoc grab.
     void toggleCheatsheet();
-    /// Re-push catalog + mode into a visible cheatsheet — live refilter on
-    /// mode switches, rebinds, and the autotile feature gate. No-op when
-    /// hidden. Mode is re-resolved for the screen the sheet is BOUND to
-    /// (not the cursor's current screen).
+    /// Re-push catalog + mode + gates + layouts capability into a visible
+    /// cheatsheet — live refilter on mode switches, rebinds, feature-gate
+    /// flips and context switches. No-op when hidden. Everything is
+    /// re-resolved for the screen the sheet is BOUND to (not the cursor's
+    /// current screen).
     void refreshCheatsheetIfVisible();
     /// Release the cheatsheet's Escape ad-hoc grab. Connected to
-    /// OverlayService::cheatsheetDismissed in start.cpp.
+    /// OverlayService::cheatsheetDismissed in shortcuts_wiring.cpp
+    /// (connectShortcutSignals).
     void onCheatsheetDismissed();
 
 private:
@@ -190,6 +193,16 @@ private:
     /// per-screen mode; dismiss sibling Escape-consuming modals; show and
     /// bind the Escape grab. Only called from toggleCheatsheet().
     void showCheatsheetOnCursorScreen();
+    /// Everything both cheatsheet push sites hand the overlay, resolved in
+    /// one place so show and refresh cannot drift apart.
+    struct CheatsheetPushState
+    {
+        QString modeString;
+        bool autotileAvailable = false;
+        bool scrollingAvailable = false;
+        bool layoutsAvailable = false;
+    };
+    CheatsheetPushState cheatsheetPushStateFor(const QString& screenId) const;
     /**
      * @brief Show layout OSD for an autotile algorithm (visual zone preview)
      *
@@ -342,11 +355,14 @@ private:
     /**
      * @brief Whether the engine owning @p screenId consumes user-selectable
      * layouts (IPlacementEngine::providesLayouts). Gates the layout picker
-     * and the layout-selection shortcuts (cycle, quick slots, layout lock)
-     * so they neither assume snap semantics on a screen whose engine has no
-     * layout concept (scrolling) nor silently fall through to the manual
-     * layout list. Null router falls back to true — same Snapping fallback
-     * as currentModeFor.
+     * and the layout-selection shortcuts (cycle, quick slots, layout lock),
+     * feeds the OverlayService's injected LayoutsProvidedResolver (the
+     * picker/drag-popup layout lists) and the cheatsheet's layouts-row
+     * filter — so no surface assumes snap semantics on a screen whose
+     * engine has no layout concept (scrolling) or falls through to the
+     * manual layout list. Only a null ROUTER falls back to true (the
+     * shutdown window; same Snapping fallback as currentModeFor) —
+     * engineFor itself never returns null for a routed screen.
      */
     bool engineProvidesLayouts(const QString& screenId) const;
 
@@ -533,6 +549,12 @@ private:
      * toggle instead of per-window D-Bus chatter. Zone-snapped windows are
      * already handled by `SnapAdaptor::resnapCurrentAssignments`.
      *
+     * @param excludeWindows Window ids to leave out of the entries (already
+     *        handled elsewhere in the calling flow).
+     * @param desktop,activity Together restrict to ONE context: when desktop
+     *        is -1 BOTH are ignored (any context, activity included); when
+     *        desktop >= 0 the saved key must match both exactly, so an empty
+     *        activity selects the no-activity context, not every activity.
      * @param onlyScreenId When non-empty, restrict to that screen's saved
      *        orders — the per-screen toggle must not emit restores for
      *        windows still tiled on other screens.

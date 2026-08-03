@@ -42,6 +42,7 @@
 
 #include <PhosphorShortcuts/IBackend.h>
 
+#include <QHash>
 #include <QKeySequence>
 #include <QMetaObject>
 #include <QMetaProperty>
@@ -187,6 +188,44 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("These registered scrolling chords are missing from the cheatsheet "
                                            "catalog, so they bind but never appear in Settings or on the sheet: %1")
                                 .arg(uncatalogued.join(QStringLiteral(", ")))));
+    }
+
+    /// Pins the layout-capability tag split the daemon's engineProvidesLayouts
+    /// gates rely on: the four layout-selection ids plus the quick-layout
+    /// digit family carry mode "layouts" (hidden on a non-layout screen),
+    /// while the two engine-routed layout-group rows stay "all" (Reapply
+    /// routes through reapplyLayout and Arrange All through snapAllWindows,
+    /// which every engine implements). A silent retag in either direction
+    /// would make the sheet advertise a refusing key or hide a working one.
+    void layoutCapabilityTagsMatchTheGates()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings(nullptr);
+        ShortcutManager manager(&settings);
+        manager.setBackendForTesting(std::make_unique<SilentBackend>());
+        manager.registerShortcuts();
+
+        const QSet<QString> expectLayouts{QStringLiteral("previous_layout"), QStringLiteral("next_layout"),
+                                          QStringLiteral("layout_picker"), QStringLiteral("toggle_layout_lock"),
+                                          QStringLiteral("quick_layout_1")};
+        const QSet<QString> expectAll{QStringLiteral("resnap_to_new_layout"), QStringLiteral("snap_all_windows")};
+
+        QHash<QString, QString> modeById;
+        const QVariantList rows = manager.cheatsheetModel();
+        for (const QVariant& v : rows) {
+            const QVariantMap row = v.toMap();
+            modeById.insert(row.value(QStringLiteral("id")).toString(), row.value(QStringLiteral("mode")).toString());
+        }
+        // The quick-layout family compresses into one row keyed by its first
+        // member, so quick_layout_1 stands in for the whole digit family.
+        for (const QString& id : expectLayouts) {
+            QVERIFY2(modeById.contains(id), qPrintable(QStringLiteral("No cheatsheet row for %1").arg(id)));
+            QCOMPARE(modeById.value(id), QStringLiteral("layouts"));
+        }
+        for (const QString& id : expectAll) {
+            QVERIFY2(modeById.contains(id), qPrintable(QStringLiteral("No cheatsheet row for %1").arg(id)));
+            QCOMPARE(modeById.value(id), QStringLiteral("all"));
+        }
     }
 };
 

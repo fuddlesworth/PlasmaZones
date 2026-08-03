@@ -141,7 +141,8 @@ Item {
         property var layouts: []
         property string activeLayoutId: ""
         property real screenAspectRatio: 16 / 9
-        // Card corner radius the surface decoration rounds to (see osdSlot).
+        // Card corner radius the surface decoration rounds to (see osdSlot
+        // in PassiveOverlayShell.qml).
         property real cardCornerRadius: Kirigami.Units.largeSpacing * 2
         property bool globalAutoAssign: false
         property bool locked: false
@@ -265,8 +266,12 @@ Item {
         property string currentMode: "snapping"
         property bool autotileAvailable: true
         property bool scrollingAvailable: true
+        // Engine capability of the bound screen (IPlacementEngine::
+        // providesLayouts), pushed per show and re-pushed on refresh; gates
+        // the rows the catalog tags mode === "layouts".
         property bool layoutsAvailable: true
-        // Card corner radius the surface decoration rounds to (see osdSlot).
+        // Card corner radius the surface decoration rounds to (see osdSlot
+        // in PassiveOverlayShell.qml).
         property real cardCornerRadius: Kirigami.Units.largeSpacing * 2
         property string fontFamily: ""
         property real fontSizeScale: 1

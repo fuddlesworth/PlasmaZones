@@ -126,10 +126,11 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "PreviousLayout shortcut: no screen info";
             return;
         }
-        // Restart once a screen resolves — handleCycleLayout's own locked
-        // path still shows a locked-preview OSD, which counts as the
-        // dispatch this window throttles (unlike handleSpan's guards,
-        // which reject with no user-visible effect).
+        // Restart once a screen resolves — handleCycleLayout's own refusal
+        // paths (the layouts-unavailable OSD on a non-layout engine, and the
+        // locked-preview OSD on a locked screen) both count as the dispatch
+        // this window throttles (unlike handleSpan's guards, which reject
+        // with no user-visible effect).
         m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, false);
     });
@@ -144,10 +145,11 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "NextLayout shortcut: no screen info";
             return;
         }
-        // Restart once a screen resolves — handleCycleLayout's own locked
-        // path still shows a locked-preview OSD, which counts as the
-        // dispatch this window throttles (unlike handleSpan's guards,
-        // which reject with no user-visible effect).
+        // Restart once a screen resolves — handleCycleLayout's own refusal
+        // paths (the layouts-unavailable OSD on a non-layout engine, and the
+        // locked-preview OSD on a locked screen) both count as the dispatch
+        // this window throttles (unlike handleSpan's guards, which reject
+        // with no user-visible effect).
         m_cycleLayoutDebounce.restart();
         handleCycleLayout(screenId, true);
     });
@@ -358,6 +360,16 @@ void Daemon::connectShortcutSignals()
                 showLockedPreviewOsd(screenId);
                 return;
             }
+        }
+        // Capability re-check at APPLY time: the picker cannot open on a
+        // non-layout screen (gated at request time, and an empty list bails
+        // the show), but a KCM apply, rule reconcile or per-screen desktop
+        // switch can flip the bound screen into Scrolling while the picker
+        // sits open — this pick would then install a snap layout on a live
+        // scrolling screen, the exact state the request-time gate prevents.
+        if (!screenId.isEmpty() && !engineProvidesLayouts(screenId)) {
+            showLayoutsUnavailableOsd(screenId);
+            return;
         }
         // Screen name was already set when the picker opened.
         if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {

@@ -4,8 +4,11 @@
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
+#include <PhosphorEngine/WindowRegistry.h>
 
 #include "scrollenginelogging.h"
+
+#include <algorithm>
 
 namespace PhosphorScrollEngine {
 
@@ -97,6 +100,10 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
     }
     const int h = horizontalDelta(direction);
     const int v = verticalDelta(direction);
+    // Captured pre-op like the sibling verbs (move/swap/cycle): ctx.windowId
+    // can be empty on a screen-hinted press, and the feedback's source slot
+    // should name the window focus is leaving, not whatever the caller knew.
+    const QString focusedBefore = state->strip().activeWindowId();
     const bool moved =
         (h != 0) ? state->strip().focusAdjacentColumn(h, params) : (v != 0 && state->strip().focusAdjacentTile(v));
     if (moved) {
@@ -111,7 +118,7 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
         Q_EMIT placementChanged(screen);
         // Success carries the direction as the reason — the navigation OSD
         // derives its arrow from it (autotile fills the same slot).
-        Q_EMIT navigationFeedback(true, action, direction, ctx.windowId, state->strip().activeWindowId(), screen);
+        Q_EMIT navigationFeedback(true, action, direction, focusedBefore, state->strip().activeWindowId(), screen);
     } else {
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
     }
@@ -240,9 +247,12 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         }
         return true;
     }
-    // Scroll→scroll crossing: migrate between strips ourselves. The imminent
-    // output changes are daemon-owned; arm the effect's one-shot BEFORE the
-    // geometry lands so the reactive close/open re-issue is skipped.
+    // Scroll→scroll crossing: migrate between strips ourselves. The effect's
+    // one-shot is armed inside each insert-success arm below — after the
+    // strip accepted the window but before applyLayout issues the geometry —
+    // so a refusal can never leave a stale marker armed to swallow the
+    // window's next genuine outputChanged (the ordering rule
+    // NavigationController.cpp documents for the autotile twin).
     const PhosphorEngine::PlacementStateKey sourceKey = currentKeyForScreen(screenId);
     const PhosphorEngine::PlacementStateKey targetKey = currentKeyForScreen(target);
     ScrollState* targetState = stateForKey(targetKey, true);
@@ -251,6 +261,24 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     }
     const ScrollLayoutParams sourceParams = layoutParamsForScreen(screenId);
     const ScrollLayoutParams targetParams = layoutParamsForScreen(target);
+
+    // All-or-nothing guard: the insert primitives' only reachable refusal for
+    // this path is "the strip already contains the window" (the positional
+    // fallback cannot fail any other way for a non-empty id), and that is a
+    // double-tracking inconsistency best refused BEFORE the source strip is
+    // mutated. With this check ahead of takeWindow, the refusal arms below
+    // are pure defence and a crossing either completes or leaves both strips
+    // untouched.
+    if (targetState->strip().containsWindow(windowId)) {
+        // Double-tracking (one window in two current-context strips) is a
+        // state corruption with no locally-knowable correct side; refuse
+        // and surface it rather than guessing which copy is stale. The old
+        // mutate-then-refuse shape "healed" it only by untracking the
+        // window entirely, which is not a repair.
+        qCWarning(lcScrollEngine) << "moveActiveWindowAcrossBoundary: target strip already holds" << windowId
+                                  << "— refusing before mutation";
+        return false;
+    }
 
     // Swap partner: the target's entry-edge window trades into the focused
     // window's vacated slot. Resolved BEFORE anything moves. A STACKED
@@ -263,6 +291,13 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     StackSlot partnerLandingSlot;
     if (swap) {
         partner = entryWindowForCrossing(target, direction);
+        // Same all-or-nothing guard for the partner leg: refuse the whole
+        // swap before anything moves rather than migrating one side.
+        if (!partner.isEmpty() && state->strip().containsWindow(partner)) {
+            qCWarning(lcScrollEngine) << "moveActiveWindowAcrossBoundary: source strip already holds swap partner"
+                                      << partner << "— refusing before mutation";
+            return false;
+        }
         partnerLanding = state->strip().columnOfWindow(windowId);
         partnerLandingSlot = stackSlotOf(state->strip(), windowId);
     }
@@ -281,7 +316,6 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         windowDisplay = state->strip().columns().at(sourceColIdx).display;
     }
     state->strip().takeWindow(windowId, sourceParams);
-    Q_EMIT windowOutputMoveExpected(windowId, target);
 
     // Entering from the facing edge: moving right arrives as the target's
     // first column, moving left as its last — unless it takes the swap
@@ -304,7 +338,6 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
             partnerDisplay = targetState->strip().columns().at(partnerColIdx).display;
         }
         targetState->strip().takeWindow(partner, targetParams);
-        Q_EMIT windowOutputMoveExpected(partner, screenId);
     }
     bool moverInserted = false;
     if (moverLandingSlot.tileIndex >= 0) {
@@ -318,6 +351,9 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
             targetState->strip().insertWindowAt(columnIdx, windowId, windowWidth, windowDisplay, targetParams);
     }
     if (moverInserted) {
+        // Arm the effect's one-shot only for a crossing that actually
+        // happened; applyLayout below is the geometry apply it must precede.
+        Q_EMIT windowOutputMoveExpected(windowId, target);
         targetState->strip().setWindowMinimumSize(windowId, windowMinSize.width(), windowMinSize.height());
         targetState->strip().setWindowHeightIntent(windowId, windowHeight);
         targetState->strip().focusWindow(windowId, targetParams);
@@ -352,6 +388,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
                                                             partnerDisplay, sourceParams);
         }
         if (partnerInserted) {
+            Q_EMIT windowOutputMoveExpected(partner, screenId); // same marker rule as the mover's arm
             state->strip().setWindowMinimumSize(partner, partnerMinSize.width(), partnerMinSize.height());
             state->strip().setWindowHeightIntent(partner, partnerHeight);
             m_states.setKeyForWindow(partner, sourceKey);
@@ -365,7 +402,11 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
                                       << "on" << screenId;
         }
     }
-    m_activeScreen = target;
+    if (moverInserted) {
+        // Only a completed crossing moves the engine's active-screen hint;
+        // on the defensive refusal path the user's focus never left source.
+        m_activeScreen = target;
+    }
 
     applyLayout(screenId, false);
     applyLayout(target, true);
@@ -541,7 +582,11 @@ void ScrollEngine::rotateWindows(bool clockwise, const PhosphorEngine::Navigatio
     }
     const int rotated = state->strip().rotateVisibleColumns(clockwise, params);
     if (rotated < 2) {
-        // Fewer than two visible columns: nothing meaningfully rotates.
+        // `rotated` is a TILE count: 0 when fewer than two visible columns
+        // exist (the strip is untouched), and the tiles across the visible
+        // columns otherwise. Every visible column holds at least one tile
+        // (empty columns are removed on their last take), so < 2 here means
+        // the no-op arm — nothing meaningfully rotated.
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
         return;
     }
@@ -575,21 +620,38 @@ void ScrollEngine::snapAllWindows(const PhosphorEngine::NavigationContext& ctx)
     const QString screen = resolveOperationScreen(ctx.screenId);
     ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false);
     if (!state) {
+        // A screen with no strip state has nothing to pull; say so rather
+        // than staying silent (the snap path's empty candidate walk reports
+        // the same reason).
+        Q_EMIT navigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("no_unsnapped_windows"),
+                                  ctx.windowId, QString(), screen);
         return;
     }
-    // Same feedback contract as the snap path (snaphandler.cpp): nothing to
-    // pull → the shared "snap_all"/"no_unsnapped_windows" failure OSD; a
+    // Feedback contract shared with the snap path (snaphandler.cpp): nothing
+    // to pull → the "snap_all"/"no_unsnapped_windows" failure OSD; a
     // successful pull needs no OSD — the windows visibly moving is the
-    // feedback. A no-strip-state screen stays silent above, matching snap's
-    // missing-screen behaviour.
-    const QStringList floating = state->floatingWindows();
-    if (floating.isEmpty()) {
+    // feedback. Like the snap handler's candidate walk, MINIMIZED floats are
+    // not candidates: the daemon models minimize as a float, so m_floating
+    // holds them, and pulling one would materialise a hidden window as a
+    // strip tile. The registry's isMinimized is re-pushed on every
+    // minimizedChanged edge; an unknown value counts as visible so a window
+    // the compositor never reported on is still pulled (the pre-filter
+    // behaviour).
+    QStringList candidates = state->floatingWindows();
+    if (m_windowRegistry) {
+        candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
+                                        [this](const QString& id) {
+                                            return m_windowRegistry->isMinimized(id);
+                                        }),
+                         candidates.end());
+    }
+    if (candidates.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("no_unsnapped_windows"),
                                   ctx.windowId, QString(), screen);
         return;
     }
     bool any = false;
-    for (const QString& windowId : floating) {
+    for (const QString& windowId : candidates) {
         // Batched: one relayout + one placementChanged for the whole pull,
         // not N (each per-window call would relayout the strip again).
         any = unfloatWindowInternal(state, windowId, screen, /*applyAfter=*/false) || any;
@@ -615,6 +677,12 @@ void ScrollEngine::cycleFocus(bool forward, const PhosphorEngine::NavigationCont
     const QStringList order = state->strip().windowsInOrder();
     const QString active = state->strip().activeWindowId();
     int idx = order.indexOf(active);
+    // Active window absent from the order (untracked focus): forward's first
+    // step from -1 already lands on entry 0; backward from -1 would land on
+    // n-2, skipping the last entry — start it at 0 so it lands on n-1.
+    if (idx < 0 && !forward) {
+        idx = 0;
+    }
     for (int step = 0; step < order.size(); ++step) {
         idx = (idx + (forward ? 1 : -1) + order.size()) % order.size();
         if (!state->strip().isWindowMinimized(order.at(idx)) && state->strip().focusWindow(order.at(idx), params)) {
@@ -633,28 +701,53 @@ void ScrollEngine::cycleFocus(bool forward, const PhosphorEngine::NavigationCont
 
 void ScrollEngine::pushToEmptyZone(const PhosphorEngine::NavigationContext& ctx)
 {
+    // Resolved like every other verb's feedback screen — the raw ctx id can
+    // be empty and would push the OSD to the fallback output.
     Q_EMIT navigationFeedback(false, QStringLiteral("push"), QStringLiteral("not_supported"), ctx.windowId, QString(),
-                              ctx.screenId);
+                              resolveOperationScreen(ctx.screenId));
+}
+
+void ScrollEngine::spanFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx)
+{
+    // Zone spanning is a snap-mode concept with no strip analogue; report it
+    // like AutotileEngine does so the shortcut is not a silent press.
+    Q_UNUSED(direction)
+    Q_EMIT navigationFeedback(false, QStringLiteral("span"), QStringLiteral("not_supported"), ctx.windowId, QString(),
+                              resolveOperationScreen(ctx.screenId));
 }
 
 void ScrollEngine::restoreFocusedWindow(const PhosphorEngine::NavigationContext& ctx)
 {
     // "Restore out of the managed state" — in scrolling terms, float it.
-    toggleFocusedFloat(ctx);
+    // Delegating to the TOGGLE (so an already-floating window re-tiles) is
+    // the shared convention with AutotileEngine's restoreFocusedWindow; do
+    // not change it in one engine alone. The failure token is per-verb: a
+    // "Restore" press with no window must report action "restore", not the
+    // delegate's "float".
+    toggleFocusedFloatAs(ctx, QStringLiteral("restore"));
 }
 
 void ScrollEngine::toggleFocusedFloat(const PhosphorEngine::NavigationContext& ctx)
 {
+    toggleFocusedFloatAs(ctx, QStringLiteral("float"));
+}
+
+void ScrollEngine::toggleFocusedFloatAs(const PhosphorEngine::NavigationContext& ctx, const QString& failureAction)
+{
+    const QString screen = resolveOperationScreen(ctx.screenId);
     QString windowId = ctx.windowId;
     if (windowId.isEmpty()) {
-        const QString screen = resolveOperationScreen(ctx.screenId);
         if (ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false)) {
             windowId = state->strip().activeWindowId();
         }
     }
-    if (!windowId.isEmpty()) {
-        toggleWindowFloat(windowId, ctx.screenId);
+    if (windowId.isEmpty()) {
+        // Interface contract (IPlacementEngine.h): a no-focused-window press
+        // answers with feedback rather than silence.
+        Q_EMIT navigationFeedback(false, failureAction, QStringLiteral("no_window"), QString(), QString(), screen);
+        return;
     }
+    toggleWindowFloat(windowId, ctx.screenId);
 }
 
 // ── Scroll-specific vocabulary ──────────────────────────────────────────────

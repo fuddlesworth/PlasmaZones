@@ -439,8 +439,11 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
 
 void AutotileEngine::snapAllWindows(const NavigationContext& ctx)
 {
-    // Autotile has no distinct "snap all" — retile picks up every window
-    // the engine is tracking and inserts any new ones into the layout.
+    // Autotile has no distinct "snap all": a retile re-lays every TILED
+    // window. Deliberately narrower than the other engines' interpretation —
+    // user/rule floats stay floating (only overflow floats are recovered,
+    // by retile's recoverIfRoom pass); pulling every float back in would be
+    // a semantic change to autotile floating that needs its own decision.
     retile(ctx.screenId);
 }
 
@@ -469,11 +472,14 @@ void AutotileEngine::cycleFocus(bool forward, const NavigationContext& ctx)
     m_navigation->focusInDirection(dir, QStringLiteral("cycle"), canonicalizeForLookup(ctx.windowId));
 }
 
-void AutotileEngine::pushToEmptyZone(const NavigationContext& /*ctx*/)
+void AutotileEngine::pushToEmptyZone(const NavigationContext& ctx)
 {
     // Autotile has no concept of empty zones — every tracked window is
-    // placed by the layout algorithm. Deliberate no-op so the shortcut
-    // becomes a harmless press in autotile mode.
+    // placed by the layout algorithm. Report it like span does (and like
+    // the scroll engine's push): a silent shortcut reads as broken, and
+    // IPlacementEngine documents the feedback policy for this intent.
+    Q_EMIT navigationFeedback(false, QStringLiteral("push"), QStringLiteral("not_supported"), ctx.windowId, QString(),
+                              ctx.screenId);
 }
 
 void AutotileEngine::restoreFocusedWindow(const NavigationContext& ctx)

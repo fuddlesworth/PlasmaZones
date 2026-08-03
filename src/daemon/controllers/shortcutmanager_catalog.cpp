@@ -46,13 +46,19 @@ using namespace ShortcutIds;
 //    the directional move/focus/swap quads, rotate, the cycle pair, restore
 //    size, the snap-to-zone digits (moveFocusedToPosition addresses
 //    zones in snapping, layout slots in autotile, visible tile slots in
-//    scrolling), the quick-layout digits, and the virtual-screen swap and
-//    rotate family (virtual screens exist in every mode)
+//    scrolling), and the virtual-screen swap and rotate family (virtual
+//    screens exist in every mode)
 //  - "snapping" for ops that are hard no-ops off snapping: the multi-zone
 //    span quad and the empty-zone push
 //  - "autotile" for the master-stack ops, hard no-ops off autotile
 //  - "scrolling" for column/strip ops (consume/expel, column widths, tab
 //    display), hard no-ops off scrolling
+//  - "layouts" is a CAPABILITY tag, not a mode name: rows shown whenever
+//    the bound screen's engine consumes user-selectable layouts
+//    (IPlacementEngine::providesLayouts, pushed to the sheet as
+//    layoutsAvailable). Covers the layout cycle pair, the picker, the
+//    layout lock, and the quick-layout digits — on a non-layout screen
+//    those keys answer with a "not available" OSD, so the sheet hides them.
 //  - toggle_autotile is the doorway INTO autotile → all modes, always shown
 // A row tagged "all" also has to READ mode-neutrally. A label that names
 // zones on a key which addresses columns in scrolling misinforms the reader
@@ -65,8 +71,10 @@ struct CatalogMeta
     // unallocated) to leave room for a new category between two existing ones
     // without renumbering the table. Gaps are not removed categories.
     int categoryOrder;
-    // "all" | "snapping" | "autotile" | "scrolling" — string form matches what the QML
-    // filter consumes; no enum round-trip needed.
+    // "all" | "snapping" | "autotile" | "scrolling" | "layouts" — string form
+    // matches what the QML filter consumes; no enum round-trip needed. The
+    // last value is a capability tag (engine providesLayouts), not a mode;
+    // see the contract block above.
     const char* mode;
     // Optional tr() disambiguation for the category word (e.g. the mode
     // name "Scrolling", whose bare source would otherwise inherit the

@@ -1,5 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// FILE-SIZE EXCEPTION (sanctioned): SnapEngine is one class — the snap
+// engine's whole public and internal surface — and C++ cannot split a class
+// declaration across headers. The implementation is partitioned by concern
+// under src/; shrinking this header means extracting collaborator classes,
+// a deliberate refactor rather than a mechanical file split. Same rationale
+// as AutotileEngine.h / daemon.h / windowtrackingadaptor.h.
 
 #pragma once
 
@@ -308,15 +315,17 @@ public:
     void saveState() override;
     void loadState() override;
 
-    // Cross-engine handoff
-    QString engineId() const override
-    {
-        return QStringLiteral("snap");
-    }
+    // Layout capability (see IPlacementEngine's Layout capability section)
     /// Snap placement is driven by user-selectable zone layouts.
     bool providesLayouts() const override
     {
         return true;
+    }
+
+    // Cross-engine handoff
+    QString engineId() const override
+    {
+        return QStringLiteral("snap");
     }
     void handoffReceive(const HandoffContext& ctx) override;
     void handoffRelease(const QString& windowId) override;

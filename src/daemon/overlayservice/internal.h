@@ -281,10 +281,14 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
 /// Check whether a snapping mode is locked for the given screen/desktop/activity context.
 /// Used by zone selector, layout picker, and overlay update paths that must respect per-context lock state.
 ///
-/// @param currentMode  The mode to check: 0 = manual, 1 = autotile, -1 = check both modes (default).
+/// @param currentMode  The mode to check: 0 = manual, 1 = autotile, -1 = check both lockable modes
+///                     (default). Scrolling (mode 2) is deliberately absent from this enumeration:
+///                     layout locks only exist for layout-consuming modes (the layout-lock shortcut
+///                     is capability-gated on IPlacementEngine::providesLayouts), so a "2:" key is
+///                     never written by current builds and a stale one from an older build is inert.
 ///
-/// When currentMode is -1 (default), BOTH modes are checked. This is intentional (PR #247): a lock on
-/// either mode blocks the zone selector for consistency with the OverlayService lock checks.
+/// When currentMode is -1 (default), BOTH lockable modes are checked. This is intentional (PR #247):
+/// a lock on either mode blocks the zone selector for consistency with the OverlayService lock checks.
 /// Previously, ZoneSelectorController only checked the current mode, causing inconsistencies when the
 /// overlay reported a lock but the selector did not.
 ///

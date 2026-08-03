@@ -461,6 +461,14 @@ void Daemon::initEnginesAndWiring()
         m_reconcileAssignmentsPending = true;
         QTimer::singleShot(0, this, [this]() {
             m_reconcileAssignmentsPending = false;
+            // A rule edit landing in the same event-loop turn as stop()
+            // leaves this single-shot queued past teardown; without the gate
+            // a non-empty diff would drive a full assignment-apply pass on a
+            // stopped daemon (m_layoutAdaptor is Qt-parented and outlives
+            // the per-sender connection sweep).
+            if (m_shuttingDown) {
+                return;
+            }
             reconcileActiveAssignments();
         });
     });

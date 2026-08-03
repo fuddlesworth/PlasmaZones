@@ -513,15 +513,17 @@ public:
     }
 
     // Cross-engine handoff (see PhosphorEngine/IPlacementEngine.h for contract)
-    QString engineId() const override
-    {
-        return QStringLiteral("autotile");
-    }
+    // Layout capability (see IPlacementEngine's Layout capability section)
     /// Autotile algorithms appear as cards in the layout picker / quick
     /// slots, so this engine is a layout consumer too.
     bool providesLayouts() const override
     {
         return true;
+    }
+
+    QString engineId() const override
+    {
+        return QStringLiteral("autotile");
     }
     void handoffReceive(const HandoffContext& ctx) override;
     void handoffRelease(const QString& windowId) override;
@@ -925,8 +927,11 @@ public:
      *
      * @param windowId Window identifier from KWin
      * @param shouldFloat True to float, false to unfloat
-     * @param screenId Authoritative current screen (unused: autotile re-tiles
-     *        fresh on the window's live screen); present to match the interface.
+     * @param screenId Accepted to satisfy the shared interface and unused —
+     *        autotile resolves the screen from its own per-window tracking,
+     *        which the focus-driven migration keeps current; see the rationale
+     *        block in float_handoff.cpp's setWindowFloat and the interface
+     *        contract in IPlacementEngine.h.
      */
     Q_INVOKABLE void setWindowFloat(const QString& windowId, bool shouldFloat,
                                     const QString& screenId = QString()) override;

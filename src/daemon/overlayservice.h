@@ -226,8 +226,10 @@ public:
     /// (IPlacementEngine::providesLayouts). Daemon-injected so the overlay
     /// stays engine-agnostic; resolvePerScreenLayoutInclude answers "no
     /// layouts at all" for a screen whose engine returns false (scrolling),
-    /// which empties the layout picker and the drag layout popup there.
-    /// Unset falls back to the assignment-based resolution. Same
+    /// which empties the layout picker's list so its show bails. (The
+    /// drag-time popup is separately suppressed on engine-owned screens by
+    /// WindowDragAdaptor's dragMoved gate; for it this is defence in
+    /// depth.) Unset falls back to the assignment-based resolution. Same
     /// clear-before-destroy contract as the other injected closures.
     using LayoutsProvidedResolver = std::function<bool(const QString& screenId)>;
     void setLayoutsProvidedResolver(LayoutsProvidedResolver resolver)
@@ -667,8 +669,11 @@ private:
     /// Resolve the per-screen include filter. buildLayoutsList (the popup
     /// model) and visibleLayoutCount (used by isNearTriggerEdge to size
     /// the keep-visible bar) both go through here so the trigger geometry
-    /// matches the rendered popup row count.
-    LayoutIncludeFlags resolvePerScreenLayoutInclude(const QString& screenId) const;
+    /// matches the rendered popup row count. @p resolvedIdOut, when
+    /// non-null, receives the id the decision was made for (connector
+    /// names are normalized to identity ids) — callers must build their
+    /// layout lists with that id so gate and rows agree.
+    LayoutIncludeFlags resolvePerScreenLayoutInclude(const QString& screenId, QString* resolvedIdOut = nullptr) const;
     // overlayOverride is resolved once per screen by the caller (screen-invariant
     // across zones) and threaded in, rather than re-resolved per zone.
     QVariantMap zoneToVariantMap(PhosphorZones::Zone* zone, const QString& screenId, QScreen* physScreen,

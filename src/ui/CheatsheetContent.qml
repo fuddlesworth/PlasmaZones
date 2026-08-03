@@ -12,12 +12,12 @@ import org.plasmazones.common as QFZCommon
  * Shortcut cheatsheet content — Item-rooted body hosted in
  * PassiveOverlayShell's cheatsheetSlot. Display-only: a centered card
  * listing every global shortcut grouped by category, filtered by the
- * tiling mode of the screen the sheet opened on.
+ * tiling mode and the layout capability of the screen the sheet opened on.
  *
  * Data arrives via the host slot's bindings (C++ pushes `shortcuts`,
- * `currentMode`, `autotileAvailable`, and `scrollingAvailable` onto
- * cheatsheetSlot; live mode switches re-push and the group filter
- * re-evaluates reactively).
+ * `currentMode`, `autotileAvailable`, `scrollingAvailable`, and
+ * `layoutsAvailable` onto cheatsheetSlot; live mode switches re-push and
+ * the group filter re-evaluates reactively).
  *
  * Keyboard: the shell surface is kbd-None, so Escape routes via the
  * daemon's dedicated ad-hoc grab (start.cpp); QML Shortcuts can never
@@ -31,7 +31,9 @@ Item {
     /// display strings), assigned (bool), mode
     /// ("all"|"snapping"|"autotile"|"scrolling"|"layouts"), and description (translated
     /// plain-prose explanation for the row tooltip; empty when the action
-    /// needs none).
+    /// needs none). "layouts" is a capability tag rather than a fourth
+    /// tiling mode: currentMode can never equal it, and rows carrying it
+    /// are gated purely by layoutsAvailable, independent of currentMode.
     property var shortcuts: []
     /// Tiling mode of the screen the sheet opened on:
     /// "snapping" | "autotile" | "scrolling".
@@ -65,7 +67,7 @@ Item {
     /// null. Sheet-level identity rather than a per-row bool so a second
     /// long-press on another row REPLACES the open tooltip instead of
     /// stacking a second one that nothing on a touch device would close.
-    property var latchedRow: null
+    property Item latchedRow: null
 
     signal dismissRequested
 
@@ -112,8 +114,8 @@ Item {
 
     /// Rows regrouped into [{name, rows}] preserving the model's category
     /// order, with mode-inapplicable rows dropped. Recomputes reactively on
-    /// shortcuts / currentMode / autotileAvailable / scrollingAvailable
-    /// changes.
+    /// shortcuts / currentMode / autotileAvailable / scrollingAvailable /
+    /// layoutsAvailable changes.
     readonly property var groups: {
         var byCat = [];
         // Keyed on categoryOrder (identity), never on the translated display
