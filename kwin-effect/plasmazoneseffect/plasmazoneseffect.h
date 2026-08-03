@@ -1260,6 +1260,13 @@ private:
     /// so packs sample composite and backdrop with one uv. Called from
     /// paintWindow for needsBackdrop chains, live windows only (the close
     /// path reuses the frozen composite and must never re-capture).
+    /// paintedDeviceRegion: the paint region paintWindow received (device
+    /// px). The blit is CLIPPED to it: outside this frame's damage the
+    /// render target still holds the PREVIOUS presented frame — the full
+    /// composite, including windows painted ABOVE @p w — and blitting it
+    /// feeds the finished scene back into the backdrop (visible as a
+    /// neighbour's padded-canvas edge re-blurred inside this window's
+    /// frost).
     /// animatedFrame: where the animation is DRAWING the window this frame
     /// (WindowAnimator's current rect, or a morph transition's interpolated
     /// rect), in logical frame-rect terms. When valid, the blit SOURCE
@@ -1268,7 +1275,7 @@ private:
     /// resting rect. Invalid = capture at the live geometry.
     void captureWindowBackdrop(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                KWin::EffectWindow* w, const WindowDecoration& wb,
-                               const QRectF& animatedFrame = QRectF());
+                               const KWin::Region& paintedDeviceRegion, const QRectF& animatedFrame = QRectF());
 
     /// Fold @p w's decoration chain into a per-window ping-pong composite, and return the
     /// texture holding the result (null on no decoration / allocation failure). drawWindow
