@@ -94,6 +94,9 @@ void Daemon::connectShortcutSignals()
             return;
         }
         m_unifiedLayoutController->setCurrentScreenName(screenId);
+        // Push the LIVE capability so applyEntry's template branch routes on
+        // the engine that actually owns the screen, not the cascade alone.
+        m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
         if (isScreenLockedForLayoutChange(screenId)) {
             return;
         }
@@ -250,7 +253,18 @@ void Daemon::connectShortcutSignals()
         // Dismissing first releases the cheatsheet grab synchronously.
         m_overlayService->hideCheatsheet();
         m_unifiedLayoutController->setCurrentScreenName(screenId);
+        // Live capability for applyEntry's template routing — see the
+        // quick-slot handler above.
+        m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
         updateLayoutFilterForScreen(screenId);
+        // An empty candidate list (allow-lists plus the aspect filter can
+        // wipe it on a screen with no current selection) makes the picker's
+        // show bail silently — answer with the unavailable OSD instead of
+        // nothing.
+        if (m_overlayService->visibleLayoutCount(screenId) == 0) {
+            showLayoutsUnavailableOsd(screenId);
+            return;
+        }
         m_overlayService->showLayoutPicker(screenId);
         // Bind the picker's KGlobalAccel grabs only if the picker actually
         // became visible. showLayoutPicker() bails without setting
@@ -375,7 +389,12 @@ void Daemon::connectShortcutSignals()
             showLayoutsUnavailableOsd(screenId);
             return;
         }
-        // Screen name was already set when the picker opened.
+        // Screen name was already set when the picker opened; RE-push the
+        // live capability at apply time — a KCM apply or rule reconcile can
+        // flip the screen's engine while the picker sits open.
+        if (!screenId.isEmpty()) {
+            m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
+        }
         if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
             return;
         }
@@ -423,8 +442,16 @@ void Daemon::connectShortcutSignals()
             Q_EMIT m_settingsAdaptor->settingsChanged();
         }
 
+        // Templates screens resolve their TEMPLATE for the unlock card:
+        // resolveLayoutForScreen is the snap-only chain and would announce an
+        // unrelated fallback snap layout there. The lock branch needs no
+        // split — showLockedPreviewOsd is itself template-aware and falls
+        // back to the text card when the context has no template.
         if (wasLocked) {
-            PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+            PhosphorZones::Layout* layout = (mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling))
+                ? m_layoutManager->scrollingTemplateForContext(
+                      screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), currentActivity())
+                : m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
                 showLayoutOsd(layout, screenId);
             }

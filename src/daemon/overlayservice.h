@@ -222,20 +222,31 @@ public:
         m_scrollZonesProvider = std::move(provider);
     }
 
-    /// Whether the engine owning a screen consumes user-selectable layouts
-    /// (IPlacementEngine::layoutSupport). Daemon-injected so the overlay
-    /// stays engine-agnostic; resolvePerScreenLayoutInclude answers "no
-    /// layouts at all" for a screen whose engine returns false (scrolling),
-    /// which empties the layout picker's list so its show bails. (The
-    /// drag-time popup is separately suppressed on engine-owned screens by
-    /// WindowDragAdaptor's dragMoved gate; for it this is defence in
-    /// depth.) Unset falls back to the assignment-based resolution. Same
-    /// clear-before-destroy contract as the other injected closures.
-    using LayoutsProvidedResolver = std::function<bool(const QString& screenId)>;
-    void setLayoutsProvidedResolver(LayoutsProvidedResolver resolver)
+    /// The LIVE layout capability of the engine owning a screen, as the int
+    /// value of IPlacementEngine::LayoutSupport (0 = None, 1 = Placement,
+    /// 2 = Templates). Daemon-injected so the overlay stays engine-agnostic
+    /// and routes through the router's live-engine answer, which correctly
+    /// downgrades a disabled or switched-off scrolling assignment to
+    /// snapping — the raw assignmentId cannot see that downgrade.
+    /// Consumers: resolvePerScreenLayoutInclude empties the layout list only
+    /// for None (a Templates screen keeps the manual list as its template
+    /// vocabulary); activeLayoutIdForScreen takes its template arm only when
+    /// the live answer is Templates; isSnappingContextInactive suppresses
+    /// the snap overlay for a scrolling assignment only when the scroll
+    /// engine actually owns the screen. Unset falls back to the
+    /// assignment-based resolution. Same clear-before-destroy contract as
+    /// the other injected closures.
+    using LayoutSupportResolver = std::function<int(const QString& screenId)>;
+    void setLayoutSupportResolver(LayoutSupportResolver resolver)
     {
-        m_layoutsProvidedResolver = std::move(resolver);
+        m_layoutSupportResolver = std::move(resolver);
     }
+    /// Int codes of the resolver's answer — hand-mirrored values of
+    /// IPlacementEngine::LayoutSupport (this header does not include the
+    /// engine interface).
+    static constexpr int LayoutSupportNone = 0;
+    static constexpr int LayoutSupportPlacement = 1;
+    static constexpr int LayoutSupportTemplates = 2;
     PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager;
@@ -783,7 +794,7 @@ private:
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
     ScrollZonesProvider m_scrollZonesProvider;
-    LayoutsProvidedResolver m_layoutsProvidedResolver;
+    LayoutSupportResolver m_layoutSupportResolver;
     /// Borrowed from Daemon. stop() detaches this even when init never reached start().
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutManager =

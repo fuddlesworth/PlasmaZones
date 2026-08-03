@@ -715,7 +715,7 @@ void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QH
 {
     const auto idx = slotIndexFor(mode);
     if (!idx) {
-        qCWarning(lcZonesLib) << "setAllQuickLayoutSlots: Scrolling carries no quick slots — ignored";
+        qCWarning(lcZonesLib) << "setAllQuickLayoutSlots: no slot array for mode" << mode << "— ignored";
         return;
     }
     auto& target = m_quickLayoutSlots[*idx];

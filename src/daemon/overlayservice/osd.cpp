@@ -161,8 +161,16 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
         ? QVariantList()
         : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full, QRectF(screenGeom));
     p.category = static_cast<int>(PhosphorZones::LayoutCategory::Manual);
-    p.autoAssign = layout->autoAssign();
-    p.globalAutoAssign = m_settings && m_settings->autoAssignAllLayouts();
+    // The Auto badge advertises snap-to-empty-zone, whose ONLY behavioural
+    // consumer is the snap engine. On a Templates screen the layout is a
+    // sizing template and that behaviour cannot happen, so both the
+    // per-layout flag and the global toggle are suppressed (the category
+    // gate below in the deferred path cannot catch this case — a manual
+    // layout used as a template is still category Manual).
+    const bool templatesScreen =
+        m_layoutSupportResolver && m_layoutSupportResolver(effectiveScreenId) == LayoutSupportTemplates;
+    p.autoAssign = !templatesScreen && layout->autoAssign();
+    p.globalAutoAssign = !templatesScreen && m_settings && m_settings->autoAssignAllLayouts();
     p.locked = locked;
     p.screenAspectRatio = aspectRatio;
     p.aspectRatioClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());

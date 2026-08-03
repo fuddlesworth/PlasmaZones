@@ -655,15 +655,18 @@ void ScrollEngine::refreshConfigFromSettings()
                                      "keeping the cached configuration";
         return;
     }
-    const auto parsePresets = [](const QStringList& raw, const QList<qreal>& fallback) {
+    const auto parsePresets = [](const QStringList& raw, qreal minFraction, const QList<qreal>& fallback) {
         QList<qreal> out;
         for (const QString& entry : raw) {
             bool ok = false;
             const qreal v = entry.trimmed().toDouble(&ok);
-            // Same floor as every other proportion producer: a preset below it
-            // resolves to a sliver no window can honour, and the preset cycle
-            // would silently offer a width the width setter refuses.
-            if (ok && v >= MinColumnWidthFraction && v <= 1.0) {
+            // Same floor as every other proportion producer on the same
+            // axis: a preset below it resolves to a sliver no window can
+            // honour, and the preset cycle would silently offer a value the
+            // setter refuses. Each axis passes ITS OWN floor — the height
+            // constant exists precisely so a height caller cannot silently
+            // follow a later width-only change (ScrollTypes.h's note).
+            if (ok && v >= minFraction && v <= 1.0) {
                 out.append(v);
             }
         }
@@ -671,8 +674,8 @@ void ScrollEngine::refreshConfigFromSettings()
     };
     // KEEP IN SYNC with ScrollLayoutParams' member defaults (ScrollTypes.h).
     const QList<qreal> defaults{1.0 / 3.0, 0.5, 2.0 / 3.0};
-    m_presetColumnWidths = parsePresets(settings->scrollingPresetColumnWidths(), defaults);
-    m_presetWindowHeights = parsePresets(settings->scrollingPresetWindowHeights(), defaults);
+    m_presetColumnWidths = parsePresets(settings->scrollingPresetColumnWidths(), MinColumnWidthFraction, defaults);
+    m_presetWindowHeights = parsePresets(settings->scrollingPresetWindowHeights(), MinWindowHeightFraction, defaults);
 
     const int center = settings->scrollingCenterFocusedColumn();
     m_centerFocusedColumn =
@@ -687,8 +690,8 @@ void ScrollEngine::refreshConfigFromSettings()
     } else if (widthKind == DefaultWidthKind::Preset) {
         // Preset list is parsed above, so the clamp is against the live
         // list; makePreset re-clamps at relayout if the list later shrinks.
-        m_defaultColumnWidth = ColumnWidth::makePreset(
-            qBound(0, settings->scrollingDefaultColumnWidthPresetIndex(), int(m_presetColumnWidths.size()) - 1));
+        m_defaultColumnWidth = ColumnWidth::makePreset(qBound(0, settings->scrollingDefaultColumnWidthPresetIndex(),
+                                                              qMax(0, int(m_presetColumnWidths.size()) - 1)));
     } else {
         m_defaultColumnWidth = ColumnWidth::makeProportion(qBound<qreal>(MinColumnWidthFraction, widthValue, 1.0));
     }
@@ -701,8 +704,8 @@ void ScrollEngine::refreshConfigFromSettings()
     if (heightKind == static_cast<int>(DefaultHeightKind::Fixed)) {
         m_defaultWindowHeight = WindowHeight::makeFixed(qMax(1, qRound(settings->scrollingDefaultWindowHeightValue())));
     } else if (heightKind == static_cast<int>(DefaultHeightKind::Preset)) {
-        m_defaultWindowHeight = WindowHeight::makePreset(
-            qBound(0, settings->scrollingDefaultWindowHeightPresetIndex(), int(m_presetWindowHeights.size()) - 1));
+        m_defaultWindowHeight = WindowHeight::makePreset(qBound(0, settings->scrollingDefaultWindowHeightPresetIndex(),
+                                                                qMax(0, int(m_presetWindowHeights.size()) - 1)));
     } else {
         m_defaultWindowHeight = WindowHeight{};
     }
@@ -781,21 +784,30 @@ namespace {
 /// the given floor (the same bound the settings parser applies), and an
 /// empty or entirely-invalid list means "no template" — never an empty
 /// preset vocabulary, which would break cycling and nearestPresetWidthIdx.
+/// Length is capped like the other public-API override ingresses in this
+/// file: the daemon's extractor caps its own output, but applyPerScreenConfig
+/// is exported LGPL surface and an embedder-supplied map must not make every
+/// relayout copy an unbounded list. KEEP IN SYNC with the settings
+/// validator's kMaxPresetEntries (hand-mirrored, like MinColumnWidthFraction).
 QList<qreal> presetListFromOverride(const QVariantMap& overrides, const QString& key, qreal minFraction,
                                     const QList<qreal>& fallback)
 {
+    constexpr int kMaxTemplateEntries = 16;
     const auto it = overrides.constFind(key);
     if (it == overrides.constEnd()) {
         return fallback;
     }
     QList<qreal> out;
     const QVariantList raw = it->toList();
-    out.reserve(raw.size());
+    out.reserve(qMin(int(raw.size()), kMaxTemplateEntries));
     for (const QVariant& entry : raw) {
         bool ok = false;
         const qreal v = entry.toDouble(&ok);
         if (ok && v >= minFraction && v <= 1.0) {
             out.append(v);
+            if (out.size() == kMaxTemplateEntries) {
+                break;
+            }
         }
     }
     return out.isEmpty() ? fallback : out;
@@ -861,7 +873,11 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) c
             // Clamp against the EFFECTIVE list: a template override changes
             // the vocabulary this index resolves into (presetAt re-clamps at
             // relayout either way, so this only tightens the stored intent).
-            return ColumnWidth::makePreset(qBound(0, presetIdx, int(effectivePresetColumnWidths(screenId).size()) - 1));
+            // qMax belt: the effective lists cannot be empty today (both
+            // fallbacks are guaranteed non-empty), but qBound with lo > hi
+            // asserts in debug and this is exported API.
+            return ColumnWidth::makePreset(
+                qBound(0, presetIdx, qMax(0, int(effectivePresetColumnWidths(screenId).size()) - 1)));
         }
         if (kind == static_cast<int>(DefaultWidthKind::Proportion)) {
             const qreal value = valueIt != overrides.constEnd()
@@ -911,7 +927,7 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId,
                 : (m_defaultWindowHeight.kind == WindowHeight::Preset ? m_defaultWindowHeight.presetIdx : 0);
             // Effective list for the same reason as the width twin above.
             return WindowHeight::makePreset(
-                qBound(0, presetIdx, int(effectivePresetWindowHeights(screenId).size()) - 1));
+                qBound(0, presetIdx, qMax(0, int(effectivePresetWindowHeights(screenId).size()) - 1)));
         } else if (kind == static_cast<int>(DefaultHeightKind::Auto)) {
             return WindowHeight{};
         }

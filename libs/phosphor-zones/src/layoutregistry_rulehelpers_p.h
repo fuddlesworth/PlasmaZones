@@ -104,10 +104,12 @@ bool hasEngineModeAction(const PWR::Rule& rule);
 // for its engine in a context without forcing the engine mode.
 bool hasSnappingLayoutAction(const PWR::Rule& rule);
 bool hasTilingAlgorithmAction(const PWR::Rule& rule);
+bool hasScrollingTemplateAction(const PWR::Rule& rule);
 
-// True when every action on @p rule is one of the three assignment slots
-// (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). False on an
-// empty action list. Used by the shape-based fallback in
+// True when every action on @p rule is one of the four assignment slots
+// (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm /
+// SetScrollingTemplate). False on an empty action list. Used by the
+// shape-based fallback in
 // findExactContextRule to refuse to claim a user-authored rule that
 // carries non-assignment actions (SetOpacity, OverrideAnimation*, Float,
 // Exclude, ...) — admitting it would silently strip those actions
@@ -120,7 +122,7 @@ bool isPureAssignmentRule(const PWR::Rule& rule);
 // context, and the rebuild paths preserve its other actions.
 bool hasAnyAssignmentSlotAction(const PWR::Rule& rule);
 
-// Append every action of @p existing that is NOT one of the three assignment
+// Append every action of @p existing that is NOT one of the four assignment
 // slots onto @p rebuilt. Every path that rebuilds an assignment rule through
 // makeAssignmentRule must call this: the rebuild carries the deterministic
 // context id, so it overwrites the stored rule whether or not a purity gate
@@ -150,7 +152,7 @@ bool matchIsExactContextActivity(const PWR::MatchExpression& match);
 // NOT a purity check, despite the family name: this says nothing about the
 // rule's OTHER actions. Any caller that REBUILDS rule.actions must therefore
 // either gate on isPureAssignmentRule OR call carryOverNonAssignmentActions,
-// because rebuilding force-injects the three slot actions and drops
+// because rebuilding force-injects the four slot actions and drops
 // everything else — so a context rule carrying SetEngineMode alongside
 // SetOpacity or LockContext would lose the extra action. Every rebuild path
 // now takes the second option, which is why clearAutotileAssignments can flip

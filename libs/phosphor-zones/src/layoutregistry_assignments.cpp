@@ -116,6 +116,12 @@ bool LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
             merged.name = byId->name;
             merged.managed = byId->managed;
             merged.enabled = byId->enabled;
+            // Preserve the stored priority like the exact-rule branch above:
+            // a reclaim is an update of an existing rule, and re-seeding it to
+            // the fresh top value would silently change its precedence against
+            // the other context rules (and defeat the no-op guard below, since
+            // Rule::operator== compares priority).
+            merged.priority = byId->priority;
             carryOverNonAssignmentActions(merged, *byId);
             if (merged == *byId) {
                 return false;
@@ -138,7 +144,7 @@ bool LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
     // identical re-apply still bumped the revision.
     rule.name = existing->name;
     rule.managed = existing->managed;
-    // And every action that is not one of the three assignment slots. The
+    // And every action that is not one of the four assignment slots. The
     // deterministic context id means this rebuild lands on the stored rule
     // regardless of any purity gate upstream, so a merge is the only
     // non-destructive rebuild. Runs before the no-op guard so a rule whose
@@ -261,10 +267,14 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
             // context needs to refresh, whether the rule was dropped or just
             // rebuilt.
             affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
-            if (entry.mode == AssignmentEntry::Snapping && entry.tilingAlgorithm.isEmpty()
-                && entry.scrollingTemplateLayout.isEmpty()) {
+            if (entry.mode == AssignmentEntry::Snapping && entry.snappingLayout.isEmpty()
+                && entry.tilingAlgorithm.isEmpty() && entry.scrollingTemplateLayout.isEmpty()) {
                 // Nothing meaningful remains — a bare Snapping engine-mode is
-                // the default. Drop the whole rule.
+                // the default. Drop the whole rule. The snappingLayout guard
+                // is load-bearing: the clear above only empties the field
+                // that MATCHED the deleted id, so a rule whose template was
+                // deleted can still carry a live snapping assignment, and
+                // dropping it would destroy that assignment.
                 qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped context rule" << rule.id.toString()
                                     << "— only a default Snapping mode remained after clearing the deleted layout";
                 continue;
@@ -302,10 +312,21 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
                            }),
             trimmed.actions.end());
         if (trimmed.actions.isEmpty()) {
-            // The rule's only action was the dead snapping reference — nothing
+            // The rule's only action was the dead layout reference — nothing
             // meaningful remains, so drop it.
             qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped rule" << rule.id.toString()
-                                << "— its only action referenced the deleted snapping layout";
+                                << "— its only action referenced the deleted layout";
+            continue;
+        }
+        // Mirror Shape 1's bare-default drop: a context rule reduced to a
+        // lone default-Snapping SetEngineMode encodes no intent beyond the
+        // default and would otherwise survive here forever (template-carrying
+        // rules land in this branch whenever a non-assignment action rides
+        // along).
+        if (isContextAssignmentRule(trimmed) && trimmed.actions.size() == 1
+            && entryFromRuleMatchActions(trimmed).mode == AssignmentEntry::Snapping) {
+            qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped context rule" << rule.id.toString()
+                                << "— only a default Snapping mode remained after trimming the deleted layout";
             continue;
         }
         kept.append(trimmed);
@@ -409,7 +430,13 @@ void LayoutRegistry::assignScrollingTemplate(const QString& screenId, int virtua
         entry = entryFromRuleMatchActions(*rule);
     }
     entry.mode = AssignmentEntry::Scrolling;
-    entry.scrollingTemplateLayout = layoutId;
+    // Normalize to the canonical braced form at the library choke point so
+    // every caller (adaptor, controller, registry) stores one spelling. A
+    // braceless bus-supplied uuid stored verbatim would defeat the purge's
+    // exact string compare on layout delete and the upsert no-op guard's
+    // byte-wise action compare. Empty stays empty (clears the template).
+    const QUuid parsed = QUuid::fromString(layoutId);
+    entry.scrollingTemplateLayout = parsed.isNull() ? QString() : parsed.toString();
     upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
     // Emit unconditionally — see assignLayout: the write suppression is real,
     // but layoutAssigned drives the engine-screen re-derive (which pushes the
@@ -443,7 +470,7 @@ void LayoutRegistry::setAssignmentEntryDirect(const QString& screenId, int virtu
 
     qCDebug(lcZonesLib) << "setAssignmentEntryDirect: screen=" << screenId << "desktop=" << virtualDesktop
                         << "activity=" << activity << "mode=" << entry.mode << "snapping=" << entry.snappingLayout
-                        << "tiling=" << entry.tilingAlgorithm;
+                        << "tiling=" << entry.tilingAlgorithm << "template=" << entry.scrollingTemplateLayout;
 
     PhosphorZones::Layout* layout = nullptr;
     if (entry.mode == AssignmentEntry::Snapping && !entry.snappingLayout.isEmpty()) {

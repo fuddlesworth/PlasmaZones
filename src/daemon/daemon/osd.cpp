@@ -288,13 +288,23 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
         return;
     }
 
-    // Show the visual preview OSD with lock overlay showing the current layout
+    // Show the visual preview OSD with lock overlay showing the current
+    // layout. A Templates (scrolling) context resolves its TEMPLATE:
+    // resolveLayoutForScreen is the snap-only chain and would preview an
+    // unrelated fallback snap layout's zones under the lock badge. A
+    // template-less scrolling context falls through to the text card.
     if (style == OsdStyle::Preview && m_overlayService && m_layoutManager) {
         const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
-        PhosphorZones::Layout* layout =
-            m_layoutManager->resolveLayoutForScreen(resolvedId.isEmpty() ? screenId : resolvedId);
+        const QString id = resolvedId.isEmpty() ? screenId : resolvedId;
+        PhosphorZones::Layout* layout = nullptr;
+        if (currentModeFor(id) == PhosphorZones::AssignmentEntry::Scrolling) {
+            layout = m_layoutManager->scrollingTemplateForContext(
+                id, m_layoutManager->currentVirtualDesktopForScreen(id), currentActivity());
+        } else {
+            layout = m_layoutManager->resolveLayoutForScreen(id);
+        }
         if (layout) {
-            m_overlayService->showLockedLayoutOsd(layout, resolvedId.isEmpty() ? screenId : resolvedId);
+            m_overlayService->showLockedLayoutOsd(layout, id);
             return;
         }
     }
@@ -741,8 +751,14 @@ void Daemon::syncModeFromAssignments()
             m_unifiedLayoutController->setCurrentScreenName(focusedScreenId);
             // Pass the per-desktop assignment as override — syncFromExternalState()
             // without override only reads the global active layout, which doesn't
-            // reflect per-desktop autotile assignments.
-            m_unifiedLayoutController->syncFromExternalState(focusedAssignmentId);
+            // reflect per-desktop autotile assignments. Routed through
+            // displayIdForAssignment: the raw id on a Templates screen is the
+            // bare "scrolling:" sentinel, and writing it here would undo the
+            // template-UUID substitution setCurrentScreenName just performed,
+            // breaking the picker highlight and cycle reference after every
+            // desktop or activity switch.
+            m_unifiedLayoutController->syncFromExternalState(
+                m_unifiedLayoutController->displayIdForAssignment(focusedScreenId, focusedAssignmentId));
 
             // Update the global active layout to match this desktop's per-screen
             // assignment. Without this, PhosphorZones::LayoutRegistry::activeLayout() returns the

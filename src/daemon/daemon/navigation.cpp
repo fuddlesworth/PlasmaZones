@@ -455,16 +455,23 @@ void Daemon::resnapIfManualMode()
     if (!m_snapEngine) {
         return;
     }
-    // Only skip resnap when the current screen is in autotile mode.
-    // Per-desktop assignments mean some screens can be autotile while
+    // Only skip resnap when the current screen is engine-managed.
+    // Per-desktop assignments mean some screens can be engine-managed while
     // others are manual — a global check would block manual resnaps.
-    if (m_autotileEngine && m_unifiedLayoutController) {
+    if (m_unifiedLayoutController) {
         const QString screenId = m_unifiedLayoutController->currentScreenName();
         if (screenId.isEmpty()) {
             return; // No screen context — can't determine mode, skip resnap
         }
-        if (isAutotileScreen(screenId)) {
+        if (m_autotileEngine && isAutotileScreen(screenId)) {
             return; // This screen is autotile — engine handles retile
+        }
+        if (currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Scrolling) {
+            // A template apply changes only the strip's preset vocabulary;
+            // no window placement moved, so buffering every OTHER snapping
+            // screen and running resnapToNewLayout would reposition windows
+            // for a no-op and burn an OSD-suppression count.
+            return;
         }
     }
     // Populate the resnap buffer before resnapping. UnifiedLayoutController::applyEntry()

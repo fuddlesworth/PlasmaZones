@@ -258,8 +258,17 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
 
     // Track the active layout so we can guarantee it appears in the list
     // (prevents empty selector / broken cycling when the active layout is
-    // hidden from the filter).
+    // hidden from the filter). The context's scrolling TEMPLATE gets the
+    // same exemption — it is the "current selection" on a Templates screen,
+    // and filtering it out (hidden, screen-restricted, aspect-mismatched)
+    // would blank the picker highlight and misaim the next cycle exactly
+    // the way a filtered active layout used to. Widened HERE rather than at
+    // a call site so buildLayoutsList and visibleLayoutCount can never
+    // disagree on the row count (a past divergence pinned the popup open).
     PhosphorZones::Layout* activeLayout = layoutManager->activeLayout();
+    PhosphorZones::Layout* contextTemplate = resolvedScreenId.isEmpty()
+        ? nullptr
+        : layoutManager->scrollingTemplateForContext(resolvedScreenId, virtualDesktop, activity);
 
     if (includeManual) {
         const auto layouts = layoutManager->layouts();
@@ -268,7 +277,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
                 continue;
             }
 
-            const bool isActive = (layout == activeLayout);
+            const bool isActive = (layout == activeLayout) || (layout == contextTemplate);
 
             if (layout->hiddenFromSelector() && !isActive) {
                 continue;

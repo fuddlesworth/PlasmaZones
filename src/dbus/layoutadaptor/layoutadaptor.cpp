@@ -43,11 +43,14 @@ namespace PlasmaZones {
 
 namespace {
 
-// Map the D-Bus quick-slot mode wire value (0 = Snapping, 1 = Autotile) to
-// the registry's AssignmentEntry::Mode, or nullopt for anything else —
-// notably Scrolling (2), which carries NO quick slots. Clamping instead of
-// rejecting would silently read or OVERWRITE the snapping slot map under a
-// scrolling request (input validation at the system boundary).
+// Map the D-Bus quick-slot mode wire value (0 = Snapping, 1 = Autotile,
+// 2 = Scrolling) to the registry's AssignmentEntry::Mode, or nullopt for
+// anything else. Scrolling deliberately SHARES the Snapping slot array
+// (LayoutRegistry::slotIndexFor is the one authority): its slots hold
+// manual-layout UUIDs, which is the template vocabulary a scrolling screen
+// consumes, so a mode-2 request reads/writes the same bindings the keyboard
+// path already resolves. Out-of-range values are still rejected rather than
+// clamped (input validation at the system boundary).
 std::optional<PhosphorZones::AssignmentEntry::Mode> quickSlotMode(int mode)
 {
     switch (mode) {
@@ -55,6 +58,8 @@ std::optional<PhosphorZones::AssignmentEntry::Mode> quickSlotMode(int mode)
         return PhosphorZones::AssignmentEntry::Snapping;
     case PhosphorZones::AssignmentEntry::Autotile:
         return PhosphorZones::AssignmentEntry::Autotile;
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        return PhosphorZones::AssignmentEntry::Scrolling;
     default:
         return std::nullopt;
     }

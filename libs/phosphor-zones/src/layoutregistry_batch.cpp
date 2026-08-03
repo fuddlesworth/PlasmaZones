@@ -551,6 +551,13 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     qCInfo(lcZonesLib) << "Batch set" << count << "combined assignments";
 }
 
+// NOTE (shared by the three projections below): the value is the entry's
+// activeLayoutId(), which for a Scrolling context is the bare "scrolling:"
+// sentinel — the scrolling TEMPLATE is not projected. Deliberate for now:
+// the value shape is a D-Bus wire contract (getAll*Assignments) and no
+// consumer reads a per-desktop/activity template yet; the batch WRITE round
+// trip is lossless regardless (rebuilds seed from the stored entry). Extend
+// the value shape when the settings app grows per-context template UI.
 QHash<CombinedAssignmentKey, QString> LayoutRegistry::combinedAssignments() const
 {
     QHash<CombinedAssignmentKey, QString> result;

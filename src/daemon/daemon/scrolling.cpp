@@ -164,21 +164,32 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultWindowHeight(),
                              *params.defaultWindowHeight);
         }
-        // TEMPLATE channel: the context's assigned template layout, resolved
-        // through the same cascade walk, becomes the screen's preset
-        // vocabulary. The zone rects normalize against the FULL screen
-        // geometry (the same basis layouts are authored against); an invalid
-        // rect degrades normalizedGeometry to the stored relative geometry,
-        // which only matters for Fixed-geometry zones. An extraction that
-        // yields no usable widths inserts nothing, so the engine keeps the
-        // settings preset lists — deleted or degenerate templates fail soft.
+        // TEMPLATE channel (a fourth tier over the settings seed and the
+        // rule slots above — it wholesale-replaces the settings PRESET
+        // LISTS, never a rule slot; ContextScrollingParams carries no
+        // preset-list slot so no collision is possible): the context's
+        // assigned template layout, resolved through the same cascade walk,
+        // becomes the screen's preset vocabulary. Fixed-geometry zones
+        // normalize against the same basis their own layout resolution
+        // uses — the AVAILABLE geometry unless the layout opts into the
+        // full screen (mirrors GeometryUtils' reference selection); an
+        // invalid rect degrades normalizedGeometry to the stored relative
+        // geometry, which only matters for Fixed-geometry zones. An
+        // extraction that yields no usable widths inserts nothing, so the
+        // engine keeps the settings preset lists — deleted, degenerate or
+        // row-only templates fail soft.
         if (PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity)) {
-            const QRectF screenRect = m_screenManager ? QRectF(m_screenManager->screenGeometry(screenId)) : QRectF();
+            QRectF referenceRect;
+            if (m_screenManager) {
+                referenceRect = templ->useFullScreenGeometry()
+                    ? QRectF(m_screenManager->screenGeometry(screenId))
+                    : QRectF(m_screenManager->screenAvailableGeometry(screenId));
+            }
             QVector<QRectF> zoneRects;
             zoneRects.reserve(templ->zones().size());
             for (const PhosphorZones::Zone* zone : templ->zones()) {
                 if (zone) {
-                    zoneRects.append(zone->normalizedGeometry(screenRect));
+                    zoneRects.append(zone->normalizedGeometry(referenceRect));
                 }
             }
             const PhosphorScrollEngine::ScrollTemplateVocabulary vocab =
@@ -190,14 +201,18 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
                     widths.append(w);
                 }
                 overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::presetColumnWidths(), widths);
-                if (!vocab.windowHeights.isEmpty()) {
-                    QVariantList heights;
-                    heights.reserve(vocab.windowHeights.size());
-                    for (qreal h : vocab.windowHeights) {
-                        heights.append(h);
-                    }
-                    overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::presetWindowHeights(), heights);
+            }
+            // Sibling guard, deliberately NOT nested under the widths one:
+            // the extractor cannot produce heights without widths today, but
+            // encoding that invariant as caller control flow would silently
+            // drop height pushes if the extractor ever changed.
+            if (!vocab.windowHeights.isEmpty()) {
+                QVariantList heights;
+                heights.reserve(vocab.windowHeights.size());
+                for (qreal h : vocab.windowHeights) {
+                    heights.append(h);
                 }
+                overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::presetWindowHeights(), heights);
             }
         }
         // The tab indicator's GEOMETRY overrides. Only these seven reach the

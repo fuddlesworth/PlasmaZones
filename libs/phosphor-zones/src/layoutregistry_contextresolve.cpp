@@ -238,8 +238,9 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             const PWR::Rule* modeRule = slotMatch(hasEngineModeAction);
             const PWR::Rule* snapRule = slotMatch(hasSnappingLayoutAction);
             const PWR::Rule* algoRule = slotMatch(hasTilingAlgorithmAction);
+            const PWR::Rule* templateRule = slotMatch(hasScrollingTemplateAction);
 
-            if (modeRule == nullptr && snapRule == nullptr && algoRule == nullptr) {
+            if (modeRule == nullptr && snapRule == nullptr && algoRule == nullptr && templateRule == nullptr) {
                 return std::nullopt; // genuine miss — the caller routes to the default
             }
 
@@ -257,6 +258,9 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             }
             if (algoRule != nullptr) {
                 resolved.tilingAlgorithm = entryFromRuleMatchActions(*algoRule).tilingAlgorithm;
+            }
+            if (templateRule != nullptr) {
+                resolved.scrollingTemplate = entryFromRuleMatchActions(*templateRule).scrollingTemplateLayout;
             }
             return resolved;
         });
@@ -278,6 +282,9 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     }
     if (rules->tilingAlgorithm) {
         entry.tilingAlgorithm = *rules->tilingAlgorithm;
+    }
+    if (rules->scrollingTemplate) {
+        entry.scrollingTemplateLayout = *rules->scrollingTemplate;
     }
     return entry;
 }

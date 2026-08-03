@@ -319,6 +319,16 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
     // The daemon's layoutAssigned handler calls updateEngineScreens() which
     // derives per-screen autotile state from assignments automatically.
     if (preview.isAutotile()) {
+        // Defence in depth: every list a Templates screen sees drops the
+        // autotile cards upstream (the include resolver and the mode-derived
+        // filters), but this branch would flip the screen off its engine via
+        // assignLayoutById("autotile:…") if one ever slipped through, so
+        // refuse here rather than rely on the filters alone.
+        if (m_currentLayoutSupport == PhosphorEngine::IPlacementEngine::LayoutSupport::Templates) {
+            qCWarning(lcDaemon) << "applyEntry: refusing autotile entry" << preview.id
+                                << "on a Templates screen — algorithms are not templates";
+            return false;
+        }
         if (m_autotileEngine && m_layoutManager) {
             QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(preview.id);
             // Assign layout FIRST so that layoutAssigned → updateEngineScreens()
@@ -355,8 +365,16 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
                 const int desktop = m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName);
-                if (m_layoutManager->modeForScreen(m_currentScreenName, desktop, m_currentActivity)
-                    == PhosphorZones::AssignmentEntry::Scrolling) {
+                // Double check, resolver-first-then-cascade (the
+                // resolvePerScreenLayoutInclude pattern): the LIVE capability
+                // must be Templates AND the cascade mode Scrolling. The router
+                // downgrades a disabled or switched-off scrolling assignment
+                // to live snapping — on such a screen the pick applies as an
+                // ordinary snapping assignment below, matching what the user
+                // actually sees, instead of writing a dead template.
+                if (m_currentLayoutSupport == PhosphorEngine::IPlacementEngine::LayoutSupport::Templates
+                    && m_layoutManager->modeForScreen(m_currentScreenName, desktop, m_currentActivity)
+                        == PhosphorZones::AssignmentEntry::Scrolling) {
                     // Templates semantics: on a scrolling screen a manual
                     // layout is the screen's sizing TEMPLATE, never a
                     // placement assignment — assignLayout would classify the

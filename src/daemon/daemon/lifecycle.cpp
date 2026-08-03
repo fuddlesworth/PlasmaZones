@@ -709,7 +709,7 @@ void Daemon::stop()
         m_overlayService->setScrollZonesProvider({});
         // Same contract: the layouts-provided resolver captures `this` and
         // reads the router, which is reset before the engines below.
-        m_overlayService->setLayoutsProvidedResolver({});
+        m_overlayService->setLayoutSupportResolver({});
     }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.

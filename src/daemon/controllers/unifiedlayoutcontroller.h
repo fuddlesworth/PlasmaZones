@@ -6,6 +6,9 @@
 #include <optional>
 
 #include "core/utils/unifiedlayoutlist.h"
+// Complete type needed for the nested IPlacementEngine::LayoutSupport enum
+// consumed by setCurrentLayoutSupport below.
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 // Layout must be COMPLETE here, not forward-declared: the layoutApplied signal
 // below carries a PhosphorZones::Layout*, and moc's metatype registration asks
@@ -168,6 +171,24 @@ public:
     void syncFromExternalState(std::optional<QString> overrideId = std::nullopt);
 
     /**
+     * @brief The LIVE engine capability of the current screen, pushed by the
+     * daemon alongside setCurrentScreenName at every layout-selection entry
+     * point (quick slot, picker open, cycle). applyEntry requires BOTH this
+     * to be Templates AND the cascade mode to be Scrolling before taking the
+     * template branch: the router downgrades a disabled or switched-off
+     * scrolling assignment to live snapping, and routing on the cascade
+     * alone would write a dead template while the visible snap screen moved
+     * nothing (the resolver-first-then-cascade double check
+     * resolvePerScreenLayoutInclude already uses). Defaults to Placement,
+     * the fail-safe: an un-pushed value can only under-route to the classic
+     * placement assignment, never mis-route a pick into template state.
+     */
+    void setCurrentLayoutSupport(PhosphorEngine::IPlacementEngine::LayoutSupport support)
+    {
+        m_currentLayoutSupport = support;
+    }
+
+    /**
      * @brief The id the picker/cycling machinery should treat as @p screenId's
      * current selection for a stored @p assignmentId.
      *
@@ -280,6 +301,10 @@ private:
 
     QString m_currentLayoutId;
     QString m_currentScreenName;
+    /// LIVE engine capability of the current screen, daemon-pushed at the
+    /// layout-selection entry points — see setCurrentLayoutSupport.
+    PhosphorEngine::IPlacementEngine::LayoutSupport m_currentLayoutSupport =
+        PhosphorEngine::IPlacementEngine::LayoutSupport::Placement;
     // Change-guard only: layouts() resolves the desktop per-screen from the
     // layout manager, so this value never reaches the list builder. It exists
     // so setCurrentVirtualDesktop can invalidate the cache on a real change

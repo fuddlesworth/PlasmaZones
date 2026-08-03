@@ -201,8 +201,9 @@ public Q_SLOTS:
     QVariantMap getAllCombinedAssignments();
 
     // Quick layout slots (1-9), keyed by tiling mode (0 = Snapping,
-    // 1 = Autotile). Scrolling (2) carries no quick slots — quickSlotMode in
-    // layoutadaptor.cpp rejects it rather than clamping onto another mode's map.
+    // 1 = Autotile, 2 = Scrolling). Scrolling shares the Snapping slot array
+    // (manual-layout UUIDs are its template vocabulary — see
+    // LayoutRegistry::slotIndexFor); other values are rejected.
     QString getQuickLayoutSlot(int mode, int slotNumber);
     void setQuickLayoutSlot(int mode, int slotNumber, const QString& layoutId);
     void setAllQuickLayoutSlots(int mode, const QVariantMap& slots); // Batch set - saves once
@@ -271,9 +272,11 @@ public Q_SLOTS:
                                                  const QString& activityId);
 
     // Scrolling template (the manual layout whose zones become the strip's
-    // preset column-width vocabulary). The setter flips the context to
-    // Scrolling; the getter answers empty for non-Scrolling contexts and for
-    // deleted or unset templates.
+    // preset column-width vocabulary, and its window-height vocabulary where
+    // the template defines heights). The setter flips the context to
+    // Scrolling and accepts an empty id as "clear the template"; the getter
+    // answers empty for non-Scrolling contexts and for deleted or unset
+    // templates.
     void setScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId,
                                     const QString& layoutId);
     QString getScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId);
@@ -284,12 +287,18 @@ public Q_SLOTS:
      * Returns a JSON array with one object per screen:
      *   screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile,
      *   2=Scrolling), layoutId, layoutName, layoutIdExplicit, algorithmId,
-     *   algorithmName, algorithmIdExplicit.
+     *   algorithmName, algorithmIdExplicit, scrollingTemplateId,
+     *   scrollingTemplateName, scrollingTemplateExplicit.
      *
      * layoutId / algorithmId carry the RESOLVED values (cascade and default
-     * fallbacks included). The two *Explicit booleans say whether this exact
-     * (screen, desktop, activity) tuple pins the field itself, so a caller can
-     * tell an inherited value from an assigned one.
+     * fallbacks included; layoutId is empty for a Scrolling context — the
+     * default-layout fallback would name a layout the screen does not use).
+     * The *Explicit booleans say whether this exact (screen, desktop,
+     * activity) tuple pins the field itself, so a caller can tell an
+     * inherited value from an assigned one. scrollingTemplateId reads the
+     * stored entry field rather than the mode-gated resolver, so a template
+     * preserved across a mode toggle is reported even while another mode
+     * runs.
      *
      * @return JSON string
      */

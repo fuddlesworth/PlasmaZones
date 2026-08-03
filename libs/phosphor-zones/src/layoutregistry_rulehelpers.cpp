@@ -82,12 +82,39 @@ bool hasTilingAlgorithmAction(const PWR::Rule& rule)
     return false;
 }
 
+bool hasScrollingTemplateAction(const PWR::Rule& rule)
+{
+    for (const PWR::RuleAction& action : rule.actions) {
+        if (action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+namespace {
+/// The ONE definition of "assignment slot action". All three predicates below
+/// and the carry-over filter share it, so a new assignment slot (like the
+/// scrolling template) cannot be added to some of them and missed in others —
+/// exactly the drift that let carryOverNonAssignmentActions duplicate
+/// SetScrollingTemplate on every rebuild while the purity gates classified
+/// template rules as mixed.
+bool isAssignmentSlotAction(const PWR::RuleAction& action)
+{
+    return action.type == QLatin1String(PWR::ActionType::SetEngineMode)
+        || action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+        || action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)
+        || action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate);
+}
+} // namespace
+
 bool isPureAssignmentRule(const PWR::Rule& rule)
 {
-    // True when every action belongs to the three assignment slots
-    // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm), i.e. the rule
-    // is a PURE assignment. False on an empty action list as well — a context
-    // match with no actions is not an assignment rule.
+    // True when every action belongs to the four assignment slots
+    // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm /
+    // SetScrollingTemplate), i.e. the rule is a PURE assignment. False on an
+    // empty action list as well — a context match with no actions is not an
+    // assignment rule.
     //
     // NOT the claim predicate. findExactContextRule used to gate on this and
     // now uses hasAnyAssignmentSlotAction, because the rebuild paths carry
@@ -100,9 +127,7 @@ bool isPureAssignmentRule(const PWR::Rule& rule)
         return false;
     }
     for (const PWR::RuleAction& action : rule.actions) {
-        if (action.type != QLatin1String(PWR::ActionType::SetEngineMode)
-            && action.type != QLatin1String(PWR::ActionType::SetSnappingLayout)
-            && action.type != QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
+        if (!isAssignmentSlotAction(action)) {
             return false;
         }
     }
@@ -118,9 +143,7 @@ bool hasAnyAssignmentSlotAction(const PWR::Rule& rule)
     // layout-only rule (SetSnappingLayout with no SetEngineMode), which the
     // batch rebuild relies on.
     for (const PWR::RuleAction& action : rule.actions) {
-        if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)
-            || action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
-            || action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
+        if (isAssignmentSlotAction(action)) {
             return true;
         }
     }
@@ -129,7 +152,7 @@ bool hasAnyAssignmentSlotAction(const PWR::Rule& rule)
 
 void carryOverNonAssignmentActions(PWR::Rule& rebuilt, const PWR::Rule& existing)
 {
-    // makeAssignmentRule emits ONLY the three assignment slot actions, so a
+    // makeAssignmentRule emits ONLY the four assignment slot actions, so a
     // wholesale `rebuilt` would silently destroy anything else the rule
     // carried. The Monitors page and the Rules editor address the same rule
     // by its deterministic context id, so a user who adds SetOpacity (or
@@ -142,11 +165,12 @@ void carryOverNonAssignmentActions(PWR::Rule& rebuilt, const PWR::Rule& existing
     // means `rebuilt` collides with the mixed rule whether or not it was
     // claimed, so the only safe rebuild is a merge. Slot actions come from
     // `rebuilt` (they are what the caller is changing); everything else rides
-    // across in its original order.
+    // across in its original order. SetScrollingTemplate MUST be in the
+    // excluded set: carrying it over duplicated the action per rebuild, and
+    // the carried OLD copy won entryFromRuleMatchActions' last-wins decode,
+    // making a template permanently unchangeable after its first assignment.
     for (const PWR::RuleAction& action : existing.actions) {
-        if (action.type != QLatin1String(PWR::ActionType::SetEngineMode)
-            && action.type != QLatin1String(PWR::ActionType::SetSnappingLayout)
-            && action.type != QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
+        if (!isAssignmentSlotAction(action)) {
             rebuilt.actions.append(action);
         }
     }

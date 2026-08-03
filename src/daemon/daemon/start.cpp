@@ -579,6 +579,10 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     // Layout cycling is meaningless on a screen whose engine has no layout
     // concept (scrolling) — answer with feedback instead of applying a snap
     // layout there (the old one-way-door-out-of-scrolling policy).
+    // Push the LIVE capability first so applyEntry's template branch routes
+    // on the engine that actually owns the screen (see the quick-slot
+    // handler in shortcuts_wiring.cpp).
+    m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
     if (layoutSupportForScreen(screenId) == LayoutSupport::None) {
         showLayoutsUnavailableOsd(screenId);
         return;
@@ -835,13 +839,14 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     // The scroll engine subscribes to no ScreenManager signal of its own
     // (unlike autotile's virtualScreenRegionsChanged handler), so its
     // affected strips must be retiled here or their columns keep stale
-    // widths/offsets until an unrelated retile.
-    if (m_scrollEngine) {
-        for (const QString& sid : affectedScreenIds) {
-            if (m_scrollEngine->isActiveOnScreen(sid)) {
-                m_scrollEngine->scheduleRetileForScreen(sid);
-            }
-        }
+    // widths/offsets until an unrelated retile. The retile relays out of
+    // the STORED override map, so the template vocabulary (extracted
+    // against live VS geometry for Fixed-geometry zones) is re-derived
+    // first — updateScrollingScreens' per-pass push plus its identical-set
+    // retile covers both needs in one call, keeping this handler's
+    // single-retile property.
+    if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {
+        updateScrollingScreens(m_scrollEngine->activeScreens());
     }
 }
 

@@ -595,14 +595,30 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     writeQmlProperty(slot, QStringLiteral("layouts"), layoutsList);
     writeQmlProperty(slot, QStringLiteral("activeLayoutId"), activeId);
     writeQmlProperty(slot, QStringLiteral("screenAspectRatio"), aspectRatio);
-    writeQmlProperty(slot, QStringLiteral("globalAutoAssign"), m_settings && m_settings->autoAssignAllLayouts());
+    // Auto badges advertise snap-to-empty-zone; suppressed on Templates
+    // screens where that behaviour cannot happen (see showLayoutOsdImpl).
+    const bool templatesScreenForBadges =
+        m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportTemplates;
+    writeQmlProperty(slot, QStringLiteral("globalAutoAssign"),
+                     !templatesScreenForBadges && m_settings && m_settings->autoAssignAllLayouts());
     writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     bool locked = false;
     if (m_settings && m_layoutManager) {
         int curDesktop = currentVirtualDesktopForScreen(resolvedId);
         QString curActivity = m_layoutManager->currentActivity();
-        locked = isAnyModeLocked(m_settings, m_layoutManager, resolvedId, curDesktop, curActivity);
+        // Pass the LIVE mode when the resolver is wired: on a Templates
+        // screen the lock that matters is the scrolling one (mode 2), and
+        // the -1 both-mode default would let an unrelated snapping lock
+        // block template picks while the actual scrolling lock went unread.
+        int lockMode = -1;
+        if (m_layoutSupportResolver) {
+            const int support = m_layoutSupportResolver(resolvedId);
+            if (support == LayoutSupportTemplates) {
+                lockMode = 2;
+            }
+        }
+        locked = isAnyModeLocked(m_settings, m_layoutManager, resolvedId, curDesktop, curActivity, lockMode);
     }
     writeQmlProperty(slot, QStringLiteral("locked"), locked);
     const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, resolvedId);

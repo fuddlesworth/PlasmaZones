@@ -1103,6 +1103,7 @@ private:
         std::optional<AssignmentEntry> modeEntry;
         std::optional<QString> snappingLayout;
         std::optional<QString> tilingAlgorithm;
+        std::optional<QString> scrollingTemplate;
     };
 
     /// Cache of @ref resolveAssignmentEntry's rule-derived resolution keyed by

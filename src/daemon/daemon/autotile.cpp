@@ -921,6 +921,16 @@ void Daemon::processPendingGeometryUpdates()
 
     m_geometryUpdatePending = false;
 
+    // Re-derive the scrolling screens' per-screen overrides: the template
+    // vocabulary is extracted against live screen geometry (Fixed-geometry
+    // zones divide by it), so a resolution or panel change must re-push or
+    // the engine keeps pre-resize fractions until an unrelated re-derive.
+    // Relative-only templates are unaffected but the pass is cheap and
+    // idempotent (the engine's equality guard no-ops an identical map).
+    if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {
+        updateScrollingScreens(m_scrollEngine->activeScreens());
+    }
+
     if (pending->isEmpty()) {
         m_overlayService->updateGeometries();
         m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);

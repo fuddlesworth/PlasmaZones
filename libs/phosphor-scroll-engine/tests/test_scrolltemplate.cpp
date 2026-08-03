@@ -9,7 +9,7 @@
 using namespace PhosphorScrollEngine;
 
 /// Pure-function coverage for extractTemplateVocabulary: layout zone rects
-/// (normalized 0–1) in, preset column-width / window-height vocabulary out.
+/// (normalized 0-1) in, preset column-width / window-height vocabulary out.
 /// No engine, no QObject — APPLESS.
 class TestScrollTemplate : public QObject
 {
@@ -19,19 +19,28 @@ private Q_SLOTS:
     void threeEqualColumns();
     void unsortedInputSortsAscending();
     void stackedBandYieldsHeights();
+    void threeMemberBandYieldsAllHeights();
     void soloPartialHeightZoneYieldsHeight();
     void soloFullHeightZoneYieldsNoHeight();
     void misalignedOverlapStartsOwnBand();
     void sliverZonesDropped();
+    void sliverAtExactlyEpsIsDropped();
     void duplicateWidthsDeduped();
     void toleranceBoundary();
     void degenerateInputYieldsEmpty();
-    void widthsClampedToMinimum();
+    void slimWidthsDroppedNotClamped();
+    void slimHeightsDroppedNotClamped();
+    void tabStyleFullHeightStackYieldsNoHeights();
+    void rowOnlyLayoutYieldsNoVocabulary();
+    void vocabularyCappedAtSixteenEntries();
+    void nonFiniteRectsDropped();
 };
 
 void TestScrollTemplate::threeEqualColumns()
 {
-    // columns-3.json shape: thirds with float dust from serialization.
+    // columns-3.json shape: thirds with float dust from serialization. A
+    // single-entry NON-full-width list is a legitimate uniform vocabulary
+    // and must be kept (contrast rowOnlyLayoutYieldsNoVocabulary).
     const auto v = extractTemplateVocabulary({
         {0.0, 0.0, 0.333333, 1.0},
         {0.333333, 0.0, 0.333334, 1.0},
@@ -69,6 +78,22 @@ void TestScrollTemplate::stackedBandYieldsHeights()
     QVERIFY(qAbs(v.windowHeights.last() - 0.75) < 0.01);
 }
 
+void TestScrollTemplate::threeMemberBandYieldsAllHeights()
+{
+    // Pins the whole-band height walk: a two-member test would pass an
+    // off-by-one that appended only the first two.
+    const auto v = extractTemplateVocabulary({
+        {0.0, 0.0, 0.6, 1.0},
+        {0.6, 0.0, 0.4, 0.2},
+        {0.6, 0.2, 0.4, 0.3},
+        {0.6, 0.5, 0.4, 0.5},
+    });
+    QCOMPARE(v.windowHeights.size(), 3);
+    QVERIFY(qAbs(v.windowHeights.at(0) - 0.2) < 0.01);
+    QVERIFY(qAbs(v.windowHeights.at(1) - 0.3) < 0.01);
+    QVERIFY(qAbs(v.windowHeights.at(2) - 0.5) < 0.01);
+}
+
 void TestScrollTemplate::soloPartialHeightZoneYieldsHeight()
 {
     const auto v = extractTemplateVocabulary({
@@ -81,8 +106,8 @@ void TestScrollTemplate::soloPartialHeightZoneYieldsHeight()
 
 void TestScrollTemplate::soloFullHeightZoneYieldsNoHeight()
 {
-    const auto v = extractTemplateVocabulary({{0.0, 0.0, 1.0, 1.0}});
-    QCOMPARE(v.columnWidths.size(), 1);
+    const auto v = extractTemplateVocabulary({{0.0, 0.0, 0.6, 1.0}, {0.6, 0.0, 0.4, 1.0}});
+    QCOMPARE(v.columnWidths.size(), 2);
     QVERIFY(v.windowHeights.isEmpty());
 }
 
@@ -101,13 +126,37 @@ void TestScrollTemplate::misalignedOverlapStartsOwnBand()
 
 void TestScrollTemplate::sliverZonesDropped()
 {
+    // The sliver-HEIGHT zone carries a DISTINCT width (0.4) so its survival
+    // would show up as a second width preset — a same-width sliver would
+    // dedupe away and leave the filter half unpinned.
     const auto v = extractTemplateVocabulary({
         {0.0, 0.0, 0.005, 1.0}, // sliver width
-        {0.0, 0.0, 0.5, 0.005}, // sliver height
+        {0.0, 0.0, 0.4, 0.005}, // sliver height, distinct width
         {0.5, 0.0, 0.5, 1.0},
     });
     QCOMPARE(v.columnWidths.size(), 1);
     QVERIFY(qAbs(v.columnWidths.first() - 0.5) < 0.01);
+    QVERIFY(v.windowHeights.isEmpty());
+}
+
+void TestScrollTemplate::sliverAtExactlyEpsIsDropped()
+{
+    // The filter is `<= Eps`, so exactly-Eps extents are dropped; just-above
+    // survives the filter. Observed through the HEIGHT channel because a
+    // just-above-Eps WIDTH is below the preset floor and normalizeFractions
+    // drops it anyway.
+    const auto atEps = extractTemplateVocabulary({
+        {0.0, 0.0, 0.01, 0.6}, // width exactly Eps: filtered, no band, no height
+        {0.5, 0.0, 0.5, 1.0},
+    });
+    QVERIFY(atEps.windowHeights.isEmpty());
+
+    const auto aboveEps = extractTemplateVocabulary({
+        {0.0, 0.0, 0.011, 0.6}, // just above Eps: forms a band, height kept
+        {0.5, 0.0, 0.5, 1.0},
+    });
+    QCOMPARE(aboveEps.windowHeights.size(), 1);
+    QVERIFY(qAbs(aboveEps.windowHeights.first() - 0.6) < 0.01);
 }
 
 void TestScrollTemplate::duplicateWidthsDeduped()
@@ -151,16 +200,84 @@ void TestScrollTemplate::degenerateInputYieldsEmpty()
     QVERIFY(v.windowHeights.isEmpty());
 }
 
-void TestScrollTemplate::widthsClampedToMinimum()
+void TestScrollTemplate::slimWidthsDroppedNotClamped()
 {
-    // A 2% zone survives the sliver filter (width > Eps) but clamps up to
-    // the engine's floor so a Preset column can never resolve below it.
+    // A 2% zone survives the sliver filter (width > Eps) but sits below the
+    // engine's preset floor: it is DROPPED, matching the settings parser,
+    // never clamped up to a preset the template does not contain.
     const auto v = extractTemplateVocabulary({
         {0.0, 0.0, 0.02, 1.0},
         {0.02, 0.0, 0.98, 1.0},
     });
-    QCOMPARE(v.columnWidths.size(), 2);
-    QVERIFY(v.columnWidths.first() >= MinColumnWidthFraction);
+    QCOMPARE(v.columnWidths.size(), 1);
+    QVERIFY(qAbs(v.columnWidths.first() - 0.98) < 0.01);
+}
+
+void TestScrollTemplate::slimHeightsDroppedNotClamped()
+{
+    // Height twin of the width drop: the ONLY coverage of the
+    // MinWindowHeightFraction argument. A 2% stacked member drops; its 98%
+    // sibling stays.
+    const auto v = extractTemplateVocabulary({
+        {0.0, 0.0, 0.5, 1.0},
+        {0.5, 0.0, 0.5, 0.02},
+        {0.5, 0.02, 0.5, 0.98},
+    });
+    QCOMPARE(v.windowHeights.size(), 1);
+    QVERIFY(qAbs(v.windowHeights.first() - 0.98) < 0.01);
+}
+
+void TestScrollTemplate::tabStyleFullHeightStackYieldsNoHeights()
+{
+    // Overlapping tab-style zones sharing one extent at ~full height must
+    // not contribute a 1.0 height preset — that would make the whole height
+    // vocabulary [1.0] and every Preset height resolve full-column.
+    const auto v = extractTemplateVocabulary({
+        {0.0, 0.0, 0.5, 1.0},
+        {0.5, 0.0, 0.5, 1.0},
+        {0.5, 0.0, 0.5, 1.0},
+    });
+    QCOMPARE(v.columnWidths.size(), 1);
+    QVERIFY(v.windowHeights.isEmpty());
+}
+
+void TestScrollTemplate::rowOnlyLayoutYieldsNoVocabulary()
+{
+    // rows-2.json shape: full-width rows define no COLUMN vocabulary at all.
+    // A [1.0]-only width list would degenerate the strip to one full-width
+    // column per window under a Preset-kind default, so the whole extraction
+    // reports "no usable template".
+    const auto v = extractTemplateVocabulary({
+        {0.0, 0.0, 1.0, 0.5},
+        {0.0, 0.5, 1.0, 0.5},
+    });
+    QVERIFY(v.columnWidths.isEmpty());
+    QVERIFY(v.windowHeights.isEmpty());
+}
+
+void TestScrollTemplate::vocabularyCappedAtSixteenEntries()
+{
+    // Overlapping misaligned zones each form their own band, so a
+    // pathological layout can yield arbitrarily many widths; the vocabulary
+    // caps at the settings validator's mirrored 16.
+    QVector<QRectF> zones;
+    for (int i = 0; i < 20; ++i) {
+        zones.append(QRectF(0.0, 0.0, 0.05 + i * 0.02, 1.0));
+    }
+    const auto v = extractTemplateVocabulary(zones);
+    QCOMPARE(v.columnWidths.size(), 16);
+}
+
+void TestScrollTemplate::nonFiniteRectsDropped()
+{
+    // NaN coordinates must not reach the sort (strict-weak-ordering UB).
+    const auto v = extractTemplateVocabulary({
+        {qQNaN(), 0.0, 0.5, 1.0},
+        {0.0, 0.0, qQNaN(), 1.0},
+        {0.5, 0.0, 0.5, 1.0},
+    });
+    QCOMPARE(v.columnWidths.size(), 1);
+    QVERIFY(qAbs(v.columnWidths.first() - 0.5) < 0.01);
 }
 
 QTEST_APPLESS_MAIN(TestScrollTemplate)

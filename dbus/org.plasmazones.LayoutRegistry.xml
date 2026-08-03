@@ -56,7 +56,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="applyQuickLayout">
             <annotation name="org.gtk.GDBus.DocString" value="Apply quick layout slot (1-9) for the given mode to the given screen."/>
             <arg name="mode" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile). Quick slots exist for these two modes only; scrolling (2) has none and is rejected."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile, 2 = scrolling). Scrolling shares the snapping slots, where the slot's manual layout applies as the screen's template."/>
             </arg>
             <arg name="number" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Slot number (1-9)."/>
@@ -177,7 +177,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getScreenStates">
-            <annotation name="org.gtk.GDBus.DocString" value="Return current mode, layout, and algorithm for all screens as a JSON array: one object per screen with screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile, 2=Scrolling), layoutId, layoutName, layoutIdExplicit, algorithmId, algorithmName, algorithmIdExplicit. layoutId and algorithmId are the RESOLVED values (cascade and default fallbacks included); the two *Explicit booleans say whether this exact screen/desktop/activity tuple pins the field itself, so a caller can tell an inherited value from an assigned one."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return current mode, layout, algorithm, and scrolling template for all screens as a JSON array: one object per screen with screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile, 2=Scrolling), layoutId, layoutName, layoutIdExplicit, algorithmId, algorithmName, algorithmIdExplicit, scrollingTemplateId, scrollingTemplateName, scrollingTemplateExplicit. layoutId and algorithmId are the RESOLVED values (cascade and default fallbacks included; layoutId is empty for a Scrolling context); the *Explicit booleans say whether this exact screen/desktop/activity tuple pins the field itself, so a caller can tell an inherited value from an assigned one. scrollingTemplateId reads the stored entry field, so a template preserved across a mode toggle is reported even while another mode runs."/>
             <arg name="statesJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON array of per-screen state objects."/>
             </arg>
@@ -325,7 +325,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="getQuickLayoutSlot">
             <annotation name="org.gtk.GDBus.DocString" value="Get the layout ID assigned to a quick slot (1-9) for the given mode."/>
             <arg name="mode" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile). Quick slots exist for these two modes only; scrolling (2) has none and is rejected."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile, 2 = scrolling). Scrolling shares the snapping slots, where the slot's manual layout applies as the screen's template."/>
             </arg>
             <arg name="slotNumber" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Slot number (1-9)."/>
@@ -337,7 +337,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="setQuickLayoutSlot">
             <annotation name="org.gtk.GDBus.DocString" value="Assign a layout to a quick slot (1-9) for the given mode."/>
             <arg name="mode" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile). Quick slots exist for these two modes only; scrolling (2) has none and is rejected."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile, 2 = scrolling). Scrolling shares the snapping slots, where the slot's manual layout applies as the screen's template."/>
             </arg>
             <arg name="slotNumber" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Slot number (1-9)."/>
@@ -349,7 +349,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="setAllQuickLayoutSlots">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all quick layout slots for the given mode (saves once)."/>
             <arg name="mode" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile). Quick slots exist for these two modes only; scrolling (2) has none and is rejected."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile, 2 = scrolling). Scrolling shares the snapping slots, where the slot's manual layout applies as the screen's template."/>
             </arg>
             <arg name="slots" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of slot number (as string) to layoutId."/>
@@ -358,7 +358,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="getAllQuickLayoutSlots">
             <annotation name="org.gtk.GDBus.DocString" value="Get all quick layout slot assignments for the given mode."/>
             <arg name="mode" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile). Quick slots exist for these two modes only; scrolling (2) has none and is rejected."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile, 2 = scrolling). Scrolling shares the snapping slots, where the slot's manual layout applies as the screen's template."/>
             </arg>
             <arg name="slots" type="a{sv}" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of slot number (as string) to layoutId."/>
@@ -505,36 +505,6 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign."/>
             </arg>
         </method>
-        <method name="setScrollingTemplateLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Assign a manual layout as the context's scrolling template (its zones become the strip's preset column widths). Flips the context to Scrolling mode."/>
-            <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
-            </arg>
-            <arg name="virtualDesktop" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based, 0 = any)."/>
-            </arg>
-            <arg name="activityId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID (empty = any)."/>
-            </arg>
-            <arg name="layoutId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Manual layout UUID to use as the template."/>
-            </arg>
-        </method>
-        <method name="getScrollingTemplateLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Resolved scrolling template for the context, or empty when the context is not Scrolling or has no template."/>
-            <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
-            </arg>
-            <arg name="virtualDesktop" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based, 0 = any)."/>
-            </arg>
-            <arg name="activityId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID (empty = any)."/>
-            </arg>
-            <arg name="layoutId" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Template layout UUID or empty string."/>
-            </arg>
-        </method>
         <method name="clearAssignmentForScreenDesktopActivity">
             <annotation name="org.gtk.GDBus.DocString" value="Clear layout assignment for screen/desktop/activity."/>
             <arg name="screenId" type="s" direction="in">
@@ -545,6 +515,36 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
             <arg name="activityId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
+            </arg>
+        </method>
+        <method name="setScrollingTemplateLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Assign a manual layout as the context's scrolling template. Its zones become the strip's preset column widths, and its window heights where the template defines heights. Flips the context to Scrolling mode. An unknown or non-UUID layout id is rejected and nothing is written."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based, 0 = screen-level)."/>
+            </arg>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID (empty = all activities)."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Manual layout UUID to use as the template, or empty to clear the template."/>
+            </arg>
+        </method>
+        <method name="getScrollingTemplateLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Resolved scrolling template for the context, or empty when the context is not Scrolling or has no template."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based, 0 = screen-level)."/>
+            </arg>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID (empty = all activities)."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Template layout UUID or empty string."/>
             </arg>
         </method>
         <method name="setAssignmentEntry">
