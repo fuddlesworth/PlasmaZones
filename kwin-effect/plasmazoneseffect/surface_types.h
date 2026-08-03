@@ -15,6 +15,7 @@
 
 #include <PhosphorSurface/SurfaceShaderContract.h>
 
+#include <core/region.h>
 #include <opengl/glframebuffer.h>
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
@@ -452,9 +453,26 @@ struct SurfaceMultipassState
     std::unique_ptr<KWin::GLFramebuffer> backdropFbo;
     QSize backdropSize;
     /// Valid sub-rect of backdropTex in TOP-DOWN normalized coords (xy=min,
-    /// zw=size) — the part actually blitted (canvas ∩ output). Zero-size
-    /// means "no capture this frame" and pushes uHasBackdrop = 0.
+    /// zw=size) — the part actually blitted (canvas ∩ output ∩ damage). Zero-size
+    /// means "no capture this frame" and pushes uHasBackdrop = 0. INVARIANT:
+    /// always fully inside backdropWritten, so a pack clamping into it can
+    /// never sample a texel still holding the allocation clear.
     QVector4D backdropRect;
+
+    /// Texture-pixel region of backdropTex written since its allocation clear.
+    ///
+    /// backdropRect is one rect, but the captures feeding it are damage-clipped
+    /// slices that can be DISJOINT — and a bounding-box union of disjoint slices
+    /// on a freshly-cleared texture spans gap texels that still hold the
+    /// transparent clear, which packs would then sample as black patches in the
+    /// frost. So every successful blit records its destination here (grown by
+    /// 1 px to absorb the inward source rounding at fractional scale), and the
+    /// published backdropRect is only ever a rect this region fully contains —
+    /// the capture falls back to a smaller covered rect otherwise. Reset with
+    /// the texture's allocation clear; after the first full-canvas capture it
+    /// collapses to one rect covering the texture and the containment checks
+    /// are trivially true.
+    KWin::Region backdropWritten;
 
     /// Every output that has blitted a FULL canvas slice into the CURRENT
     /// accumulation generation.

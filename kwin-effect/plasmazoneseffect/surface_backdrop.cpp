@@ -101,6 +101,9 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropTex->setWrapMode(GL_CLAMP_TO_EDGE);
         state.backdropSize = textureSize;
         state.backdropRect = QVector4D();
+        // Nothing has been written over the fresh clear yet — the coverage
+        // region that keeps backdropRect off cleared texels restarts empty.
+        state.backdropWritten = KWin::Region();
         // Fresh texture means no output has contributed to any accumulation generation yet, so
         // reset the generation tracker alongside the rect. Harmless today (backdropUsable gates
         // the union on the just-zeroed rect), but leaving stale output rects here would resurface
@@ -174,9 +177,12 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // before asking: the aligned (rounded-out) canvas edge can poke a
     // fraction of a pixel past a device-aligned damage rect that covers it
     // for every purpose that matters, and a false negative here starves the
-    // generation restart below. (A canvas ≤2 device px across degenerates to
-    // an empty probe and answers false — it also has nothing to restart.)
-    const bool fullSlice = paintedDevice.contains(deviceVisible.adjusted(1, 1, -1, -1));
+    // generation restart below. The explicit isEmpty guard is load-bearing:
+    // Region::contains on an empty rect is undocumented, and a canvas ≤2
+    // device px across (whose shrunk probe degenerates) must answer false —
+    // it has nothing to restart.
+    const KWin::Rect fullProbe = deviceVisible.adjusted(1, 1, -1, -1);
+    const bool fullSlice = !fullProbe.isEmpty() && paintedDevice.contains(fullProbe);
     // ── Generation restart ──────────────────────────────────────────────
     // The valid rect must eventually CONTRACT (a window dragged half off its
     // output must not keep claiming canvas it no longer captures — the
@@ -212,6 +218,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // through the gaps between them. Contained (inward-rounding) mapping so
     // a slice never claims a device pixel this pass did not repaint.
     QRectF destUnion;
+    QRectF largestSlice;
     for (const KWin::Rect& deviceSlice : paintedDevice.rects()) {
         const KWin::Rect logicalSlice = viewport.mapFromDeviceCoordinatesContained(deviceSlice);
         const QRectF sliceF =
@@ -233,7 +240,15 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         if (!fbo.blitFromRenderTarget(renderTarget, viewport, source, destination)) {
             continue;
         }
+        // Record what this blit actually covered, grown by 1 px: the inward
+        // source rounding at fractional scale can open sub-pixel seams between
+        // adjacent slices, and without the growth those seams would read as
+        // coverage gaps below and needlessly shrink the published rect.
+        state.backdropWritten += destination.grownBy(QMargins(1, 1, 1, 1));
         destUnion = destUnion.isEmpty() ? destF : destUnion.united(destF);
+        if (destF.width() * destF.height() > largestSlice.width() * largestSlice.height()) {
+            largestSlice = destF;
+        }
     }
     if (destUnion.isEmpty()) {
         // No slice landed. Leave backdropRect alone, exactly as the empty-source path
@@ -244,22 +259,36 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         // failed blit means THIS slice is missing, not that the others are invalid.
         return;
     }
-    // Valid sub-rect in TOP-DOWN normalized coords — matches backdropTexel's
-    // clamp space. Non-restart captures UNION with the slices already
-    // accumulated (sibling outputs tiling the canvas, earlier damage slices
-    // from this one). The bounding box can span texels no slice covered, but
-    // those hold the previous capture of the same scene spot, not garbage —
-    // the texture is only ever cleared at allocation.
-    QVector4D destNorm(static_cast<float>(destUnion.x() / texW), static_cast<float>(destUnion.y() / texH),
-                       static_cast<float>(destUnion.width() / texW), static_cast<float>(destUnion.height() / texH));
+    // Valid sub-rect in TEXTURE PIXELS first, normalized at the end — matches
+    // backdropTexel's clamp space. Non-restart captures UNION with the slices
+    // already accumulated (sibling outputs tiling the canvas, earlier damage
+    // slices from this one). A bounding-box union can span texels no slice
+    // ever covered, and on a freshly-cleared texture those still hold the
+    // transparent allocation clear — which a pack clamping into the rect WOULD
+    // sample, as black patches in the frost. So the published rect must pass
+    // the written-coverage check: fall back from the union to this frame's
+    // union, then to the largest single blitted slice (fully written by
+    // construction). After the first full-canvas capture the coverage region
+    // spans the texture and the checks are trivially true, so the union
+    // behaves exactly as it always has; gap texels then hold the PREVIOUS
+    // capture of the same scene spot, which is fine.
+    QRectF validPx = destUnion;
     if (!restartGeneration && backdropUsable(state)) {
-        const float x0 = qMin(state.backdropRect.x(), destNorm.x());
-        const float y0 = qMin(state.backdropRect.y(), destNorm.y());
-        const float x1 = qMax(state.backdropRect.x() + state.backdropRect.z(), destNorm.x() + destNorm.z());
-        const float y1 = qMax(state.backdropRect.y() + state.backdropRect.w(), destNorm.y() + destNorm.w());
-        destNorm = QVector4D(x0, y0, x1 - x0, y1 - y0);
+        validPx = validPx.united(QRectF(state.backdropRect.x() * texW, state.backdropRect.y() * texH,
+                                        state.backdropRect.z() * texW, state.backdropRect.w() * texH));
     }
-    state.backdropRect = destNorm;
+    const auto fullyWritten = [&state](const QRectF& r) {
+        // Shrink the probe by 1 px, mirroring the 1 px growth the inserts get:
+        // the boundary texel band is tolerated, a hole in the middle is not.
+        const QRect probe = r.toAlignedRect().adjusted(1, 1, -1, -1);
+        return probe.isEmpty() || state.backdropWritten.contains(KWin::Rect(probe));
+    };
+    if (!fullyWritten(validPx)) {
+        validPx = fullyWritten(destUnion) ? destUnion : largestSlice;
+    }
+    state.backdropRect =
+        QVector4D(static_cast<float>(validPx.x() / texW), static_cast<float>(validPx.y() / texH),
+                  static_cast<float>(validPx.width() / texW), static_cast<float>(validPx.height() / texH));
     // Commit the generation-set write now that a blit succeeded: a restart
     // clears first and re-adds this output; a first full slice from a new
     // output adds itself; a partial slice leaves the set untouched (see the

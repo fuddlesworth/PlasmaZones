@@ -805,7 +805,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // Backdrop capture for needsBackdrop decoration chains (frost / glass):
     // snapshot the scene UNDER this window's padded canvas from the live
     // render target BEFORE any fold below runs — at this point in the scene
-    // walk the target holds exactly the content painted below this window.
+    // walk the target holds the content painted below this window WITHIN the
+    // frame's damage region (outside it the buffer still holds the previous
+    // presented frame, which is why the capture clips to deviceRegion).
     // Live windows only: a closing window's decoration reuses its frozen
     // composite (renderSurfaceChain) and must never re-capture. Covers both
     // fold sites (the rest-path composite further down AND the transition
