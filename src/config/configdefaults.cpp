@@ -155,6 +155,27 @@ QString ConfigDefaults::readRenderingBackendFromDisk()
     return renderingBackend();
 }
 
+QString ConfigDefaults::readGpuDeviceFromDisk()
+{
+    // Same lightweight pre-QCoreApplication read as the backend above. No
+    // legacy INI fallback: Rendering.Gpu postdates the v1 INI format.
+    const QString jsonPath = configFilePath();
+    if (QFile::exists(jsonPath)) {
+        QFile f(jsonPath);
+        if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QJsonParseError err;
+            QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+            if (err.error == QJsonParseError::NoError && doc.isObject()) {
+                const QJsonObject rendering = doc.object().value(renderingGroup()).toObject();
+                if (rendering.contains(gpuKey())) {
+                    return normalizeGpuDevice(rendering.value(gpuKey()).toString(gpuDevice()));
+                }
+            }
+        }
+    }
+    return gpuDevice();
+}
+
 QVariantMap ConfigDefaults::animationProfile(const PhosphorAnimation::CurveRegistry& registry)
 {
     // Curve is resolved through the CurveRegistry so the wire format

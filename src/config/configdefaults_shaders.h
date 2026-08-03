@@ -5,6 +5,8 @@
 
 #include "configdefaults_limits.h"
 
+#include <QRegularExpression>
+
 namespace PlasmaZones {
 
 // Chain link 4: rendering-backend, audio-spectrum shader, decoration-shader, and
@@ -39,6 +41,29 @@ public:
     {
         const QString normalized = raw.toLower().trimmed();
         return renderingBackendOptions().contains(normalized) ? normalized : renderingBackend();
+    }
+
+    /// GPU the daemon (and editor) render on. "auto" = whatever the driver /
+    /// Qt picks; otherwise a lowercase hex PCI "vendor:device" pair (e.g.
+    /// "1002:164e"). Not an enum — the legal set is whatever GPUs the machine
+    /// has, so the schema stores a free string and the picker enumerates DRM
+    /// render nodes at runtime (GpuDeviceList).
+    static QString gpuDevice()
+    {
+        return QStringLiteral("auto");
+    }
+
+    /// Coerce to "auto" or a well-formed vendor:device hex pair. Anything
+    /// else (hand-edited garbage) falls back to "auto" so startup never acts
+    /// on a string DRI_PRIME / the Vulkan matcher can't parse.
+    static QString normalizeGpuDevice(const QString& raw)
+    {
+        const QString normalized = raw.toLower().trimmed();
+        if (normalized.isEmpty() || normalized == gpuDevice()) {
+            return gpuDevice();
+        }
+        static const QRegularExpression pciPair(QStringLiteral("^[0-9a-f]{1,4}:[0-9a-f]{1,4}$"));
+        return pciPair.match(normalized).hasMatch() ? normalized : gpuDevice();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

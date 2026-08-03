@@ -90,9 +90,14 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     QVulkanInstance vulkanInstance;
 #endif
+    const QString gpuDevice = PlasmaZones::ConfigDefaults::readGpuDeviceFromDisk();
     {
         const QString backend = PlasmaZones::ConfigDefaults::readRenderingBackendFromDisk();
         useVulkan = PlasmaZones::probeAndSetGraphicsApi(backend);
+        // Same GPU pin as the daemon so shader previews render on the same
+        // device. DRI_PRIME must be exported before the app object (Mesa
+        // reads it when the DRI screen opens during platform init).
+        PlasmaZones::applyOpenGlGpuPreference(gpuDevice);
     }
 
     // QApplication (not QGuiApplication): the org.kde.desktop QtQuick Controls
@@ -108,7 +113,7 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     qRegisterMetaType<QVulkanInstance*>();
     if (useVulkan) {
-        if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app)) {
+        if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app, gpuDevice)) {
             qCCritical(PlasmaZones::lcEditor)
                 << "Vulkan unavailable (instance creation failed or no enumerable GPU) —"
                 << "falling back to OpenGL for shader preview. If a GPU driver was upgraded,"

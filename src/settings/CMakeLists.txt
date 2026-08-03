@@ -222,6 +222,8 @@ set(plasmazones_settings_SRCS
     utils/screenhelper.cpp
     utils/screenprovider.h
     utils/screenprovider.cpp
+    utils/gpudevicelist.h
+    utils/gpudevicelist.cpp
     utils/dbusutils.h
 )
 

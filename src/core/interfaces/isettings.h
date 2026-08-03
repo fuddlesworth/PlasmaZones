@@ -178,6 +178,12 @@ public:
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
 
+    // GPU the daemon renders on: "auto" or a "vendor:device" hex PCI pair.
+    // Applied at daemon/editor startup (before QGuiApplication), so like the
+    // backend it takes effect on restart.
+    virtual QString gpuDevice() const = 0;
+    virtual void setGpuDevice(const QString& gpu) = 0;
+
     // Window decoration appearance (tiled/snapped window border + title bar).
     // Mode-neutral, distinct from the ZONE OVERLAY border settings
     // (borderWidth/borderRadius/borderColor on IZoneVisualizationSettings) —
@@ -561,6 +567,7 @@ Q_SIGNALS:
     void perScreenScrollingSettingsChanged();
     // Rendering
     void renderingBackendChanged();
+    void gpuDeviceChanged();
     // Window decoration appearance (border + title bar)
     void showWindowBorderChanged();
     void windowBorderScopeChanged();

@@ -374,6 +374,17 @@ void appendRenderingSchema(PhosphorConfig::Schema& schema)
              return QVariant(CD::normalizeRenderingBackend(v.toString()));
          },
          tokenChoices(CD::renderingBackendOptions())},
+        // Gpu is a free string, not a token enum: the legal values are the
+        // machine's GPUs ("auto" or a "vendor:device" hex PCI pair), so there
+        // are no declared choices — the picker enumerates DRM render nodes at
+        // runtime. The validator still coerces malformed strings to "auto".
+        {CD::gpuKey(),
+         CD::gpuDevice(),
+         QMetaType::QString,
+         {},
+         [](const QVariant& v) {
+             return QVariant(CD::normalizeGpuDevice(v.toString()));
+         }},
     };
 }
 

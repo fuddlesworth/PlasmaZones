@@ -412,6 +412,13 @@ public:
      * Returns the normalized backend string ("auto", "vulkan", or "opengl").
      */
     PLASMAZONES_EXPORT static QString readRenderingBackendFromDisk();
+
+    /**
+     * Same pre-QCoreApplication raw read for Rendering.Gpu. No legacy INI
+     * fallback: the key postdates the v1 INI format, so an INI can never
+     * carry it. Returns "auto" or a normalized "vendor:device" hex pair.
+     */
+    PLASMAZONES_EXPORT static QString readGpuDeviceFromDisk();
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Settings
     // ═══════════════════════════════════════════════════════════════════════════

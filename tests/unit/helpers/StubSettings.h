@@ -2083,6 +2083,19 @@ public:
             Q_EMIT settingsChanged();
         }
     }
+    QString gpuDevice() const override
+    {
+        return m_gpuDevice;
+    }
+    void setGpuDevice(const QString& gpu) override
+    {
+        const QString value = ConfigDefaults::normalizeGpuDevice(gpu);
+        if (m_gpuDevice != value) {
+            m_gpuDevice = value;
+            Q_EMIT gpuDeviceChanged();
+            Q_EMIT settingsChanged();
+        }
+    }
 
     // Per-screen autotile config (used by WindowAppearanceController's
     // per-monitor gapValue/writeGap and the per-screen gap accessors). Stored in
@@ -2182,6 +2195,7 @@ private:
     QString m_defaultLayoutId;
     bool m_suppressDefaultLayoutAssignment = ConfigDefaults::suppressDefaultLayoutAssignment();
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
+    QString m_gpuDevice = ConfigDefaults::gpuDevice();
     bool m_snapAssistFeatureEnabled = ConfigDefaults::snapAssistFeatureEnabled();
     bool m_snapAssistEnabled = ConfigDefaults::snapAssistEnabled();
     bool m_autoAssignAllLayouts = ConfigDefaults::autoAssignAllLayouts();

@@ -131,6 +131,7 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     QVulkanInstance vulkanInstance;
 #endif
+    const QString gpuDevice = PlasmaZones::ConfigDefaults::readGpuDeviceFromDisk();
     {
         const QString backend = PlasmaZones::ConfigDefaults::readRenderingBackendFromDisk();
         useVulkan = PlasmaZones::probeAndSetGraphicsApi(backend);
@@ -142,6 +143,11 @@ int main(int argc, char* argv[])
                                       << (useVulkan                                ? "(Vulkan)"
                                               : backend == QLatin1String("opengl") ? "(OpenGL)"
                                                                                    : "(Qt default)");
+        // GL device choice happens when Mesa opens the DRI screen during
+        // platform init, so DRI_PRIME must be exported before the app object.
+        // Applied on the Vulkan path too: it only steers the GL loader, and
+        // covers the case where Vulkan falls back to OpenGL below.
+        PlasmaZones::applyOpenGlGpuPreference(gpuDevice);
     }
 
     QGuiApplication app(argc, argv);
@@ -151,7 +157,7 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     qRegisterMetaType<QVulkanInstance*>();
     if (useVulkan) {
-        if (PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app)) {
+        if (PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app, gpuDevice)) {
             qCInfo(PlasmaZones::lcDaemon) << "Vulkan instance created successfully";
         } else {
             qCCritical(PlasmaZones::lcDaemon)

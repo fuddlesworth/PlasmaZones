@@ -9,6 +9,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 namespace PlasmaZones {
 
@@ -41,6 +42,14 @@ class GeneralPageController : public PhosphorControl::PageController
     Q_OBJECT
 
     Q_PROPERTY(QString startupRenderingBackend READ startupRenderingBackend CONSTANT)
+    Q_PROPERTY(QString startupGpuDevice READ startupGpuDevice CONSTANT)
+
+    // {text, value} rows for the GPU picker: "auto" first, then the
+    // machine's GPUs from DRM render-node enumeration (GpuDeviceList). A
+    // stored value that no longer matches any present GPU (card removed,
+    // config copied from another machine) is appended verbatim so the combo
+    // can still display the persisted selection.
+    Q_PROPERTY(QVariantList availableGpus READ availableGpus CONSTANT)
 
     Q_PROPERTY(int animationDurationMin READ animationDurationMin CONSTANT)
     Q_PROPERTY(int animationDurationMax READ animationDurationMax CONSTANT)
@@ -93,6 +102,14 @@ public:
     QString startupRenderingBackend() const
     {
         return m_startupRenderingBackend;
+    }
+    QString startupGpuDevice() const
+    {
+        return m_startupGpuDevice;
+    }
+    QVariantList availableGpus() const
+    {
+        return m_availableGpus;
     }
 
     int animationDurationMin() const
@@ -170,10 +187,12 @@ public:
     }
 
 private:
-    /// Backend value at controller construction. Survives page recreation so
-    /// the "restart required" InlineMessage stays visible after navigating
-    /// away and back.
+    /// Backend / GPU values at controller construction. Survive page
+    /// recreation so the "restart required" InlineMessage stays visible
+    /// after navigating away and back.
     QString m_startupRenderingBackend;
+    QString m_startupGpuDevice;
+    QVariantList m_availableGpus;
 };
 
 } // namespace PlasmaZones

@@ -252,6 +252,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // the exact card/row and pulse-highlights it. Subtitles are auto-derived from
     // the page hierarchy by SearchController, so none are passed here.
     addSection(search, QStringLiteral("general"), QStringLiteral("rendering"), PhosphorI18n::tr("Rendering"));
+    addSetting(search, QStringLiteral("general"), QStringLiteral("gpuDevice"), PhosphorI18n::tr("Rendering device"),
+               {PhosphorI18n::tr("gpu"), PhosphorI18n::tr("graphics card"), PhosphorI18n::tr("device")});
     addSetting(search, QStringLiteral("general"), QStringLiteral("renderingBackend"),
                PhosphorI18n::tr("Rendering backend"),
                {PhosphorI18n::tr("opengl"), PhosphorI18n::tr("vulkan"), PhosphorI18n::tr("graphics")});

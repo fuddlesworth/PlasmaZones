@@ -54,6 +54,26 @@ SettingsFlickable {
                 spacing: Kirigami.Units.smallSpacing
 
                 SettingsRow {
+                    title: i18n("Rendering device")
+                    description: i18n("GPU that draws the zone overlays, popups, and on-screen displays. Automatic lets the graphics driver decide. Window contents are unaffected because those are composited by KWin.")
+                    searchAnchor: "gpuDevice"
+
+                    WideComboBox {
+                        id: gpuDeviceCombo
+
+                        enabled: !settingsController.daemonRunning
+                        Accessible.name: i18n("Rendering device")
+                        textRole: "text"
+                        valueRole: "value"
+                        // Machine-dependent, so enumerated by the page
+                        // controller instead of declared in the schema.
+                        model: settingsController.generalPage.availableGpus
+                        storedValue: appSettings.gpuDevice
+                        onActivated: appSettings.gpuDevice = currentValue
+                    }
+                }
+
+                SettingsRow {
                     title: i18n("Rendering backend")
                     description: i18n("Graphics API used for overlay rendering")
                     searchAnchor: "renderingBackend"
@@ -81,8 +101,8 @@ SettingsFlickable {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     type: Kirigami.MessageType.Information
-                    text: settingsController.daemonRunning ? i18n("Stop the daemon to change the rendering backend.") : i18n("Rendering backend changes take effect after restarting the daemon.")
-                    visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.generalPage.startupRenderingBackend
+                    text: settingsController.daemonRunning ? i18n("Stop the daemon to change rendering settings.") : i18n("Rendering changes take effect after restarting the daemon.")
+                    visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.generalPage.startupRenderingBackend || appSettings.gpuDevice !== settingsController.generalPage.startupGpuDevice
                 }
             }
         }
