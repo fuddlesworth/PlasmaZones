@@ -923,6 +923,17 @@ target_link_libraries(test_scrolling_adaptor PRIVATE Qt6::Test Qt6::Core Qt6::DB
                                                      PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_scrolling_adaptor COMMAND test_scrolling_adaptor)
 
+# Close/reopen restore on the scroll engine through the unified placement
+# store: a reopened window's fresh uuid must match its record by appId FIFO
+# (WindowPlacementStore::takeForReopen), not uuid-exact only.
+add_executable(test_scroll_reopen_restore
+               scrolling/test_scroll_reopen_restore.cpp
+               # Q_OBJECT fake — listed so AUTOMOC generates its metaobject.
+               helpers/AutotileFakes.h)
+target_link_libraries(test_scroll_reopen_restore PRIVATE Qt6::Test Qt6::Core plasmazones_core
+                                                         PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_scroll_reopen_restore COMMAND test_scroll_reopen_restore)
+
 # RuleAdaptor's refusals are refusals to OVERWRITE the persisted rule set, so
 # a guard that quietly stops working loses user data rather than a feature.
 # The contract-sync test only checks the XML's shape; this pins the behaviour.

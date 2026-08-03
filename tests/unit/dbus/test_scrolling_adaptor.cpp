@@ -75,6 +75,15 @@ private Q_SLOTS:
             return QRect(1920, 0, 1200, 800);
         };
         m_engine->setScreenGeometryProviders(available, screen);
+        // Well-behaved-compositor echo, same as ScrollTestUtils'
+        // makeProviderEngine: every activation request is answered with a
+        // windowFocused report so the engine's pending-self-activation queue
+        // drains — without it the next simulated USER focus of that window is
+        // consumed as the missing echo.
+        connect(m_engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_engine,
+                [this](const QString& windowId) {
+                    m_engine->windowFocused(windowId, m_engine->screenForTrackedWindow(windowId));
+                });
         m_parent = new QObject(nullptr);
         m_adaptor = new ScrollingAdaptor(m_engine, m_parent);
         m_engine->setActiveScreens({QStringLiteral("DP-1")});

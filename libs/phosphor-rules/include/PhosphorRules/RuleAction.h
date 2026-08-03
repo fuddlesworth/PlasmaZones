@@ -101,8 +101,10 @@ struct PHOSPHORRULES_EXPORT RuleAction
  *     QColor::HexArgb); seeded by the settings layer's `defaultPayloadFor`
  *     "color" branch (defaultDisplay is a double, so it cannot carry a colour
  *     seed). Shorter `#RGB`/`#RRGGBB` shapes still load for hand-edited values.
- *   - picker-aware kinds carry no schema state — the QML loader knows
- *     to swap in the catalogue-driven ComboBox.
+ *   - picker-aware kinds normally carry no schema state — the QML loader
+ *     knows to swap in the catalogue-driven ComboBox — though one MAY carry
+ *     advisory bounds (RouteToDesktop's `virtualDesktop` declares min/max);
+ *     the loader dispatches on `kind` alone either way.
  */
 struct PHOSPHORRULES_EXPORT ParamSchema
 {
@@ -164,7 +166,8 @@ inline constexpr QLatin1StringView Overlay{"overlay"};
  *   - a `validate` predicate run on load,
  *   - the set of param keys the action accepts (`allowedKeys`) — the strict
  *     loader rejects any action carrying a key not in this set,
- *   - whether the action is **terminal** (an `Exclude` action stops evaluation),
+ *   - whether the action is **terminal** (an Exclude-family action stops
+ *     evaluation — see the four Exclude* action types),
  *   - the structural `params` schema consumed by the editor UI,
  *   - the `userAuthorable` visibility flag used by the action-type picker
  *     to filter out actions that are registered for back-compat / loader
@@ -187,7 +190,10 @@ struct PHOSPHORRULES_EXPORT ActionDescriptor
     SlotResolver slotFor;
     /// Returns true if @p params is a well-formed payload for this type.
     Validator validate;
-    /// Terminal actions (Exclude) stop evaluation once their rule matches.
+    /// Terminal actions (the Exclude family: Exclude / ExcludePlacement /
+    /// ExcludeAnimations / ExcludeDecorations) stop evaluation once their
+    /// rule matches — within the evaluator's terminal-action scope, see
+    /// RuleEvaluator::setTerminalActionScope.
     bool terminal = false;
     /// The complete set of param keys this action type accepts. The strict
     /// loader (`RuleAction::fromJson`) rejects an action whose `params`
@@ -259,7 +265,7 @@ public:
     /// type is unregistered or its descriptor rejects the params.
     QString slotFor(const RuleAction& action) const;
 
-    /// True if @p action is a terminal action (Exclude).
+    /// True if @p action is a terminal action (one of the Exclude family).
     bool isTerminal(const RuleAction& action) const;
 
     /// True if @p action passes its descriptor's validation.
@@ -321,6 +327,25 @@ inline constexpr QLatin1StringView LockContext{"lockContext"};
 /// `LayoutRegistry::resolveContextDefaultAssignment`, mirroring `LockContext`.
 inline constexpr QLatin1StringView DefaultLayoutAssignment{"defaultLayoutAssignment"};
 inline constexpr QLatin1StringView Exclude{"exclude"};
+/// Exclude a matched window from the placement engines ONLY — snapping,
+/// autotile and scrolling all treat it as unmanaged (open path, drag gate,
+/// keyboard navigation), so it stays floating — while decorations and
+/// animations still apply. The scoped sibling of the blanket `Exclude`,
+/// which additionally strips decorations. Terminal like `Exclude`, and
+/// sliced into the same placement-exclusion set consumers bind
+/// (`ExclusionRules::excludePlacementRulesFrom` returns Exclude ∪
+/// ExcludePlacement rules). Distinct from `Float`, which is an open-path
+/// placement verdict on a MANAGED window (a floated window can still be
+/// dragged into a zone; an excluded one cannot).
+///
+/// Scope enforcement: evaluators bound to the FULL store declare a
+/// terminal-action scope (RuleEvaluator::setTerminalActionScope) so this
+/// action terminates only placement-policy walks — on a mixed rule, its
+/// presence does not cancel animation/appearance or context resolution.
+/// Carries no tags, deliberately: no in-tree tag reader consumes the
+/// exclusion family, and its placement effect flows exclusively through
+/// the slicer.
+inline constexpr QLatin1StringView ExcludePlacement{"excludePlacement"};
 inline constexpr QLatin1StringView Float{"float"};
 /// Snap a matched window into one or more zones on open. Carries a non-empty
 /// list of 1-based zone ordinals (`ActionParam::Zones`); a single ordinal snaps
@@ -401,6 +426,24 @@ inline constexpr QLatin1StringView SetOverlayShowZoneNumbers{"setOverlayShowZone
 /// animationExcludedApplications / animationExcludedWindowClasses
 /// settings lists by the v3→v4 chain.
 inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
+
+/// Disable window decorations (the border + surface-pack chain) on a matched
+/// window — the decoration mirror of `ExcludeAnimations`. The KWin effect's
+/// `shouldDecorateWindow` gate binds the decoration-exclusion slice
+/// (`ExclusionRules::excludeDecorationsRulesFrom`, Exclude ∪
+/// ExcludeDecorations), so the blanket `Exclude` keeps stripping decorations
+/// while this action strips ONLY decorations — placement and animations are
+/// untouched (full-store evaluators enforce this by scoping which terminal
+/// actions they honour, see RuleEvaluator::setTerminalActionScope, so a
+/// mixed rule carrying this action cannot cancel placement or animation
+/// resolution). Like ExcludeAnimations it deliberately omits `Tag::Effect`:
+/// carrying it would admit the rule into the effect's animation rule set,
+/// whose "any match force-animates" opt-in gate must not fire for a
+/// decoration opt-out. Carries `Tag::Border` as classification only — no
+/// in-tree tag reader consumes it, and blanket `Exclude`'s decoration
+/// effect flows exclusively through the slicer, never through tags.
+/// Terminal.
+inline constexpr QLatin1StringView ExcludeDecorations{"excludeDecorations"};
 
 /// Per-window override for floated-position restore on login. A boolean `value`
 /// action: true forces the window's previous floated position (and original
@@ -670,8 +713,10 @@ inline constexpr int MaxZoneOrdinal = 64;
 
 /// Upper bounds for the per-window border appearance overrides
 /// (`SetBorderWidth` / `SetBorderRadius`), in logical px. Shared so the
-/// load-time descriptor validators (ruleaction_builtins_appearance.cpp for the
-/// per-window pair, ruleaction_builtins_engine.cpp for the overlay pair) and the KWin-effect
+/// load-time descriptor validators (ruleaction_builtins_appearance.cpp for
+/// the per-window pair, ruleaction_builtins_engine.cpp for the overlay
+/// WIDTH — the overlay RADIUS deliberately uses its own wider
+/// `kMaxOverlayBorderRadius`, see ruleaction_builtins_p.h) and the KWin-effect
 /// consumer re-validation (shader_resolve.cpp) stay in lockstep — a
 /// programmatically-built or hand-edited payload out of this range is
 /// rejected at both boundaries rather than drawn.
@@ -991,6 +1036,13 @@ inline constexpr QLatin1StringView DecorationChain{"decoration-chain"};
 /// terminal (e.g. composing with override actions) would start
 /// filling the slot, so the id stays load-bearing for that path.
 inline constexpr QLatin1StringView AnimExclude{"anim-exclude"};
+/// Window-scoped. Declared for ActionDescriptor completeness the same way
+/// AnimExclude is — ExcludeDecorations is `.terminal = true`, so
+/// `RuleEvaluator::resolve` calls `markExcluded()` and breaks before
+/// `fillSlot()` runs. The effect's `shouldDecorateWindow` gates on
+/// `ResolvedActions::isExcluded()` over the dedicated decoration-exclusion
+/// evaluator, never on this slot id.
+inline constexpr QLatin1StringView DecorationExclude{"decoration-exclude"};
 } // namespace ActionSlot
 
 } // namespace PhosphorRules

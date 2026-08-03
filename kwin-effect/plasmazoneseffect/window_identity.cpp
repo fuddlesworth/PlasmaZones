@@ -300,7 +300,23 @@ void PlasmaZonesEffect::flushPendingFrameGeometry()
         // window. QPointer nulls if the window died since the stash; a dead
         // or excluded window contributes no daemon push.
         KWin::EffectWindow* w = it.value().window.data();
-        if (!w || w->isDeleted() || !shouldHandleWindow(w)) {
+        if (!w || w->isDeleted()) {
+            continue;
+        }
+        // Geometry-scoped rules (Width / Height / PositionX / PositionY in a
+        // match) need their cached verdicts refreshed when the frame moves —
+        // handled HERE, once per 50 ms flush and only when such a rule
+        // exists (the set-level gate), never from the per-tick lambda
+        // (discussion #816). Runs before the shouldHandleWindow gate below:
+        // an EXCLUSION verdict can be geometry-scoped too, and an excluded
+        // window's verdict must still refresh even though it contributes no
+        // daemon push. Per-window eviction, NOT the coalesced state-change
+        // helper: that helper's flush clears the GLOBAL animation match
+        // cache, and this edge repeats for a drag's whole duration.
+        if (m_hasGeometryScopedRules) {
+            invalidateRuleCachesForWindowGeometry(it.key(), w);
+        }
+        if (!shouldHandleWindow(w)) {
             continue;
         }
         const QRect& geo = it.value().geometry;

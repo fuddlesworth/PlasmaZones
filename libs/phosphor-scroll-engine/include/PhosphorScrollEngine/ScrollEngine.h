@@ -123,6 +123,8 @@ public:
 
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
+    void beginArrivalBurst() override;
+    void endArrivalBurst() override;
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
@@ -691,6 +693,20 @@ private:
     /// Refreshes the clamp on an existing entry rather than overwriting a
     /// real remembered slot with a slotless one.
     void seedFloatRestoreForOpen(const QString& windowId, int minWidth, int minHeight);
+    /// Accept-predicate term for a FLOATING scroll slot in the open-time
+    /// restore branches (autotile's rule, term for term): same-instance
+    /// records restore unconditionally, FIFO consumption additionally needs a
+    /// real float-back rect, and the record's screen must match @p screenId
+    /// (or be unscreened).
+    bool acceptsFloatingRecord(const PhosphorEngine::WindowPlacement& p, const QString& windowId,
+                               const QString& screenId) const;
+    /// Consume the window's FLOATING placement record on an engine-decided
+    /// float at open (oversized / rule / sticky) and apply the gated
+    /// float-back position restore — the same record consumption and
+    /// geometry emit the record-float branch of insertOpenedWindow performs.
+    /// Without it an engine-decided float leaves the record stale in the
+    /// FIFO and forgets the remembered position autotile restores.
+    void restoreFloatRecordForOpen(const QString& windowId, const QString& screenId);
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
                              const QString& screenId);
     bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
@@ -724,6 +740,32 @@ private:
     PhosphorEngine::ScreenContextTracker m_context;
     QSet<QString> m_scrollingScreens;
     QString m_activeScreen;
+    /// FIFO of window ids this engine asked the compositor to activate
+    /// (applyLayout's focusWindowAfter arm) whose windowFocused report has
+    /// not come back yet. The effect reports EVERY activation back through
+    /// notifyWindowFocused, including ones this engine initiated, and the
+    /// round trip is asynchronous: on a rapid focus scroll the strip has
+    /// already advanced past the echoed window by the time the report lands,
+    /// and treating that stale echo as user focus rewinds the active column —
+    /// the next scroll step then advances from the rewound column and skips
+    /// one. windowFocused consumes a matching entry and drops the report; a
+    /// NON-matching report clears the whole queue, which is sound because the
+    /// effect's calls share one ordered D-Bus connection — any echo sent
+    /// earlier has already arrived, so a leftover entry means the effect
+    /// dropped that activation (show desktop, window gone). The tab-click
+    /// path is unaffected: its activation goes out via the adaptor's
+    /// focusWindowRequested, never through this engine's emit, so its echo
+    /// is never queued and still drives the strip (signals.cpp documents
+    /// that contract).
+    QStringList m_pendingSelfActivations;
+    /// Arrival-burst bracket depth (IPlacementEngine::beginArrivalBurst).
+    /// While positive, windowOpened defers its per-arrival applyLayout into
+    /// m_burstPendingApplies (screen → whether any deferred arrival took
+    /// focus) and the outermost endArrivalBurst applies once per screen —
+    /// a daemon-restart re-announce then resolves the restored strip in one
+    /// geometry batch instead of N visible partial-strip intermediates.
+    int m_arrivalBurstDepth = 0;
+    QHash<QString, bool> m_burstPendingApplies;
     /// Armed by the context setters (desktop/activity switch), consumed by
     /// setActiveScreens so the identical-set re-emit only claims
     /// isDesktopSwitch=true for a REAL switch — same contract as

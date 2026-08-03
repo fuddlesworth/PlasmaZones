@@ -106,6 +106,22 @@ bool admitScreenAndModeStamped(const PhosphorRules::Rule& rule)
 
 } // namespace
 
+void WindowTrackingAdaptor::ensureRuleEvaluator()
+{
+    // See the declaration doc: the single construction site for the
+    // full-store evaluator, so the placement-only terminal scope is applied
+    // in exactly one place. Blanket Exclude keeps its historical effect
+    // (an excluded window gets no placement policy either); the decoration-
+    // and animation-scoped exclusions are inert here, resolved instead by
+    // the effect's dedicated sliced evaluators.
+    if (m_ruleEvaluator) {
+        return;
+    }
+    m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    m_ruleEvaluator->setTerminalActionScope(
+        {QString(PhosphorRules::ActionType::Exclude), QString(PhosphorRules::ActionType::ExcludePlacement)});
+}
+
 bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId,
                                                          PhosphorZones::AssignmentEntry::Mode mode)
 {
@@ -127,9 +143,7 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
         return globalDefault;
     }
 
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     // resolveCached is keyed on (windowId, ruleSet revision) and ignores the
     // query on a hit. Six callers share the memo: four stamp ScreenId
     // (placementZonesByRule and the three open-routing resolvers) and two
@@ -186,9 +200,7 @@ bool WindowTrackingAdaptor::shouldRestoreToZoneOnLogin(const QString& windowId)
     if (!query) {
         return globalDefault;
     }
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     const PhosphorRules::ResolvedActions resolved =
         m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
     if (const std::optional<PhosphorRules::RuleAction> action =
@@ -217,9 +229,7 @@ bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
     // "scrolling"), not the SetEngineMode action vocabulary.
     stampScreenAndMode(*query, windowId,
                        m_service ? m_service->screenForWindow(windowId, m_lastActiveScreenId) : QString());
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     // Unlike the open-path resolvers above, this fires MID-SESSION on every unsnap
     // (drag-out / drop / cursor-left-zones), long after the window opened. A fresh
     // uncached resolve is required: resolveCached is keyed on (windowId, ruleSet
@@ -300,9 +310,7 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QSt
     // since the rules editor offers exactly that pairing.
     stampScreenAndMode(*query, windowId, screenId);
 
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     // UNCACHED, for the same reason scrollOpenRuleParams is: resolveCached is
     // keyed on (windowId, ruleSet revision) ALONE, so on a hit the freshly
     // built query is ignored — including the ScreenId and Mode stamped above.
@@ -331,9 +339,7 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     // rule pairing a tab colour with a ScreenId or Mode condition is therefore
     // inert on this path by design; the per-CONTEXT colour actions are the
     // spelling for "recolour tabs on this screen".
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     // This path uses its OWN memo and never touches the shared one. Two
     // separate reasons, and the shared memo cannot satisfy either:
     //
@@ -434,9 +440,7 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
     query->screenId = screenId;
     query->mode = QStringLiteral("scrolling");
 
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     // Deliberately UNCACHED, unlike the sibling predicates. resolveCached is
     // keyed on (windowId, ruleSet revision) alone, so seeding it from this
     // extra-stamped query would hand the screen-only placement resolver a
@@ -505,9 +509,7 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // and a screen-constrained rule resolves correctly.
     query->screenId = screenId;
 
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     // Shares m_ruleEvaluator with shouldFloatByRule / shouldRestoreFloatedPosition;
     // resolveCached is keyed on (windowId, ruleSet revision) and returns every matched
     // slot, so reading the Placement slot off the same verdict is free. Same open-path
@@ -600,9 +602,7 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
     // resolveCached is keyed on windowId (+ rule-set revision), so on the snap open path
     // this reuses the verdict placementZonesByRule already seeded — no second evaluation.
     query->screenId = screenId;
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     emitRouteToDesktopIfMatched(m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped), windowId);
 }
 
@@ -617,9 +617,7 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     }
     // Pin the screen so a ScreenId-scoped rule resolves, mirroring placementZonesByRule.
     query->screenId = screenId;
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     const PhosphorRules::ResolvedActions resolved =
         m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
 
@@ -717,9 +715,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
         return QString();
     }
     query->screenId = screenId;
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     const PhosphorRules::ResolvedActions resolved =
         m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
 

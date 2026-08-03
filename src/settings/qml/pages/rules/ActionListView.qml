@@ -156,10 +156,13 @@ ColumnLayout {
         if (kind === "decorationChain") {
             // Surface-pack ids resolve through the decoration pack catalog
             // (mirrors ActionRow's _decorationChainEditor source); unknown ids
-            // render verbatim. An empty chain is the "no decoration" sentinel.
+            // render verbatim. An empty chain clears the CUSTOM packs and
+            // falls back to the config-backed layers — same wording as the
+            // rules-list summary; turning decorations off entirely is
+            // ExcludeDecorations' job.
             var chainIds = raw || [];
             if (!chainIds.length)
-                return i18n("Block decoration");
+                return i18n("Decoration packs: none");
             var decoCtl = root.appSettings ? root.appSettings.decorationPage : null;
             var packs = decoCtl ? (decoCtl.availableShaderEffects() || []) : [];
             var names = [];

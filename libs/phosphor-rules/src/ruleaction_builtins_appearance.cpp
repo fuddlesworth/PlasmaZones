@@ -291,6 +291,27 @@ void ActionRegistry::registerBuiltinsAppearance()
         .tags = {QString(Tag::Border), QString(Tag::Effect)},
     });
 
+    // ── decoration-exclude slot — the decoration mirror of ExcludeAnimations.
+    // A rule with `ExcludeDecorations` suppresses the border + surface-pack
+    // chain for matched windows via the effect's shouldDecorateWindow gate,
+    // which binds the Exclude ∪ ExcludeDecorations slice
+    // (ExclusionRules::excludeDecorationsRulesFrom). Terminal for the same
+    // reason ExcludeAnimations is; deliberately NOT Tag::Effect so it never
+    // enters the effect's animation rule set (whose any-match gate
+    // force-animates — wrong for a decoration opt-out). Tag::Border is
+    // classification only (no in-tree tag reader).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::ExcludeDecorations),
+        .slotFor = constantSlot(ActionSlot::DecorationExclude),
+        .validate = &acceptAny,
+        .terminal = true,
+        .allowedKeys = {},
+        .domain = ActionDomain::Window,
+        .category = QStringLiteral("borderAppearance"),
+        .displayOrder = 9,
+        .tags = {QString(Tag::Border)},
+    });
+
     // ── per-context gap slots (domain Context) ──
     // Resolved daemon-side at zone-geometry time (DaemonGeometryResolver) as
     // the highest-precedence gap layer. Per-property to mirror the

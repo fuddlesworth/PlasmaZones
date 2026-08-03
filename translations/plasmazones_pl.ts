@@ -1081,7 +1081,7 @@
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="532"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="233"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="262"/>
         <source>Tiling: %1</source>
         <translation>Kafelkowanie: %1</translation>
     </message>
@@ -1754,7 +1754,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="148"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="224"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="253"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="950"/>
         <source>Snapping layout</source>
         <translation>Układ przyciągania</translation>
@@ -1867,13 +1867,13 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="334"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="342"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="384"/>
         <source>Overlay shader</source>
         <translation>Shader nakładki</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="337"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="348"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="390"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/OsdCard.qml.cpp" line="104"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/OsdCard.qml.cpp" line="108"/>
         <source>Overlay style</source>
@@ -1881,7 +1881,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="365"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="671"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="737"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="546"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="34"/>
         <source>Monitor</source>
@@ -1891,7 +1891,7 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="364"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="254"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="368"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="673"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="739"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="501"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="40"/>
         <source>Desktop</source>
@@ -2236,7 +2236,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="526"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="760"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="771"/>
         <source>Open in a tabbed column</source>
         <translation>Otwórz w kolumnie z kartami</translation>
     </message>
@@ -2247,7 +2247,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="535"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="766"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="777"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="626"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="801"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="212"/>
@@ -2269,7 +2269,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="544"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="769"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="780"/>
         <source>Hide the tab indicator for a single tab</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2340,7 +2340,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="586"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="740"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="751"/>
         <source>Lock layout</source>
         <translation>Zablokuj układ</translation>
     </message>
@@ -2350,122 +2350,132 @@
         <translation>Przypisanie domyślnego układu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="592"/>
-        <source>Exclude window</source>
-        <translation>Wyklucz okno</translation>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="594"/>
+        <source>Exclude window (placement and decorations)</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="595"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="597"/>
+        <source>Exclude from tiling, snapping, and scrolling</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="600"/>
         <source>Float window</source>
         <translation>Uczyń okno pływającym</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="598"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="603"/>
         <source>Snap to zone(s)</source>
         <translation>Przyciągnij do strefy/stref</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="601"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="728"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="606"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="739"/>
         <source>Restore position on login</source>
         <translation>Przywróć położenie po zalogowaniu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="604"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="731"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="609"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="742"/>
         <source>Restore to zone on login</source>
         <translation>Przywróć do strefy po zalogowaniu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="610"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="615"/>
         <source>Set window layer</source>
         <translation>Ustaw warstwę okna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="613"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="618"/>
         <source>Override animation shader</source>
         <translation>Zastąp shader animacji</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="616"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="621"/>
         <source>Override decoration packs</source>
         <translation>Zastąp pakiety dekoracji</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="619"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="624"/>
         <source>Override animation duration</source>
         <translation>Zastąp czas trwania animacji</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="622"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="627"/>
         <source>Override animation curve</source>
         <translation>Zastąp krzywą animacji</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="625"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="630"/>
         <source>Set opacity</source>
         <translation>Ustaw nieprzezroczystość</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="628"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="633"/>
         <source>Set overlay shader</source>
         <translation>Ustaw shader nakładki</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="631"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="636"/>
         <source>Set overlay style</source>
         <translation>Ustaw styl nakładki</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="634"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="639"/>
         <source>Set overlay highlight color</source>
         <translation>Ustaw barwę podświetlenia nakładki</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="637"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="642"/>
         <source>Set overlay inactive color</source>
         <translation>Ustaw barwę nieaktywnej nakładki</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="640"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="645"/>
         <source>Set overlay border color</source>
         <translation>Ustaw barwę obramowania nakładki</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="643"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="648"/>
         <source>Set overlay active opacity</source>
         <translation>Ustaw nieprzezroczystość aktywnej nakładki</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="646"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="651"/>
         <source>Set overlay inactive opacity</source>
         <translation>Ustaw nieprzezroczystość nieaktywnej nakładki</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="649"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="654"/>
         <source>Set overlay border width</source>
         <translation>Ustaw szerokość obramowania nakładki</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="652"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="657"/>
         <source>Set overlay corner radius</source>
         <translation>Ustaw promień narożnika nakładki</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="655"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="755"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="660"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="766"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="431"/>
         <source>Show zone numbers</source>
         <translation>Pokaż numery stref</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="658"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="663"/>
         <source>Exclude from animations</source>
         <translation>Wyklucz z animacji</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="666"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="737"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="669"/>
+        <source>Exclude from borders and decoration packs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="677"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="748"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="438"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="499"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="505"/>
@@ -2473,116 +2483,116 @@
         <translation>Ukryj paski tytułu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="669"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="746"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="680"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="757"/>
         <source>Show border</source>
         <translation>Pokaż obramowanie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="672"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="683"/>
         <source>Set border width</source>
         <translation>Ustaw szerokość obramowania</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="675"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="686"/>
         <source>Set corner radius</source>
         <translation>Ustaw promień narożnika</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="678"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="689"/>
         <source>Set focused border color</source>
         <translation>Ustaw barwę obramowania aktywnego okna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="681"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="692"/>
         <source>Set unfocused border color</source>
         <translation>Ustaw barwę obramowania nieaktywnego okna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="684"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="749"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="695"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="760"/>
         <source>Show opacity and tint</source>
         <translation>Pokaż nieprzezroczystość i zabarwienie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="687"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="698"/>
         <source>Set tint strength</source>
         <translation>Ustaw siłę zabarwienia</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="690"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="701"/>
         <source>Set tint color</source>
         <translation>Ustaw barwę zabarwienia</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="693"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="704"/>
         <source>Set inner gap</source>
         <translation>Ustaw odstęp wewnętrzny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="696"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="707"/>
         <source>Set outer gap</source>
         <translation>Ustaw odstęp zewnętrzny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="699"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="710"/>
         <source>Use per-side outer gaps</source>
         <translation>Użyj odstępów zewnętrznych dla każdej strony</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="702"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="713"/>
         <source>Set top gap</source>
         <translation>Ustaw odstęp górny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="705"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="716"/>
         <source>Set bottom gap</source>
         <translation>Ustaw odstęp dolny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="708"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="719"/>
         <source>Set left gap</source>
         <translation>Ustaw odstęp lewy</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="711"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="722"/>
         <source>Set right gap</source>
         <translation>Ustaw odstęp prawy</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="714"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="279"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="725"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="317"/>
         <source>Open on monitor</source>
         <translation>Otwórz na ekranie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="717"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="284"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="728"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="322"/>
         <source>Open on desktop</source>
         <translation>Otwórz na pulpicie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="760"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="771"/>
         <source>Open in a normal column</source>
         <translation>Otwórz w zwykłej kolumnie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="766"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="777"/>
         <source>Hide the tab indicator</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="770"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="781"/>
         <source>Show the tab indicator for a single tab</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="773"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="784"/>
         <source>Tab indicator inside the column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="774"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="785"/>
         <source>Tab indicator beside the column</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2669,7 +2679,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="252"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="679"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="745"/>
         <source>Notification</source>
         <translation>Powiadomienie</translation>
     </message>
@@ -3262,22 +3272,22 @@
         <translation>Pod innymi oknami</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="731"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="742"/>
         <source>Don&apos;t restore to zone on login</source>
         <translation>Nie przywracaj do strefy po zalogowaniu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="734"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="745"/>
         <source>Keep zone size on unsnap</source>
         <translation>Zachowaj rozmiar strefy przy odczepieniu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="749"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="760"/>
         <source>Hide opacity and tint</source>
         <translation>Ukryj nieprzezroczystość i zabarwienie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="755"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="766"/>
         <source>Hide zone numbers</source>
         <translation>Ukryj numery stref</translation>
     </message>
@@ -3334,7 +3344,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="128"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="245"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="248"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="168"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="457"/>
@@ -3347,7 +3357,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="142"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="245"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="248"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="168"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="457"/>
@@ -3355,68 +3365,63 @@
         <translation>Wył.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="220"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="249"/>
         <source>Engine: %1</source>
         <translation>Silnik: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="225"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="254"/>
         <source>Snapping: %1</source>
         <translation>Przyciąganie: %1</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="125"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="244"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="273"/>
         <source>Disabled</source>
         <translation>Wyłączone</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="246"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="275"/>
         <source>Disable: %1</source>
         <translation>Wyłącz: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="249"/>
-        <source>Excluded</source>
-        <translation>Wykluczone</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="253"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="288"/>
         <source>No animations</source>
         <translation>Bez animacji</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="256"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="294"/>
         <source>Float</source>
         <translation>Pływające</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="266"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="304"/>
         <source>Snap to zone</source>
         <translation>Przyciągnij do strefy</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="269"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="307"/>
         <source>Snap to zone %1</source>
         <translation>Przyciągnij do strefy %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="271"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="309"/>
         <source>Snap to zones %1</source>
         <translation>Przyciągnij do stref %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="280"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="318"/>
         <source>Open on monitor: %1</source>
         <translation>Otwórz na ekranie: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="284"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="322"/>
         <source>Open on desktop %1</source>
         <translation>Otwórz na pulpicie %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="293"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="331"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="356"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="427"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="400"/>
@@ -3426,162 +3431,176 @@
         <translation>Nieprzezroczystość</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="297"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="302"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="335"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="340"/>
         <source>Opacity (invalid)</source>
         <translation>Nieprzezroczystość (nieprawidłowa)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="304"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="342"/>
         <source>Opacity: %1%</source>
         <translation>Nieprzezroczystość: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="308"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="346"/>
         <source>Block animation shader</source>
         <translation>Zablokuj shader animacji</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="309"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="347"/>
         <source>Shader: %1</source>
         <translation>Shader: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="314"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="327"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="162"/>
-        <source>Block decoration</source>
-        <translation>Zablokuj dekorację</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="329"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="371"/>
         <source>Decoration: %1</source>
         <translation>Dekoracja: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="333"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="375"/>
         <source>Duration: %1 ms</source>
         <translation>Czas trwania: %1 ms</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="333"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="375"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="455"/>
         <source>Animation duration</source>
         <translation>Czas trwania animacji</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="337"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="379"/>
         <source>Animation curve</source>
         <translation>Krzywa animacji</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="338"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="380"/>
         <source>Curve: %1</source>
         <translation>Krzywa: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="343"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="385"/>
         <source>Overlay shader: %1</source>
         <translation>Shader nakładki: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="728"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="739"/>
         <source>Don&apos;t restore position on login</source>
         <translation>Nie przywracaj położenia po zalogowaniu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="737"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="748"/>
         <source>Show title bars</source>
         <translation>Pokaż paski tytułu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="740"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="751"/>
         <source>Don&apos;t lock layout</source>
         <translation>Nie blokuj układu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="743"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="754"/>
         <source>Assign default layout</source>
         <translation>Przypisz domyślny układ</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="743"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="754"/>
         <source>Don&apos;t assign default layout</source>
         <translation>Nie przypisuj domyślnego układu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="746"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="757"/>
         <source>Hide border</source>
         <translation>Ukryj obramowanie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="377"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="419"/>
         <source>Border width: %1 px</source>
         <translation>Szerokość obramowania: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="380"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="422"/>
         <source>Corner radius: %1 px</source>
         <translation>Promień narożnika: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="387"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="415"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="541"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="237"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="429"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="457"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="240"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="238"/>
         <source>Accent</source>
         <translation>Akcent</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="389"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="431"/>
         <source>Focused border: %1</source>
         <translation>Obramowanie aktywnego okna: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="391"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="433"/>
         <source>Unfocused border: %1</source>
         <translation>Obramowanie nieaktywnego okna: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="601"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="667"/>
         <source>Gap: %1 px</source>
         <translation>Odstęp: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="604"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="670"/>
         <source>Outer gap: %1 px</source>
         <translation>Odstęp zewnętrzny: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="752"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="763"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="501"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="108"/>
         <source>Per-side outer gaps</source>
         <translation>Odstępy zewnętrzne dla każdej strony</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="752"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="763"/>
         <source>Uniform outer gap</source>
         <translation>Jednolity odstęp zewnętrzny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="353"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="282"/>
+        <source>Excluded (placement and decorations)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="285"/>
+        <source>No tiling, snapping, or scrolling</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="291"/>
+        <source>No borders or decoration packs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="356"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="369"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="165"/>
+        <source>Decoration packs: none</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="395"/>
         <source>Overlay style: %1</source>
         <translation>Styl nakładki: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="360"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="402"/>
         <source>Algorithm parameter</source>
         <translation>Parametr algorytmu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="361"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="403"/>
         <source>Algorithm: %1</source>
         <translation>Algorytm: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="402"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="444"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="430"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="419"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="424"/>
@@ -3589,282 +3608,300 @@
         <translation>Siła zabarwienia</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="408"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="450"/>
         <source>Tint strength (invalid)</source>
         <translation>Siła zabarwienia (nieprawidłowa)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="410"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="452"/>
         <source>Tint strength: %1%</source>
         <translation>Siła zabarwienia: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="416"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="458"/>
         <source>Tint color: %1</source>
         <translation>Barwa zabarwienia: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="420"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="462"/>
         <source>Max tiled windows: %1</source>
         <translation>Maksymalna liczba kafelkowanych okien: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="423"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="465"/>
         <source>Master count: %1</source>
         <translation>Liczba okien głównych: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="427"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="469"/>
         <source>Split ratio: %1%</source>
         <translation>Proporcja podziału: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="430"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="472"/>
         <source>Insert: %1</source>
         <translation>Wstawianie: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="434"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="476"/>
         <source>Overflow: %1</source>
         <translation>Przepełnienie: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="438"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="480"/>
         <source>Drag: %1</source>
         <translation>Przeciąganie: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="450"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="492"/>
         <source>Column width (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="451"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="493"/>
         <source>Column width: %1%</source>
         <translation>Szerokość kolumny: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="455"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="497"/>
         <source>Open at width (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="456"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="498"/>
         <source>Open at width: %1%</source>
         <translation>Otwórz z szerokością: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="460"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="502"/>
         <source>Window height (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="461"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="503"/>
         <source>Window height: %1%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="465"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="507"/>
         <source>Open at height (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="466"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="508"/>
         <source>Open at height: %1%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="474"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="516"/>
         <source>Insert new windows (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="475"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="517"/>
         <source>Insert new windows: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="480"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="522"/>
         <source>Centering (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="481"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="523"/>
         <source>Centering: %1</source>
         <translation>Wyśrodkowanie: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="486"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="528"/>
         <source>New columns (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="487"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="529"/>
         <source>New columns: %1</source>
         <translation>Nowe kolumny: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="492"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="534"/>
         <source>Open (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="493"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="535"/>
         <source>Open: %1</source>
         <translation>Otwórz: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="502"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="544"/>
         <source>Tab indicator style (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="503"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="545"/>
         <source>Tab indicator style: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="508"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="550"/>
         <source>Tab indicator position (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="509"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="551"/>
         <source>Tab indicator position: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="512"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="554"/>
         <source>Tab indicator gap: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="515"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="557"/>
         <source>Tab indicator thickness: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="519"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="561"/>
         <source>Tab indicator length (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="520"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="562"/>
         <source>Tab indicator length: %1%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="523"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="565"/>
         <source>Gap between tabs: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="529"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="571"/>
         <source>Tab corners: fully rounded</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="530"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="572"/>
         <source>Tab corner radius: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="543"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="587"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="631"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="636"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="641"/>
+        <source>(invalid)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="589"/>
         <source>Active tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="546"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="592"/>
         <source>Inactive tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="549"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="595"/>
         <source>Urgent tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="552"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="598"/>
         <source>This window&apos;s active tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="555"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="601"/>
         <source>This window&apos;s inactive tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="557"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="603"/>
         <source>This window&apos;s urgent tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="563"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="609"/>
         <source>Window layer</source>
         <translation>Warstwa okna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="571"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="617"/>
         <source>Window layer (invalid)</source>
         <translation>Warstwa okna (nieprawidłowa)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="573"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="619"/>
         <source>Layer: %1</source>
         <translation>Warstwa: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="579"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="630"/>
         <source>Highlight color: %1</source>
         <translation>Barwa podświetlenia: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="582"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="635"/>
         <source>Inactive zone color: %1</source>
         <translation>Barwa nieaktywnej strefy: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="585"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="640"/>
         <source>Overlay border color: %1</source>
         <translation>Barwa obramowania nakładki: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="588"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="653"/>
+        <source>Active opacity (invalid)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="654"/>
+        <source>Inactive opacity (invalid)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="656"/>
         <source>Active opacity: %1%</source>
         <translation>Nieprzezroczystość aktywnej: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="591"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="657"/>
         <source>Inactive opacity: %1%</source>
         <translation>Nieprzezroczystość nieaktywnej: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="594"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="660"/>
         <source>Overlay border width: %1 px</source>
         <translation>Szerokość obramowania nakładki: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="597"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="663"/>
         <source>Overlay corner radius: %1 px</source>
         <translation>Promień narożnika nakładki: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="607"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="673"/>
         <source>Top gap: %1 px</source>
         <translation>Odstęp górny: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="610"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="676"/>
         <source>Bottom gap: %1 px</source>
         <translation>Odstęp dolny: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="613"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="679"/>
         <source>Left gap: %1 px</source>
         <translation>Odstęp lewy: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="616"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="682"/>
         <source>Right gap: %1 px</source>
         <translation>Odstęp prawy: %1 px</translation>
     </message>
@@ -3875,215 +3912,215 @@
         <translation>Wszędzie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="628"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="694"/>
         <source>Monitor &amp; Layout</source>
         <translation>Ekran &amp; układ</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="630"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="696"/>
         <source>Applications</source>
         <translation>Programy</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="632"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="698"/>
         <source>Activities</source>
         <translation>Aktywności</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="142"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="328"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="634"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="700"/>
         <source>Animations</source>
         <translation>Animacje</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="636"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="702"/>
         <source>Advanced / Custom</source>
         <translation>Zaawansowane / własne</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="638"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="704"/>
         <source>System</source>
         <translation>System</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="647"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="713"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="52"/>
         <source>Application</source>
         <translation>Program</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="649"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="715"/>
         <source>Window class</source>
         <translation>Klasa okna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="651"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="717"/>
         <source>Desktop file</source>
         <translation>Plik desktop</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="653"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="719"/>
         <source>Window role</source>
         <translation>Rola okna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="655"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="721"/>
         <source>Process ID</source>
         <translation>Identyfikator procesu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="657"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="723"/>
         <source>Title</source>
         <translation>Tytuł</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="659"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="725"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="627"/>
         <source>Window type</source>
         <translation>Typ okna</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="661"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="727"/>
         <source>Sticky</source>
         <translation>Przyklejone</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="663"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="729"/>
         <source>Fullscreen</source>
         <translation>Pełny ekran</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="665"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="731"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1050"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="34"/>
         <source>Maximized</source>
         <translation>Zmaksymalizowane</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="667"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="733"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1041"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowsPage.qml.cpp" line="36"/>
         <source>Minimized</source>
         <translation>Zminimalizowane</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="669"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="735"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1043"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowsPage.qml.cpp" line="41"/>
         <source>Focused</source>
         <translation>Uaktywnione</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="675"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="741"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="579"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="46"/>
         <source>Activity</source>
         <translation>Aktywność</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="677"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="743"/>
         <source>Transient</source>
         <translation>Tymczasowe</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="681"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="747"/>
         <source>Width</source>
         <translation>Szerokość</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="683"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="749"/>
         <source>Height</source>
         <translation>Wysokość</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="685"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="751"/>
         <source>Keep above</source>
         <translation>Utrzymuj na wierzchu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="687"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="753"/>
         <source>Keep below</source>
         <translation>Utrzymuj pod spodem</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="689"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="755"/>
         <source>Skip taskbar</source>
         <translation>Pomiń pasek zadań</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="691"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="757"/>
         <source>Skip pager</source>
         <translation>Pomiń przełącznik pulpitów</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="693"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="759"/>
         <source>Skip switcher</source>
         <translation>Pomiń przełącznik okien</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="695"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="761"/>
         <source>Modal</source>
         <translation>Modalne</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="697"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="763"/>
         <source>Decorated</source>
         <translation>Z dekoracją</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="699"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="765"/>
         <source>Resizable</source>
         <translation>Można zmieniać rozmiar</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="701"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="767"/>
         <source>Movable</source>
         <translation>Można przemieszczać</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="703"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="769"/>
         <source>Maximizable</source>
         <translation>Można maksymalizować</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="705"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="771"/>
         <source>Position X</source>
         <translation>Położenie X</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="707"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="773"/>
         <source>Position Y</source>
         <translation>Położenie Y</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="709"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="775"/>
         <source>Title (no suffix)</source>
         <translation>Tytuł (bez przyrostka)</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="46"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="711"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="777"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="39"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="358"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="366"/>
         <source>Floating</source>
         <translation>Pływające</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="44"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="713"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="779"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="33"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="317"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="350"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="363"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="325"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="358"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="371"/>
         <source>Snapped</source>
         <translation>Przyciągnięte</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="42"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="715"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="781"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="27"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="347"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="355"/>
         <source>Tiled</source>
         <translation>Kafelkowane</translation>
     </message>
@@ -4111,44 +4148,44 @@
         <translation>Globalne domyślne</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="717"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="783"/>
         <source>Zone</source>
         <translation>Strefa</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="719"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="785"/>
         <source>Mode</source>
         <translation>Tryb</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="721"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="787"/>
         <source>Tiled window count</source>
         <translation>Liczba kafelkowanych okien</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="723"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="789"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="704"/>
         <source>Screen orientation</source>
         <translation>Orientacja ekranu</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="725"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="791"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="738"/>
         <source>Active layout</source>
         <translation>Aktywny układ</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="733"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="799"/>
         <source>Any window</source>
         <translation>Dowolne okno</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="747"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="813"/>
         <source>(condition group)</source>
         <translation>(grupa warunków)</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="754"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="820"/>
         <source>%n condition(s)</source>
         <translation>
             <numerusform>%n warunek</numerusform>
@@ -4157,7 +4194,7 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="760"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="826"/>
         <source>No action</source>
         <translation>Brak działania</translation>
     </message>
@@ -4253,7 +4290,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="140"/>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="229"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="235"/>
         <source>Open an app in a zone</source>
         <translation>Otwórz program w strefie</translation>
     </message>
@@ -4264,7 +4301,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="143"/>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="240"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="246"/>
         <source>Open an app on a monitor</source>
         <translation>Otwórz program na ekranie</translation>
     </message>
@@ -4275,64 +4312,79 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="146"/>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="248"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="254"/>
         <source>Float an app</source>
         <translation>Uczyń program pływającym</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="147"/>
-        <source>Keep one application&apos;s windows floating instead of tiled. The windows stay managed, unlike a full exclusion.</source>
-        <translation>Utrzymuj okna jednego programu jako pływające zamiast kafelkowanych. Okna pozostają zarządzane, inaczej niż przy pełnym wykluczeniu.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="150"/>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="258"/>
-        <source>Exclude an app from tiling</source>
-        <translation>Wyklucz program z kafelkowania</translation>
+        <source>Keep one application&apos;s windows floating instead of tiled. The windows stay managed, so they can still be dragged into a zone.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="151"/>
-        <source>Keep one application&apos;s windows out of window placement entirely.</source>
-        <translation>Utrzymuj okna jednego programu całkowicie poza rozmieszczaniem okien.</translation>
+        <source>Exclude an app from tiling, snapping, and scrolling</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="153"/>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="265"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="152"/>
+        <source>Keep one application&apos;s windows out of tiling, snapping, and scrolling. Borders, decoration packs, and animations still apply.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="155"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="284"/>
+        <source>Undecorate an app</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="272"/>
+        <source>Exclude an app from placement</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="159"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="294"/>
         <source>Don&apos;t animate small windows</source>
         <translation>Nie animuj małych okien</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="154"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="156"/>
+        <source>Turn off borders and decoration packs for one application&apos;s windows. Tiling, snapping, scrolling, and animations still apply.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="160"/>
         <source>Skip open and close animations for windows narrower than a chosen width. Handy for tiny popups and tool windows.</source>
         <translation>Pomiń animacje otwierania i zamykania dla okien węższych niż wybrana szerokość. Przydatne dla drobnych okien wyskakujących i okien narzędziowych.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="167"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="173"/>
         <source>Snapping layout on monitor</source>
         <translation>Układ przyciągania na ekranie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="174"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="180"/>
         <source>Tiling algorithm on monitor</source>
         <translation>Algorytm kafelkowania na ekranie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="189"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="195"/>
         <source>Scrolling mode on monitor</source>
         <translation>Tryb przewijania na ekranie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="200"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="206"/>
         <source>Lock layout on monitor</source>
         <translation>Blokada układu na ekranie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="211"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="217"/>
         <source>Snapping layout on virtual desktop</source>
         <translation>Układ przyciągania na wirtualnym pulpicie</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="221"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="227"/>
         <source>Layout for portrait monitors</source>
         <translation>Układ dla ekranów pionowych</translation>
     </message>
@@ -5215,7 +5267,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="186"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingFocusCard.qml.cpp" line="13"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingFocusCard.qml.cpp" line="13"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="330"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="338"/>
         <source>Focus</source>
         <translation>Uaktywnienie</translation>
     </message>
@@ -5327,6 +5379,7 @@
         <translation>wczytaj</translation>
     </message>
     <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="646"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="378"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="196"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="201"/>
@@ -5340,6 +5393,7 @@
         <translation>alfa</translation>
     </message>
     <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="646"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="380"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="214"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="219"/>
@@ -6966,8 +7020,8 @@
         <translation>Przełączono pulpit</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="607"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="734"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="612"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="745"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="545"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="889"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="71"/>
@@ -7868,8 +7922,8 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="459"/>
         <location filename="../src/settings/controller/settingscontroller.cpp" line="789"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="300"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="339"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="308"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="347"/>
         <source>Zone %1</source>
         <translation>Strefa %1</translation>
     </message>
@@ -15019,42 +15073,42 @@
         <translation>Edytuj regułę</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="59"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="60"/>
         <source>The first rule (by priority) to fill each action slot wins that slot. Actions in different slots stack.</source>
         <translation>Pierwsza reguła (według priorytetu), która wypełni dany slot działania, wygrywa ten slot. Działania w różnych slotach się sumują.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="72"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="73"/>
         <source>Add at least one action before saving.</source>
         <translation>Dodaj co najmniej jedno działanie przed zapisaniem.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="75"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="76"/>
         <source>Choose a type for every action before saving.</source>
         <translation>Wybierz typ dla każdego działania przed zapisaniem.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="77"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="78"/>
         <source>Every condition needs a value before this rule can be saved.</source>
         <translation>Każdy warunek wymaga wartości, zanim tę regułę będzie można zapisać.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="101"/>
-        <source>Action “%1” may not take effect because this rule also excludes the window. Put the exclusion on a separate rule.</source>
-        <translation>Działanie „%1” może nie zadziałać, ponieważ ta reguła jednocześnie wyklucza to okno. Umieść wykluczenie w osobnej regule.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="106"/>
+        <source>Action “%1” may not take effect because this rule also has an exclusion that stops the rest of the rule from applying. Put the exclusion on a separate rule.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="103"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="108"/>
         <source>Action “%1” is a context action, but the rule matches window properties, so it never fires.</source>
         <translation>Działanie „%1” jest działaniem kontekstowym, ale reguła dopasowuje właściwości okna, więc nigdy się nie uruchomi.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="106"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="111"/>
         <source>This rule has a problem:</source>
         <translation>Ta reguła ma problem:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="106"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="111"/>
         <source>This rule has problems:</source>
         <translation>Ta reguła ma problemy:</translation>
     </message>
@@ -17493,7 +17547,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="282"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="527"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="542"/>
         <source>Dismiss notification</source>
         <translation>Odrzuć powiadomienie</translation>
     </message>
@@ -17514,204 +17568,204 @@
         <translation>Układ jest zablokowany. Odblokuj bieżący układ przed przełączeniem na inny.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="78"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="84"/>
         <source>No window is focused</source>
         <translation>Żadne okno nie jest aktywne</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="79"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="85"/>
         <source>No zone layout on this screen</source>
         <translation>Brak układu stref na tym ekranie</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="80"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="86"/>
         <source>Zone navigation is unavailable</source>
         <translation>Nawigacja po strefach jest niedostępna</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="85"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="91"/>
         <source>This window is excluded from tiling</source>
         <translation>To okno jest wyłączone z kafelkowania</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="101"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="165"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="207"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="107"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="171"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="213"/>
         <source>Window is not in a zone</source>
         <translation>Okno nie znajduje się w strefie</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="106"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="210"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="112"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="216"/>
         <source>Window is floating</source>
         <translation>Okno jest pływające</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="109"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="216"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="115"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="222"/>
         <source>No window in that direction</source>
         <translation>Brak okna w tym kierunku</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="112"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="118"/>
         <source>Could not move the window</source>
         <translation>Nie udało się przenieść okna</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="120"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="219"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="126"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="225"/>
         <source>No zone in that direction</source>
         <translation>Brak strefy w tym kierunku</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="134"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="140"/>
         <source>No empty zone available</source>
         <translation>Brak dostępnej pustej strefy</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="143"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="149"/>
         <source>No zone with that number</source>
         <translation>Brak strefy o tym numerze</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="146"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="152"/>
         <source>Window is already in that position</source>
         <translation>Okno już znajduje się na tej pozycji</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="154"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="160"/>
         <source>No zone to return to</source>
         <translation>Brak strefy, do której można wrócić</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="156"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="162"/>
         <source>Floating is unavailable</source>
         <translation>Pływanie jest niedostępne</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="159"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="165"/>
         <source>No other window in this zone</source>
         <translation>Brak innego okna w tej strefie</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="162"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="168"/>
         <source>No other window</source>
         <translation>Brak innego okna</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="178"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="184"/>
         <source>Nothing to restore</source>
         <translation>Nie ma nic do przywrócenia</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="183"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="189"/>
         <source>No windows to rearrange</source>
         <translation>Brak okien do przekształcenia</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="191"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="197"/>
         <source>Master ratio at limit (%1%)</source>
         <translation>Współczynnik głównego okna osiągnął limit (%1%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="191"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="197"/>
         <source>Master count at limit (%1)</source>
         <translation>Liczba głównych okien osiągnęła limit (%1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="207"/>
         <source>Nothing to rotate</source>
         <translation>Nie ma nic do obrócenia</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="213"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="219"/>
         <source>Could not swap windows</source>
         <translation>Nie udało się zamienić okien</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="224"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="281"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="230"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="289"/>
         <source>Nothing to swap</source>
         <translation>Nie ma nic do zamiany</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="228"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="234"/>
         <source>That window is no longer available</source>
         <translation>To okno nie jest już dostępne</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="115"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="121"/>
         <source>Spanning is not available in this mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="129"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="135"/>
         <source>Pushing to an empty zone is not available in this mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="235"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="243"/>
         <source>All windows are already arranged</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="237"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="245"/>
         <source>Could not arrange the windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="240"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="258"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="248"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="266"/>
         <source>No virtual screen split on this monitor</source>
         <translation>Brak podziału ekranu wirtualnego na tym monitorze</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="243"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="251"/>
         <source>Virtual screen no longer exists</source>
         <translation>Ekran wirtualny już nie istnieje</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="248"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="256"/>
         <source>Virtual screen swap failed</source>
         <translation>Zamiana ekranów wirtualnych nie powiodła się</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="250"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="258"/>
         <source>No adjacent virtual screen</source>
         <translation>Brak sąsiedniego ekranu wirtualnego</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="262"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="270"/>
         <source>Virtual screen rotation failed</source>
         <translation>Obrót ekranów wirtualnych nie powiódł się</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="264"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="272"/>
         <source>No virtual screens to rotate</source>
         <translation>Brak ekranów wirtualnych do obrócenia</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="271"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="279"/>
         <source>Layouts are not available in this mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="273"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="281"/>
         <source>No windows to focus</source>
         <translation>Brak okien do aktywacji</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="276"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="284"/>
         <source>Already in main position</source>
         <translation>Już na głównej pozycji</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="283"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="291"/>
         <source>Failed</source>
         <translation>Niepowodzenie</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="294"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="302"/>
         <source>Rotated %n window</source>
         <translation>
             <numerusform>Obrócono %n okno</numerusform>
@@ -17720,139 +17774,134 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="296"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="304"/>
         <source>Rotated</source>
         <translation>Obrócono</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="302"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="310"/>
         <source>Moved</source>
         <translation>Przeniesiono</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="309"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="317"/>
         <source>Extended into Zone %1</source>
         <translation>Rozciągnięto do strefy %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="311"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="319"/>
         <source>Span extended</source>
         <translation>Rozciągnięcie zwiększone</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="315"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="361"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="323"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="369"/>
         <source>Snapped into Zone %1</source>
         <translation>Przyciągnięto do strefy %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="319"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="327"/>
         <source>Span reduced</source>
         <translation>Rozciągnięcie zmniejszone</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="324"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="332"/>
         <source>Focus on the master window</source>
         <translation>Aktywuj główne okno</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="328"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="336"/>
         <source>Focus on Zone %1</source>
         <translation>Aktywuj strefę %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="334"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="342"/>
         <source>Zone %1 ↔ Zone %2</source>
         <translation>Strefa %1 ↔ strefa %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="344"/>
         <source>Swapped</source>
         <translation>Zamieniono</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="341"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="349"/>
         <source>Window pushed</source>
         <translation>Okno przesunięte</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="343"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="351"/>
         <source>Restored</source>
         <translation>Przywrócono</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="356"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="364"/>
         <source>Extra windows moved out of the layout</source>
         <translation>Nadmiarowe okna przeniesione poza układ</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="373"/>
         <source>Next window</source>
         <translation>Następne okno</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="367"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="375"/>
         <source>Focus main window</source>
         <translation>Aktywuj główne okno</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="369"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="377"/>
         <source>Swapped with main window</source>
         <translation>Zamieniono z głównym oknem</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="374"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="382"/>
         <source>Master ratio → %1%</source>
         <translation>Współczynnik głównego okna → %1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="374"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="382"/>
         <source>Master ratio changed</source>
         <translation>Współczynnik głównego okna zmieniony</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="378"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="386"/>
         <source>Master count → %1</source>
         <translation>Liczba głównych okien → %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="378"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="386"/>
         <source>Master count changed</source>
         <translation>Liczba głównych okien zmieniona</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="380"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="388"/>
         <source>Layout refreshed</source>
         <translation>Układ odświeżony</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="383"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="391"/>
         <source>Virtual screens swapped</source>
         <translation>Ekrany wirtualne zamienione</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="386"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="394"/>
         <source>Virtual screens rotated</source>
         <translation>Ekrany wirtualne obrócone</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="388"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="396"/>
         <source>Action completed</source>
         <translation>Czynność zakończona</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="440"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="448"/>
         <source>%1 %2</source>
         <comment>@info:status glyph, then the message it labels</comment>
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="470"/>
-        <source>Navigation feedback</source>
-        <translation>Informacje zwrotne nawigacji</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="471"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="485"/>
         <source>Brief feedback for keyboard window and layout actions</source>
         <translation type="unfinished"></translation>
     </message>

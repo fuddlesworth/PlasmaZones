@@ -492,6 +492,16 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     if (focusWindowAfter) {
         const QString active = state->strip().activeWindowId();
         if (!active.isEmpty()) {
+            // Remember the request so windowFocused can tell this
+            // activation's echo apart from genuine user focus (the
+            // m_pendingSelfActivations doc). Bounded: an effect-side drop
+            // leaves an entry behind until the clear-on-mismatch reclaims it,
+            // and the cap keeps a pathological run of drops from growing the
+            // queue without limit.
+            m_pendingSelfActivations.append(active);
+            while (m_pendingSelfActivations.size() > 16) {
+                m_pendingSelfActivations.removeFirst();
+            }
             Q_EMIT activateWindowRequested(active);
         }
     }
