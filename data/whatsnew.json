@@ -1,6 +1,13 @@
 {
     "releases": [
         {
+            "version": "3.3.4",
+            "date": "2026-08-03",
+            "highlights": [
+                "Fixed: with monitors running at different scales, windows PlasmaZones draws a border on stayed slightly blurry on the lower-scale monitor whenever they sat against the edge shared with the higher-scale monitor (#881)"
+            ]
+        },
+        {
             "version": "3.3.3",
             "date": "2026-07-31",
             "highlights": [

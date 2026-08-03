@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.4] - 2026-08-03
+
+### Fixed
+
+- **Windows on the lower-scale monitor of a mixed-DPI setup are no longer slightly blurry**: with monitors running at different scales, every window PlasmaZones draws a border on stayed persistently soft on the lower-scale monitor whenever it sat against the edge shared with the higher-scale monitor. The window's shadow reaches past that edge, and the offscreen surface the window is drawn through followed the neighbouring monitor's higher scale and was then scaled back down. The surface now follows the scale of the monitor the window's visible frame is on ([#868](https://github.com/fuddlesworth/PlasmaZones/discussions/868), [#881](https://github.com/fuddlesworth/PlasmaZones/pull/881)).
+
 ## [3.3.3] - 2026-07-31
 
 ### Fixed
@@ -1777,6 +1783,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[3.3.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.3...v3.3.4
 [3.3.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.2...v3.3.3
 [3.3.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.1...v3.3.2
 [3.3.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.0...v3.3.1
