@@ -30,6 +30,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Much less GPU work during window animations, especially on integrated graphics**: while any window animation played, PlasmaZones forced a full repaint of every monitor on every frame, and a decorated window was fully re-rendered and re-composited each frame even when its content had not changed. Animations now repaint only the screens they actually touch, and a decorated window's cached content survives the animation. This matters most on laptops and other machines with integrated graphics ([#872](https://github.com/fuddlesworth/PlasmaZones/pull/872)).
 - **Static decorated windows stay pixel-sharp while an undecorated window animates**: playing any window animation used to switch vertex snapping off for every decorated window, so on a fractionally scaled display the ones sitting still were softly resampled for the animation's duration. Only an animation on a decorated window relaxes snapping now, so moving an undecorated window leaves the rest of the desktop crisp and saves the full-screen resampling work on integrated graphics ([#872](https://github.com/fuddlesworth/PlasmaZones/pull/872)).
 - **Surface packs can declare that they leave the window's interior alone**: every decorated window told KWin it was translucent, so windows fully hidden behind it kept being composited, such as a video playing behind a maximized window. A surface pack whose drawing stays in the transparent margin around the window can now declare `"interiorOpaque": true` in its metadata, and a window whose whole chain declares it is no longer marked translucent. A pack that draws outside the window's own rectangle is still presented as an enlarged quad, which the compositor also excludes from occlusion culling, so a pack has to keep its drawing inside the window's rectangle to get the culling back. Border packs genuinely thin the window's own corner and edge pixels, so they correctly keep the translucent marking ([#872](https://github.com/fuddlesworth/PlasmaZones/pull/872)).
+## [3.3.4] - 2026-08-03
+
+### Fixed
+
+- **Windows on the lower-scale monitor of a mixed-DPI setup are no longer slightly blurry**: with monitors running at different scales, every window PlasmaZones draws a border on stayed persistently soft on the lower-scale monitor whenever it sat against the edge shared with the higher-scale monitor. The window's shadow reaches past that edge, and the offscreen surface the window is drawn through followed the neighbouring monitor's higher scale and was then scaled back down. The surface now follows the scale of the monitor the window's visible frame is on ([#868](https://github.com/fuddlesworth/PlasmaZones/discussions/868), [#881](https://github.com/fuddlesworth/PlasmaZones/pull/881)).
 
 ## [3.3.3] - 2026-07-31
 
@@ -1803,7 +1808,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.3...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.4...HEAD
+[3.3.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.3...v3.3.4
 [3.3.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.2...v3.3.3
 [3.3.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.1...v3.3.2
 [3.3.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.0...v3.3.1

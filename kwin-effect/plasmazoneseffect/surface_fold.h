@@ -65,22 +65,36 @@ inline bool backdropUsable(const SurfaceMultipassState& state)
 /// the fold's most expensive step — a full effects->drawWindow() re-entry — twice per frame,
 /// forever. Every cache the window had was dead for exactly the mixed-DPI multi-monitor case.
 ///
-/// Pin to the HIGHEST scale among the outputs the window's expanded rect intersects: one
+/// Pin to the HIGHEST scale among the outputs the window's FRAME rect intersects: one
 /// canvas, one capture, one fold, and the lower-scale output's paint samples the cache.
 /// Highest rather than the current output's, so the hi-DPI half of a straddle is rendered at
 /// full resolution instead of upscaled from a low-resolution canvas. It cannot change with
 /// which output is painting, so the two per-frame calls now agree and the caches hold.
 ///
-/// Falls back to the window's own screen (then 1.0) when the intersection finds nothing — a
-/// window mid-move can briefly report a rect touching no output at all.
+/// The FRAME rect, deliberately not the expanded rect the canvas itself covers. The expanded
+/// rect is inflated by the shadow band, and on a mixed-DPI layout every window that merely
+/// ABUTS the shared monitor edge overhangs the neighbour with shadow alone. Keying the scale
+/// on that overhang pinned such a window's canvas to the neighbour's HIGHER scale while its
+/// visible content sits entirely on the lower-scale output — so the present downsampled the
+/// whole composite (content, text, border) through GL_LINEAR, permanently, for precisely the
+/// windows a zone layout produces (discussion #868, the residual blur after the device-align
+/// fix). A window whose VISIBLE frame truly straddles still pins to the max scale, and the
+/// lower-DPI side of it resamples exactly like KWin natively resamples a straddling window's
+/// single hi-DPI buffer. Shadows and glow padding grazing a hi-DPI output render at the
+/// window's own scale instead; both are feathered soft bands, where a density mismatch is
+/// invisible. QRectF::intersects is false for a shared edge with no area, so an exactly
+/// abutting window keeps its own screen's scale.
+///
+/// Falls back to the expanded rect when the frame is empty, then the window's own screen,
+/// then 1.0 — a window mid-move can briefly report a rect touching no output at all.
 inline qreal windowSurfaceScale(const KWin::EffectWindow* w)
 {
     if (!w || !KWin::effects) {
         return 1.0;
     }
-    QRectF rect = w->expandedGeometry();
+    QRectF rect = w->frameGeometry();
     if (rect.isEmpty()) {
-        rect = w->frameGeometry();
+        rect = w->expandedGeometry();
     }
     qreal best = 0.0;
     const auto outputs = KWin::effects->screens();
