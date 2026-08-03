@@ -270,6 +270,14 @@ public Q_SLOTS:
     void clearAssignmentForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                  const QString& activityId);
 
+    // Scrolling template (the manual layout whose zones become the strip's
+    // preset column-width vocabulary). The setter flips the context to
+    // Scrolling; the getter answers empty for non-Scrolling contexts and for
+    // deleted or unset templates.
+    void setScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId,
+                                    const QString& layoutId);
+    QString getScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId);
+
     /**
      * @brief Get current mode, layout, and algorithm for all screens
      *

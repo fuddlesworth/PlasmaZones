@@ -505,6 +505,36 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign."/>
             </arg>
         </method>
+        <method name="setScrollingTemplateLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Assign a manual layout as the context's scrolling template (its zones become the strip's preset column widths). Flips the context to Scrolling mode."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based, 0 = any)."/>
+            </arg>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID (empty = any)."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Manual layout UUID to use as the template."/>
+            </arg>
+        </method>
+        <method name="getScrollingTemplateLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Resolved scrolling template for the context, or empty when the context is not Scrolling or has no template."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based, 0 = any)."/>
+            </arg>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID (empty = any)."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Template layout UUID or empty string."/>
+            </arg>
+        </method>
         <method name="clearAssignmentForScreenDesktopActivity">
             <annotation name="org.gtk.GDBus.DocString" value="Clear layout assignment for screen/desktop/activity."/>
             <arg name="screenId" type="s" direction="in">

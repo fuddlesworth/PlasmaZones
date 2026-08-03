@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import "../../js/PresetList.js" as PresetList
@@ -344,6 +345,20 @@ SettingsFlickable {
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
+
+                // Template precedence note. Plain label rather than an
+                // InlineMessage: this is standing behavior, not a condition
+                // the page can detect (templates are per screen and per
+                // desktop, the lists here are app-wide).
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    text: i18n("Screens with an assigned layout template use the template's column widths and heights instead of these presets.")
+                    font: Kirigami.Theme.smallFont
+                    opacity: 0.7
+                    wrapMode: Text.WordWrap
+                }
 
                 // Section header + full-width card grid, the Virtual Screens
                 // presets shape: the rows carry the titles, the editors get

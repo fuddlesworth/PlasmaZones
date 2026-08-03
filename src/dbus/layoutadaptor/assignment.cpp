@@ -784,6 +784,38 @@ void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& scree
                          << activityId;
 }
 
+void LayoutAdaptor::setScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId,
+                                               const QString& layoutId)
+{
+    QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
+    if (resolvedId.isEmpty()) {
+        qCWarning(lcDbusLayout) << "setScrollingTemplateLayout: empty screen ID for" << screenId;
+        return;
+    }
+    if (!validDesktopArg(virtualDesktop, "setScrollingTemplateLayout")) {
+        return;
+    }
+    // The template must name an existing MANUAL layout: unlike the mode-only
+    // assignment setters there is no sentinel form to accept, and an unknown
+    // UUID stored now would just resolve as "no template" later.
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("set scrolling template"));
+    if (!layout) {
+        return;
+    }
+    m_layoutManager->assignScrollingTemplate(resolvedId, virtualDesktop, activityId, layoutId);
+    m_changedScreenIds.insert(resolvedId);
+    qCInfo(lcDbusLayout) << "Set scrolling template" << layoutId << "for screen" << screenId << "desktop"
+                         << virtualDesktop << "activity" << activityId;
+}
+
+QString LayoutAdaptor::getScrollingTemplateLayout(const QString& screenId, int virtualDesktop,
+                                                  const QString& activityId)
+{
+    const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
+    PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(resolvedId, virtualDesktop, activityId);
+    return templ ? templ->id().toString() : QString();
+}
+
 void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDesktop, const QString& activity, int mode,
                                        const QString& snappingLayout, const QString& tilingAlgorithm)
 {
