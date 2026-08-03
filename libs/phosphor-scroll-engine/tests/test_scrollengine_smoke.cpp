@@ -94,6 +94,11 @@ void TestScrollEngineSmoke::screensSetLifecycle()
     QObject owner;
     auto* engine = new ScrollEngine(nullptr, nullptr, &owner);
     QVERIFY(!engine->isEnabled());
+    // Capability contract the daemon's layout-selection gates rest on: the
+    // strip has no layout concept, so the engine must keep the interface's
+    // default-false providesLayouts (snap and autotile override true).
+    QVERIFY(!engine->providesLayouts());
+    QVERIFY(!static_cast<PhosphorEngine::IPlacementEngine*>(engine)->providesLayouts());
     QSignalSpy screensSpy(engine, &ScrollEngine::scrollingScreensChanged);
 
     QSignalSpy enabledSpy(engine, &ScrollEngine::enabledChanged);

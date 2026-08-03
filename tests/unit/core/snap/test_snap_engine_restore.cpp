@@ -17,6 +17,15 @@ private Q_SLOTS:
     void testCalculateSnapToEmptyZone_gate_globalOff_perLayoutOff_blocks()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        // Capability contract the daemon's layout-selection gates rest on:
+        // zone layouts ARE snap's placement input, so the engine must
+        // override the interface's default-false providesLayouts. Asserted
+        // through the base pointer too — the daemon dispatches via
+        // IPlacementEngine*, and a dropped `override` with a shadowing
+        // non-virtual would pass the concrete check while the interface
+        // call reverted to false.
+        QVERIFY(engine.providesLayouts());
+        QVERIFY(static_cast<PhosphorEngine::IPlacementEngine*>(&engine)->providesLayouts());
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 

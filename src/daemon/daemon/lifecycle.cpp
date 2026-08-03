@@ -707,6 +707,9 @@ void Daemon::stop()
     // clear-before-teardown contract its siblings below rely on.
     if (m_overlayService) {
         m_overlayService->setScrollZonesProvider({});
+        // Same contract: the layouts-provided resolver captures `this` and
+        // reads the router, which is reset before the engines below.
+        m_overlayService->setLayoutsProvidedResolver({});
     }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.
@@ -852,6 +855,9 @@ void Daemon::stop()
     // over dead state).
     m_lastScrollTabStripsJson.clear();
     m_scrollTabEnrichmentPending = false;
+    // Sibling latch, same per-session shape (its queued single-shot also
+    // gates on m_shuttingDown, so this is symmetry rather than a live fix).
+    m_reconcileAssignmentsPending = false;
     // Per-session restore staging: entries computed against the pre-stop
     // window set must not feed a post-restart KCM apply with dead geometry.
     m_pendingSnapFloatRestores.clear();

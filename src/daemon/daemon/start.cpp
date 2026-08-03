@@ -192,6 +192,25 @@ void Daemon::connectScreenSignals()
                 // armed one would fire a card for an output that is gone.
                 reapScrollingOsdSettleTimers(removedScreenId);
 
+                // The removed output's cached tab-strip payloads and tiled
+                // counts, every virtual sub-screen included. The engine-side
+                // prune now emits "[]" per strip screen, which also removes
+                // these; the direct erase covers payloads cached for screens
+                // whose engine state never materialised, and the tiled-count
+                // erase keeps a same-id replug from swallowing its first
+                // placementChanged re-resolve (both maps are otherwise only
+                // pruned on VS reconfigure and in stop()).
+                for (auto it = m_lastScrollTabStripsJson.begin(); it != m_lastScrollTabStripsJson.end();) {
+                    it = PhosphorIdentity::VirtualScreenId::samePhysical(it.key(), removedScreenId)
+                        ? m_lastScrollTabStripsJson.erase(it)
+                        : std::next(it);
+                }
+                for (auto it = m_lastTiledCountByScreen.begin(); it != m_lastTiledCountByScreen.end();) {
+                    it = PhosphorIdentity::VirtualScreenId::samePhysical(it.key(), removedScreenId)
+                        ? m_lastTiledCountByScreen.erase(it)
+                        : std::next(it);
+                }
+
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
                 PhosphorScreens::ScreenIdentity::invalidateEdidCache(removedName);
 
@@ -557,6 +576,13 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     if (!m_unifiedLayoutController) {
         return;
     }
+    // Layout cycling is meaningless on a screen whose engine has no layout
+    // concept (scrolling) — answer with feedback instead of applying a snap
+    // layout there (the old one-way-door-out-of-scrolling policy).
+    if (!engineProvidesLayouts(screenId)) {
+        showLayoutsUnavailableOsd(screenId);
+        return;
+    }
     m_unifiedLayoutController->setCurrentScreenName(screenId);
     if (isScreenLockedForLayoutChange(screenId)) {
         return;
@@ -766,6 +792,13 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     }
+
+    // Re-prime the active-assignment snapshot for the NEW virtual screen id
+    // set — same rationale as the screenAdded / screenRemoved tails: a VS
+    // reconfigure replaces the physical id with vs:N children (or back) in
+    // effectiveScreenIds, and an un-primed id always diffs as changed, so
+    // the next unrelated rule edit would spuriously resnap every new VS.
+    diffActiveAssignments();
 }
 
 void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)

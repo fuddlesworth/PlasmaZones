@@ -359,6 +359,8 @@ Window {
                 sourceZoneId: osdSlot.sourceZoneId
                 windowCount: osdSlot.windowCount
                 errorColor: osdSlot.errorColor
+                fontFamily: osdSlot.fontFamily
+                fontSizeScale: osdSlot.fontSizeScale
             }
         }
 
