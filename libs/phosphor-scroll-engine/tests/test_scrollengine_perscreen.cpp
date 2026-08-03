@@ -208,6 +208,9 @@ private Q_SLOTS:
     void absentTrioSlotsFallBackPerSlotToTheGlobal();
     void presetIndexIsClampedToTheLivePresetList();
     void fixedKindWithAProportionValueFallsThroughToTheGlobal();
+    void templatePresetListReplacesSettingsListWholesale();
+    void templateListShrinkClampsResolvedPresetWidth();
+    void invalidTemplateEntriesFallBackToSettingsList();
     void tabIndicatorOverridesArePerProperty();
     void tabIndicatorRejectsGarbageNumericOverrides();
     void tabIndicatorRejectsAGarbagePositionOverride();
@@ -486,6 +489,85 @@ void TestScrollEnginePerScreen::fixedKindWithAProportionValueFallsThroughToTheGl
     const ColumnWidth rejectedFraction = openedWidth(engine, kS3, QStringLiteral("app|c"));
     QCOMPARE(rejectedFraction.kind, ColumnWidth::Proportion);
     QCOMPARE(rejectedFraction.proportion, 0.25);
+}
+
+void TestScrollEnginePerScreen::templatePresetListReplacesSettingsListWholesale()
+{
+    // TEMPLATE channel: a pushed preset list replaces the settings list for
+    // that screen only. Observable through a Preset-kind default width: the
+    // same stored index resolves against the template list on S1 and the
+    // settings list on S2.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Preset);
+    settings->widthPresetIndex = 1; // settings presets: 0.25 / 0.5 / 0.75
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVariantMap templ;
+    templ.insert(ScrollPerScreenKeys::presetColumnWidths(), QVariantList{0.2, 0.4});
+    engine->applyPerScreenConfig(kS1, templ);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+
+    const QVector<QRect> onTemplate = engine->visibleTileRects(kS1);
+    QCOMPARE(onTemplate.size(), 1);
+    QCOMPARE(onTemplate.first().width(), qRound(0.4 * kScreenWidth)); // template idx 1
+
+    const QVector<QRect> onSettings = engine->visibleTileRects(kS2);
+    QCOMPARE(onSettings.size(), 1);
+    QCOMPARE(onSettings.first().width(), qRound(0.5 * kScreenWidth)); // settings idx 1
+}
+
+void TestScrollEnginePerScreen::templateListShrinkClampsResolvedPresetWidth()
+{
+    // A template swap that shrinks the list must reflow an out-of-range
+    // stored Preset index to the last entry (presetAt's clamp), never crash
+    // or zero out.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Preset);
+    settings->widthPresetIndex = 2; // resolves to 0.75 pre-template
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    QCOMPARE(engine->visibleTileRects(kS1).first().width(), qRound(0.75 * kScreenWidth));
+
+    // Now the template arrives with a single entry: the stored index 2
+    // clamps to the lone 0.6 preset at the next resolve.
+    QVariantMap templ;
+    templ.insert(ScrollPerScreenKeys::presetColumnWidths(), QVariantList{0.6});
+    engine->applyPerScreenConfig(kS1, templ);
+    QCOMPARE(engine->visibleTileRects(kS1).first().width(), qRound(0.6 * kScreenWidth));
+
+    // Clearing the override restores the settings vocabulary.
+    engine->clearPerScreenConfig(kS1);
+    QCOMPARE(engine->visibleTileRects(kS1).first().width(), qRound(0.75 * kScreenWidth));
+}
+
+void TestScrollEnginePerScreen::invalidTemplateEntriesFallBackToSettingsList()
+{
+    // Entries below the width floor or above 1.0 are dropped; a list with
+    // nothing left is "no template" and the settings list stays in force.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Preset);
+    settings->widthPresetIndex = 1;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVariantMap garbage;
+    garbage.insert(ScrollPerScreenKeys::presetColumnWidths(), QVariantList{0.01, 1.5, QStringLiteral("junk")});
+    engine->applyPerScreenConfig(kS1, garbage);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    QCOMPARE(engine->visibleTileRects(kS1).first().width(), qRound(0.5 * kScreenWidth));
+
+    // A mixed list keeps its valid entries: 0.01 drops, 0.3 survives, and
+    // index 1 clamps to the lone remaining entry.
+    QVariantMap mixed;
+    mixed.insert(ScrollPerScreenKeys::presetColumnWidths(), QVariantList{0.01, 0.3});
+    engine->applyPerScreenConfig(kS1, mixed);
+    QCOMPARE(engine->visibleTileRects(kS1).first().width(), qRound(0.3 * kScreenWidth));
 }
 
 void TestScrollEnginePerScreen::tabIndicatorOverridesArePerProperty()

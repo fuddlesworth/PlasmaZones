@@ -113,8 +113,8 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
     params.gap = innerGap;
     params.respectMinimumSize = m_respectMinimumSize;
     params.defaultWindowHeight = effectiveDefaultWindowHeight(screenId, params.workArea);
-    params.presetColumnWidths = m_presetColumnWidths;
-    params.presetWindowHeights = m_presetWindowHeights;
+    params.presetColumnWidths = effectivePresetColumnWidths(screenId);
+    params.presetWindowHeights = effectivePresetWindowHeights(screenId);
     params.centerFocusedColumn = effectiveCenterFocusedColumn(screenId);
     params.alwaysCenterSingleColumn = m_alwaysCenterSingleColumn;
     params.defaultColumnWidth = effectiveDefaultColumnWidth(screenId);

@@ -912,6 +912,12 @@ private:
     /// Per-property override, so a rule that sets only the position leaves the
     /// other six geometry fields on their configured values.
     TabIndicatorParams effectiveTabIndicator(const QString& screenId) const;
+    /// Template channel: the per-screen preset list when the daemon pushed a
+    /// usable one (every entry validated against the same floor as the
+    /// settings parser), else the cached settings list. Wholesale
+    /// replacement, never a merge — see ScrollPerScreenKeys.
+    QList<qreal> effectivePresetColumnWidths(const QString& screenId) const;
+    QList<qreal> effectivePresetWindowHeights(const QString& screenId) const;
 
     QHash<QString, QVariantMap> m_perScreenOverrides;
     std::function<void()> m_persistSaveFn;

@@ -104,6 +104,20 @@ inline QString tabIndicatorPosition()
 {
     return QStringLiteral("TabIndicatorPosition");
 }
+/// TEMPLATE channel: preset lists derived from the screen's assigned layout
+/// template (extractTemplateVocabulary), as a QVariantList of doubles. A
+/// present, non-empty list replaces the settings-configured preset list
+/// WHOLESALE for that screen — no merge, so preset indices and the cycle
+/// order stay stable within one template. The daemon writes these from the
+/// assignment cascade; neither the rules bridge nor the settings app does.
+inline QString presetColumnWidths()
+{
+    return QStringLiteral("PresetColumnWidths");
+}
+inline QString presetWindowHeights()
+{
+    return QStringLiteral("PresetWindowHeights");
+}
 } // namespace ScrollPerScreenKeys
 
 /// The narrowest column width this engine will accept as a proportion of the
