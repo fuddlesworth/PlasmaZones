@@ -493,7 +493,16 @@ void PlasmaZonesEffect::loadCachedSettings()
         if (!ok) {
             return;
         }
-        m_cachedAnimationSequenceMode = qBound(0, raw, 1);
+        // validIntOr, not qBound: an unknown FUTURE mode (2) must fall back to
+        // the shipped DEFAULT, not clamp onto the nearest known value. Clamping
+        // silently enters Cascade for a mode that might mean anything, which is
+        // the trap the autotileDragBehavior loader below already documents
+        // ("unknown values clamp to the safe default rather than the
+        // highest-known value").
+        m_cachedAnimationSequenceMode = (raw == PhosphorAnimation::Limits::SequenceModeAllAtOnce
+                                         || raw == PhosphorAnimation::Limits::SequenceModeCascade)
+            ? raw
+            : PhosphorAnimation::Limits::DefaultAnimationSequenceMode;
     });
     loadSettingAsync(QStringLiteral("animationStaggerInterval"), [this](const QVariant& v) {
         bool ok = false;

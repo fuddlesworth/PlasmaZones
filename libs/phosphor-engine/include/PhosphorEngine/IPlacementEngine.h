@@ -90,6 +90,15 @@ public:
                               int minHeight = 0) = 0;
 
     /// Convenience overload — equivalent to windowOpened(id, screen, 0, 0).
+    ///
+    /// UNCALLABLE through this interface as written: every implementation
+    /// overrides the four-argument virtual, and an override HIDES every
+    /// same-named base overload, so `engine->windowOpened(id, screen)` fails
+    /// to compile against a concrete engine. Each engine restores it with a
+    /// `using IPlacementEngine::windowOpened;`, which is what actually makes
+    /// the two-argument form work — so this overload is real but only for
+    /// implementations that opt back into it, not for interface-typed callers
+    /// that never see a concrete type.
     void windowOpened(const QString& windowId, const QString& screenId)
     {
         windowOpened(windowId, screenId, 0, 0);

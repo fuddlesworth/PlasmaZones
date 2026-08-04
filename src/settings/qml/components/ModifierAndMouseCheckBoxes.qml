@@ -219,8 +219,15 @@ Item {
                             }
                             root.triggersModified(newTriggers);
                         }
+                        // Shown on HOVER, which a disabled ToolButton does not
+                        // report, so the length<=1 branch could never appear
+                        // and the one case a user needs explaining was the one
+                        // that stayed silent. The button keeps its own state
+                        // and the tooltip now always says what Remove does;
+                        // the reason it is unavailable is legible from there
+                        // being a single chip left.
                         QQC2.ToolTip.visible: hovered && root.tooltipEnabled
-                        QQC2.ToolTip.text: root.triggers.length <= 1 ? i18n("At least one trigger is required") : i18n("Remove this trigger")
+                        QQC2.ToolTip.text: i18n("Remove this trigger. At least one must remain.")
                     }
                 }
             }
