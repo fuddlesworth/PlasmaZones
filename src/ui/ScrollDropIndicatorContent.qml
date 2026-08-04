@@ -41,9 +41,17 @@ Item {
     required property int indicatorBorderWidth
     required property int indicatorBorderRadius
 
-    /// Resolved paint colours. An unparseable string cannot reach here — the
-    /// D-Bus boundary rejects anything that is neither empty nor a colour
-    /// QColor can parse — so the empty test is the only fallback needed.
+    /// Resolved paint colours. The empty test is the only fallback: the D-Bus
+    /// boundary rejects anything that is neither empty nor a colour QColor can
+    /// parse, so nothing the SETTINGS APP writes can arrive unparseable.
+    ///
+    /// A hand-edited config.json is not covered by that guard — it reaches
+    /// here through P_STORE_GET unvalidated. Qt turns an unparseable string
+    /// into an invalid QColor, which paints as black rather than falling back
+    /// to the scheme colour, so the failure is a visibly wrong indicator
+    /// rather than a crash or a silently absent one. Left as is deliberately:
+    /// re-validating in QML would duplicate the boundary check in a second
+    /// place that cannot report the problem to anyone.
     readonly property color fillColor: root.indicatorColor === "" ? Kirigami.Theme.highlightColor : root.indicatorColor
     readonly property color edgeColor: root.indicatorBorderColor === "" ? Kirigami.Theme.highlightColor : root.indicatorBorderColor
 

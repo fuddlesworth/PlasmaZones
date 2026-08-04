@@ -43,10 +43,15 @@ static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
               "ISettings::scrollingTabIndicatorCornerRadius defaults to 0 (square) — update it with this default");
 // The drop indicator's paint keys, same story: the overlay service reads them
 // through ISettings, so a stub answering from the interface body must agree.
-// The opacity default is absent because it is a non-constexpr double; its
-// agreement rests on the doc comment in isettings.h alone.
+// The two COLOUR defaults have no assert here and cannot get one: they return
+// a default-constructed QString, which is not a constant expression, and their
+// agreement rests on the doc comment in isettings.h. That is the whole
+// unasserted set now — the opacity joined the checked ones when it became
+// constexpr.
 static_assert(ConfigDefaults::scrollingDropIndicatorEnabled(),
               "ISettings::scrollingDropIndicatorEnabled defaults to true — update it with this default");
+static_assert(ConfigDefaults::scrollingDropIndicatorOpacity() == 0.25,
+              "ISettings::scrollingDropIndicatorOpacity defaults to 0.25 — update it with this default");
 static_assert(ConfigDefaults::scrollingDropIndicatorBorderWidth() == 2,
               "ISettings::scrollingDropIndicatorBorderWidth defaults to 2 — update it with this default");
 static_assert(ConfigDefaults::scrollingDropIndicatorBorderRadius() == 8,
@@ -365,6 +370,10 @@ P_STORE_GET(QString, scrollingDropIndicatorBorderColor, scrollingDropIndicatorGr
 P_STORE_SET_STRING(setScrollingDropIndicatorBorderColor, scrollingDropIndicatorGroup, borderColorKey,
                    scrollingDropIndicatorBorderColorChanged)
 
+// `double`, not the `qreal` every other floating getter in this file spells,
+// because the type has to match the ISettings virtual it overrides and that
+// one is declared double. The two are the same type on every platform this
+// builds for; the spelling difference is the interface's, not this file's.
 P_STORE_GET(double, scrollingDropIndicatorOpacity, scrollingDropIndicatorGroup, opacityKey, double)
 P_STORE_SET_DOUBLE(setScrollingDropIndicatorOpacity, scrollingDropIndicatorGroup, opacityKey,
                    scrollingDropIndicatorOpacityChanged)

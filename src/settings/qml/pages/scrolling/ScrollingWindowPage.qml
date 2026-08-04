@@ -21,7 +21,12 @@ SettingsFlickable {
     ColorDialog {
         id: dropIndicatorColorDialog
 
-        options: ColorDialog.ShowAlphaChannel
+        // NO alpha channel, unlike the Tabs page's dialog. Neither drop
+        // indicator colour honours one: the fill's alpha is replaced by the
+        // Fill opacity slider beside it, and the border is drawn opaque on
+        // purpose. Offering the channel let the user set a transparency the
+        // indicator then ignored, and the swatch rendered its checkerboard
+        // advertising an alpha nothing painted.
     }
 
     contentHeight: content.implicitHeight

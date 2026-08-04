@@ -29,9 +29,14 @@ import org.kde.kirigami as Kirigami
 SettingsCard {
     id: root
 
-    /// The page-level ColorDialog, shared by both colour rows. Page-level for
-    /// the same reason the Tabs page shares one: a page rebuild while a
-    /// row-scoped dialog is open would tear the popup down under the user.
+    /// The page-level ColorDialog, shared by both colour rows. Deliberately
+    /// `var` rather than a typed Dialog, matching ThemeFallbackColorRow's own
+    /// picker property: the row duck-types anything exposing accepted /
+    /// rejected / selectedColor / open(), and typing it here would drag a
+    /// QtQuick.Dialogs import into a card that never constructs one.
+    /// Page-level for the same reason the Tabs page shares one: a page rebuild
+    /// while a row-scoped dialog is open would tear the popup down under the
+    /// user.
     property var picker: null
 
     /// Bounds, read through the controller so C++ stays the single home for
@@ -54,7 +59,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Show drop indicator")
             searchAnchor: "scrollingDropIndicatorEnabled"
-            description: i18n("Highlight the space a dragged window will land in while re-inserting it into the scroll strip")
+            description: i18n("Highlight the space a dragged window will land in while re-inserting it into the scroll strip.")
 
             SettingsSwitch {
                 checked: appSettings.scrollingDropIndicatorEnabled
@@ -166,7 +171,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Corner radius")
             searchAnchor: "scrollingDropIndicatorBorderRadius"
-            description: i18n("Corner rounding of the indicator in pixels")
+            description: i18n("Corner rounding of the indicator in pixels.")
             enabled: root.indicatorOn
 
             SettingsSpinBox {

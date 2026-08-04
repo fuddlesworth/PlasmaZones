@@ -503,7 +503,7 @@ public:
     /// of the box. Zero width is legal and means a fill with no edge.
     static constexpr int scrollingDropIndicatorBorderWidth()
     {
-        return 2;
+        return ::PhosphorZones::ZoneDefaults::BorderWidth;
     }
     static constexpr int scrollingDropIndicatorBorderWidthMin()
     {

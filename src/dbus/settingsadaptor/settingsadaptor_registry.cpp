@@ -282,7 +282,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("osdStyle")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= ConfigDefaults::osdStyleMin() && val <= ConfigDefaults::osdStyleMax()) {
             m_settings->setOsdStyle(static_cast<OsdStyle>(val));
             return true;
         }
@@ -295,7 +295,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("overlayDisplayMode")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 1) {
+        if (val >= ConfigDefaults::overlayDisplayModeMin() && val <= ConfigDefaults::overlayDisplayModeMax()) {
             m_settings->setOverlayDisplayMode(static_cast<OverlayDisplayMode>(val));
             return true;
         }
@@ -375,14 +375,19 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_STRING_SETTING("windowTintColor", windowTintColor, setWindowTintColor)
     REGISTER_INT_SETTING("focusFadeDuration", focusFadeDuration, setFocusFadeDuration)
     REGISTER_STRING_SETTING("labelFontFamily", labelFontFamily, setLabelFontFamily)
-    // Custom setter with range validation (0.25-3.0) instead of REGISTER_DOUBLE_SETTING
+    // Custom setter with range validation instead of REGISTER_DOUBLE_SETTING.
+    // Bounds through ConfigDefaults, per CLAUDE.md's rule that config values
+    // route through the accessors: with the numbers inlined this guard and the
+    // schema's clamp were two independently-maintained spellings of the same
+    // range, and retuning one left the other rejecting values the other
+    // accepts.
     m_getters[QStringLiteral("labelFontSizeScale")] = [this]() {
         return m_settings->labelFontSizeScale();
     };
     m_setters[QStringLiteral("labelFontSizeScale")] = [this](const QVariant& v) {
         bool ok;
         double val = v.toDouble(&ok);
-        if (!ok || val < 0.25 || val > 3.0) {
+        if (!ok || val < ConfigDefaults::labelFontSizeScaleMin() || val > ConfigDefaults::labelFontSizeScaleMax()) {
             return false;
         }
         m_settings->setLabelFontSizeScale(val);
