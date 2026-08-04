@@ -1053,6 +1053,11 @@ target_link_libraries(test_tiling_adaptor_panel_gate PRIVATE Qt6::Test Qt6::Core
                                                                  plasmazones_core)
 add_test(NAME test_tiling_adaptor_panel_gate COMMAND test_tiling_adaptor_panel_gate)
 
+add_executable(test_tiling_adaptor_active_layouts dbus/test_tiling_adaptor_active_layouts.cpp)
+target_link_libraries(test_tiling_adaptor_active_layouts PRIVATE Qt6::Test Qt6::Core Qt6::DBus
+                                                                 plasmazones_core)
+add_test(NAME test_tiling_adaptor_active_layouts COMMAND test_tiling_adaptor_active_layouts)
+
 # Truth-table guard for WindowDragAdaptor::computeDragPolicy - pins the
 # (snap, autotile, context) matrix so the daemon's drag routing decision
 # can't drift relative to the compositor plugin's deleted local caches.

@@ -21,6 +21,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <property name="managedScreens" type="as" access="read">
             <annotation name="org.gtk.GDBus.DocString" value="UNION of every tiling-family engine's screens. org.plasmazones.Scrolling names the scrolling subset."/>
         </property>
+        <property name="activeLayouts" type="a{sv}" access="read">
+            <annotation name="org.qtproject.QtDBus.QtTypeName" value="QVariantMap"/>
+            <annotation name="org.gtk.GDBus.DocString" value="Per-screen RULES-VISIBLE active layout id (screenId to string): a snapping layout UUID, autotile:&lt;algorithmId&gt;, scrolling:&lt;templateUuid&gt; for a templated scrolling context, or the bare scrolling: sentinel when no template resolves. Pushed by the daemon so effect-evaluated window rules see the same ActiveLayout vocabulary as daemon-evaluated context rules. Covers EVERY effective screen, not just engine-managed ones."/>
+        </property>
 
         <!-- ═══════════════════════════════════════════════════════════════════════════
              Tiling Operations
@@ -118,6 +122,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
             <arg name="isDesktopSwitch" type="b">
                 <annotation name="org.gtk.GDBus.DocString" value="True if the change is due to desktop/activity switch (effect should skip geometry restore/re-notification)."/>
+            </arg>
+        </signal>
+
+        <signal name="activeLayoutsChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when any screen's rules-visible active layout changes (see the activeLayouts property for the value vocabulary). Deduplicated: the daemon pushes on every screen-set recompute and only actual map changes reach the wire."/>
+            <arg name="activeLayouts" type="a{sv}">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QVariantMap"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Full screenId to rules-visible layout id map after the change."/>
             </arg>
         </signal>
 

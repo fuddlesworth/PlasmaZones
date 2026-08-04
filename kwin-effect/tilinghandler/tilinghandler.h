@@ -18,6 +18,7 @@
 #include <QPointF>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 #include <QVector>
 
 #include <cstdint>
@@ -303,6 +304,19 @@ public:
         return m_scrollingScreens.contains(screenId) && m_managedScreens.contains(screenId);
     }
 
+    /// The RULES-VISIBLE active layout id the daemon pushed for @p screenId
+    /// (snapping UUID / "autotile:<algo>" / "scrolling:<templateUuid>" /
+    /// bare sentinel), stamped onto Field::ActiveLayout in ruleQuery.
+    /// Empty when no push has landed yet (bring-up window before the
+    /// Properties.Get reply) or the screen is unknown — the admission filter
+    /// in shader_config_dbus.cpp does NOT drop ActiveLayout rules for that
+    /// window because setActiveLayouts self-corrects the memoised verdicts
+    /// when the first real map arrives.
+    QString activeLayoutForScreen(const QString& screenId) const
+    {
+        return m_activeLayouts.value(screenId);
+    }
+
     /// The set this discriminator actually answers over.
     ///
     /// Because the answer is an INTERSECTION, it can change when EITHER input
@@ -402,6 +416,7 @@ public Q_SLOTS:
     void slotEnabledChanged(bool enabled);
     void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
     void slotScrollingScreensChanged(const QStringList& screenIds);
+    void slotActiveLayoutsChanged(const QVariantMap& activeLayouts);
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
 
     // Window state change handlers (connected per-window in setupWindowConnections)
@@ -633,6 +648,17 @@ private:
         bool canSnapRestore = false;
     };
     QHash<QString, DeferredWindowRoute> m_deferredWindowRoutes;
+    /// Per-screen rules-visible active layout ids, pushed by the daemon
+    /// (see activeLayoutForScreen). A pure ruleQuery input like
+    /// m_scrollingScreens — no lifecycle transitions key on it.
+    QHash<QString, QString> m_activeLayouts;
+    /// Authoritative write for m_activeLayouts: generation bump (voids
+    /// in-flight property replies), change gate, then rule-cache invalidate
+    /// + border sweep on a genuine change — the setScrollingScreens pattern.
+    void setActiveLayouts(const QHash<QString, QString>& activeLayouts);
+    /// Stale-reply guard for the activeLayouts property fetch, same contract
+    /// as m_scrollingScreensGeneration.
+    quint64 m_activeLayoutsGeneration = 0;
     /// Same stale-reply guard for the scrolling-screens property fetch.
     /// Bumped by setScrollingScreens on EVERY authoritative write (live
     /// signal, property reply, daemon-restart clear) — even an identical

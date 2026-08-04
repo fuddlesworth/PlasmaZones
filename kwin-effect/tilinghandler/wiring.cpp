@@ -14,6 +14,7 @@
 
 #include <effect/effecthandler.h>
 
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
@@ -51,6 +52,9 @@ void TilingHandler::connectSignals()
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
                    SLOT(slotScrollingScreensChanged(QStringList)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
+                   SLOT(slotActiveLayoutsChanged(QVariantMap)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowsTileRequested"), this,
@@ -75,6 +79,10 @@ void TilingHandler::connectSignals()
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
                 SLOT(slotScrollingScreensChanged(QStringList)));
+
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
+                SLOT(slotActiveLayoutsChanged(QVariantMap)));
 
     qCInfo(lcEffect) << "Connected to tiling D-Bus signals";
 }
@@ -205,6 +213,38 @@ void TilingHandler::loadSettings()
                     // Without this trail, "Mode == scrolling rules never
                     // match" has no diagnostic at all.
                     qCDebug(lcEffect) << "Scrolling screens: query failed, daemon may not be running";
+                }
+            });
+
+    // Rules-visible active layout map — a pure ruleQuery input like the
+    // scrolling subset, so the reply handling is a guarded assignment
+    // through the setActiveLayouts chokepoint (which owns the rule-cache
+    // invalidate). This closes the bring-up window where a rule verdict was
+    // memoised with an empty ActiveLayout stamp before the daemon's first
+    // push landed.
+    QDBusMessage layoutsMsg =
+        QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+    layoutsMsg << PhosphorProtocol::Service::Interface::Tiling << QStringLiteral("activeLayouts");
+    QDBusPendingCall layoutsCall =
+        QDBusConnection::sessionBus().asyncCall(layoutsMsg, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    auto* layoutsWatcher = new QDBusPendingCallWatcher(layoutsCall, this);
+    const quint64 layoutsGenerationAtDispatch = m_activeLayoutsGeneration;
+    connect(layoutsWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, layoutsGenerationAtDispatch](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                if (m_activeLayoutsGeneration != layoutsGenerationAtDispatch) {
+                    return; // a live signal carried a newer map
+                }
+                QDBusPendingReply<QDBusVariant> reply = *w;
+                if (reply.isValid()) {
+                    // a{sv} arrives as a QDBusArgument-wrapped variant;
+                    // toMap() on it returns empty — demarshal explicitly.
+                    const QVariantMap map = qdbus_cast<QVariantMap>(reply.value().variant());
+                    slotActiveLayoutsChanged(map);
+                    qCInfo(lcEffect) << "Loaded active layouts for" << map.size() << "screens";
+                } else {
+                    qCDebug(lcEffect) << "Active layouts: query failed, daemon may not be running";
                 }
             });
 }

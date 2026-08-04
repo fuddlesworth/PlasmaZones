@@ -418,6 +418,18 @@ public:
     Layout* scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
                                         const QString& activity) const override;
 
+    /// The RULES-VISIBLE ActiveLayout value the context resolvers stamp onto
+    /// their windowless queries: the assignment id, except that a Scrolling
+    /// context with a resolved template substitutes the PREFIXED
+    /// "scrolling:<templateUuid>" (LayoutId::makeScrollingId) — parity with
+    /// autotile's "autotile:<algorithmId>" stamp, so a rule can target one
+    /// template. Assignment ids on every other surface stay the bare
+    /// sentinel. Public so the daemon can push the same value to the effect
+    /// for window-domain (appearance/animation) rule queries — both rule
+    /// pipelines must see one ActiveLayout vocabulary.
+    /// Impl in layoutregistry_contextresolve.cpp.
+    QString rulesVisibleActiveLayoutId(const QString& screenId, int virtualDesktop, const QString& activity) const;
+
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;
 
@@ -826,14 +838,6 @@ Q_SIGNALS:
     void layoutsSaved();
 
 private:
-    /// The RULES-VISIBLE ActiveLayout value the context resolvers stamp onto
-    /// their windowless queries: the assignment id, except that a Scrolling
-    /// context with a resolved template substitutes the PREFIXED
-    /// "scrolling:<templateUuid>" (LayoutId::makeScrollingId) — parity with
-    /// autotile's "autotile:<algorithmId>" stamp, so a rule can target one
-    /// template. Assignment ids on every other surface stay the bare
-    /// sentinel. Impl in layoutregistry_contextresolve.cpp.
-    QString rulesVisibleActiveLayoutId(const QString& screenId, int virtualDesktop, const QString& activity) const;
     /// Post-construction setup: path validation, evaluator binding, signal
     /// wiring.
     void initCommon();

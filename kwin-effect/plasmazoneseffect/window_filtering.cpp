@@ -167,6 +167,13 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
     if (query.mode == QLatin1String("tiling") && m_tilingHandler->isScrollingScreen(screenId)) {
         query.mode = QStringLiteral("scrolling");
     }
+    // Stamp the rules-visible active layout the daemon pushed for this
+    // window's screen (snapping UUID / "autotile:<algo>" /
+    // "scrolling:<templateUuid>" / bare sentinel) so window-domain rules can
+    // match Field::ActiveLayout with the same vocabulary as the daemon's
+    // context rules. Replaces the engaged-empty stamp ruleQueryFor left,
+    // which made every negated ActiveLayout rule fire for every window.
+    query.activeLayout = m_tilingHandler->activeLayoutForScreen(screenId);
     // Stamp the screen orientation from the resolved screen id. ruleQueryFor
     // leaves the field to us whenever it is handed an id: its own derivation
     // is centre-based, which answers for the wrong monitor (or not at all) for

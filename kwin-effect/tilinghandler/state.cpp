@@ -439,6 +439,35 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     updateScrollWheelShortcuts();
 }
 
+void TilingHandler::slotActiveLayoutsChanged(const QVariantMap& activeLayouts)
+{
+    QHash<QString, QString> next;
+    next.reserve(activeLayouts.size());
+    for (auto it = activeLayouts.cbegin(); it != activeLayouts.cend(); ++it) {
+        next.insert(it.key(), it.value().toString());
+    }
+    setActiveLayouts(next);
+}
+
+void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayouts)
+{
+    // Any authoritative write voids in-flight property replies, identical
+    // map or not — the writer is always newer than a reply dispatched
+    // earlier (see the m_activeLayoutsGeneration doc).
+    ++m_activeLayoutsGeneration;
+    if (activeLayouts == m_activeLayouts) {
+        return;
+    }
+    m_activeLayouts = activeLayouts;
+    // Rule verdicts are memoised per window and ActiveLayout is a ruleQuery
+    // input: a layout/template change on any screen can flip a border,
+    // opacity, decoration, or animation-exclusion verdict, so the whole
+    // cache goes (there is no per-screen invalidation surface) and the
+    // sweep repaints borders that changed.
+    m_effect->invalidateAllRuleCaches();
+    m_effect->scheduleBorderSweep();
+}
+
 void TilingHandler::updateScrollWheelShortcuts()
 {
     // The enable setting folds into the want predicate so turning it off

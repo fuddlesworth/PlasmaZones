@@ -471,6 +471,24 @@ void Daemon::updateEngineScreens()
     // batched restore — consuming it here strands previously-floated
     // windows off their zones (found the hard way).
     emitPendingSnapFloatRestoresForResnapBuffer(/*preserveZoneEntries=*/true);
+
+    // Push the per-screen RULES-VISIBLE active layout map to the effect so
+    // window-domain (appearance/animation) rules can match Field::ActiveLayout
+    // with the same vocabulary the daemon's context rules see (snapping UUID,
+    // "autotile:<algo>", "scrolling:<templateUuid>", bare sentinel). Runs
+    // UNCONDITIONALLY at this tail and must never move behind a
+    // sets-unchanged short-circuit: a desktop switch changes the map while
+    // both engines' screen sets stay identical. The adaptor owns the
+    // emit-on-change dedup, so the unconditional push costs one map compare.
+    if (m_tilingAdaptor) {
+        QVariantMap activeLayouts;
+        for (const QString& screenId : effectiveIds) {
+            activeLayouts.insert(
+                screenId,
+                m_layoutManager->rulesVisibleActiveLayoutId(screenId, currentDesktopForScreen(screenId), activity));
+        }
+        m_tilingAdaptor->setActiveLayouts(activeLayouts);
+    }
 }
 
 QSet<QString> Daemon::diffActiveAssignments()

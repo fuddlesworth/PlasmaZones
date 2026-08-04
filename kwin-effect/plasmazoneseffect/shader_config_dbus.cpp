@@ -34,6 +34,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QLoggingCategory>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -49,6 +50,38 @@ namespace PlasmaZones {
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
+
+/// Context fields NO effect-side resolver stamps onto its WindowQuery —
+/// the effect twin of the daemon open-path's neverStampedFields()
+/// (src/dbus/windowtrackingadaptor/rules.cpp), for the same reason: an
+/// unstamped field is not inert. WindowQuery::valueForField returns an
+/// ENGAGED empty string for string-valued context fields, so a positive
+/// leaf on one correctly never matches, but a NEGATED leaf
+/// (`None{TiledWindowCount ...}`) matches precisely BECAUSE the inner
+/// leaf failed, and the rule fires for EVERY window. Dropping rules that
+/// reference an unstamped field closes both polarities.
+///
+/// ActiveLayout and ScreenOrientation are deliberately NOT in this set:
+/// ruleQuery (window_filtering.cpp) stamps both. TiledWindowCount is the
+/// one context-cascade field with no effect-side source.
+const QSet<PhosphorRules::Field>& effectNeverStampedFields()
+{
+    static const QSet<PhosphorRules::Field> fields = {
+        PhosphorRules::Field::TiledWindowCount,
+    };
+    return fields;
+}
+
+/// Drop the rules referencing a never-stamped field from an exclusion
+/// slice before it reaches an effect-bound rule set (see
+/// effectNeverStampedFields for why).
+QList<PhosphorRules::Rule> withoutNeverStampedRules(QList<PhosphorRules::Rule> rules)
+{
+    rules.removeIf([](const PhosphorRules::Rule& rule) {
+        return rule.match.referencesAnyField(effectNeverStampedFields());
+    });
+    return rules;
+}
 
 /// Parse a D-Bus setting variant containing a JSON-encoded string and
 /// dispatch to one of two callers based on the document's top-level
@@ -464,6 +497,11 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
                 // rule-set size minimal and the priority-order index smaller.)
                 continue;
             }
+            if (rule.match.referencesAnyField(effectNeverStampedFields())) {
+                // No effect resolver can stamp the referenced field — admit
+                // neither polarity (see effectNeverStampedFields).
+                continue;
+            }
             // Admit the rule to the evaluator if ANY action is effect-consumed,
             // i.e. carries Tag::Effect (hasTag below). The authoritative
             // membership list is the descriptor tag assignments in
@@ -511,14 +549,15 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
         // are therefore covered by the revision bump alone; PLACEMENT
         // changes are not, which is why rule_invalidation.cpp clears that
         // cache explicitly.
-        m_snappingExclusionRuleSet.setRules(PhosphorRules::ExclusionRules::excludeRulesFrom(*setOpt).rules());
+        m_snappingExclusionRuleSet.setRules(
+            withoutNeverStampedRules(PhosphorRules::ExclusionRules::excludeRulesFrom(*setOpt).rules()));
 
         // Same refresh for the animation-side exclusion rule set, sliced
         // for `ExcludeAnimations`-action rules. The two slices stay
         // independent so a user can have a window excluded from animations
         // but NOT from snap (or vice versa).
         m_animationExclusionRuleSet.setRules(
-            PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom(*setOpt).rules());
+            withoutNeverStampedRules(PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom(*setOpt).rules()));
         // Force a full repaint on EITHER bookend so a user-authored rule
         // applies to static (un-damaged) windows immediately AND so a
         // removed rule reverts previously-dimmed windows immediately, not
