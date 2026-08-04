@@ -133,6 +133,12 @@ struct DragInsertPreview
         priorKey; // Key of the prior PhosphorTiles::TilingState (meaningful iff hadPriorState)
     int priorRawIndex = -1; // Raw index in priorState->windowOrder() at begin
     bool priorFloating = false; // Prior floating flag in priorState
+    /// Whether that prior float was an OVERFLOW float rather than a user one.
+    /// begin clears the overflow mark when it unfloats, so cancel has to know
+    /// which kind to restore: an unmarked re-float is recorded by
+    /// capturePlacement as a phantom user float and is never picked up by
+    /// recoverIfRoom, which walks the overflow set only.
+    bool priorOverflow = false;
     bool priorSameScreen = false; // priorKey == currentKeyForScreen(targetScreenId)
 
     // Eviction info (used when the target stack is already at maxWindows

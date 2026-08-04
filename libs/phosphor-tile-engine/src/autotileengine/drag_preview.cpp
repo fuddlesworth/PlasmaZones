@@ -90,6 +90,12 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
         // Same-screen reorder: unfloat if it was floating, otherwise leave in place.
         // The first updateDragInsertPreview() call will reposition within the stack.
         if (preview.priorFloating) {
+            // Capture the overflow mark BEFORE clearing it. Cancel re-floats
+            // this window, and without the bit it would come back floating but
+            // UNMARKED — which capturePlacement then records as a phantom USER
+            // float and recoverIfRoom never auto-recovers, because that walks
+            // m_overflow only.
+            preview.priorOverflow = m_overflow.isOverflow(windowId);
             targetState->setFloating(windowId, false);
             m_overflow.clearOverflow(windowId);
         }
@@ -129,6 +135,16 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
             if (tiled[i] != windowId) {
                 preview.evictedWindowId = tiled[i];
                 targetState->setFloating(tiled[i], true);
+                // An eviction float is an OVERFLOW float, not a user float,
+                // and the distinction is load-bearing in two places:
+                // capturePlacement records an unmarked float as stateFloating
+                // (so it comes back floating after a restart, where an
+                // overflow float must record as stateTiled and re-tile), and
+                // recoverIfRoom only walks m_overflow, so an unmarked victim
+                // is never auto-recovered when a slot frees. The usual
+                // backstop does not cover it either: applyOverflow is fed
+                // tiledWindows(), which this window has just left.
+                m_overflow.markOverflow(tiled[i], screenId);
                 break;
             }
         }
@@ -273,6 +289,9 @@ void AutotileEngine::cancelDragInsertPreview()
     // the same tiled list the user started with.
     if (!p.evictedWindowId.isEmpty() && targetState) {
         targetState->setFloating(p.evictedWindowId, false);
+        // Paired with the markOverflow in begin's eviction block: the victim is
+        // tiled again, so it is no longer overflowing.
+        m_overflow.clearOverflow(p.evictedWindowId);
     }
 
     if (p.hadPriorState && p.priorSameScreen) {
@@ -282,6 +301,13 @@ void AutotileEngine::cancelDragInsertPreview()
             targetState->moveToPosition(p.windowId, p.priorRawIndex);
             if (p.priorFloating) {
                 targetState->setFloating(p.windowId, true);
+                // Restore the KIND of float, not just the flag. begin cleared
+                // the overflow mark when it unfloated; re-floating without it
+                // would leave the window floating-but-unmarked, which reads as
+                // a user float everywhere it matters.
+                if (p.priorOverflow) {
+                    m_overflow.markOverflow(p.windowId, p.targetScreenId);
+                }
             }
         }
     } else {

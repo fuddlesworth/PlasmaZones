@@ -1155,6 +1155,26 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
 std::optional<PhosphorEngine::WindowPlacement> ScrollEngine::capturePlacement(const QString& rawWindowId) const
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
+
+    // A window mid-drag-insert has NO capturable placement, and answering
+    // anyway silently destroys the one it had. Under DETACH-ONCE, begin drops
+    // the window from the floating set and out of the strip while KEEPING it
+    // tracked — so the else arm below would read isFloating()==false, take the
+    // tiled branch, and record columnOfWindow() == -1. A pre-drag FLOATING
+    // window would have its floating record overwritten with tiled/order=-1;
+    // insertOpenedWindow's restore ladder then never reaches the floating arm,
+    // its `order >= 0` test fails too, and the window reopens tiled with its
+    // remembered float-back gone.
+    //
+    // This is reachable on an ordinary hold: the save timer is restarted by
+    // markDirty, which this engine's own placementChanged triggers, and begin
+    // emits that when the neighbours close up. Returning nullopt leaves the
+    // pre-drag record intact, which is the same answer the adaptor already
+    // documents for an unmanaged window.
+    if (m_dragInsertPreview && m_dragInsertPreview->windowId == windowId) {
+        return std::nullopt;
+    }
+
     PhosphorEngine::PlacementStateKey key;
     const ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
