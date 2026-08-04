@@ -65,10 +65,15 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {}
+        SettingsSeparator {
+            enabled: root.indicatorOn
+        }
 
         ThemeFallbackColorRow {
             title: i18n("Fill color")
+            // Overridden because the title already says "color"; the default
+            // would announce "Fill color color".
+            swatchAccessibleName: i18nc("@action:button", "Drop indicator fill color")
             searchAnchor: "scrollingDropIndicatorColor"
             description: i18n("Color filling the space the window will land in. Follows the color scheme unless you pick one.")
             enabled: root.indicatorOn
@@ -81,7 +86,9 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {}
+        SettingsSeparator {
+            enabled: root.indicatorOn
+        }
 
         SettingsRow {
             title: i18n("Fill opacity")
@@ -100,10 +107,14 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {}
+        SettingsSeparator {
+            enabled: root.indicatorOn
+        }
 
         ThemeFallbackColorRow {
             title: i18n("Border color")
+            // See the fill row above.
+            swatchAccessibleName: i18nc("@action:button", "Drop indicator border color")
             searchAnchor: "scrollingDropIndicatorBorderColor"
             description: i18n("Color of the indicator's edge. Follows the color scheme unless you pick one.")
             enabled: root.indicatorOn
@@ -116,7 +127,9 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {}
+        SettingsSeparator {
+            enabled: root.indicatorOn
+        }
 
         SettingsRow {
             title: i18n("Border width")
@@ -146,7 +159,9 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {}
+        SettingsSeparator {
+            enabled: root.indicatorOn
+        }
 
         SettingsRow {
             title: i18n("Corner radius")

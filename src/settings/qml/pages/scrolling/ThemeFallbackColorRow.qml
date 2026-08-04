@@ -39,6 +39,13 @@ SettingsRow {
     /// its own picker without this file importing QtQuick.Dialogs.
     property var picker: null
 
+    /// What a screen reader announces for the swatch. Defaults to the title
+    /// with "color" appended, which reads correctly for a title naming the
+    /// thing being coloured ("Active tab" -> "Active tab color"). A host whose
+    /// title already says "color" MUST override this, or the announcement
+    /// stutters ("Fill color color").
+    property string swatchAccessibleName: i18nc("@action:button", "%1 color", root.title)
+
     /// Emitted with the chosen `#AARRGGBB`, or an EMPTY string on reset.
     signal colorChosen(string hex)
 
@@ -74,7 +81,7 @@ SettingsRow {
             id: swatch
 
             color: root._followsTheme ? root.themeColor : root.storedColor
-            Accessible.name: i18nc("@action:button", "%1 color", root.title)
+            Accessible.name: root.swatchAccessibleName
             onClicked: {
                 if (!root.picker)
                     return;

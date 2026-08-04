@@ -484,7 +484,7 @@ public:
     /// One opacity, not the snapping overlay's active/inactive pair: there is
     /// exactly one drop target at a time, so there is no inactive state to
     /// give a second value to.
-    static double scrollingDropIndicatorOpacity()
+    static constexpr double scrollingDropIndicatorOpacity()
     {
         return 0.25;
     }
@@ -949,5 +949,26 @@ static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadius()
 static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusMin()
                   == ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusPill(),
               "The corner-radius floor must be the pill sentinel — see the accessor comment");
+// The drop indicator's three ranged defaults, same guard as the tab
+// indicator's above. The colour pair is unranged (empty means follow the
+// scheme) and Enabled is a bool, so neither has anything to check.
+static_assert(ConfigDefaultsScrolling::scrollingDropIndicatorOpacity()
+                      >= ConfigDefaultsScrolling::scrollingDropIndicatorOpacityMin()
+                  && ConfigDefaultsScrolling::scrollingDropIndicatorOpacity()
+                      <= ConfigDefaultsScrolling::scrollingDropIndicatorOpacityMax(),
+              "ConfigDefaults::scrollingDropIndicatorOpacity() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingDropIndicatorBorderWidth()
+                      >= ConfigDefaultsScrolling::scrollingDropIndicatorBorderWidthMin()
+                  && ConfigDefaultsScrolling::scrollingDropIndicatorBorderWidth()
+                      <= ConfigDefaultsScrolling::scrollingDropIndicatorBorderWidthMax(),
+              "ConfigDefaults::scrollingDropIndicatorBorderWidth() outside the declared [min, max] range");
+// The radius default is ZoneDefaults::BorderRadius by reference, so this also
+// catches the snapping overlay's own default drifting out of the range this
+// file declares for the highlight that is meant to match it.
+static_assert(ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadius()
+                      >= ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadiusMin()
+                  && ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadius()
+                      <= ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadiusMax(),
+              "ConfigDefaults::scrollingDropIndicatorBorderRadius() outside the declared [min, max] range");
 
 } // namespace PlasmaZones

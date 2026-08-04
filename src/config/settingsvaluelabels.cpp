@@ -300,6 +300,11 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::gapsBetweenTabsKey()), number(px));
         t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::cornerRadiusKey()), number(px));
         t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::lengthProportionKey()), number(pct, 100.0));
+        // Drop indicator: same treatment as the zone border it mirrors, with
+        // the fill opacity as a stored 0.0-1.0 ratio read as a percentage.
+        t.insert(pairKey(CD::scrollingDropIndicatorGroup(), CD::opacityKey()), number(pct, 100.0));
+        t.insert(pairKey(CD::scrollingDropIndicatorGroup(), CD::widthKey()), number(px));
+        t.insert(pairKey(CD::scrollingDropIndicatorGroup(), CD::radiusKey()), number(px));
 
         // ── Ids resolved against live runtime data ──────────────────────────
         t.insert(pairKey(CD::snappingBehaviorWindowHandlingGroup(), CD::defaultLayoutIdKey()),

@@ -80,6 +80,7 @@ SettingsFlickable {
                         description: i18n("Color for the active/hovered zone")
 
                         ColorSwatchRow {
+                            accessibleName: i18nc("@action:button", "Zone highlight color")
                             color: appSettings.highlightColor
                             onClicked: {
                                 highlightColorDialog.selectedColor = appSettings.highlightColor;
@@ -99,6 +100,7 @@ SettingsFlickable {
                         description: i18n("Color for zones that are not hovered")
 
                         ColorSwatchRow {
+                            accessibleName: i18nc("@action:button", "Inactive zone color")
                             color: appSettings.inactiveColor
                             onClicked: {
                                 inactiveColorDialog.selectedColor = appSettings.inactiveColor;
@@ -118,6 +120,7 @@ SettingsFlickable {
                         description: i18n("Color for zone borders")
 
                         ColorSwatchRow {
+                            accessibleName: i18nc("@action:button", "Zone border color")
                             color: appSettings.borderColor
                             onClicked: {
                                 borderColorDialog.selectedColor = appSettings.borderColor;
@@ -333,6 +336,7 @@ SettingsFlickable {
                         description: i18n("Text color for zone labels")
 
                         ColorSwatchRow {
+                            accessibleName: i18nc("@action:button", "Zone label text color")
                             color: appSettings.labelFontColor
                             onClicked: {
                                 labelFontColorDialog.selectedColor = appSettings.labelFontColor;
