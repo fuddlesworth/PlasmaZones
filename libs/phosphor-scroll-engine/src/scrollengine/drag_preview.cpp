@@ -529,6 +529,63 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     return target;
 }
 
+QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
+{
+    if (!m_dragInsertPreview
+        || !PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId)) {
+        return {};
+    }
+    const DragInsertTarget target = m_dragInsertPreview->lastTarget;
+    if (!target.isValid()) {
+        return {};
+    }
+    // The preview's CAPTURED key, like commit and the hit-test: a context
+    // switch mid-drag must not paint an indicator over a strip the drop
+    // will not land in.
+    const ScrollState* state = m_states.stateForKey(m_dragInsertPreview->targetKey);
+    if (!state) {
+        return {};
+    }
+    const ScrollLayoutParams params = layoutParamsForScreen(m_dragInsertPreview->targetScreenId);
+    if (!params.workArea.isValid()) {
+        return {};
+    }
+    const ResolvedStrip resolved = state->strip().relayout(params);
+    // Vertical extent comes from a real column when there is one, so the
+    // indicator lines up with the tiles instead of any reserved indicator
+    // band the columns already exclude.
+    const QRect vertical = resolved.columns.isEmpty() ? params.workArea : resolved.columns.first().rect;
+
+    if (!target.newSlot && !resolved.columns.isEmpty()) {
+        // Joining a column: the window becomes one more tile in that stack,
+        // so it takes an (n+1)-th share of the column's height at the
+        // insert position.
+        const int columnIdx = std::clamp(target.primary, 0, static_cast<int>(resolved.columns.size()) - 1);
+        const ResolvedColumn& column = resolved.columns.at(columnIdx);
+        const int slots = column.tiles.size() + 1;
+        // secondary is a MODEL tile index; the resolved column omits
+        // minimized tiles, so clamp rather than assume the two agree.
+        const int slot = std::clamp(target.secondary < 0 ? slots - 1 : target.secondary, 0, slots - 1);
+        const int slotHeight = std::max(1, column.rect.height() / slots);
+        return QRect(column.rect.x(), column.rect.y() + slot * slotHeight, column.rect.width(), slotHeight);
+    }
+
+    // A NEW column at `primary`: it opens where that column currently
+    // starts (everything from there shifts right), or past the last one.
+    const int width = std::max(1,
+                               std::min(ScrollStrip::resolveColumnWidthPx(m_dragInsertPreview->carried.width, params),
+                                        params.workArea.width()));
+    int x = params.workArea.left();
+    if (!resolved.columns.isEmpty()) {
+        if (target.primary < resolved.columns.size()) {
+            x = resolved.columns.at(std::max(0, target.primary)).rect.left();
+        } else {
+            x = resolved.columns.last().rect.right() + 1 + params.gap;
+        }
+    }
+    return QRect(x, vertical.y(), width, vertical.height());
+}
+
 bool ScrollEngine::nudgeDragScroll(const QString& screenId, const QPoint& cursorPos)
 {
     if (!m_dragInsertPreview

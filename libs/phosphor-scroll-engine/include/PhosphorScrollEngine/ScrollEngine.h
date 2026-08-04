@@ -386,6 +386,18 @@ public:
     /// preview's captured context key, not the screen's current one.
     DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
     void updateDragInsertPreview(const DragInsertTarget& target) override;
+    /// The rect the dragged window would occupy if it were dropped at the
+    /// currently remembered target — the drop indicator the daemon paints.
+    /// Absolute screen pixels, the same basis as visibleTiles.
+    ///
+    /// Detach-once means the strip NEVER opens a gap to show where the drop
+    /// lands (autotile's live restructure slid this layout out from under a
+    /// stationary cursor), so this rect is the only feedback there is. Null
+    /// when no preview is live for @p screenId or before the first
+    /// hit-test resolves a target. Not clamped into the viewport: a target
+    /// on a parked column reports where it truly lands, and the overlay
+    /// clips.
+    QRect dragInsertIndicatorRect(const QString& screenId) const;
     /// Edge auto-scroll while a drag-insert preview is live on @p screenId:
     /// a cursor inside the left/right work-area band slides the view one
     /// step toward that edge (driven by the daemon's fixed ~60 Hz drag-

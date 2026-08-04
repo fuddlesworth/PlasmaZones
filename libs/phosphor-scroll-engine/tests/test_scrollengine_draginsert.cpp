@@ -48,6 +48,7 @@ private Q_SLOTS:
     void freshAdoptionStaysUntrackedUntilCommit();
     void hitTestResolvesTargets();
     void hitTestResolvesStackedTileSlots();
+    void indicatorRectTracksTarget();
     void nudgeDragScrollShiftsView();
     void windowClosedDropsPreview();
     void screenSetChangeCancelsPreview();
@@ -465,6 +466,62 @@ void TestScrollEngineDragInsert::hitTestResolvesStackedTileSlots()
     QVERIFY(!bottom.newSlot);
     QCOMPARE(bottom.secondary, 2);
     engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::indicatorRectTracksTarget()
+{
+    // Detach-once never opens a gap, so this rect is the ONLY drop feedback
+    // the user gets. It must describe the space the window really takes:
+    // a full-height column slot for a new column, and an (n+1)-th share of
+    // the stack for a join.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+
+    // No preview: nothing to paint.
+    QVERIFY(engine->dragInsertIndicatorRect(QStringLiteral("S1")).isNull());
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
+    // Preview live but no target hit-tested yet.
+    QVERIFY(engine->dragInsertIndicatorRect(QStringLiteral("S1")).isNull());
+    // Another screen never borrows this screen's indicator.
+    QVERIFY(engine->dragInsertIndicatorRect(QStringLiteral("S2")).isNull());
+
+    const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
+    QVERIFY(!rectB.isNull());
+
+    // New column BEFORE b: opens where b currently starts, full column height.
+    DragTarget newCol;
+    newCol.primary = 0;
+    newCol.newSlot = true;
+    engine->updateDragInsertPreview(newCol);
+    const QRect openSlot = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(openSlot.isValid());
+    QCOMPARE(openSlot.x(), rectB.x());
+    QCOMPARE(openSlot.height(), rectB.height());
+    QVERIFY(openSlot.width() > 0);
+
+    // Join b's column as a second tile: same width, half the height, and
+    // the lower half for the below-b slot.
+    DragTarget join;
+    join.primary = 0;
+    join.secondary = 1;
+    engine->updateDragInsertPreview(join);
+    const QRect joinSlot = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(joinSlot.isValid());
+    QCOMPARE(joinSlot.width(), rectB.width());
+    QCOMPARE(joinSlot.height(), rectB.height() / 2);
+    QCOMPARE(joinSlot.y(), rectB.y() + rectB.height() / 2);
+    // ...and the above-b slot is the upper half of the same column.
+    join.secondary = 0;
+    engine->updateDragInsertPreview(join);
+    const QRect upper = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QCOMPARE(upper.y(), rectB.y());
+    QCOMPARE(upper.height(), rectB.height() / 2);
+
+    // The indicator dies with the preview.
+    engine->cancelDragInsertPreview();
+    QVERIFY(engine->dragInsertIndicatorRect(QStringLiteral("S1")).isNull());
 }
 
 void TestScrollEngineDragInsert::nudgeDragScrollShiftsView()
