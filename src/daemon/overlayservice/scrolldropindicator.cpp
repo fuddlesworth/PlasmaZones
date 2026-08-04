@@ -74,8 +74,13 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     // Deliberate — a rule that silences the indicator is a property of where
     // you are working, not of the window you happened to pick up.
     bool indicatorEnabled = !m_settings || m_settings->scrollingDropIndicatorEnabled();
-    if (const auto it = m_scrollDropIndicatorOverrides[screenId].constFind(QStringLiteral("indicatorEnabled"));
-        it != m_scrollDropIndicatorOverrides[screenId].constEnd()) {
+    // constFind on a LOCAL const copy of the entry: indexing the member with
+    // operator[] default-inserts an empty map for every screen that ever
+    // pushed a rect, which then reads back as "has overrides" in the
+    // change-gate above.
+    const QVariantMap& screenOverrides = m_scrollDropIndicatorOverrides.value(screenId);
+    if (const auto it = screenOverrides.constFind(QStringLiteral("indicatorEnabled"));
+        it != screenOverrides.constEnd()) {
         indicatorEnabled = it.value().toBool();
     }
     const bool wantsIndicator = indicatorEnabled && rect.isValid() && !rect.isEmpty();
