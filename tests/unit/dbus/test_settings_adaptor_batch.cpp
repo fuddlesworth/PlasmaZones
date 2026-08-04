@@ -300,12 +300,47 @@ private Q_SLOTS:
 
         // Each key resolves to its own ISettings accessor rather than collapsing
         // onto a neighbour.
-        QCOMPARE(result.value(QStringLiteral("toggleActivation")).toBool(), m_settings->toggleActivation());
-        QCOMPARE(result.value(QStringLiteral("autotileDragInsertToggle")).toBool(),
-                 m_settings->autotileDragInsertToggle());
-        QCOMPARE(result.value(QStringLiteral("scrollingDragInsertToggle")).toBool(),
-                 m_settings->scrollingDragInsertToggle());
-        QCOMPARE(result.value(QStringLiteral("zoneSpanToggleMode")).toBool(), m_settings->zoneSpanToggleMode());
+        //
+        // Comparing each against its accessor is NOT enough to show that, and
+        // used not to: all four default to false, so every comparison was
+        // false == false and an adaptor that wired all four keys to
+        // toggleActivation() passed unchanged — the exact collapse the claim
+        // denies. Bools give only two values, so no fixed assignment can make
+        // four keys pairwise distinct either. Flip ONE at a time instead and
+        // require the others to stay put; a shared getter moves them together
+        // and fails here.
+        //
+        // The writes go through the stub's TYPED setters rather than the
+        // adaptor, so only the getter half of the registry is under test here.
+        const QStringList toggleKeys{QStringLiteral("toggleActivation"), QStringLiteral("autotileDragInsertToggle"),
+                                     QStringLiteral("scrollingDragInsertToggle"), QStringLiteral("zoneSpanToggleMode")};
+        const auto setAll = [this](bool v) {
+            m_settings->setToggleActivation(v);
+            m_settings->setAutotileDragInsertToggle(v);
+            m_settings->setScrollingDragInsertToggle(v);
+            m_settings->setZoneSpanToggleMode(v);
+        };
+        const auto setOne = [this](const QString& key, bool v) {
+            if (key == QLatin1String("toggleActivation")) {
+                m_settings->setToggleActivation(v);
+            } else if (key == QLatin1String("autotileDragInsertToggle")) {
+                m_settings->setAutotileDragInsertToggle(v);
+            } else if (key == QLatin1String("scrollingDragInsertToggle")) {
+                m_settings->setScrollingDragInsertToggle(v);
+            } else {
+                m_settings->setZoneSpanToggleMode(v);
+            }
+        };
+        for (const QString& flipped : toggleKeys) {
+            setAll(false);
+            setOne(flipped, true);
+            const QVariantMap probe = m_adaptor->getSettings(toggleKeys);
+            for (const QString& k : toggleKeys) {
+                QVERIFY2(probe.value(k).toBool() == (k == flipped),
+                         qPrintable(QStringLiteral("flipping %1 moved %2").arg(flipped, k)));
+            }
+        }
+        setAll(false);
     }
 
     // ─────────────────────────────────────────────────────────────────────

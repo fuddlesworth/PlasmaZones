@@ -118,9 +118,22 @@ void TestScrollEngineDragInsert::beginDetachesFromStrip()
     QVERIFY(!state->strip().containsWindow(QStringLiteral("b")));
     QVERIFY(engine->isWindowTracked(QStringLiteral("b")));
     QVERIFY(!engine->isWindowTiled(QStringLiteral("b")));
+    // The scan below is only meaningful against a NON-EMPTY batch: with no
+    // emission at all the loop body never runs and the assertion passes
+    // without proving anything. Its sibling at interactiveDragMark... guards
+    // the same way and says so.
+    QVERIFY(tiledSpy.count() >= 1);
+    bool sawSurvivingWindow = false;
     for (const auto& emission : tiledSpy) {
-        QVERIFY(!emission.first().toString().contains(QStringLiteral("\"b\"")));
+        const QString payload = emission.first().toString();
+        if (payload.contains(QStringLiteral("\"a\"")) || payload.contains(QStringLiteral("\"c\""))) {
+            sawSurvivingWindow = true;
+        }
+        QVERIFY(!payload.contains(QStringLiteral("\"b\"")));
     }
+    // ...and the batch really carried the surviving neighbours, so the absence
+    // of "b" above is the detach rather than an empty or unrelated payload.
+    QVERIFY(sawSurvivingWindow);
     engine->cancelDragInsertPreview();
 }
 
