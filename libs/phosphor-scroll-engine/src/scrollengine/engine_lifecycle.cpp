@@ -808,11 +808,8 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
 bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
                                          bool applyAfter)
 {
-    if (!state->removeFloating(windowId)) {
-        return false;
-    }
-    // Captured before the re-insert so the guard at the tail reads the
-    // context the window actually belongs to.
+    // Captured before any mutation so the heal arm below and the guard at
+    // the tail both read the context the window actually belongs to.
     const PhosphorEngine::PlacementStateKey key = m_states.keyForWindow(windowId);
     // The window's OWN context screen, the way floatWindowInternal reads
     // key.screenId throughout: a caller that passes the operation screen
@@ -820,6 +817,30 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     // strip this window does not live on. The caller's value is the fallback
     // only for a window the reverse map has no key for at all.
     const QString contextScreen = key.screenId.isEmpty() ? screenId : key.screenId;
+
+    if (!state->removeFloating(windowId)) {
+        // This engine holds no float for the window — but the SHARED float
+        // set can still flag it while the strip holds it as a TILE. Two ways
+        // in: another engine floated it (snap's no-zone-match default, which
+        // is correct on ITS screen) and the window later joined this strip,
+        // or a restore wrote the strip record and the snap float record for
+        // the same window. Returning silently latched that contradiction
+        // FOREVER — every unfloat route refuses, and a window the shared set
+        // calls floating is never adopted into a strip again, so the user
+        // has no way back short of closing the window.
+        //
+        // Announce the engine's real view instead. The passive sync clears
+        // the shared flag AND releases the sibling engine's stale tracking,
+        // and deliberately restores no geometry: the window is already
+        // placed as a tile, so there is nothing to move.
+        if (state->strip().containsWindow(windowId)) {
+            qCInfo(lcScrollEngine) << "unfloatWindowInternal:" << windowId
+                                   << "is a strip tile the shared float set still flags — syncing it clear";
+            m_scrollFloatedWindows.remove(windowId);
+            Q_EMIT windowFloatingStateSynced(windowId, false, contextScreen);
+        }
+        return false;
+    }
     const ScrollLayoutParams params = layoutParamsForScreen(contextScreen);
     // Restore the remembered column slot (minimize/unminimize and float
     // round-trips keep their place); fall back to next-to-focus.

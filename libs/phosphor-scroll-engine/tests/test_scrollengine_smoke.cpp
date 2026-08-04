@@ -63,6 +63,7 @@ private Q_SLOTS:
     void orderedOpenForwardArrivalsKeepSeedOrder();
     void floatedOpenConsumesSeed();
     void migrateOutAnnouncesDroppedFloat();
+    void tileFlaggedFloatingBySiblingEngineSyncsClear();
     void contextSwitchFlagRidesChangedScreenSets();
 
 private:
@@ -991,6 +992,49 @@ void TestScrollEngineSmoke::floatedOpenConsumesSeed()
     engine->windowOpened(QStringLiteral("app|f"), QStringLiteral("S1"), 0, 0);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              (QStringList{QStringLiteral("app|t"), QStringLiteral("app|f")}));
+}
+
+void TestScrollEngineSmoke::tileFlaggedFloatingBySiblingEngineSyncsClear()
+{
+    // The one-way float trap, seen live: a window can be a strip TILE here
+    // while the SHARED float set still flags it, because a sibling engine
+    // floated it (snap's no-zone-match default on its own screen, which is
+    // correct there) and the window later joined this strip.
+    //
+    // unfloatWindowInternal used to bail at removeFloating() and return in
+    // silence, so nothing ever cleared the shared flag: every unfloat route
+    // refused, and a window the shared set calls floating is never adopted
+    // into a strip again. The engine must announce its real view instead —
+    // on the PASSIVE arm, because the window is already placed and must not
+    // be moved.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QVERIFY(engine->isWindowTiled(QStringLiteral("app|a")));
+    // The engine holds NO float for it — exactly the sibling-floated shape.
+    QVERIFY(!engine->isWindowFloatingInScroll(QStringLiteral("app|a")));
+
+    QSignalSpy syncSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+    QSignalSpy activeSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+    engine->setWindowFloat(QStringLiteral("app|a"), false, QStringLiteral("S1"));
+
+    // Exactly one passive sync clearing the flag, and no active transition
+    // (which would drag the tile back to a float-back geometry).
+    QCOMPARE(syncSpy.count(), 1);
+    QCOMPARE(syncSpy.last().at(0).toString(), QStringLiteral("app|a"));
+    QCOMPARE(syncSpy.last().at(1).toBool(), false);
+    QCOMPARE(syncSpy.last().at(2).toString(), QStringLiteral("S1"));
+    QCOMPARE(activeSpy.count(), 0);
+    // Still a tile, untouched.
+    QVERIFY(engine->isWindowTiled(QStringLiteral("app|a")));
+
+    // Boundary: a window this state has never seen is NOT the heal arm's
+    // case — setWindowFloat's adopt route takes it, inserting it into the
+    // strip and announcing that on the same passive arm. Pinned here so the
+    // heal is never widened into a second adopt path.
+    engine->setWindowFloat(QStringLiteral("app|ghost"), false, QStringLiteral("S1"));
+    QCOMPARE(syncSpy.count(), 2);
+    QVERIFY(engine->isWindowTiled(QStringLiteral("app|ghost")));
 }
 
 void TestScrollEngineSmoke::migrateOutAnnouncesDroppedFloat()
