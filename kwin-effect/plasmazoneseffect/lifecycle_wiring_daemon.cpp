@@ -178,6 +178,10 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // indefinitely. Resetting here keeps the gate authoritative
         // across daemon restarts.
         m_daemonGate.bridgeRegistrationInFlight = false;
+        // Retire the in-flight call along with the gate. Its reply is still
+        // coming, and without this bump it would land after the NEW daemon's
+        // registration has re-armed the gate and clear it out from under it.
+        ++m_daemonGate.bridgeRegistrationGeneration;
         m_daemonGate.readyRestoresDone = false;
         m_daemonGate.readyWindowStateProcessed = false;
         m_snapHandler->clearRestoreCache();

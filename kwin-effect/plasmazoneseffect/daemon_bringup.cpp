@@ -64,6 +64,7 @@ void PlasmaZonesEffect::slotDaemonReady()
         return;
     }
     m_daemonGate.bridgeRegistrationInFlight = true;
+    const quint64 registrationGeneration = ++m_daemonGate.bridgeRegistrationGeneration;
 
     qCInfo(lcEffect) << "daemon ready: registering bridge before re-pushing state";
 
@@ -82,49 +83,58 @@ void PlasmaZonesEffect::slotDaemonReady()
             {QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
              QStringList{QStringLiteral("borderless"), QStringLiteral("animation")}}),
         this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        // Clear the in-flight flag on EVERY return path (success, error,
-        // rejection, version mismatch) so a subsequent slotDaemonReady
-        // can retry. m_daemonGate.serviceRegistered remains the long-lived
-        // success gate; m_daemonGate.bridgeRegistrationInFlight only covers the
-        // narrow window between the call leaving and its reply arriving.
-        m_daemonGate.bridgeRegistrationInFlight = false;
-        QDBusPendingReply<PhosphorProtocol::BridgeRegistrationResult> reply = *w;
-        if (reply.isError()) {
-            qCWarning(lcEffect) << "registerBridge call failed:" << reply.error().message()
-                                << "— effect remains idle until the daemon signals ready again.";
-            return;
-        }
-        PhosphorProtocol::BridgeRegistrationResult result = reply.value();
-        if (const QString err = result.validationError(); !err.isEmpty()) {
-            qCWarning(lcEffect) << "registerBridge reply rejected:" << err
-                                << "— effect remains idle until the daemon signals ready again.";
-            return;
-        }
-        if (result.sessionId == QLatin1String("REJECTED")) {
-            // REJECTED covers any invalid registration (the daemon also
-            // rejects an empty compositorName); this caller always sends a
-            // non-empty name, so for it the only reachable cause is a
-            // protocol-version mismatch — diagnose that.
-            qCCritical(lcEffect) << "Daemon REJECTED this effect's registration: daemon apiVersion="
-                                 << result.apiVersion << "but this effect speaks"
-                                 << PhosphorProtocol::Service::ApiVersion
-                                 << "— a version mismatch; update the effect to match the daemon.";
-            return;
-        }
-        int daemonVersion = result.apiVersion.toInt();
-        if (daemonVersion < PhosphorProtocol::Service::MinPeerApiVersion) {
-            qCCritical(lcEffect) << "Daemon apiVersion" << daemonVersion << "is below this effect's minimum"
-                                 << PhosphorProtocol::Service::MinPeerApiVersion
-                                 << "— update the daemon to match the effect.";
-            return;
-        }
-        qCInfo(lcEffect) << "Bridge registered: daemon apiVersion=" << result.apiVersion
-                         << "session=" << result.sessionId;
-        m_daemonGate.serviceRegistered = true;
-        continueDaemonReadySetup();
-    });
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, registrationGeneration](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                // Superseded: the daemon this call went to is gone (serviceUnregistered
+                // bumped the generation) and a newer registration may already own the
+                // gate. Touching anything here would clear a live registration's gate
+                // and let a third one start concurrently.
+                if (m_daemonGate.bridgeRegistrationGeneration != registrationGeneration) {
+                    qCInfo(lcEffect) << "registerBridge reply from a superseded daemon cycle — ignoring";
+                    return;
+                }
+                // Clear the in-flight flag on EVERY return path (success, error,
+                // rejection, version mismatch) so a subsequent slotDaemonReady
+                // can retry. m_daemonGate.serviceRegistered remains the long-lived
+                // success gate; m_daemonGate.bridgeRegistrationInFlight only covers the
+                // narrow window between the call leaving and its reply arriving.
+                m_daemonGate.bridgeRegistrationInFlight = false;
+                QDBusPendingReply<PhosphorProtocol::BridgeRegistrationResult> reply = *w;
+                if (reply.isError()) {
+                    qCWarning(lcEffect) << "registerBridge call failed:" << reply.error().message()
+                                        << "— effect remains idle until the daemon signals ready again.";
+                    return;
+                }
+                PhosphorProtocol::BridgeRegistrationResult result = reply.value();
+                if (const QString err = result.validationError(); !err.isEmpty()) {
+                    qCWarning(lcEffect) << "registerBridge reply rejected:" << err
+                                        << "— effect remains idle until the daemon signals ready again.";
+                    return;
+                }
+                if (result.sessionId == QLatin1String("REJECTED")) {
+                    // REJECTED covers any invalid registration (the daemon also
+                    // rejects an empty compositorName); this caller always sends a
+                    // non-empty name, so for it the only reachable cause is a
+                    // protocol-version mismatch — diagnose that.
+                    qCCritical(lcEffect) << "Daemon REJECTED this effect's registration: daemon apiVersion="
+                                         << result.apiVersion << "but this effect speaks"
+                                         << PhosphorProtocol::Service::ApiVersion
+                                         << "— a version mismatch; update the effect to match the daemon.";
+                    return;
+                }
+                int daemonVersion = result.apiVersion.toInt();
+                if (daemonVersion < PhosphorProtocol::Service::MinPeerApiVersion) {
+                    qCCritical(lcEffect) << "Daemon apiVersion" << daemonVersion << "is below this effect's minimum"
+                                         << PhosphorProtocol::Service::MinPeerApiVersion
+                                         << "— update the daemon to match the effect.";
+                    return;
+                }
+                qCInfo(lcEffect) << "Bridge registered: daemon apiVersion=" << result.apiVersion
+                                 << "session=" << result.sessionId;
+                m_daemonGate.serviceRegistered = true;
+                continueDaemonReadySetup();
+            });
 }
 
 void PlasmaZonesEffect::continueDaemonReadySetup()
@@ -596,7 +606,7 @@ bool PlasmaZonesEffect::anyLocalTriggerHeld() const
     return TriggerParser::anyTriggerHeld(m_parsedTriggers, m_currentModifiers, m_currentMouseButtons);
 }
 
-bool PlasmaZonesEffect::detectActivationAndGrab()
+bool PlasmaZonesEffect::shouldForwardDragTicks()
 {
     if (m_dragActivation.detected) {
         return true;
@@ -610,19 +620,30 @@ bool PlasmaZonesEffect::detectActivationAndGrab()
     // trigger held (the shipped default: Alt, hold mode) forwarded nothing,
     // so the daemon never saw the crossing onto an engine screen and
     // hold-mode drag-insert was unreachable from off-engine starts.
-    if (anyLocalTriggerHeld() || m_cachedToggleActivation || m_cachedAutotileDragInsertToggle
+    //
+    // FORWARDING ONLY. This deliberately does NOT take the keyboard grab,
+    // which it used to. The grab exists so Escape reaches cancelSnap instead
+    // of KWin's MoveResizeFilter during an ACTIVATED SNAP drag, and the
+    // snap-drag path takes it unconditionally at dragStarted. Taking it here
+    // meant family (4) latched a grab on a plain snap-screen drag whenever
+    // the drag-insert trigger was held — the shipped default is Alt — so
+    // holding Alt while dragging swallowed every key and rerouted Escape,
+    // with no snapping activation in effect to justify it. Engine-owned
+    // drags never take the grab at all (dragStarted returns on its engine
+    // fast path before the grab), so nothing downstream of family (4)
+    // wanted one.
+    const bool forward = anyLocalTriggerHeld() || m_cachedToggleActivation || m_cachedAutotileDragInsertToggle
         || m_cachedScrollingDragInsertToggle || m_cachedZoneSpanToggleMode
         || TriggerParser::anyTriggerHeld(m_parsedAutotileDragInsertTriggers, m_currentModifiers, m_currentMouseButtons)
         || TriggerParser::anyTriggerHeld(m_parsedScrollingDragInsertTriggers, m_currentModifiers,
-                                         m_currentMouseButtons)) {
+                                         m_currentMouseButtons);
+    if (forward) {
+        // Latched for the rest of the drag, matching the early return at the
+        // top: a mid-drag release must not silence the tick stream the
+        // daemon's rising-edge latches are counting on.
         m_dragActivation.detected = true;
-        if (!m_keyboardGrabbed) {
-            KWin::effects->grabKeyboard(this);
-            m_keyboardGrabbed = true;
-        }
-        return true;
     }
-    return false;
+    return forward;
 }
 
 // beginDrag is called unconditionally at drag-start; there's no deferred

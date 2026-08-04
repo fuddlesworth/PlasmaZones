@@ -98,7 +98,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
                 m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen
                 || m_dragBypassedForEngine;
             const bool shouldForward =
-                bypassed || detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded;
+                bypassed || shouldForwardDragTicks() || m_cachedZoneSelectorEnabled || !m_triggersLoaded;
             if (shouldForward) {
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("updateDragCursor"),

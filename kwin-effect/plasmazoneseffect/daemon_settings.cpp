@@ -792,7 +792,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     // Drag-insert TRIGGER LISTS, cached beside the toggles above: the
-    // hold-mode triggers must be visible to detectActivationAndGrab, or a
+    // hold-mode triggers must be visible to shouldForwardDragTicks, or a
     // drag that starts on a snap screen and crosses onto an engine screen
     // with only the insert trigger held never forwards a tick — the daemon
     // then never sees the crossing, never flips the policy, and hold-mode

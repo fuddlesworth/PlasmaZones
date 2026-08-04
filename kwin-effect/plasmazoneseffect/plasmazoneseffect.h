@@ -2058,13 +2058,20 @@ private:
      * The enum values are defined in src/core/interfaces.h (DragModifier).
      */
     /**
-     * @brief Detect activation trigger and grab keyboard if needed
+     * @brief Whether this drag's cursor/modifier ticks must reach the daemon.
      *
-     * Sets m_dragActivation.detected and grabs keyboard when an activation
-     * trigger is first detected during a drag. Returns true if activation
-     * was detected (either previously or just now).
+     * True once any activation family is in play, and latched thereafter via
+     * m_dragActivation.detected so a mid-drag release does not silence the
+     * stream the daemon's rising-edge latches depend on.
+     *
+     * Pure predicate. It does NOT take the keyboard grab, despite the name it
+     * used to carry: the grab is the SNAP path's, taken unconditionally at
+     * dragStarted so Escape reaches cancelSnap rather than KWin's
+     * MoveResizeFilter, and engine-owned drags deliberately take none. Doing
+     * it here made a held drag-insert trigger (the shipped default is Alt)
+     * swallow the keyboard on an ordinary snap-screen drag.
      */
-    bool detectActivationAndGrab();
+    bool shouldForwardDragTicks();
 
     // beginDrag is called unconditionally at drag-start; the deferred-send
     // optimization is obsolete now that the daemon always knows about the drag.
@@ -2176,7 +2183,7 @@ private:
     // Once real settings arrive, they override these conservative defaults.
     QVector<ParsedTrigger> m_parsedTriggers; // pre-parsed via TriggerParser::parseTriggers() at load time (avoids
                                              // QVariant unboxing in hot path)
-    // Drag-insert trigger lists, cached so detectActivationAndGrab can force
+    // Drag-insert trigger lists, cached so shouldForwardDragTicks can force
     // tick forwarding while a HOLD-mode insert trigger is physically held
     // (the toggle bools below cover toggle mode only; without these, a drag
     // starting off-engine could never reach hold-mode drag-insert).

@@ -490,10 +490,12 @@ void PlasmaZonesEffect::connectDragTracker()
             m_dragActivation.detected = false;
 
             // beginDrag already initialized daemon-side snap-drag state
-            // (called internally from the adaptor). The effect only needs
-            // to decide whether to grab the keyboard for local Escape
-            // handling.
-            detectActivationAndGrab();
+            // (called internally from the adaptor). Called for its LATCH, not
+            // its answer: it sets m_dragActivation.detected so the per-tick
+            // gates downstream keep forwarding after a mid-drag release. The
+            // grab below is unconditional and is this path's own, which is
+            // why the predicate no longer takes one.
+            shouldForwardDragTicks();
             // Grab keyboard to intercept Escape before KWin's MoveResizeFilter.
             // Without this, Escape cancels the interactive move AND the overlay.
             // With the grab, Escape only dismisses the overlay while the drag continues.
@@ -525,7 +527,7 @@ void PlasmaZonesEffect::connectDragTracker()
                     // without any intent to use zones doesn't flood the bus
                     // at 30Hz. This is a local input-event optimization; it
                     // isn't policy and doesn't come from the daemon.
-                    if (!detectActivationAndGrab() && !m_cachedZoneSelectorEnabled && m_triggersLoaded) {
+                    if (!shouldForwardDragTicks() && !m_cachedZoneSelectorEnabled && m_triggersLoaded) {
                         return;
                     }
                 }
