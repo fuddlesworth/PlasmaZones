@@ -258,6 +258,22 @@ void ScrollEngine::commitDragInsertPreview()
         m_states.removeWindow(p.windowId);
         return;
     }
+    // The STATE above came from the preview's captured key; params and the
+    // applyLayout below resolve from the screen's CURRENT key. Those agree
+    // only while the context holds still for the drag, which is a contract
+    // the DAEMON keeps: its six context-change handlers all cancel a live
+    // preview before touching desktop/activity state, and the engine's own
+    // prunes and unpin migration do the same. Nothing here can enforce it,
+    // and a violation is silent — the window lands in the old desktop's
+    // strip while the layout is computed and emitted for the new one, so it
+    // is placed where nobody can see it and no geometry is applied. Say so
+    // rather than letting it pass as a mystery.
+    if (currentKeyForScreen(p.targetScreenId) != p.targetKey) {
+        qCWarning(lcScrollEngine) << "commitDragInsertPreview: context moved under the preview for" << p.windowId
+                                  << "on" << p.targetScreenId
+                                  << "— a context-change handler failed to cancel first; the drop lands in the "
+                                     "captured context";
+    }
     const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
     ScrollStrip& strip = targetState->strip();
 
