@@ -592,6 +592,16 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
             // Snap path cancelled — run dragStopped through the legacy
             // adaptor so overlay/zone-state cleanup happens, but discard
             // the geometry outputs.
+            //
+            // Discarding the out-params is NOT enough on its own: dragStopped's
+            // commit branches gate on m_snapCancelled, which nothing sets here,
+            // so they ran in full — committing a snap, recording a snap intent,
+            // and in the selector branch reassigning the layout and resnapping
+            // every other window on the screen — while endDrag returned
+            // CancelSnap and told the effect nothing had happened. Escape was
+            // always safe (the effect's grab sets m_snapCancelled first); the
+            // exposed case is a compositor- or effect-initiated cancel.
+            m_dragExternallyCancelled = true;
             int sx = 0, sy = 0, sw = 0, sh = 0;
             bool shouldApply = false;
             bool restoreSizeOnly = false;

@@ -992,6 +992,9 @@ void WindowDragAdaptor::clearForCompositorReconnect()
 
 void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
 {
+    // Scoped to exactly one endDrag. Every teardown path routes through here,
+    // so the flag cannot survive into the next drag and suppress a real commit.
+    m_dragExternallyCancelled = false;
     if (!keepEscapeShortcut) {
         // Drag-end: drop the shared Escape grab only if no picker / snap assist
         // still needs it. The drag never bound the grab itself, so an

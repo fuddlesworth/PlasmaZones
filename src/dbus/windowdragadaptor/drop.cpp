@@ -85,6 +85,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const bool capturedWasSnapped = m_wasSnapped;
     const QRect capturedOriginalGeometry = m_originalGeometry;
     const bool capturedSnapCancelled = m_snapCancelled;
+    const bool capturedExternallyCancelled = m_dragExternallyCancelled;
     const bool capturedZoneSelectorShown = m_zoneSelectorShown;
 
     // Cross-screen stale-geometry guard. capturedZoneGeometry / capturedMultiZoneGeometry
@@ -237,7 +238,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
 
     // Check if a zone was selected via the zone selector (takes priority)
     bool usedZoneSelector = false;
-    if (!capturedSnapCancelled && capturedZoneSelectorShown && m_overlayService
+    if (!capturedSnapCancelled && !capturedExternallyCancelled && capturedZoneSelectorShown && m_overlayService
         && m_overlayService->hasSelectedZone()) {
         QString selectedLayoutId = m_overlayService->selectedLayoutId();
         // The selector screen IS the release screen — releaseResolved above
@@ -411,7 +412,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Fall back to regular zone detection if zone selector wasn't used
     // Use captured values to avoid race condition with concurrent drags
     // Do not snap to overlay zone when releasing on a disabled monitor
-    if (!usedZoneSelector && !capturedSnapCancelled && !capturedZoneId.isEmpty() && useOverlayZone) {
+    if (!usedZoneSelector && !capturedSnapCancelled && !capturedExternallyCancelled && !capturedZoneId.isEmpty()
+        && useOverlayZone) {
         if (capturedIsMultiZoneMode && capturedMultiZoneGeometry.isValid() && capturedGeometryMatchesReleaseScreen) {
             // Pass ALL zone IDs for multi-zone snap (not just primary)
             QStringList allZoneIds;
@@ -477,7 +479,13 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Call unconditionally when capturedWasSnapped: unsnapForFloat handles the
     // no-zone case internally, and setWindowFloating ensures windowClosed won't persist
     // the zone (floating windows are excluded from persistence).
-    if (!shouldApplyGeometry && capturedWasSnapped) {
+    // capturedExternallyCancelled is the load-bearing half of this gate. With
+    // the commit branches above skipped, shouldApplyGeometry is false and a
+    // previously-snapped window would fall straight into "drag-out" — so the
+    // obvious fix of reusing m_snapCancelled would unsnap and float the window
+    // on EVERY externally cancelled drag, which is worse than the bug. KWin is
+    // restoring the window to where it started; it is not being dragged out.
+    if (!shouldApplyGeometry && capturedWasSnapped && !capturedExternallyCancelled) {
         qCInfo(lcDbusWindow) << "Drag-out unsnap for" << windowId << "releaseScreen:" << releaseScreenId;
         // Latch the pre-snap float-back BEFORE the float write (twin of
         // WindowTrackingAdaptor::notifyDragOutUnsnap): setWindowFloating's

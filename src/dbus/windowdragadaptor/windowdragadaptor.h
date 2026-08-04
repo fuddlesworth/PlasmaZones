@@ -605,6 +605,19 @@ private:
     QString m_pendingSnapDragWindowId;
     QRect m_pendingSnapDragGeometry;
     bool m_pendingSnapDragWasSnapped = false;
+    /// Set for the duration of one endDrag whose `cancelled` flag was true —
+    /// KWin ended the interactive move itself (Escape, a fullscreen
+    /// transition, another effect) and is restoring the window to where it
+    /// started. dragStopped runs on that path only for its overlay/zone
+    /// teardown; every branch that would COMMIT something must skip.
+    ///
+    /// Distinct from m_snapCancelled on purpose. That flag means "the user
+    /// cancelled the snap", which additionally means the window is being
+    /// dragged out, so it deliberately still runs the drag-out unsnap. An
+    /// externally cancelled drag is not a drag-out: the window is going back
+    /// where it was, and unsnapping it there would be a fresh defect rather
+    /// than a fix. Cleared by resetDragState.
+    bool m_dragExternallyCancelled = false;
     QString m_currentZoneId;
     /// Screen the zone in m_currentZoneId was resolved against. Part of the
     /// change-gate key, not decoration: the default layout assignment is
