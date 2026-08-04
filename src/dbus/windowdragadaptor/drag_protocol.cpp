@@ -286,6 +286,16 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
     }
 
+    // Per-window drop-indicator colours, resolved from THIS window's rules and
+    // held for the drag. Unconditional and here for the same reason as the
+    // trigger caches above: a drag that starts bypassed never runs dragStarted,
+    // and the indicator is painted precisely on those engine-owned screens. One
+    // resolve per drag, not per tick — the answer cannot change while a single
+    // window is in hand.
+    if (m_overlayService && m_windowTracking) {
+        m_overlayService->setScrollDropIndicatorWindowOverrides(m_windowTracking->dropIndicatorRuleParams(windowId));
+    }
+
     // Resolve once and reuse: the autotile arm runs a full context rule
     // resolve, and the reorder-fallback branch below needs the same answer.
     // Must come AFTER the trigger-cache parse — the scrolling arm reads the

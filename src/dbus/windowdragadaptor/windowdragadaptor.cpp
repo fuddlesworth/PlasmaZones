@@ -1020,6 +1020,14 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // Scoped to exactly one endDrag. Every teardown path routes through here,
     // so the flag cannot survive into the next drag and suppress a real commit.
     m_dragExternallyCancelled = false;
+    // The dragged window's drop-indicator colour overrides die with the drag
+    // that resolved them. Left set, the NEXT drag would paint the previous
+    // window's colours until beginDrag re-resolved — and a drag of a window
+    // with no rule would inherit them outright, since an empty resolve writes
+    // an empty map only if it runs.
+    if (m_overlayService) {
+        m_overlayService->setScrollDropIndicatorWindowOverrides({});
+    }
     if (!keepEscapeShortcut) {
         // Drag-end: drop the shared Escape grab only if no picker / snap assist
         // still needs it. The drag never bound the grab itself, so an

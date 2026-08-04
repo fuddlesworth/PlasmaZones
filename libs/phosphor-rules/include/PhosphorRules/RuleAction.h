@@ -622,6 +622,33 @@ inline constexpr QLatin1StringView SetTabIndicatorActiveColor{"setTabIndicatorAc
 inline constexpr QLatin1StringView SetTabIndicatorInactiveColor{"setTabIndicatorInactiveColor"};
 inline constexpr QLatin1StringView SetTabIndicatorUrgentColor{"setTabIndicatorUrgentColor"};
 
+// ── Per-context drop-indicator overrides (domain Context) ──
+// The drop-target highlight painted while a drag re-insert is armed. Context
+// domain rather than Window for the same reason as the tab indicator's bulk:
+// the indicator describes an empty SLOT on a screen, not a window, so a rule
+// that matches a window has no referent for it. Every one of these is PAINT —
+// unlike the tab indicator there is no geometry half, because the rect comes
+// from the engine's own layout math and cannot be positioned independently of
+// where the drop lands. They are therefore collected daemon-side and handed
+// straight to the overlay, never through the engine's per-screen override map.
+/// Whether the drop indicator is painted at all. Boolean `ActionParam::Value`.
+inline constexpr QLatin1StringView SetDropIndicatorEnabled{"setDropIndicatorEnabled"};
+/// Fill and border colours. Hex `ActionParam::Value`. EMPTY is not expressible
+/// as a rule value — a rule that does not set the colour simply leaves the
+/// setting (and through it the "follow the colour scheme" sentinel) in place.
+inline constexpr QLatin1StringView SetDropIndicatorColor{"setDropIndicatorColor"};
+inline constexpr QLatin1StringView SetDropIndicatorBorderColor{"setDropIndicatorBorderColor"};
+/// Fill opacity, 0.0-1.0. Numeric `ActionParam::Value` (stored fraction,
+/// edited as a percent). The border is always opaque, so this is the fill's
+/// alone — see ScrollDropIndicatorContent.
+inline constexpr QLatin1StringView SetDropIndicatorOpacity{"setDropIndicatorOpacity"};
+/// Border thickness in px. Numeric `ActionParam::Value`. Zero is legal and
+/// means a fill with no edge, so this floors at 0 rather than at 1.
+inline constexpr QLatin1StringView SetDropIndicatorBorderWidth{"setDropIndicatorBorderWidth"};
+/// Corner radius in px. Numeric `ActionParam::Value`. UNSIGNED, unlike the tab
+/// indicator's: there is no pill sentinel here, 0 means square.
+inline constexpr QLatin1StringView SetDropIndicatorBorderRadius{"setDropIndicatorBorderRadius"};
+
 // ── Per-window scrolling open overrides (domain Window) ──
 // Read on the open path for the matched window, layered over the context /
 // config defaults above, so one application can open wide or tabbed without
@@ -640,6 +667,17 @@ inline constexpr QLatin1StringView OpenTabbed{"openTabbed"};
 inline constexpr QLatin1StringView TabColorActive{"tabColorActive"};
 inline constexpr QLatin1StringView TabColorInactive{"tabColorInactive"};
 inline constexpr QLatin1StringView TabColorUrgent{"tabColorUrgent"};
+/// Per-window drop-indicator colours, keyed on the DRAGGED window. The only
+/// per-window slice of the drop indicator that has a coherent referent: while
+/// a drag is in flight exactly one window is being dragged, so "show this
+/// colour when dragging Firefox" resolves unambiguously at drag start. The
+/// remaining four properties stay context-only — a per-window opacity or
+/// border width would name the same slot the context rule already describes
+/// with no added meaning. These outrank the per-context colours, which outrank
+/// the config, which falls back to the theme: the tab colours' exact order.
+/// Hex `ActionParam::Value`.
+inline constexpr QLatin1StringView DropIndicatorColor{"dropIndicatorColor"};
+inline constexpr QLatin1StringView DropIndicatorBorderColor{"dropIndicatorBorderColor"};
 /// Whether the opening window starts its own column or is consumed into the
 /// focused one. Closed enum token (`ActionParam::Value`, ColumnPlacementToken).
 inline constexpr QLatin1StringView OpenColumnPlacement{"openColumnPlacement"};
@@ -763,6 +801,20 @@ inline constexpr double TabIndicatorCornerRadiusPill = -1.0;
 inline constexpr double MaxTabIndicatorCornerRadius = 64.0;
 inline constexpr double MinTabIndicatorLengthRatio = 0.05;
 inline constexpr double MaxTabIndicatorLengthRatio = 1.0;
+
+/// Drop-indicator numeric bounds, mirroring the config layer's
+/// (ConfigDefaults::scrollingDropIndicator*Min/Max) so a rule cannot author a
+/// value the settings page would refuse. Both floors are 0 and neither is a
+/// sentinel: a zero border width is a fill with no edge, and a zero radius is
+/// a square corner. Deliberately NOT shared with the tab-indicator constants
+/// above — the two families' ranges agree today by coincidence of taste, not
+/// by contract, and tying them would make retuning one silently move the other.
+inline constexpr double MinDropIndicatorOpacity = 0.0;
+inline constexpr double MaxDropIndicatorOpacity = 1.0;
+inline constexpr double MinDropIndicatorBorderWidth = 0.0;
+inline constexpr double MaxDropIndicatorBorderWidth = 10.0;
+inline constexpr double MinDropIndicatorBorderRadius = 0.0;
+inline constexpr double MaxDropIndicatorBorderRadius = 50.0;
 
 /// Upper bound for a `RouteToDesktop` 1-based virtual-desktop number. KWin tops
 /// out far below this in practice; the cap exists only to reject a grossly
@@ -979,6 +1031,15 @@ inline constexpr QLatin1StringView TabIndicatorCornerRadius{"tab-indicator-corne
 inline constexpr QLatin1StringView TabIndicatorActiveColor{"tab-indicator-active-color"};
 inline constexpr QLatin1StringView TabIndicatorInactiveColor{"tab-indicator-inactive-color"};
 inline constexpr QLatin1StringView TabIndicatorUrgentColor{"tab-indicator-urgent-color"};
+// Per-context drop-indicator slots, one per property so independent context
+// rules cascade per-property. Filled by the SetDropIndicator* actions and read
+// by LayoutRegistry::resolveContextScrollingParams into ContextScrollingParams.
+inline constexpr QLatin1StringView DropIndicatorEnabled{"drop-indicator-enabled"};
+inline constexpr QLatin1StringView DropIndicatorColor{"drop-indicator-color"};
+inline constexpr QLatin1StringView DropIndicatorBorderColor{"drop-indicator-border-color"};
+inline constexpr QLatin1StringView DropIndicatorOpacity{"drop-indicator-opacity"};
+inline constexpr QLatin1StringView DropIndicatorBorderWidth{"drop-indicator-border-width"};
+inline constexpr QLatin1StringView DropIndicatorBorderRadius{"drop-indicator-border-radius"};
 // Per-window scrolling open slots (one per property so independent rules
 // cascade per-property). Filled by OpenColumnWidth / OpenTabbed /
 // OpenColumnPlacement / OpenWindowHeight, read on the open path by the
@@ -990,6 +1051,10 @@ inline constexpr QLatin1StringView OpenTabbed{"open-tabbed"};
 inline constexpr QLatin1StringView TabColorActive{"tab-color-active"};
 inline constexpr QLatin1StringView TabColorInactive{"tab-color-inactive"};
 inline constexpr QLatin1StringView TabColorUrgent{"tab-color-urgent"};
+/// Per-window drop-indicator colour slots, filled by the DropIndicator*
+/// window actions and resolved at drag start from the DRAGGED window's rules.
+inline constexpr QLatin1StringView DragDropIndicatorColor{"drag-drop-indicator-color"};
+inline constexpr QLatin1StringView DragDropIndicatorBorderColor{"drag-drop-indicator-border-color"};
 inline constexpr QLatin1StringView OpenColumnPlacement{"open-column-placement"};
 inline constexpr QLatin1StringView OpenWindowHeight{"open-window-height"};
 // Per-context overlay-property slots (one per property so independent rules

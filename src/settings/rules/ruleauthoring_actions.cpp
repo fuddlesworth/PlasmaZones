@@ -116,6 +116,17 @@ PickerCategory actionCategory(const QString& type)
                     + PhosphorI18n::tr("Tab indicator"),
                 4};
     }
+    if (cat == QLatin1String("dropIndicator")) {
+        // Same domain split as tabIndicator directly above, and for the same
+        // divider reason: the two per-window colours go to the Window bucket,
+        // the six context properties nest under Scrolling.
+        if (type == ActionType::DropIndicatorColor || type == ActionType::DropIndicatorBorderColor) {
+            return {PhosphorI18n::tr("Window") + QStringLiteral("/") + PhosphorI18n::tr("Drop indicator"), 8};
+        }
+        return {PhosphorI18n::tr("Scrolling", "tiling mode name") + QStringLiteral("/")
+                    + PhosphorI18n::tr("Drop indicator"),
+                4};
+    }
     if (cat == QLatin1String("overlay")) {
         return {PhosphorI18n::tr("Overlay"), 5};
     }
@@ -579,6 +590,36 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::TabColorUrgent) {
         return PhosphorI18n::tr("Set this window's urgent tab color");
     }
+    // Drop indicator. "Drop indicator" rather than "drag indicator" so the
+    // labels match the settings card the same properties live on.
+    if (type == ActionType::SetDropIndicatorEnabled) {
+        return PhosphorI18n::tr("Show the drop indicator");
+    }
+    if (type == ActionType::SetDropIndicatorColor) {
+        return PhosphorI18n::tr("Set the drop indicator fill color");
+    }
+    if (type == ActionType::SetDropIndicatorBorderColor) {
+        return PhosphorI18n::tr("Set the drop indicator border color");
+    }
+    if (type == ActionType::SetDropIndicatorOpacity) {
+        return PhosphorI18n::tr("Set the drop indicator fill opacity");
+    }
+    if (type == ActionType::SetDropIndicatorBorderWidth) {
+        return PhosphorI18n::tr("Set the drop indicator border width");
+    }
+    if (type == ActionType::SetDropIndicatorBorderRadius) {
+        return PhosphorI18n::tr("Set the drop indicator corner radius");
+    }
+    // The two per-window colours say "when dragging this window" rather than
+    // "this window's", unlike the tab colours: a tab colour paints ON the
+    // matched window, while these paint a slot elsewhere on screen BECAUSE
+    // that window is the one being dragged.
+    if (type == ActionType::DropIndicatorColor) {
+        return PhosphorI18n::tr("Set the drop indicator fill color when dragging this window");
+    }
+    if (type == ActionType::DropIndicatorBorderColor) {
+        return PhosphorI18n::tr("Set the drop indicator border color when dragging this window");
+    }
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");
     }
@@ -789,6 +830,10 @@ QString boolActionStateLabel(const QString& type, bool on)
     if (type == ActionType::SetTabIndicatorPlaceWithinColumn) {
         return on ? PhosphorI18n::tr("Tab indicator inside the column")
                   : PhosphorI18n::tr("Tab indicator beside the column");
+    }
+    // Drop indicator, same outcome-not-negation phrasing as the tab family.
+    if (type == ActionType::SetDropIndicatorEnabled) {
+        return on ? PhosphorI18n::tr("Show the drop indicator") : PhosphorI18n::tr("Hide the drop indicator");
     }
     return QString();
 }

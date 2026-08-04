@@ -489,6 +489,24 @@ public:
     /// reason the paint-settings hooks do.
     void setScrollTabIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
 
+    /// Per-screen drop-indicator PAINT overrides from context rules, keyed by
+    /// the QML property names the slot reads so the layering is one value()
+    /// per property. An empty map clears the screen's overrides.
+    ///
+    /// Unlike the tab-strip twin this does NOT replay: the indicator only
+    /// exists while a drag is in flight, and the next rect push during that
+    /// drag re-reads the overrides. A rule change landing between drags is
+    /// picked up by the drag that follows, which is the only time anyone can
+    /// see it.
+    void setScrollDropIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
+
+    /// Per-DRAG drop-indicator colour overrides, resolved from the dragged
+    /// window's rules at drag start. Outranks the per-context map above, which
+    /// outranks the settings, which fall back to the theme. Cleared with an
+    /// empty map when the drag ends; there is no screen key because exactly
+    /// one window is dragged at a time.
+    void setScrollDropIndicatorWindowOverrides(const QVariantMap& overrides) override;
+
     /// Re-push every screen's cached strip model through
     /// updateScrollTabStrips, whose own enabled check turns the replay into a
     /// show (toggle on) or an animated hide (toggle off). Needed because the
@@ -795,6 +813,13 @@ private:
     /// enable toggle so re-enabling the indicator can replay it (the
     /// engine's tabStripsChanged is change-latched and stays silent).
     QHash<QString, QVariantList> m_lastScrollTabStrips;
+    /// Per-screen drop-indicator paint overrides (see
+    /// setScrollDropIndicatorOverrides).
+    QHash<QString, QVariantMap> m_scrollDropIndicatorOverrides;
+    /// Per-DRAG drop-indicator colour overrides from the dragged window's
+    /// rules (see setScrollDropIndicatorWindowOverrides). Not per screen: one
+    /// window is dragged at a time, and the entry lives only for that drag.
+    QVariantMap m_scrollDropIndicatorWindowOverrides;
     /// Per-screen tab-indicator paint overrides (see
     /// setScrollTabIndicatorOverrides). Screens with no context rule carry no
     /// entry, so the common case costs one empty-hash lookup.

@@ -288,6 +288,106 @@ private Q_SLOTS:
         }
     }
 
+    void testDropIndicatorActions_range()
+    {
+        // The eight drop-indicator actions are, like every other rule family,
+        // the only load-time defence for a hand-edited rules.json. Bounds and
+        // the hex-only colour contract are pinned exactly as the tab family's
+        // are above.
+        //
+        // The numeric bounds are DELIBERATELY not shared with the tab
+        // indicator's — they agree today by coincidence of taste, not by
+        // contract — so each is checked against its own constant. Reading them
+        // from the shared header rather than spelling literals means a retune
+        // moves the test with the code instead of failing it.
+        // Same three helpers the tab-indicator slot defines. Copied rather
+        // than hoisted for the reason the file already runs on: each slot is
+        // self-contained so a reader sees exactly what "accepts" means without
+        // scrolling, and the lambdas are four lines each.
+        const auto rejectsMissingValue = [](QLatin1StringView type) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+        };
+        const auto acceptsWithSlot = [](QLatin1StringView type, const QJsonValue& value, QLatin1StringView slot) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), value);
+            const auto loaded = RuleAction::fromJson(o);
+            QVERIFY2(loaded.has_value(), type.data());
+            QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(slot));
+            const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+            QVERIFY2(roundTripped.has_value(), type.data());
+            QCOMPARE(*roundTripped, *loaded);
+        };
+        const auto rejects = [](QLatin1StringView type, const QJsonValue& value) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), value);
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+        };
+
+        rejectsMissingValue(ActionType::SetDropIndicatorEnabled);
+        rejects(ActionType::SetDropIndicatorEnabled, QStringLiteral("true")); // string, not bool
+        acceptsWithSlot(ActionType::SetDropIndicatorEnabled, true, ActionSlot::DropIndicatorEnabled);
+        acceptsWithSlot(ActionType::SetDropIndicatorEnabled, false, ActionSlot::DropIndicatorEnabled);
+
+        // Opacity is a stored FRACTION, so the ceiling is 1.0 and a percent
+        // written by hand (25) must be refused rather than silently clamped.
+        rejectsMissingValue(ActionType::SetDropIndicatorOpacity);
+        rejects(ActionType::SetDropIndicatorOpacity, MinDropIndicatorOpacity - 0.1);
+        rejects(ActionType::SetDropIndicatorOpacity, MaxDropIndicatorOpacity + 0.1);
+        rejects(ActionType::SetDropIndicatorOpacity, 25);
+        acceptsWithSlot(ActionType::SetDropIndicatorOpacity, MinDropIndicatorOpacity, ActionSlot::DropIndicatorOpacity);
+        acceptsWithSlot(ActionType::SetDropIndicatorOpacity, 0.25, ActionSlot::DropIndicatorOpacity);
+        acceptsWithSlot(ActionType::SetDropIndicatorOpacity, MaxDropIndicatorOpacity, ActionSlot::DropIndicatorOpacity);
+
+        // Border width floors at ZERO and zero is meaningful — a fill with no
+        // edge — so it must be accepted, not treated as an unset sentinel.
+        rejectsMissingValue(ActionType::SetDropIndicatorBorderWidth);
+        rejects(ActionType::SetDropIndicatorBorderWidth, -1);
+        rejects(ActionType::SetDropIndicatorBorderWidth, MaxDropIndicatorBorderWidth + 1);
+        acceptsWithSlot(ActionType::SetDropIndicatorBorderWidth, 0, ActionSlot::DropIndicatorBorderWidth);
+        acceptsWithSlot(ActionType::SetDropIndicatorBorderWidth, MaxDropIndicatorBorderWidth,
+                        ActionSlot::DropIndicatorBorderWidth);
+
+        // Radius is UNSIGNED, unlike the tab indicator's: -1 is the pill
+        // sentinel THERE and simply invalid here, which is the one asymmetry
+        // between the two families worth a test of its own.
+        rejectsMissingValue(ActionType::SetDropIndicatorBorderRadius);
+        rejects(ActionType::SetDropIndicatorBorderRadius, -1);
+        rejects(ActionType::SetDropIndicatorBorderRadius, MaxDropIndicatorBorderRadius + 1);
+        acceptsWithSlot(ActionType::SetDropIndicatorBorderRadius, 0, ActionSlot::DropIndicatorBorderRadius);
+        acceptsWithSlot(ActionType::SetDropIndicatorBorderRadius, 8, ActionSlot::DropIndicatorBorderRadius);
+        acceptsWithSlot(ActionType::SetDropIndicatorBorderRadius, MaxDropIndicatorBorderRadius,
+                        ActionSlot::DropIndicatorBorderRadius);
+
+        // The four colours, context pair and window pair alike: hex only, and
+        // the accent sentinel REJECTED for the tab family's exact reason —
+        // neither consumer resolves it, so accepting it would land an
+        // unparseable colour on the overlay.
+        for (const auto& pair : QList<QPair<QLatin1StringView, QLatin1StringView>>{
+                 {ActionType::SetDropIndicatorColor, ActionSlot::DropIndicatorColor},
+                 {ActionType::SetDropIndicatorBorderColor, ActionSlot::DropIndicatorBorderColor},
+                 {ActionType::DropIndicatorColor, ActionSlot::DragDropIndicatorColor},
+                 {ActionType::DropIndicatorBorderColor, ActionSlot::DragDropIndicatorBorderColor}}) {
+            rejectsMissingValue(pair.first);
+            rejects(pair.first, QStringLiteral("accent"));
+            rejects(pair.first, QStringLiteral("red"));
+            rejects(pair.first, QStringLiteral("3DAEE9"));
+            acceptsWithSlot(pair.first, QStringLiteral("#FF3DAEE9"), pair.second);
+            acceptsWithSlot(pair.first, QStringLiteral("#3DAEE9"), pair.second);
+        }
+
+        // The two per-window colour actions must land on DIFFERENT slots from
+        // their context twins, or a window rule would silently overwrite the
+        // context map instead of layering over it.
+        QVERIFY(QLatin1StringView(ActionSlot::DropIndicatorColor)
+                != QLatin1StringView(ActionSlot::DragDropIndicatorColor));
+        QVERIFY(QLatin1StringView(ActionSlot::DropIndicatorBorderColor)
+                != QLatin1StringView(ActionSlot::DragDropIndicatorBorderColor));
+    }
+
     void testScrollingParamActions_range()
     {
         // The nine scrolling actions are the only load-time defence for a

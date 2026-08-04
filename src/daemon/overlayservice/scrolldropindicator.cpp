@@ -32,6 +32,33 @@
 
 namespace PlasmaZones {
 
+void OverlayService::setScrollDropIndicatorOverrides(const QString& screenId, const QVariantMap& overrides)
+{
+    if (screenId.isEmpty()) {
+        return;
+    }
+    // Change-gated like the tab-strip twin: this runs on every rule/context
+    // re-resolve and the common answer is the map it already holds.
+    if (m_scrollDropIndicatorOverrides.value(screenId) == overrides) {
+        return;
+    }
+    if (overrides.isEmpty()) {
+        m_scrollDropIndicatorOverrides.remove(screenId);
+    } else {
+        m_scrollDropIndicatorOverrides.insert(screenId, overrides);
+    }
+    // Deliberately NO replay. The tab strip replays because it is on screen
+    // continuously and a paint-rule change must repaint it; the drop indicator
+    // exists only during a drag, and every rect push within that drag re-reads
+    // these. A change landing between drags shows up on the next drag, which
+    // is the first moment anyone could see it.
+}
+
+void OverlayService::setScrollDropIndicatorWindowOverrides(const QVariantMap& overrides)
+{
+    m_scrollDropIndicatorWindowOverrides = overrides;
+}
+
 void OverlayService::updateScrollDropIndicator(const QString& screenId, const QRect& rect)
 {
     if (screenId.isEmpty()) {
@@ -42,7 +69,15 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     // rect, so one branch below serves both. No cached-rect replay like the
     // tab strips: this rect only exists for the duration of a drag, and
     // toggling the setting mid-drag to see it appear is not a real workflow.
-    const bool indicatorEnabled = !m_settings || m_settings->scrollingDropIndicatorEnabled();
+    // The enable gate layers too, and only over the CONTEXT map: the window
+    // family is colours only, so there is no per-drag enable to consult.
+    // Deliberate — a rule that silences the indicator is a property of where
+    // you are working, not of the window you happened to pick up.
+    bool indicatorEnabled = !m_settings || m_settings->scrollingDropIndicatorEnabled();
+    if (const auto it = m_scrollDropIndicatorOverrides[screenId].constFind(QStringLiteral("indicatorEnabled"));
+        it != m_scrollDropIndicatorOverrides[screenId].constEnd()) {
+        indicatorEnabled = it.value().toBool();
+    }
     const bool wantsIndicator = indicatorEnabled && rect.isValid() && !rect.isEmpty();
 
     const auto cachedIt = m_lastScrollDropIndicatorRect.constFind(screenId);
@@ -163,12 +198,34 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     // almost never lands mid-drag, but writing an unchanged QML property emits no change notification, so the cost of
     // being correct here is five compares. EMPTY colours mean "follow the theme" and the content item resolves that.
     if (m_settings) {
-        writeQmlProperty(slot, QStringLiteral("indicatorColor"), m_settings->scrollingDropIndicatorColor());
-        writeQmlProperty(slot, QStringLiteral("indicatorBorderColor"), m_settings->scrollingDropIndicatorBorderColor());
-        writeQmlProperty(slot, QStringLiteral("indicatorOpacity"), m_settings->scrollingDropIndicatorOpacity());
-        writeQmlProperty(slot, QStringLiteral("indicatorBorderWidth"), m_settings->scrollingDropIndicatorBorderWidth());
-        writeQmlProperty(slot, QStringLiteral("indicatorBorderRadius"),
-                         m_settings->scrollingDropIndicatorBorderRadius());
+        // Three layers, narrowest first: the DRAGGED WINDOW's rule beats the
+        // screen's CONTEXT rule, which beats the setting, which the content
+        // item resolves against the theme when it is the empty sentinel. That
+        // is the tab colours' order, and niri's.
+        const QVariantMap& ctx = m_scrollDropIndicatorOverrides[screenId];
+        const QVariantMap& win = m_scrollDropIndicatorWindowOverrides;
+        const auto layered = [&ctx, &win](const QString& key, const QVariant& fromSettings) {
+            if (const auto it = win.constFind(key); it != win.constEnd()) {
+                return it.value();
+            }
+            if (const auto it = ctx.constFind(key); it != ctx.constEnd()) {
+                return it.value();
+            }
+            return fromSettings;
+        };
+        writeQmlProperty(slot, QStringLiteral("indicatorColor"),
+                         layered(QStringLiteral("indicatorColor"), m_settings->scrollingDropIndicatorColor()));
+        writeQmlProperty(
+            slot, QStringLiteral("indicatorBorderColor"),
+            layered(QStringLiteral("indicatorBorderColor"), m_settings->scrollingDropIndicatorBorderColor()));
+        writeQmlProperty(slot, QStringLiteral("indicatorOpacity"),
+                         layered(QStringLiteral("indicatorOpacity"), m_settings->scrollingDropIndicatorOpacity()));
+        writeQmlProperty(
+            slot, QStringLiteral("indicatorBorderWidth"),
+            layered(QStringLiteral("indicatorBorderWidth"), m_settings->scrollingDropIndicatorBorderWidth()));
+        writeQmlProperty(
+            slot, QStringLiteral("indicatorBorderRadius"),
+            layered(QStringLiteral("indicatorBorderRadius"), m_settings->scrollingDropIndicatorBorderRadius()));
     }
 
     if (slot->isVisible() && !hideWasInFlight) {

@@ -19,6 +19,7 @@
 #include <QRect>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 #include <QVector>
 
 class QScreen;
@@ -95,6 +96,17 @@ public:
     // to the drop, so unlike autotile's live restructure nothing in the strip
     // moves to show where the window is going.
     virtual void updateScrollDropIndicator(const QString& screenId, const QRect& rect) = 0;
+
+    // Per-DRAG drop-indicator colour overrides, resolved from the dragged
+    // window's rules at drag start and cleared with an empty map when the drag
+    // ends. Keyed by the QML property names the slot reads. On the interface
+    // rather than the concrete service because the DRAG adaptor is what
+    // resolves them, and it holds this interface.
+    //
+    // Only the per-window half is here. The per-CONTEXT map is pushed by the
+    // daemon's own scrolling re-derive, which holds the concrete service, so
+    // widening the interface for it would buy nothing.
+    virtual void setScrollDropIndicatorWindowOverrides(const QVariantMap& overrides) = 0;
 
     // PhosphorZones::Zone selector methods
     virtual bool isZoneSelectorVisible() const = 0;
