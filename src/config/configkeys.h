@@ -443,8 +443,12 @@ public:
     P_CONFIG_KEY(inactiveColorKey, "InactiveColor")
     P_CONFIG_KEY(urgentColorKey, "UrgentColor")
 
-    // Scrolling.DropIndicator (also uses the shared enabledKey above).
+    // Scrolling.DropIndicator. Reuses the shared enabledKey / opacityKey /
+    // widthKey / radiusKey leaves above, the same way Snapping.Zones.Border
+    // spells its border as Width + Radius. Only the fill and border colours
+    // need names of their own.
     P_CONFIG_KEY(colorKey, "Color")
+    P_CONFIG_KEY(borderColorKey, "BorderColor")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Behavior

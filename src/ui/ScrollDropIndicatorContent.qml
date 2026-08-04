@@ -31,14 +31,21 @@ Item {
 
     /// Drop-target rect in shell-window coordinates.
     required property rect indicatorRect
-    /// Configured indicator colour. EMPTY means "follow the theme", which is
-    /// the shipped default and what `accent` below resolves to.
+    /// Configured fill and border colours. EMPTY means "follow the theme",
+    /// which is the shipped default for both.
     required property string indicatorColor
+    required property string indicatorBorderColor
+    /// Fill opacity. The border draws opaque, matching the snapping zone
+    /// overlay, so a faint fill still gets a crisp edge.
+    required property real indicatorOpacity
+    required property int indicatorBorderWidth
+    required property int indicatorBorderRadius
 
-    /// Resolved paint colour. An unparseable string cannot reach here — the
+    /// Resolved paint colours. An unparseable string cannot reach here — the
     /// D-Bus boundary rejects anything that is neither empty nor a colour
     /// QColor can parse — so the empty test is the only fallback needed.
-    readonly property color accent: root.indicatorColor === "" ? Kirigami.Theme.highlightColor : root.indicatorColor
+    readonly property color fillColor: root.indicatorColor === "" ? Kirigami.Theme.highlightColor : root.indicatorColor
+    readonly property color edgeColor: root.indicatorBorderColor === "" ? Kirigami.Theme.highlightColor : root.indicatorBorderColor
 
     anchors.fill: parent
 
@@ -51,10 +58,18 @@ Item {
         // Translucent fill plus a solid edge: the fill reads as "this space is
         // claimed" at a glance while staying see-through enough that the
         // windows underneath still orient the drag.
-        color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.25)
-        border.color: root.accent
-        border.width: Math.max(1, Math.round(Kirigami.Units.smallSpacing / 2))
-        radius: Kirigami.Units.smallSpacing
+        //
+        // The fill alpha REPLACES the colour's own rather than multiplying it.
+        // The opacity slider is the one control the user reaches for here, and
+        // multiplying would make a picked colour that carries alpha come out
+        // darker than the slider says, with no way to tell which of the two
+        // was responsible.
+        color: Qt.rgba(root.fillColor.r, root.fillColor.g, root.fillColor.b, root.indicatorOpacity)
+        border.color: root.edgeColor
+        // Zero width is legal and means a fill with no edge, so this is NOT
+        // floored at 1 the way a fixed hairline would be.
+        border.width: root.indicatorBorderWidth
+        radius: root.indicatorBorderRadius
 
         // Animate the move between targets rather than snapping. The rect
         // changes only when the cursor crosses into a different column or

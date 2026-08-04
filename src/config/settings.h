@@ -401,6 +401,14 @@ public:
                    setScrollingDropIndicatorEnabled NOTIFY scrollingDropIndicatorEnabledChanged)
     Q_PROPERTY(QString scrollingDropIndicatorColor READ scrollingDropIndicatorColor WRITE setScrollingDropIndicatorColor
                    NOTIFY scrollingDropIndicatorColorChanged)
+    Q_PROPERTY(QString scrollingDropIndicatorBorderColor READ scrollingDropIndicatorBorderColor WRITE
+                   setScrollingDropIndicatorBorderColor NOTIFY scrollingDropIndicatorBorderColorChanged)
+    Q_PROPERTY(double scrollingDropIndicatorOpacity READ scrollingDropIndicatorOpacity WRITE
+                   setScrollingDropIndicatorOpacity NOTIFY scrollingDropIndicatorOpacityChanged)
+    Q_PROPERTY(int scrollingDropIndicatorBorderWidth READ scrollingDropIndicatorBorderWidth WRITE
+                   setScrollingDropIndicatorBorderWidth NOTIFY scrollingDropIndicatorBorderWidthChanged)
+    Q_PROPERTY(int scrollingDropIndicatorBorderRadius READ scrollingDropIndicatorBorderRadius WRITE
+                   setScrollingDropIndicatorBorderRadius NOTIFY scrollingDropIndicatorBorderRadiusChanged)
     Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
                    NOTIFY scrollingWheelFocusEnabledChanged)
     Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
@@ -1197,6 +1205,14 @@ public:
     void setScrollingDropIndicatorEnabled(bool enabled) override;
     QString scrollingDropIndicatorColor() const override;
     void setScrollingDropIndicatorColor(const QString& color) override;
+    QString scrollingDropIndicatorBorderColor() const override;
+    void setScrollingDropIndicatorBorderColor(const QString& color) override;
+    double scrollingDropIndicatorOpacity() const override;
+    void setScrollingDropIndicatorOpacity(double opacity) override;
+    int scrollingDropIndicatorBorderWidth() const override;
+    void setScrollingDropIndicatorBorderWidth(int px) override;
+    int scrollingDropIndicatorBorderRadius() const override;
+    void setScrollingDropIndicatorBorderRadius(int px) override;
     bool scrollingWheelFocusEnabled() const;
     void setScrollingWheelFocusEnabled(bool enabled);
     bool scrollingWheelFocusInverted() const;

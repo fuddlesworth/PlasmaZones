@@ -377,12 +377,42 @@ public:
     virtual void setScrollingDropIndicatorEnabled(bool /*enabled*/)
     {
     }
-    /// Empty means "follow the theme" (see ConfigDefaults).
+    /// Fill and border colours; empty means "follow the theme" (see
+    /// ConfigDefaults).
     virtual QString scrollingDropIndicatorColor() const
     {
         return QString();
     }
     virtual void setScrollingDropIndicatorColor(const QString& /*color*/)
+    {
+    }
+    virtual QString scrollingDropIndicatorBorderColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingDropIndicatorBorderColor(const QString& /*color*/)
+    {
+    }
+    /// Fill opacity; the border always draws opaque.
+    virtual double scrollingDropIndicatorOpacity() const
+    {
+        return 0.25;
+    }
+    virtual void setScrollingDropIndicatorOpacity(double /*opacity*/)
+    {
+    }
+    virtual int scrollingDropIndicatorBorderWidth() const
+    {
+        return 2;
+    }
+    virtual void setScrollingDropIndicatorBorderWidth(int /*px*/)
+    {
+    }
+    virtual int scrollingDropIndicatorBorderRadius() const
+    {
+        return 4;
+    }
+    virtual void setScrollingDropIndicatorBorderRadius(int /*px*/)
     {
     }
 
@@ -798,6 +828,10 @@ Q_SIGNALS:
     // Scrolling drop indicator (Scrolling.DropIndicator)
     void scrollingDropIndicatorEnabledChanged();
     void scrollingDropIndicatorColorChanged();
+    void scrollingDropIndicatorBorderColorChanged();
+    void scrollingDropIndicatorOpacityChanged();
+    void scrollingDropIndicatorBorderWidthChanged();
+    void scrollingDropIndicatorBorderRadiusChanged();
 
     // Scrolling behavior settings
     void scrollingInsertPositionChanged();

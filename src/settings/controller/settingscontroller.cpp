@@ -152,6 +152,15 @@ QVariantMap SettingsController::scrollingConstants() const
         {QStringLiteral("tabGapsBetweenMax"), ConfigDefaults::scrollingTabIndicatorGapsBetweenTabsMax()},
         {QStringLiteral("tabCornerRadiusPill"), ConfigDefaults::scrollingTabIndicatorCornerRadiusPill()},
         {QStringLiteral("tabCornerRadiusMax"), ConfigDefaults::scrollingTabIndicatorCornerRadiusMax()},
+        // Drop indicator (Scrolling.DropIndicator). Bounds only, same policy
+        // as the tab block above. The border bounds mirror the snapping zone
+        // overlay's so the two highlights cannot drift apart visually.
+        {QStringLiteral("dropOpacityMin"), ConfigDefaults::scrollingDropIndicatorOpacityMin()},
+        {QStringLiteral("dropOpacityMax"), ConfigDefaults::scrollingDropIndicatorOpacityMax()},
+        {QStringLiteral("dropBorderWidthMin"), ConfigDefaults::scrollingDropIndicatorBorderWidthMin()},
+        {QStringLiteral("dropBorderWidthMax"), ConfigDefaults::scrollingDropIndicatorBorderWidthMax()},
+        {QStringLiteral("dropBorderRadiusMin"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMin()},
+        {QStringLiteral("dropBorderRadiusMax"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMax()},
     };
 }
 

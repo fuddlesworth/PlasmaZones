@@ -305,6 +305,22 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::scrollingDropIndicatorGroup()] = {
         {CD::enabledKey(), CD::scrollingDropIndicatorEnabled(), QMetaType::Bool},
         {CD::colorKey(), CD::scrollingDropIndicatorColor(), QMetaType::QString},
+        {CD::borderColorKey(), CD::scrollingDropIndicatorBorderColor(), QMetaType::QString},
+        {CD::opacityKey(),
+         CD::scrollingDropIndicatorOpacity(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::scrollingDropIndicatorOpacityMin(), CD::scrollingDropIndicatorOpacityMax())},
+        {CD::widthKey(),
+         CD::scrollingDropIndicatorBorderWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingDropIndicatorBorderWidthMin(), CD::scrollingDropIndicatorBorderWidthMax())},
+        {CD::radiusKey(),
+         CD::scrollingDropIndicatorBorderRadius(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingDropIndicatorBorderRadiusMin(), CD::scrollingDropIndicatorBorderRadiusMax())},
     };
 
     // ─── Scrolling behavior (Scrolling.Behavior) ─────────────────────────

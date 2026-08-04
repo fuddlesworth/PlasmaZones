@@ -148,13 +148,18 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
 
     writeQmlProperty(slot, QStringLiteral("indicatorRect"), local);
 
-    // Paint setting, pushed on every update rather than only on the show path.
-    // A drag is short enough that a colour change almost never lands mid-drag,
-    // but writing an unchanged QML property emits no change notification, so
-    // the cost of being correct here is one compare. EMPTY means "follow the
-    // theme" and the content item resolves that itself.
+    // Paint settings, pushed on every update rather than only on the show
+    // path. A drag is short enough that a settings change almost never lands
+    // mid-drag, but writing an unchanged QML property emits no change
+    // notification, so the cost of being correct here is five compares. EMPTY
+    // colours mean "follow the theme" and the content item resolves that.
     if (m_settings) {
         writeQmlProperty(slot, QStringLiteral("indicatorColor"), m_settings->scrollingDropIndicatorColor());
+        writeQmlProperty(slot, QStringLiteral("indicatorBorderColor"), m_settings->scrollingDropIndicatorBorderColor());
+        writeQmlProperty(slot, QStringLiteral("indicatorOpacity"), m_settings->scrollingDropIndicatorOpacity());
+        writeQmlProperty(slot, QStringLiteral("indicatorBorderWidth"), m_settings->scrollingDropIndicatorBorderWidth());
+        writeQmlProperty(slot, QStringLiteral("indicatorBorderRadius"),
+                         m_settings->scrollingDropIndicatorBorderRadius());
     }
 
     if (slot->isVisible() && !hideWasInFlight) {

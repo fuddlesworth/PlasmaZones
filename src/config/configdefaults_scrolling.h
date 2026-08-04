@@ -460,12 +460,65 @@ public:
     {
         return true;
     }
-    /// EMPTY MEANS "follow the theme" — the overlay falls back to
-    /// Kirigami.Theme's highlight colour, same resolution tier as the tab
-    /// colours above.
+    /// Fill and border colours. EMPTY MEANS "follow the theme" — the overlay
+    /// falls back to Kirigami.Theme's highlight colour, same resolution tier
+    /// as the tab colours above. Two colours rather than one so the highlight
+    /// can be a tinted fill with a contrasting edge, which is how the snapping
+    /// zone overlay spells the same idea (Highlight + Border).
     static QString scrollingDropIndicatorColor()
     {
         return QString();
+    }
+    static QString scrollingDropIndicatorBorderColor()
+    {
+        return QString();
+    }
+    /// Fill opacity. The border always draws opaque, matching the snapping
+    /// zone overlay, so the fill can be faint enough to read the windows
+    /// underneath while the edge stays crisp.
+    ///
+    /// One opacity, not the snapping overlay's active/inactive pair: there is
+    /// exactly one drop target at a time, so there is no inactive state to
+    /// give a second value to.
+    static double scrollingDropIndicatorOpacity()
+    {
+        return 0.25;
+    }
+    static constexpr qreal scrollingDropIndicatorOpacityMin()
+    {
+        return 0.0;
+    }
+    static constexpr qreal scrollingDropIndicatorOpacityMax()
+    {
+        return 1.0;
+    }
+    /// Border width and corner radius, in px. Bounds mirror the snapping zone
+    /// overlay's (Snapping.Zones.Border) so the two highlights cannot be given
+    /// visually incompatible ranges. Zero width is legal and means a fill with
+    /// no edge.
+    static constexpr int scrollingDropIndicatorBorderWidth()
+    {
+        return 2;
+    }
+    static constexpr int scrollingDropIndicatorBorderWidthMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollingDropIndicatorBorderWidthMax()
+    {
+        return 10;
+    }
+    static constexpr int scrollingDropIndicatorBorderRadius()
+    {
+        return 4;
+    }
+    static constexpr int scrollingDropIndicatorBorderRadiusMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollingDropIndicatorBorderRadiusMax()
+    {
+        return 50;
     }
 
     /// Meta+wheel column focus in the KWin effect. Off, the axis chords are

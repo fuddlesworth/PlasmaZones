@@ -350,6 +350,22 @@ P_STORE_GET(QString, scrollingDropIndicatorColor, scrollingDropIndicatorGroup, c
 P_STORE_SET_STRING(setScrollingDropIndicatorColor, scrollingDropIndicatorGroup, colorKey,
                    scrollingDropIndicatorColorChanged)
 
+P_STORE_GET(QString, scrollingDropIndicatorBorderColor, scrollingDropIndicatorGroup, borderColorKey, QString)
+P_STORE_SET_STRING(setScrollingDropIndicatorBorderColor, scrollingDropIndicatorGroup, borderColorKey,
+                   scrollingDropIndicatorBorderColorChanged)
+
+P_STORE_GET(double, scrollingDropIndicatorOpacity, scrollingDropIndicatorGroup, opacityKey, double)
+P_STORE_SET_DOUBLE(setScrollingDropIndicatorOpacity, scrollingDropIndicatorGroup, opacityKey,
+                   scrollingDropIndicatorOpacityChanged)
+
+P_STORE_GET(int, scrollingDropIndicatorBorderWidth, scrollingDropIndicatorGroup, widthKey, int)
+P_STORE_SET_INT(setScrollingDropIndicatorBorderWidth, scrollingDropIndicatorGroup, widthKey,
+                scrollingDropIndicatorBorderWidthChanged)
+
+P_STORE_GET(int, scrollingDropIndicatorBorderRadius, scrollingDropIndicatorGroup, radiusKey, int)
+P_STORE_SET_INT(setScrollingDropIndicatorBorderRadius, scrollingDropIndicatorGroup, radiusKey,
+                scrollingDropIndicatorBorderRadiusChanged)
+
 // ── Scrolling behavior (Scrolling.Behavior) ─────────────────────────────────
 // Shared leaf key names under the scrolling behavior group; the schema
 // validators own enum validation (validIntOr snaps a bad sticky value back

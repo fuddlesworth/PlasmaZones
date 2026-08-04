@@ -422,6 +422,10 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // during the drag those triggers arm.
              {CD::scrollingDropIndicatorGroup(), CD::enabledKey()},
              {CD::scrollingDropIndicatorGroup(), CD::colorKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::borderColorKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::opacityKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::widthKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::radiusKey()},
          }},
         // Only the GLOBAL Windows.* / Gaps.* keys are listed. Per-monitor gap
         // overrides live in the per-screen autotile store (AutotileScreen:*), not

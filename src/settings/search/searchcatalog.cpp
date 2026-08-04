@@ -692,9 +692,26 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Show drop indicator"),
                {PhosphorI18n::tr("drop"), PhosphorI18n::tr("drag"), PhosphorI18n::tr("indicator"),
                 PhosphorI18n::tr("highlight"), PhosphorI18n::tr("target")});
-    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorColor"),
-               PhosphorI18n::tr("Indicator color"),
-               {PhosphorI18n::tr("drop"), PhosphorI18n::tr("color"), PhosphorI18n::tr("indicator")});
+    addSetting(
+        search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorColor"),
+        PhosphorI18n::tr("Fill color"),
+        {PhosphorI18n::tr("drop"), PhosphorI18n::tr("color"), PhosphorI18n::tr("indicator"), PhosphorI18n::tr("fill")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorOpacity"),
+               PhosphorI18n::tr("Fill opacity"),
+               {PhosphorI18n::tr("drop"), PhosphorI18n::tr("opacity"), PhosphorI18n::tr("transparency"),
+                PhosphorI18n::tr("indicator")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorBorderColor"),
+               PhosphorI18n::tr("Border color"),
+               {PhosphorI18n::tr("drop"), PhosphorI18n::tr("color"), PhosphorI18n::tr("border"),
+                PhosphorI18n::tr("indicator")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorBorderWidth"),
+               PhosphorI18n::tr("Border width"),
+               {PhosphorI18n::tr("drop"), PhosphorI18n::tr("border"), PhosphorI18n::tr("width"),
+                PhosphorI18n::tr("thickness")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorBorderRadius"),
+               PhosphorI18n::tr("Corner radius"),
+               {PhosphorI18n::tr("drop"), PhosphorI18n::tr("radius"), PhosphorI18n::tr("corner"),
+                PhosphorI18n::tr("rounding")});
 
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingWindowHandling"),
                PhosphorI18n::tr("Window Handling"));

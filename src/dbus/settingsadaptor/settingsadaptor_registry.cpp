@@ -950,6 +950,14 @@ void SettingsAdaptor::initializeRegistry()
         // daemon, so an unregistered key looks wired and does nothing.
         REGISTER_THEME_FALLBACK_COLOR("scrollingDropIndicatorColor", scrollingDropIndicatorColor,
                                       setScrollingDropIndicatorColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingDropIndicatorBorderColor", scrollingDropIndicatorBorderColor,
+                                      setScrollingDropIndicatorBorderColor)
+        REGISTER_CONCRETE_DOUBLE("scrollingDropIndicatorOpacity", scrollingDropIndicatorOpacity,
+                                 setScrollingDropIndicatorOpacity)
+        REGISTER_CONCRETE_INT("scrollingDropIndicatorBorderWidth", scrollingDropIndicatorBorderWidth,
+                              setScrollingDropIndicatorBorderWidth)
+        REGISTER_CONCRETE_INT("scrollingDropIndicatorBorderRadius", scrollingDropIndicatorBorderRadius,
+                              setScrollingDropIndicatorBorderRadius)
 
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusEnabled", scrollingWheelFocusEnabled, setScrollingWheelFocusEnabled)
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusInverted", scrollingWheelFocusInverted,
