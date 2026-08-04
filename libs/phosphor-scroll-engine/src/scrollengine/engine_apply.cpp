@@ -39,7 +39,7 @@ constexpr int kMaxPendingSelfActivations = 16;
 
 } // namespace
 
-ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) const
+ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, int columnCountOverride) const
 {
     ScrollLayoutParams params;
     QRect area = m_screenManager ? m_screenManager->screenAvailableGeometry(screenId)
@@ -111,9 +111,15 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
     // settle detach-once already makes, and gating on the preview would
     // give the opposite artifact (gaps around a visually single column).
     if (m_smartGaps) {
-        const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
-        if (state && state->strip().columnCount() == 1) {
-            top = bottom = left = right = 0;
+        if (columnCountOverride >= 0) {
+            if (columnCountOverride == 1) {
+                top = bottom = left = right = 0;
+            }
+        } else {
+            const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+            if (state && state->strip().columnCount() == 1) {
+                top = bottom = left = right = 0;
+            }
         }
     }
     // Outer gaps must never invert the rect: an unknown/removed screen

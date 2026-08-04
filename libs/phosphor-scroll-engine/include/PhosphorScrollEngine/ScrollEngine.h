@@ -678,7 +678,14 @@ private:
     /// leftover width nobody claimed, and a maximize compare that never
     /// matched. Inner gaps need no arm — with one column no inter-column gap
     /// exists.
-    ScrollLayoutParams layoutParamsForScreen(const QString& screenId) const;
+    /// @param columnCountOverride When >= 0, the smart-gaps arm judges the
+    /// single-column case against THIS count instead of the live strip's.
+    /// Only the drop indicator passes it: while a preview holds the dragged
+    /// window detached, a strip that will have two columns after the drop
+    /// still counts as one, so the live answer zeroes the outer gaps that the
+    /// post-drop layout will restore — and the indicator would be drawn
+    /// against a work area the window never occupies.
+    ScrollLayoutParams layoutParamsForScreen(const QString& screenId, int columnCountOverride = -1) const;
     /// visibleTiles' real body, taking params the caller already resolved.
     /// The public overload is the thin wrapper; callers that hold params
     /// (the digit path, the normalized-rect walk) use this instead of paying

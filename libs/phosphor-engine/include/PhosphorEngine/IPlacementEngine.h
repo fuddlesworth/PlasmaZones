@@ -433,6 +433,14 @@ public:
     /// PAINT the drop target. Empty when no preview is live, no target has
     /// been hit-tested yet, or the preview belongs to another screen.
     ///
+    /// Measured in the layout's CURRENT view. A drop may additionally scroll
+    /// the view — the scroll engine focuses the dropped window, which can
+    /// re-anchor the strip — so this marks the place under the cursor that the
+    /// user is aiming at, not the screen position the window settles at once
+    /// any post-drop scroll finishes. Painting the post-scroll position would
+    /// move the indicator away from the cursor while the user is still
+    /// choosing, which is the worse of the two.
+    ///
     /// Default empty, and that is the right answer for an engine that
     /// restructures live: autotile's feedback IS its restructure, so painting
     /// a second indicator over it would double-report the same thing. Only an

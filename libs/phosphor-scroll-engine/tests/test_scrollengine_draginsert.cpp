@@ -23,6 +23,7 @@
 using namespace PhosphorScrollEngine;
 
 using ScrollTestUtils::engineParams;
+using ScrollTestUtils::makeGappedProviderEngine;
 using ScrollTestUtils::makeProviderEngine;
 
 using DragTarget = PhosphorEngine::IPlacementEngine::DragInsertTarget;
@@ -49,6 +50,8 @@ private Q_SLOTS:
     void hitTestResolvesTargets();
     void hitTestResolvesStackedTileSlots();
     void indicatorRectTracksTarget();
+    void indicatorRectMatchesTheDropUnderAGap();
+    void indicatorRectMatchesTheDropForANewColumn();
     void nudgeDragScrollShiftsView();
     void windowClosedDropsPreview();
     void screenSetChangeCancelsPreview();
@@ -475,7 +478,9 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     // a full-height column slot for a new column, and an (n+1)-th share of
     // the stack for a join.
     QObject owner;
-    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    // BOTH screens active: the cross-screen assertion below must fail for the
+    // screen-match guard, not because S2 merely has no state.
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
 
     // No preview: nothing to paint.
@@ -484,8 +489,6 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
     // Preview live but no target hit-tested yet.
     QVERIFY(engine->dragInsertIndicatorRect(QStringLiteral("S1")).isNull());
-    // Another screen never borrows this screen's indicator.
-    QVERIFY(engine->dragInsertIndicatorRect(QStringLiteral("S2")).isNull());
 
     const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
     QVERIFY(!rectB.isNull());
@@ -499,7 +502,15 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     QVERIFY(openSlot.isValid());
     QCOMPARE(openSlot.x(), rectB.x());
     QCOMPARE(openSlot.height(), rectB.height());
-    QVERIFY(openSlot.width() > 0);
+    // Width pinned CONCRETELY, not just non-zero: both windows open at the
+    // default column width, so the opening slot is exactly b's width. A
+    // regression handing back the whole work area would satisfy `> 0`.
+    QCOMPARE(openSlot.width(), rectB.width());
+
+    // Another screen never borrows this screen's indicator. Asserted AFTER a
+    // target exists: before one, the no-target early return fires first and
+    // this would pass even with the screen guard deleted.
+    QVERIFY(engine->dragInsertIndicatorRect(QStringLiteral("S2")).isNull());
 
     // Join b's column as a second tile: same width, half the height, and
     // the lower half for the below-b slot.
@@ -522,6 +533,68 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     // The indicator dies with the preview.
     engine->cancelDragInsertPreview();
     QVERIFY(engine->dragInsertIndicatorRect(QStringLiteral("S1")).isNull());
+}
+
+void TestScrollEngineDragInsert::indicatorRectMatchesTheDropUnderAGap()
+{
+    // The whole suite used to run at gap 0, where a layout that omits the gap
+    // term entirely still produces the right numbers — so no test could see
+    // the indicator's arithmetic disagreeing with the strip's. Under a real
+    // inner gap the two diverge by up to slot*gap, which is what this pins.
+    //
+    // Stated as an EQUIVALENCE rather than a formula: whatever the indicator
+    // promises, committing must deliver. That holds no matter how the layout's
+    // height distribution changes later, which a hand-computed expectation
+    // would not.
+    QObject owner;
+    ScrollEngine* engine = makeGappedProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
+
+    // Join the column holding b, below it — the arm where the gap term and the
+    // per-tile height distribution both bite.
+    DragTarget join;
+    join.primary = 0;
+    join.secondary = 1;
+    engine->updateDragInsertPreview(join);
+
+    const QRect promised = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(promised.isValid());
+
+    engine->commitDragInsertPreview();
+    const QRect delivered = tileRect(engine, QStringLiteral("S1"), QStringLiteral("a"));
+    QVERIFY(!delivered.isNull());
+
+    QCOMPARE(promised, delivered);
+}
+
+void TestScrollEngineDragInsert::indicatorRectMatchesTheDropForANewColumn()
+{
+    // The new-column arm of the same equivalence, under a gap. Catches the
+    // column-width resolution (including the min-width floor) and the vertical
+    // extent, which used to come from the FULL column rect rather than the
+    // tile's — taller than the tiles beside it whenever the tab indicator
+    // reserves a band inside the column.
+    QObject owner;
+    ScrollEngine* engine = makeGappedProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
+
+    DragTarget newCol;
+    newCol.primary = 0;
+    newCol.newSlot = true;
+    engine->updateDragInsertPreview(newCol);
+
+    const QRect promised = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(promised.isValid());
+
+    engine->commitDragInsertPreview();
+    const QRect delivered = tileRect(engine, QStringLiteral("S1"), QStringLiteral("a"));
+    QVERIFY(!delivered.isNull());
+
+    QCOMPARE(promised, delivered);
 }
 
 void TestScrollEngineDragInsert::nudgeDragScrollShiftsView()

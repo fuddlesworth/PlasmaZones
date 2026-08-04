@@ -546,44 +546,85 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     if (!state) {
         return {};
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(m_dragInsertPreview->targetScreenId);
+    const DragInsertPreview& p = *m_dragInsertPreview;
+
+    // SIMULATE THE DROP RATHER THAN MODEL IT.
+    //
+    // This function used to re-derive the landing rect with its own column and
+    // slot arithmetic, and every version of that arithmetic was wrong in a
+    // different way: it indexed the resolved column vector with a model index,
+    // split a column into equal shares when relayout distributes by height
+    // intent and weight, omitted the inner gap the real layout subtracts,
+    // ignored the min-height clamp and its rebalance, treated a tabbed column
+    // as a vertical stack when every tab shares one rect, and read the full
+    // column extent where the tiles get contentRectFor. Each of those was a
+    // separate defect with a separate patch, and the list kept growing.
+    //
+    // So: copy the strip, apply the SAME insert commitDragInsertPreview would,
+    // relayout, and read back the rect the dropped window actually gets. The
+    // layout code becomes the single source of truth for the layout, which is
+    // the only way this can stay correct as the strip gains features.
+    //
+    // The copy is per call and the strip is a plain value type. That is not
+    // free, and the ledger already tracks the per-tick relayout cost of this
+    // whole path — but a cheap wrong rect is worth less than an accurate one,
+    // and the change-gate in the daemon means a stationary cursor never
+    // reaches here at all.
+    ScrollStrip probe = state->strip();
+
+    // Params resolved against the POST-drop column count. Smart gaps zero the
+    // outer gaps for a single-column strip, and while the preview holds the
+    // dragged window detached a strip that will have two columns still reads
+    // as one — so the live params describe a work area the dropped window
+    // never occupies.
+    const int postDropColumns = probe.columnCount() + ((target.newSlot || probe.isEmpty()) ? 1 : 0);
+    const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId, postDropColumns);
     if (!params.workArea.isValid()) {
         return {};
     }
-    const ResolvedStrip resolved = state->strip().relayout(params);
-    // Vertical extent comes from a real column when there is one, so the
-    // indicator lines up with the tiles instead of any reserved indicator
-    // band the columns already exclude.
-    const QRect vertical = resolved.columns.isEmpty() ? params.workArea : resolved.columns.first().rect;
 
-    if (!target.newSlot && !resolved.columns.isEmpty()) {
-        // Joining a column: the window becomes one more tile in that stack,
-        // so it takes an (n+1)-th share of the column's height at the
-        // insert position.
-        const int columnIdx = std::clamp(target.primary, 0, static_cast<int>(resolved.columns.size()) - 1);
-        const ResolvedColumn& column = resolved.columns.at(columnIdx);
-        const int slots = column.tiles.size() + 1;
-        // secondary is a MODEL tile index; the resolved column omits
-        // minimized tiles, so clamp rather than assume the two agree.
-        const int slot = std::clamp(target.secondary < 0 ? slots - 1 : target.secondary, 0, slots - 1);
-        const int slotHeight = std::max(1, column.rect.height() / slots);
-        return QRect(column.rect.x(), column.rect.y() + slot * slotHeight, column.rect.width(), slotHeight);
+    // Mirror of commit's insert selection, deliberately kept line-for-line
+    // comparable with it: if the two ever diverge, the indicator lies.
+    bool inserted = false;
+    if (target.newSlot || probe.isEmpty()) {
+        inserted = probe.insertWindowAt(std::clamp(target.primary, 0, probe.columnCount()), p.windowId, p.carried.width,
+                                        p.carried.display, params);
+    } else {
+        const int joinColumn = std::clamp(target.primary, 0, probe.columnCount() - 1);
+        const int tileIndex = target.secondary >= 0 ? target.secondary : probe.columns().at(joinColumn).tiles.size();
+        inserted = probe.insertWindowIntoColumnAt(joinColumn, tileIndex, p.windowId, params, p.carried.minWidth,
+                                                  p.carried.minHeight);
+    }
+    if (!inserted) {
+        return {};
+    }
+    // The same two post-insert stamps commit applies, under the same gates —
+    // both change the resolved geometry, so omitting either would reintroduce
+    // a modelling error by the back door.
+    if (p.carried.minWidth > 0 || p.carried.minHeight > 0) {
+        probe.setWindowMinimumSize(p.windowId, p.carried.minWidth, p.carried.minHeight);
+    }
+    if (p.carried.column >= 0 || p.carried.tileIndex >= 0) {
+        probe.setWindowHeightIntent(p.windowId, p.carried.height);
     }
 
-    // A NEW column at `primary`: it opens where that column currently
-    // starts (everything from there shifts right), or past the last one.
-    const int width = std::max(1,
-                               std::min(ScrollStrip::resolveColumnWidthPx(m_dragInsertPreview->carried.width, params),
-                                        params.workArea.width()));
-    int x = params.workArea.left();
-    if (!resolved.columns.isEmpty()) {
-        if (target.primary < resolved.columns.size()) {
-            x = resolved.columns.at(std::max(0, target.primary)).rect.left();
-        } else {
-            x = resolved.columns.last().rect.right() + 1 + params.gap;
+    // Deliberately NOT mirrored: commit's focusWindow, which re-anchors the
+    // view so the dropped column is scrolled into place. Running it here would
+    // make the indicator jump to where the window will be AFTER the view
+    // scrolls, rather than marking the place under the cursor the user is
+    // aiming at. The rect is therefore in the strip's current view, and the
+    // view may scroll on drop.
+    const ResolvedStrip resolved = probe.relayout(params);
+    for (const ResolvedColumn& column : resolved.columns) {
+        for (const ResolvedTile& tile : column.tiles) {
+            if (tile.windowId == p.windowId) {
+                return tile.rect;
+            }
         }
     }
-    return QRect(x, vertical.y(), width, vertical.height());
+    // Resolved away (every column zero-width on a degenerate work area, or the
+    // tile hidden behind an active tab). Nothing truthful to paint.
+    return {};
 }
 
 bool ScrollEngine::nudgeDragScroll(const QString& screenId, const QPoint& cursorPos)
