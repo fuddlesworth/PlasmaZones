@@ -3,13 +3,25 @@
 //
 // Window-morph fragment shader — shader-driven geometry move/resize.
 //
-// The window jumps to its destination instantly (moveResize); this shader
-// animates the visual transition by interpolating the drawn rect from the
-// OLD frame (iFromRect) to the NEW frame (iToRect) by iTime, cross-fading a
-// snapshot of the old content (uOldWindow) out as the live new content
-// (uTexture0, via surfaceColor) fades in. Both are sampled at the SAME
-// normalised rect coordinate, so each is shown at its own native aspect —
-// no non-uniform stretch like the C++ setXScale/setYScale path it replaces.
+// VERTEX-ONLY: the window's content is never resampled. The window jumps to
+// its destination instantly (moveResize), and this shader animates the visual
+// transition by interpolating the DRAWN RECT from the OLD frame (iFromRect) to
+// the NEW frame (iToRect) by iTime while the live content is drawn at its own
+// final scale, anchored to that moving rect and cropped by it. A grow reveals
+// more of the content, a shrink crops it, and the pixels themselves are
+// identical to the settled window on every frame of the leg.
+//
+// This replaced a cross-fade that sampled the live content at the INTERPOLATED
+// rect's normalised coordinate. That squeezed already-final-size content into
+// the old geometry at t = 0 and only reached 1:1 at t = 1, so every snap, tile
+// and reflow visibly stretched its content for the whole leg and then snapped
+// sharp (discussion #868). Scaling the content was the one thing this pack
+// existed to avoid, and normalising into the morphing rect reintroduced it.
+//
+// No old-content snapshot is sampled, so none is captured for this pack: the
+// capture request is gated on the compiled shader linking uOldWindow. Packs
+// that DO want the old frame (the cross-fade families) keep it by declaring
+// the uniform.
 //
 // Surface-extent shader: apply() lays an output-spanning quad, so vTexCoord
 // spans the host output and iResolution is the output size. iFromRect/iToRect
@@ -20,19 +32,10 @@
 // window's top-left offset within that output, so their difference is the
 // output's global top-left. screenPx = outputOrigin + vTexCoord * iResolution.
 //
-// The old-content snapshot (uOldWindow) is captured at the window's CURRENT
-// (post-moveResize) expanded geometry, so iAnchorRectInTexture — the new
-// frame's sub-rect within the new expanded texture — maps card-space uv into
-// it correctly, exactly as it does for the live uTexture0.
-
 // Geometry-morph endpoints (logical-screen px, x/y/w/h). Default-block
-// uniforms pushed by the kwin-effect paint pipeline. The old-content snapshot
-// (uOldWindow) comes from the shared old_content.glsl include below.
+// uniforms pushed by the kwin-effect paint pipeline.
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
-
-// uOldWindow + oldColor(): the shared captured-old-frame sampler.
-#include <old_content.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
     // `t` is the raw (possibly flipped) iTime the pTransition entry contract
@@ -52,10 +55,6 @@ vec4 pTransition(vec2 uv, float t) {
     //     The max() below stops the NaN but collapses the rect to a 1px axis, so the
     //     mask zeroes and the window VANISHES into a sliver before popping back.
     //     "Before the start" does not mean "negative width".
-    //   - the old→new COLOUR cross-fade, where extrapolating premultiplied colours
-    //     past their endpoints drives them out of range (over-contrast on a unorm8
-    //     target, unbounded on a float/HDR one). A cross-fade has no meaning past
-    //     its ends.
     // The POSITION carries the bounce, which is where the eye reads it: the window
     // sails past its target and springs back, at its final size.
     float tc = clamp(t, 0.0, 1.0);
@@ -75,12 +74,9 @@ vec4 pTransition(vec2 uv, float t) {
     //
     // The rect is the window FRAME, and ruv is frame-relative, so the bare
     // [0, 1] range cropped the decoration chain's halo at the frame edge for
-    // the whole morph. Widen by the chain's outer margin: oldColor() and
-    // surfaceColor() are both frame-anchored, so the same out-of-range ruv
-    // resolves into the padded canvas's margin band on either side of the
-    // cross-fade. The pad rides the rect lerp, so the halo scales with the
-    // window as it morphs rather than sitting at a fixed screen width. Zero
-    // pad reduces to the previous frame-edge mask.
+    // the whole morph. Widen by the chain's outer margin: surfaceColor() is
+    // frame-anchored, so an out-of-range coordinate resolves into the padded
+    // canvas's margin band. Zero pad reduces to the plain frame-edge mask.
     vec2 pad = surfacePadRel();
     vec2 fw = max(fwidth(ruv), vec2(1.0e-4));
     vec2 edge = min(smoothstep(vec2(0.0), fw, ruv + pad), smoothstep(vec2(0.0), fw, 1.0 + pad - ruv));
@@ -89,10 +85,27 @@ vec4 pTransition(vec2 uv, float t) {
         return vec4(0.0);
     }
 
-    vec4 oldC = oldColor(ruv);           // captured old content, native aspect
-    vec4 newC = surfaceColor(ruv);       // live new content, native aspect
+    // Content coordinate: normalised against the FINAL size, not the morphing
+    // one, and anchored at the morphing rect's origin. That is the whole
+    // vertex-only property — the divisor never changes, so the content is
+    // sampled at exactly one texel per device pixel for the entire leg, and at
+    // t = 1 (rect == iToRect) this reduces to the settled window's own mapping.
+    // Sampling at `ruv` instead, as this used to, divides by the morphing size
+    // and scales the content by iToRect.zw / rect.zw every frame.
+    vec2 cuv = (screenPx - rect.xy) / max(iToRect.zw, vec2(1.0));
 
-    // Cross-fade old -> new across the morph. Inputs are premultiplied
-    // (KWin FBO storage); a straight mix of premultiplied colours is correct.
-    return mix(oldC, newC, tc) * mask;
+    // Crop to the content's own extent as well as the rect. A SHRINK leg has a
+    // rect LARGER than the final content for most of its run (unmaximize is the
+    // everyday case), and without this the fragments past the content edge
+    // sample CLAMP_TO_EDGE and smear the window's last texel column across the
+    // remaining band. Cropped, a shrink instead reads as the final-size window
+    // travelling to its new home, which is the honest vertex-only answer: there
+    // are no pixels for that band, and inventing them by scaling is what this
+    // pack is here to avoid.
+    // Its OWN fwidth: cuv's derivative is 1 / iToRect.zw while ruv's is
+    // 1 / rect.zw, so reusing `fw` would feather this edge by the wrong number
+    // of pixels by exactly the ratio the morph is mid-way through.
+    vec2 cfw = max(fwidth(cuv), vec2(1.0e-4));
+    vec2 cedge = min(smoothstep(vec2(0.0), cfw, cuv + pad), smoothstep(vec2(0.0), cfw, 1.0 + pad - cuv));
+    return surfaceColor(cuv) * mask * cedge.x * cedge.y;
 }
