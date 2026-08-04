@@ -47,7 +47,6 @@ SettingsRow {
 
     ModifierAndMouseCheckBoxes {
         width: triggerRow.controlPreferredWidth
-        allowMultiple: true
         acceptMode: acceptModeAll
         // With "activate on every drag" on, the sentinel holding that flag
         // takes one of the four stored slots and is stripped from the list

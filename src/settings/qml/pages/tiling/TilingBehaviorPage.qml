@@ -61,7 +61,6 @@ SettingsFlickable {
 
                     ModifierAndMouseCheckBoxes {
                         width: root.triggerPreferredWidth
-                        allowMultiple: true
                         acceptMode: acceptModeAll
                         // See the scrolling twin: the sentinel eats a stored
                         // slot that this list does not show.

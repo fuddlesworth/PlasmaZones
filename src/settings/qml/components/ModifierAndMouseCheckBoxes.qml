@@ -7,21 +7,25 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * Single input box for modifier and/or mouse trigger.
- * Uses TextField styling to match other form inputs (e.g. assignments tab).
- * Click in the box to capture; one key/modifier/mouse overwrites the value.
- * X inside the box clears. No pills; single value only.
- * acceptMode: MetaOnly (modifier keys only), MouseOnly (any mouse button: Right, Middle, Back, Forward, Extra 3–5), or All.
+ * A list of activation triggers with Add / Edit / Remove. Each entry is one
+ * modifier combination or mouse button that independently activates the
+ * feature the hosting row controls.
  *
- * Multi-bind mode (allowMultiple: true):
- * Shows a list of triggers with Add/Remove buttons. Each trigger is a separate
- * modifier or mouse button that can independently activate the feature.
+ * acceptMode narrows what a capture will take: MetaOnly (modifier keys),
+ * MouseOnly (any mouse button, Right / Middle / Back / Forward / Extra 3-5),
+ * or All.
  *
- * The caller owns the state in both modes. The component never writes
- * modifierValue/mouseButtonValue/triggers itself; it emits valueModified,
- * mouseButtonsModified, or triggersModified and the caller persists the
- * value and propagates it back through the property binding. A consumer
- * that ignores the signals will not see captures or clears reflected.
+ * The CALLER owns the state. This component never writes `triggers` itself.
+ * It emits triggersModified and the caller persists the value, which comes
+ * back through the property binding. A host that ignores the signal will not
+ * see captures or removals reflected, and self-assigning here would sever
+ * that binding on the first edit.
+ *
+ * There used to be a single-value mode behind an `allowMultiple` flag,
+ * roughly a third of the file, kept for a caller that never arrived: all five
+ * instantiation sites in the tree passed true. Both the mode and the flag are
+ * gone rather than left as a second untested path through the capture, clear
+ * and display logic that no host could reach.
  */
 Item {
     // Edit mode: replace the trigger at the edited index
@@ -32,21 +36,9 @@ Item {
     readonly property int acceptModeAll: 0
     readonly property int acceptModeMetaOnly: 1
     readonly property int acceptModeMouseOnly: 2
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Single-mode properties (used when allowMultiple is false)
-    // ═══════════════════════════════════════════════════════════════════════════
-    property int modifierValue: 0
-    property int mouseButtonValue: 0
-    property int defaultModifierValue: 0
-    property int defaultMouseButtonValue: 0
+    /// What a capture will accept. See the class note.
     property int acceptMode: acceptModeAll
     property bool tooltipEnabled: true
-    //* When set, overrides the default tooltip for the input field (use instead of ToolTip.text; Item has no ToolTip attached type).
-    property string customTooltipText: ""
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Multi-mode properties (used when allowMultiple is true)
-    // ═══════════════════════════════════════════════════════════════════════════
-    property bool allowMultiple: false
     property var triggers: [] // [{modifier: bitmask, mouseButton: buttonBit}, ...]
     property var defaultTriggers: []
     readonly property int maxTriggers: 4
@@ -72,8 +64,6 @@ Item {
     readonly property var modifierChips: TriggerLabels.modifiers
     readonly property var mouseButtonList: TriggerLabels.mouseButtons
 
-    signal valueModified(int modifierValue)
-    signal mouseButtonsModified(int mouseButtonValue)
     signal triggersModified(var triggers)
 
     //* Scan a modifier bitmask + mouse button bit into a "A + B" label,
@@ -99,23 +89,9 @@ Item {
         return parts.join(" + ");
     }
 
-    function displayText() {
-        return _scanText(modifierValue, mouseButtonValue, "");
-    }
-
     //* Display text for a single trigger (modifier bitmask + mouse button bit)
     function triggerDisplayText(modifier, mouseButton) {
         return _scanText(modifier, mouseButton, i18n("(none)"));
-    }
-
-    function clearAll() {
-        // Emit only; writing modifierValue/mouseButtonValue here would sever
-        // the caller's bindings. The caller persists the defaults and the
-        // bindings propagate them back.
-        if (modifierValue !== defaultModifierValue || mouseButtonValue !== defaultMouseButtonValue) {
-            valueModified(defaultModifierValue);
-            mouseButtonsModified(defaultMouseButtonValue);
-        }
     }
 
     //* Compare two trigger arrays for equality
@@ -159,13 +135,11 @@ Item {
         triggersModified(deduped);
     }
 
-    // Match ShortcutCaptureField: no fixed width so FormLayout gives the same column width as shortcut fields
-    implicitWidth: allowMultiple ? multiContainer.implicitWidth : field.implicitWidth
-    implicitHeight: allowMultiple ? multiContainer.implicitHeight : field.implicitHeight
+    // Match ShortcutCaptureField: no fixed width so FormLayout gives the same
+    // column width as shortcut fields.
+    implicitWidth: multiContainer.implicitWidth
+    implicitHeight: multiContainer.implicitHeight
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Multi-mode: list of triggers with Add/Remove
-    // ═══════════════════════════════════════════════════════════════════════════
     Rectangle {
         id: multiContainer
 
@@ -173,7 +147,6 @@ Item {
         // against the content-surface palette wherever the control is hosted.
         Kirigami.Theme.colorSet: Kirigami.Theme.View
         Kirigami.Theme.inherit: false
-        visible: root.allowMultiple
         anchors.fill: parent
         color: Kirigami.Theme.backgroundColor
         border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
@@ -191,7 +164,7 @@ Item {
 
             // Trigger rows
             Repeater {
-                model: root.allowMultiple ? root.triggers : []
+                model: root.triggers
 
                 RowLayout {
                     id: triggerRow
@@ -301,121 +274,13 @@ Item {
         acceptMode: root.acceptMode
         tooltipEnabled: root.tooltipEnabled
         onModifierCaptured: mask => {
-            if (!root.allowMultiple)
-                return;
-
             root.applyTriggerCapture(mask, 0);
         }
         onMouseCaptured: bit => {
-            if (!root.allowMultiple)
-                return;
-
             if (root.acceptMode === root.acceptModeMetaOnly)
                 return;
 
             root.applyTriggerCapture(0, bit);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Single-mode: existing TextField input
-    // ═══════════════════════════════════════════════════════════════════════════
-    QQC2.TextField {
-        id: field
-
-        visible: !root.allowMultiple
-        anchors.fill: parent
-        // Pin the View set on the control itself so the foreground (text and
-        // placeholder colours below) resolves the same content-surface palette
-        // as the fill and border, which the background Rectangle pins
-        // separately — otherwise the foreground follows the inherited set of
-        // whatever surface hosts the control.
-        Kirigami.Theme.colorSet: Kirigami.Theme.View
-        Kirigami.Theme.inherit: false
-        readOnly: true
-        text: root.displayText()
-        placeholderText: i18n("Click to set shortcut")
-        rightPadding: clearBtn.visible ? (clearBtn.width + Kirigami.Units.smallSpacing * 2) : (leftPadding + Kirigami.Units.smallSpacing)
-        color: inputCapture.capturing ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
-        font.italic: inputCapture.capturing
-        placeholderTextColor: Kirigami.Theme.disabledTextColor
-        // ToolTip attached to Control (TextField) - Item has no ToolTip attached type
-        QQC2.ToolTip.visible: root.tooltipEnabled && clickArea.containsMouse && !inputCapture.capturing
-        QQC2.ToolTip.text: root.customTooltipText !== "" ? root.customTooltipText : (root.acceptMode === root.acceptModeMetaOnly ? i18n("Click to set modifier key(s)") : (root.acceptMode === root.acceptModeMouseOnly ? i18n("Click to set any mouse button (Right, Middle, Back, Forward, etc.)") : i18n("Click to set key, modifier, or any mouse button")))
-        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-
-        MouseArea {
-            id: clickArea
-
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.LeftButton
-            cursorShape: Qt.PointingHandCursor
-            z: 10
-            onClicked: mouse => {
-                if (clearBtn.visible && mouse.x >= field.width - clearBtn.width - Kirigami.Units.smallSpacing * 2) {
-                    root.clearAll();
-                    return;
-                }
-                inputCapture.startCapture();
-            }
-        }
-
-        QQC2.Button {
-            id: clearBtn
-
-            visible: !inputCapture.capturing && (root.modifierValue !== root.defaultModifierValue || root.mouseButtonValue !== root.defaultMouseButtonValue)
-            anchors.right: parent.right
-            anchors.rightMargin: Kirigami.Units.smallSpacing
-            anchors.verticalCenter: parent.verticalCenter
-            width: height
-            height: parent.height - Kirigami.Units.smallSpacing * 2
-            flat: true
-            icon.name: "edit-clear"
-            z: 1
-            Accessible.role: Accessible.Button
-            Accessible.name: i18n("Reset to defaults")
-            // Mouse clicks land on clickArea (z:10), whose region test calls
-            // clearAll — this handler is the KEYBOARD and assistive-tech
-            // activation path, which invokes the button directly. Not dead.
-            onClicked: root.clearAll()
-            QQC2.ToolTip.visible: hovered && root.tooltipEnabled
-            QQC2.ToolTip.text: i18n("Reset to defaults")
-        }
-
-        background: Rectangle {
-            // Pin the View set so the field's fill and border resolve against
-            // the content-surface palette wherever the control is hosted —
-            // the same rationale as multiContainer's pin above, so the two
-            // modes render on identical surfaces.
-            Kirigami.Theme.colorSet: Kirigami.Theme.View
-            Kirigami.Theme.inherit: false
-            color: inputCapture.capturing ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : (field.enabled ? Kirigami.Theme.backgroundColor : Qt.alpha(Kirigami.Theme.backgroundColor, 0.5))
-            border.color: inputCapture.capturing ? Kirigami.Theme.highlightColor : (field.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast))
-            border.width: 1
-            radius: Kirigami.Units.smallSpacing
-        }
-    }
-
-    InputCapture {
-        id: inputCapture
-
-        visible: false
-        acceptMode: root.acceptMode
-        tooltipEnabled: root.tooltipEnabled
-        // Emit only, mirroring multi-mode's triggersModified contract:
-        // self-assigning modifierValue/mouseButtonValue would sever the
-        // caller's bindings on first capture.
-        onModifierCaptured: mask => {
-            root.valueModified(mask);
-            root.mouseButtonsModified(0);
-        }
-        onMouseCaptured: bit => {
-            if (root.acceptMode === root.acceptModeMetaOnly)
-                return;
-
-            root.valueModified(0);
-            root.mouseButtonsModified(bit);
         }
     }
 }

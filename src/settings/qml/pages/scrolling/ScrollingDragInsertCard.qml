@@ -55,7 +55,6 @@ SettingsCard {
 
             ModifierAndMouseCheckBoxes {
                 width: root.triggerPreferredWidth
-                allowMultiple: true
                 acceptMode: acceptModeAll
                 // The always-active sentinel occupies one of the four stored
                 // slots and is stripped out of the list below, so Add has to
