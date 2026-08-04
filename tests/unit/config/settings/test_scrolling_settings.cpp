@@ -662,6 +662,9 @@ private Q_SLOTS:
         // itself like any other change. A setter that compared the value it
         // was HANDED (42) rather than the value the store came back with
         // would leave the page showing IgnoreAll over a stored default.
+        // 42 is a literal on purpose: it has to be outside the closed set,
+        // and spelling it through an accessor would mean naming a value the
+        // set deliberately does not contain.
         settings.setScrollingStickyWindowHandling(42);
         QCOMPARE(settings.scrollingStickyWindowHandling(), ConfigDefaults::scrollingStickyWindowHandling());
         QCOMPARE(stickySpy.count(), 2);
@@ -763,8 +766,12 @@ private Q_SLOTS:
         QCOMPARE(capped.size(), ConfigDefaults::scrollingPresetIndexMax() + 1);
         // Keep-EARLIEST, not keep-last: the survivors are the first entries of
         // the input, so a user's leading presets outlive an over-long tail.
-        QCOMPARE(capped.first(), QStringLiteral("0.05"));
-        QCOMPARE(capped.last(), QStringLiteral("0.2"));
+        // Both ends DERIVED from the same cap the size assertion uses, for
+        // the reason spelled out above: a literal "0.2" here is the cap in
+        // disguise, and raising the cap would fail this line for a reason
+        // that has nothing to do with keep-earliest.
+        QCOMPARE(capped.first(), many.first());
+        QCOMPARE(capped.last(), many.at(ConfigDefaults::scrollingPresetIndexMax()));
     }
 
     /// The width VALUE key clamps into the schema range (backstop; the

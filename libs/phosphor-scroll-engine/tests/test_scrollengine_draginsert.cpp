@@ -601,6 +601,28 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     QCOMPARE(upper.y(), rectB.y());
     QCOMPARE(upper.height(), rectB.height() / 2);
 
+    // A join with NO secondary takes the append-at-the-end default rather
+    // than clamping to tile 0. With b alone in the column, appending puts the
+    // window BELOW it, so this must land on the lower half — the same rect as
+    // secondary=1 and the opposite of the secondary=0 upper half above.
+    join.secondary = -1;
+    engine->updateDragInsertPreview(join);
+    const QRect appended = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QCOMPARE(appended, joinSlot);
+
+    // A new column PAST the last one: the primary index is beyond the strip,
+    // and the insert clamps to the end rather than refusing. The rect lands
+    // to the right of b's column, which is the arm a cursor dragged off the
+    // right edge of the strip reaches.
+    DragTarget pastEnd;
+    pastEnd.primary = 99;
+    pastEnd.newSlot = true;
+    engine->updateDragInsertPreview(pastEnd);
+    const QRect tail = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(tail.isValid());
+    QVERIFY2(tail.x() > rectB.x(), "a past-the-end new column must open to the RIGHT of the last one");
+    QCOMPARE(tail.height(), rectB.height());
+
     // The indicator dies with the preview.
     engine->cancelDragInsertPreview();
     QVERIFY(engine->dragInsertIndicatorRect(QStringLiteral("S1")).isNull());
@@ -703,6 +725,16 @@ void TestScrollEngineDragInsert::nudgeDragScrollShiftsView()
     // direction instead.
     QVERIFY(engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(5, 400)));
     QVERIFY(state->strip().viewAnchor() > anchorAfterRight);
+
+    // Just INSIDE the band's inner edge: depth is small enough that the
+    // quadratic ramp rounds to a zero step, which the guard treats as outside
+    // the band. Without it the view would creep by a rounded-up pixel on
+    // every one of the 60 ticks a second the timer fires, so a hand resting
+    // near an edge column would drift the strip it was aiming at.
+    QVERIFY(!engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(47, 400)));
+    // ...and deeper in the SAME band does move, so the line above is the
+    // ramp refusing a shallow contact rather than the band being missed.
+    QVERIFY(engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(10, 400)));
 
     // Drain to the left end, then assert the "already pinned at this end"
     // arm. It matters because the adaptor keeps its 16 ms timer alive on a

@@ -209,12 +209,17 @@ private Q_SLOTS:
     // return-value-only assertions can't distinguish guard-fires from
     // setter-runs-and-returns-true.
     //
-    // StubSettings::adjacentThreshold() returns 20 — supply 20 and the guard fires.
+    // Supply whatever the stub currently answers and the guard fires. Read
+    // rather than hardcoded: a literal here silently stops testing the guard
+    // the day the stub's value changes, because a DIFFERENT value takes the
+    // setter path and the call-count assertion then fails for the wrong
+    // reason — or worse, matches by accident.
     // ─────────────────────────────────────────────────────────────────────
     void testSetSetting_unchangedScalar_guardShortCircuits()
     {
         m_settings->setAdjacentThresholdCalls = 0;
-        const bool ok = m_adaptor->setSetting(QStringLiteral("adjacentThreshold"), QDBusVariant(QVariant(20)));
+        const int current = m_settings->adjacentThreshold();
+        const bool ok = m_adaptor->setSetting(QStringLiteral("adjacentThreshold"), QDBusVariant(QVariant(current)));
         QVERIFY(ok);
         QCOMPARE(m_settings->setAdjacentThresholdCalls, 0);
     }

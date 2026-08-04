@@ -52,7 +52,10 @@ private:
     void addWindowsToState(AutotileEngine& engine, const QString& screenId, const QStringList& windowIds)
     {
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenId);
-        Q_ASSERT(state);
+        // QVERIFY, not Q_ASSERT: the latter compiles out under NDEBUG, so a
+        // release-mode run of this suite would dereference null here instead
+        // of failing the slot.
+        QVERIFY(state);
         for (const QString& id : windowIds) {
             state->addWindow(id);
         }

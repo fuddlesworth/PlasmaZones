@@ -100,8 +100,11 @@ void TestScrollEngineSmoke::screensSetLifecycle()
     // Capability contract the daemon's layout-selection gates rest on: the
     // strip has no layout concept, so the engine must keep the interface's
     // default-false providesLayouts (snap and autotile override true).
+    // One call, not two: providesLayouts is virtual, so the cast added
+    // nothing — both lines were the identical dispatch through the identical
+    // vtable slot, and the second read as though it proved the interface view
+    // agrees with the concrete one.
     QVERIFY(!engine->providesLayouts());
-    QVERIFY(!static_cast<PhosphorEngine::IPlacementEngine*>(engine)->providesLayouts());
     QSignalSpy screensSpy(engine, &ScrollEngine::scrollingScreensChanged);
 
     QSignalSpy enabledSpy(engine, &ScrollEngine::enabledChanged);
@@ -234,6 +237,12 @@ void TestScrollEngineSmoke::capturePlacementReportsSlot()
     QCOMPARE(stackedB->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId()).order, 0);
 }
 
+// Named for handoffRelease but covers the RELEASE-then-RECEIVE round trip:
+// the release half asserts the window leaves tracking without disturbing its
+// neighbour, and the receive half asserts it comes back tracked on the new
+// screen. Kept as one slot because the two halves only mean anything
+// together — a release that drops tracking is only correct if something can
+// pick the window back up.
 void TestScrollEngineSmoke::handoffReleaseIsTrackingOnly()
 {
     QObject owner;
