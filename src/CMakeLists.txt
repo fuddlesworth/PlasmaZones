@@ -524,6 +524,7 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/rekey.cpp
     daemon/overlayservice/cheatsheet.cpp
     daemon/overlayservice/scrolltabs.cpp
+    daemon/overlayservice/scrolldropindicator.cpp
     daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
     daemon/overlayservice/shellhost_bridge.cpp

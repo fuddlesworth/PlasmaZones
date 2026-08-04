@@ -50,7 +50,8 @@ Window {
     // Sibling tiers below: the modalSlots container (z=2, hosting the
     // snap-assist / layout-picker / cheatsheet slots in
     // PassiveOverlayModalSlots.qml), zoneSelectorSlot (z=1),
-    // scrollTabsSlot (z=0.5), mainOverlaySlot (z=0).
+    // scrollDropIndicatorSlot (z=0.6), scrollTabsSlot (z=0.5),
+    // mainOverlaySlot (z=0).
     // The osdSlot's z is
     // dynamic (3 normally, 1.5 while a modal slot is visible — see the
     // binding on osdSlot). Each is a sibling Item with its own
@@ -95,6 +96,12 @@ Window {
     /// rects, which is what the daemon's per-screen input region gives it.
     /// Content updates are plain property writes (no re-instantiation).
     readonly property alias scrollTabsSlotItem: scrollTabsSlot
+    /// Scroll drag drop-indicator slot Item — outlines the slot a dragged
+    /// window would land in while a scrolling drag re-insert is armed.
+    /// Display-only: it declares no pointer handlers and contributes no input
+    /// region, because it is drawn underneath a cursor that is mid-drag.
+    /// Content updates are plain property writes (no re-instantiation).
+    readonly property alias scrollDropIndicatorSlotItem: scrollDropIndicatorSlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
     /// the slot-hide animation start (not Surface::hide() — only the
@@ -466,6 +473,45 @@ Window {
                 activeColor: scrollTabsSlot.activeColor
                 inactiveColor: scrollTabsSlot.inactiveColor
                 urgentColor: scrollTabsSlot.urgentColor
+            }
+        }
+    }
+
+    Item {
+        id: scrollDropIndicatorSlot
+
+        // Drop-target rect in shell-window coordinates — C++ converts from
+        // absolute compositor space before writing. An empty rect never
+        // arrives here: the daemon hides the slot instead.
+        property rect indicatorRect: Qt.rect(0, 0, 0, 0)
+        // Content lifecycle gate, toggled by C++ on show/hide. Like the tab
+        // strips (and unlike the OSD-style slots) the content is NOT
+        // re-instantiated per update — the rect changes as the drag moves and
+        // flows through the `indicatorRect` binding.
+        property bool loaded: false
+
+        anchors.fill: parent
+        // Indicator tier: directly above the tab strips, so a drop target that
+        // lands on a tabbed column is not hidden by that column's own
+        // indicator. Still below the zone selector, the OSDs and the modals.
+        z: 0.6
+        opacity: 0
+        visible: false
+
+        Loader {
+            id: scrollDropIndicatorLoader
+
+            anchors.fill: parent
+            active: scrollDropIndicatorSlot.loaded
+            // SYNCHRONOUS by contract — see snapAssistLoader.
+            sourceComponent: scrollDropIndicatorContentComp
+        }
+
+        Component {
+            id: scrollDropIndicatorContentComp
+
+            ScrollDropIndicatorContent {
+                indicatorRect: scrollDropIndicatorSlot.indicatorRect
             }
         }
     }

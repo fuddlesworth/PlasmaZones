@@ -397,7 +397,7 @@ public:
     /// hit-test resolves a target. Not clamped into the viewport: a target
     /// on a parked column reports where it truly lands, and the overlay
     /// clips.
-    QRect dragInsertIndicatorRect(const QString& screenId) const;
+    QRect dragInsertIndicatorRect(const QString& screenId) const override;
     /// Edge auto-scroll while a drag-insert preview is live on @p screenId:
     /// a cursor inside the left/right work-area band slides the view one
     /// step toward that edge (driven by the daemon's fixed ~60 Hz drag-

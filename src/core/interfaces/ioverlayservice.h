@@ -86,6 +86,16 @@ public:
     // the labels-texture build path is hash-cached on unchanged inputs.
     virtual void refreshFromIdle() = 0;
 
+    // Drop-target indicator for a scrolling drag re-insert: paints the slot
+    // the dragged window would land in, in absolute px on the named screen.
+    // An invalid or empty rect hides it. Display-only — it takes no input,
+    // because it is drawn underneath a cursor that is mid-drag.
+    //
+    // The drag pipeline pushes this because the scroll engine defers structure
+    // to the drop, so unlike autotile's live restructure nothing in the strip
+    // moves to show where the window is going.
+    virtual void updateScrollDropIndicator(const QString& screenId, const QRect& rect) = 0;
+
     // PhosphorZones::Zone selector methods
     virtual bool isZoneSelectorVisible() const = 0;
     virtual void showZoneSelector(const QString& targetScreenId = QString()) = 0;

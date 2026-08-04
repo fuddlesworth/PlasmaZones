@@ -314,7 +314,43 @@ void WindowDragAdaptor::onDragScrollTick()
         if (target.isValid()) {
             engine->updateDragInsertPreview(target);
         }
+        // Repaint the indicator against the shifted strip. This tick fires
+        // with no cursor motion at all, so the dragMoved push cannot cover it:
+        // a hand parked in the edge band would otherwise scroll the columns
+        // out from under a frozen indicator.
+        pushScrollDropIndicator(screenId, engine->dragInsertIndicatorRect(screenId));
     }
+}
+
+void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const QRect& rect)
+{
+    if (!m_overlayService || screenId.isEmpty()) {
+        return;
+    }
+    // Cross-screen drag: hide the old screen's indicator before lighting the
+    // new one. Without this the departed screen keeps painting a target the
+    // drop can no longer land in, and nothing else would clear it — the
+    // teardown paths only know the screen recorded here.
+    if (!m_dropIndicatorScreenId.isEmpty() && m_dropIndicatorScreenId != screenId) {
+        m_overlayService->updateScrollDropIndicator(m_dropIndicatorScreenId, QRect());
+    }
+    m_overlayService->updateScrollDropIndicator(screenId, rect);
+    // An empty rect means the engine has no paintable target (autotile by
+    // interface default, or a preview with nothing hit-tested yet). The
+    // overlay treats that as a hide, so do not record the screen as lit —
+    // otherwise the next clear would push a redundant second hide.
+    m_dropIndicatorScreenId = rect.isValid() && !rect.isEmpty() ? screenId : QString();
+}
+
+void WindowDragAdaptor::clearScrollDropIndicator()
+{
+    if (m_dropIndicatorScreenId.isEmpty()) {
+        return;
+    }
+    if (m_overlayService) {
+        m_overlayService->updateScrollDropIndicator(m_dropIndicatorScreenId, QRect());
+    }
+    m_dropIndicatorScreenId.clear();
 }
 
 void WindowDragAdaptor::cancelDragInsertIfActive()
@@ -328,6 +364,7 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
         m_scrollEngine->cancelDragInsertPreview();
     }
     stopDragScrollTimer();
+    clearScrollDropIndicator();
 }
 
 void WindowDragAdaptor::cancelDragInsertPreviews()
@@ -355,6 +392,7 @@ void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenI
     }
     if (cancelled) {
         stopDragScrollTimer();
+        clearScrollDropIndicator();
     }
 }
 
@@ -383,10 +421,12 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
                                                        resolveScreenAt(QPointF(cursorX, cursorY)).screenId)) {
         engine->cancelDragInsertPreview();
         stopDragScrollTimer();
+        clearScrollDropIndicator();
         return false;
     }
     engine->commitDragInsertPreview(); // commit, not cancel — the drop finalizes the reorder
     stopDragScrollTimer();
+    clearScrollDropIndicator();
     return true;
 }
 

@@ -712,6 +712,21 @@ private:
     // DRY helper: cancel any active drag-insert preview on either engine.
     void cancelDragInsertIfActive();
 
+    /// Screen the drop indicator was last pushed to, empty when none is
+    /// showing. Tracked rather than re-derived because the clear has to reach
+    /// the screen the indicator is ON, which after a cross-screen drag is no
+    /// longer the screen under the cursor.
+    QString m_dropIndicatorScreenId;
+    /// Push the drop-target indicator for a live preview. Hides the previous
+    /// screen's indicator first when the drag crossed screens, so a cross-
+    /// screen drag cannot strand one behind it.
+    void pushScrollDropIndicator(const QString& screenId, const QRect& rect);
+    /// Preview-end teardown for the drop indicator. Safe to call with none
+    /// showing. Must run on EVERY preview-end path (commit, cancel, screen
+    /// change, drag teardown) — a stranded indicator would sit on the desktop
+    /// with no drag left to dismiss it.
+    void clearScrollDropIndicator();
+
     /// Drop-path settle for a live drag-insert preview (either engine).
     /// Commits it and returns true when the preview belongs to the screen
     /// under (@p cursorX, @p cursorY); otherwise cancels it (or does nothing

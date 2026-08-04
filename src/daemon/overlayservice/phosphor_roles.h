@@ -130,6 +130,17 @@ inline const PhosphorLayer::Role Cheatsheet =
 inline const PhosphorLayer::Role ScrollTabs =
     PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-scroll-tabs"));
 
+/// Scroll drag drop-indicator config-only role. Paints the slot a dragged
+/// window would land in while a scrolling drag re-insert is armed, so the
+/// drop target is visible the way autotile's live restructure makes it
+/// visible. Per-screen like ScrollTabs (a drag can cross screens and the
+/// indicator follows), and like ScrollTabs it registers no per-role config:
+/// the taxonomy defines no domain for it, so both legs use the library
+/// default motion. Display-only and click-through — it must never take
+/// input, since it is painted underneath a cursor that is mid-drag.
+inline const PhosphorLayer::Role ScrollDropIndicator =
+    PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-scroll-drop-indicator"));
+
 /// Shader preview (editor Shader Settings dialog). Floating Overlay
 /// layer, no anchors, no keyboard. Singleton. Positioned programmatically
 /// by the caller.

@@ -451,6 +451,22 @@ public:
     /// indicator rects via the per-screen input region built here.
     void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
 
+    /// Drop-target indicator for a scrolling drag re-insert on @p screenId
+    /// (per screen, NOT a singleton — a drag can cross screens). @p rect is
+    /// the absolute-px slot the dragged window would land in, converted to
+    /// shell coordinates here; an invalid or empty rect hides the indicator.
+    ///
+    /// Purely display: unlike the tab strips this installs NO input region,
+    /// because it is painted underneath a cursor that is mid-drag and taking
+    /// input there would break the drag it exists to describe.
+    ///
+    /// Scrolling needs a drawn indicator where autotile needs none. Autotile's
+    /// feedback IS its live restructure, but the scroll engine detaches once at
+    /// drag start and applies structure at drop, precisely because restructuring
+    /// live slid the strip out from under a stationary cursor. So the target has
+    /// to be painted rather than enacted.
+    void updateScrollDropIndicator(const QString& screenId, const QRect& rect) override;
+
     /// Per-context PAINT overrides for @p screenId's tab indicator, resolved
     /// from the SetTabIndicator* context rules and layered over the config
     /// values when the indicator is drawn. Keyed by the overlay SLOT's own
@@ -779,6 +795,22 @@ private:
     /// everywhere else. Rebuilt from each strip update; cleared with the
     /// screen's strips.
     QHash<QString, QRegion> m_scrollTabInputRegions;
+
+    /// Per-screen generation guard for the drop indicator's animated hide,
+    /// same contract as m_scrollTabsHideGuard: a hide completion that lost the
+    /// race to a newer rect must no-op rather than tear down a repopulated
+    /// slot. A drag pushes rects at pointer rate, so this race is the common
+    /// case here, not the exotic one.
+    QHash<QString, quint64> m_scrollDropIndicatorHideGuard;
+    /// Screens with a drop-indicator hide in flight; the show path treats
+    /// these as not visible so a mid-hide repopulation re-runs beginShow.
+    QSet<QString> m_scrollDropIndicatorHidePending;
+    /// Last rect pushed per screen, in ABSOLUTE px (the caller's space, not
+    /// the shifted shell-local one). Change-gate only: a drag re-pushes the
+    /// same target on every tick, and without this each tick would re-write
+    /// the QML properties and re-run a surface sync. Screens with no live
+    /// indicator carry no entry.
+    QHash<QString, QRect> m_lastScrollDropIndicatorRect;
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;

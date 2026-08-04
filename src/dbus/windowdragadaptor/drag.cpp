@@ -635,6 +635,12 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             if (previewEngine
                 && (previewEngine != insertEngine || previewEngine->dragInsertPreviewScreenId() != insertScreenId)) {
                 previewEngine->cancelDragInsertPreview();
+                // The departed screen's indicator goes with the preview it
+                // described. pushScrollDropIndicator would clear it anyway on
+                // the first tick that resolves a rect for the new screen, but
+                // a begin that fails, or a new screen with no valid target
+                // yet, would leave it lit in the meantime.
+                clearScrollDropIndicator();
             }
             if (!insertEngine->hasDragInsertPreview()) {
                 const bool began = insertEngine->beginDragInsertPreview(windowId, insertScreenId);
@@ -658,6 +664,15 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 if (target.isValid()) {
                     insertEngine->updateDragInsertPreview(target);
                 }
+                // Paint the drop target. Pushed AFTER the update above so the
+                // rect reflects this tick's target, and pushed on every tick
+                // rather than only on a target change: the strip can move
+                // under a stationary cursor via edge auto-scroll, which shifts
+                // the rect without changing the target. The overlay
+                // change-gates on the rect itself, so a repeat costs a
+                // compare. Empty for autotile by interface default, which is
+                // correct — its live restructure already shows the target.
+                pushScrollDropIndicator(insertScreenId, insertEngine->dragInsertIndicatorRect(insertScreenId));
                 // The early return below starves the activation and
                 // zone-span rising-edge latches for as long as the preview
                 // lives; keep them fed here so a release→press performed
@@ -687,6 +702,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                                   << "engineResolved=" << (insertEngine != nullptr) << "held=" << insertHeld
                                   << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
             previewEngine->cancelDragInsertPreview();
+            clearScrollDropIndicator();
         }
     }
 

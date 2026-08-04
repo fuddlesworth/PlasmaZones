@@ -179,6 +179,8 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
              "cheatsheet on this screen");
     wireSlot(PhosphorSlotKeys::ScrollTabs(), "scrollTabsSlotItem", PhosphorRoles::ScrollTabs,
              "scroll tab strips on this screen");
+    wireSlot(PhosphorSlotKeys::ScrollDropIndicator(), "scrollDropIndicatorSlotItem", PhosphorRoles::ScrollDropIndicator,
+             "scroll drag drop indicator on this screen");
 
     // Wire QML signals → animator-driven slot hide / forward.
     // String-based SIGNAL/SLOT macros are required here because the source
@@ -351,7 +353,7 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // for the shell to actually unmap when no other slot is up.
     const bool anyVisible = isVisible(s.osdSlot()) || isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot())
         || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot()) || isVisible(s.cheatsheetSlot())
-        || isVisible(s.scrollTabsSlot());
+        || isVisible(s.scrollTabsSlot()) || isVisible(s.scrollDropIndicatorSlot());
     const bool anyInputGrabbing =
         isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot()) || isVisible(s.cheatsheetSlot());
 

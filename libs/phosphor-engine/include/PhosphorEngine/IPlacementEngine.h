@@ -428,6 +428,26 @@ public:
         Q_UNUSED(target)
     }
 
+    /// The rect the dragged window would occupy if the live preview were
+    /// dropped now, in absolute px on @p screenId, for a caller that wants to
+    /// PAINT the drop target. Empty when no preview is live, no target has
+    /// been hit-tested yet, or the preview belongs to another screen.
+    ///
+    /// Default empty, and that is the right answer for an engine that
+    /// restructures live: autotile's feedback IS its restructure, so painting
+    /// a second indicator over it would double-report the same thing. Only an
+    /// engine that defers structure to the drop (the scroll strip, per the
+    /// DETACH-ONCE contract above) has a target that is otherwise invisible.
+    ///
+    /// NOT clamped to the viewport: a target past the visible edge genuinely
+    /// lies off screen, and clamping would report a plausible-looking rect for
+    /// the wrong slot.
+    virtual QRect dragInsertIndicatorRect(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return {};
+    }
+
     /// Edge auto-scroll during a drag-insert preview: an engine whose layout
     /// is a scrollable viewport (the scroll strip) shifts its view one step
     /// when the cursor sits inside its edge band, so drops can land past the
