@@ -4,11 +4,19 @@
 #pragma once
 
 // Shared fixture helpers for the whole PhosphorScrollEngine test suite — the
-// two strip-model files and the three engine files. One definition of the
-// 1200x800 geometry and the 10px gap, because a work area that drifts between
-// files quietly changes what every hardcoded pixel expectation means, and one
-// definition of the headless engine fixture, because its two geometry
-// providers are the seam the parking tests need to tell apart.
+// two strip-model files and the five engine files. One definition of the
+// 1200x800 geometry, because a work area that drifts between files quietly
+// changes what every hardcoded pixel expectation means, and one definition
+// of the headless engine fixture, because its two geometry providers are
+// the seam the parking tests need to tell apart.
+//
+// TWO params helpers, deliberately: defaultParams() (10px gap) is for the
+// PURE-STRIP fixtures; engineParams() (0 gap) mirrors what makeProviderEngine
+// actually computes — its engine has no IScrollSettings and no gap provider,
+// so layoutParamsForScreen leaves every gap at 0. An engine test that mixes
+// direct strip calls with engine-driven relayouts must use engineParams(),
+// or the same strip is laid out against two different gap values in one
+// test body.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollStrip.h>
@@ -37,6 +45,16 @@ inline PhosphorScrollEngine::ScrollLayoutParams defaultParams()
     PhosphorScrollEngine::ScrollLayoutParams p;
     p.workArea = defaultScreenRect();
     p.gap = 10;
+    return p;
+}
+
+/// Params matching what makeProviderEngine's engine computes internally
+/// (no settings, no gap provider → every gap 0). See the header note.
+inline PhosphorScrollEngine::ScrollLayoutParams engineParams()
+{
+    PhosphorScrollEngine::ScrollLayoutParams p;
+    p.workArea = defaultScreenRect();
+    p.gap = 0;
     return p;
 }
 

@@ -151,7 +151,10 @@ void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
         m_snapHandler->callCancelSnap();
     }
     // All other keys are silently consumed by the grab. Modifier state is
-    // unaffected because mouseChanged reads xkb state directly.
+    // unaffected because KWin's ModifiersChangedSpy runs BEFORE input
+    // filters (processSpies precedes processFilters in processKey), so a
+    // grabbed drag still receives keyboardModifiersChanged-driven
+    // mouseChanged events with live xkb state.
 }
 
 } // namespace PlasmaZones

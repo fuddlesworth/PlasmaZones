@@ -12,9 +12,9 @@
 #include "settings/pages/snappingeffectscontroller.h"
 #include "settings/pages/snappingzoneselectorcontroller.h"
 #include "settings/pages/tilingalgorithmcontroller.h"
-#include "settings/pages/windowappearancecontroller.h"
 #include "settings/pages/scrollingbehaviorcontroller.h"
 #include "settings/pages/tilingbehaviorcontroller.h"
+#include "settings/pages/windowappearancecontroller.h"
 #include "settings/utils/virtualscreenutils.h"
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
@@ -537,7 +537,7 @@ SettingsController::SettingsController(QObject* parent)
     m_editorPage = new EditorPageController(m_settings, this);
     connect(m_editorPage, &EditorPageController::changed, this, &SettingsController::onSettingsPropertyChanged);
 
-    // Snapping→Behavior + Tiling→Behavior page sub-controllers. Their
+    // Snapping→Behavior + Tiling→Behavior + Scrolling→Window page sub-controllers. Their
     // underlying settings ARE Q_PROPERTY on Settings, so the meta-object
     // loop above already wires them to onSettingsPropertyChanged(); the
     // sub-controllers only provide the QML-facing forwarders + storage/QML
@@ -1075,6 +1075,21 @@ SettingsController::SettingsController(QObject* parent)
 SnappingZonesController* SettingsController::snappingZonesPage() const
 {
     return m_snappingZonesPage;
+}
+
+SnappingBehaviorController* SettingsController::snappingBehaviorPage() const
+{
+    return m_snappingBehaviorPage;
+}
+
+TilingBehaviorController* SettingsController::tilingBehaviorPage() const
+{
+    return m_tilingBehaviorPage;
+}
+
+ScrollingBehaviorController* SettingsController::scrollingBehaviorPage() const
+{
+    return m_scrollingBehaviorPage;
 }
 
 WindowAppearanceController* SettingsController::windowAppearancePage() const

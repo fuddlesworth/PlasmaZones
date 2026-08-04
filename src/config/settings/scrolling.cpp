@@ -45,24 +45,6 @@ static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
 P_STORE_GET(bool, scrollingEnabled, scrollingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabledChanged)
 
-// ── Scrolling drag-insert triggers (PhosphorConfig::Store-backed) ───────────
-// Hand-written like the autotile pair in triggers.cpp: trigger lists are
-// QVariantList payloads, outside the P_STORE macro vocabulary.
-
-QVariantList Settings::scrollingDragInsertTriggers() const
-{
-    return m_store->readVariant(ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::triggersKey()).toList();
-}
-void Settings::setScrollingDragInsertTriggers(const QVariantList& triggers)
-{
-    writeTriggerList(ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::triggersKey(), triggers,
-                     &Settings::scrollingDragInsertTriggersChanged);
-}
-
-P_STORE_GET(bool, scrollingDragInsertToggle, scrollingBehaviorGroup, toggleActivationKey, bool)
-P_STORE_SET_BOOL(setScrollingDragInsertToggle, scrollingBehaviorGroup, toggleActivationKey,
-                 scrollingDragInsertToggleChanged)
-
 P_STORE_GET(int, scrollingCenterFocusedColumn, scrollingGroup, centerFocusedColumnKey, int)
 P_STORE_SET_INT(setScrollingCenterFocusedColumn, scrollingGroup, centerFocusedColumnKey,
                 scrollingCenterFocusedColumnChanged)
@@ -184,7 +166,7 @@ void Settings::normalizeScrollingColumnWidthValue()
 }
 
 // Hand-written value setter: kind-aware clamp (Proportion values live in
-// [ValueMin, ProportionMax]; Fixed in pixels with a FixedMin floor, rounded
+// [ProportionMin, ProportionMax]; Fixed in pixels with a FixedMin floor, rounded
 // to whole pixels by the engine on load) — the schema clamp alone spans
 // both ranges. Under ClientDecides and Preset the clamp is an identity, so a
 // D-Bus write while one of those kinds is in force cannot collapse the pixel
@@ -358,6 +340,24 @@ P_STORE_SET_STRING(setScrollingTabIndicatorUrgentColor, scrollingTabIndicatorGro
 // validators own enum validation (validIntOr snaps a bad sticky value back
 // to the default on read, like every other stored enum) and range clamping
 // (clampInt on the step percents).
+
+// ── Scrolling drag-insert triggers (PhosphorConfig::Store-backed) ───────────
+// Hand-written like the autotile pair in triggers.cpp: trigger lists are
+// QVariantList payloads, outside the P_STORE macro vocabulary.
+
+QVariantList Settings::scrollingDragInsertTriggers() const
+{
+    return m_store->readVariant(ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::triggersKey()).toList();
+}
+void Settings::setScrollingDragInsertTriggers(const QVariantList& triggers)
+{
+    writeTriggerList(ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::triggersKey(), triggers,
+                     &Settings::scrollingDragInsertTriggersChanged);
+}
+
+P_STORE_GET(bool, scrollingDragInsertToggle, scrollingBehaviorGroup, toggleActivationKey, bool)
+P_STORE_SET_BOOL(setScrollingDragInsertToggle, scrollingBehaviorGroup, toggleActivationKey,
+                 scrollingDragInsertToggleChanged)
 
 P_STORE_GET(int, scrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, int)
 P_STORE_SET_INT(setScrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, scrollingInsertPositionChanged)

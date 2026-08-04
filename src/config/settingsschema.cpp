@@ -120,21 +120,21 @@ QVariant canonicalCommaList(const QVariant& v)
     return QVariant(parts.join(QLatin1Char(',')));
 }
 
-/// Canonicalize a trigger list: cap size, coerce each entry to a
-/// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
-/// every write so the flush loop enforces the cap even when the setter
-/// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
-///
-/// Both this file's cap and Settings::MaxTriggersPerAction resolve to
+/// Both this cap and Settings::MaxTriggersPerAction resolve to
 /// ConfigDefaults::maxTriggersPerAction() — single source of truth, no
 /// drift possible because neither TU carries its own literal.
 constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
 
 } // namespace
 
-// Namespace scope (declared in settingsschema.h): shared with
-// settingsschema_scrolling.cpp, whose Scrolling.Behavior group carries the
-// scrolling drag-insert trigger list.
+/// Canonicalize a trigger list: cap size, coerce each entry to a
+/// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
+/// every write so the flush loop enforces the cap even when the setter
+/// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
+///
+/// Namespace scope (declared in settingsschema.h): shared with
+/// settingsschema_scrolling.cpp, whose Scrolling.Behavior group carries the
+/// scrolling drag-insert trigger list.
 QVariant canonicalTriggerList(const QVariant& v)
 {
     const QVariantList raw = v.toList();

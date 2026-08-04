@@ -307,10 +307,26 @@ public:
         return !m_draggedWindowId.isEmpty();
     }
 
+    /**
+     * Cancel any live drag-insert preview on either engine and stop the
+     * edge-scroll timer. The daemon's context-change handlers route through
+     * these instead of hand-inlining the two-engine sweep (a third engine,
+     * or the timer stop, would otherwise need three call sites updated).
+     * The ForScreen form cancels only previews whose target or prior screen
+     * shares @p screenId's physical output — a desktop switch or output
+     * removal on monitor A must not snap monitor B's live preview back.
+     */
+    void cancelDragInsertPreviews();
+    void cancelDragInsertPreviewsForScreen(const QString& screenId);
+
 Q_SIGNALS:
     /**
      * Emitted when the zone geometry under the cursor changes during drag.
-     * KWin effect subscribes and applies the geometry immediately for snap-on-hover behavior.
+     * NO in-tree subscriber exists today: the effect and DaemonClient
+     * subscribe only to restoreSizeDuringDragChanged. The signal stays on
+     * the published D-Bus surface (org.plasmazones.WindowDrag.xml) for a
+     * snap-on-hover consumer; removing it from the wire contract is a
+     * maintainer decision, not a doc fix.
      */
     void zoneGeometryDuringDragChanged(const QString& windowId, int x, int y, int width, int height);
 
@@ -424,6 +440,13 @@ public:
      *        (desktop, activity, live-mode) tuple used for the
      *        context-disabled check. nullptr disables the disable gate
      *        (matches the historical `settings == nullptr` fallback).
+     * @param reorderMode The caller's per-screen reorder verdict
+     *        (effectiveDragReorderModeFor: autotile = the DragBehavior rule
+     *        cascade, scrolling = the bare AlwaysActive sentinel in its
+     *        trigger list). Resolved by the caller because the static can't
+     *        reach the registry or the per-drag trigger caches. True on an
+     *        engine-owned screen clears immediateFloatOnStart — the reorder
+     *        pipeline, not a float, owns the drop.
      * @param activeLayoutSuppressed Whether the screen's context has NO active
      *        zone layout because the default assignment is suppressed
      *        (LayoutRegistry::isContextActiveLayoutSuppressed — resolved by the
@@ -593,21 +616,32 @@ private:
     // tick by the engine owning the cursor screen).
     bool m_dragInsertToggled = false; // Current toggle state for drag-insert
     bool m_prevDragInsertHeld = false; // Previous frame's drag-insert trigger state
+    // Journal-diagnostic dedup for the "drag-insert tick:" line: first tick
+    // plus every raw-held transition logs once (a first-tick-only latch was
+    // structurally blind to a mid-drag press, which once sent a whole
+    // debugging session after the wrong fix).
+    bool m_lastLoggedRawInsertHeld = false;
     bool m_zoneSpanToggled = false; // Current toggle state for zone span (toggle mode)
     bool m_prevZoneSpanTriggerHeld = false; // Previous frame's zone span trigger state for edge detection
-    // Drag-to-reorder mode is active for the current autotile screen: cached so
-    // per-tick dragMoved work (60+ Hz) doesn't have to re-query the settings +
-    // engine on every cursor update. Seeded at beginDrag from the start screen
-    // (requires (a) autotile-bypass path, (b) AutotileDragBehavior::Reorder,
-    // (c) window tiled at drag-start) and RE-LATCHED to the cursor's current screen
-    // on each policy flip in updateDragCursor under the SAME conditions (destination
-    // bypassReason == EngineOwnedScreen AND isWindowTiled), so a mid-drag crossing
-    // between screens with divergent per-context SetDragBehavior rules applies the
-    // destination screen's mode without ever adopting a floating window into the
-    // stack or forcing a preview on a context-disabled screen. Cleared by endDrag,
-    // clearPendingSnapDragState, cancelSnap, handleWindowClosed, and the shared
-    // resetDragState teardown.
+    // Drag-to-reorder mode is active for the cursor's current ENGINE screen
+    // (autotile or scrolling): cached so per-tick dragMoved work (60+ Hz)
+    // doesn't re-query settings + engine per cursor update. Seeded at
+    // beginDrag from the start screen (requires (a) engine-bypass path,
+    // (b) the engine's reorder verdict — autotile's DragBehavior rule
+    // cascade or scrolling's AlwaysActive sentinel, via
+    // effectiveDragReorderModeFor, (c) window tiled at drag-start) and
+    // RE-LATCHED to the cursor's screen on each policy flip in
+    // updateDragCursor under the same conditions, with the tiled test
+    // widened to "tiled OR a preview is live for this drag" (detach-once
+    // un-tiles the dragged window while its preview lives). Cleared by
+    // endDrag, clearPendingSnapDragState, cancelSnap, handleWindowClosed,
+    // and the shared resetDragState teardown.
     bool m_dragReorderActive = false;
+    // beginDrag's reorder fallback (preview begin refused → float-on-start
+    // restored) is a PER-DRAG decision: while set, the policy-flip re-latch
+    // must not re-arm reorder for this drag, or the fallback survives
+    // exactly one tick. Cleared at beginDrag and in resetDragState.
+    bool m_dragReorderAbandoned = false;
     bool m_overlayShown = false;
     // Overlay was blanked mid-drag via IOverlayService::setIdleForDragPause()
     // (trigger released, but the drag is still live). Windows stay alive;
@@ -671,6 +705,9 @@ private:
     QPoint m_lastDragCursorPos;
     void ensureDragScrollTimerRunning();
     void onDragScrollTick();
+    /// Preview-end teardown: stop the edge-scroll timer and forget the
+    /// cursor so a stale 16 ms tick cannot nudge the NEXT drag's strip.
+    void stopDragScrollTimer();
 
     // DRY helper: cancel any active drag-insert preview on either engine.
     void cancelDragInsertIfActive();

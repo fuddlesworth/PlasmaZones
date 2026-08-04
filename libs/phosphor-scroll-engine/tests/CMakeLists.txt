@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 # PhosphorScrollEngine unit tests. Headless throughout: two files exercise the
-# pure strip model, three drive the engine through null daemon dependencies and
+# pure strip model, five drive the engine through null daemon dependencies and
 # the geometry-provider seam. None needs a QPA platform, so the strip tests run
 # APPLESS and the engine tests GUILESS (they need an event dispatcher for the
 # coalesced retile and the prunes' deleteLater).

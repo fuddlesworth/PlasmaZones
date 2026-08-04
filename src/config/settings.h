@@ -338,6 +338,10 @@ public:
                    setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
     Q_PROPERTY(bool autotileDragInsertToggle READ autotileDragInsertToggle WRITE setAutotileDragInsertToggle NOTIFY
                    autotileDragInsertToggleChanged)
+    // The scrolling drag-insert pair sits HERE, beside its autotile twin,
+    // rather than under the Scrolling banner below — the two features are
+    // maintained in lockstep (same rationale as their ConfigDefaults
+    // placement note).
     Q_PROPERTY(QVariantList scrollingDragInsertTriggers READ scrollingDragInsertTriggers WRITE
                    setScrollingDragInsertTriggers NOTIFY scrollingDragInsertTriggersChanged)
     Q_PROPERTY(bool scrollingDragInsertToggle READ scrollingDragInsertToggle WRITE setScrollingDragInsertToggle NOTIFY
@@ -1115,6 +1119,7 @@ public:
     bool autotileDragInsertToggle() const override;
     void setAutotileDragInsertToggle(bool enable) override;
 
+    // Beside the autotile twin on purpose — see the Q_PROPERTY note above.
     QVariantList scrollingDragInsertTriggers() const override;
     void setScrollingDragInsertTriggers(const QVariantList& triggers) override;
     bool scrollingDragInsertToggle() const override;
@@ -1802,8 +1807,8 @@ private:
     /// passed into @ref writeTriggerList.
     using TriggerListSignalFn = void (Settings::*)();
 
-    /// Shared trigger-list setter used by the three "plain" setters
-    /// (activation, snap-assist, autotile-insert). Caps at
+    /// Shared trigger-list setter used by the four "plain" setters
+    /// (activation, snap-assist, autotile-insert, scrolling-insert). Caps at
     /// @c MaxTriggersPerAction, round-trips through the schema's validator,
     /// and only emits @p specificSignal + @c settingsChanged on a real change.
     /// @c setZoneSpanTriggers does its own dance because it also synchronises

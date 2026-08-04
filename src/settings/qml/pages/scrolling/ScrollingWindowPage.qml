@@ -8,8 +8,10 @@ import org.kde.kirigami as Kirigami
  * @brief Scrolling → Window: how the strip treats windows (placement,
  * minimum sizes, restore, sticky handling, adjust steps) plus focus and the
  * viewport rows that follow it. The peer of the Tiling and Snapping → Window
- * pages; one of the two advanced scrolling leaves (Columns / Window). Both
- * cards are the shared components the simple page also hosts.
+ * pages; one of the three advanced scrolling leaves (Columns / Tabs /
+ * Window). The Window Handling and Focus cards are the shared components
+ * the simple page also hosts; the Triggers card is advanced-only, matching
+ * the tiling twin.
  */
 SettingsFlickable {
     contentHeight: content.implicitHeight

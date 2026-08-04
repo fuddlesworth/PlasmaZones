@@ -554,27 +554,27 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // cursor's screen (autotile or scrolling) selects which trigger list and
     // toggle setting apply this tick; the rising-edge latch is shared (the
     // cursor is on one screen at a time).
+    // One cursor-screen resolve per tick, shared by the drag-insert block
+    // and the overlay un-idle gate below (each used to re-resolve).
+    const QString cursorScreenId = effectiveScreenIdAt(cursorX, cursorY);
     if (m_settings && (m_autotileEngine || m_scrollEngine)) {
-        const QString insertScreenId = effectiveScreenIdAt(cursorX, cursorY);
+        const QString& insertScreenId = cursorScreenId;
         PhosphorEngine::IPlacementEngine* insertEngine = dragInsertEngineFor(insertScreenId);
+        // Engine set membership is mode, not health: a context-DISABLED
+        // engine screen stays in its engine's active set, and the policy
+        // tier deliberately ranks ContextDisabled above EngineOwnedScreen.
+        // Without this gate the preview block was the one consumer that
+        // reordered a disabled screen's stack anyway.
+        if (insertEngine && m_contextResolver
+            && m_contextResolver->isDisabled(m_contextResolver->handleFor(insertScreenId))) {
+            insertEngine = nullptr;
+        }
         const bool onScrollingScreen = insertEngine && insertEngine == m_scrollEngine;
 
         const bool rawInsertHeld = insertEngine
             && anyTriggerHeld(onScrollingScreen ? m_cachedScrollingDragInsertTriggers
                                                 : m_cachedAutotileDragInsertTriggers,
                               mods, mouseButtons);
-
-        // One info line per drag, on the first tick: the block's two silent
-        // failure modes (engine unresolved for the cursor screen, trigger
-        // never reading as held) are indistinguishable from "no ticks" in
-        // the journal without it.
-        if (!m_dragInsertTickLogged) {
-            m_dragInsertTickLogged = true;
-            qCInfo(lcDbusWindow) << "drag-insert tick:" << windowId << "screen=" << insertScreenId
-                                 << "engine=" << (insertEngine ? insertEngine->engineId() : QStringLiteral("none"))
-                                 << "rawHeld=" << rawInsertHeld << "mods=" << static_cast<int>(mods)
-                                 << "buttons=" << mouseButtons;
-        }
 
         // Toggle mode: detect rising edge (release→press) to flip insert-active state
         bool insertHeld;
@@ -584,10 +584,19 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             if (rawInsertHeld && !m_prevDragInsertHeld) {
                 m_dragInsertToggled = !m_dragInsertToggled;
             }
-            m_prevDragInsertHeld = rawInsertHeld;
             insertHeld = m_dragInsertToggled;
         } else {
             insertHeld = rawInsertHeld;
+        }
+        // The shared rising-edge latch follows the raw state on EVERY
+        // engine-screen tick, not only in toggle mode: the toggle SETTING is
+        // per engine, so a hold-mode autotile stretch that never wrote prev
+        // used to hand a stale value to a toggle-mode scrolling screen at
+        // the crossing (missed rising edge, or a phantom one on the way
+        // back). Off any engine screen the latch deliberately holds, so
+        // returning with the key still down is not a fresh press.
+        if (insertEngine) {
+            m_prevDragInsertHeld = rawInsertHeld;
         }
 
         // Reorder-mode override: drag-insert as the default behavior on the
@@ -600,6 +609,21 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         // not the force-held override.
         if (m_dragReorderActive && insertEngine) {
             insertHeld = true;
+        }
+
+        // Journal diagnostic, AFTER the override so it reports what the
+        // block actually acts on. One line on the first tick (the block's
+        // silent failure modes — engine unresolved, trigger never held —
+        // are indistinguishable from "no ticks" without it), then one per
+        // raw-held transition, so a mid-drag press/release is visible
+        // instead of vanishing behind a first-tick-only latch.
+        if (!m_dragInsertTickLogged || rawInsertHeld != m_lastLoggedRawInsertHeld) {
+            m_dragInsertTickLogged = true;
+            m_lastLoggedRawInsertHeld = rawInsertHeld;
+            qCInfo(lcDbusWindow) << "drag-insert tick:" << windowId << "screen=" << insertScreenId
+                                 << "engine=" << (insertEngine ? insertEngine->engineId() : QStringLiteral("none"))
+                                 << "rawHeld=" << rawInsertHeld << "effectiveHeld=" << insertHeld
+                                 << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
         }
 
         PhosphorEngine::IPlacementEngine* previewEngine = dragInsertPreviewEngine();
@@ -622,13 +646,36 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // this motion tick only records the cursor and keeps the
                 // timer alive, so a hand parked in the edge band scrolls
                 // continuously instead of stalling with the motion stream.
+                // Scroll engine only — nudgeDragScroll is a base no-op for
+                // autotile, and a 60 Hz timer spinning on a guaranteed false
+                // for the whole preview is pure waste.
                 m_lastDragCursorPos = QPoint(cursorX, cursorY);
-                ensureDragScrollTimerRunning();
+                if (onScrollingScreen) {
+                    ensureDragScrollTimerRunning();
+                }
                 const PhosphorEngine::IPlacementEngine::DragInsertTarget target =
                     insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
                 if (target.isValid()) {
                     insertEngine->updateDragInsertPreview(target);
                 }
+                // The early return below starves the activation and
+                // zone-span rising-edge latches for as long as the preview
+                // lives; keep them fed here so a release→press performed
+                // over the strip is not read as stale state at the next
+                // snap-screen crossing (the resolver is pure, the persisted
+                // latches are its only side channel).
+                const ActivationDecision actKeepAlive =
+                    resolveActivationActive(triggerHeld, m_settings->toggleActivation(), alwaysActiveOnDrag,
+                                            m_prevTriggerHeld, m_activationToggled);
+                m_prevTriggerHeld = actKeepAlive.nextPrevTriggerHeld;
+                m_activationToggled = actKeepAlive.nextActivationToggled;
+                const bool rawSpanKeepAlive =
+                    anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
+                const ActivationDecision spanKeepAlive =
+                    resolveActivationActive(rawSpanKeepAlive, m_settings->zoneSpanToggleMode(),
+                                            /*alwaysActiveOnDrag=*/false, m_prevZoneSpanTriggerHeld, m_zoneSpanToggled);
+                m_prevZoneSpanTriggerHeld = spanKeepAlive.nextPrevTriggerHeld;
+                m_zoneSpanToggled = spanKeepAlive.nextActivationToggled;
                 return;
             }
         } else if (previewEngine) {
@@ -636,9 +683,9 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             // mid-drag — cancel so neighbours snap back to their original
             // order. Logged: a cancel on the LAST tick before release is
             // otherwise indistinguishable from "never began" at drop time.
-            qCInfo(lcDbusWindow) << "drag-insert cancel:" << windowId << "screen=" << insertScreenId
-                                 << "engineResolved=" << (insertEngine != nullptr) << "held=" << insertHeld
-                                 << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
+            qCDebug(lcDbusWindow) << "drag-insert cancel:" << windowId << "screen=" << insertScreenId
+                                  << "engineResolved=" << (insertEngine != nullptr) << "held=" << insertHeld
+                                  << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
             previewEngine->cancelDragInsertPreview();
         }
     }
@@ -706,8 +753,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // sits on the suppressed one (the #724 wrong-screen highlight, recreated).
     // The suppression read is memoized per drag, so this costs a string
     // compare on the hot path.
-    if (activationActive && m_overlayIdled && m_overlayService
-        && !isActiveLayoutSuppressedForScreen(effectiveScreenIdAt(cursorX, cursorY))) {
+    if (activationActive && m_overlayIdled && m_overlayService && !isActiveLayoutSuppressedForScreen(cursorScreenId)) {
         m_overlayService->refreshFromIdle();
         m_overlayIdled = false;
     }
@@ -715,11 +761,14 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // Check all configured zone span triggers (multi-bind support). In toggle
     // mode the raw held-state is resolved through the same rising-edge latch as
     // activation (#563): tap the span modifier once to start spanning, tap
-    // again to stop, instead of holding it. alwaysActiveOnDrag is always false
-    // here — zone span has no always-active sentinel. The latch is evaluated
-    // every tick (not just when the overlay is active) so a release→press while
-    // the overlay is off is still seen on the next active tick.
-    const bool rawZoneSpanHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons);
+    // again to stop, instead of holding it. The sentinel is EXCLUDED like the
+    // activation read above — the legacy scalar ZoneSpanModifier key admits
+    // alwaysActive (schema value 8) and its Triggers synthesis carries it
+    // into this list, where an unconditional match would latch paint-to-span
+    // for the whole drag. The latch is evaluated every tick (not just when
+    // the overlay is active) so a release→press while the overlay is off is
+    // still seen on the next active tick.
+    const bool rawZoneSpanHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
     const ActivationDecision zoneSpanDecision =
         resolveActivationActive(rawZoneSpanHeld, m_settings->zoneSpanToggleMode(), /*alwaysActiveOnDrag=*/false,
                                 m_prevZoneSpanTriggerHeld, m_zoneSpanToggled);
@@ -796,14 +845,19 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             Q_EMIT zoneGeometryDuringDragChanged(windowId, geom.x(), geom.y(), geom.width(), geom.height());
         }
     } else {
-        // Cursor left all zones: restore pre-snap size immediately if window was snapped
+        // Cursor left all zones: restore pre-snap size immediately if window was snapped.
+        // The record is read for the CURSOR's screen, the same basis the
+        // drop-time commit uses (drop.cpp reads validatedUnmanagedGeometry
+        // for the release screen) — getValidatedPreTileGeometry resolves the
+        // window's TRACKED screen instead, so a cross-monitor drag-out
+        // previewed one monitor's remembered size and committed the other's.
         if (m_wasSnapped && !m_restoreSizeEmittedDuringDrag && m_windowTracking
             && m_windowTracking->shouldRestoreSizeOnUnsnap(windowId)) {
-            int origX, origY, origW, origH;
-            if (m_windowTracking->getValidatedPreTileGeometry(windowId, origX, origY, origW, origH)) {
+            const auto preSnap = m_windowTracking->service()->validatedUnmanagedGeometry(windowId, cursorScreenId);
+            if (preSnap) {
                 m_restoreSizeEmittedDuringDrag = true;
                 m_lastEmittedZoneGeometry = QRect(); // Reset so re-entering zone will emit
-                Q_EMIT restoreSizeDuringDragChanged(windowId, origW, origH);
+                Q_EMIT restoreSizeDuringDragChanged(windowId, preSnap->width(), preSnap->height());
             }
         }
     }
@@ -811,7 +865,10 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
 
 void WindowDragAdaptor::selectorScrollWheel(int angleDeltaY)
 {
-    if (m_overlayService) {
+    // Session-bus callable: gate on the selector actually being shown by a
+    // live drag, matching the validation its sibling entry points carry —
+    // an idle-time call must not scroll a popup that isn't there.
+    if (m_zoneSelectorShown && m_overlayService) {
         m_overlayService->scrollZoneSelector(angleDeltaY);
     }
 }

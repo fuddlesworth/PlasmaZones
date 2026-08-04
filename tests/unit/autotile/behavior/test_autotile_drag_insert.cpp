@@ -352,6 +352,43 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // The IPlacementEngine STRUCT seam — the only forms production calls.
+    // The int forms above stay engine-local; their clamping contract does
+    // NOT cross this seam, so both differences need their own pins.
+    // =========================================================================
+
+    void testStructSeam_noStateYieldsInvalidTarget()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const PhosphorEngine::IPlacementEngine::DragInsertTarget target =
+            engine.computeDragInsertTargetAtPoint(QStringLiteral("nonexistent"), QPoint(50, 50));
+        QVERIFY(!target.isValid());
+        QCOMPARE(target.secondary, -1);
+        QVERIFY(!target.newSlot);
+    }
+
+    void testStructSeam_invalidTargetIsIgnoredNotClamped()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), screen));
+        PhosphorEngine::IPlacementEngine::DragInsertTarget target;
+        target.primary = 2;
+        engine.updateDragInsertPreview(target);
+        const QStringList afterValid = engine.tilingStateForScreen(screen)->tiledWindows();
+        QCOMPARE(afterValid[2], QStringLiteral("A"));
+        // An invalid struct target is a silent no-op — the int form's
+        // clamp-to-0 must NOT happen here, or a stateless-screen wander
+        // mid-drag would teleport the preview to the front.
+        engine.updateDragInsertPreview(PhosphorEngine::IPlacementEngine::DragInsertTarget{});
+        QCOMPARE(engine.tilingStateForScreen(screen)->tiledWindows(), afterValid);
+        engine.cancelDragInsertPreview();
+    }
+
+    // =========================================================================
     // Commit emits windowFloatingStateSynced for fresh adoption
     // =========================================================================
 

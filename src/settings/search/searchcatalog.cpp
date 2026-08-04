@@ -162,7 +162,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("scrolling-window"),
                             {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("window"),
                              PhosphorI18n::tr("strip"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("center"),
-                             PhosphorI18n::tr("wheel"),
+                             PhosphorI18n::tr("wheel"), PhosphorI18n::tr("drag"), PhosphorI18n::tr("insert"),
+                             PhosphorI18n::tr("trigger"), PhosphorI18n::tr("modifier"),
                              // Proper noun (the upstream compositor), deliberately not translated —
                              // the one exception to this section's tr-for-extraction rule.
                              QStringLiteral("niri")});
@@ -668,6 +669,21 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Urgent tab"),
                {PhosphorI18n::tr("tab"), PhosphorI18n::tr("color"), PhosphorI18n::tr("urgent"),
                 PhosphorI18n::tr("attention")});
+
+    // Triggers card first, matching visual order on the page. Titles must
+    // match the QML i18n() strings verbatim (ScrollingDragInsertCard.qml) or
+    // the deep link lands on the page without scrolling to the row. No
+    // advancedOnly flag: the whole scrolling-window page is AdvancedOnly,
+    // same as the unflagged tiling-behavior twins.
+    addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingTriggers"),
+               PhosphorI18n::tr("Triggers"));
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingAlwaysReinsertOnDrag"),
+               PhosphorI18n::tr("Always re-insert on drag"), {PhosphorI18n::tr("strip"), PhosphorI18n::tr("insert")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingHoldToReinsert"),
+               PhosphorI18n::tr("Hold to re-insert into strip"),
+               {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("strip")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingTriggersToggleMode"),
+               PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("tap"), PhosphorI18n::tr("strip preview")});
 
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingWindowHandling"),
                PhosphorI18n::tr("Window Handling"));

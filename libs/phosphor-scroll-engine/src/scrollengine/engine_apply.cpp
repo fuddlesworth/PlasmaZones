@@ -7,6 +7,7 @@
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "scrollenginelogging.h"
@@ -29,6 +30,12 @@ namespace {
 // spreads by distance — the margin only keeps them clear of edge-snap
 // heuristics.
 constexpr int kParkMargin = 16;
+
+/// Cap on the self-activation echo queue. The bound exists only to keep a
+/// pathological run of effect-side drops from growing the FIFO without
+/// limit; the full reasoning lives with m_pendingSelfActivations' doc in
+/// ScrollEngine.h.
+constexpr int kMaxPendingSelfActivations = 16;
 
 } // namespace
 
@@ -97,6 +104,12 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId) 
     // is the screen's CURRENT-context strip, which is the one applyLayout
     // ever puts on screen; a background context resolving params for the
     // same screen borrows that verdict rather than inventing a second one.
+    // Accepted quirk: while a drag-insert preview holds the dragged window
+    // DETACHED, a two-column strip counts as one here, so the outer gaps
+    // drop for the duration of the hold and snap back at commit/cancel.
+    // That is one settle each way, consistent with the neighbours-close-up
+    // settle detach-once already makes, and gating on the preview would
+    // give the opposite artifact (gaps around a visually single column).
     if (m_smartGaps) {
         const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
         if (state && state->strip().columnCount() == 1) {
@@ -256,12 +269,15 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         qCDebug(lcScrollEngine) << "applyLayout: no valid work area for screen" << screenId;
         return;
     }
-    // Live drag-insert preview on THIS screen: the daemon's drag tick (edge
-    // auto-scroll, take-and-reinsert updates) is steering the view manually,
-    // and both nudgeDragScroll and the preview's holdViewX compensate the
-    // anchor themselves — re-applying the centering policy here would snap
-    // the view back to the focused column every pass and undo them.
-    const bool dragPreviewSteersView = m_dragInsertPreview && m_dragInsertPreview->targetScreenId == screenId;
+    // Live drag-insert preview on THIS screen: the daemon's drag-scroll
+    // timer is steering the view manually through nudgeDragScroll, which
+    // shifts the anchor itself — re-applying the centering policy here
+    // would snap the view back to the focused column every pass and undo
+    // every nudge. screensMatch, not ==, so a virtual-screen id spelling
+    // difference cannot fail the guard open (the nudge path already
+    // compares this way).
+    const bool dragPreviewSteersView = m_dragInsertPreview
+        && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId);
 
     // Re-apply the centering policy before resolving: a work-area change
     // (resolution, panels, outer gaps) or a centering-settings flip leaves
@@ -360,23 +376,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
 
     // A window under a compositor interactive move keeps its geometry with
     // KWin — skip it in the batch (and leave its m_lastAppliedRect memory
-    // alone) while neighbours animate. Two sources, one contract: the live
-    // drag-insert preview's window, and the daemon's whole-drag interactive
-    // mark (which covers trigger-not-held stretches of the same drag, where
-    // the window is still modelled as a strip tile the effect merely floats
-    // visually). commitDragInsertPreview resets the preview BEFORE its
-    // re-apply, and the daemon clears the mark BEFORE the drop settles, so
-    // the finalizing relayout runs unfiltered.
-    const QString dragPreviewSkip = (m_dragInsertPreview && m_dragInsertPreview->targetScreenId == screenId)
-        ? m_dragInsertPreview->windowId
-        : QString();
-
+    // alone) while neighbours animate. The one live source is the daemon's
+    // whole-drag interactive mark, which covers trigger-not-held stretches
+    // of the drag, where the window is still modelled as a strip tile the
+    // effect merely floats visually. (A drag-insert preview's window never
+    // appears in a resolved tile: begin DETACHES it, and commit/cancel
+    // reset the preview before re-inserting, so no second filter source is
+    // needed.) The daemon clears the mark BEFORE the drop settles, so the
+    // finalizing relayout runs unfiltered.
     QJsonArray arr;
     bool anyRectMoved = false;
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
-            if ((!dragPreviewSkip.isEmpty() && tile.windowId == dragPreviewSkip)
-                || (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow)) {
+            if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
                 continue;
             }
             QRect rect = tile.rect;
@@ -418,9 +430,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         }
     }
     if (arr.isEmpty()) {
-        // Unreachable today, kept as the belt: resolved.columns is non-empty
-        // by the bail above, and relayout never emits a column with no
-        // tiles, so every surviving column contributes at least one entry.
+        // Reachable through the interactive-drag skip above: a strip whose
+        // only resolved tile is the marked (dragged) window contributes no
+        // entries. The behaviour is the same as the empty-strip bail —
+        // clear the indicator, persist a moved anchor, emit nothing.
         clearTabStripsForScreen(screenId);
         if (anchorMoved) {
             Q_EMIT placementChanged(screenId);
@@ -499,7 +512,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // and the cap keeps a pathological run of drops from growing the
             // queue without limit.
             m_pendingSelfActivations.append(active);
-            while (m_pendingSelfActivations.size() > 16) {
+            while (m_pendingSelfActivations.size() > kMaxPendingSelfActivations) {
                 m_pendingSelfActivations.removeFirst();
             }
             Q_EMIT activateWindowRequested(active);

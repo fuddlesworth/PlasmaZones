@@ -235,9 +235,11 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("zoneSpanTriggers")] = QStringLiteral("stringlist");
 
-    // Autotile drag-insert triggers list (multi-bind) — consumed by the KWin
-    // effect so it knows which modifier/mouse-button combos should forward
-    // dragMoved events to the daemon during an autotile-bypassed drag.
+    // Autotile drag-insert triggers list (multi-bind). Consumers: the
+    // daemon's own WindowDragAdaptor::beginDrag per-drag trigger cache is
+    // the authoritative one (which combos count as "insert held" per tick),
+    // and the KWin effect also fetches the list to OR a held insert trigger
+    // into its tick-forwarding gate (detectActivationAndGrab).
     m_getters[QStringLiteral("autotileDragInsertTriggers")] = [this]() {
         return QVariant::fromValue(m_settings->autotileDragInsertTriggers());
     };
@@ -247,8 +249,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("autotileDragInsertTriggers")] = QStringLiteral("stringlist");
 
-    // Scrolling twin — same effect-side consumer contract (which combos
-    // forward dragMoved during an engine-bypassed drag on a scroll strip).
+    // Scrolling twin — same consumer contract (daemon beginDrag cache +
+    // the effect's tick-forwarding gate).
     m_getters[QStringLiteral("scrollingDragInsertTriggers")] = [this]() {
         return QVariant::fromValue(m_settings->scrollingDragInsertTriggers());
     };
@@ -297,11 +299,12 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
     m_schemas[QStringLiteral("overlayDisplayMode")] = QStringLiteral("int");
-    // Per-mode disable lists. Six entries — one per (context, mode) pair —
-    // because both the read and the write need a Mode argument that the
-    // REGISTER_STRINGLIST_SETTING macro doesn't expose. Pre-v3 these were a
-    // single set of three keys whose values silently gated both modes; the
-    // new wire schema names the mode explicitly so consumers can't conflate.
+    // Per-mode disable lists — one entry per (context, mode) pair, three
+    // contexts by three modes — because both the read and the write need a
+    // Mode argument that the REGISTER_STRINGLIST_SETTING macro doesn't
+    // expose. Pre-v3 these were a single set of three keys whose values
+    // silently gated every mode; the new wire schema names the mode
+    // explicitly so consumers can't conflate.
 #define REGISTER_PER_MODE_DISABLE(keyName, modeEnum, getterFn, setterFn)                                               \
     m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
         return m_settings->getterFn(modeEnum);                                                                         \
@@ -1116,6 +1119,7 @@ void SettingsAdaptor::initializeRegistry()
 #undef REGISTER_CONCRETE_INT
 #undef REGISTER_CONCRETE_DOUBLE
 #undef REGISTER_CONCRETE_STRING
+#undef REGISTER_TAB_COLOR
 }
 
 } // namespace PlasmaZones

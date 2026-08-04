@@ -24,13 +24,13 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
                                          Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
                                          Qt::KeyboardModifiers oldmodifiers)
 {
-    // A REAL keyboard transition is modifiers != oldmodifiers — the event's
-    // own before/after pair. Comparing against the m_currentModifiers cache
-    // instead made every keyboard-stateless pointer event (KWin reports
-    // modifiers=0 on those during an interactive move) read as a "change"
-    // that RESET the cached Alt to 0 — so a drag-insert trigger held for a
-    // whole drag reached the daemon as held for exactly one tick per
-    // physical press, and the preview begin/cancel churned with it.
+    // modifiersChanged selects the BRANCH below (a real keyboard transition
+    // forwards a modifier-change D-Bus call; pointer noise must not), and
+    // the event's own before/after pair is the only honest signal for that.
+    // KWin (verified against 6.7.3's three mouseChanged emit sites) passes
+    // its live modifier cache for BOTH slots on pointer/button events and
+    // the real (new, old) pair only on keyboardModifiersChanged — it never
+    // reports a spurious 0 while a key is held.
     const bool modifiersChanged = (modifiers != oldmodifiers);
     const bool buttonsChanged = (oldbuttons != buttons);
 
@@ -46,15 +46,23 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     }
 
     if (buttonsChanged && m_dragTracker->isDragging()) {
-        qCInfo(lcEffect) << "mouseChanged buttons:" << static_cast<int>(oldbuttons) << "->"
-                         << static_cast<int>(buttons);
+        qCDebug(lcEffect) << "mouseChanged buttons:" << static_cast<int>(oldbuttons) << "->"
+                          << static_cast<int>(buttons);
     }
 
+    // The caches are assigned UNCONDITIONALLY, like the buttons always were:
+    // `modifiers` is KWin's authoritative live state on all three emit
+    // paths, so every event is a free resync. Gating the write on
+    // modifiersChanged made the cache write-only-on-transition, and with
+    // key-repeat suppressed compositor-side a modifier held at effect load
+    // (or across a compositor restart) had NO second event to correct the
+    // NoModifier initializer — and KWin exposes no modifier accessor to
+    // seed from.
+    m_currentModifiers = modifiers;
+    m_currentMouseButtons = buttons;
     if (modifiersChanged) {
-        m_currentModifiers = modifiers;
         qCDebug(lcEffect) << "Modifiers changed to" << static_cast<int>(modifiers);
     }
-    m_currentMouseButtons = buttons;
 
     if (m_dragTracker->isDragging()) {
         if ((oldbuttons & Qt::LeftButton) && !(buttons & Qt::LeftButton)) {

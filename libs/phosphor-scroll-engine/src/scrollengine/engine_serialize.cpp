@@ -244,6 +244,15 @@ QJsonObject ScrollEngine::serializeStripState() const
             }
         }
     }
+    // A drag-insert preview's dragged window is DETACHED — in no strip and
+    // in no stash — but it is emphatically live, and without this a save
+    // landing mid-hold lets a stale stash tile naming it win the write and
+    // hand its slot to a cross-session claim. (Its own slot is still absent
+    // from this save; a drop that never lands because the session ends
+    // mid-drag is inherently unrecoverable aim.)
+    if (m_dragInsertPreview) {
+        liveWindowIds.insert(m_dragInsertPreview->windowId);
+    }
     // Stash entries first (mode-round-trip structure not yet re-adopted),
     // live strips second so a live strip also wins its own key.
     //

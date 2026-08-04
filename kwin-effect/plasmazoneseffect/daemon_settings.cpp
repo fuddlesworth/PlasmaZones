@@ -61,7 +61,12 @@ void PlasmaZonesEffect::loadCachedSettings()
     //
     // Transient exclusion and min-size are handled by the daemon. Exclusion lists are
     // cached here for drag-operation gating (shouldHandleWindow).
-    m_triggersLoaded = false; // Permissive until new triggers arrive (#175)
+    // Permissive until new triggers arrive (#175). Fail-open by design: if
+    // the dragActivationTriggers reply never lands (transport error — the
+    // ClientHelpers layer logs a warning), the flag stays false until the
+    // NEXT settingsChanged broadcast re-runs this load. The cost of that
+    // window is unconditional per-tick forwarding, never a dead drag.
+    m_triggersLoaded = false;
 
     // excludedApplications / excludedWindowClasses are GONE — the v4
     // migration folded those lists into the unified Rule store, and
@@ -785,6 +790,24 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
         m_snapHandler->setFocusFollowsMouse(v.toBool());
     });
+
+    // Drag-insert TRIGGER LISTS, cached beside the toggles above: the
+    // hold-mode triggers must be visible to detectActivationAndGrab, or a
+    // drag that starts on a snap screen and crosses onto an engine screen
+    // with only the insert trigger held never forwards a tick — the daemon
+    // then never sees the crossing, never flips the policy, and hold-mode
+    // drag-insert (the shipped default: Alt, toggle off) is unreachable
+    // from off-engine starts.
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(
+        this, QStringLiteral("autotileDragInsertTriggers"), [this](const QVariant& v) {
+            m_parsedAutotileDragInsertTriggers =
+                TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
+        });
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(
+        this, QStringLiteral("scrollingDragInsertTriggers"), [this](const QVariant& v) {
+            m_parsedScrollingDragInsertTriggers =
+                TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
+        });
 
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization
     {

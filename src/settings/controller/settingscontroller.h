@@ -95,9 +95,9 @@ class RegistryShaderPreviewBackend;
 #include "settings/pages/decorationpagecontroller.h"
 #include "settings/services/stagingservice.h"
 #include "settings/pages/tilingalgorithmcontroller.h"
-#include "settings/pages/windowappearancecontroller.h"
 #include "settings/pages/scrollingbehaviorcontroller.h"
 #include "settings/pages/tilingbehaviorcontroller.h"
+#include "settings/pages/windowappearancecontroller.h"
 #include "settings/rules/rulecontroller.h"
 
 namespace PlasmaZones {
@@ -479,18 +479,9 @@ public:
     {
         return m_editorPage;
     }
-    SnappingBehaviorController* snappingBehaviorPage() const
-    {
-        return m_snappingBehaviorPage;
-    }
-    TilingBehaviorController* tilingBehaviorPage() const
-    {
-        return m_tilingBehaviorPage;
-    }
-    ScrollingBehaviorController* scrollingBehaviorPage() const
-    {
-        return m_scrollingBehaviorPage;
-    }
+    SnappingBehaviorController* snappingBehaviorPage() const;
+    TilingBehaviorController* tilingBehaviorPage() const;
+    ScrollingBehaviorController* scrollingBehaviorPage() const;
     SnappingZoneSelectorController* snappingZoneSelectorPage() const
     {
         return m_snappingZoneSelectorPage;

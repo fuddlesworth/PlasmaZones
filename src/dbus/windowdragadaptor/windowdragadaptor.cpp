@@ -268,10 +268,14 @@ bool WindowDragAdaptor::effectiveDragReorderModeFor(const QString& screenId) con
         // Scrolling's "always re-insert" is the AlwaysActive sentinel in its
         // trigger list — no DragBehavior enum, no rule resolve. Read from
         // the per-drag parsed cache (populated unconditionally by beginDrag,
-        // ahead of every consumer).
+        // ahead of every consumer). A sentinel paired with a mouse button is
+        // NOT unconditional — anyTriggerHeld ANDs the button in per tick, so
+        // treating it as always-on here would make policy and per-tick
+        // behaviour disagree; only the bare sentinel means "always".
         return std::any_of(m_cachedScrollingDragInsertTriggers.cbegin(), m_cachedScrollingDragInsertTriggers.cend(),
                            [](const ParsedTrigger& pt) {
-                               return pt.modifier == static_cast<int>(DragModifier::AlwaysActive);
+                               return pt.modifier == static_cast<int>(DragModifier::AlwaysActive)
+                                   && pt.mouseButton == 0;
                            });
     }
     return false;
@@ -323,6 +327,47 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
     if (m_scrollEngine && m_scrollEngine->hasDragInsertPreview()) {
         m_scrollEngine->cancelDragInsertPreview();
     }
+    stopDragScrollTimer();
+}
+
+void WindowDragAdaptor::cancelDragInsertPreviews()
+{
+    cancelDragInsertIfActive();
+}
+
+void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenId)
+{
+    if (screenId.isEmpty()) {
+        return;
+    }
+    const auto affected = [&screenId](PhosphorEngine::IPlacementEngine* engine) {
+        return engine && engine->hasDragInsertPreview()
+            && PhosphorIdentity::VirtualScreenId::samePhysical(engine->dragInsertPreviewScreenId(), screenId);
+    };
+    bool cancelled = false;
+    if (affected(m_autotileEngine)) {
+        m_autotileEngine->cancelDragInsertPreview();
+        cancelled = true;
+    }
+    if (affected(m_scrollEngine)) {
+        m_scrollEngine->cancelDragInsertPreview();
+        cancelled = true;
+    }
+    if (cancelled) {
+        stopDragScrollTimer();
+    }
+}
+
+void WindowDragAdaptor::stopDragScrollTimer()
+{
+    // Preview-end teardown for the edge-scroll timer. The tick handler
+    // self-stops too, but its next firing is up to 16 ms away — long enough
+    // for a NEW drag's eager preview to begin, at which point the stale
+    // tick would nudge the new strip with the OLD drag's parked cursor.
+    if (m_dragScrollTimer) {
+        m_dragScrollTimer->stop();
+    }
+    m_lastDragCursorPos = QPoint();
 }
 
 bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
@@ -337,9 +382,11 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
     if (!PhosphorScreens::ScreenIdentity::screensMatch(engine->dragInsertPreviewScreenId(),
                                                        resolveScreenAt(QPointF(cursorX, cursorY)).screenId)) {
         engine->cancelDragInsertPreview();
+        stopDragScrollTimer();
         return false;
     }
     engine->commitDragInsertPreview(); // commit, not cancel — the drop finalizes the reorder
+    stopDragScrollTimer();
     return true;
 }
 
@@ -365,6 +412,29 @@ void WindowDragAdaptor::cancelSnap()
     // Clear the reorder latch alongside the other per-drag latches so cancelSnap
     // is symmetric with resetDragState (it doesn't route through resetDragState).
     m_dragReorderActive = false;
+    // The drag-insert toggle pair too, or Escape cannot actually stop a
+    // toggled-on preview: the drag-insert block runs ABOVE the
+    // m_snapCancelled early return in dragMoved, so with the latch still
+    // true the very next tick re-begins the preview Escape just cancelled.
+    // prev is seeded true so a trigger still physically held is not read as
+    // a fresh rising edge (beginDrag's seed contract).
+    m_dragInsertToggled = false;
+    m_prevDragInsertHeld = true;
+    // Escape during a PENDING (never-activated) snap drag must stay
+    // cancelled for the rest of the gesture: dragStarted unconditionally
+    // clears m_snapCancelled on a later promotion, so kill the pending
+    // state itself rather than racing that flag. The interactive-drag mark
+    // is re-set afterwards — the compositor move CONTINUES after Escape,
+    // and clearPendingSnapDragState's mark clear would let a scroll retile
+    // fight the still-live move; the endDrag mismatch-with-no-live-drag
+    // sweep clears the mark when the gesture really ends.
+    if (m_draggedWindowId.isEmpty() && !m_pendingSnapDragWindowId.isEmpty()) {
+        const QString pendingWindow = m_pendingSnapDragWindowId;
+        clearPendingSnapDragState();
+        if (m_scrollEngine) {
+            m_scrollEngine->setInteractiveDragWindow(pendingWindow);
+        }
+    }
     m_currentZoneId.clear();
     m_currentZoneGeometry = QRect();
     m_currentAdjacentZoneIds.clear();
@@ -540,7 +610,8 @@ void WindowDragAdaptor::ensureLayoutPickerNavShortcutsRegistered(std::function<v
              moveCb(0, 1);
          }},
         {kLayoutPickerReturnId, QKeySequence(Qt::Key_Return), PhosphorI18n::tr("Layout Picker: Confirm"), confirmCb},
-        {kLayoutPickerEnterId, QKeySequence(Qt::Key_Enter), PhosphorI18n::tr("Layout Picker: Confirm"), confirmCb},
+        {kLayoutPickerEnterId, QKeySequence(Qt::Key_Enter), PhosphorI18n::tr("Layout Picker: Confirm (Numpad Enter)"),
+         confirmCb},
     });
 }
 
@@ -874,6 +945,7 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // true for the next drag. endDrag also clears it directly before its own
     // early-return branches that don't route through resetDragState.
     m_dragReorderActive = false;
+    m_dragReorderAbandoned = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     // m_overlayIdled is intentionally NOT cleared here. Each drag-end

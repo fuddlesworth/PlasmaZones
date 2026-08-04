@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -16,6 +15,12 @@ SettingsCard {
     id: root
 
     readonly property var settingsBridge: settingsController.scrollingBehaviorPage
+    // Explicit width for the SettingsRow control slot (a plain Row
+    // positioner — Layout.* is ignored there), hoisted like the tiling
+    // page's triggerPreferredWidth. Below ~640 px of row width the slot
+    // clamp cuts the widget's right edge; shared pre-existing behaviour
+    // with the tiling twin.
+    readonly property int triggerPreferredWidth: Kirigami.Units.gridUnit * 16
 
     headerText: i18n("Triggers")
     searchAnchor: "scrollingTriggers"
@@ -45,11 +50,11 @@ SettingsCard {
         SettingsRow {
             title: i18n("Hold to re-insert into strip")
             searchAnchor: "scrollingHoldToReinsert"
-            description: i18n("Hold a modifier or mouse button while dragging a window to insert it into the scroll strip at the cursor position, as a new column or stacked into an existing one")
+            description: i18n("Hold a modifier or mouse button while dragging a window to insert it into the strip under the cursor. It becomes a new column, or stacks into the column it lands on.")
             enabled: !alwaysReinsertSwitch.checked
 
             ModifierAndMouseCheckBoxes {
-                width: Kirigami.Units.gridUnit * 16
+                width: root.triggerPreferredWidth
                 allowMultiple: true
                 acceptMode: acceptModeAll
                 triggers: root.settingsBridge.scrollingDragInsertTriggers
@@ -66,7 +71,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Toggle mode")
             searchAnchor: "scrollingTriggersToggleMode"
-            description: i18n("Tap the re-insert trigger once to activate the strip preview, tap again to deactivate it")
+            description: i18n("Tap the re-insert trigger once to activate the strip preview. Tap it again to deactivate.")
             enabled: !alwaysReinsertSwitch.checked
 
             SettingsSwitch {

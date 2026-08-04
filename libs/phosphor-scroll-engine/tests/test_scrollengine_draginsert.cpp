@@ -22,7 +22,7 @@
 
 using namespace PhosphorScrollEngine;
 
-using ScrollTestUtils::defaultParams;
+using ScrollTestUtils::engineParams;
 using ScrollTestUtils::makeProviderEngine;
 
 using DragTarget = PhosphorEngine::IPlacementEngine::DragInsertTarget;
@@ -47,11 +47,14 @@ private Q_SLOTS:
     void crossScreenCommitAdopts();
     void freshAdoptionStaysUntrackedUntilCommit();
     void hitTestResolvesTargets();
+    void hitTestResolvesStackedTileSlots();
     void nudgeDragScrollShiftsView();
     void windowClosedDropsPreview();
     void screenSetChangeCancelsPreview();
     void interactiveDragMarkSuppressesEmitAndReconcile();
     void detachedResidueHealsInsteadOfLatching();
+    void reentrantBeginRestoresPriorWindow();
+    void neighbourCloseInvalidatesStaleTarget();
 
 private:
     static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
@@ -140,7 +143,17 @@ void TestScrollEngineDragInsert::updateStoresTargetWithoutRestructuring()
     target.secondary = 0;
     engine->updateDragInsertPreview(target);
     QCOMPARE(state->strip().windowsInOrder(), detached);
-    engine->cancelDragInsertPreview();
+    // An INVALID target must not clobber the stored one (the guard that
+    // keeps a stateless-screen wander mid-drag from erasing the aim).
+    engine->updateDragInsertPreview(DragTarget{});
+    // Commit proves the SECOND stored target was what survived: b joins
+    // c's column (index 1 after the detach) at tile 0 — distinguishing
+    // "stored the latest" from "stored nothing" and from "kept the first"
+    // (which would have opened a new column at 0).
+    engine->commitDragInsertPreview();
+    QCOMPARE(state->strip().columnOfWindow(QStringLiteral("b")), state->strip().columnOfWindow(QStringLiteral("c")));
+    const Column& joined = state->strip().columns().at(state->strip().columnOfWindow(QStringLiteral("b")));
+    QCOMPARE(joined.indexOfWindow(QStringLiteral("b")), 0);
 }
 
 void TestScrollEngineDragInsert::commitNewColumnAtTarget()
@@ -262,8 +275,8 @@ void TestScrollEngineDragInsert::cancelRestoresStackedTileSlot()
     QVERIFY(state);
     // Restructure b into a's column (tile 1) while the reverse map keeps
     // tracking it — the stacked-tile begin path.
-    QVERIFY(state->strip().takeWindow(QStringLiteral("b"), defaultParams()));
-    QVERIFY(state->strip().insertWindowIntoColumnAt(0, 1, QStringLiteral("b"), defaultParams()));
+    QVERIFY(state->strip().takeWindow(QStringLiteral("b"), engineParams()));
+    QVERIFY(state->strip().insertWindowIntoColumnAt(0, 1, QStringLiteral("b"), engineParams()));
 
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
     QVERIFY(!state->strip().containsWindow(QStringLiteral("b")));
@@ -395,7 +408,8 @@ void TestScrollEngineDragInsert::hitTestResolvesTargets()
     const DragTarget join = engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), rectB.center());
     QCOMPARE(join.primary, 0);
     QVERIFY(!join.newSlot);
-    QVERIFY(join.secondary >= 0);
+    // Cursor at b's centre resolves the above-midpoint arm: insert BEFORE b.
+    QCOMPARE(join.secondary, 0);
 
     // b's left edge band: a new column before it.
     const DragTarget before =
@@ -415,6 +429,41 @@ void TestScrollEngineDragInsert::hitTestResolvesTargets()
     QCOMPARE(append.primary, 1);
     QVERIFY(append.newSlot);
 
+    engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::hitTestResolvesStackedTileSlots()
+{
+    // The y-resolution loop with a REAL stack: secondary must be the MODEL
+    // tile index of the hovered slot (above-midpoint inserts before the
+    // tile, below-midpoint after), which the single-tile sibling above
+    // cannot exercise.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    // Stack c under b, then detach a: the settled strip is one column [b,c].
+    QVERIFY(state->strip().takeWindow(QStringLiteral("c"), engineParams()));
+    QVERIFY(state->strip().insertWindowIntoColumnAt(1, 1, QStringLiteral("c"), engineParams()));
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
+
+    const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
+    const QRect rectC = tileRect(engine, QStringLiteral("S1"), QStringLiteral("c"));
+    QVERIFY(!rectB.isNull());
+    QVERIFY(!rectC.isNull());
+    const int columnMidX = rectB.center().x();
+
+    // Upper half of the TOP tile: insert before b (model index 0).
+    const DragTarget top = engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"),
+                                                                  QPoint(columnMidX, rectB.top() + rectB.height() / 4));
+    QVERIFY(!top.newSlot);
+    QCOMPARE(top.secondary, 0);
+    // Lower half of the BOTTOM tile: insert after c (model index 2).
+    const DragTarget bottom = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), QPoint(columnMidX, rectC.bottom() - rectC.height() / 4));
+    QVERIFY(!bottom.newSlot);
+    QCOMPARE(bottom.secondary, 2);
     engine->cancelDragInsertPreview();
 }
 
@@ -439,9 +488,13 @@ void TestScrollEngineDragInsert::nudgeDragScrollShiftsView()
     // Detaching the leftmost column re-clamped the view off the strip's
     // right end, so the right band has room and slides the view a step...
     QVERIFY(engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(1195, 400)));
-    QVERIFY(state->strip().viewAnchor() != anchorBefore);
-    // ...and the left band scrolls back the other way.
+    const int anchorAfterRight = state->strip().viewAnchor();
+    QVERIFY(anchorAfterRight != anchorBefore);
+    // ...and the left band scrolls back the OTHER way — a sign error in
+    // either band's arm would move the anchor further in the same
+    // direction instead.
     QVERIFY(engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(5, 400)));
+    QVERIFY(state->strip().viewAnchor() > anchorAfterRight);
     engine->cancelDragInsertPreview();
 }
 
@@ -466,9 +519,17 @@ void TestScrollEngineDragInsert::screenSetChangeCancelsPreview()
 
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
     // S1 leaves the scrolling set: the preview must unwind BEFORE the state
-    // teardown, not dangle into a released context.
+    // teardown, not dangle into a released context — and the unwind must
+    // put b BACK first, so the release hands it over like any other tile
+    // instead of orphaning a detached window.
+    QSignalSpy releasedSpy(engine, &PhosphorEngine::PlacementEngineBase::windowsReleased);
     engine->setActiveScreens({QStringLiteral("S2")});
     QVERIFY(!engine->hasDragInsertPreview());
+    QCOMPARE(releasedSpy.count(), 1);
+    const QStringList released = releasedSpy.first().first().toStringList();
+    QVERIFY(released.contains(QStringLiteral("a")));
+    QVERIFY(released.contains(QStringLiteral("b")));
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("b")));
 }
 
 void TestScrollEngineDragInsert::interactiveDragMarkSuppressesEmitAndReconcile()
@@ -483,12 +544,21 @@ void TestScrollEngineDragInsert::interactiveDragMarkSuppressesEmitAndReconcile()
 
     // Retiles while the mark is set never emit the marked window's rect —
     // KWin's interactive move owns the frame, and re-emitting the slot rect
-    // was the mid-drag teleport fight.
+    // was the mid-drag teleport fight. Change b's column width FIRST so the
+    // relayout genuinely moves rects and the batch is non-empty: an
+    // identical relayout is silent for every window, and an empty spy would
+    // pass the no-"a" scan without proving the mark did anything.
     QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    state->strip().focusWindow(QStringLiteral("b"), engineParams());
+    state->strip().setActiveColumnWidth(ColumnWidth::makeProportion(0.7));
     engine->retile(QStringLiteral("S1"));
+    QVERIFY(tiledSpy.count() >= 1);
+    bool sawEmissionWithB = false;
     for (const auto& emission : tiledSpy) {
         QVERIFY(!emission.first().toString().contains(QStringLiteral("\"a\"")));
+        sawEmissionWithB = sawEmissionWithB || emission.first().toString().contains(QStringLiteral("\"b\""));
     }
+    QVERIFY(sawEmissionWithB);
 
     // A drag-frame ack for the marked window must not reconcile: without
     // the gate this pinned the column width intent to the transient drag
@@ -507,7 +577,7 @@ void TestScrollEngineDragInsert::interactiveDragMarkSuppressesEmitAndReconcile()
     // relayout would stay silent for every window).
     engine->setInteractiveDragWindow(QString());
     tiledSpy.clear();
-    state->strip().focusWindow(QStringLiteral("a"), defaultParams());
+    state->strip().focusWindow(QStringLiteral("a"), engineParams());
     state->strip().setActiveColumnWidth(ColumnWidth::makeProportion(0.4));
     engine->retile(QStringLiteral("S1"));
     bool emittedA = false;
@@ -531,7 +601,7 @@ void TestScrollEngineDragInsert::detachedResidueHealsInsteadOfLatching()
     QVERIFY(state);
 
     // Manufacture the residue: strip loses b, the reverse map keeps it.
-    QVERIFY(state->strip().takeWindow(QStringLiteral("b"), defaultParams()));
+    QVERIFY(state->strip().takeWindow(QStringLiteral("b"), engineParams()));
     QVERIFY(engine->isWindowTracked(QStringLiteral("b")));
     QVERIFY(!engine->isWindowTiled(QStringLiteral("b")));
 
@@ -545,12 +615,66 @@ void TestScrollEngineDragInsert::detachedResidueHealsInsteadOfLatching()
     QVERIFY(engine->isWindowTiled(QStringLiteral("b")));
 
     // And the float path heals the same residue (the drop's ApplyFloat leg).
-    QVERIFY(state->strip().takeWindow(QStringLiteral("b"), defaultParams()));
+    QVERIFY(state->strip().takeWindow(QStringLiteral("b"), engineParams()));
     engine->setWindowFloat(QStringLiteral("b"), true, QStringLiteral("S1"));
     QVERIFY(engine->isWindowFloatingInScroll(QStringLiteral("b")));
     // The healed float round-trips: unfloat opens a fresh column.
     engine->setWindowFloat(QStringLiteral("b"), false, QStringLiteral("S1"));
     QVERIFY(engine->isWindowTiled(QStringLiteral("b")));
+}
+
+void TestScrollEngineDragInsert::reentrantBeginRestoresPriorWindow()
+{
+    // Begin-over-a-live-preview (a new interactive move starting before the
+    // first drop landed): the implicit cancel must restore window #1's
+    // captured slot before window #2 detaches — the second-invocation shape
+    // the autotile twin also pins.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("c"), QStringLiteral("S1")));
+    QCOMPARE(engine->dragInsertPreviewWindowId(), QStringLiteral("c"));
+    // b is back at its captured slot; only c is detached (mid-preview).
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), (QStringList{QStringLiteral("a"), QStringLiteral("b")}));
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(state->strip().containsWindow(QStringLiteral("b")));
+    QVERIFY(!state->strip().containsWindow(QStringLiteral("c")));
+    engine->cancelDragInsertPreview();
+    // And the final cancel puts c back too — the full original order.
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             (QStringList{QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
+}
+
+void TestScrollEngineDragInsert::neighbourCloseInvalidatesStaleTarget()
+{
+    // A NEIGHBOUR closing mid-hold shifts the structure the remembered
+    // indexes were aimed at, and a stationary cursor never re-aims. The
+    // stale target must be discarded so commit takes the restore-slot
+    // fallback instead of silently landing at a shifted index.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
+    // Aim at c's column (index 1 of the detached strip b,c) as a join.
+    DragTarget target;
+    target.primary = 1;
+    target.secondary = 0;
+    engine->updateDragInsertPreview(target);
+
+    engine->windowClosed(QStringLiteral("b"));
+    QVERIFY(engine->hasDragInsertPreview());
+
+    engine->commitDragInsertPreview();
+    // Restore-slot fallback: a returns to its captured column 0, alone —
+    // the stale join would have stacked it into c's column instead.
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), (QStringList{QStringLiteral("a"), QStringLiteral("c")}));
+    QVERIFY(state->strip().columnOfWindow(QStringLiteral("a")) != state->strip().columnOfWindow(QStringLiteral("c")));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineDragInsert)

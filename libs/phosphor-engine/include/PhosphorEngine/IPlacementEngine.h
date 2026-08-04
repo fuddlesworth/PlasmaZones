@@ -9,10 +9,10 @@
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorEngine/WindowPlacement.h>
 
-#include <QJsonArray>
 #include <QJsonObject>
 #include <QPoint>
 #include <QRect>
+#include <QSize>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -275,8 +275,9 @@ public:
     /// take()/claim the record themselves) because those paths carry engine-specific
     /// policy (snap's auto-snap fallback chain; autotile's burst-insert coalescing;
     /// scrolling's strip-stash claim) that a single apply-this-record call cannot
-    /// express. A minimal future engine may instead implement only this method and
-    /// have its own open path invoke it directly.
+    /// express. NOTHING in-tree calls this virtual today — a minimal future
+    /// engine that implements it MUST have its own open path invoke it
+    /// directly; no orchestrator will.
     virtual bool restorePlacement(const WindowPlacement& placement, const QString& screenId)
     {
         Q_UNUSED(placement)
@@ -375,6 +376,19 @@ public:
         bool operator==(const DragInsertTarget& other) const = default;
     };
 
+    // Contract shared by the preview verbs, which the two implementations
+    // honour with OPPOSITE internal shapes:
+    //  - begin MAY mutate managed state, and MAY adopt the window from
+    //    another screen, from a floating set, or from untracked entirely
+    //    (both engines do all three).
+    //  - an engine may or may not keep the window MANAGED while its preview
+    //    is live — autotile keeps it a tile and restructures per update;
+    //    scrolling DETACHES it until commit. Cross-engine callers must not
+    //    use isWindowTiled/isWindowManaged as a drag-state probe.
+    //  - begin on an engine already holding a preview cancels the old one
+    //    first; commit/cancel are no-ops with no preview live; and
+    //    dragInsertPreviewScreenId is empty with no preview live.
+
     virtual bool hasDragInsertPreview() const
     {
         return false;
@@ -394,6 +408,56 @@ public:
     virtual QString dragInsertPreviewScreenId() const
     {
         return {};
+    }
+
+    /// Compute the drop target for a cursor position on a managed screen.
+    /// Returns an invalid target when the screen has no active state.
+    virtual DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(cursorPos)
+        return {};
+    }
+
+    /// Update the drop target for an active drag-insert preview. An invalid
+    /// target is IGNORED, never clamped — implementations keep the previous
+    /// stored target (autotile's engine-local int form clamps instead; that
+    /// contract does not cross this seam).
+    virtual void updateDragInsertPreview(const DragInsertTarget& target)
+    {
+        Q_UNUSED(target)
+    }
+
+    /// Edge auto-scroll during a drag-insert preview: an engine whose layout
+    /// is a scrollable viewport (the scroll strip) shifts its view one step
+    /// when the cursor sits inside its edge band, so drops can land past the
+    /// visible columns. Driven by the daemon's FIXED ~60 Hz drag-scroll
+    /// timer, independent of cursor motion — the cursor may be unchanged
+    /// between calls, so per-call step size must be scaled for that rate.
+    /// Returns true when the view actually moved (the caller then
+    /// re-hit-tests). Default no-op for engines with a fixed layout.
+    virtual bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(cursorPos)
+        return false;
+    }
+
+    /// The window currently under a compositor interactive move (the whole
+    /// drag, preview or not). Empty clears. While set, an engine that still
+    /// models the window as tiled must neither emit geometry for it nor
+    /// reconcile its geometry acks — KWin's interactive move owns the frame
+    /// until drop, and fighting it yanks the window from the cursor (and a
+    /// per-ack reconcile pins size intents to transient drag frames). The
+    /// daemon sets it at beginDrag and clears it before the drop is
+    /// finalized, so commit/float paths apply normally. Today the daemon
+    /// calls this on the SCROLL engine only, and only ScrollEngine
+    /// overrides it: autotile also retiles mid-drag but exempts the dragged
+    /// window inside applyTiling's emit filter instead. Override this when
+    /// an engine has no such filter of its own.
+    virtual void setInteractiveDragWindow(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -598,48 +662,6 @@ public:
         return {};
     }
 
-    /// Compute the drop target for a cursor position on a managed screen.
-    /// Returns an invalid target when the screen has no active state.
-    virtual DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const
-    {
-        Q_UNUSED(screenId)
-        Q_UNUSED(cursorPos)
-        return {};
-    }
-
-    /// Update the drop target for an active drag-insert preview.
-    virtual void updateDragInsertPreview(const DragInsertTarget& target)
-    {
-        Q_UNUSED(target)
-    }
-
-    /// Edge auto-scroll during a drag-insert preview: an engine whose layout
-    /// is a scrollable viewport (the scroll strip) shifts its view one step
-    /// when the cursor sits inside its edge band, so drops can land past the
-    /// visible columns. Called by the daemon's drag tick just before the
-    /// hit-test; returns true when the view actually moved. Default no-op
-    /// for engines with a fixed layout.
-    virtual bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos)
-    {
-        Q_UNUSED(screenId)
-        Q_UNUSED(cursorPos)
-        return false;
-    }
-
-    /// The window currently under a compositor interactive move (the whole
-    /// drag, preview or not). Empty clears. While set, an engine that still
-    /// models the window as tiled must neither emit geometry for it nor
-    /// reconcile its geometry acks — KWin's interactive move owns the frame
-    /// until drop, and fighting it yanks the window from the cursor (and a
-    /// per-ack reconcile pins size intents to transient drag frames). The
-    /// daemon sets it at beginDrag and clears it before the drop is
-    /// finalized, so commit/float paths apply normally. Default no-op for
-    /// engines whose drag flows never retile mid-drag.
-    virtual void setInteractiveDragWindow(const QString& windowId)
-    {
-        Q_UNUSED(windowId)
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Layout capability (UI-facing; distinct from algorithm identity)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -765,10 +787,13 @@ public:
     virtual void refreshConfigFromSettings()
     {
     }
+    /// One home for the master/split ratio step so the default return below
+    /// and the two default arguments cannot drift apart.
+    static constexpr qreal kDefaultSplitRatioStep = 0.05;
     virtual qreal effectiveSplitRatioStep(const QString& screenId) const
     {
         Q_UNUSED(screenId)
-        return 0.05;
+        return kDefaultSplitRatioStep;
     }
     /// Runtime max-windows limit. Returns -1 (unlimited sentinel) by default;
     /// engines that enforce a cap override with the actual value.
@@ -804,7 +829,7 @@ public:
     }
 
     // Per-window restore persistence is unified: engines implement
-    // capturePlacement()/restorePlacement() (below) and the common
+    // capturePlacement()/restorePlacement() (above) and the common
     // WindowPlacementStore handles capture timing, serialization, and the single
     // WindowPlacements config key. No engine-specific serialize/deserialize hooks.
 
@@ -823,11 +848,11 @@ public:
     // OPTIONAL: Master operations (autotile-specific, no-op on snap engine)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    virtual void increaseMasterRatio(qreal delta = 0.05)
+    virtual void increaseMasterRatio(qreal delta = kDefaultSplitRatioStep)
     {
         Q_UNUSED(delta)
     }
-    virtual void decreaseMasterRatio(qreal delta = 0.05)
+    virtual void decreaseMasterRatio(qreal delta = kDefaultSplitRatioStep)
     {
         Q_UNUSED(delta)
     }

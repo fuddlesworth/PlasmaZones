@@ -321,7 +321,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/tiling/TilingWindowHandlingCard.qml
         qml/pages/tiling/TilingFocusCard.qml
         # Scrolling: the condensed simple page, the three advanced leaves
-        # (Columns / Tabs / Window), the two cards both surfaces share, the
+        # (Columns / Tabs / Window), the cards both surfaces share, the
         # preset-list editor the Columns page hosts twice, and the tab-colour
         # row it hosts three times.
         qml/pages/scrolling/ScrollingSimplePage.qml

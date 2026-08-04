@@ -149,6 +149,31 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
             continue;
         }
         pushWindowMetadata(w);
+        // Seed the daemon's frame-geometry shadow alongside the metadata.
+        // The shadow's only other writer is the motion-driven
+        // flushPendingFrameGeometry, so after a daemon restart every
+        // un-moved window read back as empty — hollowing out the save-time
+        // refreshOpenWindowPlacements sweep (whose stated purpose is restart
+        // survival), the mode-flip presave, and handoff sourceGeometry.
+        // Deliberately NOT routed through m_pendingFrameGeometry: that path
+        // also runs the geometry-scoped rule-cache eviction, which a bulk
+        // seed must not trigger. Idempotent across repeated bringups (plain
+        // map assignment daemon-side, pruned by the alive-set sweep).
+        if (shouldHandleWindow(w)) {
+            // getWindowId, NOT getWindowInstanceId: the daemon's
+            // m_frameGeometry shadow is keyed by the same composite id the
+            // motion-driven flush uses (window_connections.cpp keys its
+            // stash with getWindowId), and a bare-UUID seed would populate
+            // a parallel key space no consumer reads.
+            const QString windowId = getWindowId(w);
+            const QRect frame = w->frameGeometry().toRect();
+            if (!windowId.isEmpty() && frame.width() > 0 && frame.height() > 0) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setFrameGeometry"),
+                    {windowId, frame.x(), frame.y(), frame.width(), frame.height()},
+                    QStringLiteral("setFrameGeometry bringup seed"));
+            }
+        }
     }
 
     // Drop the snap-assist capture's "we recently posted this handle" set —
@@ -184,6 +209,12 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // to the correct virtual screen, not the physical monitor.
     // m_lastEffectiveScreenId was set during the last processCursorPosition() call
     // via resolveEffectiveScreenId(), so it already has the correct virtual ID.
+    // ACCEPTED STALENESS: this runs BEFORE fetchAllVirtualScreenConfigs below,
+    // so if the fresh daemon loads a subdivision config that no longer defines
+    // this virtual id, the push names a dead vs id until the first pointer
+    // motion re-resolves (and onVirtualScreensChanged clears the cache when
+    // the defs really change). The window is "screen-targeted shortcut fired
+    // before the cursor moves after a daemon restart".
     if (!m_lastEffectiveScreenId.isEmpty()) {
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("cursorScreenChanged"), {m_lastEffectiveScreenId},
@@ -202,6 +233,9 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         if (cursorScreenId.isEmpty()) {
             cursorScreenId = m_lastCursorOutput;
         }
+        // Refresh the dedup cache too, or the next pointer motion resolving
+        // the same id re-sends a value the daemon already holds.
+        m_lastEffectiveScreenId = cursorScreenId;
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("cursorScreenChanged"), {cursorScreenId},
                                                        QStringLiteral("cursorScreenChanged"));
@@ -567,17 +601,20 @@ bool PlasmaZonesEffect::detectActivationAndGrab()
     if (m_dragActivation.detected) {
         return true;
     }
-    // Autotile drag-insert toggle mode also forces activation so the daemon
-    // receives dragMoved ticks for rising-edge detection even when the drag
-    // started on a non-autotile screen and the user hasn't held any snap
-    // trigger. Without this, the cross-to-autotile policy flip never fires
-    // because the gate below (drag lambda, slotMouseChanged) swallows ticks.
-    // Zone-span toggle mode (#563) forces activation for the same reason: the
-    // daemon's span rising-edge latch needs the release→press ticks even when
-    // no key is currently held (e.g. activation itself is toggled on and the
-    // user tapped, then released, the activation trigger).
+    // FOUR forcing families beyond a held snap-activation trigger:
+    // (1) toggle-activation, (2) the two engines' drag-insert TOGGLE modes,
+    // (3) zone-span toggle mode — each needs the daemon to see release→press
+    // ticks for its rising-edge latch even when no key is currently held —
+    // and (4) a physically HELD drag-insert trigger (either engine's list).
+    // Without (4), a drag starting on a snap screen with only the insert
+    // trigger held (the shipped default: Alt, hold mode) forwarded nothing,
+    // so the daemon never saw the crossing onto an engine screen and
+    // hold-mode drag-insert was unreachable from off-engine starts.
     if (anyLocalTriggerHeld() || m_cachedToggleActivation || m_cachedAutotileDragInsertToggle
-        || m_cachedScrollingDragInsertToggle || m_cachedZoneSpanToggleMode) {
+        || m_cachedScrollingDragInsertToggle || m_cachedZoneSpanToggleMode
+        || TriggerParser::anyTriggerHeld(m_parsedAutotileDragInsertTriggers, m_currentModifiers, m_currentMouseButtons)
+        || TriggerParser::anyTriggerHeld(m_parsedScrollingDragInsertTriggers, m_currentModifiers,
+                                         m_currentMouseButtons)) {
         m_dragActivation.detected = true;
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);
@@ -707,7 +744,13 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("snapAssistReady"), m_snapHandler.get(),
                                           SLOT(slotSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
 
-    qCInfo(lcEffect) << "Connected to navigation D-Bus signals";
+    // Deliberately not asserting per-connect success: the only failure mode
+    // for these QDBusConnection::connect calls is an unregistered custom
+    // type, and PhosphorProtocol::registerWireTypes() runs at effect
+    // construction, before this wiring (lifecycle.cpp) — so a false return
+    // here would be a build-order bug, not a runtime condition. Worded as
+    // "wired", not "connected", because the returns are not checked.
+    qCDebug(lcEffect) << "Navigation D-Bus signal subscriptions wired";
 }
 
 } // namespace PlasmaZones

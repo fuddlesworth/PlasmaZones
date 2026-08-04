@@ -43,6 +43,11 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     // dead windows on one screen needs it once, not N times.
     QHash<QString, ScrollLayoutParams> paramsByScreen;
     for (const QString& windowId : dead) {
+        // Before any state mutation, mirroring windowClosed (and autotile's
+        // prune): a preview naming a dead id must not survive to re-add or
+        // float it at commit/cancel — the prune is the backstop for exactly
+        // the windows that died WITHOUT a windowClosed signal.
+        dropClosedWindowFromDragPreview(windowId);
         PhosphorEngine::PlacementStateKey key;
         ScrollState* state = stateForWindow(windowId, &key);
         if (state) {
@@ -58,6 +63,10 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         m_lastAppliedRect.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
+        // A dead window's queued self-activation echo can never be answered;
+        // left behind it would eat the first genuine focus of a reused id
+        // (windowClosed and releaseScreenState sweep for the same reason).
+        m_pendingSelfActivations.removeAll(windowId);
         ++pruned;
     }
     // Seed lists hold dead ids too (a captured order whose window died before
@@ -171,6 +180,11 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     }
     for (const QString& screenId : affectedScreens) {
         scheduleRetileForScreen(screenId);
+        // The strip structure mutated durably (a column may have closed) and
+        // placementChanged is the sole producer of DirtyScrollStrips — the
+        // prune path is exactly the no-windowClosed case, so nothing else
+        // marks the save.
+        Q_EMIT placementChanged(screenId);
     }
     return pruned;
 }
@@ -234,6 +248,16 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
             const PhosphorEngine::PlacementStateKey newKey = currentKeyForScreen(screenId);
             if (pinnedDesktop != newKey.desktop) {
                 const PhosphorEngine::PlacementStateKey oldKey{screenId, pinnedDesktop, m_context.currentActivity()};
+                // A live preview's captured keys are plain copies that
+                // rekeyWindows cannot rewrite — migrating under it would
+                // strand the preview on the dead key and commit would then
+                // materialise a fresh empty state there. Every sibling
+                // context-mutating path unwinds the preview the same way.
+                if (m_dragInsertPreview
+                    && (m_dragInsertPreview->targetKey == oldKey
+                        || (m_dragInsertPreview->hadPriorState && m_dragInsertPreview->priorKey == oldKey))) {
+                    cancelDragInsertPreview();
+                }
                 if (ScrollState* migrated = m_states.stateForKey(oldKey)) {
                     if (ScrollState* existing = m_states.takeState(newKey)) {
                         // Normally a placeholder a transient lookup created,
@@ -258,6 +282,20 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                     m_states.takeState(oldKey);
                     m_states.insertState(newKey, migrated);
                     m_states.rekeyWindows(oldKey, newKey);
+                    // The stash maps are keyed by context too — left at the
+                    // old key they become unreachable (no live context
+                    // resolves it) until a prune reaps them, and a restore
+                    // for the new key finds nothing. Move-only-if-vacant:
+                    // the new key can already hold a stash awaiting
+                    // re-adoption, and clobbering it would lose those
+                    // pending restores — in that case the old-key entry
+                    // stays for the prunes, exactly the pre-fix behaviour.
+                    if (m_stripStash.contains(oldKey) && !m_stripStash.contains(newKey)) {
+                        m_stripStash.insert(newKey, m_stripStash.take(oldKey));
+                        if (m_stripStashConsumed.contains(oldKey)) {
+                            m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));
+                        }
+                    }
                     qCInfo(lcScrollEngine) << "Migrated screen" << screenId << "strip from desktop" << pinnedDesktop
                                            << "to" << newKey.desktop;
                 }
@@ -325,6 +363,10 @@ void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
         m_lastAppliedRect.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
+        // The dying context's windows can never answer their queued echoes;
+        // a stale entry would swallow the first genuine focus of a reused
+        // id (windowClosed and releaseScreenState sweep the same way).
+        m_pendingSelfActivations.removeAll(windowId);
     }
 }
 
@@ -500,6 +542,16 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         it = matches(it.key()) ? m_lastTabStripPayload.erase(it) : std::next(it);
     }
     m_context.removeScreensIf(matches);
+    // Drop the dead output from the active set and the deferred-apply queue
+    // too: until the daemon's next setActiveScreens, isActiveOnScreen would
+    // otherwise keep answering true for it and stateForKey(create) would
+    // happily re-materialise a state for a screen that no longer exists.
+    for (auto it = m_scrollingScreens.begin(); it != m_scrollingScreens.end();) {
+        it = matches(*it) ? m_scrollingScreens.erase(it) : std::next(it);
+    }
+    for (auto it = m_burstPendingApplies.begin(); it != m_burstPendingApplies.end();) {
+        it = matches(it.key()) ? m_burstPendingApplies.erase(it) : std::next(it);
+    }
     // A dead screen id must not keep feeding the hint-less shortcut paths
     // (autotile's twin clears the same way).
     if (matches(m_activeScreen)) {

@@ -293,14 +293,12 @@ public:
     /// screen coordinates; the normalized twin is below.
     QVector<QRect> visibleTileRects(const QString& screenId) const;
     /// @p windowId's zone number on @p screenId's current strip, or -1 when
-    /// it is off-screen, a hidden tab, or untracked (the navigation OSD
-    /// then shows direction-only copy).
+    /// it is off-screen, a hidden tab, or untracked.
     ///
-    /// THE resolver for the number space in the window→number direction: it
-    /// reads VisibleTile::zoneNumber off the same walk the rect consumers
-    /// read, so a caller holding a window id never has to count the walk
-    /// itself. Callers that already hold a VisibleTile read its zoneNumber
-    /// instead of paying for a second walk here.
+    /// Convenience/test seam with no production caller today (like
+    /// visibleTileRects above): every production number consumer walks
+    /// visibleTiles and reads VisibleTile::zoneNumber directly, so this
+    /// exists for callers that hold only a window id.
     int visibleTileNumberForWindow(const QString& screenId, const QString& windowId) const;
     /// visibleTileRects normalized to the FULL screen geometry (0.0–1.0 per
     /// axis) — the shape zone previews consume. The tiles are clipped to the
@@ -380,17 +378,20 @@ public:
     void cancelDragInsertPreview() override;
     /// `primary` = column index; `newSlot` true opens a NEW column at
     /// `primary`; otherwise the window joins column `primary` as tile
-    /// `secondary`. Cursor over the dragged window's own tile (or its own
-    /// solo column, edge bands included) returns the CURRENT target verbatim
-    /// — the same stable-identity contract as autotile's own-zone rule,
-    /// without which the take-and-reinsert churns every tick.
+    /// `secondary` (a MODEL-column tile index — minimized tiles count).
+    /// The dragged window is DETACHED while a preview is live, so the strip
+    /// hit-tested here is stable across ticks and no own-slot special case
+    /// exists (nothing the cursor hovers can be the dragged window). While
+    /// a preview is live for @p screenId the hit-test resolves against the
+    /// preview's captured context key, not the screen's current one.
     DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
     void updateDragInsertPreview(const DragInsertTarget& target) override;
     /// Edge auto-scroll while a drag-insert preview is live on @p screenId:
     /// a cursor inside the left/right work-area band slides the view one
-    /// step toward that edge (rides the daemon's ~30 Hz drag tick). Returns
-    /// true when the view actually moved, so the caller re-hit-tests
-    /// against the shifted strip.
+    /// step toward that edge (driven by the daemon's fixed ~60 Hz drag-
+    /// scroll timer, independent of cursor motion). Returns true when the
+    /// view actually moved, so the caller re-hit-tests against the shifted
+    /// strip.
     bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos) override;
     /// While set, applyLayout never emits this window's rect and
     /// onWindowResized never reconciles its acks: during a drag the effect
@@ -858,7 +859,9 @@ private:
         // ── cancel restoration ──
         bool hadPriorState = false;
         PhosphorEngine::PlacementStateKey priorKey;
-        bool priorSameScreen = false;
+        /// Whole-key comparison (screen AND desktop AND activity): a
+        /// same-screen/different-desktop prior context reads false.
+        bool priorSameKey = false;
         bool priorFloating = false;
         /// The tiled slot at begin time (valid when !priorFloating).
         FloatRestore priorSlot;
@@ -882,7 +885,10 @@ private:
     /// by begin (same-screen floating entry) and cancel.
     bool dragPreviewRestoreSlot(ScrollState* state, const QString& windowId, const FloatRestore& slot,
                                 const ScrollLayoutParams& params, const QString& screenId);
-    /// Drop the preview without restoration when its dragged window closes.
+    /// Preview hygiene for a closing window: drops the preview without
+    /// restoration when the DRAGGED window closes, and discards the stale
+    /// hit-tested target when a NEIGHBOUR in the target strip closes (the
+    /// remembered indexes were aimed at a structure that is changing).
     void dropClosedWindowFromDragPreview(const QString& windowId);
     /// Windows floated BY scroll mode (mode-transition marker, ephemeral).
     QSet<QString> m_scrollFloatedWindows;

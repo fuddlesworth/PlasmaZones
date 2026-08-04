@@ -277,10 +277,14 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // flag false until the daemon's own daemonReady signal fires (end of
         // Daemon::start()), confirming it can handle D-Bus requests.
 
-        // Reconnect daemonReady signal — Qt may cache the old daemon's unique bus
-        // name in match rules, so refresh for the new daemon instance.
-        // Disconnect first to prevent duplicate match rules (Qt doesn't deduplicate),
-        // which would cause slotDaemonReady to fire twice on the same signal.
+        // Defensive reconnect of daemonReady. Subscriptions against a
+        // WELL-KNOWN name survive daemon restarts (the bus re-resolves the
+        // owner per match rule — daemon_bringup.cpp's connectNavigationSignals
+        // note is the authoritative statement, and settingsChanged plus all
+        // fourteen navigation signals rely on it without any re-wire), so
+        // this refresh is belt-and-braces, not a requirement. Keep the
+        // disconnect-first pairing (Qt doesn't deduplicate match rules) and
+        // do NOT propagate the pattern to other signals.
         QDBusConnection::sessionBus().disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                                  PhosphorProtocol::Service::Interface::LayoutRegistry,
                                                  QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));

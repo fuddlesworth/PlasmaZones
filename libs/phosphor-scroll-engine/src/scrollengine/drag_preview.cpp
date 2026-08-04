@@ -150,7 +150,7 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
     if (it != m_states.windowKeys().constEnd()) {
         preview.hadPriorState = true;
         preview.priorKey = it.value();
-        preview.priorSameScreen = (preview.priorKey == targetKey);
+        preview.priorSameKey = (preview.priorKey == targetKey);
         priorState = m_states.stateForKey(preview.priorKey);
         if (priorState) {
             preview.priorFloating = priorState->isFloating(windowId);
@@ -214,7 +214,7 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
     m_dragInsertPreview = preview;
     // Neighbours close up once; from here the strip is STABLE until drop.
     applyLayout(screenId, false);
-    if (preview.hadPriorState && !preview.priorSameScreen
+    if (preview.hadPriorState && !preview.priorSameKey
         && preview.priorKey == currentKeyForScreen(preview.priorKey.screenId)) {
         applyLayout(preview.priorKey.screenId, false);
     }
@@ -242,6 +242,11 @@ void ScrollEngine::commitDragInsertPreview()
 
     ScrollState* targetState = stateForKey(p.targetKey, /*createIfMissing=*/true);
     if (!targetState) {
+        // The target screen left the scrolling set mid-hold and the cancels
+        // that normally cover that raced past this commit. Do not return
+        // with the reverse-map entry intact — that is the detached-residue
+        // limbo every other path heals.
+        m_states.removeWindow(p.windowId);
         return;
     }
     const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
@@ -260,7 +265,7 @@ void ScrollEngine::commitDragInsertPreview()
                                                       p.carried.minHeight);
         }
     }
-    if (!inserted && p.hadPriorState && p.priorSameScreen) {
+    if (!inserted && p.hadPriorState && p.priorSameKey) {
         // No target was ever resolved (zero-motion drop): back to the
         // captured slot rather than an arbitrary append.
         inserted = dragPreviewRestoreSlot(targetState, p.windowId, p.priorSlot.column >= 0 ? p.priorSlot : p.carried,
@@ -278,31 +283,58 @@ void ScrollEngine::commitDragInsertPreview()
         qCWarning(lcScrollEngine) << "commitDragInsertPreview: every insert refused for" << p.windowId
                                   << "— degrading to floating";
         targetState->addFloating(p.windowId);
-        m_floatRestore.insert(p.windowId, p.carried);
+        // A cross-screen carried slot names the PRIOR screen's strip — a
+        // later unfloat against the target strip must not consume it.
+        FloatRestore carried = p.carried;
+        if (!p.priorSameKey) {
+            carried.column = -1;
+            carried.tileIndex = -1;
+            carried.stackAnchor.clear();
+        }
+        m_floatRestore.insert(p.windowId, carried);
+        // Mode marker: this is a scroll-decided float, same as every other
+        // float-producing exit (begin removed the marker on the way in).
+        m_scrollFloatedWindows.insert(p.windowId);
         m_states.setKeyForWindow(p.windowId, p.targetKey);
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
+        Q_EMIT placementChanged(p.targetScreenId);
         return;
     }
     if (p.carried.minWidth > 0 || p.carried.minHeight > 0) {
         strip.setWindowMinimumSize(p.windowId, p.carried.minWidth, p.carried.minHeight);
     }
-    strip.setWindowHeightIntent(p.windowId, p.carried.height);
+    if (p.carried.column >= 0 || p.carried.tileIndex >= 0) {
+        // Only a FloatRestore that really captured a tile carries a height
+        // intent; a default-constructed one would stamp Auto over the
+        // context default the insert just seeded (same gate as
+        // dragPreviewRestoreSlot and unfloatWindowInternal).
+        strip.setWindowHeightIntent(p.windowId, p.carried.height);
+    }
     // The dropped window is the one the user is looking at.
     strip.focusWindow(p.windowId, params);
     m_states.setKeyForWindow(p.windowId, p.targetKey);
 
+    // Drop the last-applied memory so the re-tile emit survives the
+    // emit-on-change gate even when the window resolves back to its
+    // pre-drag rect (single-column strip: no neighbour ever moves, so this
+    // is the ONLY signal that re-tiles the dropped frame).
+    m_lastAppliedRect.remove(p.windowId);
     applyLayout(p.targetScreenId, false);
     // The window's float/tracking state changed for every entry mode except
     // the plain same-screen tiled reorder. floating=false routes through the
     // no-restore path (windowFloatingStateSynced), avoiding the
-    // geometry-restore teleport of windowFloatingChanged.
-    const bool adoptedOrUnfloated = !p.hadPriorState || !p.priorSameScreen || p.priorFloating;
+    // geometry-restore teleport of windowFloatingChanged. The adopt-and-heal
+    // entry (tracked but slotless: priorSlot never captured a tile) counts
+    // too — the window reached that arm precisely because bookkeeping was
+    // inconsistent, so the corrective announcement must not be skipped.
+    const bool adoptedOrUnfloated =
+        !p.hadPriorState || !p.priorSameKey || p.priorFloating || (p.priorSlot.column < 0 && p.priorSlot.tileIndex < 0);
     if (adoptedOrUnfloated) {
         Q_EMIT windowFloatingStateSynced(p.windowId, false, p.targetScreenId);
     }
     // Strip structure (and possibly the prior screen's) changed durably.
     Q_EMIT placementChanged(p.targetScreenId);
-    if (p.hadPriorState && !p.priorSameScreen) {
+    if (p.hadPriorState && !p.priorSameKey) {
         Q_EMIT placementChanged(p.priorKey.screenId);
     }
 }
@@ -321,7 +353,7 @@ void ScrollEngine::cancelDragInsertPreview()
         return;
     }
 
-    if (p.priorSameScreen) {
+    if (p.priorSameKey) {
         ScrollState* targetState = stateForKey(p.targetKey, /*createIfMissing=*/false);
         const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
         if (p.priorFloating) {
@@ -340,8 +372,15 @@ void ScrollEngine::cancelDragInsertPreview()
             }
         } else if (targetState) {
             dragPreviewRestoreSlot(targetState, p.windowId, p.priorSlot, params, p.targetScreenId);
+            // Same emit-on-change escape as commit: the restored slot is
+            // typically the pre-drag rect, so without dropping the memory
+            // the re-tile emit is suppressed.
+            m_lastAppliedRect.remove(p.windowId);
         }
         applyLayout(p.targetScreenId, false);
+        // The detach at begin and this restore both mutate persisted strip
+        // structure (and the view anchor when edge-scroll ran mid-hold).
+        Q_EMIT placementChanged(p.targetScreenId);
         return;
     }
 
@@ -356,7 +395,14 @@ void ScrollEngine::cancelDragInsertPreview()
             targetState->strip().insertWindow(p.windowId, p.carried.width, p.carried.display, params,
                                               p.carried.minWidth, p.carried.minHeight, ScrollInsertPosition::Last);
             m_states.setKeyForWindow(p.windowId, p.targetKey);
+            m_lastAppliedRect.remove(p.windowId);
             applyLayout(p.targetScreenId, false);
+            Q_EMIT placementChanged(p.targetScreenId);
+        } else {
+            // Target context refused too — the window would stay tracked
+            // against a key holding it nowhere. Drop the reverse-map entry
+            // instead of latching the detached-residue limbo.
+            m_states.removeWindow(p.windowId);
         }
         Q_EMIT windowFloatingStateSynced(p.windowId, false, p.targetScreenId);
         return;
@@ -373,19 +419,30 @@ void ScrollEngine::cancelDragInsertPreview()
     } else {
         dragPreviewRestoreSlot(priorState, p.windowId, p.priorSlot, layoutParamsForScreen(p.priorKey.screenId),
                                p.priorKey.screenId);
+        m_lastAppliedRect.remove(p.windowId);
     }
     m_states.setKeyForWindow(p.windowId, p.priorKey);
     applyLayout(p.targetScreenId, false);
     if (p.priorKey == currentKeyForScreen(p.priorKey.screenId)) {
         applyLayout(p.priorKey.screenId, false);
     }
+    // Cross-key cancel changes which strip holds the window on BOTH ends.
+    Q_EMIT placementChanged(p.targetScreenId);
+    Q_EMIT placementChanged(p.priorKey.screenId);
 }
 
 PhosphorEngine::IPlacementEngine::DragInsertTarget
 ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const
 {
     DragInsertTarget target;
-    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+    // While a preview is live for this screen, resolve against the preview's
+    // CAPTURED key, not the screen's current context: a desktop/activity
+    // switch mid-drag would otherwise hit-test the new context's strip while
+    // commit applies those indexes to the old one.
+    const bool previewOwnsScreen = m_dragInsertPreview
+        && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId);
+    const ScrollState* state = previewOwnsScreen ? m_states.stateForKey(m_dragInsertPreview->targetKey)
+                                                 : m_states.stateForKey(m_context.currentKeyForScreen(screenId));
     if (!state) {
         return target;
     }
@@ -420,8 +477,9 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
             continue;
         }
         // Inside this column's x-span: edge bands open a new column beside
-        // it, the middle joins it as a tile at the y-resolved slot.
-        const int band = std::min(column.rect.width() / kEdgeBandDivisor, kEdgeBandMaxPx);
+        // it, the middle joins it as a tile at the y-resolved slot. Floor of
+        // 1 so integer division on a degenerate sliver still leaves bands.
+        const int band = std::clamp(column.rect.width() / kEdgeBandDivisor, 1, kEdgeBandMaxPx);
         if (cursorPos.x() < column.rect.left() + band) {
             target.primary = column.columnIndex;
             target.newSlot = true;
@@ -433,18 +491,23 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
             return target;
         }
         target.primary = column.columnIndex;
-        target.secondary = column.tiles.size();
-        for (int i = 0; i < column.tiles.size(); ++i) {
-            const ResolvedTile& tile = column.tiles.at(i);
+        // secondary indexes the MODEL column's tiles — that is what
+        // insertWindowIntoColumnAt consumes at commit. Resolved tiles omit
+        // minimized ones, so map through the hovered tile's windowId rather
+        // than reusing the resolved position, which skews by one slot per
+        // preceding minimized tile.
+        const Column& modelColumn = state->strip().columns().at(column.columnIndex);
+        target.secondary = modelColumn.tiles.size();
+        for (const ResolvedTile& tile : column.tiles) {
             if (tile.hidden) {
                 continue;
             }
             if (cursorPos.y() <= tile.rect.center().y()) {
-                target.secondary = i;
+                target.secondary = std::max(0, modelColumn.indexOfWindow(tile.windowId));
                 break;
             }
-            if (tile.rect.contains(cursorPos) || cursorPos.y() <= tile.rect.bottom()) {
-                target.secondary = i + 1;
+            if (cursorPos.y() <= tile.rect.bottom()) {
+                target.secondary = modelColumn.indexOfWindow(tile.windowId) + 1;
                 break;
             }
         }
@@ -457,8 +520,10 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
         return target;
     }
     // Nothing visible (fully parked strip): hold the live preview's target
-    // rather than snapping somewhere arbitrary.
-    if (m_dragInsertPreview) {
+    // rather than snapping somewhere arbitrary. Only for the preview's OWN
+    // screen — a stateless sibling screen must not inherit another screen's
+    // remembered target (nudgeDragScroll carries the same guard).
+    if (previewOwnsScreen) {
         return m_dragInsertPreview->lastTarget;
     }
     return target;
@@ -487,16 +552,27 @@ bool ScrollEngine::nudgeDragScroll(const QString& screenId, const QPoint& cursor
     // screen edge. Shallow contact scrolls barely at all, so dragging near
     // an edge column doesn't yank the strip; parking at the edge reaches
     // full speed.
+    // Pick the band by the NEARER edge so a work area narrower than two
+    // bands cannot route a right-edge cursor into the left band, then ramp
+    // quadratically with depth. A depth that rounds to a zero step is
+    // treated as outside the band — matching the "brushing the inner edge
+    // barely moves" intent instead of creeping 1 px per tick forever.
+    const int leftEdge = params.workArea.left() + kDragScrollBandPx;
+    const int rightEdge = params.workArea.right() - kDragScrollBandPx;
+    const bool inLeftBand = cursorPos.x() <= leftEdge;
+    const bool inRightBand = cursorPos.x() >= rightEdge;
     int step = 0;
-    if (cursorPos.x() <= params.workArea.left() + kDragScrollBandPx) {
-        const double depth = std::clamp(
-            (params.workArea.left() + kDragScrollBandPx - cursorPos.x()) / double(kDragScrollBandPx), 0.0, 1.0);
-        step = -std::max(1, static_cast<int>(std::lround(depth * depth * kDragScrollMaxStepPx)));
-    } else if (cursorPos.x() >= params.workArea.right() - kDragScrollBandPx) {
-        const double depth = std::clamp(
-            (cursorPos.x() - (params.workArea.right() - kDragScrollBandPx)) / double(kDragScrollBandPx), 0.0, 1.0);
-        step = std::max(1, static_cast<int>(std::lround(depth * depth * kDragScrollMaxStepPx)));
+    if (inLeftBand
+        && (!inRightBand || cursorPos.x() - params.workArea.left() <= params.workArea.right() - cursorPos.x())) {
+        const double depth = std::clamp((leftEdge - cursorPos.x()) / double(kDragScrollBandPx), 0.0, 1.0);
+        step = -static_cast<int>(std::lround(depth * depth * kDragScrollMaxStepPx));
+    } else if (inRightBand) {
+        const double depth = std::clamp((cursorPos.x() - rightEdge) / double(kDragScrollBandPx), 0.0, 1.0);
+        step = static_cast<int>(std::lround(depth * depth * kDragScrollMaxStepPx));
     } else {
+        return false;
+    }
+    if (step == 0) {
         return false;
     }
     const int maxViewX = resolved.stripWidth - params.workArea.width();
@@ -509,6 +585,11 @@ bool ScrollEngine::nudgeDragScroll(const QString& screenId, const QPoint& cursor
     // ran through newViewX above.
     strip.restoreViewAnchor(strip.viewAnchor() - (newViewX - resolved.viewX), params);
     applyLayout(m_dragInsertPreview->targetScreenId, false);
+    // The anchor is persisted state, and applyLayout's own anchorMoved gate
+    // cannot see this shift (updateViewForFocus is skipped while the preview
+    // steers the view) — without this emit an edge-scroll followed by Escape
+    // loses the anchor across a restart.
+    Q_EMIT placementChanged(m_dragInsertPreview->targetScreenId);
     return true;
 }
 
@@ -532,6 +613,17 @@ void ScrollEngine::dropClosedWindowFromDragPreview(const QString& windowId)
         // already removing it everywhere, so restoration would resurrect a
         // dead id — just drop the preview.
         m_dragInsertPreview.reset();
+        return;
+    }
+    // A NEIGHBOUR in the target strip is going away: the remembered target
+    // indexes were hit-tested against a structure that is about to change,
+    // and a stationary cursor never re-aims. Discard the stale aim — commit
+    // then takes the restore-slot / append fallback instead of silently
+    // landing at a shifted index, and the next motion or scroll tick
+    // re-resolves a fresh target.
+    const auto it = m_states.windowKeys().constFind(windowId);
+    if (it != m_states.windowKeys().constEnd() && it.value() == m_dragInsertPreview->targetKey) {
+        m_dragInsertPreview->lastTarget = DragInsertTarget{};
     }
 }
 

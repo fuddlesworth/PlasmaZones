@@ -501,7 +501,6 @@ void ScrollEngine::endArrivalBurst()
         return;
     }
     const QHash<QString, bool> pending = std::move(m_burstPendingApplies);
-    m_burstPendingApplies.clear();
     // Sorted, not hash order: with focus-taking arrivals on two screens the
     // LAST activation request wins the compositor's focus, and hash order
     // would make that winner vary run to run.
@@ -887,7 +886,11 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         state->strip().focusWindow(windowId, params);
     }
     m_scrollFloatedWindows.remove(windowId);
-    Q_EMIT windowFloatingChanged(windowId, false, screenId);
+    // contextScreen, not the caller's raw screenId — the same fallback form
+    // floatWindowInternal uses, so an empty caller hint cannot mislabel the
+    // announcement's screen (both current callers pass a matching screen;
+    // this pins the contract).
+    Q_EMIT windowFloatingChanged(windowId, false, contextScreen);
     // Batch callers (snapAllWindows) relayout once for the whole batch.
     if (applyAfter) {
         // Background-context guard, same terms as floatWindowInternal:
@@ -974,6 +977,10 @@ void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& 
 void ScrollEngine::handoffRelease(const QString& rawWindowId)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
+    // A preview naming this window must not survive its tracking: commit
+    // would re-insert into a strip another engine has since adopted the
+    // window from (shared contract gap with autotile's twin, closed here).
+    dropClosedWindowFromDragPreview(windowId);
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
@@ -985,6 +992,10 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     state->strip().takeWindow(windowId, params);
     state->removeFloating(windowId);
     m_states.removeWindow(windowId);
+    // A released window's queued echo can never be answered — the stale
+    // entry would eat the first genuine focus when the window comes back
+    // (releaseScreenState documents the same sweep).
+    m_pendingSelfActivations.removeAll(windowId);
     // m_lastAppliedRect deliberately retained (same rationale as
     // windowClosed: a close/capture racing the handoff still needs the
     // poison-guard memory; pruneStaleWindows reclaims it).
@@ -1007,6 +1018,9 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     if (windowId.isEmpty() || !m_scrollingScreens.contains(ctx.toScreenId)) {
         return;
     }
+    // Same preview hygiene as handoffRelease: an arriving window that a
+    // live preview still names would be double-placed at commit.
+    dropClosedWindowFromDragPreview(windowId);
     PhosphorEngine::PlacementStateKey key = currentKeyForScreen(ctx.toScreenId);
     if (ctx.toDesktop > 0) {
         key.desktop = ctx.toDesktop;

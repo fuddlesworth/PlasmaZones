@@ -285,6 +285,7 @@ private Q_SLOTS:
         const QStringList keys{
             QStringLiteral("toggleActivation"),
             QStringLiteral("autotileDragInsertToggle"),
+            QStringLiteral("scrollingDragInsertToggle"),
             QStringLiteral("zoneSpanToggleMode"),
         };
 
@@ -302,6 +303,8 @@ private Q_SLOTS:
         QCOMPARE(result.value(QStringLiteral("toggleActivation")).toBool(), m_settings->toggleActivation());
         QCOMPARE(result.value(QStringLiteral("autotileDragInsertToggle")).toBool(),
                  m_settings->autotileDragInsertToggle());
+        QCOMPARE(result.value(QStringLiteral("scrollingDragInsertToggle")).toBool(),
+                 m_settings->scrollingDragInsertToggle());
         QCOMPARE(result.value(QStringLiteral("zoneSpanToggleMode")).toBool(), m_settings->zoneSpanToggleMode());
     }
 

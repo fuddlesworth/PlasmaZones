@@ -77,7 +77,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Toggle mode")
                     searchAnchor: "triggersToggleMode"
-                    description: i18n("Tap the re-insert trigger once to activate the stack preview, tap again to deactivate it")
+                    description: i18n("Tap the re-insert trigger once to activate the stack preview. Tap it again to deactivate.")
                     enabled: !alwaysReinsertSwitch.checked
 
                     SettingsSwitch {

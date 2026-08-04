@@ -2173,6 +2173,12 @@ private:
     // Once real settings arrive, they override these conservative defaults.
     QVector<ParsedTrigger> m_parsedTriggers; // pre-parsed via TriggerParser::parseTriggers() at load time (avoids
                                              // QVariant unboxing in hot path)
+    // Drag-insert trigger lists, cached so detectActivationAndGrab can force
+    // tick forwarding while a HOLD-mode insert trigger is physically held
+    // (the toggle bools below cover toggle mode only; without these, a drag
+    // starting off-engine could never reach hold-mode drag-insert).
+    QVector<ParsedTrigger> m_parsedAutotileDragInsertTriggers;
+    QVector<ParsedTrigger> m_parsedScrollingDragInsertTriggers;
     bool m_triggersLoaded =
         false; // false until D-Bus reply arrives — permissive default bypasses trigger gating (#175)
     bool m_cachedToggleActivation = false;

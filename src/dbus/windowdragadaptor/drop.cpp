@@ -240,10 +240,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     if (!capturedSnapCancelled && capturedZoneSelectorShown && m_overlayService
         && m_overlayService->hasSelectedZone()) {
         QString selectedLayoutId = m_overlayService->selectedLayoutId();
-        // Resolve virtual-aware screen ID for the zone selector position
-        auto selectorResolved = resolveScreenAt(QPointF(cursorX, cursorY));
-        QString selectorScreenId = selectorResolved.screenId;
-        QScreen* screen = selectorResolved.qscreen;
+        // The selector screen IS the release screen — releaseResolved above
+        // was computed from the identical cursor point, so a second resolve
+        // only manufactured a name implying they could differ.
+        const QString& selectorScreenId = releaseScreenId;
+        QScreen* screen = releaseScreen;
 
         // Block entire zone selector snap path when screen is locked for its
         // current mode. Take a single resolver snapshot of (desktop, activity)
@@ -364,7 +365,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // selected layout directly here. Doing the activation earlier on
                     // hover would resnap every other window mid-drag — the "layouts
                     // changing when holding alt to move window" bug.
-                    if (selectedLayout) {
+                    // Gated on the commit surviving: an unresolvable zone
+                    // UUID refuses the snap (shouldApplyGeometry=false), and
+                    // a refused drop must not still reassign the screen's
+                    // layout — that resnaps every OTHER window and persists
+                    // an assignment the user's drop never completed.
+                    if (selectedLayout && shouldApplyGeometry) {
                         // Reuse the `selectorCtx` snapshot built at the top of
                         // this block — its (desktop, activity) is the same
                         // frozen tuple the gate above already consulted, and
@@ -609,7 +615,13 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     }
 
     QScreen* releaseScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
-    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    // Desktop-explicit resolve on the same SNAPSHOT axis as the suppression
+    // gate and the occupancy set below — resolveLayoutForScreen reads the
+    // live desktop, so a virtual-desktop switch landing in this handler's
+    // one-event-loop deferral would pair the NEW desktop's layout with the
+    // OLD desktop's occupancy.
+    PhosphorZones::Layout* layout =
+        m_layoutManager->layoutForScreen(screenId, desktopFilter, m_layoutManager->currentActivity());
     if (!layout) {
         return;
     }

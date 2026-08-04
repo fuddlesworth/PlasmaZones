@@ -205,6 +205,23 @@ void AutotileEngine::updateDragInsertPreview(int insertIndex)
     retileAfterOperation(m_dragInsertPreview->targetScreenId, /*operationSucceeded=*/true);
 }
 
+void AutotileEngine::updateDragInsertPreview(const DragInsertTarget& target)
+{
+    // Interface seam: an invalid target is ignored, never clamped (the
+    // engine-local int form clamps; that contract stays on its side).
+    if (target.isValid()) {
+        updateDragInsertPreview(target.primary);
+    }
+}
+
+AutotileEngine::DragInsertTarget AutotileEngine::computeDragInsertTargetAtPoint(const QString& screenId,
+                                                                                const QPoint& cursorPos) const
+{
+    DragInsertTarget target;
+    target.primary = computeDragInsertIndexAtPoint(screenId, cursorPos);
+    return target;
+}
+
 void AutotileEngine::commitDragInsertPreview()
 {
     if (!m_dragInsertPreview) {

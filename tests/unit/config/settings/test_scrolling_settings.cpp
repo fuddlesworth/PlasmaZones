@@ -695,7 +695,7 @@ private Q_SLOTS:
 
     /// The kind-aware clamp in the SETTER, which the schema's wider
     /// clampDouble cannot express: under Fixed the value is bounded by the
-    /// pixel range, under Proportion by [ValueMin, ProportionMax]. Without
+    /// pixel range, under Proportion by [ProportionMin, ProportionMax]. Without
     /// this the two halves of the shared value key are pinned only at their
     /// union, so a proportion-magnitude write under Fixed (or a pixel-
     /// magnitude one under Proportion) would sail through.
@@ -897,7 +897,7 @@ private Q_SLOTS:
         QTest::newRow("fixed-in-range") << ConfigDefaults::scrollingWidthKindFixed() << 640.0 << 640.0;
         QTest::newRow("proportion-in-range") << ConfigDefaults::scrollingWidthKindProportion() << 0.25 << 0.25;
         // NO rows for "in-kind but out of RANGE". They would be vacuous: the
-        // schema's clampDouble(ValueMin, FixedMax) validator runs on the READ
+        // schema's clampDouble(ProportionMin, FixedMax) validator runs on the READ
         // path as well as the write (PhosphorConfig::Schema), so a hand-edited
         // Fixed=50000 is already 10000 by the time the getter returns it and
         // the normalizer sees an in-range value. reseedColumnWidthForKind's
