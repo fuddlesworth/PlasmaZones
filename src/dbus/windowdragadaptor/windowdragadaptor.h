@@ -606,6 +606,15 @@ private:
     QRect m_pendingSnapDragGeometry;
     bool m_pendingSnapDragWasSnapped = false;
     QString m_currentZoneId;
+    /// Screen the zone in m_currentZoneId was resolved against. Part of the
+    /// change-gate key, not decoration: the default layout assignment is
+    /// GLOBAL, so two monitors routinely resolve the same Layout* and hand
+    /// back the same zone UUID. Keyed on the id alone, a cursor crossing
+    /// between them compares equal, skips the update, and leaves
+    /// m_currentZoneGeometry holding the OLD monitor's absolute rect — which
+    /// the drop's physical-screen guard then rejects, so the window
+    /// float-drops instead of snapping.
+    QString m_currentZoneScreenId;
     QRect m_currentZoneGeometry;
     bool m_snapCancelled = false;
     bool m_triggerReleasedAfterCancel = false; // Tracks release→press cycle for retrigger after Escape

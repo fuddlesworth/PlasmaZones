@@ -70,6 +70,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_draggedWindowId = windowId;
     m_originalGeometry = QRect(qRound(x), qRound(y), qRound(width), qRound(height));
     m_currentZoneId.clear();
+    m_currentZoneScreenId.clear();
     m_currentZoneGeometry = QRect();
     m_currentAdjacentZoneIds.clear();
     m_isMultiZoneMode = false;
@@ -174,6 +175,23 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
     }
     outScreenId = resolved.screenId;
     // Live-mode disable check — `handleFor` not `handleForMode(Snapping)`.
+    // Snapping switched off entirely. This is the FOURTH bypass reason and it
+    // had no gate here, unlike its three siblings below — beginDrag's bypass
+    // branch never calls dragStarted, so dragStarted's own snappingEnabled
+    // check never runs, and the effect still forwards cursor ticks for a
+    // non-engine bypass. The result was that holding the activation trigger
+    // with snapping disabled lit the zone overlay and ran zone detection for
+    // the whole drag. Nothing could snap (endDrag no-ops), so it was wasted
+    // work and a wrong picture rather than a wrong placement.
+    if (m_settings && !m_settings->snappingEnabled()) {
+        if (m_overlayShown && m_overlayService) {
+            m_overlayService->hide();
+            m_overlayShown = false;
+        }
+        m_overlayIdled = false;
+        return nullptr;
+    }
+
     // The cursor can cross from a snap-mode screen onto an autotile-mode
     // screen mid-drag; gating on the hard-coded Snapping disable list
     // would consult the wrong list for the destination. Mirrors the
@@ -308,6 +326,7 @@ void WindowDragAdaptor::hideOverlayAndClearZoneState()
         m_overlayService->clearHighlight();
     }
     m_currentZoneId.clear();
+    m_currentZoneScreenId.clear();
     m_currentAdjacentZoneIds.clear();
     m_isMultiZoneMode = false;
     m_currentZoneGeometry = QRect();
@@ -355,6 +374,8 @@ void WindowDragAdaptor::clearOverlayForTriggerRelease()
     }
 
     m_currentZoneId.clear();
+
+    m_currentZoneScreenId.clear();
     m_currentAdjacentZoneIds.clear();
     m_isMultiZoneMode = false;
     m_currentZoneGeometry = QRect();
@@ -462,9 +483,14 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             }
         }
 
-        // Only update if zone selection changed
-        if (primaryZoneId != m_currentZoneId || newAdjacentZoneIds != m_currentAdjacentZoneIds) {
+        // Only update if zone selection changed. screenId is part of the key:
+        // the same zone UUID on a different monitor is a different rect, and
+        // without it a crossing between two screens sharing a layout skips the
+        // update and strands the previous screen's geometry.
+        if (primaryZoneId != m_currentZoneId || screenId != m_currentZoneScreenId
+            || newAdjacentZoneIds != m_currentAdjacentZoneIds) {
             m_currentZoneId = primaryZoneId;
+            m_currentZoneScreenId = screenId;
             m_currentAdjacentZoneIds = newAdjacentZoneIds;
             m_isMultiZoneMode = true;
 
@@ -485,8 +511,9 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
     } else if (result.primaryZone) {
         // Single zone detected (fallback from multi-zone detection)
         QString zoneId = result.primaryZone->id().toString();
-        if (zoneId != m_currentZoneId || m_isMultiZoneMode) {
+        if (zoneId != m_currentZoneId || screenId != m_currentZoneScreenId || m_isMultiZoneMode) {
             m_currentZoneId = zoneId;
+            m_currentZoneScreenId = screenId;
             m_currentAdjacentZoneIds.clear();
             m_isMultiZoneMode = false;
             m_zoneDetector->highlightZone(result.primaryZone);
@@ -500,6 +527,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
         // No zone detected
         if (!m_currentZoneId.isEmpty() || m_isMultiZoneMode) {
             m_currentZoneId.clear();
+            m_currentZoneScreenId.clear();
             m_currentAdjacentZoneIds.clear();
             m_isMultiZoneMode = false;
             m_currentZoneGeometry = QRect();

@@ -496,6 +496,7 @@ void WindowDragAdaptor::cancelSnap()
         }
     }
     m_currentZoneId.clear();
+    m_currentZoneScreenId.clear();
     m_currentZoneGeometry = QRect();
     m_currentAdjacentZoneIds.clear();
     m_isMultiZoneMode = false;
@@ -689,6 +690,17 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
 {
     // Check if zone selector feature is enabled
     if (!m_settings || !m_settings->zoneSelectorEnabled()) {
+        return;
+    }
+
+    // ...and that snapping is on at all. The selector is a "pick a zone
+    // layout" UI whose pick is committed inside dragStopped, which a
+    // snapping-disabled drag never reaches (endDrag returns NoOp), so offering
+    // it would discard the choice on release — the same reasoning the
+    // layout-suppressed note below gives. This gate pairs with the one added
+    // to prepareHandlerContext; without both, holding the activation trigger
+    // with snapping off produced overlay AND popup for a drag that cannot snap.
+    if (!m_settings->snappingEnabled()) {
         return;
     }
 
@@ -990,6 +1002,7 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_draggedWindowId.clear();
     m_originalGeometry = QRect();
     m_currentZoneId.clear();
+    m_currentZoneScreenId.clear();
     m_currentZoneGeometry = QRect();
     m_currentAdjacentZoneIds.clear();
     m_isMultiZoneMode = false;
@@ -1057,6 +1070,7 @@ void WindowDragAdaptor::onLayoutChanged()
     if (!m_draggedWindowId.isEmpty()) {
         qCInfo(lcDbusWindow) << "Layout changed mid-drag, clearing cached zone state";
         m_currentZoneId.clear();
+        m_currentZoneScreenId.clear();
         m_currentZoneGeometry = QRect();
         m_currentMultiZoneGeometry = QRect();
         m_currentAdjacentZoneIds.clear();

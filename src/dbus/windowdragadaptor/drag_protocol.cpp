@@ -838,6 +838,7 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
                     m_overlayService->clearHighlight();
                 }
                 m_currentZoneId.clear();
+                m_currentZoneScreenId.clear();
                 m_currentZoneGeometry = QRect();
                 m_currentAdjacentZoneIds.clear();
                 m_isMultiZoneMode = false;
