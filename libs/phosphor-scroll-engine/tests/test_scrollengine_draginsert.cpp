@@ -53,6 +53,7 @@ private Q_SLOTS:
     void indicatorRectTracksTarget();
     void indicatorRectMatchesTheDropUnderAGap();
     void indicatorRectMatchesTheDropForANewColumn();
+    void indicatorStaysOnScreenWithAFullViewport();
     void nudgeDragScrollShiftsView();
     void nudgeDragScrollRefusesWhenTheStripFits();
     void windowClosedDropsPreview();
@@ -688,6 +689,59 @@ void TestScrollEngineDragInsert::indicatorRectMatchesTheDropForANewColumn()
     QVERIFY(!delivered.isNull());
 
     QCOMPARE(promised, delivered);
+}
+
+void TestScrollEngineDragInsert::indicatorStaysOnScreenWithAFullViewport()
+{
+    // The reported bug: with the viewport FULL, aiming at an outer edge drew
+    // the indicator off screen and the drag ran with no drop feedback.
+    //
+    // Four windows at the 50% default on a 1200px work area. Focusing the
+    // leftmost anchors the view there, so a and b exactly fill 0..1199 with c
+    // off to the right — no empty space for a new column to land in visibly
+    // without the view moving. That is the configuration every other indicator
+    // test misses: they all leave slack, so the slot happens to be on screen
+    // and the missing re-anchor never shows.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"),
+                {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("w")});
+    engine->windowFocused(QStringLiteral("a"), QStringLiteral("S1"));
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("w"), QStringLiteral("S1")));
+
+    const QRect work = ScrollTestUtils::defaultScreenRect();
+    const QRect rectA = tileRect(engine, QStringLiteral("S1"), QStringLiteral("a"));
+    const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
+    QVERIFY(!rectA.isNull());
+    QVERIFY(!rectB.isNull());
+    // The premise: the two survivors really do fill the work area. Without
+    // this the test could pass on a strip with slack and prove nothing.
+    QCOMPARE(rectA.left(), work.left());
+    QCOMPARE(rectB.right(), work.right());
+
+    // Aim at the LEFT edge of the leftmost column: insert before it.
+    const DragTarget before =
+        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectA.left() + 5, 400));
+    QVERIFY(before.newSlot);
+    engine->updateDragInsertPreview(before);
+    const QRect beforeRect = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY2(work.intersects(beforeRect),
+             "inserting before the first column must resolve to a slot the user can actually see");
+
+    // ...and the RIGHT edge of the rightmost: insert after it.
+    const DragTarget after =
+        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectB.right() - 5, 400));
+    QVERIFY(after.newSlot);
+    engine->updateDragInsertPreview(after);
+    const QRect afterRect = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY2(work.intersects(afterRect),
+             "inserting after the last column must resolve to a slot the user can actually see");
+
+    // And the promise is kept: the rect the indicator showed is where the
+    // window actually lands. This is the assertion that would fail if the
+    // re-anchor were mirrored WRONGLY rather than merely omitted.
+    engine->commitDragInsertPreview();
+    QCOMPARE(tileRect(engine, QStringLiteral("S1"), QStringLiteral("w")), afterRect);
 }
 
 void TestScrollEngineDragInsert::nudgeDragScrollShiftsView()

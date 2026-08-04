@@ -668,12 +668,27 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
         probe.setWindowHeightIntent(p.windowId, p.carried.height);
     }
 
-    // Deliberately NOT mirrored: commit's focusWindow, which re-anchors the
-    // view so the dropped column is scrolled into place. Running it here would
-    // make the indicator jump to where the window will be AFTER the view
-    // scrolls, rather than marking the place under the cursor the user is
-    // aiming at. The rect is therefore in the strip's current view, and the
-    // view may scroll on drop.
+    // MIRRORS commit's focusWindow, which re-anchors the view so the dropped
+    // column is scrolled into place. This used to be deliberately omitted, on
+    // the reasoning that the indicator should mark the place under the cursor
+    // rather than jump to where the window lands after the view scrolls. That
+    // reasoning only holds while the target slot is ON SCREEN.
+    //
+    // With a FULL viewport it is not, and omitting the re-anchor produced no
+    // indicator at all. Two columns filling a 1200px work area, aim at either
+    // outer edge: inserting before the first resolves the slot to x=-600 and
+    // inserting after the last to x=1200. Both are outside the work area, so
+    // the overlay clipped them and the drag ran with no drop feedback in the
+    // one configuration where a user most needs it. The DROP was correct
+    // throughout — commit re-anchors and the window lands visibly — so the
+    // indicator was contradicting an outcome that was already right.
+    //
+    // Mirroring it costs nothing when the slot is already visible: focusWindow
+    // re-anchors only when the focused column actually changes, so a target in
+    // the middle of a partly-filled strip still resolves under the cursor.
+    // Every drop-equivalence test in the suite pins that, comparing this rect
+    // against the post-commit tile rect.
+    probe.focusWindow(p.windowId, params);
     const ResolvedStrip resolved = probe.relayout(params);
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
