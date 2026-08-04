@@ -469,7 +469,7 @@ public:
     /// drag start and applies structure at drop, precisely because restructuring
     /// live slid the strip out from under a stationary cursor. So the target has
     /// to be painted rather than enacted.
-    void updateScrollDropIndicator(const QString& screenId, const QRect& rect) override;
+    void updateScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate) override;
 
     /// Per-context PAINT overrides for @p screenId's tab indicator, resolved
     /// from the SetTabIndicator* context rules and layered over the config

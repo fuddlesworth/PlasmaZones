@@ -59,7 +59,7 @@ void OverlayService::setScrollDropIndicatorWindowOverrides(const QVariantMap& ov
     m_scrollDropIndicatorWindowOverrides = overrides;
 }
 
-void OverlayService::updateScrollDropIndicator(const QString& screenId, const QRect& rect)
+void OverlayService::updateScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate)
 {
     if (screenId.isEmpty()) {
         return;
@@ -189,6 +189,10 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     auto* shellSurface = state->shell->shellSurface();
     auto* shellWindow = state->shell->shellWindow();
 
+    // BEFORE the rect, so the Behaviors are already gated when the new value
+    // lands. Written after it, the change would animate under the old flag and
+    // the first frame of a scroll would still stretch.
+    writeQmlProperty(slot, QStringLiteral("animateMoves"), animate);
     writeQmlProperty(slot, QStringLiteral("indicatorRect"), local);
 
     // Paint settings, pushed on every RECT CHANGE rather than only on the

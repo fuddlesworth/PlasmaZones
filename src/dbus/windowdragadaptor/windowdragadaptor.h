@@ -753,7 +753,11 @@ private:
     /// Push the drop-target indicator for a live preview. Hides the previous
     /// screen's indicator first when the drag crossed screens, so a cross-
     /// screen drag cannot strand one behind it.
-    void pushScrollDropIndicator(const QString& screenId, const QRect& rect);
+    /// Paint the drop indicator on @p screenId. @p animate is true for a
+    /// TARGET CHANGE (the cursor picked a different slot) and false for a
+    /// scroll-tracking re-projection, which the overlay must not animate —
+    /// see ScrollDropIndicatorContent::animateMoves.
+    void pushScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate);
     /// Preview-end teardown for the drop indicator. Safe to call with none
     /// showing.
     ///

@@ -323,11 +323,15 @@ void WindowDragAdaptor::onDragScrollTick()
         // with no cursor motion at all, so the dragMoved push cannot cover it:
         // a hand parked in the edge band would otherwise scroll the columns
         // out from under a frozen indicator.
-        pushScrollDropIndicator(screenId, engine->dragInsertIndicatorRect(screenId));
+        // animate=false: this is the SCROLL re-projecting the same slot, not
+        // the user picking a different one. The timer fires at ~16ms against a
+        // 100ms transition, so animating it retargets six times before it can
+        // settle and the rect stretches instead of sliding.
+        pushScrollDropIndicator(screenId, engine->dragInsertIndicatorRect(screenId), /*animate=*/false);
     }
 }
 
-void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const QRect& rect)
+void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate)
 {
     if (!m_overlayService || screenId.isEmpty()) {
         return;
@@ -345,9 +349,11 @@ void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const Q
     // two drivers. Every sibling comparison in this file already uses it.
     if (!m_dropIndicatorScreenId.isEmpty()
         && !PhosphorScreens::ScreenIdentity::screensMatch(m_dropIndicatorScreenId, screenId)) {
-        m_overlayService->updateScrollDropIndicator(m_dropIndicatorScreenId, QRect());
+        // The departing screen's hide is never animated: there is no target
+        // to make legible, only a rectangle that must stop being painted.
+        m_overlayService->updateScrollDropIndicator(m_dropIndicatorScreenId, QRect(), /*animate=*/false);
     }
-    m_overlayService->updateScrollDropIndicator(screenId, rect);
+    m_overlayService->updateScrollDropIndicator(screenId, rect, animate);
     // An empty rect means the engine has no paintable target (autotile by
     // interface default, or a preview with nothing hit-tested yet). The
     // overlay treats that as a hide, so do not record the screen as lit —
@@ -361,7 +367,7 @@ void WindowDragAdaptor::clearScrollDropIndicator()
         return;
     }
     if (m_overlayService) {
-        m_overlayService->updateScrollDropIndicator(m_dropIndicatorScreenId, QRect());
+        m_overlayService->updateScrollDropIndicator(m_dropIndicatorScreenId, QRect(), /*animate=*/false);
     }
     m_dropIndicatorScreenId.clear();
 }

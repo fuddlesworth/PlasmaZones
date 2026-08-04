@@ -40,6 +40,16 @@ Item {
     required property real indicatorOpacity
     required property int indicatorBorderWidth
     required property int indicatorBorderRadius
+    /// Whether a rect change should be ANIMATED. True for a target change,
+    /// which is what the transitions exist to make legible. False while the
+    /// edge auto-scroll is driving, because then the rect is re-projected
+    /// every frame for the same slot and animating that is actively wrong:
+    /// the daemon's scroll timer fires at ~16ms against a 100ms transition,
+    /// so each update retargets an animation six times before it can settle.
+    /// x, width and height interpolate INDEPENDENTLY, so a rect that should
+    /// translate instead stretches — the edges arrive at different times and
+    /// the indicator visibly grows and shrinks as it slides.
+    property bool animateMoves: true
 
     /// Resolved paint colours. The empty test is the only fallback: the D-Bus
     /// boundary rejects anything that is neither empty nor a colour QColor can
@@ -91,24 +101,28 @@ Item {
         // stack slot, so this is a handful of transitions across a drag, and
         // the motion is what makes the new target legible as a CHANGE.
         Behavior on x {
+            enabled: root.animateMoves
             NumberAnimation {
                 duration: Kirigami.Units.shortDuration
                 easing.type: Easing.OutCubic
             }
         }
         Behavior on y {
+            enabled: root.animateMoves
             NumberAnimation {
                 duration: Kirigami.Units.shortDuration
                 easing.type: Easing.OutCubic
             }
         }
         Behavior on width {
+            enabled: root.animateMoves
             NumberAnimation {
                 duration: Kirigami.Units.shortDuration
                 easing.type: Easing.OutCubic
             }
         }
         Behavior on height {
+            enabled: root.animateMoves
             NumberAnimation {
                 duration: Kirigami.Units.shortDuration
                 easing.type: Easing.OutCubic

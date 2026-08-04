@@ -689,37 +689,37 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="616"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="622"/>
         <source>Cancel Zone Overlay</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="675"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="681"/>
         <source>Layout Picker: Move Left</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="679"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="685"/>
         <source>Layout Picker: Move Right</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="683"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="689"/>
         <source>Layout Picker: Move Up</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="687"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="693"/>
         <source>Layout Picker: Move Down</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="691"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="697"/>
         <source>Layout Picker: Confirm</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="692"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="698"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1886,7 +1886,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="376"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="777"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="776"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="546"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="34"/>
         <source>Monitor</source>
@@ -1896,7 +1896,7 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="364"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="254"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="379"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="779"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="778"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="501"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="40"/>
         <source>Desktop</source>
@@ -2730,7 +2730,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="252"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="785"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="784"/>
         <source>Notification</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3587,12 +3587,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="707"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="706"/>
         <source>Gap: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="710"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="709"/>
         <source>Outer gap: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3840,10 +3840,10 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="590"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="628"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="670"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="675"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="680"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="627"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="669"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="674"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="679"/>
         <source>(invalid)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3898,102 +3898,102 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="630"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="629"/>
         <source>Drop indicator fill: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="633"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="632"/>
         <source>Drop indicator border: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="640"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="639"/>
         <source>Drop indicator fill when dragging this window: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="642"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="641"/>
         <source>Drop indicator border when dragging this window: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="648"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="647"/>
         <source>Window layer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="656"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="655"/>
         <source>Window layer (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="658"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="657"/>
         <source>Layer: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="669"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="668"/>
         <source>Highlight color: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="674"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="673"/>
         <source>Inactive zone color: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="679"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="678"/>
         <source>Overlay border color: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="693"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="692"/>
         <source>Active opacity (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="694"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="693"/>
         <source>Inactive opacity (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="696"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="695"/>
         <source>Active opacity: %1%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="697"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="696"/>
         <source>Inactive opacity: %1%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="700"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="699"/>
         <source>Overlay border width: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="703"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="702"/>
         <source>Overlay corner radius: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="713"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="712"/>
         <source>Top gap: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="716"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="715"/>
         <source>Bottom gap: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="719"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="718"/>
         <source>Left gap: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="722"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="721"/>
         <source>Right gap: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4004,195 +4004,195 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="734"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="733"/>
         <source>Monitor &amp; Layout</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="736"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="735"/>
         <source>Applications</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="738"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="737"/>
         <source>Activities</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="142"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="328"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="740"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="739"/>
         <source>Animations</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="742"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="741"/>
         <source>Advanced / Custom</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="744"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="743"/>
         <source>System</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="753"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="752"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="52"/>
         <source>Application</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="755"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="754"/>
         <source>Window class</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="757"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="756"/>
         <source>Desktop file</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="759"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="758"/>
         <source>Window role</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="761"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="760"/>
         <source>Process ID</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="763"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="762"/>
         <source>Title</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="765"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="764"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="627"/>
         <source>Window type</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="767"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="766"/>
         <source>Sticky</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="769"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="768"/>
         <source>Fullscreen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="771"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="770"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1096"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="34"/>
         <source>Maximized</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="773"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="772"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1087"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowsPage.qml.cpp" line="36"/>
         <source>Minimized</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="775"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="774"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1089"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowsPage.qml.cpp" line="41"/>
         <source>Focused</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="781"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="780"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="579"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="46"/>
         <source>Activity</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="783"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="782"/>
         <source>Transient</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="787"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="786"/>
         <source>Width</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="789"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="788"/>
         <source>Height</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="791"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="790"/>
         <source>Keep above</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="793"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="792"/>
         <source>Keep below</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="795"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="794"/>
         <source>Skip taskbar</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="797"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="796"/>
         <source>Skip pager</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="799"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="798"/>
         <source>Skip switcher</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="801"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="800"/>
         <source>Modal</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="803"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="802"/>
         <source>Decorated</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="805"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="804"/>
         <source>Resizable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="807"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="806"/>
         <source>Movable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="809"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="808"/>
         <source>Maximizable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="811"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="810"/>
         <source>Position X</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="813"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="812"/>
         <source>Position Y</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="815"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="814"/>
         <source>Title (no suffix)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="46"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="817"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="816"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="39"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="366"/>
         <source>Floating</source>
@@ -4200,7 +4200,7 @@
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="44"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="819"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="818"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="33"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="325"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="358"/>
@@ -4210,7 +4210,7 @@
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="42"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="821"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="820"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="27"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="355"/>
         <source>Tiled</source>
@@ -4240,44 +4240,44 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="823"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="822"/>
         <source>Zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="825"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="824"/>
         <source>Mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="827"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="826"/>
         <source>Tiled window count</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="829"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="828"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="704"/>
         <source>Screen orientation</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="831"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="830"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="738"/>
         <source>Active layout</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="839"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="838"/>
         <source>Any window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="853"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="852"/>
         <source>(condition group)</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="860"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="859"/>
         <source>%n condition(s)</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -4285,7 +4285,7 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="866"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="865"/>
         <source>No action</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5480,7 +5480,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="686"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="685"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="379"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="199"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="204"/>
@@ -5494,7 +5494,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="686"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="685"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="381"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="217"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="222"/>

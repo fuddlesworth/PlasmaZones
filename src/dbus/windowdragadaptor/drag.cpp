@@ -727,7 +727,12 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // change-gates on the rect itself, so a repeat costs a
                 // compare. Empty for autotile by interface default, which is
                 // correct — its live restructure already shows the target.
-                pushScrollDropIndicator(insertScreenId, insertEngine->dragInsertIndicatorRect(insertScreenId));
+                // animate=true: this push follows a CURSOR MOVE, so any rect
+                // change here is the user aiming somewhere new, which is
+                // exactly what the transitions exist to make legible. The
+                // overlay change-gates, so an unchanged rect animates nothing.
+                pushScrollDropIndicator(insertScreenId, insertEngine->dragInsertIndicatorRect(insertScreenId),
+                                        /*animate=*/true);
                 // The early return below starves the activation and
                 // zone-span rising-edge latches for as long as the preview
                 // lives; keep them fed here so a release→press performed

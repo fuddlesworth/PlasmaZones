@@ -95,7 +95,12 @@ public:
     // The drag pipeline pushes this because the scroll engine defers structure
     // to the drop, so unlike autotile's live restructure nothing in the strip
     // moves to show where the window is going.
-    virtual void updateScrollDropIndicator(const QString& screenId, const QRect& rect) = 0;
+    // @p animate distinguishes a TARGET CHANGE (true — the transitions exist
+    // to make one legible) from a scroll-tracking re-projection (false). No
+    // default argument on purpose: a default on a virtual binds statically to
+    // the declared type, so a caller holding the concrete service would
+    // silently get a different one.
+    virtual void updateScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate) = 0;
 
     // Per-DRAG drop-indicator colour overrides, resolved from the dragged
     // window's rules at drag start and cleared with an empty map when the drag
