@@ -265,11 +265,20 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
             // the fold's failure paths, which can erase the multipass entry.
             QRectF padded = textureGeo.adjusted(-pad, -pad, pad, pad);
             bool haveCanvas = false;
+            // The scale the canvas was BUILT at, carried beside it. Re-deriving it here
+            // with windowSurfaceScale would answer for the window's CURRENT outputs,
+            // which is a different question than "what scale is this texture's grid" the
+            // moment a window crosses outputs between the fold and the present.
+            qreal presentScale = 0.0;
             if (const auto psIt = m_surfaceMultipass.find(getWindowId(window)); psIt != m_surfaceMultipass.end()) {
                 if (psIt->second.canvasGeo.isValid()) {
                     padded = psIt->second.canvasGeo;
                     haveCanvas = true;
                 }
+                presentScale = psIt->second.captureScaleKey;
+            }
+            if (presentScale <= 0.0) {
+                presentScale = windowSurfaceScale(window);
             }
             // UNPADDED windows rewrite too, not just padded ones: surfaceCanvasFor
             // device-aligns the canvas, so even at pad == 0 the composite covers the
@@ -293,8 +302,41 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
                 qLeft = qMin(qLeft, quads[i].left());
                 qTop = qMin(qTop, quads[i].top());
             }
-            const double ox = qLeft + (padded.x() - textureGeo.x());
-            const double oy = qTop + (padded.y() - textureGeo.y());
+            // Offset from the anchor the quad ACTUALLY carries, which is the expanded
+            // rect SNAPPED to the device grid — not the raw expanded rect.
+            // OffscreenEffect builds this quad from the redirect's visible rect, and the
+            // scene rounds every vertex to a whole device pixel (RenderGeometry's default
+            // VertexSnappingMode::Round), so qLeft names round(textureGeo.x * scale)
+            // device pixels, not textureGeo.x * scale. Measuring the canvas delta against
+            // the unsnapped origin therefore carried KWin's own rounding into the quad as
+            // a sub-pixel error.
+            //
+            // At scale 1.5 that error is exactly half a device pixel, and a half pixel is
+            // the one value the vertex rounding cannot absorb: the left edge sits at a
+            // negative window-relative coordinate and the right at a positive one, so
+            // round-half-AWAY-FROM-ZERO pushes them APART (-97.5 → -98, +1058.5 → +1059).
+            // The quad came out one device pixel wider than its own texture and stretched
+            // the whole composite through GL_LINEAR — every decorated window permanently
+            // soft at 1.5x, while 1.25x and 1.48333x (whose fractions are never exactly
+            // .5) stayed pixel-exact. That asymmetry is the fingerprint (discussion #868).
+            //
+            // Anchoring on the snapped origin puts both edges on whole device pixels — the
+            // canvas is device-aligned by construction (surfaceCanvasFor) and the anchor
+            // is now an integer device coordinate too — so the vertex rounding is a no-op
+            // and the texture presents 1:1.
+            //
+            // Rounding the ABSOLUTE screen coordinate models what the scene does to the
+            // window-RELATIVE one, and the two agree exactly while the window's own origin
+            // lands on a device pixel, which is the case a zone layout produces. When it
+            // does not, our edges inherit the window origin's fraction — the same fraction
+            // KWin's own quads carry — so we track its rendering rather than adding error
+            // of our own. What holds unconditionally is the WIDTH: both edges are an exact
+            // integer number of device pixels apart, and rounding is translation-invariant
+            // by integers everywhere except the .5 tie this anchor removes.
+            const double anchorX = std::round(textureGeo.x() * presentScale) / presentScale;
+            const double anchorY = std::round(textureGeo.y() * presentScale) / presentScale;
+            const double ox = qLeft + (padded.x() - anchorX);
+            const double oy = qTop + (padded.y() - anchorY);
             const double ow = padded.width();
             const double oh = padded.height();
 

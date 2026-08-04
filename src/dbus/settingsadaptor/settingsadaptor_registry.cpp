@@ -585,6 +585,18 @@ void SettingsAdaptor::initializeRegistry()
             QStringList paths =
                 QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
                                           QStandardPaths::LocateDirectory);
+            // REVERSE into ascending priority, exactly as the daemon's own registry
+            // population does (shader_warmup.cpp). This list is registered verbatim
+            // by the effect via addSearchPaths, and MetadataPackScanStrategy
+            // reverse-iterates the registered paths and applies first-wins on an id
+            // collision — so it requires lowest-priority-FIRST, while locateAll
+            // hands back highest-priority-first. Publishing locateAll's order made
+            // the strategy examine /usr/share before the user dir, so a user pack
+            // that deliberately overrides a bundled id ("window-morph") was silently
+            // shadowed in the COMPOSITOR while the daemon (which reverses) honoured
+            // it — the same pack id resolving to different files in the two
+            // processes.
+            std::reverse(paths.begin(), paths.end());
             const QString userDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
                 + QStringLiteral("/plasmazones/animations");
             if (!paths.contains(userDir))
