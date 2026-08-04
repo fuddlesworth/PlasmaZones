@@ -5,6 +5,10 @@
 
 #include "configdefaults_screens.h"
 
+// Explicit rather than transitive: the drop indicator's corner-radius default
+// IS the zone overlay's, so this header genuinely depends on that symbol.
+#include <PhosphorZones/ZoneDefaults.h>
+
 namespace PlasmaZones {
 
 // Chain link 6: the scrolling engine's Scrolling defaults and the
@@ -492,10 +496,11 @@ public:
     {
         return 1.0;
     }
-    /// Border width and corner radius, in px. Bounds mirror the snapping zone
-    /// overlay's (Snapping.Zones.Border) so the two highlights cannot be given
-    /// visually incompatible ranges. Zero width is legal and means a fill with
-    /// no edge.
+    /// Border width and corner radius, in px. Bounds AND the radius default
+    /// mirror the snapping zone overlay's (Snapping.Zones.Border, whose radius
+    /// default is ZoneDefaults::BorderRadius) so the two highlights cannot be
+    /// given visually incompatible ranges or land on different roundings out
+    /// of the box. Zero width is legal and means a fill with no edge.
     static constexpr int scrollingDropIndicatorBorderWidth()
     {
         return 2;
@@ -510,7 +515,7 @@ public:
     }
     static constexpr int scrollingDropIndicatorBorderRadius()
     {
-        return 4;
+        return ::PhosphorZones::ZoneDefaults::BorderRadius;
     }
     static constexpr int scrollingDropIndicatorBorderRadiusMin()
     {

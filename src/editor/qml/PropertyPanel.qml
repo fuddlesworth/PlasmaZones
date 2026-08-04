@@ -369,14 +369,14 @@ Rectangle {
                 }
 
                 AppearanceSpinBox {
-                    Kirigami.FormData.label: i18nc("@label", "Border radius:")
+                    Kirigami.FormData.label: i18nc("@label", "Corner radius:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     from: 0
                     to: 50
                     spinValue: propertyPanel.defaultBorderRadius
                     defaultValue: propertyPanel.defaultBorderRadius
                     spinEnabled: editorController !== null
-                    accessibleName: i18nc("@label", "Border radius for all selected zones")
+                    accessibleName: i18nc("@label", "Corner radius for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Set corner radius for all selected zones (0-50)")
                     onSpinValueModified: function (newValue) {
                         if (editorController)
@@ -794,14 +794,14 @@ Rectangle {
                 AppearanceSpinBox {
                     id: borderRadiusSpinBox
 
-                    Kirigami.FormData.label: i18nc("@label", "Border radius:")
+                    Kirigami.FormData.label: i18nc("@label", "Corner radius:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     from: 0
                     to: 50
                     spinValue: selectedZone ? selectedZone.borderRadius : propertyPanel.defaultBorderRadius
                     defaultValue: propertyPanel.defaultBorderRadius
                     spinEnabled: Boolean(selectedZone) && Boolean(editorController)
-                    accessibleName: i18nc("@label", "Border radius in pixels")
+                    accessibleName: i18nc("@label", "Corner radius in pixels")
                     toolTipText: i18nc("@info:tooltip", "Set zone corner radius in pixels (0-50)")
                     onSpinValueModified: function (newValue) {
                         if (selectedZoneId && editorController)

@@ -41,6 +41,17 @@ static_assert(ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs() == 0,
               "ISettings::scrollingTabIndicatorGapsBetweenTabs defaults to 0 — update it with this default");
 static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
               "ISettings::scrollingTabIndicatorCornerRadius defaults to 0 (square) — update it with this default");
+// The drop indicator's paint keys, same story: the overlay service reads them
+// through ISettings, so a stub answering from the interface body must agree.
+// The opacity default is absent because it is a non-constexpr double; its
+// agreement rests on the doc comment in isettings.h alone.
+static_assert(ConfigDefaults::scrollingDropIndicatorEnabled(),
+              "ISettings::scrollingDropIndicatorEnabled defaults to true — update it with this default");
+static_assert(ConfigDefaults::scrollingDropIndicatorBorderWidth() == 2,
+              "ISettings::scrollingDropIndicatorBorderWidth defaults to 2 — update it with this default");
+static_assert(ConfigDefaults::scrollingDropIndicatorBorderRadius() == 8,
+              "ISettings::scrollingDropIndicatorBorderRadius defaults to 8 (the zone overlay's radius) — update it "
+              "with this default");
 
 P_STORE_GET(bool, scrollingEnabled, scrollingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabledChanged)

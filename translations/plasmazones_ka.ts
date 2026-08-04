@@ -2462,7 +2462,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="660"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="766"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="431"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="435"/>
         <source>Show zone numbers</source>
         <translation>ზონის ნომრების ჩვენება</translation>
     </message>
@@ -4570,7 +4570,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="664"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="667"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="670"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="697"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="698"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="705"/>
         <source>color</source>
         <translation>ფერი</translation>
@@ -4620,6 +4620,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="216"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="228"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="233"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="385"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="407"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="410"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="480"/>
@@ -5302,13 +5303,13 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="361"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="318"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="322"/>
         <source>Zone Labels</source>
         <translation>ზონის წარწერები</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="363"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="417"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="421"/>
         <source>Effects</source>
         <translation>ეფექტები</translation>
     </message>
@@ -5455,20 +5456,12 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="385"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="280"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="287"/>
-        <source>Border radius</source>
-        <translation>საზღვრის რადიუსი</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="385"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="407"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="714"/>
         <source>rounding</source>
         <translation>მომრგვალება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="385"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="658"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="713"/>
         <source>corner</source>
@@ -5476,7 +5469,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="387"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="327"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="331"/>
         <source>Label color</source>
         <translation>წარწერის ფერი</translation>
     </message>
@@ -5493,7 +5486,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="389"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="345"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="349"/>
         <source>Font</source>
         <translation>შრიფტი</translation>
     </message>
@@ -5514,8 +5507,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="392"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="387"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="392"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="396"/>
         <source>Label scale</source>
         <translation>წარწერის მასშტაბი</translation>
     </message>
@@ -5526,7 +5519,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="395"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="425"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="429"/>
         <source>Zone numbers</source>
         <translation>ზონის ნომრები</translation>
     </message>
@@ -5550,7 +5543,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="398"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="441"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="445"/>
         <source>Flash on layout switch</source>
         <translation>განლაგების გადართვისას აციმციმება</translation>
     </message>
@@ -6033,6 +6026,7 @@
         <translation>დეკორაციები</translation>
     </message>
     <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="385"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="407"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="657"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="712"/>
@@ -6041,6 +6035,8 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="152"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="160"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="286"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="284"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="291"/>
         <source>Corner radius</source>
         <translation>კუთხის რადიუსი</translation>
     </message>
@@ -6799,7 +6795,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="158"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="628"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="693"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="697"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="698"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="702"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="706"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="846"/>
@@ -6855,7 +6851,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="693"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="697"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="698"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="701"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="705"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="709"/>
@@ -7872,7 +7868,7 @@
         <translation>შემოცურება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="696"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="697"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="71"/>
         <source>Fill color</source>
         <translation type="unfinished"></translation>
@@ -10158,15 +10154,17 @@
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="372"/>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="797"/>
-        <source>Border radius:</source>
+        <source>Corner radius:</source>
+        <oldsource>Border radius:</oldsource>
         <comment>@label</comment>
-        <translation>საზღვრის რადიუსი:</translation>
+        <translation type="unfinished">საზღვრის რადიუსი:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="379"/>
-        <source>Border radius for all selected zones</source>
+        <source>Corner radius for all selected zones</source>
+        <oldsource>Border radius for all selected zones</oldsource>
         <comment>@label</comment>
-        <translation>საზღვრის რადიუსი ყველა მონიშნული ზონისთვის</translation>
+        <translation type="unfinished">საზღვრის რადიუსი ყველა მონიშნული ზონისთვის</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="380"/>
@@ -10396,9 +10394,10 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="804"/>
-        <source>Border radius in pixels</source>
+        <source>Corner radius in pixels</source>
+        <oldsource>Border radius in pixels</oldsource>
         <comment>@label</comment>
-        <translation>საზღვრის რადიუსი პიქსელებში</translation>
+        <translation type="unfinished">საზღვრის რადიუსი პიქსელებში</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="805"/>
@@ -11294,7 +11293,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="279"/>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="366"/>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="372"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="371"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="375"/>
         <source>Reset to defaults</source>
         <translation>საწყისებზე დაბრუნება</translation>
     </message>
@@ -11570,7 +11569,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="410"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="346"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="290"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="516"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="520"/>
         <source>All files (*)</source>
         <translation>ყველა ფაილი (*)</translation>
     </message>
@@ -14247,7 +14246,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="505"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="519"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="548"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="516"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="520"/>
         <source>JSON files (*.json)</source>
         <translation>JSON ფაილები (*.json)</translation>
     </message>
@@ -16500,77 +16499,77 @@
         <translation>ზონის საზღვრების სისქე პიქსელებში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="282"/>
-        <source>Corner rounding of zone borders in pixels</source>
-        <translation>ზონის საზღვრების კუთხის მრგვალობა პიქსელებში</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="286"/>
+        <source>Corner rounding of zones in pixels</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="329"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="333"/>
         <source>Text color for zone labels</source>
         <translation>ტექსტის ფერი ზონის იარლიყებისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="347"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="351"/>
         <source>Typeface and style for zone labels</source>
         <translation>შრიფტი და სტილი ზონის იარლიყებისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="353"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="357"/>
         <source>System default</source>
         <translation>სისტემის ნაგულისხმევი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="389"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="393"/>
         <source>Size multiplier for zone label text</source>
         <translation>ზონის იარლიყის ტექსტის ზომის მამრავლი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="427"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="431"/>
         <source>Display a number label inside each zone</source>
         <translation>თითოეულ ზონაში რიცხვის იარლიყის ჩვენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="443"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="447"/>
         <source>Briefly flash zones when switching between layouts</source>
         <translation>განლაგებებს შორის გადართვისას ზონების მოკლედ ციმციმი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="447"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="451"/>
         <source>Flash zones on layout switch</source>
         <translation>ზონების ციმციმი განლაგების გადართვისას</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="465"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="469"/>
         <source>Choose Highlight Color</source>
         <translation>გამოკვეთის ფერის არჩევა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="473"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="477"/>
         <source>Choose Inactive Zone Color</source>
         <translation>არააქტიური ზონის ფერის არჩევა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="481"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="485"/>
         <source>Choose Border Color</source>
         <translation>საზღვრის ფერის არჩევა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="489"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="493"/>
         <source>Choose Label Color</source>
         <translation>იარლიყის ფერის არჩევა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="515"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="519"/>
         <source>Import Colors from File</source>
         <translation>ფერების შემოტანა ფაილიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="524"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="528"/>
         <source>Color Import Failed</source>
         <translation>ფერების შემოტანა ვერ მოხერხდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="536"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="540"/>
         <source>Colors imported successfully</source>
         <translation>ფერები წარმატებით შემოიტანა</translation>
     </message>

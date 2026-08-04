@@ -277,14 +277,18 @@ SettingsFlickable {
                     SettingsSeparator {}
 
                     SettingsRow {
-                        title: i18n("Border radius")
+                        // "Corner radius", not "Border radius": the radius
+                        // rounds the SHAPE's corners and applies even at zero
+                        // border width, so it is not a property of the border.
+                        // Matches the window-appearance and tab-indicator rows.
+                        title: i18n("Corner radius")
                         searchAnchor: "borderRadius"
-                        description: i18n("Corner rounding of zone borders in pixels")
+                        description: i18n("Corner rounding of zones in pixels")
 
                         SettingsSpinBox {
                             id: zoneBorderRadiusSpin
 
-                            accessibleName: i18n("Border radius")
+                            accessibleName: i18n("Corner radius")
                             from: root.zonesBridge.borderRadiusMin
                             to: root.zonesBridge.borderRadiusMax
                             onValueModified: value => {

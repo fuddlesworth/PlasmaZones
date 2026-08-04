@@ -382,7 +382,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("borderWidth"),
                PhosphorI18n::tr("Border width"), {PhosphorI18n::tr("thickness"), PhosphorI18n::tr("size")});
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("borderRadius"),
-               PhosphorI18n::tr("Border radius"), {PhosphorI18n::tr("rounding"), PhosphorI18n::tr("corner")});
+               PhosphorI18n::tr("Corner radius"), {PhosphorI18n::tr("rounding"), PhosphorI18n::tr("border")});
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("labelColor"),
                PhosphorI18n::tr("Label color"),
                {PhosphorI18n::tr("colour"), PhosphorI18n::tr("text"), PhosphorI18n::tr("font")});

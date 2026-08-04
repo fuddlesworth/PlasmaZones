@@ -408,9 +408,12 @@ public:
     virtual void setScrollingDropIndicatorBorderWidth(int /*px*/)
     {
     }
+    /// 8 px, the zone overlay's radius. Kept in sync with
+    /// ConfigDefaults::scrollingDropIndicatorBorderRadius by the static_assert
+    /// in settings/scrolling.cpp — change one and it fails the build.
     virtual int scrollingDropIndicatorBorderRadius() const
     {
-        return 4;
+        return 8;
     }
     virtual void setScrollingDropIndicatorBorderRadius(int /*px*/)
     {

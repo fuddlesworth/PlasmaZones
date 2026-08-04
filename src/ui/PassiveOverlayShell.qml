@@ -494,7 +494,7 @@ Window {
         property string indicatorBorderColor: ""
         property real indicatorOpacity: 0.25
         property int indicatorBorderWidth: 2
-        property int indicatorBorderRadius: 4
+        property int indicatorBorderRadius: 8
         // Content lifecycle gate, toggled by C++ on show/hide. Like the tab
         // strips (and unlike the OSD-style slots) the content is NOT
         // re-instantiated per update — the rect changes as the drag moves and
