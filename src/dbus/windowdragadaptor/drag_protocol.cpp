@@ -64,6 +64,23 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
     if (autotileEngine && !screenId.isEmpty() && autotileEngine->isActiveOnScreen(screenId)) {
         policy.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
         policy.captureGeometry = true; // preserve pre-autotile size for unfloat restore
+        // GRAB THE KEYBOARD, but only under always-on re-insert. Escape has
+        // to reach the daemon to cancel the preview, and without a grab it
+        // reaches KWin's MoveResizeFilter instead and aborts the whole move.
+        //
+        // Scoped to reorderMode rather than every engine drag because that is
+        // the only configuration with no other way out: in HOLD mode releasing
+        // the trigger already cancels the preview and lets the drag continue,
+        // while always-on forces insertHeld true on every tick (see dragMoved)
+        // so the cancel arm is unreachable. A grab swallows every key for the
+        // drag's duration, so it is not worth taking where a cheaper exit
+        // already exists.
+        //
+        // This is the premise that expired: skipping the grab on engine
+        // screens was correct when an engine drag had no overlay and no
+        // cancellable state ("the drag proceeds freely", c5f6c6739, Feb 2026).
+        // Drag-insert previews and the drop indicator gave it both.
+        policy.grabKeyboard = reorderMode;
         // reorderMode is resolved by the caller (effectiveReorderMode): a matched
         // context SetDragBehavior rule wins over the global setting for this screen.
         if (!windowId.isEmpty() && !reorderMode) {
@@ -90,6 +107,9 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
     if (scrollEngine && !screenId.isEmpty() && scrollEngine->isActiveOnScreen(screenId)) {
         policy.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
         policy.captureGeometry = true;
+        // See the autotile branch above for why the grab is scoped to
+        // always-on re-insert rather than taken for every engine drag.
+        policy.grabKeyboard = reorderMode;
         if (!windowId.isEmpty() && !reorderMode) {
             policy.immediateFloatOnStart = scrollEngine->isWindowTracked(windowId);
         }

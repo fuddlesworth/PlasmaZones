@@ -345,6 +345,14 @@ private Q_SLOTS:
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(p.captureGeometry);
         QVERIFY(!p.immediateFloatOnStart);
+        // ...and it GRABS THE KEYBOARD, which every other engine-owned arm
+        // does not. Always-on re-insert is the one configuration with no other
+        // way to abandon a re-insert mid-drag: hold mode cancels the preview
+        // when the trigger is released, but always-on forces insertHeld true
+        // on every tick, so the cancel arm is unreachable and Escape is the
+        // only exit. Without the grab Escape reaches KWin's MoveResizeFilter
+        // and aborts the whole move instead of just the re-insert.
+        QVERIFY2(p.grabKeyboard, "always-on re-insert must grab so Escape can cancel the preview, not the move");
         QVERIFY(p.validationError().isEmpty());
     }
 
@@ -839,6 +847,11 @@ private Q_SLOTS:
         // cleared.
         QVERIFY(!p.immediateFloatOnStart);
         QVERIFY(p.captureGeometry);
+        // Reorder grabs the keyboard, the autotile twin of the scrolling
+        // always-on case: the drag runs a live preview with no trigger to
+        // release, so Escape is the only way to abandon the reorder, and
+        // without a grab it aborts the whole move instead.
+        QVERIFY2(p.grabKeyboard, "reorder mode must grab so Escape can cancel the preview, not the move");
         QVERIFY(p.validationError().isEmpty());
     }
 

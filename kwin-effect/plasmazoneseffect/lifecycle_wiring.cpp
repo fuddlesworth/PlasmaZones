@@ -484,6 +484,23 @@ void PlasmaZonesEffect::connectDragTracker()
                     // where the user drops it, not snap back to a stored rect.
                     m_dragActivation.floatedWindowIds.insert(windowId);
                 }
+                // Honour the DAEMON's grab decision before leaving. This early
+                // return used to skip the grab unconditionally, which was
+                // right when an engine drag had no overlay and nothing Escape
+                // could cancel — the comment that introduced it said exactly
+                // that ("the drag proceeds freely", Feb 2026). Drag-insert
+                // previews and the drop indicator gave it both, so the policy
+                // now asks for a grab under always-on re-insert and this is
+                // where that has to be obeyed.
+                //
+                // The cached fast path can be stale, so it reads the policy
+                // rather than re-deriving: the async beginDrag reply below
+                // corrects the flag, and the correction arm takes the grab
+                // itself if the drag turns out to be a snap one after all.
+                if (m_currentDragPolicy.grabKeyboard && !m_keyboardGrabbed) {
+                    KWin::effects->grabKeyboard(this);
+                    m_keyboardGrabbed = true;
+                }
                 return;
             }
             m_dragBypassedForEngine = false;
