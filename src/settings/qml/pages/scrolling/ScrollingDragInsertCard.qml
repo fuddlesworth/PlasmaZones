@@ -45,7 +45,9 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {}
+        SettingsSeparator {
+            enabled: !alwaysReinsertSwitch.checked
+        }
 
         SettingsRow {
             title: i18n("Hold to re-insert into strip")
@@ -69,7 +71,9 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {}
+        SettingsSeparator {
+            enabled: !alwaysReinsertSwitch.checked
+        }
 
         SettingsRow {
             title: i18n("Toggle mode")

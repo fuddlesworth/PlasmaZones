@@ -415,8 +415,11 @@ public:
     bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos) override;
     /// While set, applyLayout never emits this window's rect and
     /// onWindowResized never reconciles its acks: during a drag the effect
-    /// floats the window VISUALLY ONLY (the engine keeps its strip tile),
-    /// so without the mark every mid-drag ack re-emitted the slot rect
+    /// floats the window VISUALLY ONLY. The engine keeps its strip tile for a
+    /// drag with no drag-insert preview armed; under DETACH-ONCE the tile is
+    /// gone for the duration of a preview, and the mark still has to hold
+    /// because the acks keep arriving either way. So without it every mid-drag
+    /// ack re-emitted the slot rect
     /// (yanking the window from the cursor) and pinned the column's
     /// width/height intents to transient drag frames. Clearing does NOT
     /// retile — every drop path finalizes on its own (see the definition).
@@ -864,10 +867,16 @@ private:
     };
     QHash<QString, FloatRestore> m_floatRestore;
     /// Live drag-insert preview state (drag_preview.cpp). The structural
-    /// edits a preview makes are SIGNAL-SILENT — float bookkeeping signals
-    /// fire only at commit (windowFloatingStateSynced), mirroring autotile's
-    /// contract, so the daemon's float bookkeeping never sees the transient
-    /// begin/cancel round trip.
+    /// edits a preview makes while it is LIVE are signal-silent, mirroring
+    /// autotile's contract, so the daemon's float bookkeeping never sees the
+    /// transient begin/update round trip.
+    ///
+    /// Both ENDINGS announce, not just commit. Commit emits
+    /// windowFloatingStateSynced for every entry mode except a plain
+    /// same-screen tiled reorder, and cancel emits it too on the arms that
+    /// re-home a window whose prior context died — those paths genuinely
+    /// changed which strip holds the window, so leaving the daemon's
+    /// bookkeeping stale would be the bug.
     struct DragInsertPreview
     {
         QString windowId;

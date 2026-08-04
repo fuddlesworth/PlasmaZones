@@ -10,10 +10,12 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Two siblings carry the rest of the suite, both split off at this file's size
+// Four siblings carry the rest of the suite, split off at this file's size
 // ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
-// zone-number walk and the verbs that address it.
+// zone-number walk and the verbs that address it, test_scrollengine_perscreen
+// owns the per-screen override resolution, and test_scrollengine_draginsert
+// owns the drag-insert state machine.
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>

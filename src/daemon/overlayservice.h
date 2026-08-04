@@ -8,8 +8,9 @@
 // than settled precedent, and it is recorded here for that reason.
 //
 // The case for it: OverlayService is the single façade every overlay surface
-// goes through — zone overlay, selector, snap assist, OSD, cheatsheet, and
-// the scroll tab strip — so its members are the per-screen state and per-role
+// goes through — zone overlay, selector, snap assist, OSD, cheatsheet, the
+// scroll tab strip and the scrolling drop indicator — so its members are the
+// per-screen state and per-role
 // wiring those surfaces share. The implementation is already split by surface
 // across daemon/overlayservice/*.cpp; splitting the class DECLARATION would
 // scatter the per-screen ownership and teardown-order contract the member

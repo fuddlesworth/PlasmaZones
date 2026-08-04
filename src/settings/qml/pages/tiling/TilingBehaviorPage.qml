@@ -51,7 +51,9 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {}
+                SettingsSeparator {
+                    enabled: !alwaysReinsertSwitch.checked
+                }
 
                 SettingsRow {
                     title: i18n("Hold to re-insert into stack")
@@ -74,7 +76,9 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {}
+                SettingsSeparator {
+                    enabled: !alwaysReinsertSwitch.checked
+                }
 
                 SettingsRow {
                     title: i18n("Toggle mode")

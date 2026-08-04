@@ -78,6 +78,11 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
     if (it != m_states.windowKeys().constEnd()) {
         preview.hadPriorState = true;
         preview.priorKey = it.value();
+        // Whole-KEY equality (screen AND desktop AND activity), so the name
+        // undersells it: a same-screen drag across a desktop switch reads
+        // false. That is what the restore paths want — they key off the
+        // context, not the output — but do not read the field as "the two
+        // screen ids match".
         preview.priorSameScreen = (preview.priorKey == targetKey);
         priorState = m_states.stateForKey(preview.priorKey);
         if (priorState) {

@@ -670,9 +670,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("tab"), PhosphorI18n::tr("color"), PhosphorI18n::tr("urgent"),
                 PhosphorI18n::tr("attention")});
 
-    // Triggers card first, matching visual order on the page. Titles must
-    // match the QML i18n() strings verbatim (ScrollingDragInsertCard.qml) or
-    // the deep link lands on the page without scrolling to the row. No
+    // Triggers card first, matching visual order on the page, then the drop
+    // indicator. Titles must match the QML i18n() strings VERBATIM — in
+    // ScrollingDragInsertCard.qml for the first block and
+    // ScrollingDropIndicatorCard.qml for the second — or the deep link lands
+    // on the page without scrolling to the row. No
     // advancedOnly flag: the whole scrolling-window page is AdvancedOnly,
     // same as the unflagged tiling-behavior twins.
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingTriggers"),
