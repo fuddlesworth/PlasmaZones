@@ -798,16 +798,30 @@ void PlasmaZonesEffect::loadCachedSettings()
     // then never sees the crossing, never flips the policy, and hold-mode
     // drag-insert (the shipped default: Alt, toggle off) is unreachable
     // from off-engine starts.
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(
-        this, QStringLiteral("autotileDragInsertTriggers"), [this](const QVariant& v) {
-            m_parsedAutotileDragInsertTriggers =
-                TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
-        });
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(
-        this, QStringLiteral("scrollingDragInsertTriggers"), [this](const QVariant& v) {
-            m_parsedScrollingDragInsertTriggers =
-                TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
-        });
+    //
+    // Through the member wrapper, like the other ~50 loaders in this function.
+    // The helper only invokes the callback on a VALID reply, so an error never
+    // clobbers a previously-parsed list. A valid reply carrying nothing does
+    // reach us — an older daemon answering an unknown key — and parses to an
+    // empty list that silently makes hold-mode drag-insert unreachable. That
+    // is diagnosable only from a log line, so both loaders emit one, matching
+    // the all-zero-triggers warning dragActivationTriggers already carries.
+    loadSettingAsync(QStringLiteral("autotileDragInsertTriggers"), [this](const QVariant& v) {
+        m_parsedAutotileDragInsertTriggers =
+            TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
+        if (m_parsedAutotileDragInsertTriggers.isEmpty()) {
+            qCWarning(lcEffect) << "autotileDragInsertTriggers parsed to an EMPTY list — hold-mode drag-insert is "
+                                   "unreachable for autotile until a trigger is configured";
+        }
+    });
+    loadSettingAsync(QStringLiteral("scrollingDragInsertTriggers"), [this](const QVariant& v) {
+        m_parsedScrollingDragInsertTriggers =
+            TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
+        if (m_parsedScrollingDragInsertTriggers.isEmpty()) {
+            qCWarning(lcEffect) << "scrollingDragInsertTriggers parsed to an EMPTY list — hold-mode drag-insert is "
+                                   "unreachable for scrolling until a trigger is configured";
+        }
+    });
 
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization
     {

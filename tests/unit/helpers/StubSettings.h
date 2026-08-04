@@ -6,6 +6,7 @@
 #include "config/configdefaults.h"
 #include "core/interfaces/interfaces.h"
 
+#include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 
 #include <QHash>
@@ -36,6 +37,12 @@ namespace PlasmaZones {
  * dynamic_cast<IAutotileSettings*> against the stub. If a future test
  * exercises autotile-engine wiring through ISettings, the stub
  * should grow that base + the 26 IAutotileSettings overrides.
+ *
+ * The same holds for PhosphorEngine::IScrollSettings, on the same terms and
+ * for the same reason: the ScrollEngine takes its config through its own
+ * seam, nothing here casts to it, and adding the base would mean 30 more
+ * pure-virtual overrides serving no live test. Named explicitly because the
+ * silence read as an oversight once the scrolling engine landed.
  */
 class StubSettings : public ISettings, public PhosphorEngine::ISnapSettings
 {
@@ -2203,9 +2210,14 @@ public:
     // ISettings defaults are no-ops, and a stub falling through to them
     // passes any consumer test vacuously (empty map, swallowed writes).
     // Keys are stored verbatim: PerScreenScrollingKey carries no prefix
-    // asymmetry (see settings/perscreen.cpp). The zone-selector quartet is
-    // a DELIBERATE OMISSION: no stub-backed test drives it today; mirror
-    // this block when one does.
+    // asymmetry (see settings/perscreen.cpp). Two DELIBERATE OMISSIONS, both
+    // because no stub-backed test drives them today: the zone-selector
+    // quartet, and production's width re-seed — the real
+    // setPerScreenScrollingSetting runs repairPerScreenScrollingWidth after a
+    // kind change so the stored value cannot belong to the wrong kind, and
+    // this stores whatever it is handed. Mirror either when a test needs it,
+    // and expect a test of the kind-change path to fail against this stub
+    // until you do.
     QVariantMap getPerScreenScrollingSettings(const QString& screenIdOrName) const override
     {
         return m_perScreenScrolling.value(screenIdOrName);
@@ -2241,12 +2253,18 @@ public:
     // added on one side but not the other silently drops (or leaks) a gap
     // dimension from the stub's gap subset. Shared by perScreenGapOverrides
     // and clearPerScreenAutotileSettings' gap-resnap parity check.
+    /// Through the canonical constants rather than seven hand-copied string
+    /// literals. They matched exactly, which is the problem: a rename on the
+    /// production side would leave this set silently naming keys nothing
+    /// writes any more, and the gap-resnap emit it guards would stop firing
+    /// with every test still green.
     static const QSet<QString>& perScreenGapDimensionKeys()
     {
+        namespace K = PhosphorEngine::PerScreenKeys;
         static const QSet<QString> gapKeys = {
-            QStringLiteral("InnerGap"),      QStringLiteral("OuterGap"),       QStringLiteral("UsePerSideOuterGap"),
-            QStringLiteral("OuterGapTop"),   QStringLiteral("OuterGapBottom"), QStringLiteral("OuterGapLeft"),
-            QStringLiteral("OuterGapRight"),
+            QString(K::InnerGap),      QString(K::OuterGap),       QString(K::UsePerSideOuterGap),
+            QString(K::OuterGapTop),   QString(K::OuterGapBottom), QString(K::OuterGapLeft),
+            QString(K::OuterGapRight),
         };
         return gapKeys;
     }

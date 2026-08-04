@@ -806,18 +806,9 @@ public:
     /// add/remove/reconfigure (same invalidation points as screenIdCache).
     const QSet<QString>& connectedPhysicalIds() const;
 
-    // Animation sequence mode: 0=all at once, 1=one by one in zone order (for batch snaps)
-    int cachedAnimationSequenceMode() const
-    {
-        return m_cachedAnimationSequenceMode;
-    }
     int animationDurationMs() const
     {
         return m_cachedAnimationDuration;
-    }
-    int cachedAnimationStaggerInterval() const
-    {
-        return m_cachedAnimationStaggerInterval;
     }
 
     /**
@@ -2203,7 +2194,11 @@ private:
     // daemon doesn't silently enter the wrong mode.
     EffectAutotileDragBehavior m_cachedAutotileDragBehavior = EffectAutotileDragBehavior::Float;
     bool m_cachedZoneSelectorEnabled = true; // true until proven false — ensures dragMoved passes through at startup
-    int m_cachedAnimationSequenceMode = 0; // 0=all at once, 1=one by one in zone order
+    // Same rule as the duration two members below: seeded from the canonical
+    // constant, not an inline literal. It was 0 (all at once) while the
+    // shipped default is the cascade, so every batch apply before the async
+    // reply lands — bringup included — ran the wrong sequencing.
+    int m_cachedAnimationSequenceMode = PhosphorAnimation::Limits::DefaultAnimationSequenceMode;
     // Pinned to the canonical Limits constant rather than an inline magic
     // number so a future bump in the suite-wide default propagates here
     // automatically and a malformed daemon reply (zero/negative) clamped
@@ -2211,7 +2206,9 @@ private:
     // before the first reply arrives.
     int m_cachedAnimationDuration =
         PhosphorAnimation::Limits::DefaultAnimationDurationMs; // ms, fallback until loaded from daemon
-    int m_cachedAnimationStaggerInterval = 30; // ms between each window start when animating one by one (cascading)
+    // ms between each window start when cascading. Canonical constant for the
+    // reason the member above now gives; it was 30 against a shipped 40.
+    int m_cachedAnimationStaggerInterval = PhosphorAnimation::Limits::DefaultAnimationStaggerIntervalMs;
 
     // Per-drag activation / float tracking. Fields + rationale in effect_state.h
     // (DragActivationState).

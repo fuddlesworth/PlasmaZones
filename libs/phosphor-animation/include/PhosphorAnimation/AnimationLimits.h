@@ -102,6 +102,23 @@ constexpr int MinAnimationStaggerIntervalMs = 10;
 /// without making large lists glacial.
 constexpr int MaxAnimationStaggerIntervalMs = 200;
 
+/// Shipped stagger interval, the twin of DefaultAnimationDurationMs and
+/// there for the same reason: a consumer that caches the setting needs
+/// something to hold BEFORE the first reply lands, and an inline literal
+/// there drifts from the real default silently. The daemon's
+/// ConfigDefaults::animationStaggerInterval() resolves to this value.
+constexpr int DefaultAnimationStaggerIntervalMs = 40;
+static_assert(DefaultAnimationStaggerIntervalMs >= MinAnimationStaggerIntervalMs
+                  && DefaultAnimationStaggerIntervalMs <= MaxAnimationStaggerIntervalMs,
+              "DefaultAnimationStaggerIntervalMs must lie within [Min, Max] so callers get a structurally-safe init");
+
+/// Batch sequencing mode: 0 applies every window at once, 1 cascades them
+/// in zone order. Shipped default is the cascade, and
+/// ConfigDefaults::animationSequenceMode() resolves to this value.
+constexpr int SequenceModeAllAtOnce = 0;
+constexpr int SequenceModeCascade = 1;
+constexpr int DefaultAnimationSequenceMode = SequenceModeCascade;
+
 /// Hard ceiling on a per-frame time delta handed to a shader or to a
 /// physics integrator, in seconds. A sleep/resume hiccup, GC stall, or
 /// scheduler glitch must not blast a multi-second jump into a consumer
