@@ -386,6 +386,16 @@ private Q_SLOTS:
             const auto* dropColour = findKey(schema, dropGroup, colourKey);
             QVERIFY(dropColour);
             QVERIFY(dropColour->defaultValue.toString().isEmpty());
+            // The DISK path's only guard. The D-Bus setter refuses an
+            // unparseable colour, but a hand-edited config never goes through
+            // it and reaches QML as an invalid QColor, which Qt paints BLACK
+            // rather than falling back to the scheme. Junk must come back as
+            // the empty sentinel, and both the sentinel and a real colour
+            // must survive untouched.
+            QVERIFY(dropColour->validator);
+            QVERIFY(dropColour->validator(QStringLiteral("not-a-colour")).toString().isEmpty());
+            QVERIFY(dropColour->validator(QString()).toString().isEmpty());
+            QCOMPARE(dropColour->validator(QStringLiteral("#FF3366CC")).toString(), QStringLiteral("#FF3366CC"));
         }
     }
 

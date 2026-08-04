@@ -9,6 +9,12 @@
 
 namespace PlasmaZones {
 
+// The PageController id is INERT here, exactly as it is for the snapping and
+// tiling twins: none of the three is passed to registerPage, so nothing
+// resolves a nav node or a staging domain by it. They are child Q_PROPERTY
+// surfaces on SettingsController and the page they serve is registered by the
+// QML side. The id satisfies the base constructor and names the page for a
+// reader; do not expect a deep link or a dirty-badge to key off it.
 ScrollingBehaviorController::ScrollingBehaviorController(ISettings& settings, QObject* parent)
     : PhosphorControl::PageController(QStringLiteral("scrolling-window"), parent)
     , m_settings(&settings)

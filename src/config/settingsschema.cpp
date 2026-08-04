@@ -3,6 +3,8 @@
 
 #include "settingsschema.h"
 
+#include <QColor>
+
 #include "settingsschemachoices.h"
 #include "settingsschema_p.h"
 
@@ -132,6 +134,17 @@ constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction
 /// every write so the flush loop enforces the cap even when the setter
 /// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
 ///
+/// See the header. Namespace scope so settingsschema_scrolling.cpp can reach
+/// it for the five colour keys that carry the empty sentinel.
+QVariant canonicalThemeFallbackColor(const QVariant& v)
+{
+    const QString s = v.toString();
+    if (s.isEmpty() || QColor::isValidColorName(s)) {
+        return s;
+    }
+    return QString();
+}
+
 /// Namespace scope (declared in settingsschema.h): shared with
 /// settingsschema_scrolling.cpp, whose Scrolling.Behavior group carries the
 /// scrolling drag-insert trigger list.

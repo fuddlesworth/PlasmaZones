@@ -21,6 +21,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "tileenginelogging.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -357,6 +358,12 @@ void AutotileEngine::cancelDragInsertPreview()
 
 int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const
 {
+    // Preview reads below are gated on the preview OWNING @p screenId. Without
+    // the gate, a query for a stateless sibling screen inherited this drag's
+    // remembered index and its past-the-cap hold — the scrolling twin carries
+    // the same guard for the same reason.
+    const bool previewOwnsScreen = m_dragInsertPreview
+        && PhosphorIdentity::VirtualScreenId::samePhysical(m_dragInsertPreview->targetScreenId, screenId);
     // Const-correct lookup: avoid tilingStateForScreen() which may create state.
     auto it = m_states.states().constFind(currentKeyForScreen(screenId));
     if (it == m_states.states().constEnd() || !it.value()) {
@@ -380,7 +387,7 @@ int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const
     // monocle-style layout), the stable-identity contract can't hold — hold
     // the preview at its last index instead.
     const int limit = std::min(zones.size(), tiled.size());
-    const int draggedIdx = m_dragInsertPreview ? tiled.indexOf(m_dragInsertPreview->windowId) : -1;
+    const int draggedIdx = previewOwnsScreen ? tiled.indexOf(m_dragInsertPreview->windowId) : -1;
     const bool draggedBeyondCap = draggedIdx >= 0 && draggedIdx >= limit;
     if (!draggedBeyondCap) {
         for (int i = 0; i < limit; ++i) {
@@ -391,7 +398,7 @@ int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const
     }
     // Cursor isn't over any zone (or the dragged window is past the cap) —
     // hold the preview at its current index to avoid snapping to an endpoint.
-    if (m_dragInsertPreview && m_dragInsertPreview->lastInsertIndex >= 0) {
+    if (previewOwnsScreen && m_dragInsertPreview->lastInsertIndex >= 0) {
         return m_dragInsertPreview->lastInsertIndex;
     }
     return tiled.isEmpty() ? 0 : tiled.size() - 1;
