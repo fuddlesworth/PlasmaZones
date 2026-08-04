@@ -208,6 +208,15 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
     // without a matching reverse-map entry — clear it so commit cannot
     // double-insert.
     if (targetState->strip().containsWindow(windowId)) {
+        // Recorded, because this take happens on the !hadPriorState path too
+        // and cancel's early return there says "never touched any state at
+        // begin". Unrecorded, an Escape on such a window left it out of the
+        // strip with nothing tracking it — removed from the engine outright
+        // rather than put back. Capture the slot BEFORE the take.
+        if (!preview.hadPriorState) {
+            preview.defensivelyDetached = true;
+            preview.defensiveSlot = captureDragSlot(targetState->strip(), windowId);
+        }
         targetState->strip().takeWindow(windowId, params);
     }
 
@@ -348,8 +357,22 @@ void ScrollEngine::cancelDragInsertPreview()
     m_dragInsertPreview.reset();
 
     if (!p.hadPriorState) {
-        // Fresh adoption never touched any state at begin — nothing to
-        // restore.
+        // Fresh adoption normally touched no state at begin, so there is
+        // nothing to restore. The exception is begin's defensive take: the
+        // window WAS sitting in the target strip (with no reverse-map entry
+        // behind it) and begin pulled it out, so returning here would leave
+        // it removed from the strip and untracked — gone from the engine.
+        // Put it back in the slot it held and re-key it, which is the same
+        // healing begin performs for the tracked form of this residue.
+        if (p.defensivelyDetached) {
+            if (ScrollState* targetState = stateForKey(p.targetKey, /*createIfMissing=*/false)) {
+                const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
+                if (dragPreviewRestoreSlot(targetState, p.windowId, p.defensiveSlot, params, p.targetScreenId)) {
+                    m_states.setKeyForWindow(p.windowId, p.targetKey);
+                    applyLayout(p.targetScreenId, false);
+                }
+            }
+        }
         return;
     }
 

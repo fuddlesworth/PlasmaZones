@@ -59,6 +59,7 @@ private Q_SLOTS:
     void screenSetChangeCancelsPreview();
     void interactiveDragMarkSuppressesEmitAndReconcile();
     void detachedResidueHealsInsteadOfLatching();
+    void cancelRestoresADefensivelyDetachedWindow();
     void reentrantBeginRestoresPriorWindow();
     void neighbourCloseInvalidatesStaleTarget();
 
@@ -859,6 +860,39 @@ void TestScrollEngineDragInsert::detachedResidueHealsInsteadOfLatching()
     // The healed float round-trips: unfloat opens a fresh column.
     engine->setWindowFloat(QStringLiteral("b"), false, QStringLiteral("S1"));
     QVERIFY(engine->isWindowTiled(QStringLiteral("b")));
+}
+
+void TestScrollEngineDragInsert::cancelRestoresADefensivelyDetachedWindow()
+{
+    // The MIRROR residue of the test above: in the strip, but with no
+    // reverse-map entry behind it. begin's defensive block pulls such a
+    // window out so commit cannot double-insert, and that take happens on
+    // the hadPriorState=false path — where cancel used to return early
+    // saying "fresh adoption never touched any state". It had. Escape then
+    // left the window out of the strip AND untracked: gone from the engine
+    // outright, with the user's window still on screen and nothing placing
+    // it ever again.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    // Manufacture it: put a window straight into the strip model, so the
+    // engine's reverse map never learns about it.
+    QVERIFY(state->strip().insertWindow(QStringLiteral("ghost"), ColumnWidth{}, ColumnDisplay::Normal, engineParams()));
+    QVERIFY(state->strip().containsWindow(QStringLiteral("ghost")));
+    QVERIFY(!engine->isWindowTracked(QStringLiteral("ghost")));
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("ghost"), QStringLiteral("S1")));
+    // begin took it out, which is the behaviour being relied on.
+    QVERIFY(!state->strip().containsWindow(QStringLiteral("ghost")));
+
+    engine->cancelDragInsertPreview();
+    QVERIFY2(state->strip().containsWindow(QStringLiteral("ghost")),
+             "Escape must put a defensively detached window back, not drop it out of the engine");
+    QVERIFY2(engine->isWindowTracked(QStringLiteral("ghost")),
+             "and re-key it, so the next drag resolves its state instead of adopting it fresh again");
 }
 
 void TestScrollEngineDragInsert::reentrantBeginRestoresPriorWindow()

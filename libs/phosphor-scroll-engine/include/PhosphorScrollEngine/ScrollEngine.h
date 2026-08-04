@@ -884,6 +884,15 @@ private:
         /// columns in the abandoned live-restructure design.
         FloatRestore carried;
         // ── cancel restoration ──
+        /// Set when begin's defensive block took the window out of the
+        /// TARGET strip despite it having no reverse-map entry (a stale
+        /// forward state). That take is a real structural edit made with
+        /// hadPriorState false, so cancel's "fresh adoption never touched
+        /// anything" early return would abandon the window: out of the strip
+        /// AND untracked, gone from the engine entirely. The slot it held is
+        /// in defensiveSlot.
+        bool defensivelyDetached = false;
+        FloatRestore defensiveSlot;
         bool hadPriorState = false;
         PhosphorEngine::PlacementStateKey priorKey;
         /// Whole-key comparison (screen AND desktop AND activity): a

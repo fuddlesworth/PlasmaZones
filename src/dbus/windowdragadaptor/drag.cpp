@@ -657,6 +657,21 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         PhosphorEngine::IPlacementEngine* previewEngine = dragInsertPreviewEngine();
 
         if (insertEngine && insertHeld) {
+            // Put out the snap overlay before anything below can return early.
+            // prepareHandlerContext owns this for every other path, and its
+            // engine-screen arm does exactly this, but the preview branch
+            // returns without ever reaching it. So a drag that lit the overlay
+            // on a snapping screen and then crossed onto an engine screen with
+            // the trigger held left it burning on the old screen for the rest
+            // of the drag, hit-testable and offering zones for a window the
+            // strip is about to claim. Placed at the top of the block rather
+            // than beside the one return, because a failed begin and a
+            // cross-engine cancel below leave through their own paths.
+            if (m_overlayShown && m_overlayService) {
+                m_overlayService->hide();
+                m_overlayShown = false;
+            }
+            m_overlayIdled = false;
             // Cursor crossed between two engine-owned screens (same engine
             // or autotile↔scrolling) while the trigger is held: cancel the
             // old preview before starting a fresh one on the new screen.
