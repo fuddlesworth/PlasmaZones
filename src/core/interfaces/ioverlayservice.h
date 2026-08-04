@@ -199,7 +199,11 @@ Q_SIGNALS:
     void scrollTabActivated(const QString& windowId);
 
     /**
-     * @brief Informational signal emitted when the Snap Assist overlay is shown.
+     * @brief Load-bearing signal (NOT merely informational: shortcuts_wiring.cpp's
+    // handler is the ONLY binder of the shared Escape grab for the snap-assist
+    // phase, which drop.cpp defers to it, and overlayadaptor.cpp relays it onto
+    // the bus — removing or reordering the emission leaves snap assist
+    // un-dismissable). Also emitted when the Snap Assist overlay is shown.
      *
      * The kwin-effect drives thumbnail capture independently as part of the
      * `showSnapAssist` call sequence (not in response to this signal); the

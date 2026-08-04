@@ -97,7 +97,8 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     // Verify daemon availability asynchronously to avoid blocking the compositor.
     // CRITICAL: Do NOT use synchronous isServiceRegistered() here. The daemon
     // registers its D-Bus service name in init() BEFORE start() runs heavy
-    // initialization and BEFORE the event loop begins (main.cpp:88→94→102).
+    // initialization and BEFORE the event loop begins
+    // (src/daemon/main.cpp: init() → start() → app.exec()).
     // During that window, isServiceRegistered() returns true but the daemon
     // can't process messages. Any synchronous QDBusInterface creation would
     // trigger Introspect, blocking KWin for up to the D-Bus timeout (~25s).
@@ -281,7 +282,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // WELL-KNOWN name survive daemon restarts (the bus re-resolves the
         // owner per match rule — daemon_bringup.cpp's connectNavigationSignals
         // note is the authoritative statement, and settingsChanged plus all
-        // fourteen navigation signals rely on it without any re-wire), so
+        // sixteen navigation signals rely on it without any re-wire), so
         // this refresh is belt-and-braces, not a requirement. Keep the
         // disconnect-first pairing (Qt doesn't deduplicate match rules) and
         // do NOT propagate the pattern to other signals.

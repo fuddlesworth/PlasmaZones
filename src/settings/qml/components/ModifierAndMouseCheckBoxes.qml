@@ -196,7 +196,7 @@ Item {
                         implicitHeight: triggerLabel.implicitHeight + Kirigami.Units.smallSpacing
                         // The label lives in a custom contentItem, so the
                         // button has no `text` to derive an accessible name
-                        // from — and both trigger cards disable the tooltip,
+                        // from — and every trigger card that hosts this component (all five) disables the tooltip,
                         // leaving this the chip's only announced affordance.
                         Accessible.role: Accessible.Button
                         Accessible.name: i18n("Change trigger %1", triggerLabel.text)

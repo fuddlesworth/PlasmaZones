@@ -111,11 +111,13 @@ static_assert(
 
 // Plasmashell notification stacking makes KWin emit spurious
 // minimizedChanged(true) events on tiled windows, with the matching
-// unminimize ~1-2 ms later. Two suppressions key off this window and MUST
+// unminimize ~1-2 ms later. THREE suppressions key off this window and MUST
 // agree on its width: the autotile minimize→float debounce
-// (tilinghandler/signals.cpp) and the minimize shader-event
-// spurious-pair cancel (plasmazoneseffect/daemon_apply.cpp,
-// slotWindowMinimizedChanged). Shared here so the two can never desync.
+// (tilinghandler/minimizefloat.cpp), the SNAP-mode minimize→float debounce
+// (handlers/snaphandler.cpp) and the minimize shader-event spurious-pair
+// cancel (plasmazoneseffect/daemon_apply.cpp, slotWindowMinimizedChanged).
+// Shared here so the three can never desync — which is the whole point of
+// enumerating them, so keep the list complete when a fourth appears.
 inline constexpr int kSpuriousMinimizePairMs = 75;
 
 // Forward declarations for helper classes
@@ -217,7 +219,7 @@ protected:
         Continue,
     };
 
-    /// The ~970-line shader-transition branch of paintWindow, extracted verbatim
+    /// The shader-transition branch of paintWindow, extracted verbatim
     /// (paint_shader_window.cpp). Runs the snapshot capture-only frame, computes
     /// progress, binds every animation-shader uniform, draws the redirected
     /// window, and drives the deferred expiry teardown. @p st is the live
@@ -1096,9 +1098,9 @@ private:
     /// must be the EXACT window, never a fuzzy same-app sibling.
     ///
     /// Three other sites erase m_surfaceMultipass directly, and each is deliberate:
-    ///   - lifecycle.cpp's surface-pack hot-reload clears the WHOLE map, because every
+    ///   - lifecycle_wiring.cpp's surface-pack hot-reload clears the WHOLE map, because every
     ///     compiled pack is about to be recompiled and no composite survives it;
-    ///   - lifecycle.cpp's windowDeleted backstop, which runs after the window is gone
+    ///   - lifecycle_wiring.cpp's windowDeleted backstop, which runs after the window is gone
     ///     and there is nothing left to animate;
     ///   - surface_capture.cpp's ensureSurfaceTargets, which on an allocation failure
     ///     erases the half-built state it just failed to allocate and returns false;
@@ -1644,7 +1646,8 @@ private:
     void seedDecorationTreeBaseline();
 
     // Constructor wiring, decomposed from the ctor along its original comment
-    // seams (definitions in lifecycle_wiring.cpp). Each is called exactly once,
+    // seams (definitions in lifecycle_wiring.cpp, except connectDaemonSubscriptions
+    // which is in lifecycle_wiring_daemon.cpp). Each is called exactly once,
     // from the ctor, in this declared order. Not part of the public surface —
     // pure ctor decomposition, so their bodies keep the ordering guarantees the
     // inline sequence had (notably: connect the screen signals before iterating
@@ -2247,7 +2250,7 @@ private:
     // minimize→unminimize pairs (plasmashell notification stacking emits
     // them on tiled windows ~1-2 ms apart; the float side debounces the
     // same quirk with the shared kSpuriousMinimizePairMs — see
-    // tilinghandler/signals.cpp). An unminimize landing inside the
+    // tilinghandler/minimizefloat.cpp). An unminimize landing inside the
     // window silently drops the reverse leg instead of replaying a full
     // un-minimize animation. `generation` pins the stamp to the exact
     // transition the minimize event installed (or kept running), so the

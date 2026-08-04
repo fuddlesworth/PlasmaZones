@@ -944,7 +944,8 @@ void SettingsAdaptor::initializeRegistry()
 
         // ── Scrolling.DropIndicator ──
         // scrollingDropIndicatorEnabled is registered through ISettings above;
-        // the colour lives here so the whole group is reachable. Same
+        // the other FIVE live here (two colours, opacity, border width and
+        // radius) so the whole group is reachable. Same
         // every-key-must-be-present rule as the tab indicator block above:
         // this generic surface is the settings app's ONLY channel to the
         // daemon, so an unregistered key looks wired and does nothing.

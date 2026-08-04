@@ -9,9 +9,10 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief One theme-fallback colour row: a swatch, the hex, and a reset.
  *
- * Used by the three tab-indicator colours and by the drag drop-indicator
- * colour. All of them store EMPTY to mean "follow the colour scheme", which no
- * plain colour control can express — a picker always has some colour selected.
+ * Used by the three tab-indicator colours and by the drop indicator's two
+ * (fill and border): five instances across two pages. All of them store EMPTY
+ * to mean "follow the colour scheme", which no plain colour control can
+ * express — a picker always has some colour selected.
  * So the row pairs the swatch with an explicit Reset that clears back to
  * empty, and previews the theme colour it would fall back to while it is
  * unset. Without that pairing there would be no way back to the default once a
@@ -77,7 +78,7 @@ SettingsRow {
             onClicked: {
                 if (!root.picker)
                     return;
-                // The picker is SHARED across the three rows. If a second row
+                // The picker is SHARED across the rows on the page. If a second row
                 // could open it while the first is pending, both rows' handlers
                 // would be connected and one accept would write the chosen
                 // colour into two settings. Refusing while it is up is what

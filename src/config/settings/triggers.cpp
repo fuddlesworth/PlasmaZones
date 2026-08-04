@@ -339,7 +339,7 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 }
 
 // ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
-// Largest group — seven sub-groups. defaultAutotileAlgorithm passes through
+// Three sub-groups (Algorithm, Behavior, Gaps) plus the top-level toggle. defaultAutotileAlgorithm passes through
 // PhosphorTiles::AlgorithmRegistry for validation; per-algorithm settings round-trip as a
 // JSON string and sanitize via AutotileConfig::perAlgoFromVariantMap.
 

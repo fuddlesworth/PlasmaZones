@@ -38,10 +38,10 @@ void PlasmaZonesEffect::slotSettingsChanged()
 {
     qCInfo(lcEffect) << "settingsChanged: reloading settings";
     loadCachedSettings();
-    // Note: loadAutotileSettings() is intentionally NOT called here.
+    // Note: m_tilingHandler->loadSettings() is intentionally NOT called here.
     // Autotile screen changes are tracked via the dedicated managedScreensChanged
     // D-Bus signal (→ slotScreensChanged), which is authoritative.
-    // Calling loadAutotileSettings on every settingsChanged causes redundant
+    // Calling m_tilingHandler->loadSettings on every settingsChanged causes redundant
     // full window re-notification (N D-Bus windowOpened calls + retile round)
     // on every algorithm/gap/setting change — the daemon already retiles and
     // emits windowsTiled directly for those changes.
@@ -720,7 +720,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         // This D-Bus reply lands between frames where the compositor GL context is not
         // guaranteed current, and the cached packs own GLShaders plus user GLTextures
         // whose destruction issues glDelete* — make the context current first, same
-        // discipline as the effectsChanged clears in lifecycle.cpp.
+        // discipline as the effectsChanged clears in lifecycle_wiring.cpp.
         //
         // The result is CAPTURED, not discarded. The only false case is compositor
         // teardown, where GL is going away and the driver reclaims the objects whatever

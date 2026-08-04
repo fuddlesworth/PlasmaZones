@@ -408,9 +408,12 @@ public:
     virtual void setScrollingDropIndicatorBorderWidth(int /*px*/)
     {
     }
-    /// 8 px, the zone overlay's radius. Kept in sync with
-    /// ConfigDefaults::scrollingDropIndicatorBorderRadius by the static_assert
-    /// in settings/scrolling.cpp — change one and it fails the build.
+    /// 8 px, the zone overlay's radius. The static_assert in
+    /// settings/scrolling.cpp pins the CONFIGDEFAULTS value, so moving it (or
+    /// the ZoneDefaults constant it forwards) fails the build and prompts an
+    /// update here. It cannot see a change made on THIS side — editing the
+    /// literal below compiles cleanly and drifts silently, so keep the two in
+    /// step by hand.
     virtual int scrollingDropIndicatorBorderRadius() const
     {
         return 8;

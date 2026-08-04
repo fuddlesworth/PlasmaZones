@@ -310,7 +310,7 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::decorationsGroup(), CD::decorationProfileTreeKey()), idKind(ValueKind::DecorationPack));
 
         // ── Triggers ────────────────────────────────────────────────────────
-        // Tiling.Behavior.Triggers has a group accessor but declares no keys —
+        // the tiling drag-insert triggers are a leaf of Tiling.Behavior, not a sub-group of their own —
         // the tiling triggers live in Tiling.Behavior itself.
         for (const QString& group :
              {CD::snappingBehaviorGroup(), CD::snappingBehaviorZoneSpanGroup(), CD::snappingBehaviorSnapAssistGroup(),

@@ -452,7 +452,7 @@ public:
     }
     // ═══════════════════════════════════════════════════════════════════════════
     // Scrolling.DropIndicator — the drop-target highlight painted during a drag
-    // re-insert. Both keys are PAINT-only: they never enter the engine, which
+    // re-insert. EVERY key here is PAINT-only: they never enter the engine, which
     // resolves the indicator's rect from the same layout math the drop uses.
     // ═══════════════════════════════════════════════════════════════════════════
 
