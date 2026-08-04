@@ -77,7 +77,7 @@ ScrollEngine::FloatRestore ScrollEngine::captureDragSlot(const ScrollStrip& stri
         for (int i = slot.tileIndex - 1; i >= 0 && slot.stackAnchor.isEmpty(); --i) {
             slot.stackAnchor = column.tiles.at(i).windowId;
         }
-        for (int i = slot.tileIndex + 1; i < column.tiles.size() && slot.stackAnchor.isEmpty(); ++i) {
+        for (int i = slot.tileIndex + 1; i < static_cast<int>(column.tiles.size()) && slot.stackAnchor.isEmpty(); ++i) {
             slot.stackAnchor = column.tiles.at(i).windowId;
         }
     }
@@ -284,8 +284,9 @@ void ScrollEngine::commitDragInsertPreview()
                                             p.carried.width, p.carried.display, params);
         } else {
             const int joinColumn = std::clamp(p.lastTarget.primary, 0, strip.columnCount() - 1);
-            const int tileIndex =
-                p.lastTarget.secondary >= 0 ? p.lastTarget.secondary : strip.columns().at(joinColumn).tiles.size();
+            const int tileIndex = p.lastTarget.secondary >= 0
+                ? p.lastTarget.secondary
+                : static_cast<int>(strip.columns().at(joinColumn).tiles.size());
             inserted = strip.insertWindowIntoColumnAt(joinColumn, tileIndex, p.windowId, params, p.carried.minWidth,
                                                       p.carried.minHeight);
         }
@@ -320,6 +321,11 @@ void ScrollEngine::commitDragInsertPreview()
         // Mode marker: this is a scroll-decided float, same as every other
         // float-producing exit (begin removed the marker on the way in).
         m_scrollFloatedWindows.insert(p.windowId);
+        // Same drop floatWindowInternal makes on this transition. The window
+        // is leaving the tiled set, so a remembered tile rect can only serve
+        // as a stale comparand for the emit-on-change gate; the sibling paths
+        // all clear it and this one was the exception.
+        m_lastAppliedRect.remove(p.windowId);
         m_states.setKeyForWindow(p.windowId, p.targetKey);
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
         Q_EMIT placementChanged(p.targetScreenId);
@@ -393,7 +399,14 @@ void ScrollEngine::cancelDragInsertPreview()
     }
 
     if (p.priorSameKey) {
-        ScrollState* targetState = stateForKey(p.targetKey, /*createIfMissing=*/false);
+        // createIfMissing, matching the cross-key !priorState arm below. With
+        // false, a context that died between begin and cancel left the tiled
+        // sub-arm's `else if (targetState)` unentered: the window stayed
+        // tracked at targetKey while held by no strip and no floating set,
+        // which is the detached-residue limbo every other path goes out of
+        // its way to avoid manufacturing. Re-homing into a fresh state for
+        // the key costs a placeholder that a later prune reaps.
+        ScrollState* targetState = stateForKey(p.targetKey, /*createIfMissing=*/true);
         const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
         if (p.priorFloating) {
             // The engine-global bookkeeping is restored UNCONDITIONALLY —
@@ -481,11 +494,18 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     const bool previewOwnsScreen = m_dragInsertPreview
         && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId);
     const ScrollState* state = previewOwnsScreen ? m_states.stateForKey(m_dragInsertPreview->targetKey)
-                                                 : m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+                                                 : m_states.stateForKey(currentKeyForScreen(screenId));
     if (!state) {
         return target;
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    // The PREVIEW's screen id, not the caller's, whenever a preview owns this
+    // screen. screensMatch above accepts a virtual/physical spelling
+    // difference between the two, and layoutParamsForScreen resolves gaps and
+    // the work area per SCREEN ID — so passing the caller's spelling could
+    // hit-test against a work area the commit path never uses. Both siblings
+    // (dragInsertIndicatorRect and nudgeDragScroll) already use the preview's.
+    const ScrollLayoutParams params =
+        layoutParamsForScreen(previewOwnsScreen ? m_dragInsertPreview->targetScreenId : screenId);
     if (!params.workArea.isValid()) {
         return target;
     }
@@ -536,7 +556,7 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
         // than reusing the resolved position, which skews by one slot per
         // preceding minimized tile.
         const Column& modelColumn = state->strip().columns().at(column.columnIndex);
-        target.secondary = modelColumn.tiles.size();
+        target.secondary = static_cast<int>(modelColumn.tiles.size());
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.hidden) {
                 continue;
@@ -630,7 +650,8 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
                                         p.carried.display, params);
     } else {
         const int joinColumn = std::clamp(target.primary, 0, probe.columnCount() - 1);
-        const int tileIndex = target.secondary >= 0 ? target.secondary : probe.columns().at(joinColumn).tiles.size();
+        const int tileIndex =
+            target.secondary >= 0 ? target.secondary : static_cast<int>(probe.columns().at(joinColumn).tiles.size());
         inserted = probe.insertWindowIntoColumnAt(joinColumn, tileIndex, p.windowId, params, p.carried.minWidth,
                                                   p.carried.minHeight);
     }
@@ -691,9 +712,13 @@ bool ScrollEngine::nudgeDragScroll(const QString& screenId, const QPoint& cursor
     // full speed.
     // Pick the band by the NEARER edge so a work area narrower than two
     // bands cannot route a right-edge cursor into the left band, then ramp
-    // quadratically with depth. A depth that rounds to a zero step is
-    // treated as outside the band — matching the "brushing the inner edge
-    // barely moves" intent instead of creeping 1 px per tick forever.
+    // quadratically with depth. A depth whose step ROUNDS TO ZERO is treated
+    // as outside the band: with a 24px maximum that is roughly the outer 14%
+    // of the band, so the shallowest contact does nothing at all rather than
+    // creeping. Note this is a rounding threshold, not a 1px floor — the step
+    // goes 0, 1, 2, ... as the cursor deepens, so a slow crawl IS reachable
+    // just inside the threshold. That is the intended feel; the guard only
+    // exists so brushing the very edge of the band is inert.
     //
     // The nearer-edge arm is deliberately UNTESTED, and cannot be tested
     // through the view anchor. The bands only overlap on a work area under
@@ -768,6 +793,13 @@ void ScrollEngine::dropClosedWindowFromDragPreview(const QString& windowId)
     // then takes the restore-slot / append fallback instead of silently
     // landing at a shifted index, and the next motion or scroll tick
     // re-resolves a fresh target.
+    //
+    // With the cursor held still and outside the edge-scroll bands, neither
+    // of those ticks fires, so the indicator stays dark until the user moves
+    // again. That is deliberate: after a neighbour vanishes there is no
+    // honest target to paint, and painting the OLD rect would promise a slot
+    // that no longer exists. A dark indicator says "aim again", which is what
+    // the fallback at commit will otherwise decide for the user.
     const auto it = m_states.windowKeys().constFind(windowId);
     if (it != m_states.windowKeys().constEnd() && it.value() == m_dragInsertPreview->targetKey) {
         m_dragInsertPreview->lastTarget = DragInsertTarget{};

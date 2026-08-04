@@ -879,9 +879,17 @@ private:
         /// nothing structural happens until commit applies it.
         DragInsertTarget lastTarget;
         /// The window's OWN begin-time width/display/height/min-size
-        /// intents, applied at commit. Never refreshed mid-drag: reading
-        /// them from a transient host column stamped foreign widths across
-        /// columns in the abandoned live-restructure design.
+        /// intents. Never refreshed mid-drag: reading them from a transient
+        /// host column stamped foreign widths across columns in the abandoned
+        /// live-restructure design.
+        ///
+        /// How much of it commit applies depends on the drop. A NEW-COLUMN
+        /// drop applies all of it. A JOIN discards width and display, because
+        /// the window becomes a tile of a host column that already owns both,
+        /// and only the height and min-size intents survive. That is a
+        /// property of what a join means rather than an oversight, but the
+        /// word "applied at commit" read as though the whole struct always
+        /// made it through.
         FloatRestore carried;
         // ── cancel restoration ──
         /// Set when begin's defensive block took the window out of the
