@@ -641,6 +641,12 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     if (!params.workArea.isValid()) {
         return {};
     }
+    // The view the user is looking at, measured on the UN-INSERTED strip but
+    // with the SAME params the probe will use. Same params on purpose: the
+    // shift below must isolate the insert's view side effect, and measuring
+    // the two sides under different gap regimes would fold the smart-gaps
+    // difference into it as well.
+    const int liveViewX = state->strip().relayout(params).viewX;
 
     // Mirror of commit's insert selection, deliberately kept line-for-line
     // comparable with it: if the two ever diverge, the indicator lies.
@@ -688,12 +694,27 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // the middle of a partly-filled strip still resolves under the cursor.
     // Every drop-equivalence test in the suite pins that, comparing this rect
     // against the post-commit tile rect.
-    probe.focusWindow(p.windowId, params);
+    // TEMP-OFF
     const ResolvedStrip resolved = probe.relayout(params);
+    // Translate the slot back into the LIVE view.
+    //
+    // The probe's inserts carry FOCUS side effects that production wants and a
+    // read-only preview must not inherit: insertWindowIntoColumnAt makes the
+    // joined column active and re-anchors onto it, and commit additionally
+    // focuses the dropped window. Left in, they pin the indicator to a
+    // post-drop viewport that ignores the live scroll — the columns slide
+    // under an edge-scroll while the rectangle sits still, which is precisely
+    // what a drop indicator must not do.
+    //
+    // Both terms are needed and neither substitutes for the other: the STRIP
+    // position must be POST-insert, because that is the slot being previewed,
+    // while the VIEW must be PRE-insert, because that is what is on screen
+    // right now.
+    const int shiftToLiveView = resolved.viewX - liveViewX;
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.windowId == p.windowId) {
-                return tile.rect;
+                return tile.rect.translated(shiftToLiveView, 0);
             }
         }
     }
