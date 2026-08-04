@@ -246,7 +246,7 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     // Autotile screen — engine owns placement, plugin bypasses the snap
     // path and (later in the drag flow) applies handleDragToFloat directly.
-    // bypassReason = "autotile_screen". Policy captures geometry so the
+    // bypassReason = EngineOwnedScreen. Policy captures geometry so the
     // free-floating size can be restored on unfloat.
     // ─────────────────────────────────────────────────────────────────────
     void autotileScreen_bypassAutotile()
@@ -268,8 +268,10 @@ private Q_SLOTS:
         QVERIFY(p.captureGeometry);
         // No windowOpened flowed through the engine, so isWindowTracked()
         // returns false and immediateFloatOnStart stays false. The
-        // "tracked window → true" path is exercised indirectly by
-        // integration tests that actually tile windows.
+        // "tracked window → true" path has NO coverage anywhere: the
+        // integration tests this once pointed at do not exist. Worth adding
+        // when someone next touches the policy — it is the arm that decides
+        // whether an autotile drag floats the window on the first tick.
         QVERIFY(!p.immediateFloatOnStart);
         // AutotileScreen bypass requires non-empty screenId per the validator.
         QVERIFY(p.validationError().isEmpty());
@@ -309,7 +311,8 @@ private Q_SLOTS:
 
         // Both tiling-family engines report the SAME bypass reason: the value
         // means "a tiling-family engine owns this screen", and its
-        // autotile_screen wire token predates the scroll engine. The branches
+        // EngineOwnedScreen enumerator's name predates the scroll engine (it
+        // was spelled "autotile_screen" on the wire). The branches
         // are told apart by the policy FIELDS, not by this token.
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(!p.streamDragMoved);
@@ -556,7 +559,7 @@ private Q_SLOTS:
 
     // ─────────────────────────────────────────────────────────────────────
     // Snapping disabled on a normal screen. Dead drag — the user
-    // configured snap mode off. bypassReason = "snapping_disabled".
+    // configured snap mode off. bypassReason = SnappingDisabled.
     // Every flag false.
     // ─────────────────────────────────────────────────────────────────────
     void snapDisabled_onNormalScreen_bypass()
@@ -585,7 +588,7 @@ private Q_SLOTS:
     // suppressed, screen has no layout of its own). Dead drag — without the
     // gate the drag path's layout resolution falls back to the global
     // default layout and snaps windows into zones the screen was never
-    // assigned (#724). bypassReason = "layout_suppressed", every flag false.
+    // assigned (#724). bypassReason = LayoutSuppressed, every flag false.
     // ─────────────────────────────────────────────────────────────────────
     void layoutSuppressed_onNormalScreen_bypass()
     {
@@ -681,7 +684,7 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     // Snapping disabled BUT the drag is on an autotile screen. Autotile
     // takes precedence — the engine still owns placement regardless of the
-    // snap-mode setting. bypassReason = "autotile_screen".
+    // snap-mode setting. bypassReason = EngineOwnedScreen.
     //
     // This is the exact scenario from discussion #310: reporter had
     // snapping off and autotile on both monitors. Drags on autotile
@@ -707,7 +710,7 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     // Monitor excluded in display settings. Dead drag regardless of snap
     // or autotile state — user told us to leave this monitor alone.
-    // bypassReason = "context_disabled".
+    // bypassReason = ContextDisabled.
     // ─────────────────────────────────────────────────────────────────────
     void contextDisabled_overridesAutotile()
     {
@@ -807,7 +810,7 @@ private Q_SLOTS:
     // AutotileDragBehavior::Reorder on an autotile screen — the daemon owns
     // drag-insert preview for tile swapping, so the plugin must NOT float
     // the window on drag-start. Policy still uses bypassReason =
-    // "autotile_screen" but immediateFloatOnStart must be cleared even
+    // EngineOwnedScreen but immediateFloatOnStart must be cleared even
     // though the window is tracked, because the synchronous fast path and
     // the async reply handler both key on this flag to skip
     // handleDragToFloat.
