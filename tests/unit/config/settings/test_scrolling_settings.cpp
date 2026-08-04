@@ -244,6 +244,12 @@ private Q_SLOTS:
         QCOMPARE(style->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorStyle());
         QCOMPARE(style->validator(ConfigDefaults::scrollingTabIndicatorStyleBar()).toInt(),
                  ConfigDefaults::scrollingTabIndicatorStyleBar());
+        // BELOW the set, not above. The set is {Chips=0, Bar=1} and the
+        // default is Bar, the HIGHER member, so an out-of-set 7 clamps to 1
+        // and snaps back to 1 alike — it cannot tell validIntOr from
+        // clampInt, which is the whole property this line claims to pin.
+        // -5 clamps to Chips and snaps back to Bar.
+        QCOMPARE(style->validator(-5).toInt(), ConfigDefaults::scrollingTabIndicatorStyle());
         QCOMPARE(style->validator(7).toInt(), ConfigDefaults::scrollingTabIndicatorStyle());
 
         const auto* position = findKey(schema, tabGroup, ConfigDefaults::positionKey());
@@ -477,6 +483,33 @@ private Q_SLOTS:
         const auto* restoreFloated = findKey(schema, group, ConfigDefaults::restoreFloatedOnLoginKey());
         QVERIFY(restoreFloated);
         QCOMPARE(restoreFloated->defaultValue.toBool(), ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin());
+
+        // The drag-insert pair this PR added. Every other key in the group is
+        // pinned above, and these two were the only ones that were not.
+        const auto* toggle = findKey(schema, group, ConfigDefaults::toggleActivationKey());
+        QVERIFY(toggle);
+        QCOMPARE(toggle->defaultValue.toBool(), ConfigDefaults::scrollingDragInsertToggle());
+
+        const auto* triggers = findKey(schema, group, ConfigDefaults::triggersKey());
+        QVERIFY(triggers && triggers->validator);
+        QCOMPARE(triggers->defaultValue, ConfigDefaults::scrollingDragInsertTriggers());
+        // canonicalTriggerList is the shared validator the snapping and
+        // tiling trigger lists use, and its two load-bearing behaviours are
+        // dropping malformed entries rather than coercing them (a string
+        // element must not become a phantom {0,0} trigger that matches every
+        // bare drag) and capping the list length. Both asserted here because
+        // this group's wiring of it was untested, so a plain passthrough
+        // would have shipped unnoticed.
+        QVariantList mixed;
+        mixed.append(QStringLiteral("garbage"));
+        QVariantMap real;
+        real[ConfigDefaults::triggerModifierField()] = 42;
+        real[ConfigDefaults::triggerMouseButtonField()] = 1;
+        mixed.append(real);
+        const QVariantList canon = triggers->validator(mixed).toList();
+        QCOMPARE(canon.size(), 1);
+        QCOMPARE(canon.at(0).toMap().value(ConfigDefaults::triggerModifierField()).toInt(), 42);
+        QCOMPARE(canon.at(0).toMap().value(ConfigDefaults::triggerMouseButtonField()).toInt(), 1);
     }
 
     /// A factory reset must ANNOUNCE the values it restored.
@@ -803,12 +836,20 @@ private Q_SLOTS:
         const int kindR = ConfigDefaults::scrollingWidthKindPreset();
         const qreal seededPx = ConfigDefaults::scrollingDefaultColumnWidthFixedPx();
         const qreal defaultProp = ConfigDefaults::scrollingDefaultColumnWidthValue();
-        // Seeds deliberately DIFFER from the ConfigDefaults values (0.35 vs
-        // the 0.5 default, 1200 vs the 800 re-seed): with default-equal
-        // seeds every "value untouched" row would also pass under a bogus
-        // unconditional re-seed to the default.
+        // Seeds deliberately DIFFER from the ConfigDefaults values: with
+        // default-equal seeds every "value untouched" row would also pass
+        // under a bogus unconditional re-seed to the default.
         const qreal seedProp = 0.35;
         const qreal seedPx = 1200.0;
+        // Pinned, not just stated. The seeds are literals and the defaults
+        // are not, so retuning either default to the seed's value would
+        // silently defang every value-preserving row in the table below
+        // rather than failing anything. Asserted here so that change is
+        // loud and the fix is obvious (pick a different seed).
+        QVERIFY2(!qFuzzyCompare(seedProp, defaultProp),
+                 "the proportion seed has collided with its default — pick another, or the untouched rows go vacuous");
+        QVERIFY2(!qFuzzyCompare(seedPx, seededPx),
+                 "the pixel seed has collided with the re-seed value — pick another, or the untouched rows go vacuous");
 
         struct Row
         {
