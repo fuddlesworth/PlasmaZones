@@ -179,6 +179,17 @@ struct DaemonGateState
     /// stale call doesn't leave the gate stuck and silently swallow the
     /// new daemon's daemonReady signal.
     bool bridgeRegistrationInFlight = false;
+    /// Monotonic id of the registration attempt the gate above belongs to.
+    /// Bumped when a call is sent AND when the daemon vanishes, and captured
+    /// by each reply lambda. Without it a dead daemon's reply cleared the gate
+    /// belonging to a LIVE registration: the daemon dies with a call in
+    /// flight, serviceUnregistered clears the gate, the new daemon's
+    /// daemonReady starts a second call, and then the first call's error reply
+    /// lands and clears the gate out from under it — leaving a third
+    /// daemonReady free to start a concurrent third registration, which is
+    /// exactly the duplicate-state-push the gate exists to prevent. Never
+    /// restarted; a monotonic counter is the whole mechanism.
+    quint64 bridgeRegistrationGeneration = 0;
     bool readyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
 
     bool virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive

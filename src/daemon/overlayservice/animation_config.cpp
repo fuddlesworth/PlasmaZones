@@ -349,7 +349,7 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
 {
     namespace PAL = PhosphorAnimationLayer;
 
-    // Three existing surface types do NOT have a per-role config registered
+    // Four existing surface types do NOT have a per-role config registered
     // and therefore fall back to the empty default (no shader effect, the
     // library-default 150 ms OutCubic motion):
     //   - ZoneOverlay (zone overlay rendering): routes through the
@@ -363,6 +363,9 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     //     taxonomy defines no popup.scrollTabs domain, so the library
     //     default is the intended motion for both legs; registering a
     //     config would need new profile paths first (see the role doc).
+    //   - ScrollDropIndicator (drag re-insert drop target): same reasoning as
+    //     ScrollTabs — no domain in the taxonomy, library default is the
+    //     intended motion, and the role doc points back at this list.
     m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(profileRegistry, buildDefaultConfig());
     if (m_animShaderRegistry) {
         m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);

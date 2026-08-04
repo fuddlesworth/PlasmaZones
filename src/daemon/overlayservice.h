@@ -8,8 +8,9 @@
 // than settled precedent, and it is recorded here for that reason.
 //
 // The case for it: OverlayService is the single façade every overlay surface
-// goes through — zone overlay, selector, snap assist, OSD, cheatsheet, and
-// the scroll tab strip — so its members are the per-screen state and per-role
+// goes through — zone overlay, selector, snap assist, OSD, cheatsheet, the
+// scroll tab strip and the scrolling drop indicator — so its members are the
+// per-screen state and per-role
 // wiring those surfaces share. The implementation is already split by surface
 // across daemon/overlayservice/*.cpp; splitting the class DECLARATION would
 // scatter the per-screen ownership and teardown-order contract the member
@@ -336,8 +337,11 @@ public:
      * first layout switch OSD or keyboard navigation action appears
      * instantly instead of blocking the event loop.
      *
-     * Idempotent - subsequent calls are no-ops thanks to the
-     * m_notificationsWarmed latch and per-screen window guard.
+     * Idempotent for the SAME screen set: the m_notificationsWarmed latch
+     * and the per-screen window guard make a repeat call a no-op for screens
+     * already warmed. A screen that appeared since the last call is still
+     * warmed on the next one, which is the point of calling it again after a
+     * hotplug rather than only once at start.
      */
     void warmUpNotifications();
 
@@ -451,6 +455,22 @@ public:
     /// indicator rects via the per-screen input region built here.
     void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
 
+    /// Drop-target indicator for a scrolling drag re-insert on @p screenId
+    /// (per screen, NOT a singleton — a drag can cross screens). @p rect is
+    /// the absolute-px slot the dragged window would land in, converted to
+    /// shell coordinates here; an invalid or empty rect hides the indicator.
+    ///
+    /// Purely display: unlike the tab strips this installs NO input region,
+    /// because it is painted underneath a cursor that is mid-drag and taking
+    /// input there would break the drag it exists to describe.
+    ///
+    /// Scrolling needs a drawn indicator where autotile needs none. Autotile's
+    /// feedback IS its live restructure, but the scroll engine detaches once at
+    /// drag start and applies structure at drop, precisely because restructuring
+    /// live slid the strip out from under a stationary cursor. So the target has
+    /// to be painted rather than enacted.
+    void updateScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate) override;
+
     /// Per-context PAINT overrides for @p screenId's tab indicator, resolved
     /// from the SetTabIndicator* context rules and layered over the config
     /// values when the indicator is drawn. Keyed by the overlay SLOT's own
@@ -468,6 +488,24 @@ public:
     /// so a rule change repaints a live indicator immediately, for the same
     /// reason the paint-settings hooks do.
     void setScrollTabIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
+
+    /// Per-screen drop-indicator PAINT overrides from context rules, keyed by
+    /// the QML property names the slot reads so the layering is one value()
+    /// per property. An empty map clears the screen's overrides.
+    ///
+    /// Unlike the tab-strip twin this does NOT replay: the indicator only
+    /// exists while a drag is in flight, and the next rect push during that
+    /// drag re-reads the overrides. A rule change landing between drags is
+    /// picked up by the drag that follows, which is the only time anyone can
+    /// see it.
+    void setScrollDropIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
+
+    /// Per-DRAG drop-indicator colour overrides, resolved from the dragged
+    /// window's rules at drag start. Outranks the per-context map above, which
+    /// outranks the settings, which fall back to the theme. Cleared with an
+    /// empty map when the drag ends; there is no screen key because exactly
+    /// one window is dragged at a time.
+    void setScrollDropIndicatorWindowOverrides(const QVariantMap& overrides) override;
 
     /// Re-push every screen's cached strip model through
     /// updateScrollTabStrips, whose own enabled check turns the replay into a
@@ -697,10 +735,15 @@ private:
     /// an algorithm.
     QString activeLayoutIdForScreen(const QString& screenId) const;
 
-    /// True when the snapping overlay must NOT show on @p screenId for the current
-    /// desktop/activity: either the context is on a disable list, OR its default
-    /// layout assignment is suppressed (the global "don't assign by default"
-    /// setting, or a per-context rule) and nothing is explicitly assigned.
+    /// True when the snapping overlay must NOT show on @p screenId for the
+    /// current desktop/activity. THREE conditions, any one of which is enough:
+    /// the context is on a disable list; its default layout assignment is
+    /// suppressed (the global "don't assign by default" setting, or a
+    /// per-context rule) with nothing explicitly assigned; or the context
+    /// resolves to an ENGINE mode. The third catches a bare or suppressed
+    /// autotile context and a context-disabled scrolling one, neither of
+    /// which is in the excluded-screens set, so without it the snap overlay
+    /// surfaced on a screen the user had just switched away from snapping.
     /// Consumed by the OVERLAY activation sites; the zone SELECTOR is
     /// deliberately disabled-list-only (isSnappingContextDisabled) — a
     /// suppressed-default context still allows an explicit drag to pick a
@@ -770,6 +813,13 @@ private:
     /// enable toggle so re-enabling the indicator can replay it (the
     /// engine's tabStripsChanged is change-latched and stays silent).
     QHash<QString, QVariantList> m_lastScrollTabStrips;
+    /// Per-screen drop-indicator paint overrides (see
+    /// setScrollDropIndicatorOverrides).
+    QHash<QString, QVariantMap> m_scrollDropIndicatorOverrides;
+    /// Per-DRAG drop-indicator colour overrides from the dragged window's
+    /// rules (see setScrollDropIndicatorWindowOverrides). Not per screen: one
+    /// window is dragged at a time, and the entry lives only for that drag.
+    QVariantMap m_scrollDropIndicatorWindowOverrides;
     /// Per-screen tab-indicator paint overrides (see
     /// setScrollTabIndicatorOverrides). Screens with no context rule carry no
     /// entry, so the common case costs one empty-hash lookup.
@@ -779,6 +829,26 @@ private:
     /// everywhere else. Rebuilt from each strip update; cleared with the
     /// screen's strips.
     QHash<QString, QRegion> m_scrollTabInputRegions;
+
+    /// Per-screen generation guard for the drop indicator's animated hide,
+    /// same contract as m_scrollTabsHideGuard: a hide completion that lost the
+    /// race to a newer rect must no-op rather than tear down a repopulated
+    /// slot. A drag pushes rects at pointer rate, so this race is the common
+    /// case here, not the exotic one. Retained after teardown (monotonic) —
+    /// must never restart, which is why unwirePassiveShellSlots erases the two
+    /// maps below but deliberately not this one.
+    QHash<QString, quint64> m_scrollDropIndicatorHideGuard;
+    /// Screens with a drop-indicator hide in flight; the show path treats
+    /// these as not visible so a mid-hide repopulation re-runs beginShow.
+    QSet<QString> m_scrollDropIndicatorHidePending;
+    /// Last rect pushed per screen, in SHELL-LOCAL px (already shifted by the
+    /// screen origin) — the space that is actually painted, so a screen move
+    /// invalidates the entry instead of comparing equal. Change-gate only: a
+    /// drag re-pushes the same target on every tick, and without this each tick
+    /// would re-write the QML properties, re-assert the shell's click-through
+    /// flag and re-run a surface sync. An entry is written only once the update
+    /// has passed every bail, so it records what is genuinely on screen.
+    QHash<QString, QRect> m_lastScrollDropIndicatorRect;
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;

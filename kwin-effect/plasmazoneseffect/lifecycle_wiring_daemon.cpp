@@ -97,7 +97,8 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     // Verify daemon availability asynchronously to avoid blocking the compositor.
     // CRITICAL: Do NOT use synchronous isServiceRegistered() here. The daemon
     // registers its D-Bus service name in init() BEFORE start() runs heavy
-    // initialization and BEFORE the event loop begins (main.cpp:88→94→102).
+    // initialization and BEFORE the event loop begins
+    // (src/daemon/main.cpp: init() → start() → app.exec()).
     // During that window, isServiceRegistered() returns true but the daemon
     // can't process messages. Any synchronous QDBusInterface creation would
     // trigger Introspect, blocking KWin for up to the D-Bus timeout (~25s).
@@ -177,6 +178,10 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // indefinitely. Resetting here keeps the gate authoritative
         // across daemon restarts.
         m_daemonGate.bridgeRegistrationInFlight = false;
+        // Retire the in-flight call along with the gate. Its reply is still
+        // coming, and without this bump it would land after the NEW daemon's
+        // registration has re-armed the gate and clear it out from under it.
+        ++m_daemonGate.bridgeRegistrationGeneration;
         m_daemonGate.readyRestoresDone = false;
         m_daemonGate.readyWindowStateProcessed = false;
         m_snapHandler->clearRestoreCache();
@@ -277,10 +282,14 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // flag false until the daemon's own daemonReady signal fires (end of
         // Daemon::start()), confirming it can handle D-Bus requests.
 
-        // Reconnect daemonReady signal — Qt may cache the old daemon's unique bus
-        // name in match rules, so refresh for the new daemon instance.
-        // Disconnect first to prevent duplicate match rules (Qt doesn't deduplicate),
-        // which would cause slotDaemonReady to fire twice on the same signal.
+        // Defensive reconnect of daemonReady. Subscriptions against a
+        // WELL-KNOWN name survive daemon restarts (the bus re-resolves the
+        // owner per match rule — daemon_bringup.cpp's connectNavigationSignals
+        // note is the authoritative statement, and settingsChanged plus all
+        // sixteen navigation signals rely on it without any re-wire), so
+        // this refresh is belt-and-braces, not a requirement. Keep the
+        // disconnect-first pairing (Qt doesn't deduplicate match rules) and
+        // do NOT propagate the pattern to other signals.
         QDBusConnection::sessionBus().disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                                  PhosphorProtocol::Service::Interface::LayoutRegistry,
                                                  QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));

@@ -88,6 +88,19 @@ public:
     {
         return false;
     }
+    // Scrolling twins of the autotile drag-insert pair (stored under
+    // Scrolling.Behavior with the same generic Triggers/ToggleActivation
+    // keys). Declared here beside the trigger family rather than in
+    // configdefaults_scrolling.h because makeSingleTriggerList lives on the
+    // derived class and the base header cannot call it.
+    static QVariantList scrollingDragInsertTriggers()
+    {
+        return makeSingleTriggerList(static_cast<int>(DragModifier::Alt));
+    }
+    static bool scrollingDragInsertToggle()
+    {
+        return false;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Display Settings
@@ -613,19 +626,6 @@ public:
     {
         return {};
     }
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Ordering Settings
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    static QStringList snappingLayoutOrder()
-    {
-        return {};
-    }
-    static QStringList tilingAlgorithmOrder()
-    {
-        return {};
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Editor Settings
     // ═══════════════════════════════════════════════════════════════════════════

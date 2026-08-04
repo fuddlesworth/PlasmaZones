@@ -293,14 +293,12 @@ public:
     /// screen coordinates; the normalized twin is below.
     QVector<QRect> visibleTileRects(const QString& screenId) const;
     /// @p windowId's zone number on @p screenId's current strip, or -1 when
-    /// it is off-screen, a hidden tab, or untracked (the navigation OSD
-    /// then shows direction-only copy).
+    /// it is off-screen, a hidden tab, or untracked.
     ///
-    /// THE resolver for the number space in the window→number direction: it
-    /// reads VisibleTile::zoneNumber off the same walk the rect consumers
-    /// read, so a caller holding a window id never has to count the walk
-    /// itself. Callers that already hold a VisibleTile read its zoneNumber
-    /// instead of paying for a second walk here.
+    /// Convenience/test seam with no production caller today (like
+    /// visibleTileRects above): every production number consumer walks
+    /// visibleTiles and reads VisibleTile::zoneNumber directly, so this
+    /// exists for callers that hold only a window id.
     int visibleTileNumberForWindow(const QString& screenId, const QString& windowId) const;
     /// visibleTileRects normalized to the FULL screen geometry (0.0–1.0 per
     /// axis) — the shape zone previews consume. The tiles are clipped to the
@@ -345,6 +343,87 @@ public:
     /// context), or -1 — the landing-slot reference a swap counterpart uses
     /// via HandoffContext.insertIndex.
     int columnIndexForWindow(const QString& screenId, const QString& windowId) const;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Drag-insert (trigger-held window drag re-inserts into the strip)
+    //
+    // DETACH-ONCE architecture, deliberately unlike autotile's live-
+    // restructure preview: begin detaches the window from the strip (one
+    // settle, neighbours close up), update only remembers the hit-tested
+    // drop target against the now-stable strip, and commit applies the
+    // structure once at drop. A strip cannot restructure per tick the way
+    // a fixed zone grid can — it slides the layout under the cursor (see
+    // drag_preview.cpp's header for the full rationale). Restoration state
+    // is captured in FloatRestore vocabulary (column + tile + stack anchor
+    // + width/display/height intents) — the strip has no raw-order index
+    // for cancel to restore by. All in drag_preview.cpp.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    bool hasDragInsertPreview() const override
+    {
+        return m_dragInsertPreview.has_value();
+    }
+    QString dragInsertPreviewScreenId() const override
+    {
+        return m_dragInsertPreview ? m_dragInsertPreview->targetScreenId : QString();
+    }
+    /// See the base declaration. Empty without a preview, and empty when begin
+    /// took the window from untracked, which for this engine also covers a
+    /// window that was floating outside any strip.
+    QString dragInsertPreviewPriorScreenId() const override
+    {
+        return m_dragInsertPreview && m_dragInsertPreview->hadPriorState ? m_dragInsertPreview->priorKey.screenId
+                                                                         : QString();
+    }
+    /// The window id of the active drag-insert preview, or empty (test seam,
+    /// mirroring AutotileEngine's accessor).
+    QString dragInsertPreviewWindowId() const
+    {
+        return m_dragInsertPreview ? m_dragInsertPreview->windowId : QString();
+    }
+    bool beginDragInsertPreview(const QString& rawWindowId, const QString& screenId) override;
+    void commitDragInsertPreview() override;
+    void cancelDragInsertPreview() override;
+    /// `primary` = column index; `newSlot` true opens a NEW column at
+    /// `primary`; otherwise the window joins column `primary` as tile
+    /// `secondary` (a MODEL-column tile index — minimized tiles count).
+    /// The dragged window is DETACHED while a preview is live, so the strip
+    /// hit-tested here is stable across ticks and no own-slot special case
+    /// exists (nothing the cursor hovers can be the dragged window). While
+    /// a preview is live for @p screenId the hit-test resolves against the
+    /// preview's captured context key, not the screen's current one.
+    DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
+    void updateDragInsertPreview(const DragInsertTarget& target) override;
+    /// The rect the dragged window would occupy if it were dropped at the
+    /// currently remembered target — the drop indicator the daemon paints.
+    /// Absolute screen pixels, the same basis as visibleTiles.
+    ///
+    /// Detach-once means the strip NEVER opens a gap to show where the drop
+    /// lands (autotile's live restructure slid this layout out from under a
+    /// stationary cursor), so this rect is the only feedback there is. Null
+    /// when no preview is live for @p screenId or before the first
+    /// hit-test resolves a target. Not clamped into the viewport: a target
+    /// on a parked column reports where it truly lands, and the overlay
+    /// clips.
+    QRect dragInsertIndicatorRect(const QString& screenId) const override;
+    /// Edge auto-scroll while a drag-insert preview is live on @p screenId:
+    /// a cursor inside the left/right work-area band slides the view one
+    /// step toward that edge (driven by the daemon's fixed ~60 Hz drag-
+    /// scroll timer, independent of cursor motion). Returns true when the
+    /// view actually moved, so the caller re-hit-tests against the shifted
+    /// strip.
+    bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos) override;
+    /// While set, applyLayout never emits this window's rect and
+    /// onWindowResized never reconciles its acks: during a drag the effect
+    /// floats the window VISUALLY ONLY. The engine keeps its strip tile for a
+    /// drag with no drag-insert preview armed; under DETACH-ONCE the tile is
+    /// gone for the duration of a preview, and the mark still has to hold
+    /// because the acks keep arriving either way. So without it every mid-drag
+    /// ack re-emitted the slot rect
+    /// (yanking the window from the cursor) and pinned the column's
+    /// width/height intents to transient drag frames. Clearing does NOT
+    /// retile — every drop path finalizes on its own (see the definition).
+    void setInteractiveDragWindow(const QString& windowId) override;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Desktop / activity context
@@ -610,7 +689,14 @@ private:
     /// leftover width nobody claimed, and a maximize compare that never
     /// matched. Inner gaps need no arm — with one column no inter-column gap
     /// exists.
-    ScrollLayoutParams layoutParamsForScreen(const QString& screenId) const;
+    /// @param columnCountOverride When >= 0, the smart-gaps arm judges the
+    /// single-column case against THIS count instead of the live strip's.
+    /// Only the drop indicator passes it: while a preview holds the dragged
+    /// window detached, a strip that will have two columns after the drop
+    /// still counts as one, so the live answer zeroes the outer gaps that the
+    /// post-drop layout will restore — and the indicator would be drawn
+    /// against a work area the window never occupies.
+    ScrollLayoutParams layoutParamsForScreen(const QString& screenId, int columnCountOverride = -1) const;
     /// visibleTiles' real body, taking params the caller already resolved.
     /// The public overload is the thin wrapper; callers that hold params
     /// (the digit path, the normalized-rect walk) use this instead of paying
@@ -780,6 +866,83 @@ private:
         WindowHeight height;
     };
     QHash<QString, FloatRestore> m_floatRestore;
+    /// Live drag-insert preview state (drag_preview.cpp). The structural
+    /// edits a preview makes while it is LIVE are signal-silent, mirroring
+    /// autotile's contract, so the daemon's float bookkeeping never sees the
+    /// transient begin/update round trip.
+    ///
+    /// Both ENDINGS announce, not just commit. Commit emits
+    /// windowFloatingStateSynced for every entry mode except a plain
+    /// same-screen tiled reorder, and cancel emits it too on the arms that
+    /// re-home a window whose prior context died — those paths genuinely
+    /// changed which strip holds the window, so leaving the daemon's
+    /// bookkeeping stale would be the bug.
+    struct DragInsertPreview
+    {
+        QString windowId;
+        QString targetScreenId;
+        /// The context the preview inserted into, captured at begin so the
+        /// prune paths can tell whether a dying context strands it.
+        PhosphorEngine::PlacementStateKey targetKey;
+        /// The most recent hit-tested drop target, stored verbatim —
+        /// nothing structural happens until commit applies it.
+        DragInsertTarget lastTarget;
+        /// The window's OWN begin-time width/display/height/min-size
+        /// intents. Never refreshed mid-drag: reading them from a transient
+        /// host column stamped foreign widths across columns in the abandoned
+        /// live-restructure design.
+        ///
+        /// How much of it commit applies depends on the drop. A NEW-COLUMN
+        /// drop applies all of it. A JOIN discards width and display, because
+        /// the window becomes a tile of a host column that already owns both,
+        /// and only the height and min-size intents survive. That is a
+        /// property of what a join means rather than an oversight, but the
+        /// word "applied at commit" read as though the whole struct always
+        /// made it through.
+        FloatRestore carried;
+        // ── cancel restoration ──
+        /// Set when begin's defensive block took the window out of the
+        /// TARGET strip despite it having no reverse-map entry (a stale
+        /// forward state). That take is a real structural edit made with
+        /// hadPriorState false, so cancel's "fresh adoption never touched
+        /// anything" early return would abandon the window: out of the strip
+        /// AND untracked, gone from the engine entirely. The slot it held is
+        /// in defensiveSlot.
+        bool defensivelyDetached = false;
+        FloatRestore defensiveSlot;
+        bool hadPriorState = false;
+        PhosphorEngine::PlacementStateKey priorKey;
+        /// Whole-key comparison (screen AND desktop AND activity): a
+        /// same-screen/different-desktop prior context reads false.
+        bool priorSameKey = false;
+        bool priorFloating = false;
+        /// The tiled slot at begin time (valid when !priorFloating).
+        FloatRestore priorSlot;
+        /// The m_floatRestore entry begin consumed when it silently
+        /// unfloated the window; re-inserted verbatim on cancel.
+        bool hadFloatRestoreEntry = false;
+        FloatRestore floatRestoreEntry;
+        bool wasScrollFloated = false;
+    };
+    std::optional<DragInsertPreview> m_dragInsertPreview;
+    /// Canonical id of the window under a compositor interactive move (see
+    /// setInteractiveDragWindow). Independent of the preview: the mark
+    /// covers the WHOLE drag, trigger held or not.
+    QString m_interactiveDragWindow;
+    // drag_preview.cpp
+    /// Capture @p windowId's current slot in FloatRestore vocabulary — the
+    /// twin of floatWindowInternal's capture block.
+    static FloatRestore captureDragSlot(const ScrollStrip& strip, const QString& windowId);
+    /// Re-insert @p windowId into @p strip from a FloatRestore-shaped slot
+    /// (anchor arm → column arm → fresh-column fallback), silently. Shared
+    /// by begin (same-screen floating entry) and cancel.
+    bool dragPreviewRestoreSlot(ScrollState* state, const QString& windowId, const FloatRestore& slot,
+                                const ScrollLayoutParams& params, const QString& screenId);
+    /// Preview hygiene for a closing window: drops the preview without
+    /// restoration when the DRAGGED window closes, and discards the stale
+    /// hit-tested target when a NEIGHBOUR in the target strip closes (the
+    /// remembered indexes were aimed at a structure that is changing).
+    void dropClosedWindowFromDragPreview(const QString& windowId);
     /// Windows floated BY scroll mode (mode-transition marker, ephemeral).
     QSet<QString> m_scrollFloatedWindows;
     /// Restore-order seed for deterministic mode transitions. The captured
@@ -868,10 +1031,14 @@ private:
         int viewAnchor = 0;
         /// Monotonic stamp of when this entry was staged (mode exit or
         /// persistence load), from m_stashSequence. serializeStripState
-        /// resolves a window listed by two DIFFERENT keys in favour of the
-        /// higher stamp: keys do not collide, so write order cannot decide
-        /// it, and the reader's alphabetical first-wins would otherwise let
-        /// a window's older screen displace its newer one.
+        /// resolves a window listed by two DIFFERENT stash keys in favour of
+        /// the higher stamp, because the reader's alphabetical first-wins
+        /// would otherwise let a window's older screen displace its newer
+        /// one. This orders the stash entries against each other only. A
+        /// stash and a LIVE strip CAN share a key (an entry still waiting on
+        /// a window that has not re-announced, beside the strip the others
+        /// rebuilt), which serializeStripState resolves by merging rather
+        /// than by stamp.
         quint64 sequence = 0;
 
         bool isEmpty() const

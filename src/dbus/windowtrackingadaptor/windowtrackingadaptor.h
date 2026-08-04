@@ -808,6 +808,14 @@ public:
     /// a slot read with no screen or mode stamping.
     QVariantMap tabColorRuleParams(const QString& windowId);
 
+    /// Per-window drop-indicator colours for @p windowId, keyed by the QML
+    /// property names the overlay slot reads. Resolved once at DRAG START from
+    /// the dragged window's rules — the only per-window slice of the drop
+    /// indicator with a coherent referent, since exactly one window is dragged
+    /// at a time. Unmemoised, unlike tabColorRuleParams: once per drag rather
+    /// than per tab per relayout.
+    QVariantMap dropIndicatorRuleParams(const QString& windowId);
+
 private:
     /// Extract the three tab-colour slots from an already-resolved verdict.
     /// Shared by the memo-hit and memo-miss paths so both produce the same map.

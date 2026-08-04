@@ -21,6 +21,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "tileenginelogging.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -78,6 +79,11 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
     if (it != m_states.windowKeys().constEnd()) {
         preview.hadPriorState = true;
         preview.priorKey = it.value();
+        // Whole-KEY equality (screen AND desktop AND activity), so the name
+        // undersells it: a same-screen drag across a desktop switch reads
+        // false. That is what the restore paths want — they key off the
+        // context, not the output — but do not read the field as "the two
+        // screen ids match".
         preview.priorSameScreen = (preview.priorKey == targetKey);
         priorState = m_states.stateForKey(preview.priorKey);
         if (priorState) {
@@ -90,6 +96,12 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
         // Same-screen reorder: unfloat if it was floating, otherwise leave in place.
         // The first updateDragInsertPreview() call will reposition within the stack.
         if (preview.priorFloating) {
+            // Capture the overflow mark BEFORE clearing it. Cancel re-floats
+            // this window, and without the bit it would come back floating but
+            // UNMARKED — which capturePlacement then records as a phantom USER
+            // float and recoverIfRoom never auto-recovers, because that walks
+            // m_overflow only.
+            preview.priorOverflow = m_overflow.isOverflow(windowId);
             targetState->setFloating(windowId, false);
             m_overflow.clearOverflow(windowId);
         }
@@ -114,6 +126,14 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
     // target (same-screen reorder with priorFloating=false) because that
     // doesn't grow the count.
     //
+    // ONE victim, deliberately. An adoption grows the count by exactly one,
+    // so one eviction restores the cap. A state ALREADY over cap — MaxWindows
+    // lowered while windows were tiled — stays over by whatever it was, and
+    // the drag does not become the moment that mass-floats the excess. That
+    // belongs to the retile the setting change itself triggers, not to a
+    // user's drag, and the preview only knows how to undo the one eviction it
+    // made.
+    //
     // Uses effectiveMaxWindows(screenId) so per-screen MaxWindows overrides
     // and global Unlimited mode are both honored consistently — the per-
     // screen override wins even when global is Unlimited, matching the
@@ -129,6 +149,16 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
             if (tiled[i] != windowId) {
                 preview.evictedWindowId = tiled[i];
                 targetState->setFloating(tiled[i], true);
+                // An eviction float is an OVERFLOW float, not a user float,
+                // and the distinction is load-bearing in two places:
+                // capturePlacement records an unmarked float as stateFloating
+                // (so it comes back floating after a restart, where an
+                // overflow float must record as stateTiled and re-tile), and
+                // recoverIfRoom only walks m_overflow, so an unmarked victim
+                // is never auto-recovered when a slot frees. The usual
+                // backstop does not cover it either: applyOverflow is fed
+                // tiledWindows(), which this window has just left.
+                m_overflow.markOverflow(tiled[i], screenId);
                 break;
             }
         }
@@ -205,6 +235,23 @@ void AutotileEngine::updateDragInsertPreview(int insertIndex)
     retileAfterOperation(m_dragInsertPreview->targetScreenId, /*operationSucceeded=*/true);
 }
 
+void AutotileEngine::updateDragInsertPreview(const DragInsertTarget& target)
+{
+    // Interface seam: an invalid target is ignored, never clamped (the
+    // engine-local int form clamps; that contract stays on its side).
+    if (target.isValid()) {
+        updateDragInsertPreview(target.primary);
+    }
+}
+
+AutotileEngine::DragInsertTarget AutotileEngine::computeDragInsertTargetAtPoint(const QString& screenId,
+                                                                                const QPoint& cursorPos) const
+{
+    DragInsertTarget target;
+    target.primary = computeDragInsertIndexAtPoint(screenId, cursorPos);
+    return target;
+}
+
 void AutotileEngine::commitDragInsertPreview()
 {
     if (!m_dragInsertPreview) {
@@ -256,6 +303,9 @@ void AutotileEngine::cancelDragInsertPreview()
     // the same tiled list the user started with.
     if (!p.evictedWindowId.isEmpty() && targetState) {
         targetState->setFloating(p.evictedWindowId, false);
+        // Paired with the markOverflow in begin's eviction block: the victim is
+        // tiled again, so it is no longer overflowing.
+        m_overflow.clearOverflow(p.evictedWindowId);
     }
 
     if (p.hadPriorState && p.priorSameScreen) {
@@ -265,6 +315,13 @@ void AutotileEngine::cancelDragInsertPreview()
             targetState->moveToPosition(p.windowId, p.priorRawIndex);
             if (p.priorFloating) {
                 targetState->setFloating(p.windowId, true);
+                // Restore the KIND of float, not just the flag. begin cleared
+                // the overflow mark when it unfloated; re-floating without it
+                // would leave the window floating-but-unmarked, which reads as
+                // a user float everywhere it matters.
+                if (p.priorOverflow) {
+                    m_overflow.markOverflow(p.windowId, p.targetScreenId);
+                }
             }
         }
     } else {
@@ -309,6 +366,12 @@ void AutotileEngine::cancelDragInsertPreview()
 
 int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const
 {
+    // Preview reads below are gated on the preview OWNING @p screenId. Without
+    // the gate, a query for a stateless sibling screen inherited this drag's
+    // remembered index and its past-the-cap hold — the scrolling twin carries
+    // the same guard for the same reason.
+    const bool previewOwnsScreen = m_dragInsertPreview
+        && PhosphorIdentity::VirtualScreenId::samePhysical(m_dragInsertPreview->targetScreenId, screenId);
     // Const-correct lookup: avoid tilingStateForScreen() which may create state.
     auto it = m_states.states().constFind(currentKeyForScreen(screenId));
     if (it == m_states.states().constEnd() || !it.value()) {
@@ -332,7 +395,7 @@ int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const
     // monocle-style layout), the stable-identity contract can't hold — hold
     // the preview at its last index instead.
     const int limit = std::min(zones.size(), tiled.size());
-    const int draggedIdx = m_dragInsertPreview ? tiled.indexOf(m_dragInsertPreview->windowId) : -1;
+    const int draggedIdx = previewOwnsScreen ? tiled.indexOf(m_dragInsertPreview->windowId) : -1;
     const bool draggedBeyondCap = draggedIdx >= 0 && draggedIdx >= limit;
     if (!draggedBeyondCap) {
         for (int i = 0; i < limit; ++i) {
@@ -343,7 +406,7 @@ int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const
     }
     // Cursor isn't over any zone (or the dragged window is past the cap) —
     // hold the preview at its current index to avoid snapping to an endpoint.
-    if (m_dragInsertPreview && m_dragInsertPreview->lastInsertIndex >= 0) {
+    if (previewOwnsScreen && m_dragInsertPreview->lastInsertIndex >= 0) {
         return m_dragInsertPreview->lastInsertIndex;
     }
     return tiled.isEmpty() ? 0 : tiled.size() - 1;

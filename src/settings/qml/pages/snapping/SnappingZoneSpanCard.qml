@@ -38,7 +38,6 @@ SettingsCard {
 
             ModifierAndMouseCheckBoxes {
                 width: card.sliderPreferredWidth
-                allowMultiple: true
                 acceptMode: acceptModeAll
                 triggers: card.settingsBridge.zoneSpanTriggers
                 defaultTriggers: card.settingsBridge.defaultZoneSpanTriggers

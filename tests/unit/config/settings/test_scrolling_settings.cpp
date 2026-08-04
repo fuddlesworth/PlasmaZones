@@ -42,6 +42,9 @@
 #include <QtNumeric>
 
 #include <PhosphorConfig/Schema.h>
+// For the drop indicator's radius default, which is deliberately the zone
+// overlay's constant rather than a literal.
+#include <PhosphorZones/ZoneDefaults.h>
 
 #include "config/configdefaults.h"
 #include "config/settings.h"
@@ -241,6 +244,12 @@ private Q_SLOTS:
         QCOMPARE(style->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorStyle());
         QCOMPARE(style->validator(ConfigDefaults::scrollingTabIndicatorStyleBar()).toInt(),
                  ConfigDefaults::scrollingTabIndicatorStyleBar());
+        // BELOW the set, not above. The set is {Chips=0, Bar=1} and the
+        // default is Bar, the HIGHER member, so an out-of-set 7 clamps to 1
+        // and snaps back to 1 alike — it cannot tell validIntOr from
+        // clampInt, which is the whole property this line claims to pin.
+        // -5 clamps to Chips and snaps back to Bar.
+        QCOMPARE(style->validator(-5).toInt(), ConfigDefaults::scrollingTabIndicatorStyle());
         QCOMPARE(style->validator(7).toInt(), ConfigDefaults::scrollingTabIndicatorStyle());
 
         const auto* position = findKey(schema, tabGroup, ConfigDefaults::positionKey());
@@ -323,6 +332,71 @@ private Q_SLOTS:
         const auto* enabled = findKey(schema, tabGroup, ConfigDefaults::enabledKey());
         QVERIFY(enabled);
         QCOMPARE(enabled->defaultValue.toBool(), ConfigDefaults::scrollingTabIndicatorEnabled());
+
+        // ── Scrolling.DropIndicator ──
+        // The paint family for the drag re-insert highlight. Six keys, and
+        // every one of them was unpinned until this block existed — the group
+        // had no test of any kind, while its sibling above is exhaustively
+        // covered. Both clamp ends matter here for a reason peculiar to this
+        // group: all three of its minima mean "invisible" (transparent fill,
+        // no border, no rounding), so a validator that silently floors is the
+        // difference between a drawn indicator and a slot that is created,
+        // shown, animated and synced every drag while painting nothing.
+        const QString dropGroup = ConfigDefaults::scrollingDropIndicatorGroup();
+
+        const auto* dropEnabled = findKey(schema, dropGroup, ConfigDefaults::enabledKey());
+        QVERIFY(dropEnabled);
+        QCOMPARE(dropEnabled->defaultValue.toBool(), ConfigDefaults::scrollingDropIndicatorEnabled());
+
+        const auto* dropOpacity = findKey(schema, dropGroup, ConfigDefaults::opacityKey());
+        QVERIFY(dropOpacity && dropOpacity->validator);
+        QCOMPARE(dropOpacity->defaultValue.toDouble(), ConfigDefaults::scrollingDropIndicatorOpacity());
+        QCOMPARE(dropOpacity->validator(-1.0).toDouble(), ConfigDefaults::scrollingDropIndicatorOpacityMin());
+        QCOMPARE(dropOpacity->validator(2.0).toDouble(), ConfigDefaults::scrollingDropIndicatorOpacityMax());
+        // Fully transparent and fully opaque are both LEGAL, not clamped away:
+        // 0.0 is edge-only, 1.0 is a solid fill. A clamp that excluded either
+        // end would take a real configuration off the table.
+        QCOMPARE(dropOpacity->validator(0.0).toDouble(), 0.0);
+        QCOMPARE(dropOpacity->validator(1.0).toDouble(), 1.0);
+
+        const auto* dropWidth = findKey(schema, dropGroup, ConfigDefaults::widthKey());
+        QVERIFY(dropWidth && dropWidth->validator);
+        QCOMPARE(dropWidth->defaultValue.toInt(), ConfigDefaults::scrollingDropIndicatorBorderWidth());
+        QCOMPARE(dropWidth->validator(-5).toInt(), ConfigDefaults::scrollingDropIndicatorBorderWidthMin());
+        QCOMPARE(dropWidth->validator(9999).toInt(), ConfigDefaults::scrollingDropIndicatorBorderWidthMax());
+        // Zero border width is a supported look (fill with no edge), so it has
+        // to survive the clamp rather than being floored to 1.
+        QCOMPARE(dropWidth->validator(0).toInt(), 0);
+
+        const auto* dropRadius = findKey(schema, dropGroup, ConfigDefaults::radiusKey());
+        QVERIFY(dropRadius && dropRadius->validator);
+        QCOMPARE(dropRadius->defaultValue.toInt(), ConfigDefaults::scrollingDropIndicatorBorderRadius());
+        QCOMPARE(dropRadius->validator(-5).toInt(), ConfigDefaults::scrollingDropIndicatorBorderRadiusMin());
+        QCOMPARE(dropRadius->validator(9999).toInt(), ConfigDefaults::scrollingDropIndicatorBorderRadiusMax());
+        // The radius default is deliberately the zone overlay's, so the drop
+        // highlight and the snap highlight round identically out of the box.
+        // Pinned against the shared constant, not a literal 8, so a change
+        // upstream moves both or fails here.
+        QCOMPARE(dropRadius->defaultValue.toInt(), int(PhosphorZones::ZoneDefaults::BorderRadius));
+
+        // Both colours default EMPTY, which is the "follow the colour scheme"
+        // sentinel — the one value a QColor round-trip could not carry, and
+        // the reason these two are stored as free-form strings.
+        for (const auto& colourKey : {ConfigDefaults::colorKey(), ConfigDefaults::borderColorKey()}) {
+            const auto* dropColour = findKey(schema, dropGroup, colourKey);
+            QVERIFY(dropColour);
+            QVERIFY(dropColour->defaultValue.toString().isEmpty());
+            // The DISK path's only guard. The D-Bus setter refuses an
+            // unparseable colour, but a hand-edited config never goes through
+            // it and reaches QML as an invalid QColor, which Qt paints BLACK
+            // rather than falling back to the scheme. Junk must come back as
+            // the empty sentinel, and both the sentinel and a real colour
+            // must survive untouched.
+            QVERIFY(dropColour->validator);
+            QVERIFY(dropColour->validator(QStringLiteral("not-a-colour")).toString().isEmpty());
+            QVERIFY(dropColour->validator(QString()).toString().isEmpty());
+            QCOMPARE(dropColour->validator(QStringLiteral("#FF3366CC")).toString(), QStringLiteral("#FF3366CC"));
+        }
     }
 
     /// The Scrolling group's numeric-range keys, which DO clamp (clampInt /
@@ -419,6 +493,33 @@ private Q_SLOTS:
         const auto* restoreFloated = findKey(schema, group, ConfigDefaults::restoreFloatedOnLoginKey());
         QVERIFY(restoreFloated);
         QCOMPARE(restoreFloated->defaultValue.toBool(), ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin());
+
+        // The drag-insert pair this PR added. Every other key in the group is
+        // pinned above, and these two were the only ones that were not.
+        const auto* toggle = findKey(schema, group, ConfigDefaults::toggleActivationKey());
+        QVERIFY(toggle);
+        QCOMPARE(toggle->defaultValue.toBool(), ConfigDefaults::scrollingDragInsertToggle());
+
+        const auto* triggers = findKey(schema, group, ConfigDefaults::triggersKey());
+        QVERIFY(triggers && triggers->validator);
+        QCOMPARE(triggers->defaultValue, ConfigDefaults::scrollingDragInsertTriggers());
+        // canonicalTriggerList is the shared validator the snapping and
+        // tiling trigger lists use, and its two load-bearing behaviours are
+        // dropping malformed entries rather than coercing them (a string
+        // element must not become a phantom {0,0} trigger that matches every
+        // bare drag) and capping the list length. Both asserted here because
+        // this group's wiring of it was untested, so a plain passthrough
+        // would have shipped unnoticed.
+        QVariantList mixed;
+        mixed.append(QStringLiteral("garbage"));
+        QVariantMap real;
+        real[ConfigDefaults::triggerModifierField()] = 42;
+        real[ConfigDefaults::triggerMouseButtonField()] = 1;
+        mixed.append(real);
+        const QVariantList canon = triggers->validator(mixed).toList();
+        QCOMPARE(canon.size(), 1);
+        QCOMPARE(canon.at(0).toMap().value(ConfigDefaults::triggerModifierField()).toInt(), 42);
+        QCOMPARE(canon.at(0).toMap().value(ConfigDefaults::triggerMouseButtonField()).toInt(), 1);
     }
 
     /// A factory reset must ANNOUNCE the values it restored.
@@ -571,6 +672,9 @@ private Q_SLOTS:
         // itself like any other change. A setter that compared the value it
         // was HANDED (42) rather than the value the store came back with
         // would leave the page showing IgnoreAll over a stored default.
+        // 42 is a literal on purpose: it has to be outside the closed set,
+        // and spelling it through an accessor would mean naming a value the
+        // set deliberately does not contain.
         settings.setScrollingStickyWindowHandling(42);
         QCOMPARE(settings.scrollingStickyWindowHandling(), ConfigDefaults::scrollingStickyWindowHandling());
         QCOMPARE(stickySpy.count(), 2);
@@ -672,8 +776,12 @@ private Q_SLOTS:
         QCOMPARE(capped.size(), ConfigDefaults::scrollingPresetIndexMax() + 1);
         // Keep-EARLIEST, not keep-last: the survivors are the first entries of
         // the input, so a user's leading presets outlive an over-long tail.
-        QCOMPARE(capped.first(), QStringLiteral("0.05"));
-        QCOMPARE(capped.last(), QStringLiteral("0.2"));
+        // Both ends DERIVED from the same cap the size assertion uses, for
+        // the reason spelled out above: a literal "0.2" here is the cap in
+        // disguise, and raising the cap would fail this line for a reason
+        // that has nothing to do with keep-earliest.
+        QCOMPARE(capped.first(), many.first());
+        QCOMPARE(capped.last(), many.at(ConfigDefaults::scrollingPresetIndexMax()));
     }
 
     /// The width VALUE key clamps into the schema range (backstop; the
@@ -695,7 +803,7 @@ private Q_SLOTS:
 
     /// The kind-aware clamp in the SETTER, which the schema's wider
     /// clampDouble cannot express: under Fixed the value is bounded by the
-    /// pixel range, under Proportion by [ValueMin, ProportionMax]. Without
+    /// pixel range, under Proportion by [ProportionMin, ProportionMax]. Without
     /// this the two halves of the shared value key are pinned only at their
     /// union, so a proportion-magnitude write under Fixed (or a pixel-
     /// magnitude one under Proportion) would sail through.
@@ -745,12 +853,20 @@ private Q_SLOTS:
         const int kindR = ConfigDefaults::scrollingWidthKindPreset();
         const qreal seededPx = ConfigDefaults::scrollingDefaultColumnWidthFixedPx();
         const qreal defaultProp = ConfigDefaults::scrollingDefaultColumnWidthValue();
-        // Seeds deliberately DIFFER from the ConfigDefaults values (0.35 vs
-        // the 0.5 default, 1200 vs the 800 re-seed): with default-equal
-        // seeds every "value untouched" row would also pass under a bogus
-        // unconditional re-seed to the default.
+        // Seeds deliberately DIFFER from the ConfigDefaults values: with
+        // default-equal seeds every "value untouched" row would also pass
+        // under a bogus unconditional re-seed to the default.
         const qreal seedProp = 0.35;
         const qreal seedPx = 1200.0;
+        // Pinned, not just stated. The seeds are literals and the defaults
+        // are not, so retuning either default to the seed's value would
+        // silently defang every value-preserving row in the table below
+        // rather than failing anything. Asserted here so that change is
+        // loud and the fix is obvious (pick a different seed).
+        QVERIFY2(!qFuzzyCompare(seedProp, defaultProp),
+                 "the proportion seed has collided with its default — pick another, or the untouched rows go vacuous");
+        QVERIFY2(!qFuzzyCompare(seedPx, seededPx),
+                 "the pixel seed has collided with the re-seed value — pick another, or the untouched rows go vacuous");
 
         struct Row
         {
@@ -897,7 +1013,7 @@ private Q_SLOTS:
         QTest::newRow("fixed-in-range") << ConfigDefaults::scrollingWidthKindFixed() << 640.0 << 640.0;
         QTest::newRow("proportion-in-range") << ConfigDefaults::scrollingWidthKindProportion() << 0.25 << 0.25;
         // NO rows for "in-kind but out of RANGE". They would be vacuous: the
-        // schema's clampDouble(ValueMin, FixedMax) validator runs on the READ
+        // schema's clampDouble(ProportionMin, FixedMax) validator runs on the READ
         // path as well as the write (PhosphorConfig::Schema), so a hand-edited
         // Fixed=50000 is already 10000 by the time the getter returns it and
         // the normalizer sees an in-range value. reseedColumnWidthForKind's

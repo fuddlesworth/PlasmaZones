@@ -275,20 +275,23 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         return PhosphorI18n::tr("Disable: %1").arg(label);
     }
     // The exclusion family: all terminal with no Value param — the action's
-    // presence IS the effect, so each summary states the outcome. The
-    // blanket form names its scope so it reads distinctly beside the scoped
-    // siblings in a mixed list.
+    // presence IS the effect, so each summary states the outcome. One shape
+    // ("Excluded from <scope>") mirroring the picker labels, with the same
+    // umbrella terms: "placement" is the tiling/snapping/scrolling engines,
+    // "decorations" is borders plus decoration packs. The blanket form names
+    // both scopes so it reads distinctly beside the scoped siblings in a
+    // mixed list.
     if (action.type == ActionType::Exclude) {
-        return PhosphorI18n::tr("Excluded (placement and decorations)");
+        return PhosphorI18n::tr("Excluded from placement and decorations");
     }
     if (action.type == ActionType::ExcludePlacement) {
-        return PhosphorI18n::tr("No tiling, snapping, or scrolling");
+        return PhosphorI18n::tr("Excluded from placement");
     }
     if (action.type == ActionType::ExcludeAnimations) {
-        return PhosphorI18n::tr("No animations");
+        return PhosphorI18n::tr("Excluded from animations");
     }
     if (action.type == ActionType::ExcludeDecorations) {
-        return PhosphorI18n::tr("No borders or decoration packs");
+        return PhosphorI18n::tr("Excluded from decorations");
     }
     if (action.type == ActionType::Float) {
         return PhosphorI18n::tr("Float");
@@ -352,7 +355,7 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             // The empty-chain sentinel clears the CUSTOM packs; the config-
             // backed border and opacity-tint layers still render (easy mode).
             // "Block decoration" was wrong — that outcome belongs to
-            // ExcludeDecorations' "No borders or decoration packs".
+            // ExcludeDecorations' "Excluded from decorations".
             return PhosphorI18n::tr("Decoration packs: none");
         }
         QStringList names;
@@ -601,6 +604,41 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                 return PhosphorI18n::tr("This window's inactive tab: %1").arg(shown);
             }
             return PhosphorI18n::tr("This window's urgent tab: %1").arg(shown);
+        }
+        // ── drop indicator ──
+        // Same treatment as the tab family: numerics carry their unit, colours
+        // upper-case a valid hex and read "(invalid)" otherwise so the summary
+        // never claims a colour the runtime discards.
+        if (action.type == ActionType::SetDropIndicatorOpacity) {
+            const int pct = scrollFractionPercent(raw);
+            return pct < 0 ? PhosphorI18n::tr("Drop indicator fill opacity (invalid)")
+                           : PhosphorI18n::tr("Drop indicator fill opacity: %1%").arg(pct);
+        }
+        if (action.type == ActionType::SetDropIndicatorBorderWidth) {
+            return PhosphorI18n::tr("Drop indicator border width: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetDropIndicatorBorderRadius) {
+            // No sentinel here, unlike the tab corner radius: 0 is square.
+            return PhosphorI18n::tr("Drop indicator corner radius: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetDropIndicatorColor || action.type == ActionType::SetDropIndicatorBorderColor
+            || action.type == ActionType::DropIndicatorColor || action.type == ActionType::DropIndicatorBorderColor) {
+            const QString value = raw.toString();
+            const QString shown = isHexColorShape(value) ? value.toUpper() : PhosphorI18n::tr("(invalid)");
+            if (action.type == ActionType::SetDropIndicatorColor) {
+                return PhosphorI18n::tr("Drop indicator fill: %1").arg(shown);
+            }
+            if (action.type == ActionType::SetDropIndicatorBorderColor) {
+                return PhosphorI18n::tr("Drop indicator border: %1").arg(shown);
+            }
+            // The per-window pair says "when dragging this window", matching
+            // its authoring label: these paint a slot elsewhere on screen
+            // because this window is the one in hand, rather than painting on
+            // the window itself the way the tab colours do.
+            if (action.type == ActionType::DropIndicatorColor) {
+                return PhosphorI18n::tr("Drop indicator fill when dragging this window: %1").arg(shown);
+            }
+            return PhosphorI18n::tr("Drop indicator border when dragging this window: %1").arg(shown);
         }
         // ── window-management overrides ──
         if (action.type == ActionType::SetWindowLayer) {

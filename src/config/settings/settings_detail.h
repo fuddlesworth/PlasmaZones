@@ -271,7 +271,7 @@ inline qreal reseedColumnWidthForKind(qreal value, int kind)
     // is the right SORT of thing.
     //
     // UNREACHABLE through the global pair, and deliberately kept as defence
-    // rather than removed: the schema's clampDouble(ValueMin, FixedMax)
+    // rather than removed: the schema's clampDouble(ProportionMin, FixedMax)
     // validator runs on the READ path too, so that caller receives an
     // already-bounded value and this tail is an identity. It only starts
     // mattering if that clamp is widened for a future kind, or if a caller

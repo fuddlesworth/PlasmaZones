@@ -19,6 +19,7 @@
 #include <QRect>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 #include <QVector>
 
 class QScreen;
@@ -85,6 +86,32 @@ public:
     // overlay windows so the shader starts drawing zones again. Cheap because
     // the labels-texture build path is hash-cached on unchanged inputs.
     virtual void refreshFromIdle() = 0;
+
+    // Drop-target indicator for a scrolling drag re-insert: paints the slot
+    // the dragged window would land in, in absolute px on the named screen.
+    // An invalid or empty rect hides it. Display-only — it takes no input,
+    // because it is drawn underneath a cursor that is mid-drag.
+    //
+    // The drag pipeline pushes this because the scroll engine defers structure
+    // to the drop, so unlike autotile's live restructure nothing in the strip
+    // moves to show where the window is going.
+    // @p animate distinguishes a TARGET CHANGE (true — the transitions exist
+    // to make one legible) from a scroll-tracking re-projection (false). No
+    // default argument on purpose: a default on a virtual binds statically to
+    // the declared type, so a caller holding the concrete service would
+    // silently get a different one.
+    virtual void updateScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate) = 0;
+
+    // Per-DRAG drop-indicator colour overrides, resolved from the dragged
+    // window's rules at drag start and cleared with an empty map when the drag
+    // ends. Keyed by the QML property names the slot reads. On the interface
+    // rather than the concrete service because the DRAG adaptor is what
+    // resolves them, and it holds this interface.
+    //
+    // Only the per-window half is here. The per-CONTEXT map is pushed by the
+    // daemon's own scrolling re-derive, which holds the concrete service, so
+    // widening the interface for it would buy nothing.
+    virtual void setScrollDropIndicatorWindowOverrides(const QVariantMap& overrides) = 0;
 
     // PhosphorZones::Zone selector methods
     virtual bool isZoneSelectorVisible() const = 0;
@@ -189,7 +216,11 @@ Q_SIGNALS:
     void scrollTabActivated(const QString& windowId);
 
     /**
-     * @brief Informational signal emitted when the Snap Assist overlay is shown.
+     * @brief Load-bearing signal (NOT merely informational: shortcuts_wiring.cpp's
+    // handler is the ONLY binder of the shared Escape grab for the snap-assist
+    // phase, which drop.cpp defers to it, and overlayadaptor.cpp relays it onto
+    // the bus — removing or reordering the emission leaves snap assist
+    // un-dismissable). Also emitted when the Snap Assist overlay is shown.
      *
      * The kwin-effect drives thumbnail capture independently as part of the
      * `showSnapAssist` call sequence (not in response to this signal); the

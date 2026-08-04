@@ -100,8 +100,9 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     m_screenStates.erase(donor);
     auto inserted = m_screenStates.insert(newKey, std::move(state));
 
-    // The FIVE scroll tab-strip maps are keyed by screen id too, and each
-    // needs something different from the move:
+    // SEVEN per-screen overlay maps are keyed by screen id too — five for the
+    // scroll tab strips, two for the drag drop indicator — and each needs
+    // something different from the move:
     //  - m_lastScrollTabStrips MUST follow. It is the cached model the
     //    enable toggle replays, so left under the dead key, re-enabling the
     //    indicator would replay nothing until the next structural strip
@@ -119,6 +120,18 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     //  - m_scrollTabIndicatorOverrides MUST follow. Otherwise the screen's
     //    context-rule paint overrides silently fall back to the config values
     //    until the next updateScrollingScreens pass re-pushes them.
+    //  - m_lastScrollDropIndicatorRect MUST follow, for a reason sharper than
+    //    the others. It is the drop indicator's CHANGE GATE, and the rekey
+    //    preserves the live slot — so an indicator visible under oldKey stays
+    //    on screen while its cache entry strands. A later clear addressed to
+    //    newKey then finds no entry, takes the "already clear" early return,
+    //    and never hides the still-visible slot. The common path self-heals
+    //    (the next push hides the old id first), but a rekey with no further
+    //    push before the drop leaves the rectangle painted with no drag left
+    //    to dismiss it.
+    //  - m_scrollDropIndicatorHidePending is dropped like its tab twin, and
+    //    m_scrollDropIndicatorHideGuard is abandoned for the same monotonic
+    //    reason: a stale-returning completion is the safe direction.
     // After the rekey the old key has no removal path of its own (the rekeyed
     // key never reaches unwirePassiveShellSlots, and the by-key clears in
     // updateScrollingScreens name the LIVE screen), so failing to move these
@@ -137,7 +150,13 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         m_scrollTabIndicatorOverrides.insert(newKey, overrideIt.value());
         m_scrollTabIndicatorOverrides.remove(oldKey);
     }
+    if (const auto dropRectIt = m_lastScrollDropIndicatorRect.constFind(oldKey);
+        dropRectIt != m_lastScrollDropIndicatorRect.constEnd()) {
+        m_lastScrollDropIndicatorRect.insert(newKey, dropRectIt.value());
+        m_lastScrollDropIndicatorRect.remove(oldKey);
+    }
     m_scrollTabsHidePending.remove(oldKey);
+    m_scrollDropIndicatorHidePending.remove(oldKey);
 
     // The geometryChanged lambda captured the OLD sid by value. After the
     // state moved to newKey, the lambda's m_screenStates.find(oldSid) lookup

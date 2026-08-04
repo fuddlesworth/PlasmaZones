@@ -3,6 +3,8 @@
 
 #include "settingsschema.h"
 
+#include <QColor>
+
 #include "settingsschemachoices.h"
 #include "settingsschema_p.h"
 
@@ -120,16 +122,32 @@ QVariant canonicalCommaList(const QVariant& v)
     return QVariant(parts.join(QLatin1Char(',')));
 }
 
+/// Both this cap and Settings::MaxTriggersPerAction resolve to
+/// ConfigDefaults::maxTriggersPerAction() — single source of truth, no
+/// drift possible because neither TU carries its own literal.
+constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
+
+} // namespace
+
 /// Canonicalize a trigger list: cap size, coerce each entry to a
 /// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
 /// every write so the flush loop enforces the cap even when the setter
 /// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
 ///
-/// Both this file's cap and Settings::MaxTriggersPerAction resolve to
-/// ConfigDefaults::maxTriggersPerAction() — single source of truth, no
-/// drift possible because neither TU carries its own literal.
-constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
+/// See the header. Namespace scope so settingsschema_scrolling.cpp can reach
+/// it for the five colour keys that carry the empty sentinel.
+QVariant canonicalThemeFallbackColor(const QVariant& v)
+{
+    const QString s = v.toString();
+    if (s.isEmpty() || QColor::isValidColorName(s)) {
+        return s;
+    }
+    return QString();
+}
 
+/// Namespace scope (declared in settingsschema.h): shared with
+/// settingsschema_scrolling.cpp, whose Scrolling.Behavior group carries the
+/// scrolling drag-insert trigger list.
 QVariant canonicalTriggerList(const QVariant& v)
 {
     const QVariantList raw = v.toList();
@@ -154,6 +172,8 @@ QVariant canonicalTriggerList(const QVariant& v)
     }
     return QVariant(out);
 }
+
+namespace {
 
 /// Canonicalize a per-algorithm settings map: round-trip through
 /// @c AutotileConfig so each algorithm's settings are validated against
@@ -432,11 +452,12 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Shortcuts ──────────────────────────────────────────────────────────────
-// Three sub-groups: Global (editor/settings launchers, zone navigation,
-// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation),
-// Tiling (autotile master/ratio/count controls + retile toggle), Editor
-// (zone editor shortcuts — duplicate, split, fill). All QString keys, no
-// validators needed.
+// TWO sub-groups: Global (editor/settings launchers, zone navigation,
+// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation)
+// and Tiling (autotile master/ratio/count controls + retile toggle). All
+// QString keys, no validators needed. There is no Editor group here — the
+// zone editor's shortcuts are not part of the daemon's schema; EditorController
+// owns its own settings in a separate process.
 
 namespace {
 // Helper: append a string KeyDef with no validator. Cuts the noise in the
@@ -785,8 +806,9 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingGroup()] = {
         {CD::enabledKey(), CD::snappingEnabled(), QMetaType::Bool},
     };
-    // Snapping.Behavior owns two scalar keys directly (Triggers, ToggleActivation);
-    // the SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
+    // Snapping.Behavior owns FOUR scalar keys directly — Triggers,
+    // ToggleActivation, FocusNewWindows and FocusFollowsMouse — while the
+    // SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
     // sub-groups each get their own Schema entry below (or already migrated).
     schema.groups[CD::snappingBehaviorGroup()] = {
         {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},

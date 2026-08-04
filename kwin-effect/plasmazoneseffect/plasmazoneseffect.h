@@ -111,11 +111,13 @@ static_assert(
 
 // Plasmashell notification stacking makes KWin emit spurious
 // minimizedChanged(true) events on tiled windows, with the matching
-// unminimize ~1-2 ms later. Two suppressions key off this window and MUST
+// unminimize ~1-2 ms later. THREE suppressions key off this window and MUST
 // agree on its width: the autotile minimize→float debounce
-// (tilinghandler/signals.cpp) and the minimize shader-event
-// spurious-pair cancel (plasmazoneseffect/daemon_apply.cpp,
-// slotWindowMinimizedChanged). Shared here so the two can never desync.
+// (tilinghandler/minimizefloat.cpp), the SNAP-mode minimize→float debounce
+// (handlers/snaphandler.cpp) and the minimize shader-event spurious-pair
+// cancel (plasmazoneseffect/daemon_apply.cpp, slotWindowMinimizedChanged).
+// Shared here so the three can never desync — which is the whole point of
+// enumerating them, so keep the list complete when a fourth appears.
 inline constexpr int kSpuriousMinimizePairMs = 75;
 
 // Forward declarations for helper classes
@@ -217,7 +219,7 @@ protected:
         Continue,
     };
 
-    /// The ~970-line shader-transition branch of paintWindow, extracted verbatim
+    /// The shader-transition branch of paintWindow, extracted verbatim
     /// (paint_shader_window.cpp). Runs the snapshot capture-only frame, computes
     /// progress, binds every animation-shader uniform, draws the redirected
     /// window, and drives the deferred expiry teardown. @p st is the live
@@ -804,18 +806,9 @@ public:
     /// add/remove/reconfigure (same invalidation points as screenIdCache).
     const QSet<QString>& connectedPhysicalIds() const;
 
-    // Animation sequence mode: 0=all at once, 1=one by one in zone order (for batch snaps)
-    int cachedAnimationSequenceMode() const
-    {
-        return m_cachedAnimationSequenceMode;
-    }
     int animationDurationMs() const
     {
         return m_cachedAnimationDuration;
-    }
-    int cachedAnimationStaggerInterval() const
-    {
-        return m_cachedAnimationStaggerInterval;
     }
 
     /**
@@ -1096,9 +1089,9 @@ private:
     /// must be the EXACT window, never a fuzzy same-app sibling.
     ///
     /// Three other sites erase m_surfaceMultipass directly, and each is deliberate:
-    ///   - lifecycle.cpp's surface-pack hot-reload clears the WHOLE map, because every
+    ///   - lifecycle_wiring.cpp's surface-pack hot-reload clears the WHOLE map, because every
     ///     compiled pack is about to be recompiled and no composite survives it;
-    ///   - lifecycle.cpp's windowDeleted backstop, which runs after the window is gone
+    ///   - lifecycle_wiring.cpp's windowDeleted backstop, which runs after the window is gone
     ///     and there is nothing left to animate;
     ///   - surface_capture.cpp's ensureSurfaceTargets, which on an allocation failure
     ///     erases the half-built state it just failed to allocate and returns false;
@@ -1644,7 +1637,8 @@ private:
     void seedDecorationTreeBaseline();
 
     // Constructor wiring, decomposed from the ctor along its original comment
-    // seams (definitions in lifecycle_wiring.cpp). Each is called exactly once,
+    // seams (definitions in lifecycle_wiring.cpp, except connectDaemonSubscriptions
+    // which is in lifecycle_wiring_daemon.cpp). Each is called exactly once,
     // from the ctor, in this declared order. Not part of the public surface —
     // pure ctor decomposition, so their bodies keep the ordering guarantees the
     // inline sequence had (notably: connect the screen signals before iterating
@@ -2055,13 +2049,20 @@ private:
      * The enum values are defined in src/core/interfaces.h (DragModifier).
      */
     /**
-     * @brief Detect activation trigger and grab keyboard if needed
+     * @brief Whether this drag's cursor/modifier ticks must reach the daemon.
      *
-     * Sets m_dragActivation.detected and grabs keyboard when an activation
-     * trigger is first detected during a drag. Returns true if activation
-     * was detected (either previously or just now).
+     * True once any activation family is in play, and latched thereafter via
+     * m_dragActivation.detected so a mid-drag release does not silence the
+     * stream the daemon's rising-edge latches depend on.
+     *
+     * Pure predicate. It does NOT take the keyboard grab, despite the name it
+     * used to carry: the grab is the SNAP path's, taken unconditionally at
+     * dragStarted so Escape reaches cancelSnap rather than KWin's
+     * MoveResizeFilter, and engine-owned drags deliberately take none. Doing
+     * it here made a held drag-insert trigger (the shipped default is Alt)
+     * swallow the keyboard on an ordinary snap-screen drag.
      */
-    bool detectActivationAndGrab();
+    bool shouldForwardDragTicks();
 
     // beginDrag is called unconditionally at drag-start; the deferred-send
     // optimization is obsolete now that the daemon always knows about the drag.
@@ -2173,10 +2174,17 @@ private:
     // Once real settings arrive, they override these conservative defaults.
     QVector<ParsedTrigger> m_parsedTriggers; // pre-parsed via TriggerParser::parseTriggers() at load time (avoids
                                              // QVariant unboxing in hot path)
+    // Drag-insert trigger lists, cached so shouldForwardDragTicks can force
+    // tick forwarding while a HOLD-mode insert trigger is physically held
+    // (the toggle bools below cover toggle mode only; without these, a drag
+    // starting off-engine could never reach hold-mode drag-insert).
+    QVector<ParsedTrigger> m_parsedAutotileDragInsertTriggers;
+    QVector<ParsedTrigger> m_parsedScrollingDragInsertTriggers;
     bool m_triggersLoaded =
         false; // false until D-Bus reply arrives — permissive default bypasses trigger gating (#175)
     bool m_cachedToggleActivation = false;
     bool m_cachedAutotileDragInsertToggle = false;
+    bool m_cachedScrollingDragInsertToggle = false;
     bool m_cachedZoneSpanToggleMode = false;
     // AutotileDragBehavior cached so the synchronous drag-start fast path can
     // decide whether to skip the handleDragToFloat(immediate=true) call.
@@ -2186,7 +2194,11 @@ private:
     // daemon doesn't silently enter the wrong mode.
     EffectAutotileDragBehavior m_cachedAutotileDragBehavior = EffectAutotileDragBehavior::Float;
     bool m_cachedZoneSelectorEnabled = true; // true until proven false — ensures dragMoved passes through at startup
-    int m_cachedAnimationSequenceMode = 0; // 0=all at once, 1=one by one in zone order
+    // Same rule as the duration two members below: seeded from the canonical
+    // constant, not an inline literal. It was 0 (all at once) while the
+    // shipped default is the cascade, so every batch apply before the async
+    // reply lands — bringup included — ran the wrong sequencing.
+    int m_cachedAnimationSequenceMode = PhosphorAnimation::Limits::DefaultAnimationSequenceMode;
     // Pinned to the canonical Limits constant rather than an inline magic
     // number so a future bump in the suite-wide default propagates here
     // automatically and a malformed daemon reply (zero/negative) clamped
@@ -2194,7 +2206,9 @@ private:
     // before the first reply arrives.
     int m_cachedAnimationDuration =
         PhosphorAnimation::Limits::DefaultAnimationDurationMs; // ms, fallback until loaded from daemon
-    int m_cachedAnimationStaggerInterval = 30; // ms between each window start when animating one by one (cascading)
+    // ms between each window start when cascading. Canonical constant for the
+    // reason the member above now gives; it was 30 against a shipped 40.
+    int m_cachedAnimationStaggerInterval = PhosphorAnimation::Limits::DefaultAnimationStaggerIntervalMs;
 
     // Per-drag activation / float tracking. Fields + rationale in effect_state.h
     // (DragActivationState).
@@ -2240,7 +2254,7 @@ private:
     // minimize→unminimize pairs (plasmashell notification stacking emits
     // them on tiled windows ~1-2 ms apart; the float side debounces the
     // same quirk with the shared kSpuriousMinimizePairMs — see
-    // tilinghandler/signals.cpp). An unminimize landing inside the
+    // tilinghandler/minimizefloat.cpp). An unminimize landing inside the
     // window silently drops the reverse leg instead of replaying a full
     // un-minimize animation. `generation` pins the stamp to the exact
     // transition the minimize event installed (or kept running), so the

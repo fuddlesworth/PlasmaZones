@@ -1072,6 +1072,16 @@ target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::C
     PhosphorControl::PhosphorControl)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
+# The scrolling twin, same compile-the-sources-directly reason as above.
+add_executable(test_scrolling_behavior_controller
+    settings/pages/test_scrolling_behavior_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/scrollingbehaviorcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/utils/triggerutils.cpp
+)
+target_link_libraries(test_scrolling_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorControl::PhosphorControl)
+add_test(NAME test_scrolling_behavior_controller COMMAND test_scrolling_behavior_controller)
+
 # Pure string helpers behind AlgorithmService::createNewAlgorithm. Compiled
 # directly because they live in the plasmazones-settings executable rather than
 # plasmazones_core. Split by surface: the template splice / metadata rewrite

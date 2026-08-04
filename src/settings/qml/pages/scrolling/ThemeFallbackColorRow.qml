@@ -7,14 +7,16 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief One tab-indicator colour row: a swatch, the hex, and a reset.
+ * @brief One theme-fallback colour row: a swatch, the hex, and a reset.
  *
- * The three tab colours all store EMPTY to mean "follow the colour scheme",
- * which no plain colour control can express — a picker always has some colour
- * selected. So the row pairs the swatch with an explicit Reset that clears
- * back to empty, and previews the theme colour it would fall back to while it
- * is unset. Without that pairing there would be no way back to the default
- * once a colour had been picked.
+ * Used by the three tab-indicator colours and by the drop indicator's two
+ * (fill and border): five instances across two pages. All of them store EMPTY
+ * to mean "follow the colour scheme", which no plain colour control can
+ * express — a picker always has some colour selected.
+ * So the row pairs the swatch with an explicit Reset that clears back to
+ * empty, and previews the theme colour it would fall back to while it is
+ * unset. Without that pairing there would be no way back to the default once a
+ * colour had been picked.
  *
  * The picker itself is PAGE-LEVEL and passed in rather than owned here: a page
  * rebuild while the dialog is open would destroy a row-scoped dialog and tear
@@ -36,6 +38,13 @@ SettingsRow {
     /// accepted / rejected / selectedColor / open(), so a host can substitute
     /// its own picker without this file importing QtQuick.Dialogs.
     property var picker: null
+
+    /// What a screen reader announces for the swatch. Defaults to the title
+    /// with "color" appended, which reads correctly for a title naming the
+    /// thing being coloured ("Active tab" -> "Active tab color"). A host whose
+    /// title already says "color" MUST override this, or the announcement
+    /// stutters ("Fill color color").
+    property string swatchAccessibleName: i18nc("@action:button", "%1 color", root.title)
 
     /// Emitted with the chosen `#AARRGGBB`, or an EMPTY string on reset.
     signal colorChosen(string hex)
@@ -72,11 +81,11 @@ SettingsRow {
             id: swatch
 
             color: root._followsTheme ? root.themeColor : root.storedColor
-            Accessible.name: i18nc("@action:button", "%1 color", root.title)
+            Accessible.name: root.swatchAccessibleName
             onClicked: {
                 if (!root.picker)
                     return;
-                // The picker is SHARED across the three rows. If a second row
+                // The picker is SHARED across the rows on the page. If a second row
                 // could open it while the first is pending, both rows' handlers
                 // would be connected and one accept would write the chosen
                 // colour into two settings. Refusing while it is up is what

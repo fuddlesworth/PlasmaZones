@@ -524,6 +524,7 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/rekey.cpp
     daemon/overlayservice/cheatsheet.cpp
     daemon/overlayservice/scrolltabs.cpp
+    daemon/overlayservice/scrolldropindicator.cpp
     daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
     daemon/overlayservice/shellhost_bridge.cpp
@@ -604,7 +605,7 @@ find_package(Vulkan REQUIRED)
 target_link_libraries(plasmazonesd PRIVATE Vulkan::Vulkan)
 
 # libepoxy: EGL/GL entry points for the OpenGL-RHI dma-buf import fallback
-# (daemon/dmabufglimport.cpp). Only that TU includes epoxy headers.
+# (daemon/rendering/dmabufglimport.cpp). Only that TU includes epoxy headers.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(Epoxy REQUIRED IMPORTED_TARGET epoxy)
 target_link_libraries(plasmazonesd PRIVATE PkgConfig::Epoxy)

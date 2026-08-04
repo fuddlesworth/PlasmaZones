@@ -221,6 +221,31 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
                 paint.insert(QStringLiteral("urgentColor"), *params.tabIndicatorUrgentColor);
             }
             m_overlayService->setScrollTabIndicatorOverrides(screenId, paint);
+
+            // The drop indicator's overrides, same shape and same reason: keyed
+            // by the QML property names its slot reads, handed to the overlay
+            // rather than the engine. ALL of them are paint — the indicator's
+            // rect is the engine's own layout answer and no rule can move it.
+            QVariantMap drop;
+            if (params.dropIndicatorEnabled) {
+                drop.insert(QStringLiteral("indicatorEnabled"), *params.dropIndicatorEnabled);
+            }
+            if (params.dropIndicatorColor) {
+                drop.insert(QStringLiteral("indicatorColor"), *params.dropIndicatorColor);
+            }
+            if (params.dropIndicatorBorderColor) {
+                drop.insert(QStringLiteral("indicatorBorderColor"), *params.dropIndicatorBorderColor);
+            }
+            if (params.dropIndicatorOpacity) {
+                drop.insert(QStringLiteral("indicatorOpacity"), *params.dropIndicatorOpacity);
+            }
+            if (params.dropIndicatorBorderWidth) {
+                drop.insert(QStringLiteral("indicatorBorderWidth"), *params.dropIndicatorBorderWidth);
+            }
+            if (params.dropIndicatorBorderRadius) {
+                drop.insert(QStringLiteral("indicatorBorderRadius"), *params.dropIndicatorBorderRadius);
+            }
+            m_overlayService->setScrollDropIndicatorOverrides(screenId, drop);
         }
     }
     m_scrollEngine->setActiveScreens(scrollingScreens);
@@ -249,6 +274,9 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             // the queued clear no-ops.
             m_overlayService->updateScrollTabStrips(screenId, {});
             m_overlayService->setScrollTabIndicatorOverrides(screenId, {});
+            // No model to clear first for the drop indicator: it holds no
+            // cached strip and does not replay, so dropping the map is enough.
+            m_overlayService->setScrollDropIndicatorOverrides(screenId, {});
         }
         m_lastScrollTabStripsJson.remove(screenId);
     }

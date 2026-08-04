@@ -37,7 +37,7 @@ Kirigami.Dialog {
     // sampling once on open.
     readonly property real screenAspectRatio: WizardUtils.clampedScreenAspectRatio(dialogContent.Screen.width, dialogContent.Screen.height)
     // Template previews match TemplateService strategies exactly
-    // (see src/editor/services/TemplateService.cpp and core/constants.h)
+    // (see src/editor/services/TemplateService.cpp and core/types/constants.h)
     readonly property var templates: [
         {
             "name": i18n("Blank Canvas"),
@@ -369,7 +369,7 @@ Kirigami.Dialog {
 
                             Layout.fillWidth: true
                             placeholderText: i18n("My Layout")
-                            // Mirrors PlasmaZones::MaxLayoutNameLength (core/constants.h),
+                            // Mirrors PlasmaZones::MaxLayoutNameLength (core/types/constants.h),
                             // same client-side cap as the editor's layout name field.
                             maximumLength: 40
                             Accessible.name: i18n("Layout name")

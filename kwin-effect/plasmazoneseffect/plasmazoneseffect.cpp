@@ -144,14 +144,25 @@ void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
 {
     if (e->type() == QEvent::KeyPress && e->key() == Qt::Key_Escape && m_dragTracker->isDragging()) {
         // The keyboard grab ensures this runs before KWin's MoveResizeFilter,
-        // so Escape never reaches the interactive move handler. The daemon
-        // hides the overlay and sets snapCancelled; the drag continues as
-        // a plain window move without zone snapping.
-        qCInfo(lcEffect) << "Drag escape: overlay hidden, drag continues";
+        // so Escape never reaches the interactive move handler. In every case
+        // the DRAG CONTINUES as a plain window move; only the placement
+        // machinery is dismissed.
+        //
+        // One call serves both kinds of drag, because cancelSnap already does
+        // the right thing for each. On a SNAP drag it hides the overlay and
+        // sets snapCancelled. On an ENGINE drag (which now grabs under
+        // always-on re-insert) it cancels the drag-insert preview, clears the
+        // drop indicator, stops the edge-scroll timer, and drops the reorder
+        // and toggle latches — that last part is what stops the very next tick
+        // re-arming the preview Escape just cancelled.
+        qCInfo(lcEffect) << "Drag escape: placement dismissed, drag continues";
         m_snapHandler->callCancelSnap();
     }
     // All other keys are silently consumed by the grab. Modifier state is
-    // unaffected because mouseChanged reads xkb state directly.
+    // unaffected because KWin's ModifiersChangedSpy runs BEFORE input
+    // filters (processSpies precedes processFilters in processKey), so a
+    // grabbed drag still receives keyboardModifiersChanged-driven
+    // mouseChanged events with live xkb state.
 }
 
 } // namespace PlasmaZones
