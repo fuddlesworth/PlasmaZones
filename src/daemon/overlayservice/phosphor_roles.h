@@ -57,9 +57,22 @@ inline const PhosphorLayer::Role Osd = PhosphorShellPatterns::Hud().withScopePre
 /// groups every kbd-None overlay (OSD, zone-selector, main zone overlay,
 /// and post-migration snap-assist + layout picker + cheatsheet) onto one
 /// wl_surface per screen. FullscreenOverlay primitive (AnchorAll, no keyboard,
-/// click-through). Permanently mapped after first show - keepMappedOnHide
-/// is moot since per-content slots toggle visibility within the shared
-/// scene graph rather than the wl_surface itself unmapping.
+/// click-through). Hiding ONE slot never unmaps anything: the per-content
+/// slots toggle visibility within the shared scene graph, and the shell's
+/// own show/hide is driven off the anyVisible aggregate, so the wl_surface
+/// only moves when the LAST visible slot goes.
+///
+/// At that point keepMappedOnHide decides, and it is NOT moot: it is
+/// effects-gated in createWarmedOsdSurface. With shaders or animations
+/// enabled the shell stays mapped and keeps its warmed Vulkan swapchain;
+/// with BOTH disabled it is false and the wl_surface is unmapped
+/// synchronously, so the next slot to show pays a full remap. Repeatedly
+/// arming and releasing a hold-mode trigger during one drag toggles the
+/// drop indicator, which on that configuration means an unmap/remap per
+/// cycle. That is the deliberate trade (an idle daemon should not keep a
+/// composited surface alive when it is drawing nothing), and it applies
+/// equally to every consumer of this shell, but it is a real cost rather
+/// than the no-op the previous wording claimed.
 ///
 /// Layer downgrade from Overlay to Top is deliberate (issue #516). A
 /// fullscreen wlr Overlay-layer surface above the active toplevel masks

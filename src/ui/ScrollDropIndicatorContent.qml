@@ -65,7 +65,14 @@ Item {
         // darker than the slider says, with no way to tell which of the two
         // was responsible.
         color: Qt.rgba(root.fillColor.r, root.fillColor.g, root.fillColor.b, root.indicatorOpacity)
-        border.color: root.edgeColor
+        // Forced opaque, for the same reason the fill's alpha is replaced.
+        // The colour picker writes 8-digit ARGB, so a border colour CAN carry
+        // an alpha, and passing it through contradicts what two shipped
+        // strings tell the user: the opacity row says "The border always
+        // stays fully opaque" and the ConfigDefaults accessor says the same.
+        // Honouring a picked alpha here would also give the edge a second,
+        // hidden opacity control that the settings page never mentions.
+        border.color: Qt.rgba(root.edgeColor.r, root.edgeColor.g, root.edgeColor.b, 1.0)
         // Zero width is legal and means a fill with no edge, so this is NOT
         // floored at 1 the way a fixed hairline would be.
         border.width: root.indicatorBorderWidth
