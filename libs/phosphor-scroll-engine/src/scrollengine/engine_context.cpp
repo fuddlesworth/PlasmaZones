@@ -259,7 +259,7 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                     cancelDragInsertPreview();
                 }
                 if (ScrollState* migrated = m_states.stateForKey(oldKey)) {
-                    if (ScrollState* existing = m_states.takeState(newKey)) {
+                    if (ScrollState* existing = m_states.stateForKey(newKey)) {
                         // Normally a placeholder a transient lookup created,
                         // and empty. If it is NOT, its windows are real and
                         // discarding the state silently would leave them
@@ -277,7 +277,18 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                                 << "window(s) held by the state the unpin migration displaced on" << screenId;
                             displacedScreens.insert(screenId);
                         }
+                        // RELEASE FIRST, then unhook. releaseScreenState's
+                        // placement snapshot goes through capturePlacement ->
+                        // stateForWindow, which resolves the window's reverse-map
+                        // key and then looks THAT key up in the forward map. Take
+                        // the state out first and every one of those lookups
+                        // misses, so capturePlacement returns nullopt for every
+                        // displaced window and not one record is written — the
+                        // exact loss the comment above says this arm prevents.
+                        // removeStatesIf documents the same ordering ("invoke
+                        // onRemove BEFORE dropping the entry") for its callers.
                         releaseScreenState(existing, displacedWindows);
+                        m_states.takeState(newKey);
                     }
                     m_states.takeState(oldKey);
                     m_states.insertState(newKey, migrated);

@@ -997,10 +997,14 @@ private:
         int viewAnchor = 0;
         /// Monotonic stamp of when this entry was staged (mode exit or
         /// persistence load), from m_stashSequence. serializeStripState
-        /// resolves a window listed by two DIFFERENT keys in favour of the
-        /// higher stamp: keys do not collide, so write order cannot decide
-        /// it, and the reader's alphabetical first-wins would otherwise let
-        /// a window's older screen displace its newer one.
+        /// resolves a window listed by two DIFFERENT stash keys in favour of
+        /// the higher stamp, because the reader's alphabetical first-wins
+        /// would otherwise let a window's older screen displace its newer
+        /// one. This orders the stash entries against each other only. A
+        /// stash and a LIVE strip CAN share a key (an entry still waiting on
+        /// a window that has not re-announced, beside the strip the others
+        /// rebuilt), which serializeStripState resolves by merging rather
+        /// than by stamp.
         quint64 sequence = 0;
 
         bool isEmpty() const

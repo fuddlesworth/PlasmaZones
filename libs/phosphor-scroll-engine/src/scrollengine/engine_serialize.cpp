@@ -276,6 +276,16 @@ QJsonObject ScrollEngine::serializeStripState() const
                   return keyToString(a) < keyToString(b);
               });
     QSet<QString> writtenWindowIds;
+    // Staged rather than written straight to `out`: a key can hold BOTH an
+    // unconsumed stash and a live strip. Three windows leave scrolling and are
+    // stashed at K, two of them re-announce, restoreFromStripStash holds the
+    // entry back waiting on the third, and now K has a two-window live strip
+    // beside a three-tile stash. The prune above drops the two live tiles, so
+    // the stash still carries the third — and the live loop below inserts at
+    // the same key, which in a QJsonObject REPLACES rather than merges. That
+    // window's structure would vanish from the save entirely. So the surviving
+    // stash columns are folded into the live entry instead.
+    QHash<PhosphorEngine::PlacementStateKey, StashedStrip> prunedStashes;
     for (const PhosphorEngine::PlacementStateKey& key : std::as_const(stashKeys)) {
         StashedStrip pruned = m_stripStash.value(key);
         for (auto colIt = pruned.columns.begin(); colIt != pruned.columns.end();) {
@@ -292,12 +302,22 @@ QJsonObject ScrollEngine::serializeStripState() const
                 writtenWindowIds.insert(tile.windowId);
             }
         }
-        out.insert(keyToString(key), stashToJson(pruned));
+        prunedStashes.insert(key, pruned);
     }
     for (auto it = liveStrips.cbegin(); it != liveStrips.cend(); ++it) {
-        if (!it.value().isEmpty()) {
-            out.insert(keyToString(it.key()), stashToJson(it.value()));
+        StashedStrip merged = it.value();
+        // Live columns first: they are the strip as it stands, and the stash
+        // holds only windows that have not come back to it. focusedWindowId
+        // and viewAnchor stay the LIVE ones for the same reason.
+        const StashedStrip stash = prunedStashes.take(it.key());
+        merged.columns += stash.columns;
+        if (!merged.isEmpty()) {
+            out.insert(keyToString(it.key()), stashToJson(merged));
         }
+    }
+    // Whatever was left keyed at a context with no live strip.
+    for (auto it = prunedStashes.cbegin(); it != prunedStashes.cend(); ++it) {
+        out.insert(keyToString(it.key()), stashToJson(it.value()));
     }
     return out;
 }
