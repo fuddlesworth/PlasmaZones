@@ -281,56 +281,6 @@ bool WindowDragAdaptor::effectiveDragReorderModeFor(const QString& screenId) con
     return false;
 }
 
-void WindowDragAdaptor::ensureDragScrollTimerRunning()
-{
-    if (!m_dragScrollTimer) {
-        m_dragScrollTimer = new QTimer(this);
-        // ~60 Hz: smooth continuous scroll while the cursor parks in the
-        // edge band. The engine's per-step size is scaled for this rate.
-        m_dragScrollTimer->setInterval(16);
-        connect(m_dragScrollTimer, &QTimer::timeout, this, &WindowDragAdaptor::onDragScrollTick);
-    }
-    if (!m_dragScrollTimer->isActive()) {
-        m_dragScrollTimer->start();
-    }
-}
-
-void WindowDragAdaptor::onDragScrollTick()
-{
-    // Self-terminating: the preview ending (drop, cancel, window close) is
-    // the single stop condition, so no teardown path has to remember the
-    // timer.
-    PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
-    if (!engine || m_draggedWindowId.isEmpty()) {
-        m_dragScrollTimer->stop();
-        // This tick is one of the places the daemon LEARNS a preview ended
-        // without being told — an engine can self-cancel (a prune, a mode
-        // flip) with no adaptor-side call. Repair the indicator here rather
-        // than leaving it painted until the next drag.
-        clearScrollDropIndicator();
-        return;
-    }
-    const QString screenId = engine->dragInsertPreviewScreenId();
-    if (engine->nudgeDragScroll(screenId, m_lastDragCursorPos)) {
-        // The strip shifted under a (possibly stationary) cursor — the drop
-        // target must follow the columns, not the stale hit.
-        const PhosphorEngine::IPlacementEngine::DragInsertTarget target =
-            engine->computeDragInsertTargetAtPoint(screenId, m_lastDragCursorPos);
-        if (target.isValid()) {
-            engine->updateDragInsertPreview(target);
-        }
-        // Repaint the indicator against the shifted strip. This tick fires
-        // with no cursor motion at all, so the dragMoved push cannot cover it:
-        // a hand parked in the edge band would otherwise scroll the columns
-        // out from under a frozen indicator.
-        // animate=false: this is the SCROLL re-projecting the same slot, not
-        // the user picking a different one. The timer fires at ~16ms against a
-        // 100ms transition, so animating it retargets six times before it can
-        // settle and the rect stretches instead of sliding.
-        pushScrollDropIndicator(screenId, engine->dragInsertIndicatorRect(screenId), /*animate=*/false);
-    }
-}
-
 void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate)
 {
     if (!m_overlayService || screenId.isEmpty()) {
@@ -382,7 +332,6 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
     if (m_scrollEngine && m_scrollEngine->hasDragInsertPreview()) {
         m_scrollEngine->cancelDragInsertPreview();
     }
-    stopDragScrollTimer();
     clearScrollDropIndicator();
 }
 
@@ -419,9 +368,7 @@ void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenI
         m_scrollEngine->cancelDragInsertPreview();
         cancelled = true;
     }
-    if (cancelled) {
-        stopDragScrollTimer();
-    }
+    if (cancelled) { }
     // Clear the indicator on the departing output INDEPENDENTLY of `cancelled`.
     // The engine may have self-cancelled its own preview during a prune before
     // this call arrives (pruneStatesForRemovedScreen does exactly that), in
@@ -433,18 +380,6 @@ void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenI
     }
 }
 
-void WindowDragAdaptor::stopDragScrollTimer()
-{
-    // Preview-end teardown for the edge-scroll timer. The tick handler
-    // self-stops too, but its next firing is up to 16 ms away — long enough
-    // for a NEW drag's eager preview to begin, at which point the stale
-    // tick would nudge the new strip with the OLD drag's parked cursor.
-    if (m_dragScrollTimer) {
-        m_dragScrollTimer->stop();
-    }
-    m_lastDragCursorPos = QPoint();
-}
-
 bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
 {
     PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
@@ -454,7 +389,6 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
         // own preview after the last push (five engine-side self-cancel sites
         // do exactly that), leaving the indicator painted and the edge-scroll
         // timer armed with the old drag's parked cursor. Both must go.
-        stopDragScrollTimer();
         clearScrollDropIndicator();
         return false;
     }
@@ -464,12 +398,10 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
     if (!PhosphorScreens::ScreenIdentity::screensMatch(engine->dragInsertPreviewScreenId(),
                                                        resolveScreenAt(QPointF(cursorX, cursorY)).screenId)) {
         engine->cancelDragInsertPreview();
-        stopDragScrollTimer();
         clearScrollDropIndicator();
         return false;
     }
     engine->commitDragInsertPreview(); // commit, not cancel — the drop finalizes the reorder
-    stopDragScrollTimer();
     clearScrollDropIndicator();
     return true;
 }

@@ -408,13 +408,6 @@ public:
     /// on a parked column reports where it truly lands, and the overlay
     /// clips.
     QRect dragInsertIndicatorRect(const QString& screenId) const override;
-    /// Edge auto-scroll while a drag-insert preview is live on @p screenId:
-    /// a cursor inside the left/right work-area band slides the view one
-    /// step toward that edge (driven by the daemon's fixed ~60 Hz drag-
-    /// scroll timer, independent of cursor motion). Returns true when the
-    /// view actually moved, so the caller re-hit-tests against the shifted
-    /// strip.
-    bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos) override;
     /// While set, applyLayout never emits this window's rect and
     /// onWindowResized never reconciles its acks: during a drag the effect
     /// floats the window VISUALLY ONLY. The engine keeps its strip tile for a

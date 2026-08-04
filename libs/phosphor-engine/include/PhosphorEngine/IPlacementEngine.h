@@ -478,21 +478,6 @@ public:
         return {};
     }
 
-    /// Edge auto-scroll during a drag-insert preview: an engine whose layout
-    /// is a scrollable viewport (the scroll strip) shifts its view one step
-    /// when the cursor sits inside its edge band, so drops can land past the
-    /// visible columns. Driven by the daemon's FIXED ~60 Hz drag-scroll
-    /// timer, independent of cursor motion — the cursor may be unchanged
-    /// between calls, so per-call step size must be scaled for that rate.
-    /// Returns true when the view actually moved (the caller then
-    /// re-hit-tests). Default no-op for engines with a fixed layout.
-    virtual bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos)
-    {
-        Q_UNUSED(screenId)
-        Q_UNUSED(cursorPos)
-        return false;
-    }
-
     /// The window currently under a compositor interactive move (the whole
     /// drag, preview or not). Empty clears. While set, an engine that still
     /// models the window as tiled must neither emit geometry for it nor

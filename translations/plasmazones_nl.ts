@@ -689,37 +689,37 @@
         <translation>Naar voorgrond brengen</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="622"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="558"/>
         <source>Cancel Zone Overlay</source>
         <translation>Zone-overlay annuleren</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="681"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="617"/>
         <source>Layout Picker: Move Left</source>
         <translation>Indelingskiezer: naar links</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="685"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="621"/>
         <source>Layout Picker: Move Right</source>
         <translation>Indelingskiezer: naar rechts</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="689"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="625"/>
         <source>Layout Picker: Move Up</source>
         <translation>Indelingskiezer: omhoog</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="693"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="629"/>
         <source>Layout Picker: Move Down</source>
         <translation>Indelingskiezer: omlaag</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="697"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="633"/>
         <source>Layout Picker: Confirm</source>
         <translation>Indelingskiezer: bevestigen</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="698"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="634"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
         <translation type="unfinished"></translation>
     </message>

@@ -40,16 +40,6 @@ namespace {
 constexpr int kEdgeBandMaxPx = 96;
 constexpr int kEdgeBandDivisor = 4;
 
-/// Edge auto-scroll: band inside the work area's left/right edges that arms
-/// the scroll, and the maximum per-step size. The daemon drives steps from
-/// a ~60 Hz timer (niri's dnd-edge-view-scroll shape), and the step scales
-/// QUADRATICALLY with how deep the cursor sits in the band — brushing the
-/// band's inner edge barely moves (no accidental yanks when aiming near an
-/// edge column), parking at the screen edge reaches ~kDragScrollMaxStepPx
-/// per step (~1400 px/s at 60 Hz).
-constexpr int kDragScrollBandPx = 48;
-constexpr int kDragScrollMaxStepPx = 24;
-
 } // namespace
 
 /// Capture @p windowId's current slot in FloatRestore vocabulary — the twin
@@ -503,7 +493,7 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     // difference between the two, and layoutParamsForScreen resolves gaps and
     // the work area per SCREEN ID — so passing the caller's spelling could
     // hit-test against a work area the commit path never uses. Both siblings
-    // (dragInsertIndicatorRect and nudgeDragScroll) already use the preview's.
+    // (dragInsertIndicatorRect) already uses the preview's.
     const ScrollLayoutParams params =
         layoutParamsForScreen(previewOwnsScreen ? m_dragInsertPreview->targetScreenId : screenId);
     if (!params.workArea.isValid()) {
@@ -581,7 +571,7 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     // Nothing visible (fully parked strip): hold the live preview's target
     // rather than snapping somewhere arbitrary. Only for the preview's OWN
     // screen — a stateless sibling screen must not inherit another screen's
-    // remembered target (nudgeDragScroll carries the same guard).
+    // remembered target.
     if (previewOwnsScreen) {
         return m_dragInsertPreview->lastTarget;
     }
@@ -721,84 +711,6 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // Resolved away (every column zero-width on a degenerate work area, or the
     // tile hidden behind an active tab). Nothing truthful to paint.
     return {};
-}
-
-bool ScrollEngine::nudgeDragScroll(const QString& screenId, const QPoint& cursorPos)
-{
-    if (!m_dragInsertPreview
-        || !PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId)) {
-        return false;
-    }
-    ScrollState* state = stateForKey(m_dragInsertPreview->targetKey, /*createIfMissing=*/false);
-    if (!state || state->strip().isEmpty()) {
-        return false;
-    }
-    const ScrollLayoutParams params = layoutParamsForScreen(m_dragInsertPreview->targetScreenId);
-    if (!params.workArea.isValid()) {
-        return false;
-    }
-    ScrollStrip& strip = state->strip();
-    const ResolvedStrip resolved = strip.relayout(params);
-    if (resolved.stripWidth <= params.workArea.width()) {
-        return false; // strip fits the viewport — nothing to reveal
-    }
-    // Quadratic depth ramp: depth 0 at the band's inner edge, 1 at the
-    // screen edge. Shallow contact scrolls barely at all, so dragging near
-    // an edge column doesn't yank the strip; parking at the edge reaches
-    // full speed.
-    // Pick the band by the NEARER edge so a work area narrower than two
-    // bands cannot route a right-edge cursor into the left band, then ramp
-    // quadratically with depth. A depth whose step ROUNDS TO ZERO is treated
-    // as outside the band: with a 24px maximum that is roughly the outer 14%
-    // of the band, so the shallowest contact does nothing at all rather than
-    // creeping. Note this is a rounding threshold, not a 1px floor — the step
-    // goes 0, 1, 2, ... as the cursor deepens, so a slow crawl IS reachable
-    // just inside the threshold. That is the intended feel; the guard only
-    // exists so brushing the very edge of the band is inert.
-    //
-    // The nearer-edge arm is deliberately UNTESTED, and cannot be tested
-    // through the view anchor. The bands only overlap on a work area under
-    // 2*kDragScrollBandPx wide, and on a viewport that small the columns
-    // leave the anchor a single legal value, so it lands there whichever arm
-    // fired. Both regimes were measured: at 90px the overlap yields a zero
-    // step in both arms, and at 60px the anchor is identical for a pure
-    // left-band cursor and a pure right-band one. The arm stays because it
-    // costs nothing and the alternative is a wrong-direction scroll on a
-    // sliver of an output, not because anything pins it.
-    const int leftEdge = params.workArea.left() + kDragScrollBandPx;
-    const int rightEdge = params.workArea.right() - kDragScrollBandPx;
-    const bool inLeftBand = cursorPos.x() <= leftEdge;
-    const bool inRightBand = cursorPos.x() >= rightEdge;
-    int step = 0;
-    if (inLeftBand
-        && (!inRightBand || cursorPos.x() - params.workArea.left() <= params.workArea.right() - cursorPos.x())) {
-        const double depth = std::clamp((leftEdge - cursorPos.x()) / double(kDragScrollBandPx), 0.0, 1.0);
-        step = -static_cast<int>(std::lround(depth * depth * kDragScrollMaxStepPx));
-    } else if (inRightBand) {
-        const double depth = std::clamp((cursorPos.x() - rightEdge) / double(kDragScrollBandPx), 0.0, 1.0);
-        step = static_cast<int>(std::lround(depth * depth * kDragScrollMaxStepPx));
-    } else {
-        return false;
-    }
-    if (step == 0) {
-        return false;
-    }
-    const int maxViewX = resolved.stripWidth - params.workArea.width();
-    const int newViewX = std::clamp(resolved.viewX + step, 0, maxViewX);
-    if (newViewX == resolved.viewX) {
-        return false; // already pinned at this end
-    }
-    // viewX = columnStripX(active) - anchor: shifting the view right means
-    // shrinking the anchor by the same amount. Raw restore — the clamp just
-    // ran through newViewX above.
-    strip.restoreViewAnchor(strip.viewAnchor() - (newViewX - resolved.viewX), params);
-    applyLayout(m_dragInsertPreview->targetScreenId, false);
-    // The anchor is persisted state, and applyLayout's own anchorMoved gate
-    // cannot see this shift (updateViewForFocus is skipped while the preview
-    // steers the view) — without this emit an edge-scroll followed by Escape
-    // loses the anchor across a restart.
-    Q_EMIT placementChanged(m_dragInsertPreview->targetScreenId);
-    return true;
 }
 
 void ScrollEngine::setInteractiveDragWindow(const QString& windowId)

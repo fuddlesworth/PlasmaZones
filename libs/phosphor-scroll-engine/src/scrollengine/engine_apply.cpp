@@ -272,13 +272,14 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         qCDebug(lcScrollEngine) << "applyLayout: no valid work area for screen" << screenId;
         return;
     }
-    // Live drag-insert preview on THIS screen: the daemon's drag-scroll
-    // timer is steering the view manually through nudgeDragScroll, which
-    // shifts the anchor itself — re-applying the centering policy here
-    // would snap the view back to the focused column every pass and undo
-    // every nudge. screensMatch, not ==, so a virtual-screen id spelling
-    // difference cannot fail the guard open (the nudge path already
-    // compares this way).
+    // Live drag-insert preview on THIS screen: the view must not move for the
+    // rest of the hold. That is the DETACH-ONCE invariant this whole design
+    // rests on — the strip settles once when begin detaches the window, and
+    // anything that slides the layout under a stationary cursor afterwards is
+    // what killed the live-restructure design (see drag_preview.cpp's header).
+    // Re-applying the centering policy on an incidental pass mid-drag would do
+    // exactly that. screensMatch, not ==, so a virtual-screen id spelling
+    // difference cannot fail the guard open.
     const bool dragPreviewSteersView = m_dragInsertPreview
         && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId);
 

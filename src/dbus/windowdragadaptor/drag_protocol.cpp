@@ -699,8 +699,7 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         // one non-cancelled exit that never reached settleDragInsertPreviewAt,
         // so a drag that armed a preview on an engine screen and then crossed
         // onto a suppressed one ended here with the preview alive, the window
-        // detached and the edge-scroll timer armed for the next drag.
-        stopDragScrollTimer();
+        // detached.
         cancelDragInsertIfActive();
         clearScrollDropIndicator();
         outcome.action = PhosphorProtocol::DragOutcome::NoOp;

@@ -698,22 +698,10 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     // (previewEngine)` cancel arm is unreachable because this
                     // outer branch was taken. A rect pushed on an earlier tick
                     // would stay painted for the rest of the drag.
-                    stopDragScrollTimer();
                     clearScrollDropIndicator();
                 }
             }
             if (insertEngine->hasDragInsertPreview() && insertEngine->dragInsertPreviewScreenId() == insertScreenId) {
-                // Edge auto-scroll is TIMER-driven (see m_dragScrollTimer):
-                // this motion tick only records the cursor and keeps the
-                // timer alive, so a hand parked in the edge band scrolls
-                // continuously instead of stalling with the motion stream.
-                // Scroll engine only — nudgeDragScroll is a base no-op for
-                // autotile, and a 60 Hz timer spinning on a guaranteed false
-                // for the whole preview is pure waste.
-                m_lastDragCursorPos = QPoint(cursorX, cursorY);
-                if (onScrollingScreen) {
-                    ensureDragScrollTimerRunning();
-                }
                 const PhosphorEngine::IPlacementEngine::DragInsertTarget target =
                     insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
                 if (target.isValid()) {
@@ -762,11 +750,6 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                                   << "engineResolved=" << (insertEngine != nullptr) << "held=" << insertHeld
                                   << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
             previewEngine->cancelDragInsertPreview();
-            // The edge-scroll timer goes with the preview it was driving. Left
-            // armed, its next firing is up to 16 ms away — long enough for a
-            // new drag's eager preview to begin, at which point a stale tick
-            // would nudge the NEW strip with this drag's parked cursor.
-            stopDragScrollTimer();
             clearScrollDropIndicator();
         }
     }

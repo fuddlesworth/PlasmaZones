@@ -319,8 +319,8 @@ public:
     }
 
     /**
-     * Cancel any live drag-insert preview on either engine and stop the
-     * edge-scroll timer. The daemon's context-change handlers route through
+     * Cancel any live drag-insert preview on either engine. The daemon's
+     * context-change handlers route through
      * these instead of hand-inlining the two-engine sweep (a third engine,
      * or the timer stop, would otherwise need three call sites updated).
      * The ForScreen form cancels only previews whose target or prior screen
@@ -727,21 +727,6 @@ private:
     /// journal without it). Reset by beginDrag.
     bool m_dragInsertTickLogged = false;
 
-    /// Edge auto-scroll driver (niri's dnd-edge-view-scroll shape): a
-    /// repeating ~60 Hz timer runs while a drag-insert preview is live, so
-    /// a cursor PARKED in the edge band keeps scrolling — dragMoved ticks
-    /// are motion-driven and stall the moment the hand stops. The engine's
-    /// nudgeDragScroll self-gates on the band and scales its step by band
-    /// depth; after each real scroll the drop target is re-resolved against
-    /// the shifted strip. The timer self-stops when the preview ends.
-    QTimer* m_dragScrollTimer = nullptr;
-    QPoint m_lastDragCursorPos;
-    void ensureDragScrollTimerRunning();
-    void onDragScrollTick();
-    /// Preview-end teardown: stop the edge-scroll timer and forget the
-    /// cursor so a stale 16 ms tick cannot nudge the NEXT drag's strip.
-    void stopDragScrollTimer();
-
     // DRY helper: cancel any active drag-insert preview on either engine.
     void cancelDragInsertIfActive();
 
@@ -772,8 +757,6 @@ private:
     ///   - cancelDragInsertPreviewsForScreen, keyed on the DEPARTING screen
     ///     rather than on whether it cancelled anything, since a prune may
     ///     have self-cancelled first;
-    ///   - onDragScrollTick's self-stop, which is where the daemon often
-    ///     first observes that the preview is gone;
     ///   - dragMoved's failed-begin arm and its trigger-release cancel arm,
     ///     neither of which routes through the shared teardown.
     /// Adding a new preview-end path means adding a call here; the earlier
