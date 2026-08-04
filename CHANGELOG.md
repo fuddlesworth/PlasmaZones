@@ -5,6 +5,15 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Windows are no longer blurry on a display scaled to exactly 150%**: every window PlasmaZones draws a border on stayed persistently soft at 150%, while 125% was affected only at some window positions and other fractional scales such as 148.33% were fine. The offscreen surface those windows are drawn through was positioned half a device pixel away from where the compositor rounds it to, and half a pixel is the one offset that rounding cannot absorb, so the surface was stretched by a single pixel and resampled ([#868](https://github.com/fuddlesworth/PlasmaZones/discussions/868), [#884](https://github.com/fuddlesworth/PlasmaZones/pull/884)).
+- **Window content no longer stretches while a window snaps or tiles**: the default geometry animation drew the window's content squeezed into the rectangle it was travelling through, so text and icons were distorted for the length of the animation and then snapped sharp at the end. The content is now drawn at its final size throughout and the animation reveals it as the window grows ([#868](https://github.com/fuddlesworth/PlasmaZones/discussions/868), [#884](https://github.com/fuddlesworth/PlasmaZones/pull/884)).
+- **Choosing "None" for a snap animation no longer distorts the window either**: with no animation shader selected, the fallback animation scaled the window's content the same way. It now animates only where the window sits ([#884](https://github.com/fuddlesworth/PlasmaZones/pull/884)).
+- **Your own animation and decoration packs now override the bundled ones**: a pack you installed under your home directory with the same name as one that ships with PlasmaZones was ignored for windows, while the daemon still used yours for on-screen displays and popups, so the same pack could look different in the two places ([#884](https://github.com/fuddlesworth/PlasmaZones/pull/884)).
+
 ## [3.3.4] - 2026-08-03
 
 ### Fixed
