@@ -571,7 +571,17 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                     // at the already-committed previous target instead of the
                     // animator's departure rect.
                     mt->fromGeometry = morphAnchor;
-                    if (!mt->oldSnapshot) {
+                    // Gate on the compiled shader actually LINKING uOldWindow,
+                    // matching the two sibling request sites (the move-start
+                    // hookup and beginMaximizeShaderMorph) and the bind/unbind
+                    // pair in decoration_render.cpp, which already test this
+                    // same predicate. The bundled window-morph is vertex-only
+                    // and samples no old frame, so an ungated request paid a
+                    // full-window drawWindow re-entry plus an RGBA8 allocation
+                    // on every snap, tile and reflow to fill a texture nothing
+                    // would ever read. A cross-fade pack keeps its snapshot by
+                    // declaring the uniform.
+                    if (mt->cached->iOldWindowLoc >= 0 && !mt->oldSnapshot) {
                         mt->needsSnapshot = true;
                     }
                 }
