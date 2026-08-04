@@ -360,6 +360,81 @@ private Q_SLOTS:
         QCOMPARE(engine.computeDragInsertIndexAtPoint(QStringLiteral("nonexistent"), QPoint(50, 50)), -1);
     }
 
+    /// Every POSITIVE branch of the same function. Only the no-state arm above
+    /// was covered, so the hit-test loop, the empty-zones shortcut, the
+    /// cursor-over-own-zone identity and both fallbacks could each be
+    /// rewritten with the suite still green.
+    void testComputeIndex_hitTestAndFallbacks()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+
+        // No zones calculated yet: the layout has nothing to hit-test against,
+        // so the answer is the head of the list rather than -1. The two are
+        // NOT interchangeable — -1 means "no state" and suppresses the drag,
+        // 0 means "insert at the front".
+        state->setCalculatedZones({});
+        QCOMPARE(engine.computeDragInsertIndexAtPoint(screen, QPoint(50, 50)), 0);
+
+        // Three side-by-side zones, one per window.
+        const QVector<QRect> zones{QRect(0, 0, 100, 200), QRect(100, 0, 100, 200), QRect(200, 0, 100, 200)};
+        state->setCalculatedZones(zones);
+        QCOMPARE(engine.computeDragInsertIndexAtPoint(screen, QPoint(50, 100)), 0);
+        QCOMPARE(engine.computeDragInsertIndexAtPoint(screen, QPoint(150, 100)), 1);
+        QCOMPARE(engine.computeDragInsertIndexAtPoint(screen, QPoint(250, 100)), 2);
+
+        // Outside every zone with no preview live: the last index, not -1 and
+        // not 0. Snapping to an endpoint here is what the fallback avoids.
+        QCOMPARE(engine.computeDragInsertIndexAtPoint(screen, QPoint(5000, 5000)), 2);
+
+        // With a preview live, the same miss HOLDS the preview's last index
+        // instead. Wandering off the layout mid-drag must not yank the
+        // window to an endpoint.
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), screen));
+        state->setCalculatedZones(zones);
+        engine.updateDragInsertPreview(1);
+        QCOMPARE(engine.computeDragInsertIndexAtPoint(screen, QPoint(5000, 5000)), 1);
+
+        // Cursor over the DRAGGED window's own zone is a stable identity: it
+        // answers that zone rather than skipping to a neighbour. Skipping
+        // would re-match under the cursor on the next tick and oscillate.
+        const int ownIndex = state->tiledWindows().indexOf(QStringLiteral("A"));
+        QVERIFY(ownIndex >= 0);
+        QVERIFY(ownIndex < zones.size());
+        QCOMPARE(engine.computeDragInsertIndexAtPoint(screen, zones.at(ownIndex).center()), ownIndex);
+        engine.cancelDragInsertPreview();
+    }
+
+    /// The maxWindows cap arm. When the layout produces fewer zones than
+    /// there are tiled windows and the DRAGGED window fell past the cap, the
+    /// stable-identity contract cannot hold, so the hit-test is skipped
+    /// entirely and the preview holds its last index. Without the skip the
+    /// cursor would match some other window's zone and shuffle the layout.
+    void testComputeIndex_draggedPastTheZoneCapHolds()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), screen));
+        engine.updateDragInsertPreview(2);
+        // A only has a zone if the layout produced three. One zone caps the
+        // layout at the head window, so the dragged one sits past it.
+        state->setCalculatedZones({QRect(0, 0, 100, 200)});
+        QCOMPARE(state->tiledWindows().indexOf(QStringLiteral("A")), 2);
+        // The cursor is squarely inside zone 0. With the cap check gone the
+        // loop returns 0 and the window jumps to the head of the layout.
+        QCOMPARE(engine.computeDragInsertIndexAtPoint(screen, QPoint(50, 100)), 2);
+        engine.cancelDragInsertPreview();
+    }
+
     // =========================================================================
     // The IPlacementEngine STRUCT seam — the only forms production calls.
     // The int forms above stay engine-local; their clamping contract does

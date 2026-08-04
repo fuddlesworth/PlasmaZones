@@ -57,6 +57,10 @@ SettingsCard {
                 width: root.triggerPreferredWidth
                 allowMultiple: true
                 acceptMode: acceptModeAll
+                // The always-active sentinel occupies one of the four stored
+                // slots and is stripped out of the list below, so Add has to
+                // stop one early or the merge silently drops the newest chip.
+                reservedTriggerSlots: alwaysReinsertSwitch.checked ? 1 : 0
                 triggers: root.settingsBridge.scrollingDragInsertTriggers
                 defaultTriggers: root.settingsBridge.defaultScrollingDragInsertTriggers
                 tooltipEnabled: false

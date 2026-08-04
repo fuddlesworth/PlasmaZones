@@ -63,6 +63,9 @@ SettingsFlickable {
                         width: root.triggerPreferredWidth
                         allowMultiple: true
                         acceptMode: acceptModeAll
+                        // See the scrolling twin: the sentinel eats a stored
+                        // slot that this list does not show.
+                        reservedTriggerSlots: alwaysReinsertSwitch.checked ? 1 : 0
                         triggers: root.settingsBridge.autotileDragInsertTriggers
                         defaultTriggers: root.settingsBridge.defaultAutotileDragInsertTriggers
                         tooltipEnabled: false

@@ -50,6 +50,17 @@ Item {
     property var triggers: [] // [{modifier: bitmask, mouseButton: buttonBit}, ...]
     property var defaultTriggers: []
     readonly property int maxTriggers: 4
+    /// Stored slots that are spoken for but absent from `triggers`. Set to 1
+    /// by a host whose master "always active" toggle is on: that toggle is
+    /// stored as an AlwaysActive sentinel INSIDE the same capped list, and the
+    /// controllers strip it before handing the list here, so `triggers` is one
+    /// shorter than what is really stored. Gating Add on the stripped length
+    /// let the user author four triggers, the merge re-added the sentinel, and
+    /// the cap silently dropped the last one — a chip the user had just
+    /// created vanished on the next read with nothing said.
+    property int reservedTriggerSlots: 0
+    /// What Add is actually allowed to reach.
+    readonly property int availableTriggerSlots: root.maxTriggers - root.reservedTriggerSlots
     // -1 = adding a new trigger, >= 0 = editing trigger at that index
     property int editingTriggerIndex: -1
     // Bits and labels come from the TriggerLabels singleton so this editor and
@@ -249,7 +260,7 @@ Item {
                 QQC2.ToolButton {
                     text: i18n("Add…")
                     icon.name: "list-add"
-                    enabled: root.triggers.length < root.maxTriggers
+                    enabled: root.triggers.length < root.availableTriggerSlots
                     onClicked: {
                         root.editingTriggerIndex = -1;
                         multiInputCapture.startCapture();
