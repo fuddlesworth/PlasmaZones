@@ -655,6 +655,16 @@ bool ScrollEngine::nudgeDragScroll(const QString& screenId, const QPoint& cursor
     // quadratically with depth. A depth that rounds to a zero step is
     // treated as outside the band — matching the "brushing the inner edge
     // barely moves" intent instead of creeping 1 px per tick forever.
+    //
+    // The nearer-edge arm is deliberately UNTESTED, and cannot be tested
+    // through the view anchor. The bands only overlap on a work area under
+    // 2*kDragScrollBandPx wide, and on a viewport that small the columns
+    // leave the anchor a single legal value, so it lands there whichever arm
+    // fired. Both regimes were measured: at 90px the overlap yields a zero
+    // step in both arms, and at 60px the anchor is identical for a pure
+    // left-band cursor and a pure right-band one. The arm stays because it
+    // costs nothing and the alternative is a wrong-direction scroll on a
+    // sliver of an output, not because anything pins it.
     const int leftEdge = params.workArea.left() + kDragScrollBandPx;
     const int rightEdge = params.workArea.right() - kDragScrollBandPx;
     const bool inLeftBand = cursorPos.x() <= leftEdge;

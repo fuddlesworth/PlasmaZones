@@ -49,10 +49,12 @@ private Q_SLOTS:
     void freshAdoptionStaysUntrackedUntilCommit();
     void hitTestResolvesTargets();
     void hitTestResolvesStackedTileSlots();
+    void hitTestMapsThroughAMinimizedTile();
     void indicatorRectTracksTarget();
     void indicatorRectMatchesTheDropUnderAGap();
     void indicatorRectMatchesTheDropForANewColumn();
     void nudgeDragScrollShiftsView();
+    void nudgeDragScrollRefusesWhenTheStripFits();
     void windowClosedDropsPreview();
     void screenSetChangeCancelsPreview();
     void interactiveDragMarkSuppressesEmitAndReconcile();
@@ -495,6 +497,50 @@ void TestScrollEngineDragInsert::hitTestResolvesStackedTileSlots()
     engine->cancelDragInsertPreview();
 }
 
+void TestScrollEngineDragInsert::hitTestMapsThroughAMinimizedTile()
+{
+    // The reason the y-loop maps through the hovered tile's windowId instead
+    // of reusing its position among the RESOLVED tiles. Resolved tiles omit
+    // minimized ones, so the two indices diverge by one per preceding
+    // minimized tile, and a resolved-position shortcut would hand commit a
+    // slot one place too high. Nothing else in the suite puts a hidden tile
+    // in a column, so both the `continue` and the model mapping were free to
+    // be replaced by the resolved position with every test still green.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"),
+                {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    // One column [b, c, d], then minimize the MIDDLE tile. d is model index 2
+    // but resolved index 1, which is the whole point.
+    QVERIFY(state->strip().takeWindow(QStringLiteral("c"), engineParams()));
+    QVERIFY(state->strip().insertWindowIntoColumnAt(1, 1, QStringLiteral("c"), engineParams()));
+    QVERIFY(state->strip().takeWindow(QStringLiteral("d"), engineParams()));
+    QVERIFY(state->strip().insertWindowIntoColumnAt(1, 2, QStringLiteral("d"), engineParams()));
+    QVERIFY(state->strip().setWindowMinimized(QStringLiteral("c"), true, engineParams()));
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
+
+    // c is hidden, so it has no rect at all — the `continue` in the y-loop.
+    QVERIFY(tileRect(engine, QStringLiteral("S1"), QStringLiteral("c")).isNull());
+    const QRect rectD = tileRect(engine, QStringLiteral("S1"), QStringLiteral("d"));
+    QVERIFY(!rectD.isNull());
+
+    // Upper half of d: insert BEFORE d, which is model index 2. Reusing d's
+    // resolved position would answer 1 and drop the window above the
+    // minimized tile instead of below it.
+    const DragTarget aboveD = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), QPoint(rectD.center().x(), rectD.top() + rectD.height() / 4));
+    QVERIFY(!aboveD.newSlot);
+    QCOMPARE(aboveD.secondary, 2);
+    // Lower half of d: after it, model index 3.
+    const DragTarget belowD = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), QPoint(rectD.center().x(), rectD.bottom() - rectD.height() / 4));
+    QVERIFY(!belowD.newSlot);
+    QCOMPARE(belowD.secondary, 3);
+    engine->cancelDragInsertPreview();
+}
+
 void TestScrollEngineDragInsert::indicatorRectTracksTarget()
 {
     // Detach-once never opens a gap, so this rect is the ONLY drop feedback
@@ -639,16 +685,54 @@ void TestScrollEngineDragInsert::nudgeDragScrollShiftsView()
     // Center of the work area: outside both bands.
     QVERIFY(!engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(600, 400)));
     QCOMPARE(state->strip().viewAnchor(), anchorBefore);
+    // The anchor is persisted state that applyLayout's own gate cannot see
+    // while the preview steers the view, so the nudge emits placementChanged
+    // for it directly. Without the emit an edge-scroll followed by Escape
+    // loses the anchor across a restart, which the source states as the
+    // reason for the emit and nothing asserted.
+    QSignalSpy placementSpy(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
     // Detaching the leftmost column re-clamped the view off the strip's
     // right end, so the right band has room and slides the view a step...
     QVERIFY(engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(1195, 400)));
     const int anchorAfterRight = state->strip().viewAnchor();
     QVERIFY(anchorAfterRight != anchorBefore);
+    QVERIFY2(placementSpy.count() >= 1, "a nudge that moved the view must announce the anchor change");
     // ...and the left band scrolls back the OTHER way — a sign error in
     // either band's arm would move the anchor further in the same
     // direction instead.
     QVERIFY(engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(5, 400)));
     QVERIFY(state->strip().viewAnchor() > anchorAfterRight);
+
+    // Drain to the left end, then assert the "already pinned at this end"
+    // arm. It matters because the adaptor keeps its 16 ms timer alive on a
+    // true return, so a nudge that reports a scroll it did not perform spins
+    // the timer for the rest of the drag.
+    while (engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(5, 400))) {
+        // drain
+    }
+    const int pinnedAnchor = state->strip().viewAnchor();
+    QVERIFY(!engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(5, 400)));
+    QCOMPARE(state->strip().viewAnchor(), pinnedAnchor);
+    engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::nudgeDragScrollRefusesWhenTheStripFits()
+{
+    // The strip-fits-viewport early return. With one column left after the
+    // detach there is nothing off screen to reveal, so a cursor parked hard
+    // against either edge must not scroll. Without the guard the view would
+    // drift off the end of a strip the user can already see in full.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
+    const int anchorBefore = state->strip().viewAnchor();
+    QVERIFY(!engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(1195, 400)));
+    QVERIFY(!engine->nudgeDragScroll(QStringLiteral("S1"), QPoint(5, 400)));
+    QCOMPARE(state->strip().viewAnchor(), anchorBefore);
     engine->cancelDragInsertPreview();
 }
 
