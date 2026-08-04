@@ -646,6 +646,17 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 const bool began = insertEngine->beginDragInsertPreview(windowId, insertScreenId);
                 qCDebug(lcDbusWindow) << "drag-insert preview begin:" << windowId << "on" << insertScreenId
                                       << "engine=" << insertEngine->engineId() << "=>" << began;
+                if (!began) {
+                    // Correct on tick 1, wrong on tick 2 without this. A failed
+                    // begin (or an engine that dropped its own preview between
+                    // ticks) skips the whole inner block below, so nothing
+                    // updates AND nothing clears — and the `else if
+                    // (previewEngine)` cancel arm is unreachable because this
+                    // outer branch was taken. A rect pushed on an earlier tick
+                    // would stay painted for the rest of the drag.
+                    stopDragScrollTimer();
+                    clearScrollDropIndicator();
+                }
             }
             if (insertEngine->hasDragInsertPreview() && insertEngine->dragInsertPreviewScreenId() == insertScreenId) {
                 // Edge auto-scroll is TIMER-driven (see m_dragScrollTimer):
@@ -702,6 +713,11 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                                   << "engineResolved=" << (insertEngine != nullptr) << "held=" << insertHeld
                                   << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
             previewEngine->cancelDragInsertPreview();
+            // The edge-scroll timer goes with the preview it was driving. Left
+            // armed, its next firing is up to 16 ms away — long enough for a
+            // new drag's eager preview to begin, at which point a stale tick
+            // would nudge the NEW strip with this drag's parked cursor.
+            stopDragScrollTimer();
             clearScrollDropIndicator();
         }
     }

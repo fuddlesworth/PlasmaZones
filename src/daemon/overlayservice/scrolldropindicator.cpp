@@ -45,32 +45,18 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     const bool indicatorEnabled = !m_settings || m_settings->scrollingDropIndicatorEnabled();
     const bool wantsIndicator = indicatorEnabled && rect.isValid() && !rect.isEmpty();
 
-    // Change-gate on the ABSOLUTE rect, before any of the work below. A drag
-    // pushes on every pointer tick and the target only changes when the cursor
-    // crosses into a different column or stack slot, so the overwhelmingly
-    // common call is a repeat. Without this gate every tick would re-write the
-    // QML properties and re-run a surface-state sync for no visual change.
-    //
-    // Gated on the caller's coordinate space rather than the shell-local one
-    // so the comparison stays valid across a screen-geometry change: if the
-    // screen moves under a held rect, the shifted value changes while the
-    // absolute one does not, and the sync below is what has to re-run.
     const auto cachedIt = m_lastScrollDropIndicatorRect.constFind(screenId);
     const bool hadIndicator = cachedIt != m_lastScrollDropIndicatorRect.constEnd();
-    if (wantsIndicator && hadIndicator && cachedIt.value() == rect) {
-        return;
-    }
-    if (!wantsIndicator && !hadIndicator) {
-        return; // already clear — do not manufacture a shell to hide nothing
-    }
-
-    if (wantsIndicator) {
-        m_lastScrollDropIndicatorRect.insert(screenId, rect);
-    } else {
-        m_lastScrollDropIndicatorRect.remove(screenId);
-    }
+    const QRect cachedLocal = hadIndicator ? cachedIt.value() : QRect();
 
     if (!wantsIndicator) {
+        if (!hadIndicator) {
+            return; // already clear — do not manufacture a shell to hide nothing
+        }
+        // Dropping the cache here is safe ahead of the bails below: they all
+        // mean "nothing is painted on this screen", which is exactly what an
+        // absent entry records.
+        m_lastScrollDropIndicatorRect.remove(screenId);
         // Hide-and-unload without creating a shell for a screen that never
         // showed an indicator.
         auto it = m_screenStates.find(screenId);
@@ -124,11 +110,38 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
         screenGeom = screen->geometry();
     }
 
+    // The rect arrives in absolute compositor coordinates; the shell window
+    // sits at the screen origin, so shift into window space here (single
+    // conversion point, matching the tab strips).
+    const QRect local = rect.translated(-screenGeom.x(), -screenGeom.y());
+
+    // Change-gate on the SHELL-LOCAL rect, which is what actually gets painted.
+    // A drag pushes on every pointer tick and the target only changes when the
+    // cursor crosses into a different column or stack slot, so the common call
+    // is a repeat; without this gate every tick would re-write the QML
+    // properties and re-run a surface sync for no visual change.
+    //
+    // Local rather than absolute deliberately: if the screen origin moves under
+    // a held target, the absolute rect is UNCHANGED while the window-local one
+    // is not, so an absolute key would early-return and leave the indicator
+    // painting at its pre-move position. Gating here also means a repeat tick
+    // never reaches ensurePassiveShellFor below, which re-asserts the SHELL's
+    // click-through flag as a side effect.
+    if (hadIndicator && cachedLocal == local) {
+        return;
+    }
+
     auto* state = ensurePassiveShellFor(screenId, screen);
     if (!state || !state->shell || !state->shell->shellSurface() || !state->scrollDropIndicatorSlot()) {
         qCWarning(lcOverlay) << "updateScrollDropIndicator: no passive shell for screen=" << screenId;
         return;
     }
+
+    // Commit the cache only once past every bail above. Recording it earlier
+    // was a silent trap: after a bail the cache claimed a rect was painted when
+    // nothing was, so every later identical push compared equal, early-returned
+    // at the gate, and the indicator never appeared again for that drag.
+    m_lastScrollDropIndicatorRect.insert(screenId, local);
 
     // Invalidate a pending hide only once this update is committed to running
     // the show choreography below. Bumping before the bails above would leave
@@ -136,11 +149,6 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     // the slot, stranding it visible+loaded at opacity 0 forever.
     ++m_scrollDropIndicatorHideGuard[screenId];
     const bool hideWasInFlight = m_scrollDropIndicatorHidePending.remove(screenId);
-
-    // The rect arrives in absolute compositor coordinates; the shell window
-    // sits at the screen origin, so shift into window space here (single
-    // conversion point, matching the tab strips).
-    const QRect local = rect.translated(-screenGeom.x(), -screenGeom.y());
 
     auto* slot = state->scrollDropIndicatorSlot();
     auto* shellSurface = state->shell->shellSurface();
@@ -163,7 +171,15 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     }
 
     if (slot->isVisible() && !hideWasInFlight) {
-        return; // live rect update — no show choreography, and no input to sync
+        // Live rect update — no show choreography needed, but the sync is NOT
+        // optional. ensurePassiveShellFor above unconditionally re-asserts
+        // Qt::WindowTransparentForInput on the SHELL window, which is shared
+        // with every other slot on this screen; skipping the sync would leave a
+        // live tab-strip input region dropped until its next strip update. The
+        // earlier "no input to sync" reasoning was about THIS slot's own
+        // (absent) region and missed that the flag it clobbers is the shell's.
+        syncPassiveShellSurfaceStateForSurface(shellSurface);
+        return;
     }
     // Either genuinely hidden, or mid-hide (still visible, opacity animating
     // toward 0). In BOTH cases the show choreography must run: early-returning

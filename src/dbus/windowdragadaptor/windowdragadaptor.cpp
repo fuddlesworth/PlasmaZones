@@ -303,6 +303,11 @@ void WindowDragAdaptor::onDragScrollTick()
     PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
     if (!engine || m_draggedWindowId.isEmpty()) {
         m_dragScrollTimer->stop();
+        // This tick is one of the places the daemon LEARNS a preview ended
+        // without being told — an engine can self-cancel (a prune, a mode
+        // flip) with no adaptor-side call. Repair the indicator here rather
+        // than leaving it painted until the next drag.
+        clearScrollDropIndicator();
         return;
     }
     const QString screenId = engine->dragInsertPreviewScreenId();
@@ -392,6 +397,14 @@ void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenI
     }
     if (cancelled) {
         stopDragScrollTimer();
+    }
+    // Clear the indicator on the departing output INDEPENDENTLY of `cancelled`.
+    // The engine may have self-cancelled its own preview during a prune before
+    // this call arrives (pruneStatesForRemovedScreen does exactly that), in
+    // which case `affected` is false, nothing is cancelled here, and the
+    // rectangle would stay painted on a screen that is going away.
+    if (!m_dropIndicatorScreenId.isEmpty()
+        && PhosphorIdentity::VirtualScreenId::samePhysical(m_dropIndicatorScreenId, screenId)) {
         clearScrollDropIndicator();
     }
 }
@@ -412,6 +425,13 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
 {
     PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
     if (!engine) {
+        // No preview to settle — but the drag is ENDING here, so this is a
+        // teardown path like the two below it. The engine may have dropped its
+        // own preview after the last push (five engine-side self-cancel sites
+        // do exactly that), leaving the indicator painted and the edge-scroll
+        // timer armed with the old drag's parked cursor. Both must go.
+        stopDragScrollTimer();
+        clearScrollDropIndicator();
         return false;
     }
     // Screen-matched: a fast drop can land on another screen before any

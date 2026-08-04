@@ -800,16 +800,20 @@ private:
     /// same contract as m_scrollTabsHideGuard: a hide completion that lost the
     /// race to a newer rect must no-op rather than tear down a repopulated
     /// slot. A drag pushes rects at pointer rate, so this race is the common
-    /// case here, not the exotic one.
+    /// case here, not the exotic one. Retained after teardown (monotonic) —
+    /// must never restart, which is why unwirePassiveShellSlots erases the two
+    /// maps below but deliberately not this one.
     QHash<QString, quint64> m_scrollDropIndicatorHideGuard;
     /// Screens with a drop-indicator hide in flight; the show path treats
     /// these as not visible so a mid-hide repopulation re-runs beginShow.
     QSet<QString> m_scrollDropIndicatorHidePending;
-    /// Last rect pushed per screen, in ABSOLUTE px (the caller's space, not
-    /// the shifted shell-local one). Change-gate only: a drag re-pushes the
-    /// same target on every tick, and without this each tick would re-write
-    /// the QML properties and re-run a surface sync. Screens with no live
-    /// indicator carry no entry.
+    /// Last rect pushed per screen, in SHELL-LOCAL px (already shifted by the
+    /// screen origin) — the space that is actually painted, so a screen move
+    /// invalidates the entry instead of comparing equal. Change-gate only: a
+    /// drag re-pushes the same target on every tick, and without this each tick
+    /// would re-write the QML properties, re-assert the shell's click-through
+    /// flag and re-run a surface sync. An entry is written only once the update
+    /// has passed every bail, so it records what is genuinely on screen.
     QHash<QString, QRect> m_lastScrollDropIndicatorRect;
 
     QPointer<PhosphorZones::Layout> m_layout;
