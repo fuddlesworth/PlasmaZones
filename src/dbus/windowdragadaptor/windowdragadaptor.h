@@ -135,10 +135,10 @@ public:
      *
      * The snap-assist phase (start.cpp's snapAssistShown handler) and the
      * layout picker register / unregister this on demand. The drag itself
-     * needs no binding: the
-     * kwin-effect grabs the keyboard for the whole drag and routes Escape
-     * to cancelSnap() directly, so a KGlobalAccel grab would never fire
-     * during a drag (and binding one per drag fsynced kglobalshortcutsrc and
+     * needs no binding: on the SNAP path the kwin-effect grabs the keyboard
+     * (lifecycle_wiring.cpp's dragStarted) and routes Escape to cancelSnap()
+     * from grabbedKeyboardEvent (plasmazoneseffect.cpp), so a KGlobalAccel
+     * grab would never fire during such a drag (and binding one per drag fsynced kglobalshortcutsrc and
      * stuttered the compositor on slow disks, #167). The layout picker
      * re-uses the same id
      * (kCancelOverlayId) so KGlobalAccel never sees two distinct actions
@@ -298,7 +298,9 @@ public:
      * no remote caller and must not surface on the bus. The daemon's
      * cheatsheet toggle consults it — while the adaptor is acting on a drag
      * the kwin-effect holds a keyboard grab and routes Escape to cancelSnap
-     * itself (see windowdragadaptor/drag.cpp), so a cheatsheet shown then
+     * itself (grabbedKeyboardEvent, kwin-effect/plasmazoneseffect.cpp — the
+     * note in windowdragadaptor/drag.cpp only records why the daemon binds
+     * nothing), so a cheatsheet shown then
      * could never receive its own KGlobalAccel dismiss grab.
      *
      * NOT the same as "between beginDrag and endDrag". beginDrag's SNAP path

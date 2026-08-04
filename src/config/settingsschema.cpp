@@ -428,11 +428,12 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Shortcuts ──────────────────────────────────────────────────────────────
-// Three sub-groups: Global (editor/settings launchers, zone navigation,
-// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation),
-// Tiling (autotile master/ratio/count controls + retile toggle), Editor
-// (zone editor shortcuts — duplicate, split, fill). All QString keys, no
-// validators needed.
+// TWO sub-groups: Global (editor/settings launchers, zone navigation,
+// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation)
+// and Tiling (autotile master/ratio/count controls + retile toggle). All
+// QString keys, no validators needed. There is no Editor group here — the
+// zone editor's shortcuts are not part of the daemon's schema; EditorController
+// owns its own settings in a separate process.
 
 namespace {
 // Helper: append a string KeyDef with no validator. Cuts the noise in the
@@ -781,8 +782,9 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingGroup()] = {
         {CD::enabledKey(), CD::snappingEnabled(), QMetaType::Bool},
     };
-    // Snapping.Behavior owns two scalar keys directly (Triggers, ToggleActivation);
-    // the SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
+    // Snapping.Behavior owns FOUR scalar keys directly — Triggers,
+    // ToggleActivation, FocusNewWindows and FocusFollowsMouse — while the
+    // SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
     // sub-groups each get their own Schema entry below (or already migrated).
     schema.groups[CD::snappingBehaviorGroup()] = {
         {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},

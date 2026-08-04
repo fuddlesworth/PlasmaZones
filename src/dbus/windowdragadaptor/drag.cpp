@@ -58,8 +58,9 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     }
 
     // No KGlobalAccel Escape grab is bound here. During a snap drag the
-    // kwin-effect grabs the keyboard (lifecycle.cpp) and routes Escape
-    // through grabbedKeyboardEvent -> callCancelSnap -> cancelSnap(), so a
+    // kwin-effect grabs the keyboard (lifecycle_wiring.cpp's dragStarted)
+    // and routes Escape through grabbedKeyboardEvent (plasmazoneseffect.cpp)
+    // -> callCancelSnap -> cancelSnap(), so a
     // KGlobalAccel binding would never fire during the drag anyway. Binding
     // it per-drag used to force kwin (which hosts kglobalaccel) to rewrite
     // kglobalshortcutsrc + kglobalshortcutsstaterc with an fsync at drag

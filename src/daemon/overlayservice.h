@@ -337,8 +337,11 @@ public:
      * first layout switch OSD or keyboard navigation action appears
      * instantly instead of blocking the event loop.
      *
-     * Idempotent - subsequent calls are no-ops thanks to the
-     * m_notificationsWarmed latch and per-screen window guard.
+     * Idempotent for the SAME screen set: the m_notificationsWarmed latch
+     * and the per-screen window guard make a repeat call a no-op for screens
+     * already warmed. A screen that appeared since the last call is still
+     * warmed on the next one, which is the point of calling it again after a
+     * hotplug rather than only once at start.
      */
     void warmUpNotifications();
 
@@ -714,10 +717,15 @@ private:
     /// an algorithm.
     QString activeLayoutIdForScreen(const QString& screenId) const;
 
-    /// True when the snapping overlay must NOT show on @p screenId for the current
-    /// desktop/activity: either the context is on a disable list, OR its default
-    /// layout assignment is suppressed (the global "don't assign by default"
-    /// setting, or a per-context rule) and nothing is explicitly assigned.
+    /// True when the snapping overlay must NOT show on @p screenId for the
+    /// current desktop/activity. THREE conditions, any one of which is enough:
+    /// the context is on a disable list; its default layout assignment is
+    /// suppressed (the global "don't assign by default" setting, or a
+    /// per-context rule) with nothing explicitly assigned; or the context
+    /// resolves to an ENGINE mode. The third catches a bare or suppressed
+    /// autotile context and a context-disabled scrolling one, neither of
+    /// which is in the excluded-screens set, so without it the snap overlay
+    /// surfaced on a screen the user had just switched away from snapping.
     /// Consumed by the OVERLAY activation sites; the zone SELECTOR is
     /// deliberately disabled-list-only (isSnappingContextDisabled) — a
     /// suppressed-default context still allows an explicit drag to pick a
