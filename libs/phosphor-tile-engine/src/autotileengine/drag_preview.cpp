@@ -126,6 +126,14 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
     // target (same-screen reorder with priorFloating=false) because that
     // doesn't grow the count.
     //
+    // ONE victim, deliberately. An adoption grows the count by exactly one,
+    // so one eviction restores the cap. A state ALREADY over cap — MaxWindows
+    // lowered while windows were tiled — stays over by whatever it was, and
+    // the drag does not become the moment that mass-floats the excess. That
+    // belongs to the retile the setting change itself triggers, not to a
+    // user's drag, and the preview only knows how to undo the one eviction it
+    // made.
+    //
     // Uses effectiveMaxWindows(screenId) so per-screen MaxWindows overrides
     // and global Unlimited mode are both honored consistently — the per-
     // screen override wins even when global is Unlimited, matching the

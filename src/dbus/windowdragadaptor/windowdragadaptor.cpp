@@ -336,7 +336,15 @@ void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const Q
     // new one. Without this the departed screen keeps painting a target the
     // drop can no longer land in, and nothing else would clear it — the
     // teardown paths only know the screen recorded here.
-    if (!m_dropIndicatorScreenId.isEmpty() && m_dropIndicatorScreenId != screenId) {
+    // screensMatch, not raw !=, because the two push drivers source the id
+    // differently: dragMoved passes the resolver's id and the scroll tick
+    // passes the engine's own dragInsertPreviewScreenId. Those can spell the
+    // same output as a physical id or a virtual one, and a raw compare then
+    // reads a spelling change as a screen change and pushes a hide the very
+    // next line un-hides — a one-frame flicker on every tick that crosses the
+    // two drivers. Every sibling comparison in this file already uses it.
+    if (!m_dropIndicatorScreenId.isEmpty()
+        && !PhosphorScreens::ScreenIdentity::screensMatch(m_dropIndicatorScreenId, screenId)) {
         m_overlayService->updateScrollDropIndicator(m_dropIndicatorScreenId, QRect());
     }
     m_overlayService->updateScrollDropIndicator(screenId, rect);

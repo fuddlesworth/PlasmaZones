@@ -664,6 +664,15 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         // Dead drag — no action. LayoutSuppressed belongs here: the policy
         // declared the drag dead (the screen has no zone layout), so the
         // release must not run the snap dispatch below.
+        //
+        // A live drag-insert preview still has to be torn down. This is the
+        // one non-cancelled exit that never reached settleDragInsertPreviewAt,
+        // so a drag that armed a preview on an engine screen and then crossed
+        // onto a suppressed one ended here with the preview alive, the window
+        // detached and the edge-scroll timer armed for the next drag.
+        stopDragScrollTimer();
+        cancelDragInsertIfActive();
+        clearScrollDropIndicator();
         outcome.action = PhosphorProtocol::DragOutcome::NoOp;
         hideOverlayAndSelector();
         resetDragState();

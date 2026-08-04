@@ -306,6 +306,15 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
             // retaining them would leave isWindowFloating() returning true for
             // windows that are no longer floating.
             m_navigationHandler->clearAllFloatingState();
+            if (!reply.isValid()) {
+                // Diagnosable: the clear above is correct on its own, but with
+                // no re-seed every window the daemon still considers floating
+                // now reads as tiled to the effect until something else
+                // reports it. Its sibling getSnappedWindows warns on the same
+                // shape; this path was silent.
+                qCWarning(lcEffect) << "getFloatingWindows failed at bringup:" << reply.error().message()
+                                    << "— float state cleared with no re-seed";
+            }
             if (reply.isValid()) {
                 // Bulk re-seed via the direct-write path (no per-window rule
                 // invalidation) — the shared invalidation below drops every
@@ -418,11 +427,18 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
         connect(geoWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QString> reply = *w;
+            // Both failure modes were silent. Neither is fatal — windows fall
+            // back to the async restore path — but the fallback shows as a
+            // visible flash on every window that opens during bringup, which
+            // is exactly the symptom someone would come looking for.
             if (!reply.isValid()) {
+                qCWarning(lcEffect) << "getPendingRestoreGeometries failed at bringup:" << reply.error().message()
+                                    << "— windows opening now fall back to the async restore";
                 return;
             }
             QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
             if (!doc.isObject()) {
+                qCWarning(lcEffect) << "getPendingRestoreGeometries returned a non-object payload — ignoring";
                 return;
             }
             QJsonObject obj = doc.object();

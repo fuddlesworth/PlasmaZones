@@ -428,6 +428,13 @@ void Daemon::stop()
     // ShortcutManager / AutotileEngine. Both setters are null-safe and
     // idempotent, so running this on an already-stopped daemon costs nothing.
     if (m_windowDragAdaptor) {
+        // Cancel a live preview BEFORE dropping the engine borrows. The
+        // adaptor reaches the engines only through those two pointers, so
+        // nulling them first strands any preview: the engine keeps the window
+        // detached with its restoration state held, and nothing left can
+        // commit or cancel it. A stop() mid-drag is reachable from a settings
+        // reload or a shutdown that races a drag.
+        m_windowDragAdaptor->cancelDragInsertPreviews();
         m_windowDragAdaptor->setAutotileEngine(nullptr);
         m_windowDragAdaptor->setScrollEngine(nullptr);
         m_windowDragAdaptor->setShortcutRegistrar(nullptr);
