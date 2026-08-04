@@ -1,6 +1,16 @@
 {
     "releases": [
         {
+            "version": "3.3.5",
+            "date": "2026-08-04",
+            "highlights": [
+                "Fixed: every window PlasmaZones draws a border on stayed blurry on a display scaled to exactly 150%, and 125% was affected at some window positions (#884)",
+                "Fixed: the default geometry animation drew a window's content squeezed into the rectangle it was travelling through, so text and icons were distorted while the window snapped or tiled (#884)",
+                "Fixed: choosing \"None\" for a snap animation distorted the window the same way (#884)",
+                "Fixed: an animation or decoration pack you installed under your home directory was ignored for windows when it shared a name with a bundled pack, while on-screen displays and popups still used yours (#884)"
+            ]
+        },
+        {
             "version": "3.3.4",
             "date": "2026-08-03",
             "highlights": [
