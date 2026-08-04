@@ -758,6 +758,19 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // load); guard those uses individually.
     const PhosphorScreens::VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
 
+    // Cancel any live drag-insert preview on this output BEFORE the screen id
+    // set is re-derived, the same ordering rule the four sibling
+    // context-change handlers document (screenRemoved, screenDesktopChanged,
+    // the activity switch and the mode reassignment). Subdividing or
+    // un-subdividing an output rewrites its screen ids, so a preview holding
+    // "DP-1" while the topology moves everything to "DP-1/vs:0" is left with
+    // captured keys nothing resolves, and neither its commit nor its cancel
+    // can put the window anywhere. Scoped to the reconfigured output because
+    // samePhysical covers the physical id and every virtual child of it.
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(physicalScreenId);
+    }
+
     // Recalculate zone geometries inline for the affected screens FIRST so
     // that any PhosphorTiles::TilingState created by the upcoming updateEngineScreens
     // call (and the resnap below) reads fresh zone bounds. The screenAdded

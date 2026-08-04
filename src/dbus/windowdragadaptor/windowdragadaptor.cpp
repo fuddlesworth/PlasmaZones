@@ -382,9 +382,19 @@ void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenI
     if (screenId.isEmpty()) {
         return;
     }
+    // TARGET or PRIOR screen. Cancel restores the window to the screen it was
+    // adopted from, so a cross-output drag whose SOURCE monitor is the one
+    // going away is just as stranded as one whose target is: the preview
+    // survives with a priorKey naming a context that no longer resolves, and
+    // the cancel it exists to serve can never put the window back. The scroll
+    // engine's own pruneStatesForRemovedScreen tests both, and this is the
+    // only place autotile's previews get either test.
     const auto affected = [&screenId](PhosphorEngine::IPlacementEngine* engine) {
-        return engine && engine->hasDragInsertPreview()
-            && PhosphorIdentity::VirtualScreenId::samePhysical(engine->dragInsertPreviewScreenId(), screenId);
+        if (!engine || !engine->hasDragInsertPreview()) {
+            return false;
+        }
+        return PhosphorIdentity::VirtualScreenId::samePhysical(engine->dragInsertPreviewScreenId(), screenId)
+            || PhosphorIdentity::VirtualScreenId::samePhysical(engine->dragInsertPreviewPriorScreenId(), screenId);
     };
     bool cancelled = false;
     if (affected(m_autotileEngine)) {
@@ -778,6 +788,13 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
         m_overlayService->hideZoneSelector();
         m_zoneSelectorShown = false;
         m_zoneSelectorShownOn.clear();
+        // The selection is a SERVICE-level singleton, not per screen, and
+        // showZoneSelector does not reset it. Carried across the hop it names
+        // a zone in the OLD screen's layout, which the drop then applies —
+        // the window lands in a zone belonging to a monitor the cursor left.
+        // OverlayService::destroyWindowsForPhysicalScreen clears it for the
+        // same reason when a VS reconfigure invalidates the old geometry.
+        m_overlayService->clearSelectedZone();
     }
 
     if (nearEdge && !m_zoneSelectorShown) {

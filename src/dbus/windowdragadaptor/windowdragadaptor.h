@@ -293,14 +293,23 @@ public:
     void handleWindowClosed(const QString& windowId);
 
     /**
-     * True while a compositor drag session is in flight (between beginDrag
-     * and endDrag/clear). Plain public member (NOT a Q_SLOT) for the same
-     * reason as handleWindowClosed: it has no remote caller and must not
-     * surface on the bus. The daemon's cheatsheet toggle consults it —
-     * during a drag the kwin-effect holds a keyboard grab and routes
-     * Escape to cancelSnap itself (see windowdragadaptor/drag.cpp), so a
-     * cheatsheet shown mid-drag could never receive its own KGlobalAccel
-     * dismiss grab.
+     * True while a drag this adaptor is ACTING ON is in flight. Plain public
+     * member (NOT a Q_SLOT) for the same reason as handleWindowClosed: it has
+     * no remote caller and must not surface on the bus. The daemon's
+     * cheatsheet toggle consults it — while the adaptor is acting on a drag
+     * the kwin-effect holds a keyboard grab and routes Escape to cancelSnap
+     * itself (see windowdragadaptor/drag.cpp), so a cheatsheet shown then
+     * could never receive its own KGlobalAccel dismiss grab.
+     *
+     * NOT the same as "between beginDrag and endDrag". beginDrag's SNAP path
+     * deliberately defers filling m_draggedWindowId until the user first
+     * holds an activation trigger (see the deferral note in
+     * beginDrag/activateSnapDragIfNeeded), so a snap drag where the trigger is
+     * never held reports false from beginning to end. That is the answer this
+     * predicate's consumers want: with no activation there is no keyboard
+     * grab, so the cheatsheet's own dismiss grab works normally. A caller that
+     * genuinely needs "a compositor drag session exists" has to consult
+     * m_pendingSnapDragWindowId as well.
      */
     bool isDragInFlight() const
     {

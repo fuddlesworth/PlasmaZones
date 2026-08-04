@@ -367,6 +367,14 @@ public:
     {
         return m_dragInsertPreview ? m_dragInsertPreview->targetScreenId : QString();
     }
+    /// See the base declaration. Empty without a preview, and empty when begin
+    /// took the window from untracked, which for this engine also covers a
+    /// window that was floating outside any strip.
+    QString dragInsertPreviewPriorScreenId() const override
+    {
+        return m_dragInsertPreview && m_dragInsertPreview->hadPriorState ? m_dragInsertPreview->priorKey.screenId
+                                                                         : QString();
+    }
     /// The window id of the active drag-insert preview, or empty (test seam,
     /// mirroring AutotileEngine's accessor).
     QString dragInsertPreviewWindowId() const

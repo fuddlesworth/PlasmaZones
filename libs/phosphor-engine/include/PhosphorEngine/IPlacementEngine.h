@@ -410,6 +410,19 @@ public:
         return {};
     }
 
+    /// The screen the previewed window was on BEFORE begin adopted it, or
+    /// empty when it had no prior state (begin took it from untracked) or no
+    /// preview is live. Distinct from dragInsertPreviewScreenId whenever the
+    /// drag crossed outputs, and the two together are what a caller needs to
+    /// decide whether an output going away concerns this preview: cancel
+    /// restores the window to the PRIOR screen, so a preview whose prior
+    /// screen is disappearing can no longer be cancelled meaningfully even
+    /// though its target survives.
+    virtual QString dragInsertPreviewPriorScreenId() const
+    {
+        return {};
+    }
+
     /// Compute the drop target for a cursor position on a managed screen.
     /// Returns an invalid target when the screen has no active state.
     virtual DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const

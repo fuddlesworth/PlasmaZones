@@ -359,6 +359,14 @@ void TestScrollEngineDragInsert::crossScreenCancelReturnsHome()
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), (QStringList{QStringLiteral("a")}));
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S2")), (QStringList{QStringLiteral("d")}));
     QCOMPARE(engine->screenForTrackedWindow(QStringLiteral("b")), QStringLiteral("S2"));
+    // The two screens the preview straddles, both reportable. The adaptor's
+    // cancelDragInsertPreviewsForScreen needs the PRIOR one as well as the
+    // target: cancel puts the window back on S1, so an output-removal or
+    // desktop switch on S1 strands this preview just as surely as one on S2,
+    // and with only the target reported it would survive with a priorKey
+    // naming a context that no longer resolves.
+    QCOMPARE(engine->dragInsertPreviewScreenId(), QStringLiteral("S2"));
+    QCOMPARE(engine->dragInsertPreviewPriorScreenId(), QStringLiteral("S1"));
 
     engine->cancelDragInsertPreview();
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), (QStringList{QStringLiteral("a"), QStringLiteral("b")}));
@@ -391,6 +399,9 @@ void TestScrollEngineDragInsert::freshAdoptionStaysUntrackedUntilCommit()
     // Nothing was touched at begin, so a cancel has nothing to restore and
     // the window stays foreign until a commit actually adopts it.
     QVERIFY(!engine->isWindowTracked(QStringLiteral("ghost")));
+    // No prior state means no prior screen: there is nowhere for a cancel to
+    // put this window back to, so no output going away can strand it.
+    QVERIFY(engine->dragInsertPreviewPriorScreenId().isEmpty());
     engine->cancelDragInsertPreview();
     QVERIFY(!engine->isWindowTracked(QStringLiteral("ghost")));
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), (QStringList{QStringLiteral("a")}));

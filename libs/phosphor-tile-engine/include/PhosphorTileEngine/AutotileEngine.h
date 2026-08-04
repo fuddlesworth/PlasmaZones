@@ -1166,6 +1166,19 @@ public:
     }
 
     /**
+     * @brief The screen the previewed window sat on before begin adopted it.
+     *
+     * Empty without a preview, and empty when begin took the window from
+     * untracked (hadPriorState false), in which case there is nothing to
+     * restore it to and no prior screen to speak of.
+     */
+    QString dragInsertPreviewPriorScreenId() const override
+    {
+        return m_dragInsertPreview && m_dragInsertPreview->hadPriorState ? m_dragInsertPreview->priorKey.screenId
+                                                                         : QString();
+    }
+
+    /**
      * @brief Helper to retile a screen after a window operation
      *
      * Recalculates layout and applies tiling if enabled, then emits placementChanged.
