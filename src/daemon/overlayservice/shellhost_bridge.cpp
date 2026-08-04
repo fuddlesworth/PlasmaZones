@@ -179,6 +179,8 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
              "cheatsheet on this screen");
     wireSlot(PhosphorSlotKeys::ScrollTabs(), "scrollTabsSlotItem", PhosphorRoles::ScrollTabs,
              "scroll tab strips on this screen");
+    wireSlot(PhosphorSlotKeys::ScrollDropIndicator(), "scrollDropIndicatorSlotItem", PhosphorRoles::ScrollDropIndicator,
+             "scroll drag drop indicator on this screen");
 
     // Wire QML signals → animator-driven slot hide / forward.
     // String-based SIGNAL/SLOT macros are required here because the source
@@ -292,6 +294,14 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     m_lastScrollTabStrips.remove(screenId);
     m_scrollTabInputRegions.remove(screenId);
     m_scrollTabIndicatorOverrides.remove(screenId);
+    // The drop indicator's two per-screen maps follow the same rule, and its
+    // guard follows the same EXCEPTION: m_scrollDropIndicatorHideGuard is
+    // monotonic and must never restart, so it stays. Dropping the rect cache
+    // matters for more than the leak — it is the change gate, so a retained
+    // entry would make an identical rect after a shell teardown compare equal
+    // and early-return, and the indicator would silently never show again.
+    m_scrollDropIndicatorHidePending.remove(screenId);
+    m_lastScrollDropIndicatorRect.remove(screenId);
     QObject::disconnect(it->overlayGeomConnection);
     it->overlayGeomConnection = {};
     it->overlayPhysScreen = nullptr;
@@ -351,7 +361,7 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // for the shell to actually unmap when no other slot is up.
     const bool anyVisible = isVisible(s.osdSlot()) || isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot())
         || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot()) || isVisible(s.cheatsheetSlot())
-        || isVisible(s.scrollTabsSlot());
+        || isVisible(s.scrollTabsSlot()) || isVisible(s.scrollDropIndicatorSlot());
     const bool anyInputGrabbing =
         isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot()) || isVisible(s.cheatsheetSlot());
 

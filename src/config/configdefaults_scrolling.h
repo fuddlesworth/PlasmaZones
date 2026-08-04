@@ -5,6 +5,10 @@
 
 #include "configdefaults_screens.h"
 
+// Explicit rather than transitive: the drop indicator's corner-radius default
+// IS the zone overlay's, so this header genuinely depends on that symbol.
+#include <PhosphorZones/ZoneDefaults.h>
+
 namespace PlasmaZones {
 
 // Chain link 6: the scrolling engine's Scrolling defaults and the
@@ -446,6 +450,82 @@ public:
     {
         return QString();
     }
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling.DropIndicator — the drop-target highlight painted during a drag
+    // re-insert. EVERY key here is PAINT-only: they never enter the engine, which
+    // resolves the indicator's rect from the same layout math the drop uses.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Master switch. Off, a scrolling drag re-insert runs exactly as before
+    /// with no on-screen drop target. On by default because the scroll engine
+    /// defers structure to the drop, so without the indicator nothing shows
+    /// where the window is going.
+    static constexpr bool scrollingDropIndicatorEnabled()
+    {
+        return true;
+    }
+    /// Fill and border colours. EMPTY MEANS "follow the theme" — the overlay
+    /// falls back to Kirigami.Theme's highlight colour, same resolution tier
+    /// as the tab colours above. Two colours rather than one so the highlight
+    /// can be a tinted fill with a contrasting edge, which is how the snapping
+    /// zone overlay spells the same idea (Highlight + Border).
+    static QString scrollingDropIndicatorColor()
+    {
+        return QString();
+    }
+    static QString scrollingDropIndicatorBorderColor()
+    {
+        return QString();
+    }
+    /// Fill opacity. The border always draws opaque, matching the snapping
+    /// zone overlay, so the fill can be faint enough to read the windows
+    /// underneath while the edge stays crisp.
+    ///
+    /// One opacity, not the snapping overlay's active/inactive pair: there is
+    /// exactly one drop target at a time, so there is no inactive state to
+    /// give a second value to.
+    static constexpr double scrollingDropIndicatorOpacity()
+    {
+        return 0.25;
+    }
+    static constexpr qreal scrollingDropIndicatorOpacityMin()
+    {
+        return 0.0;
+    }
+    static constexpr qreal scrollingDropIndicatorOpacityMax()
+    {
+        return 1.0;
+    }
+    /// Border width and corner radius, in px. Bounds AND the radius default
+    /// mirror the snapping zone overlay's (Snapping.Zones.Border, whose radius
+    /// default is ZoneDefaults::BorderRadius) so the two highlights cannot be
+    /// given visually incompatible ranges or land on different roundings out
+    /// of the box. Zero width is legal and means a fill with no edge.
+    static constexpr int scrollingDropIndicatorBorderWidth()
+    {
+        return ::PhosphorZones::ZoneDefaults::BorderWidth;
+    }
+    static constexpr int scrollingDropIndicatorBorderWidthMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollingDropIndicatorBorderWidthMax()
+    {
+        return 10;
+    }
+    static constexpr int scrollingDropIndicatorBorderRadius()
+    {
+        return ::PhosphorZones::ZoneDefaults::BorderRadius;
+    }
+    static constexpr int scrollingDropIndicatorBorderRadiusMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollingDropIndicatorBorderRadiusMax()
+    {
+        return 50;
+    }
+
     /// Meta+wheel column focus in the KWin effect. Off, the axis chords are
     /// genuinely released back to the compositor for any later registrant
     /// (stock zoom binds its axis gesture to Meta+Ctrl, not plain Meta).
@@ -869,5 +949,26 @@ static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadius()
 static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusMin()
                   == ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusPill(),
               "The corner-radius floor must be the pill sentinel — see the accessor comment");
+// The drop indicator's three ranged defaults, same guard as the tab
+// indicator's above. The colour pair is unranged (empty means follow the
+// scheme) and Enabled is a bool, so neither has anything to check.
+static_assert(ConfigDefaultsScrolling::scrollingDropIndicatorOpacity()
+                      >= ConfigDefaultsScrolling::scrollingDropIndicatorOpacityMin()
+                  && ConfigDefaultsScrolling::scrollingDropIndicatorOpacity()
+                      <= ConfigDefaultsScrolling::scrollingDropIndicatorOpacityMax(),
+              "ConfigDefaults::scrollingDropIndicatorOpacity() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingDropIndicatorBorderWidth()
+                      >= ConfigDefaultsScrolling::scrollingDropIndicatorBorderWidthMin()
+                  && ConfigDefaultsScrolling::scrollingDropIndicatorBorderWidth()
+                      <= ConfigDefaultsScrolling::scrollingDropIndicatorBorderWidthMax(),
+              "ConfigDefaults::scrollingDropIndicatorBorderWidth() outside the declared [min, max] range");
+// The radius default is ZoneDefaults::BorderRadius by reference, so this also
+// catches the snapping overlay's own default drifting out of the range this
+// file declares for the highlight that is meant to match it.
+static_assert(ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadius()
+                      >= ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadiusMin()
+                  && ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadius()
+                      <= ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadiusMax(),
+              "ConfigDefaults::scrollingDropIndicatorBorderRadius() outside the declared [min, max] range");
 
 } // namespace PlasmaZones

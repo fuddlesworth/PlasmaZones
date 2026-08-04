@@ -168,6 +168,15 @@ inline constexpr double kMaxTabIndicatorCornerRadius = MaxTabIndicatorCornerRadi
 inline constexpr double kMinTabIndicatorLengthRatio = MinTabIndicatorLengthRatio;
 inline constexpr double kMaxTabIndicatorLengthRatio = MaxTabIndicatorLengthRatio;
 
+// Drop indicator. Every floor here really is zero — a zero border width is a
+// fill with no edge and a zero radius is a square corner, neither a sentinel —
+// so these take the zero-floored helper rather than the explicit-floor one the
+// tab indicator's signed bounds need.
+inline constexpr double kMinDropIndicatorOpacity = MinDropIndicatorOpacity;
+inline constexpr double kMaxDropIndicatorOpacity = MaxDropIndicatorOpacity;
+inline constexpr double kMaxDropIndicatorBorderWidth = MaxDropIndicatorBorderWidth;
+inline constexpr double kMaxDropIndicatorBorderRadius = MaxDropIndicatorBorderRadius;
+
 /// Helper to keep the registerBuiltins body legible — every built-in shares
 /// the same constant slot pattern (no slot-from-params resolution).
 inline ActionDescriptor::SlotResolver constantSlot(QLatin1StringView slot)

@@ -293,9 +293,50 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::scrollingTabIndicatorCornerRadiusMin(), CD::scrollingTabIndicatorCornerRadiusMax())},
-        {CD::activeColorKey(), CD::scrollingTabIndicatorActiveColor(), QMetaType::QString},
-        {CD::inactiveColorKey(), CD::scrollingTabIndicatorInactiveColor(), QMetaType::QString},
-        {CD::urgentColorKey(), CD::scrollingTabIndicatorUrgentColor(), QMetaType::QString},
+        {CD::activeColorKey(),
+         CD::scrollingTabIndicatorActiveColor(),
+         QMetaType::QString,
+         {},
+         canonicalThemeFallbackColor},
+        {CD::inactiveColorKey(),
+         CD::scrollingTabIndicatorInactiveColor(),
+         QMetaType::QString,
+         {},
+         canonicalThemeFallbackColor},
+        {CD::urgentColorKey(),
+         CD::scrollingTabIndicatorUrgentColor(),
+         QMetaType::QString,
+         {},
+         canonicalThemeFallbackColor},
+    };
+
+    // ─── Scrolling drop indicator (Scrolling.DropIndicator) ──────────────
+    // The drop-target highlight painted during a drag re-insert. The colour is
+    // a free-form string for the same reason as the tab colours: EMPTY is the
+    // meaningful "follow the theme" value.
+    schema.groups[CD::scrollingDropIndicatorGroup()] = {
+        {CD::enabledKey(), CD::scrollingDropIndicatorEnabled(), QMetaType::Bool},
+        {CD::colorKey(), CD::scrollingDropIndicatorColor(), QMetaType::QString, {}, canonicalThemeFallbackColor},
+        {CD::borderColorKey(),
+         CD::scrollingDropIndicatorBorderColor(),
+         QMetaType::QString,
+         {},
+         canonicalThemeFallbackColor},
+        {CD::opacityKey(),
+         CD::scrollingDropIndicatorOpacity(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::scrollingDropIndicatorOpacityMin(), CD::scrollingDropIndicatorOpacityMax())},
+        {CD::widthKey(),
+         CD::scrollingDropIndicatorBorderWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingDropIndicatorBorderWidthMin(), CD::scrollingDropIndicatorBorderWidthMax())},
+        {CD::radiusKey(),
+         CD::scrollingDropIndicatorBorderRadius(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingDropIndicatorBorderRadiusMin(), CD::scrollingDropIndicatorBorderRadiusMax())},
     };
 
     // ─── Scrolling behavior (Scrolling.Behavior) ─────────────────────────
@@ -305,6 +346,8 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     // the shared Tiling.Gaps/SmartGaps value, see IScrollSettings).
     schema.groups[CD::scrollingBehaviorGroup()] = {
         {CD::focusNewWindowsKey(), CD::scrollingFocusNewWindows(), QMetaType::Bool},
+        {CD::triggersKey(), CD::scrollingDragInsertTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
+        {CD::toggleActivationKey(), CD::scrollingDragInsertToggle(), QMetaType::Bool},
         {CD::insertPositionKey(),
          CD::scrollingInsertPosition(),
          QMetaType::Int,

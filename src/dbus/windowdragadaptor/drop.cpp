@@ -52,12 +52,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         return;
     }
 
-    // ── Autotile drag-insert commit ─────────────────────────────────────────
-    // If a drag-insert preview is live, finalize it: commit the reorder so the
-    // dragged window's final geometry is applied on the next retile. Snapping
-    // logic is skipped entirely — the window's place in the stack IS the drop.
-    // Deliberately autotile-only: the strip has no drag-insert preview
-    // (ScrollEngine keeps the IPlacementEngine no-op defaults).
+    // ── Drag-insert commit ──────────────────────────────────────────────────
+    // If a drag-insert preview is live (autotile stack or scroll strip),
+    // finalize it: commit the reorder so the dragged window's final geometry
+    // is applied on the next retile. Snapping logic is skipped entirely — the
+    // window's place in the layout IS the drop.
     if (settleDragInsertPreviewAt(cursorX, cursorY)) {
         hideOverlayAndSelector();
         resetDragState();
@@ -86,6 +85,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const bool capturedWasSnapped = m_wasSnapped;
     const QRect capturedOriginalGeometry = m_originalGeometry;
     const bool capturedSnapCancelled = m_snapCancelled;
+    const bool capturedExternallyCancelled = m_dragExternallyCancelled;
     const bool capturedZoneSelectorShown = m_zoneSelectorShown;
 
     // Cross-screen stale-geometry guard. capturedZoneGeometry / capturedMultiZoneGeometry
@@ -238,13 +238,14 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
 
     // Check if a zone was selected via the zone selector (takes priority)
     bool usedZoneSelector = false;
-    if (!capturedSnapCancelled && capturedZoneSelectorShown && m_overlayService
+    if (!capturedSnapCancelled && !capturedExternallyCancelled && capturedZoneSelectorShown && m_overlayService
         && m_overlayService->hasSelectedZone()) {
         QString selectedLayoutId = m_overlayService->selectedLayoutId();
-        // Resolve virtual-aware screen ID for the zone selector position
-        auto selectorResolved = resolveScreenAt(QPointF(cursorX, cursorY));
-        QString selectorScreenId = selectorResolved.screenId;
-        QScreen* screen = selectorResolved.qscreen;
+        // The selector screen IS the release screen — releaseResolved above
+        // was computed from the identical cursor point, so a second resolve
+        // only manufactured a name implying they could differ.
+        const QString& selectorScreenId = releaseScreenId;
+        QScreen* screen = releaseScreen;
 
         // Block entire zone selector snap path when screen is locked for its
         // current mode. Take a single resolver snapshot of (desktop, activity)
@@ -365,7 +366,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // selected layout directly here. Doing the activation earlier on
                     // hover would resnap every other window mid-drag — the "layouts
                     // changing when holding alt to move window" bug.
-                    if (selectedLayout) {
+                    // Gated on the commit surviving: an unresolvable zone
+                    // UUID refuses the snap (shouldApplyGeometry=false), and
+                    // a refused drop must not still reassign the screen's
+                    // layout — that resnaps every OTHER window and persists
+                    // an assignment the user's drop never completed.
+                    if (selectedLayout && shouldApplyGeometry) {
                         // Reuse the `selectorCtx` snapshot built at the top of
                         // this block — its (desktop, activity) is the same
                         // frozen tuple the gate above already consulted, and
@@ -406,7 +412,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Fall back to regular zone detection if zone selector wasn't used
     // Use captured values to avoid race condition with concurrent drags
     // Do not snap to overlay zone when releasing on a disabled monitor
-    if (!usedZoneSelector && !capturedSnapCancelled && !capturedZoneId.isEmpty() && useOverlayZone) {
+    if (!usedZoneSelector && !capturedSnapCancelled && !capturedExternallyCancelled && !capturedZoneId.isEmpty()
+        && useOverlayZone) {
         if (capturedIsMultiZoneMode && capturedMultiZoneGeometry.isValid() && capturedGeometryMatchesReleaseScreen) {
             // Pass ALL zone IDs for multi-zone snap (not just primary)
             QStringList allZoneIds;
@@ -472,7 +479,13 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Call unconditionally when capturedWasSnapped: unsnapForFloat handles the
     // no-zone case internally, and setWindowFloating ensures windowClosed won't persist
     // the zone (floating windows are excluded from persistence).
-    if (!shouldApplyGeometry && capturedWasSnapped) {
+    // capturedExternallyCancelled is the load-bearing half of this gate. With
+    // the commit branches above skipped, shouldApplyGeometry is false and a
+    // previously-snapped window would fall straight into "drag-out" — so the
+    // obvious fix of reusing m_snapCancelled would unsnap and float the window
+    // on EVERY externally cancelled drag, which is worse than the bug. KWin is
+    // restoring the window to where it started; it is not being dragged out.
+    if (!shouldApplyGeometry && capturedWasSnapped && !capturedExternallyCancelled) {
         qCInfo(lcDbusWindow) << "Drag-out unsnap for" << windowId << "releaseScreen:" << releaseScreenId;
         // Latch the pre-snap float-back BEFORE the float write (twin of
         // WindowTrackingAdaptor::notifyDragOutUnsnap): setWindowFloating's
@@ -610,7 +623,13 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     }
 
     QScreen* releaseScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
-    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    // Desktop-explicit resolve on the same SNAPSHOT axis as the suppression
+    // gate and the occupancy set below — resolveLayoutForScreen reads the
+    // live desktop, so a virtual-desktop switch landing in this handler's
+    // one-event-loop deferral would pair the NEW desktop's layout with the
+    // OLD desktop's occupancy.
+    PhosphorZones::Layout* layout =
+        m_layoutManager->layoutForScreen(screenId, desktopFilter, m_layoutManager->currentActivity());
     if (!layout) {
         return;
     }

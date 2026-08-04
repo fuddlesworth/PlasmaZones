@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 # PhosphorScrollEngine unit tests. Headless throughout: two files exercise the
-# pure strip model, three drive the engine through null daemon dependencies and
+# pure strip model, five drive the engine through null daemon dependencies and
 # the geometry-provider seam. None needs a QPA platform, so the strip tests run
 # APPLESS and the engine tests GUILESS (they need an event dispatcher for the
 # coalesced retile and the prunes' deleteLater).
@@ -42,6 +42,7 @@ pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp)
+pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp)
 
 # Shared fixture header, listed so IDE/target file listings see it (every test
 # here includes it; it carries no Q_OBJECT, so automoc scans it and produces
@@ -52,3 +53,4 @@ target_sources(test_scrollengine_smoke PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollengine_persistence PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollengine_zonenumbers PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollengine_perscreen PRIVATE scrollstriptestutils.h)
+target_sources(test_scrollengine_draginsert PRIVATE scrollstriptestutils.h)

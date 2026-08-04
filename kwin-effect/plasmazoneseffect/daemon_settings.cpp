@@ -38,10 +38,10 @@ void PlasmaZonesEffect::slotSettingsChanged()
 {
     qCInfo(lcEffect) << "settingsChanged: reloading settings";
     loadCachedSettings();
-    // Note: loadAutotileSettings() is intentionally NOT called here.
+    // Note: m_tilingHandler->loadSettings() is intentionally NOT called here.
     // Autotile screen changes are tracked via the dedicated managedScreensChanged
     // D-Bus signal (→ slotScreensChanged), which is authoritative.
-    // Calling loadAutotileSettings on every settingsChanged causes redundant
+    // Calling m_tilingHandler->loadSettings on every settingsChanged causes redundant
     // full window re-notification (N D-Bus windowOpened calls + retile round)
     // on every algorithm/gap/setting change — the daemon already retiles and
     // emits windowsTiled directly for those changes.
@@ -61,7 +61,12 @@ void PlasmaZonesEffect::loadCachedSettings()
     //
     // Transient exclusion and min-size are handled by the daemon. Exclusion lists are
     // cached here for drag-operation gating (shouldHandleWindow).
-    m_triggersLoaded = false; // Permissive until new triggers arrive (#175)
+    // Permissive until new triggers arrive (#175). Fail-open by design: if
+    // the dragActivationTriggers reply never lands (transport error — the
+    // ClientHelpers layer logs a warning), the flag stays false until the
+    // NEXT settingsChanged broadcast re-runs this load. The cost of that
+    // window is unconditional per-tick forwarding, never a dead drag.
+    m_triggersLoaded = false;
 
     // excludedApplications / excludedWindowClasses are GONE — the v4
     // migration folded those lists into the unified Rule store, and
@@ -488,7 +493,16 @@ void PlasmaZonesEffect::loadCachedSettings()
         if (!ok) {
             return;
         }
-        m_cachedAnimationSequenceMode = qBound(0, raw, 1);
+        // validIntOr, not qBound: an unknown FUTURE mode (2) must fall back to
+        // the shipped DEFAULT, not clamp onto the nearest known value. Clamping
+        // silently enters Cascade for a mode that might mean anything, which is
+        // the trap the autotileDragBehavior loader below already documents
+        // ("unknown values clamp to the safe default rather than the
+        // highest-known value").
+        m_cachedAnimationSequenceMode = (raw == PhosphorAnimation::Limits::SequenceModeAllAtOnce
+                                         || raw == PhosphorAnimation::Limits::SequenceModeCascade)
+            ? raw
+            : PhosphorAnimation::Limits::DefaultAnimationSequenceMode;
     });
     loadSettingAsync(QStringLiteral("animationStaggerInterval"), [this](const QVariant& v) {
         bool ok = false;
@@ -637,6 +651,12 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
         m_cachedAutotileDragInsertToggle = v.toBool();
     });
+    loadSettingAsync(QStringLiteral("scrollingDragInsertToggle"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        m_cachedScrollingDragInsertToggle = v.toBool();
+    });
     loadSettingAsync(QStringLiteral("zoneSpanToggleMode"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;
@@ -709,7 +729,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         // This D-Bus reply lands between frames where the compositor GL context is not
         // guaranteed current, and the cached packs own GLShaders plus user GLTextures
         // whose destruction issues glDelete* — make the context current first, same
-        // discipline as the effectsChanged clears in lifecycle.cpp.
+        // discipline as the effectsChanged clears in lifecycle_wiring.cpp.
         //
         // The result is CAPTURED, not discarded. The only false case is compositor
         // teardown, where GL is going away and the driver reclaims the objects whatever
@@ -778,6 +798,38 @@ void PlasmaZonesEffect::loadCachedSettings()
             return;
         }
         m_snapHandler->setFocusFollowsMouse(v.toBool());
+    });
+
+    // Drag-insert TRIGGER LISTS, cached beside the toggles above: the
+    // hold-mode triggers must be visible to shouldForwardDragTicks, or a
+    // drag that starts on a snap screen and crosses onto an engine screen
+    // with only the insert trigger held never forwards a tick — the daemon
+    // then never sees the crossing, never flips the policy, and hold-mode
+    // drag-insert (the shipped default: Alt, toggle off) is unreachable
+    // from off-engine starts.
+    //
+    // Through the member wrapper, like the other ~50 loaders in this function.
+    // The helper only invokes the callback on a VALID reply, so an error never
+    // clobbers a previously-parsed list. A valid reply carrying nothing does
+    // reach us — an older daemon answering an unknown key — and parses to an
+    // empty list that silently makes hold-mode drag-insert unreachable. That
+    // is diagnosable only from a log line, so both loaders emit one, matching
+    // the all-zero-triggers warning dragActivationTriggers already carries.
+    loadSettingAsync(QStringLiteral("autotileDragInsertTriggers"), [this](const QVariant& v) {
+        m_parsedAutotileDragInsertTriggers =
+            TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
+        if (m_parsedAutotileDragInsertTriggers.isEmpty()) {
+            qCWarning(lcEffect) << "autotileDragInsertTriggers parsed to an EMPTY list — hold-mode drag-insert is "
+                                   "unreachable for autotile until a trigger is configured";
+        }
+    });
+    loadSettingAsync(QStringLiteral("scrollingDragInsertTriggers"), [this](const QVariant& v) {
+        m_parsedScrollingDragInsertTriggers =
+            TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
+        if (m_parsedScrollingDragInsertTriggers.isEmpty()) {
+            qCWarning(lcEffect) << "scrollingDragInsertTriggers parsed to an EMPTY list — hold-mode drag-insert is "
+                                   "unreachable for scrolling until a trigger is configured";
+        }
     });
 
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization

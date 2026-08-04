@@ -29,7 +29,6 @@ SettingsFlickable {
     readonly property var _scrollConsts: settingsController.scrollingConstants()
     readonly property int widthKindProportion: _scrollConsts.kindProportion
     readonly property int widthKindFixed: _scrollConsts.kindFixed
-    readonly property int widthKindClientDecides: _scrollConsts.kindClientDecides
     readonly property int widthKindPreset: _scrollConsts.kindPreset
     readonly property int heightKindFixed: _scrollConsts.heightKindFixed
     readonly property int heightKindPreset: _scrollConsts.heightKindPreset

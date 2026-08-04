@@ -421,6 +421,51 @@ QVariantMap WindowTrackingAdaptor::tabColorsFromResolved(const PhosphorRules::Re
     return out;
 }
 
+QVariantMap WindowTrackingAdaptor::dropIndicatorRuleParams(const QString& windowId)
+{
+    if (!m_ruleStore) {
+        return {};
+    }
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return {};
+    }
+    // Same NO-screen-stamp reasoning as tabColorRuleParams, and the same
+    // consequence: a rule pairing a per-window drop colour with a ScreenId or
+    // Mode condition is inert here by design, because the caller (drag start)
+    // knows the window but the indicator can move between screens during the
+    // drag it is being resolved for. "Recolour the indicator on this screen"
+    // is spelled with the per-CONTEXT actions instead.
+    //
+    // NO memo either, unlike the tab colours: this resolves ONCE per drag
+    // rather than per tab per relayout, so a cache would cost more in
+    // invalidation correctness than the single resolve it saves.
+    ensureRuleEvaluator();
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveFiltered(*query, [](const PhosphorRules::Rule& rule) {
+            return admitScreenStamped(rule) && !rule.match.referencesAnyField({PhosphorRules::Field::ScreenId});
+        });
+    QVariantMap out;
+    const auto readColor = [&resolved, &out](QLatin1StringView slot, const QString& key) {
+        const auto action = resolved.slot(QString(slot));
+        if (!action) {
+            return;
+        }
+        const QString value = action->params.value(QString(PhosphorRules::ActionParam::Value)).toString();
+        // Shape-checked for the same reason its twin above is: the value goes
+        // through to a QML `color` property verbatim, and an unparseable one
+        // renders invalid rather than falling back to the theme.
+        if (isHexColorString(value)) {
+            out.insert(key, value);
+        }
+    };
+    // Keyed by the QML property names the drop-indicator slot reads, so the
+    // overlay's layering is one lookup per property.
+    readColor(PhosphorRules::ActionSlot::DragDropIndicatorColor, QStringLiteral("indicatorColor"));
+    readColor(PhosphorRules::ActionSlot::DragDropIndicatorBorderColor, QStringLiteral("indicatorBorderColor"));
+    return out;
+}
+
 QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId, const QString& screenId)
 {
     QVariantMap out;

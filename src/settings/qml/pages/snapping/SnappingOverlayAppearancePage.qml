@@ -80,6 +80,7 @@ SettingsFlickable {
                         description: i18n("Color for the active/hovered zone")
 
                         ColorSwatchRow {
+                            accessibleName: i18nc("@action:button", "Zone highlight color")
                             color: appSettings.highlightColor
                             onClicked: {
                                 highlightColorDialog.selectedColor = appSettings.highlightColor;
@@ -99,6 +100,7 @@ SettingsFlickable {
                         description: i18n("Color for zones that are not hovered")
 
                         ColorSwatchRow {
+                            accessibleName: i18nc("@action:button", "Inactive zone color")
                             color: appSettings.inactiveColor
                             onClicked: {
                                 inactiveColorDialog.selectedColor = appSettings.inactiveColor;
@@ -118,6 +120,7 @@ SettingsFlickable {
                         description: i18n("Color for zone borders")
 
                         ColorSwatchRow {
+                            accessibleName: i18nc("@action:button", "Zone border color")
                             color: appSettings.borderColor
                             onClicked: {
                                 borderColorDialog.selectedColor = appSettings.borderColor;
@@ -277,14 +280,18 @@ SettingsFlickable {
                     SettingsSeparator {}
 
                     SettingsRow {
-                        title: i18n("Border radius")
+                        // "Corner radius", not "Border radius": the radius
+                        // rounds the SHAPE's corners and applies even at zero
+                        // border width, so it is not a property of the border.
+                        // Matches the window-appearance and tab-indicator rows.
+                        title: i18n("Corner radius")
                         searchAnchor: "borderRadius"
-                        description: i18n("Corner rounding of zone borders in pixels")
+                        description: i18n("Corner rounding of zones in pixels")
 
                         SettingsSpinBox {
                             id: zoneBorderRadiusSpin
 
-                            accessibleName: i18n("Border radius")
+                            accessibleName: i18n("Corner radius")
                             from: root.zonesBridge.borderRadiusMin
                             to: root.zonesBridge.borderRadiusMax
                             onValueModified: value => {
@@ -329,6 +336,7 @@ SettingsFlickable {
                         description: i18n("Text color for zone labels")
 
                         ColorSwatchRow {
+                            accessibleName: i18nc("@action:button", "Zone label text color")
                             color: appSettings.labelFontColor
                             onClicked: {
                                 labelFontColorDialog.selectedColor = appSettings.labelFontColor;

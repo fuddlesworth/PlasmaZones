@@ -10,10 +10,12 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Two siblings carry the rest of the suite, both split off at this file's size
+// Four siblings carry the rest of the suite, split off at this file's size
 // ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
-// zone-number walk and the verbs that address it.
+// zone-number walk and the verbs that address it, test_scrollengine_perscreen
+// owns the per-screen override resolution, and test_scrollengine_draginsert
+// owns the drag-insert state machine.
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -63,6 +65,7 @@ private Q_SLOTS:
     void orderedOpenForwardArrivalsKeepSeedOrder();
     void floatedOpenConsumesSeed();
     void migrateOutAnnouncesDroppedFloat();
+    void tileFlaggedFloatingBySiblingEngineSyncsClear();
     void contextSwitchFlagRidesChangedScreenSets();
 
 private:
@@ -97,8 +100,11 @@ void TestScrollEngineSmoke::screensSetLifecycle()
     // Capability contract the daemon's layout-selection gates rest on: the
     // strip has no layout concept, so the engine must keep the interface's
     // default-false providesLayouts (snap and autotile override true).
+    // One call, not two: providesLayouts is virtual, so the cast added
+    // nothing — both lines were the identical dispatch through the identical
+    // vtable slot, and the second read as though it proved the interface view
+    // agrees with the concrete one.
     QVERIFY(!engine->providesLayouts());
-    QVERIFY(!static_cast<PhosphorEngine::IPlacementEngine*>(engine)->providesLayouts());
     QSignalSpy screensSpy(engine, &ScrollEngine::scrollingScreensChanged);
 
     QSignalSpy enabledSpy(engine, &ScrollEngine::enabledChanged);
@@ -231,6 +237,12 @@ void TestScrollEngineSmoke::capturePlacementReportsSlot()
     QCOMPARE(stackedB->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId()).order, 0);
 }
 
+// Named for handoffRelease but covers the RELEASE-then-RECEIVE round trip:
+// the release half asserts the window leaves tracking without disturbing its
+// neighbour, and the receive half asserts it comes back tracked on the new
+// screen. Kept as one slot because the two halves only mean anything
+// together — a release that drops tracking is only correct if something can
+// pick the window back up.
 void TestScrollEngineSmoke::handoffReleaseIsTrackingOnly()
 {
     QObject owner;
@@ -991,6 +1003,49 @@ void TestScrollEngineSmoke::floatedOpenConsumesSeed()
     engine->windowOpened(QStringLiteral("app|f"), QStringLiteral("S1"), 0, 0);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              (QStringList{QStringLiteral("app|t"), QStringLiteral("app|f")}));
+}
+
+void TestScrollEngineSmoke::tileFlaggedFloatingBySiblingEngineSyncsClear()
+{
+    // The one-way float trap, seen live: a window can be a strip TILE here
+    // while the SHARED float set still flags it, because a sibling engine
+    // floated it (snap's no-zone-match default on its own screen, which is
+    // correct there) and the window later joined this strip.
+    //
+    // unfloatWindowInternal used to bail at removeFloating() and return in
+    // silence, so nothing ever cleared the shared flag: every unfloat route
+    // refused, and a window the shared set calls floating is never adopted
+    // into a strip again. The engine must announce its real view instead —
+    // on the PASSIVE arm, because the window is already placed and must not
+    // be moved.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QVERIFY(engine->isWindowTiled(QStringLiteral("app|a")));
+    // The engine holds NO float for it — exactly the sibling-floated shape.
+    QVERIFY(!engine->isWindowFloatingInScroll(QStringLiteral("app|a")));
+
+    QSignalSpy syncSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+    QSignalSpy activeSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+    engine->setWindowFloat(QStringLiteral("app|a"), false, QStringLiteral("S1"));
+
+    // Exactly one passive sync clearing the flag, and no active transition
+    // (which would drag the tile back to a float-back geometry).
+    QCOMPARE(syncSpy.count(), 1);
+    QCOMPARE(syncSpy.last().at(0).toString(), QStringLiteral("app|a"));
+    QCOMPARE(syncSpy.last().at(1).toBool(), false);
+    QCOMPARE(syncSpy.last().at(2).toString(), QStringLiteral("S1"));
+    QCOMPARE(activeSpy.count(), 0);
+    // Still a tile, untouched.
+    QVERIFY(engine->isWindowTiled(QStringLiteral("app|a")));
+
+    // Boundary: a window this state has never seen is NOT the heal arm's
+    // case — setWindowFloat's adopt route takes it, inserting it into the
+    // strip and announcing that on the same passive arm. Pinned here so the
+    // heal is never widened into a second adopt path.
+    engine->setWindowFloat(QStringLiteral("app|ghost"), false, QStringLiteral("S1"));
+    QCOMPARE(syncSpy.count(), 2);
+    QVERIFY(engine->isWindowTiled(QStringLiteral("app|ghost")));
 }
 
 void TestScrollEngineSmoke::migrateOutAnnouncesDroppedFloat()

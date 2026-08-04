@@ -292,6 +292,25 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()), number(pct));
         t.insert(pairKey(CD::scrollingGroup(), CD::defaultColumnWidthPresetIndexKey()), oneBasedIndex());
         t.insert(pairKey(CD::scrollingGroup(), CD::defaultWindowHeightPresetIndexKey()), oneBasedIndex());
+        // Tab indicator numerics: pixels for the geometry knobs (same
+        // treatment as the zone border width/radius above), and the length
+        // proportion is a stored 0.0-1.0 ratio that reads as a percentage.
+        t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::gapKey()), number(px));
+        t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::widthKey()), number(px));
+        t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::gapsBetweenTabsKey()), number(px));
+        // The corner radius reads as plain pixels even though 0 is the PILL
+        // sentinel ("fully rounded"), not zero rounding. The profile diff
+        // therefore shows "0 px" for a pill, which understates it. Left as
+        // is: a unit table maps a key to a unit, and a sentinel needs a
+        // value RENDERER, which is a different mechanism from the one this
+        // table implements.
+        t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::cornerRadiusKey()), number(px));
+        t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::lengthProportionKey()), number(pct, 100.0));
+        // Drop indicator: same treatment as the zone border it mirrors, with
+        // the fill opacity as a stored 0.0-1.0 ratio read as a percentage.
+        t.insert(pairKey(CD::scrollingDropIndicatorGroup(), CD::opacityKey()), number(pct, 100.0));
+        t.insert(pairKey(CD::scrollingDropIndicatorGroup(), CD::widthKey()), number(px));
+        t.insert(pairKey(CD::scrollingDropIndicatorGroup(), CD::radiusKey()), number(px));
 
         // ── Ids resolved against live runtime data ──────────────────────────
         t.insert(pairKey(CD::snappingBehaviorWindowHandlingGroup(), CD::defaultLayoutIdKey()),
@@ -302,10 +321,11 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::decorationsGroup(), CD::decorationProfileTreeKey()), idKind(ValueKind::DecorationPack));
 
         // ── Triggers ────────────────────────────────────────────────────────
-        // Tiling.Behavior.Triggers has a group accessor but declares no keys —
+        // the tiling drag-insert triggers are a leaf of Tiling.Behavior, not a sub-group of their own —
         // the tiling triggers live in Tiling.Behavior itself.
-        for (const QString& group : {CD::snappingBehaviorGroup(), CD::snappingBehaviorZoneSpanGroup(),
-                                     CD::snappingBehaviorSnapAssistGroup(), CD::tilingBehaviorGroup()}) {
+        for (const QString& group :
+             {CD::snappingBehaviorGroup(), CD::snappingBehaviorZoneSpanGroup(), CD::snappingBehaviorSnapAssistGroup(),
+              CD::tilingBehaviorGroup(), CD::scrollingBehaviorGroup()}) {
             t.insert(pairKey(group, CD::triggersKey()), idKind(ValueKind::Trigger));
         }
         t.insert(pairKey(CD::editorSnappingGroup(), CD::overrideModifierKey()), idKind(ValueKind::Trigger));

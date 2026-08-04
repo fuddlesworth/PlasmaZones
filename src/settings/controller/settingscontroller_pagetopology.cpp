@@ -414,6 +414,18 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingBehaviorGroup(), CD::restoreFloatedOnLoginKey()},
              {CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()},
              {CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()},
+             // Drag re-insert triggers (the Triggers card on this page).
+             {CD::scrollingBehaviorGroup(), CD::triggersKey()},
+             {CD::scrollingBehaviorGroup(), CD::toggleActivationKey()},
+             // Scrolling.DropIndicator — the Drop indicator card on this page.
+             // It lives beside the Triggers card because it only appears
+             // during the drag those triggers arm.
+             {CD::scrollingDropIndicatorGroup(), CD::enabledKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::colorKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::borderColorKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::opacityKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::widthKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::radiusKey()},
          }},
         // Only the GLOBAL Windows.* / Gaps.* keys are listed. Per-monitor gap
         // overrides live in the per-screen autotile store (AutotileScreen:*), not

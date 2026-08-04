@@ -41,6 +41,22 @@ static_assert(ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs() == 0,
               "ISettings::scrollingTabIndicatorGapsBetweenTabs defaults to 0 — update it with this default");
 static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
               "ISettings::scrollingTabIndicatorCornerRadius defaults to 0 (square) — update it with this default");
+// The drop indicator's paint keys, same story: the overlay service reads them
+// through ISettings, so a stub answering from the interface body must agree.
+// The two COLOUR defaults have no assert here and cannot get one: they return
+// a default-constructed QString, which is not a constant expression, and their
+// agreement rests on the doc comment in isettings.h. That is the whole
+// unasserted set now — the opacity joined the checked ones when it became
+// constexpr.
+static_assert(ConfigDefaults::scrollingDropIndicatorEnabled(),
+              "ISettings::scrollingDropIndicatorEnabled defaults to true — update it with this default");
+static_assert(ConfigDefaults::scrollingDropIndicatorOpacity() == 0.25,
+              "ISettings::scrollingDropIndicatorOpacity defaults to 0.25 — update it with this default");
+static_assert(ConfigDefaults::scrollingDropIndicatorBorderWidth() == 2,
+              "ISettings::scrollingDropIndicatorBorderWidth defaults to 2 — update it with this default");
+static_assert(ConfigDefaults::scrollingDropIndicatorBorderRadius() == 8,
+              "ISettings::scrollingDropIndicatorBorderRadius defaults to 8 (the zone overlay's radius) — update it "
+              "with this default");
 
 P_STORE_GET(bool, scrollingEnabled, scrollingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabledChanged)
@@ -166,7 +182,7 @@ void Settings::normalizeScrollingColumnWidthValue()
 }
 
 // Hand-written value setter: kind-aware clamp (Proportion values live in
-// [ValueMin, ProportionMax]; Fixed in pixels with a FixedMin floor, rounded
+// [ProportionMin, ProportionMax]; Fixed in pixels with a FixedMin floor, rounded
 // to whole pixels by the engine on load) — the schema clamp alone spans
 // both ranges. Under ClientDecides and Preset the clamp is an identity, so a
 // D-Bus write while one of those kinds is in force cannot collapse the pixel
@@ -335,11 +351,64 @@ P_STORE_GET(QString, scrollingTabIndicatorUrgentColor, scrollingTabIndicatorGrou
 P_STORE_SET_STRING(setScrollingTabIndicatorUrgentColor, scrollingTabIndicatorGroup, urgentColorKey,
                    scrollingTabIndicatorUrgentColorChanged)
 
+// ── Scrolling drop indicator (Scrolling.DropIndicator) ──────────────────────
+// The drop-target highlight painted during a drag re-insert. Paint-only: the
+// engine never reads these, it resolves the indicator's rect from the same
+// layout math the drop uses. Like the tab colours above, the colour is a
+// free-form string whose EMPTY value means "follow the theme", so it
+// deliberately carries no validator.
+
+P_STORE_GET(bool, scrollingDropIndicatorEnabled, scrollingDropIndicatorGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setScrollingDropIndicatorEnabled, scrollingDropIndicatorGroup, enabledKey,
+                 scrollingDropIndicatorEnabledChanged)
+
+P_STORE_GET(QString, scrollingDropIndicatorColor, scrollingDropIndicatorGroup, colorKey, QString)
+P_STORE_SET_STRING(setScrollingDropIndicatorColor, scrollingDropIndicatorGroup, colorKey,
+                   scrollingDropIndicatorColorChanged)
+
+P_STORE_GET(QString, scrollingDropIndicatorBorderColor, scrollingDropIndicatorGroup, borderColorKey, QString)
+P_STORE_SET_STRING(setScrollingDropIndicatorBorderColor, scrollingDropIndicatorGroup, borderColorKey,
+                   scrollingDropIndicatorBorderColorChanged)
+
+// `double`, not the `qreal` every other floating getter in this file spells,
+// because the type has to match the ISettings virtual it overrides and that
+// one is declared double. The two are the same type on every platform this
+// builds for; the spelling difference is the interface's, not this file's.
+P_STORE_GET(double, scrollingDropIndicatorOpacity, scrollingDropIndicatorGroup, opacityKey, double)
+P_STORE_SET_DOUBLE(setScrollingDropIndicatorOpacity, scrollingDropIndicatorGroup, opacityKey,
+                   scrollingDropIndicatorOpacityChanged)
+
+P_STORE_GET(int, scrollingDropIndicatorBorderWidth, scrollingDropIndicatorGroup, widthKey, int)
+P_STORE_SET_INT(setScrollingDropIndicatorBorderWidth, scrollingDropIndicatorGroup, widthKey,
+                scrollingDropIndicatorBorderWidthChanged)
+
+P_STORE_GET(int, scrollingDropIndicatorBorderRadius, scrollingDropIndicatorGroup, radiusKey, int)
+P_STORE_SET_INT(setScrollingDropIndicatorBorderRadius, scrollingDropIndicatorGroup, radiusKey,
+                scrollingDropIndicatorBorderRadiusChanged)
+
 // ── Scrolling behavior (Scrolling.Behavior) ─────────────────────────────────
 // Shared leaf key names under the scrolling behavior group; the schema
 // validators own enum validation (validIntOr snaps a bad sticky value back
 // to the default on read, like every other stored enum) and range clamping
 // (clampInt on the step percents).
+
+// ── Scrolling drag-insert triggers (PhosphorConfig::Store-backed) ───────────
+// Hand-written like the autotile pair in triggers.cpp: trigger lists are
+// QVariantList payloads, outside the P_STORE macro vocabulary.
+
+QVariantList Settings::scrollingDragInsertTriggers() const
+{
+    return m_store->readVariant(ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::triggersKey()).toList();
+}
+void Settings::setScrollingDragInsertTriggers(const QVariantList& triggers)
+{
+    writeTriggerList(ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::triggersKey(), triggers,
+                     &Settings::scrollingDragInsertTriggersChanged);
+}
+
+P_STORE_GET(bool, scrollingDragInsertToggle, scrollingBehaviorGroup, toggleActivationKey, bool)
+P_STORE_SET_BOOL(setScrollingDragInsertToggle, scrollingBehaviorGroup, toggleActivationKey,
+                 scrollingDragInsertToggleChanged)
 
 P_STORE_GET(int, scrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, int)
 P_STORE_SET_INT(setScrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, scrollingInsertPositionChanged)

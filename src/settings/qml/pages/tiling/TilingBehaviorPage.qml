@@ -51,7 +51,9 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {}
+                SettingsSeparator {
+                    enabled: !alwaysReinsertSwitch.checked
+                }
 
                 SettingsRow {
                     title: i18n("Hold to re-insert into stack")
@@ -61,8 +63,10 @@ SettingsFlickable {
 
                     ModifierAndMouseCheckBoxes {
                         width: root.triggerPreferredWidth
-                        allowMultiple: true
                         acceptMode: acceptModeAll
+                        // See the scrolling twin: the sentinel eats a stored
+                        // slot that this list does not show.
+                        reservedTriggerSlots: alwaysReinsertSwitch.checked ? 1 : 0
                         triggers: root.settingsBridge.autotileDragInsertTriggers
                         defaultTriggers: root.settingsBridge.defaultAutotileDragInsertTriggers
                         tooltipEnabled: false
@@ -72,12 +76,14 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {}
+                SettingsSeparator {
+                    enabled: !alwaysReinsertSwitch.checked
+                }
 
                 SettingsRow {
                     title: i18n("Toggle mode")
                     searchAnchor: "triggersToggleMode"
-                    description: i18n("Tap the re-insert trigger once to activate the stack preview, tap again to deactivate it")
+                    description: i18n("Tap the re-insert trigger once to activate the stack preview. Tap it again to deactivate.")
                     enabled: !alwaysReinsertSwitch.checked
 
                     SettingsSwitch {

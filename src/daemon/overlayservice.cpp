@@ -112,6 +112,11 @@ QQuickItem* OverlayService::PerScreenOverlayState::scrollTabsSlot() const
     return slotItemOrNull(*this, PhosphorSlotKeys::ScrollTabs());
 }
 
+QQuickItem* OverlayService::PerScreenOverlayState::scrollDropIndicatorSlot() const
+{
+    return slotItemOrNull(*this, PhosphorSlotKeys::ScrollDropIndicator());
+}
+
 // Per-role SurfaceAnimator config builders + setupSurfaceAnimator +
 // applyShaderProfilesToAnimator live in overlayservice/animation_config.cpp.
 
@@ -485,10 +490,13 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
     // do not pay the wl_surface unmap + RHI swapchain teardown cost on
     // every dismiss; with both shaders and animations disabled there is
     // no transition to amortize, and keeping the shell mapped means a
-    // fullscreen wlr OVERLAY layer surface is composited above every
-    // normal toplevel for the daemon's lifetime - which masks the
-    // compositor's own translucency-while-moving effect and exposes
-    // composition-pipeline bugs on hybrid-GPU setups. Effects-on path
+    // fullscreen layer surface is composited above every normal toplevel for
+    // the daemon's lifetime, which exposes composition-pipeline bugs on
+    // hybrid-GPU setups. (It no longer masks the compositor's own
+    // translucency-while-moving effect: the shell's layer was downgraded from
+    // Overlay to Top for exactly that reason, see the PassiveShell role note
+    // and issue #516. The rest of the cost stands, which is why the gate
+    // stays.) Effects-on path
     // keeps the warm cache; effects-off path lets the next
     // syncSurfaceState !anyVisible transition unmap the wl_surface.
     const bool shadersOn = m_shaderRegistry && m_shaderRegistry->shadersEnabled();

@@ -95,6 +95,16 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetTabIndicatorActiveColor,
     ActionType::SetTabIndicatorInactiveColor,
     ActionType::SetTabIndicatorUrgentColor,
+    // Drop indicator — context-domain for the whole family, because the
+    // indicator describes an empty SLOT on a screen and a window-matching rule
+    // has no referent for it. The two per-window COLOURS below are the
+    // exception, keyed on the dragged window.
+    ActionType::SetDropIndicatorEnabled,
+    ActionType::SetDropIndicatorColor,
+    ActionType::SetDropIndicatorBorderColor,
+    ActionType::SetDropIndicatorOpacity,
+    ActionType::SetDropIndicatorBorderWidth,
+    ActionType::SetDropIndicatorBorderRadius,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -146,6 +156,10 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::TabColorActive,
     ActionType::TabColorInactive,
     ActionType::TabColorUrgent,
+    // Per-window drop-indicator colours — resolved at drag start from the
+    // DRAGGED window's rules, where they outrank the context pair.
+    ActionType::DropIndicatorColor,
+    ActionType::DropIndicatorBorderColor,
 };
 } // namespace
 

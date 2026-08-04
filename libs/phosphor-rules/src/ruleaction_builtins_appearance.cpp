@@ -1098,6 +1098,160 @@ void ActionRegistry::registerBuiltinsAppearance()
         .displayOrder = 16,
         .tags = {QString(Tag::LayoutEngine)},
     });
+
+    // ── per-context drop-indicator overrides (domain Context) ──
+    // Its own category, not folded into tabIndicator: the two indicators are
+    // separate features a user reaches for independently, and the drop
+    // indicator is armed by a drag while the tab indicator is a property of a
+    // tabbed column. Every action here is PAINT — there is no geometry half,
+    // because the rect comes from the engine's layout math and cannot be
+    // positioned independently of where the drop lands.
+    // Master switch, the peer of SetTabIndicatorEnabled.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetDropIndicatorEnabled),
+        .slotFor = constantSlot(ActionSlot::DropIndicatorEnabled),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("dropIndicator"),
+        .displayOrder = 1,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    // Fill colour. A rule cannot express the EMPTY "follow the colour scheme" sentinel; not setting the action leaves
+    // it in place.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetDropIndicatorColor),
+        .slotFor = constantSlot(ActionSlot::DropIndicatorColor),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasHexColor(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+        .category = QStringLiteral("dropIndicator"),
+        .displayOrder = 2,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    // Border colour. Drawn opaque whatever alpha the value carries, matching the paint site.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetDropIndicatorBorderColor),
+        .slotFor = constantSlot(ActionSlot::DropIndicatorBorderColor),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasHexColor(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+        .category = QStringLiteral("dropIndicator"),
+        .displayOrder = 3,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    // Fill opacity as a stored fraction, edited as a percent. Zero is legal and means an outline with no fill.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetDropIndicatorOpacity),
+        .slotFor = constantSlot(ActionSlot::DropIndicatorOpacity),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, kMaxDropIndicatorOpacity);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = kMinDropIndicatorOpacity,
+                     .max = kMaxDropIndicatorOpacity,
+                     .defaultDisplay = 0.25}},
+        .category = QStringLiteral("dropIndicator"),
+        .displayOrder = 4,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    // Border thickness in px. Floors at 0, which is a fill with no edge.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetDropIndicatorBorderWidth),
+        .slotFor = constantSlot(ActionSlot::DropIndicatorBorderWidth),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, kMaxDropIndicatorBorderWidth);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 0.0,
+                     .max = kMaxDropIndicatorBorderWidth,
+                     .defaultDisplay = 2.0}},
+        .category = QStringLiteral("dropIndicator"),
+        .displayOrder = 5,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    // Corner radius in px. UNSIGNED, unlike the tab indicator: 0 is square, not a pill sentinel.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetDropIndicatorBorderRadius),
+        .slotFor = constantSlot(ActionSlot::DropIndicatorBorderRadius),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, kMaxDropIndicatorBorderRadius);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 0.0,
+                     .max = kMaxDropIndicatorBorderRadius,
+                     .defaultDisplay = 8.0}},
+        .category = QStringLiteral("dropIndicator"),
+        .displayOrder = 6,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+
+    // ── per-window drop-indicator colours (domain Window) ──
+    // Keyed on the DRAGGED window, resolved once at drag start. The only
+    // per-window slice of this family with a coherent referent: exactly one
+    // window is dragged at a time. They outrank the per-context colours above,
+    // which outrank the config, which falls back to the theme — the same order
+    // the tab colours use.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::DropIndicatorColor),
+        .slotFor = constantSlot(ActionSlot::DragDropIndicatorColor),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasHexColor(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+        .category = QStringLiteral("dropIndicator"),
+        .displayOrder = 7,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::DropIndicatorBorderColor),
+        .slotFor = constantSlot(ActionSlot::DragDropIndicatorBorderColor),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasHexColor(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+        .category = QStringLiteral("dropIndicator"),
+        .displayOrder = 8,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
 }
 
 } // namespace PhosphorRules

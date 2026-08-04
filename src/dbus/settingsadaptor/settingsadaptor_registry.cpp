@@ -180,12 +180,15 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
-// A tab-indicator colour: EMPTY (follow the theme) or a colour QColor can
+// A theme-fallback colour: EMPTY (follow the theme) or a colour QColor can
 // parse. Rejects anything else at the boundary rather than letting it reach
 // the QML `color` property, where an unparseable string renders as an invalid
 // colour rather than falling back. Returning false surfaces the rejection to
 // the D-Bus caller instead of silently dropping the write.
-#define REGISTER_TAB_COLOR(name, getter, setter)                                                                       \
+//
+// These ride as strings rather than REGISTER_COLOR_SETTING precisely because
+// a QColor round-trip cannot carry the empty "follow the theme" value.
+#define REGISTER_THEME_FALLBACK_COLOR(name, getter, setter)                                                            \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
@@ -235,9 +238,11 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("zoneSpanTriggers")] = QStringLiteral("stringlist");
 
-    // Autotile drag-insert triggers list (multi-bind) — consumed by the KWin
-    // effect so it knows which modifier/mouse-button combos should forward
-    // dragMoved events to the daemon during an autotile-bypassed drag.
+    // Autotile drag-insert triggers list (multi-bind). Consumers: the
+    // daemon's own WindowDragAdaptor::beginDrag per-drag trigger cache is
+    // the authoritative one (which combos count as "insert held" per tick),
+    // and the KWin effect also fetches the list to OR a held insert trigger
+    // into its tick-forwarding gate (detectActivationAndGrab).
     m_getters[QStringLiteral("autotileDragInsertTriggers")] = [this]() {
         return QVariant::fromValue(m_settings->autotileDragInsertTriggers());
     };
@@ -247,7 +252,19 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("autotileDragInsertTriggers")] = QStringLiteral("stringlist");
 
+    // Scrolling twin — same consumer contract (daemon beginDrag cache +
+    // the effect's tick-forwarding gate).
+    m_getters[QStringLiteral("scrollingDragInsertTriggers")] = [this]() {
+        return QVariant::fromValue(m_settings->scrollingDragInsertTriggers());
+    };
+    m_setters[QStringLiteral("scrollingDragInsertTriggers")] = [this](const QVariant& v) {
+        m_settings->setScrollingDragInsertTriggers(v.toList());
+        return true;
+    };
+    m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("stringlist");
+
     REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
+    REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
     REGISTER_BOOL_SETTING("zoneSpanToggleMode", zoneSpanToggleMode, setZoneSpanToggleMode)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
@@ -265,7 +282,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("osdStyle")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= ConfigDefaults::osdStyleMin() && val <= ConfigDefaults::osdStyleMax()) {
             m_settings->setOsdStyle(static_cast<OsdStyle>(val));
             return true;
         }
@@ -278,18 +295,19 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("overlayDisplayMode")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 1) {
+        if (val >= ConfigDefaults::overlayDisplayModeMin() && val <= ConfigDefaults::overlayDisplayModeMax()) {
             m_settings->setOverlayDisplayMode(static_cast<OverlayDisplayMode>(val));
             return true;
         }
         return false;
     };
     m_schemas[QStringLiteral("overlayDisplayMode")] = QStringLiteral("int");
-    // Per-mode disable lists. Six entries — one per (context, mode) pair —
-    // because both the read and the write need a Mode argument that the
-    // REGISTER_STRINGLIST_SETTING macro doesn't expose. Pre-v3 these were a
-    // single set of three keys whose values silently gated both modes; the
-    // new wire schema names the mode explicitly so consumers can't conflate.
+    // Per-mode disable lists — one entry per (context, mode) pair, three
+    // contexts by three modes — because both the read and the write need a
+    // Mode argument that the REGISTER_STRINGLIST_SETTING macro doesn't
+    // expose. Pre-v3 these were a single set of three keys whose values
+    // silently gated every mode; the new wire schema names the mode
+    // explicitly so consumers can't conflate.
 #define REGISTER_PER_MODE_DISABLE(keyName, modeEnum, getterFn, setterFn)                                               \
     m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
         return m_settings->getterFn(modeEnum);                                                                         \
@@ -357,14 +375,19 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_STRING_SETTING("windowTintColor", windowTintColor, setWindowTintColor)
     REGISTER_INT_SETTING("focusFadeDuration", focusFadeDuration, setFocusFadeDuration)
     REGISTER_STRING_SETTING("labelFontFamily", labelFontFamily, setLabelFontFamily)
-    // Custom setter with range validation (0.25-3.0) instead of REGISTER_DOUBLE_SETTING
+    // Custom setter with range validation instead of REGISTER_DOUBLE_SETTING.
+    // Bounds through ConfigDefaults, per CLAUDE.md's rule that config values
+    // route through the accessors: with the numbers inlined this guard and the
+    // schema's clamp were two independently-maintained spellings of the same
+    // range, and retuning one left the other rejecting values the other
+    // accepts.
     m_getters[QStringLiteral("labelFontSizeScale")] = [this]() {
         return m_settings->labelFontSizeScale();
     };
     m_setters[QStringLiteral("labelFontSizeScale")] = [this](const QVariant& v) {
         bool ok;
         double val = v.toDouble(&ok);
-        if (!ok || val < 0.25 || val > 3.0) {
+        if (!ok || val < ConfigDefaults::labelFontSizeScaleMin() || val > ConfigDefaults::labelFontSizeScaleMax()) {
             return false;
         }
         m_settings->setLabelFontSizeScale(val);
@@ -438,6 +461,8 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("scrollingRestoreFloatedWindowsOnLogin", scrollingRestoreFloatedWindowsOnLogin,
                           setScrollingRestoreFloatedWindowsOnLogin)
     REGISTER_BOOL_SETTING("scrollingTabIndicatorEnabled", scrollingTabIndicatorEnabled, setScrollingTabIndicatorEnabled)
+    REGISTER_BOOL_SETTING("scrollingDropIndicatorEnabled", scrollingDropIndicatorEnabled,
+                          setScrollingDropIndicatorEnabled)
     REGISTER_BOOL_SETTING("snapUnfloatFallbackToZone", snapUnfloatFallbackToZone, setSnapUnfloatFallbackToZone)
     REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
     REGISTER_BOOL_SETTING("suppressDefaultLayoutAssignment", suppressDefaultLayoutAssignment,
@@ -915,12 +940,30 @@ void SettingsAdaptor::initializeRegistry()
         // passed through — the string lands on a QML `color` property, where an
         // unparseable value renders as an invalid colour instead of falling
         // back to the theme, so an arbitrary D-Bus write must not reach it.
-        REGISTER_TAB_COLOR("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
-                           setScrollingTabIndicatorActiveColor)
-        REGISTER_TAB_COLOR("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
-                           setScrollingTabIndicatorInactiveColor)
-        REGISTER_TAB_COLOR("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
-                           setScrollingTabIndicatorUrgentColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
+                                      setScrollingTabIndicatorActiveColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
+                                      setScrollingTabIndicatorInactiveColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
+                                      setScrollingTabIndicatorUrgentColor)
+
+        // ── Scrolling.DropIndicator ──
+        // scrollingDropIndicatorEnabled is registered through ISettings above;
+        // the other FIVE live here (two colours, opacity, border width and
+        // radius) so the whole group is reachable. Same
+        // every-key-must-be-present rule as the tab indicator block above:
+        // this generic surface is the settings app's ONLY channel to the
+        // daemon, so an unregistered key looks wired and does nothing.
+        REGISTER_THEME_FALLBACK_COLOR("scrollingDropIndicatorColor", scrollingDropIndicatorColor,
+                                      setScrollingDropIndicatorColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingDropIndicatorBorderColor", scrollingDropIndicatorBorderColor,
+                                      setScrollingDropIndicatorBorderColor)
+        REGISTER_CONCRETE_DOUBLE("scrollingDropIndicatorOpacity", scrollingDropIndicatorOpacity,
+                                 setScrollingDropIndicatorOpacity)
+        REGISTER_CONCRETE_INT("scrollingDropIndicatorBorderWidth", scrollingDropIndicatorBorderWidth,
+                              setScrollingDropIndicatorBorderWidth)
+        REGISTER_CONCRETE_INT("scrollingDropIndicatorBorderRadius", scrollingDropIndicatorBorderRadius,
+                              setScrollingDropIndicatorBorderRadius)
 
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusEnabled", scrollingWheelFocusEnabled, setScrollingWheelFocusEnabled)
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusInverted", scrollingWheelFocusInverted,
@@ -1104,6 +1147,7 @@ void SettingsAdaptor::initializeRegistry()
 #undef REGISTER_CONCRETE_INT
 #undef REGISTER_CONCRETE_DOUBLE
 #undef REGISTER_CONCRETE_STRING
+#undef REGISTER_THEME_FALLBACK_COLOR
 }
 
 } // namespace PlasmaZones
