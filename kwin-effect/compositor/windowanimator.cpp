@@ -464,25 +464,25 @@ void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPain
 
     const QRectF current = anim->value();
 
-    // Translate: desired visual top-left offset from the actual frameGeometry.
+    // Translate ONLY — the position is animated, the content is never resampled.
+    //
+    // This used to also setXScale/setYScale from the animated size over the live
+    // frame size whenever the animation had a size change. KWin has already
+    // committed the FINAL geometry and the client has already painted at the
+    // final size by the time this runs, so that scale took finished content and
+    // squeezed it into the in-flight rect, easing back to 1.0 only at the end —
+    // a visible stretch-then-settle on every size-changing leg (discussion
+    // #868). WindowPaintData offers no crop, so the honest fallback is to draw
+    // the window at its true size and animate only where it sits.
+    //
+    // Reachable only when NO shader owns the geometry: paintWindow calls this
+    // solely under `!shaderOwnsGeometry`, and the built-in default for the snap
+    // legs (window-morph) declares iFromRect. So this is the path a user takes
+    // by choosing "None" — and "None" must not mean "the stretching one". The
+    // vertex-only fragment path reaches the same conclusion for packs.
     const QPointF desiredPos = current.topLeft();
     const QPointF actualPos = window->frameGeometry().topLeft();
     data += (desiredPos - actualPos);
-
-    // Scale: smoothly morph from old size to target size.
-    if (anim->hasSizeChange()) {
-        const QSizeF desiredSize = current.size();
-        const QSizeF actualSize = window->frameGeometry().size();
-        constexpr qreal kMinActualDim = 1.0;
-        constexpr qreal kMinScaleFactor = 0.01;
-        constexpr qreal kMaxScaleFactor = 100.0;
-        const qreal sx =
-            qBound(kMinScaleFactor, desiredSize.width() / qMax(actualSize.width(), kMinActualDim), kMaxScaleFactor);
-        const qreal sy =
-            qBound(kMinScaleFactor, desiredSize.height() / qMax(actualSize.height(), kMinActualDim), kMaxScaleFactor);
-        data.setXScale(data.xScale() * sx);
-        data.setYScale(data.yScale() * sy);
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -563,8 +563,31 @@ QMarginsF WindowAnimator::expandedPadding(KWin::EffectWindow* window,
     const QRectF expanded = (window && !window->isDeleted()) ? QRectF(window->expandedGeometry()) : anim.to();
 
     const QRectF frameGeo = anim.to();
-    return QMarginsF(qMax(0.0, frameGeo.x() - expanded.x()), qMax(0.0, frameGeo.y() - expanded.y()),
-                     qMax(0.0, expanded.right() - frameGeo.right()), qMax(0.0, expanded.bottom() - frameGeo.bottom()));
+    QMarginsF margins(qMax(0.0, frameGeo.x() - expanded.x()), qMax(0.0, frameGeo.y() - expanded.y()),
+                      qMax(0.0, expanded.right() - frameGeo.right()), qMax(0.0, expanded.bottom() - frameGeo.bottom()));
+
+    // Cover what applyTransform actually DRAWS, which is no longer what
+    // anim.bounds() describes. bounds() is the union of the from/to rects, but
+    // the transform translates the window at its FINAL size to every position
+    // along that sweep, so the drawn rect can reach past the union — a snap
+    // travelling LEFT into a larger zone draws (old position + final width),
+    // which for from(1000,0 400x300) → to(0,0 1200x900) overruns the union's
+    // right edge by 800px. Undamaged, that band keeps whatever was under it and
+    // the window trails.
+    //
+    // The shortfall on an axis is at most (final extent - the SMALLEST extent
+    // the sweep passes through): bounds.right is never less than
+    // position(t) + width(t) for any sampled t, and the drawn right is
+    // position(t) + finalWidth. Bounding it that way needs no position term, so
+    // it stays correct under the overshoot samples bounds() already folds in,
+    // and it self-zeroes for a pure move (all widths equal). One-sided like the
+    // margins above: bounds only ever grow.
+    const QSizeF finalSize = (window && !window->isDeleted()) ? window->frameGeometry().size() : anim.to().size();
+    const qreal minWidth = qMin(anim.from().width(), anim.to().width());
+    const qreal minHeight = qMin(anim.from().height(), anim.to().height());
+    margins.setRight(margins.right() + qMax(0.0, finalSize.width() - minWidth));
+    margins.setBottom(margins.bottom() + qMax(0.0, finalSize.height() - minHeight));
+    return margins;
 }
 
 PhosphorAnimation::IMotionClock* WindowAnimator::clockForHandle(KWin::EffectWindow* window) const
