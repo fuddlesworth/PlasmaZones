@@ -330,9 +330,10 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/scrolling/ScrollingWindowPage.qml
         qml/pages/scrolling/ScrollingWindowHandlingCard.qml
         qml/pages/scrolling/ScrollingDragInsertCard.qml
+        qml/pages/scrolling/ScrollingDropIndicatorCard.qml
         qml/pages/scrolling/ScrollingFocusCard.qml
         qml/pages/scrolling/PresetListEditor.qml
-        qml/pages/scrolling/TabIndicatorColorRow.qml
+        qml/pages/scrolling/ThemeFallbackColorRow.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which
         # also hosts the unified inner/outer gap controls.
         qml/pages/decoration/WindowAppearancePage.qml

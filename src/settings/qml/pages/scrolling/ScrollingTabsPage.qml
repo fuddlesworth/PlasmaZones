@@ -331,7 +331,7 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                TabIndicatorColorRow {
+                ThemeFallbackColorRow {
                     Layout.fillWidth: true
                     title: i18n("Active tab")
                     searchAnchor: "tabIndicatorActiveColor"
@@ -344,7 +344,7 @@ SettingsFlickable {
                     }
                 }
 
-                TabIndicatorColorRow {
+                ThemeFallbackColorRow {
                     Layout.fillWidth: true
                     title: i18n("Inactive tabs")
                     searchAnchor: "tabIndicatorInactiveColor"
@@ -357,7 +357,7 @@ SettingsFlickable {
                     }
                 }
 
-                TabIndicatorColorRow {
+                ThemeFallbackColorRow {
                     Layout.fillWidth: true
                     title: i18n("Urgent tab")
                     searchAnchor: "tabIndicatorUrgentColor"

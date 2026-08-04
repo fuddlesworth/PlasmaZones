@@ -396,6 +396,11 @@ public:
                    setScrollingTabIndicatorInactiveColor NOTIFY scrollingTabIndicatorInactiveColorChanged)
     Q_PROPERTY(QString scrollingTabIndicatorUrgentColor READ scrollingTabIndicatorUrgentColor WRITE
                    setScrollingTabIndicatorUrgentColor NOTIFY scrollingTabIndicatorUrgentColorChanged)
+    // Scrolling.DropIndicator
+    Q_PROPERTY(bool scrollingDropIndicatorEnabled READ scrollingDropIndicatorEnabled WRITE
+                   setScrollingDropIndicatorEnabled NOTIFY scrollingDropIndicatorEnabledChanged)
+    Q_PROPERTY(QString scrollingDropIndicatorColor READ scrollingDropIndicatorColor WRITE setScrollingDropIndicatorColor
+                   NOTIFY scrollingDropIndicatorColorChanged)
     Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
                    NOTIFY scrollingWheelFocusEnabledChanged)
     Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
@@ -1185,6 +1190,13 @@ public:
     void setScrollingTabIndicatorInactiveColor(const QString& color) override;
     QString scrollingTabIndicatorUrgentColor() const override;
     void setScrollingTabIndicatorUrgentColor(const QString& color) override;
+    // Scrolling.DropIndicator. Paint-only, so ISettings alone — the engine
+    // never reads these (it resolves the indicator's rect from the same layout
+    // math the drop uses).
+    bool scrollingDropIndicatorEnabled() const override;
+    void setScrollingDropIndicatorEnabled(bool enabled) override;
+    QString scrollingDropIndicatorColor() const override;
+    void setScrollingDropIndicatorColor(const QString& color) override;
     bool scrollingWheelFocusEnabled() const;
     void setScrollingWheelFocusEnabled(bool enabled);
     bool scrollingWheelFocusInverted() const;

@@ -31,6 +31,14 @@ Item {
 
     /// Drop-target rect in shell-window coordinates.
     required property rect indicatorRect
+    /// Configured indicator colour. EMPTY means "follow the theme", which is
+    /// the shipped default and what `accent` below resolves to.
+    required property string indicatorColor
+
+    /// Resolved paint colour. An unparseable string cannot reach here — the
+    /// D-Bus boundary rejects anything that is neither empty nor a colour
+    /// QColor can parse — so the empty test is the only fallback needed.
+    readonly property color accent: root.indicatorColor === "" ? Kirigami.Theme.highlightColor : root.indicatorColor
 
     anchors.fill: parent
 
@@ -43,8 +51,8 @@ Item {
         // Translucent fill plus a solid edge: the fill reads as "this space is
         // claimed" at a glance while staying see-through enough that the
         // windows underneath still orient the drag.
-        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.25)
-        border.color: Kirigami.Theme.highlightColor
+        color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.25)
+        border.color: root.accent
         border.width: Math.max(1, Math.round(Kirigami.Units.smallSpacing / 2))
         radius: Kirigami.Units.smallSpacing
 

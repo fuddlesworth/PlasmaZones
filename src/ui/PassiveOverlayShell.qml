@@ -484,6 +484,13 @@ Window {
         // absolute compositor space before writing. An empty rect never
         // arrives here: the daemon hides the slot instead.
         property rect indicatorRect: Qt.rect(0, 0, 0, 0)
+        // Indicator colour (Scrolling.DropIndicator/Color), pushed by C++ on
+        // every rect update. EMPTY means "follow the theme" and the content
+        // item resolves that. Must be declared here AND forwarded below:
+        // setProperty on an undeclared name silently creates a dynamic
+        // property that no binding ever sees (see the zoneSelectorSlot
+        // contract note).
+        property string indicatorColor: ""
         // Content lifecycle gate, toggled by C++ on show/hide. Like the tab
         // strips (and unlike the OSD-style slots) the content is NOT
         // re-instantiated per update — the rect changes as the drag moves and
@@ -512,6 +519,7 @@ Window {
 
             ScrollDropIndicatorContent {
                 indicatorRect: scrollDropIndicatorSlot.indicatorRect
+                indicatorColor: scrollDropIndicatorSlot.indicatorColor
             }
         }
     }

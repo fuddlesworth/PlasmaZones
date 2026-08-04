@@ -685,6 +685,17 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingTriggersToggleMode"),
                PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("tap"), PhosphorI18n::tr("strip preview")});
 
+    // Drop indicator card, directly after Triggers on the page.
+    addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicator"),
+               PhosphorI18n::tr("Drop indicator"));
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorEnabled"),
+               PhosphorI18n::tr("Show drop indicator"),
+               {PhosphorI18n::tr("drop"), PhosphorI18n::tr("drag"), PhosphorI18n::tr("indicator"),
+                PhosphorI18n::tr("highlight"), PhosphorI18n::tr("target")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorColor"),
+               PhosphorI18n::tr("Indicator color"),
+               {PhosphorI18n::tr("drop"), PhosphorI18n::tr("color"), PhosphorI18n::tr("indicator")});
+
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingWindowHandling"),
                PhosphorI18n::tr("Window Handling"));
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingNewWindowPlacement"),

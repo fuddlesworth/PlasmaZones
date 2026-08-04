@@ -335,6 +335,21 @@ P_STORE_GET(QString, scrollingTabIndicatorUrgentColor, scrollingTabIndicatorGrou
 P_STORE_SET_STRING(setScrollingTabIndicatorUrgentColor, scrollingTabIndicatorGroup, urgentColorKey,
                    scrollingTabIndicatorUrgentColorChanged)
 
+// ── Scrolling drop indicator (Scrolling.DropIndicator) ──────────────────────
+// The drop-target highlight painted during a drag re-insert. Paint-only: the
+// engine never reads these, it resolves the indicator's rect from the same
+// layout math the drop uses. Like the tab colours above, the colour is a
+// free-form string whose EMPTY value means "follow the theme", so it
+// deliberately carries no validator.
+
+P_STORE_GET(bool, scrollingDropIndicatorEnabled, scrollingDropIndicatorGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setScrollingDropIndicatorEnabled, scrollingDropIndicatorGroup, enabledKey,
+                 scrollingDropIndicatorEnabledChanged)
+
+P_STORE_GET(QString, scrollingDropIndicatorColor, scrollingDropIndicatorGroup, colorKey, QString)
+P_STORE_SET_STRING(setScrollingDropIndicatorColor, scrollingDropIndicatorGroup, colorKey,
+                   scrollingDropIndicatorColorChanged)
+
 // ── Scrolling behavior (Scrolling.Behavior) ─────────────────────────────────
 // Shared leaf key names under the scrolling behavior group; the schema
 // validators own enum validation (validIntOr snaps a bad sticky value back

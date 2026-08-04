@@ -180,12 +180,15 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
-// A tab-indicator colour: EMPTY (follow the theme) or a colour QColor can
+// A theme-fallback colour: EMPTY (follow the theme) or a colour QColor can
 // parse. Rejects anything else at the boundary rather than letting it reach
 // the QML `color` property, where an unparseable string renders as an invalid
 // colour rather than falling back. Returning false surfaces the rejection to
 // the D-Bus caller instead of silently dropping the write.
-#define REGISTER_TAB_COLOR(name, getter, setter)                                                                       \
+//
+// These ride as strings rather than REGISTER_COLOR_SETTING precisely because
+// a QColor round-trip cannot carry the empty "follow the theme" value.
+#define REGISTER_THEME_FALLBACK_COLOR(name, getter, setter)                                                            \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
@@ -453,6 +456,8 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("scrollingRestoreFloatedWindowsOnLogin", scrollingRestoreFloatedWindowsOnLogin,
                           setScrollingRestoreFloatedWindowsOnLogin)
     REGISTER_BOOL_SETTING("scrollingTabIndicatorEnabled", scrollingTabIndicatorEnabled, setScrollingTabIndicatorEnabled)
+    REGISTER_BOOL_SETTING("scrollingDropIndicatorEnabled", scrollingDropIndicatorEnabled,
+                          setScrollingDropIndicatorEnabled)
     REGISTER_BOOL_SETTING("snapUnfloatFallbackToZone", snapUnfloatFallbackToZone, setSnapUnfloatFallbackToZone)
     REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
     REGISTER_BOOL_SETTING("suppressDefaultLayoutAssignment", suppressDefaultLayoutAssignment,
@@ -930,12 +935,21 @@ void SettingsAdaptor::initializeRegistry()
         // passed through — the string lands on a QML `color` property, where an
         // unparseable value renders as an invalid colour instead of falling
         // back to the theme, so an arbitrary D-Bus write must not reach it.
-        REGISTER_TAB_COLOR("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
-                           setScrollingTabIndicatorActiveColor)
-        REGISTER_TAB_COLOR("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
-                           setScrollingTabIndicatorInactiveColor)
-        REGISTER_TAB_COLOR("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
-                           setScrollingTabIndicatorUrgentColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
+                                      setScrollingTabIndicatorActiveColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
+                                      setScrollingTabIndicatorInactiveColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
+                                      setScrollingTabIndicatorUrgentColor)
+
+        // ── Scrolling.DropIndicator ──
+        // scrollingDropIndicatorEnabled is registered through ISettings above;
+        // the colour lives here so the whole group is reachable. Same
+        // every-key-must-be-present rule as the tab indicator block above:
+        // this generic surface is the settings app's ONLY channel to the
+        // daemon, so an unregistered key looks wired and does nothing.
+        REGISTER_THEME_FALLBACK_COLOR("scrollingDropIndicatorColor", scrollingDropIndicatorColor,
+                                      setScrollingDropIndicatorColor)
 
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusEnabled", scrollingWheelFocusEnabled, setScrollingWheelFocusEnabled)
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusInverted", scrollingWheelFocusInverted,
@@ -1119,7 +1133,7 @@ void SettingsAdaptor::initializeRegistry()
 #undef REGISTER_CONCRETE_INT
 #undef REGISTER_CONCRETE_DOUBLE
 #undef REGISTER_CONCRETE_STRING
-#undef REGISTER_TAB_COLOR
+#undef REGISTER_THEME_FALLBACK_COLOR
 }
 
 } // namespace PlasmaZones

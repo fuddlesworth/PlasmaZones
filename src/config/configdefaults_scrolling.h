@@ -446,6 +446,28 @@ public:
     {
         return QString();
     }
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling.DropIndicator — the drop-target highlight painted during a drag
+    // re-insert. Both keys are PAINT-only: they never enter the engine, which
+    // resolves the indicator's rect from the same layout math the drop uses.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Master switch. Off, a scrolling drag re-insert runs exactly as before
+    /// with no on-screen drop target. On by default because the scroll engine
+    /// defers structure to the drop, so without the indicator nothing shows
+    /// where the window is going.
+    static constexpr bool scrollingDropIndicatorEnabled()
+    {
+        return true;
+    }
+    /// EMPTY MEANS "follow the theme" — the overlay falls back to
+    /// Kirigami.Theme's highlight colour, same resolution tier as the tab
+    /// colours above.
+    static QString scrollingDropIndicatorColor()
+    {
+        return QString();
+    }
+
     /// Meta+wheel column focus in the KWin effect. Off, the axis chords are
     /// genuinely released back to the compositor for any later registrant
     /// (stock zoom binds its axis gesture to Meta+Ctrl, not plain Meta).

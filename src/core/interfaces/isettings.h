@@ -367,6 +367,25 @@ public:
     {
     }
 
+    /// Drop-target indicator during a scrolling drag re-insert. Virtual with
+    /// an always-on default so the overlay service can gate through the
+    /// interface, same pattern as scrollingTabIndicatorEnabled above.
+    virtual bool scrollingDropIndicatorEnabled() const
+    {
+        return true;
+    }
+    virtual void setScrollingDropIndicatorEnabled(bool /*enabled*/)
+    {
+    }
+    /// Empty means "follow the theme" (see ConfigDefaults).
+    virtual QString scrollingDropIndicatorColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingDropIndicatorColor(const QString& /*color*/)
+    {
+    }
+
     /// Float-position restore for scroll-floated windows. Virtual with an
     /// always-on default so the WindowTrackingAdaptor's restore predicate
     /// can resolve it through the interface, like its snap/autotile twins.
@@ -775,6 +794,10 @@ Q_SIGNALS:
     void scrollingTabIndicatorActiveColorChanged();
     void scrollingTabIndicatorInactiveColorChanged();
     void scrollingTabIndicatorUrgentColorChanged();
+
+    // Scrolling drop indicator (Scrolling.DropIndicator)
+    void scrollingDropIndicatorEnabledChanged();
+    void scrollingDropIndicatorColorChanged();
 
     // Scrolling behavior settings
     void scrollingInsertPositionChanged();

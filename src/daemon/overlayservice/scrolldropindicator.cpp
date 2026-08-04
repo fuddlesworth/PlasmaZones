@@ -38,7 +38,12 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
         return;
     }
 
-    const bool wantsIndicator = rect.isValid() && !rect.isEmpty();
+    // The enable toggle folds into the same "no indicator" answer as an empty
+    // rect, so one branch below serves both. No cached-rect replay like the
+    // tab strips: this rect only exists for the duration of a drag, and
+    // toggling the setting mid-drag to see it appear is not a real workflow.
+    const bool indicatorEnabled = !m_settings || m_settings->scrollingDropIndicatorEnabled();
+    const bool wantsIndicator = indicatorEnabled && rect.isValid() && !rect.isEmpty();
 
     // Change-gate on the ABSOLUTE rect, before any of the work below. A drag
     // pushes on every pointer tick and the target only changes when the cursor
@@ -142,6 +147,15 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     auto* shellWindow = state->shell->shellWindow();
 
     writeQmlProperty(slot, QStringLiteral("indicatorRect"), local);
+
+    // Paint setting, pushed on every update rather than only on the show path.
+    // A drag is short enough that a colour change almost never lands mid-drag,
+    // but writing an unchanged QML property emits no change notification, so
+    // the cost of being correct here is one compare. EMPTY means "follow the
+    // theme" and the content item resolves that itself.
+    if (m_settings) {
+        writeQmlProperty(slot, QStringLiteral("indicatorColor"), m_settings->scrollingDropIndicatorColor());
+    }
 
     if (slot->isVisible() && !hideWasInFlight) {
         return; // live rect update — no show choreography, and no input to sync

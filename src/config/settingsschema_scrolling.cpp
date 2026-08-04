@@ -298,6 +298,15 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         {CD::urgentColorKey(), CD::scrollingTabIndicatorUrgentColor(), QMetaType::QString},
     };
 
+    // ─── Scrolling drop indicator (Scrolling.DropIndicator) ──────────────
+    // The drop-target highlight painted during a drag re-insert. The colour is
+    // a free-form string for the same reason as the tab colours: EMPTY is the
+    // meaningful "follow the theme" value.
+    schema.groups[CD::scrollingDropIndicatorGroup()] = {
+        {CD::enabledKey(), CD::scrollingDropIndicatorEnabled(), QMetaType::Bool},
+        {CD::colorKey(), CD::scrollingDropIndicatorColor(), QMetaType::QString},
+    };
+
     // ─── Scrolling behavior (Scrolling.Behavior) ─────────────────────────
     // Window-handling and focus knobs, the peers of Tiling.Behavior and
     // Snapping.Behavior.WindowHandling. Shared leaf key names under the

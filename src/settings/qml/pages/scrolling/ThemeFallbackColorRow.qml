@@ -7,14 +7,15 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief One tab-indicator colour row: a swatch, the hex, and a reset.
+ * @brief One theme-fallback colour row: a swatch, the hex, and a reset.
  *
- * The three tab colours all store EMPTY to mean "follow the colour scheme",
- * which no plain colour control can express — a picker always has some colour
- * selected. So the row pairs the swatch with an explicit Reset that clears
- * back to empty, and previews the theme colour it would fall back to while it
- * is unset. Without that pairing there would be no way back to the default
- * once a colour had been picked.
+ * Used by the three tab-indicator colours and by the drag drop-indicator
+ * colour. All of them store EMPTY to mean "follow the colour scheme", which no
+ * plain colour control can express — a picker always has some colour selected.
+ * So the row pairs the swatch with an explicit Reset that clears back to
+ * empty, and previews the theme colour it would fall back to while it is
+ * unset. Without that pairing there would be no way back to the default once a
+ * colour had been picked.
  *
  * The picker itself is PAGE-LEVEL and passed in rather than owned here: a page
  * rebuild while the dialog is open would destroy a row-scoped dialog and tear

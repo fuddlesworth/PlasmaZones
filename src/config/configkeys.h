@@ -137,6 +137,11 @@ public:
     // a dozen Tab*-prefixed leaves on Scrolling, so the settings page, the
     // per-page reset manifest and the rule slots all address one subtree.
     P_CONFIG_GROUP(scrollingTabIndicatorGroup, "Scrolling.TabIndicator")
+    // Scrolling.DropIndicator — the drop-target highlight painted during a
+    // drag re-insert. Its own group for the same reason as TabIndicator: the
+    // settings page, the per-page reset manifest and any later rule slots all
+    // address one subtree.
+    P_CONFIG_GROUP(scrollingDropIndicatorGroup, "Scrolling.DropIndicator")
 
     // Decorations — per-surface decoration tree (DecorationProfileTree:
     // shader-pack chain + per-pack parameters, keyed on a dot-path surface
@@ -437,6 +442,9 @@ public:
     P_CONFIG_KEY(activeColorKey, "ActiveColor")
     P_CONFIG_KEY(inactiveColorKey, "InactiveColor")
     P_CONFIG_KEY(urgentColorKey, "UrgentColor")
+
+    // Scrolling.DropIndicator (also uses the shared enabledKey above).
+    P_CONFIG_KEY(colorKey, "Color")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Behavior
