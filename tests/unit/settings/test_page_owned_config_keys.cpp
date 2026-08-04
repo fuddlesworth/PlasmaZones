@@ -153,7 +153,14 @@ private Q_SLOTS:
 
         QStringList unowned;
         int checked = 0;
-        for (const QString& group : {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup()}) {
+        // All FOUR scrolling schema groups. The two indicator groups were
+        // outside this sweep, so a key added to either could drop out of
+        // per-page Reset with nothing failing — which is the exact class of
+        // regression this file exists to catch, and the DropIndicator group
+        // was added while the gap was open.
+        for (const QString& group :
+             {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
+              ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup()}) {
             const auto it = schema.groups.constFind(group);
             QVERIFY2(it != schema.groups.constEnd(), qPrintable(group));
             for (const PhosphorConfig::KeyDef& def : *it) {

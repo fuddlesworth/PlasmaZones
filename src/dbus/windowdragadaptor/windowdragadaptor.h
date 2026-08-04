@@ -744,9 +744,25 @@ private:
     /// screen drag cannot strand one behind it.
     void pushScrollDropIndicator(const QString& screenId, const QRect& rect);
     /// Preview-end teardown for the drop indicator. Safe to call with none
-    /// showing. Must run on EVERY preview-end path (commit, cancel, screen
-    /// change, drag teardown) — a stranded indicator would sit on the desktop
-    /// with no drag left to dismiss it.
+    /// showing.
+    ///
+    /// A stranded indicator sits on the desktop with no drag left to dismiss
+    /// it, so every preview-end path calls this. The list is longer than it
+    /// looks, because an engine can drop its own preview WITHOUT telling the
+    /// adaptor — five engine-side self-cancel sites do exactly that — so the
+    /// daemon cannot rely on being notified and repairs wherever it notices:
+    ///   - settleDragInsertPreviewAt, on all three arms including the one
+    ///     that finds no engine at all (a drag is still ending there);
+    ///   - cancelDragInsertIfActive, the shared cancel;
+    ///   - cancelDragInsertPreviewsForScreen, keyed on the DEPARTING screen
+    ///     rather than on whether it cancelled anything, since a prune may
+    ///     have self-cancelled first;
+    ///   - onDragScrollTick's self-stop, which is where the daemon often
+    ///     first observes that the preview is gone;
+    ///   - dragMoved's failed-begin arm and its trigger-release cancel arm,
+    ///     neither of which routes through the shared teardown.
+    /// Adding a new preview-end path means adding a call here; the earlier
+    /// version of this comment asserted the rule without the code keeping it.
     void clearScrollDropIndicator();
 
     /// Drop-path settle for a live drag-insert preview (either engine).

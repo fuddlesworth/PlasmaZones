@@ -42,6 +42,9 @@
 #include <QtNumeric>
 
 #include <PhosphorConfig/Schema.h>
+// For the drop indicator's radius default, which is deliberately the zone
+// overlay's constant rather than a literal.
+#include <PhosphorZones/ZoneDefaults.h>
 
 #include "config/configdefaults.h"
 #include "config/settings.h"
@@ -323,6 +326,61 @@ private Q_SLOTS:
         const auto* enabled = findKey(schema, tabGroup, ConfigDefaults::enabledKey());
         QVERIFY(enabled);
         QCOMPARE(enabled->defaultValue.toBool(), ConfigDefaults::scrollingTabIndicatorEnabled());
+
+        // ── Scrolling.DropIndicator ──
+        // The paint family for the drag re-insert highlight. Six keys, and
+        // every one of them was unpinned until this block existed — the group
+        // had no test of any kind, while its sibling above is exhaustively
+        // covered. Both clamp ends matter here for a reason peculiar to this
+        // group: all three of its minima mean "invisible" (transparent fill,
+        // no border, no rounding), so a validator that silently floors is the
+        // difference between a drawn indicator and a slot that is created,
+        // shown, animated and synced every drag while painting nothing.
+        const QString dropGroup = ConfigDefaults::scrollingDropIndicatorGroup();
+
+        const auto* dropEnabled = findKey(schema, dropGroup, ConfigDefaults::enabledKey());
+        QVERIFY(dropEnabled);
+        QCOMPARE(dropEnabled->defaultValue.toBool(), ConfigDefaults::scrollingDropIndicatorEnabled());
+
+        const auto* dropOpacity = findKey(schema, dropGroup, ConfigDefaults::opacityKey());
+        QVERIFY(dropOpacity && dropOpacity->validator);
+        QCOMPARE(dropOpacity->defaultValue.toDouble(), ConfigDefaults::scrollingDropIndicatorOpacity());
+        QCOMPARE(dropOpacity->validator(-1.0).toDouble(), ConfigDefaults::scrollingDropIndicatorOpacityMin());
+        QCOMPARE(dropOpacity->validator(2.0).toDouble(), ConfigDefaults::scrollingDropIndicatorOpacityMax());
+        // Fully transparent and fully opaque are both LEGAL, not clamped away:
+        // 0.0 is edge-only, 1.0 is a solid fill. A clamp that excluded either
+        // end would take a real configuration off the table.
+        QCOMPARE(dropOpacity->validator(0.0).toDouble(), 0.0);
+        QCOMPARE(dropOpacity->validator(1.0).toDouble(), 1.0);
+
+        const auto* dropWidth = findKey(schema, dropGroup, ConfigDefaults::widthKey());
+        QVERIFY(dropWidth && dropWidth->validator);
+        QCOMPARE(dropWidth->defaultValue.toInt(), ConfigDefaults::scrollingDropIndicatorBorderWidth());
+        QCOMPARE(dropWidth->validator(-5).toInt(), ConfigDefaults::scrollingDropIndicatorBorderWidthMin());
+        QCOMPARE(dropWidth->validator(9999).toInt(), ConfigDefaults::scrollingDropIndicatorBorderWidthMax());
+        // Zero border width is a supported look (fill with no edge), so it has
+        // to survive the clamp rather than being floored to 1.
+        QCOMPARE(dropWidth->validator(0).toInt(), 0);
+
+        const auto* dropRadius = findKey(schema, dropGroup, ConfigDefaults::radiusKey());
+        QVERIFY(dropRadius && dropRadius->validator);
+        QCOMPARE(dropRadius->defaultValue.toInt(), ConfigDefaults::scrollingDropIndicatorBorderRadius());
+        QCOMPARE(dropRadius->validator(-5).toInt(), ConfigDefaults::scrollingDropIndicatorBorderRadiusMin());
+        QCOMPARE(dropRadius->validator(9999).toInt(), ConfigDefaults::scrollingDropIndicatorBorderRadiusMax());
+        // The radius default is deliberately the zone overlay's, so the drop
+        // highlight and the snap highlight round identically out of the box.
+        // Pinned against the shared constant, not a literal 8, so a change
+        // upstream moves both or fails here.
+        QCOMPARE(dropRadius->defaultValue.toInt(), int(PhosphorZones::ZoneDefaults::BorderRadius));
+
+        // Both colours default EMPTY, which is the "follow the colour scheme"
+        // sentinel — the one value a QColor round-trip could not carry, and
+        // the reason these two are stored as free-form strings.
+        for (const auto& colourKey : {ConfigDefaults::colorKey(), ConfigDefaults::borderColorKey()}) {
+            const auto* dropColour = findKey(schema, dropGroup, colourKey);
+            QVERIFY(dropColour);
+            QVERIFY(dropColour->defaultValue.toString().isEmpty());
+        }
     }
 
     /// The Scrolling group's numeric-range keys, which DO clamp (clampInt /
