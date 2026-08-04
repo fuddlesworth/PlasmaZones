@@ -288,9 +288,18 @@ private Q_SLOTS:
         QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), screen));
         engine.updateDragInsertPreview(2);
 
+        // A has been moved to index 2 by the update above; the re-begin must
+        // CANCEL that, putting A back at 0.
+        const QStringList beforeReBegin = engine.tilingStateForScreen(screen)->tiledWindows();
+        QCOMPARE(beforeReBegin.indexOf(QStringLiteral("A")), 2);
+
         // Starting a new preview for B should cancel A's preview first
         QVERIFY(engine.beginDragInsertPreview(QStringLiteral("B"), screen));
         QCOMPARE(engine.dragInsertPreviewWindowId(), QStringLiteral("B"));
+        // The id alone does not show a cancel happened — replacing the implicit
+        // cancel with a plain overwrite of the preview would satisfy it while
+        // leaving A stranded at 2. Assert A actually went home.
+        QCOMPARE(engine.tilingStateForScreen(screen)->tiledWindows().indexOf(QStringLiteral("A")), 0);
     }
 
     // =========================================================================
@@ -456,7 +465,17 @@ private Q_SLOTS:
         engine.commitDragInsertPreview();
 
         // Evicted neighbour should be routed through the batch-float signal.
+        // The COUNT alone does not show that: a batch naming the newcomer, or
+        // any other window, satisfies it. Walk the payload for the evicted id,
+        // the way testCommit_freshAdoptionEmitsFloatSync does.
         QVERIFY(batchSpy.count() >= 1);
+        bool sawEvicted = false;
+        for (const auto& emission : batchSpy) {
+            if (emission.first().toStringList().contains(QStringLiteral("B"))) {
+                sawEvicted = true;
+            }
+        }
+        QVERIFY2(sawEvicted, "batch-float did not name the evicted neighbour");
     }
 
     // =========================================================================
@@ -489,8 +508,14 @@ private Q_SLOTS:
         QVERIFY(engine.beginDragInsertPreview(QStringLiteral("newcomer"), screen));
         QVERIFY(engine.hasDragInsertPreview());
 
-        // The evicted window is B (last in tiled order before adoption).
+        // B really IS the evicted one — asserted, not assumed. If the eviction
+        // policy ever picked first-instead-of-last this slot would quietly
+        // degenerate into "close an unrelated tiled window mid-preview" and
+        // keep passing, losing the coverage its name promises.
+        QVERIFY(!engine.tilingStateForScreen(screen)->tiledWindows().contains(QStringLiteral("B")));
+
         // Close it while the preview is live.
+        QSignalSpy batchSpy(&engine, &AutotileEngine::windowsBatchFloated);
         engine.windowClosed(QStringLiteral("B"));
 
         // Preview still live (newcomer is the dragged window, not B) and
@@ -498,6 +523,13 @@ private Q_SLOTS:
         QVERIFY(engine.hasDragInsertPreview());
         engine.commitDragInsertPreview(); // should be safe
         QVERIFY(!engine.hasDragInsertPreview());
+        // The point of the guard this slot is named for: commit must NOT emit
+        // a batch-float for the closed id. Without the assertion, deleting the
+        // guard leaves the test green while commit routes a dead window id.
+        for (const auto& emission : batchSpy) {
+            QVERIFY2(!emission.first().toStringList().contains(QStringLiteral("B")),
+                     "batch-float named a window that closed mid-preview");
+        }
     }
 
     // =========================================================================
