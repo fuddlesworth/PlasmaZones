@@ -767,6 +767,10 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     // tracking: the receiving engine owns the float bit from here, and a
     // stale entry would keep isModeSpecificFloated answering true.
     m_scrollFloatedWindows.remove(windowId);
+    // Same orphan rule as the float path: the window leaves this engine
+    // alive, so the park-edge memory has to go here or it survives to
+    // mis-anchor the first arrival after a later re-adoption.
+    m_parkedScrollEdge.remove(windowId);
     // Background-context guard, as windowClosed and the float paths carry: a
     // release out of another desktop's state must not retile the strip that
     // is on screen right now. The switch back retiles the mutated one.

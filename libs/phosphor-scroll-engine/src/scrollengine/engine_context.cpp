@@ -30,6 +30,18 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
+    // The remembered park edge is written only while a window sits parked and
+    // consumed when it scrolls back on screen, so a window that DIES parked
+    // never consumes its entry; this aliveness sweep reclaims those. A window
+    // that leaves the strip alive (float, cross-engine handoff) is handled at
+    // those sites — it never becomes stale enough to reach this sweep.
+    for (auto it = m_parkedScrollEdge.begin(); it != m_parkedScrollEdge.end();) {
+        if (!aliveWindowIds.contains(it.key())) {
+            it = m_parkedScrollEdge.erase(it);
+        } else {
+            ++it;
+        }
+    }
     QStringList dead;
     const auto& windowKeys = m_states.windowKeys();
     for (auto it = windowKeys.cbegin(); it != windowKeys.cend(); ++it) {

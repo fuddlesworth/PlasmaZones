@@ -88,6 +88,11 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     m_floatRestore.insert(windowId, restore);
     m_scrollFloatedWindows.insert(windowId);
     m_lastAppliedRect.remove(windowId);
+    // A float leaves the strip, so a remembered park edge is orphaned: the
+    // aliveness prune never reclaims it (the window stays alive), and the
+    // stale entry would anchor the arrival animation to the wrong side when
+    // the window later unfloats back into partial view.
+    m_parkedScrollEdge.remove(windowId);
     Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
     // Background-context guard: see windowClosed.
     if (key == currentKeyForScreen(key.screenId)) {

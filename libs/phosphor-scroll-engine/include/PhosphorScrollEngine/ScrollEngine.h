@@ -65,10 +65,12 @@ struct ScrollOpenParams
  * autotile engine emits, relayed by the shared tiling adaptor to the KWin
  * effect's tile-request path (staggered apply, supersession epochs, maximize
  * reset). Columns scrolled out of the viewport are parked with real geometry
- * just outside the nearest work-area edge — never at extreme coordinates —
- * so input hit-testing stays sane and enter/leave scroll animations morph
- * from a believable origin. Hidden tiles of a tabbed column park the same
- * way (a hidden tab must not sit under the active tile stealing clicks).
+ * just below the union of all outputs — the one place no monitor topology
+ * can occupy, and never at extreme coordinates — so input hit-testing stays
+ * sane; the enter/leave animation origin comes from the tile request's
+ * scrollEdge field, not from where the park happens to sit. Hidden tiles of
+ * a tabbed column park the same way (a hidden tab must not sit under the
+ * active tile stealing clicks).
  *
  * Floating reuses the shared PlasmaZones float model: a floated window
  * leaves the strip (its column closes up) and the engine remembers the
@@ -808,6 +810,11 @@ private:
     QList<qreal> m_presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0};
     CenterFocusedColumn m_centerFocusedColumn = CenterFocusedColumn::Never;
     bool m_alwaysCenterSingleColumn = false;
+    /// Crop mode: keep TRUE rects for partial edge columns and rely on the
+    /// effect forcing GL composition + per-output culling to crop the
+    /// overhang. When false (default) the emit loop clamps the rect at the
+    /// screen edge instead, which no present path can bypass.
+    bool m_cropStraddlers = false;
     ColumnWidth m_defaultColumnWidth = ColumnWidth::makeProportion(0.5);
     /// "Client decides" default width: open at the client's initial size.
     bool m_defaultWidthClientDecides = false;
@@ -831,6 +838,17 @@ private:
     /// The exact rect last APPLIED per window while strip-managed (float-back
     /// poison guard; see PlacementEngineBase::lastManagedRect).
     QHash<QString, QRect> m_lastAppliedRect;
+    /// Which screen edge each currently-parked window went out by ("left" /
+    /// "right"), so that when it scrolls back INTO the viewport the batch can
+    /// tell the effect which side to animate it in from.
+    ///
+    /// It has to be remembered rather than derived: parking picks a side that
+    /// is free of adjacent outputs, which on a multi-monitor layout is
+    /// routinely the opposite side from the one the column left by, so the
+    /// parked rect cannot answer the question. The entry is written when the
+    /// window parks and consumed when it comes back on screen; windows that
+    /// are never parked never appear here.
+    QHash<QString, QString> m_parkedScrollEdge;
     /// What a floated/minimized window's column held, so unfloat restores
     /// the slot AND the user's width/display intent (a Proportion/Preset
     /// column must not come back as the default width). The min size IS

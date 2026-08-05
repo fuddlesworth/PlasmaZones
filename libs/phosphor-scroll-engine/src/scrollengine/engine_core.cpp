@@ -687,6 +687,7 @@ void ScrollEngine::refreshConfigFromSettings()
     m_centerFocusedColumn =
         (center >= 0 && center <= 2) ? static_cast<CenterFocusedColumn>(center) : CenterFocusedColumn::Never;
     m_alwaysCenterSingleColumn = settings->scrollingAlwaysCenterSingleColumn();
+    m_cropStraddlers = settings->scrollingCropStraddlers();
 
     const auto widthKind = static_cast<DefaultWidthKind>(settings->scrollingDefaultColumnWidthKind());
     const qreal widthValue = settings->scrollingDefaultColumnWidthValue();
