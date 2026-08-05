@@ -15,8 +15,11 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <QtGlobal>
 #include <PhosphorScreens/ScreenIdentity.h>
+
+#include <iterator>
 
 using namespace Qt::StringLiterals;
 
@@ -378,8 +381,8 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Rendering ──────────────────────────────────────────────────────────────
-// Single-key group selecting the GPU backend. The validator coerces any
-// unknown string to a known value via ConfigDefaults::normalizeRenderingBackend
+// Two keys: the graphics API backend token and the GPU device pin. Each has
+// its own coercing validator (normalizeRenderingBackend / normalizeGpuDevice)
 // so hand-edited configs can't persist garbage.
 
 void appendRenderingSchema(PhosphorConfig::Schema& schema)
@@ -478,12 +481,19 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut());
     addShortcut(globals, CD::previousLayoutKey(), CD::previousLayoutShortcut());
     addShortcut(globals, CD::nextLayoutKey(), CD::nextLayoutShortcut());
-    const QString quickDefaults[9] = {
+    const QString quickDefaults[] = {
         CD::quickLayout1Shortcut(), CD::quickLayout2Shortcut(), CD::quickLayout3Shortcut(),
         CD::quickLayout4Shortcut(), CD::quickLayout5Shortcut(), CD::quickLayout6Shortcut(),
         CD::quickLayout7Shortcut(), CD::quickLayout8Shortcut(), CD::quickLayout9Shortcut(),
     };
-    for (int i = 0; i < 9; ++i) {
+    // Bound by the protocol constant, not a local 9: quickLayoutKey() qFatals
+    // outside [1, QuickLayoutSlotCount], so a raised constant with a stale
+    // local literal would silently declare too few keys and a LOWERED one
+    // would abort at startup. The static_assert makes the defaults array
+    // track the constant at compile time instead.
+    static_assert(std::size(quickDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "quick-layout defaults array must cover every protocol slot");
+    for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
         addShortcut(globals, CD::quickLayoutKey(i + 1), quickDefaults[i]);
     }
     addShortcut(globals, CD::moveWindowLeftKey(), CD::moveWindowLeftShortcut());
@@ -505,12 +515,15 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::spanWindowRightKey(), CD::spanWindowRightShortcut());
     addShortcut(globals, CD::spanWindowUpKey(), CD::spanWindowUpShortcut());
     addShortcut(globals, CD::spanWindowDownKey(), CD::spanWindowDownShortcut());
-    const QString snapToZoneDefaults[9] = {
+    const QString snapToZoneDefaults[] = {
         CD::snapToZone1Shortcut(), CD::snapToZone2Shortcut(), CD::snapToZone3Shortcut(),
         CD::snapToZone4Shortcut(), CD::snapToZone5Shortcut(), CD::snapToZone6Shortcut(),
         CD::snapToZone7Shortcut(), CD::snapToZone8Shortcut(), CD::snapToZone9Shortcut(),
     };
-    for (int i = 0; i < 9; ++i) {
+    // Same protocol-constant bound as the quick-layout loop above.
+    static_assert(std::size(snapToZoneDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "snap-to-zone defaults array must cover every protocol slot");
+    for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
         addShortcut(globals, CD::snapToZoneKey(i + 1), snapToZoneDefaults[i]);
     }
     addShortcut(globals, CD::rotateWindowsClockwiseKey(), CD::rotateWindowsClockwiseShortcut());

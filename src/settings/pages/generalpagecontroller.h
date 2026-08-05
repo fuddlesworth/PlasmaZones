@@ -17,39 +17,39 @@ class ISettings;
 
 /// Q_PROPERTY surface for the "General" settings page.
 ///
-/// Owns the startup-time rendering-backend snapshot that keeps the "restart
-/// required" InlineMessage visible across page navigation (the picker's
-/// options come from SettingsController::valueOptions and the schema), plus
-/// the animation-duration / min-distance / stagger-interval slider bounds
-/// that the animation curve editors consume, plus the window-filtering bounds
-/// (snap-side, animation-side and decoration-side) that the shared
-/// WindowFilterCard reads.
+/// Owns the startup-time rendering-backend and GPU-device snapshots that keep
+/// the "restart required" InlineMessage visible across page navigation (the
+/// backend picker's options come from SettingsController::valueOptions and
+/// the schema), the enumerated GPU list for the rendering-device picker,
+/// plus the animation-duration / min-distance / stagger-interval slider
+/// bounds that the animation curve editors consume, plus the
+/// window-filtering bounds (snap-side, animation-side and decoration-side)
+/// that the shared WindowFilterCard reads.
 ///
 /// Import/export of the full config stays on SettingsController — those are
 /// top-level app actions that touch every page, not a "General" concern.
 ///
-/// Pure CONSTANT facade — no per-page staged state; isDirty/apply/discard
-/// are no-ops. Dirty tracking is global through SettingsController's
-/// meta-object loop on Settings's Q_PROPERTYs: any rendering-backend
-/// selection that calls `m_settings.setRenderingBackend` trips the
-/// Q_PROPERTY NOTIFY, which SettingsController's `onSettingsPropertyChanged`
-/// slot maps to the active page (or the top of `m_externalEditStack`).
-/// The "General" page therefore participates in dirty tracking via
-/// the Settings property surface, not via this controller's own
-/// signals.
+/// No per-page staged state; isDirty/apply/discard are no-ops. Value-based
+/// dirty tracking for General flows through the pageOwnedConfigKeys manifest
+/// (settingscontroller_pagetopology.cpp), with SettingsController's
+/// meta-object NOTIFY loop attributing edits to the active page.
 class GeneralPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
-    Q_PROPERTY(QString startupRenderingBackend READ startupRenderingBackend CONSTANT)
-    Q_PROPERTY(QString startupGpuDevice READ startupGpuDevice CONSTANT)
+    Q_PROPERTY(QString startupRenderingBackend READ startupRenderingBackend NOTIFY startupSnapshotsChanged)
+    Q_PROPERTY(QString startupGpuDevice READ startupGpuDevice NOTIFY startupSnapshotsChanged)
 
     // {text, value} rows for the GPU picker: "auto" first, then the
-    // machine's GPUs from DRM render-node enumeration (GpuDeviceList). A
-    // stored value that no longer matches any present GPU (card removed,
-    // config copied from another machine) is appended verbatim so the combo
-    // can still display the persisted selection.
-    Q_PROPERTY(QVariantList availableGpus READ availableGpus CONSTANT)
+    // machine's GPUs from DRM render-node enumeration (GpuDeviceList,
+    // enumerated once per process — a GPU hot-plugged mid-session appears
+    // after the settings app restarts). A stored value that no longer
+    // matches any present GPU (card removed, config copied from another
+    // machine) is appended as a synthetic "Unavailable device" row so the
+    // combo can still display the persisted selection; the row is rebuilt on
+    // every gpuDeviceChanged so external writes stay displayable and the
+    // synthetic row disappears once a present device is selected.
+    Q_PROPERTY(QVariantList availableGpus READ availableGpus NOTIFY availableGpusChanged)
 
     Q_PROPERTY(int animationDurationMin READ animationDurationMin CONSTANT)
     Q_PROPERTY(int animationDurationMax READ animationDurationMax CONSTANT)
@@ -98,6 +98,13 @@ public:
     void discard() override
     {
     }
+
+    /// Re-snapshot the startup backend/GPU values from the live settings.
+    /// SettingsController calls this on the daemon's running rising edge:
+    /// a freshly started daemon has just read the current config, so the
+    /// "restart required" banner must stop comparing against the values the
+    /// SETTINGS APP started with.
+    void rebaselineStartupSnapshots();
 
     QString startupRenderingBackend() const
     {
@@ -186,12 +193,29 @@ public:
         return ConfigDefaults::decorationMinimumWindowHeightMax();
     }
 
+Q_SIGNALS:
+    /// Both startup snapshots were re-baselined (daemon restart observed).
+    void startupSnapshotsChanged();
+    /// The GPU picker rows changed (external gpuDevice write added or
+    /// removed the synthetic "Unavailable device" row).
+    void availableGpusChanged();
+
+private Q_SLOTS:
+    /// Rebuild the picker rows from the cached enumeration + the current
+    /// stored value. Connected to ISettings::gpuDeviceChanged.
+    void rebuildAvailableGpus();
+
 private:
-    /// Backend / GPU values at controller construction. Survive page
-    /// recreation so the "restart required" InlineMessage stays visible
-    /// after navigating away and back.
+    ISettings& m_settings;
+
+    /// Backend / GPU values at controller construction (re-baselined on
+    /// daemon restart). Survive page recreation so the "restart required"
+    /// InlineMessage stays visible after navigating away and back.
     QString m_startupRenderingBackend;
     QString m_startupGpuDevice;
+
+    /// Raw GpuDeviceList::enumerate() result, cached once per process.
+    QVariantList m_enumeratedGpus;
     QVariantList m_availableGpus;
 };
 

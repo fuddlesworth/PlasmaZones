@@ -234,6 +234,50 @@ QHash<QUuid, ProfileStore::Record> ProfileStore::loadAll() const
 
 // ── Inheritance resolution / delta ────────────────────────────────────────────
 
+namespace {
+
+/// Keys that name THIS machine's hardware and must never ride into profiles.
+/// A captured delta would ship a hardware identity into an export another
+/// machine cannot satisfy, and applying one from an existing record would
+/// silently repoint the render GPU on profile switch (with no daemon-running
+/// gate or restart notice). Enforced on the capture side (diffConfig) and by
+/// stripping the key from resolveConfig's returned blob — NOT inside
+/// overlayConfig: the resolve seed comes from defaultConfig(), which carries
+/// EVERY declared key including this one at its default, so a skip during
+/// overlay would let that seeded default survive into the resolved blob and
+/// RESET the user's live pin on every profile activation. Removing the key
+/// from the resolved blob instead leaves the live value untouched, because
+/// Store::importFromJson only writes keys present in the blob. Currently
+/// just Rendering.Gpu, a PCI vendor:device pair.
+bool isMachineScopedKey(const QString& group, const QString& key)
+{
+    return group == ConfigKeys::renderingGroup() && key == ConfigKeys::gpuKey();
+}
+
+void stripMachineScopedKeys(QJsonObject& config)
+{
+    for (auto git = config.begin(); git != config.end(); ++git) {
+        if (!git.value().isObject()) {
+            continue;
+        }
+        QJsonObject group = git.value().toObject();
+        bool changed = false;
+        for (auto kit = group.begin(); kit != group.end();) {
+            if (isMachineScopedKey(git.key(), kit.key())) {
+                kit = group.erase(kit);
+                changed = true;
+            } else {
+                ++kit;
+            }
+        }
+        if (changed) {
+            git.value() = group;
+        }
+    }
+}
+
+} // namespace
+
 void ProfileStore::overlayConfig(QJsonObject& base, const QJsonObject& delta)
 {
     for (auto git = delta.constBegin(); git != delta.constEnd(); ++git) {
@@ -258,6 +302,9 @@ QJsonObject ProfileStore::diffConfig(const QJsonObject& full, const QJsonObject&
         const QJsonObject baseGroup = base.value(git.key()).toObject();
         QJsonObject deltaGroup;
         for (auto kit = fullGroup.constBegin(); kit != fullGroup.constEnd(); ++kit) {
+            if (isMachineScopedKey(git.key(), kit.key())) {
+                continue;
+            }
             if (baseGroup.value(kit.key()) != kit.value()) {
                 deltaGroup.insert(kit.key(), kit.value());
             }
@@ -287,6 +334,16 @@ QJsonObject ProfileStore::resolveConfig(const QUuid& id, const QHash<QUuid, Reco
     for (const QUuid& node : chain) {
         overlayConfig(resolved, all.value(node).configDelta);
     }
+    // Single choke point for the machine-scoped exclusion: every consumer of
+    // a resolved blob (activation staging, the active-modified compare, the
+    // profile signature, and the parent-resolved diff baselines) sees a blob
+    // with no hardware-identity keys, and an absent key is a no-op on apply
+    // (see isMachineScopedKey above). Profile EXPORT copies the profile file
+    // verbatim and never resolves, so exports are protected by diffConfig's
+    // capture-side skip instead. The null-parent diff baseline is the raw
+    // defaultConfig() and stays deliberately unstripped: diffConfig's own
+    // skip enforces the invariant on that path.
+    stripMachineScopedKeys(resolved);
     return resolved;
 }
 
@@ -676,8 +733,12 @@ bool ProfileStore::isActiveModified(const QHash<QUuid, Record>& all) const
         return false;
     }
 
-    // Config: compare the profile's resolved blob to the live config, key by key
-    // (both carry every declared key). Skip the top-level `_version` marker.
+    // Config: compare the profile's resolved blob to the live config, key by
+    // key over the RESOLVED blob's keys. The resolved blob carries every
+    // declared key EXCEPT the machine-scoped ones stripped by resolveConfig,
+    // so a wholesale group compare would read a live GPU pin as a permanent
+    // modification; comparing only the keys the blob carries tolerates the
+    // machine-scoped extras while still catching every real divergence.
     if (m_config.currentConfig) {
         const QJsonObject resolved = resolveConfig(uid, all);
         const QJsonObject current = m_config.currentConfig();
@@ -685,8 +746,12 @@ bool ProfileStore::isActiveModified(const QHash<QUuid, Record>& all) const
             if (!git.value().isObject()) {
                 continue;
             }
-            if (current.value(git.key()).toObject() != git.value().toObject()) {
-                return true;
+            const QJsonObject resolvedGroup = git.value().toObject();
+            const QJsonObject currentGroup = current.value(git.key()).toObject();
+            for (auto kit = resolvedGroup.constBegin(); kit != resolvedGroup.constEnd(); ++kit) {
+                if (currentGroup.value(kit.key()) != kit.value()) {
+                    return true;
+                }
             }
         }
     }

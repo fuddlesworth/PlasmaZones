@@ -21,13 +21,11 @@
 
 #include <QApplication>
 #include <QFile>
-#include <QLibrary>
 #include <QScopeGuard>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QCommandLineParser>
 #include <QQuickStyle>
-#include <QQuickWindow>
 #include <QObject>
 
 #include "phosphor_i18n.h"
@@ -90,14 +88,21 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     QVulkanInstance vulkanInstance;
 #endif
-    const QString gpuDevice = PlasmaZones::ConfigDefaults::readGpuDeviceFromDisk();
+    const PlasmaZones::ConfigDefaults::RenderingBootConfig renderingConfig =
+        PlasmaZones::ConfigDefaults::readRenderingConfigFromDisk();
     {
-        const QString backend = PlasmaZones::ConfigDefaults::readRenderingBackendFromDisk();
-        useVulkan = PlasmaZones::probeAndSetGraphicsApi(backend);
+        useVulkan = PlasmaZones::probeAndSetGraphicsApi(renderingConfig.backend);
+        if (!useVulkan && renderingConfig.backend == QLatin1String("vulkan")) {
+            // Mirror the daemon's diagnostic: without it a silent drop to
+            // OpenGL leaves no log line even though the comment above promises
+            // previews render identically to the daemon.
+            qCCritical(PlasmaZones::lcEditor) << "Vulkan library not found — falling back to OpenGL."
+                                              << "Install vulkan-icd-loader or equivalent for your distro.";
+        }
         // Same GPU pin as the daemon so shader previews render on the same
         // device. DRI_PRIME must be exported before the app object (Mesa
         // reads it when the DRI screen opens during platform init).
-        PlasmaZones::applyOpenGlGpuPreference(gpuDevice);
+        PlasmaZones::applyOpenGlGpuPreference(renderingConfig.gpuDevice);
     }
 
     // QApplication (not QGuiApplication): the org.kde.desktop QtQuick Controls
@@ -109,19 +114,31 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
 
-    // Create and store QVulkanInstance for shader preview windows (same as daemon)
+    // Probe Vulkan usability and export the GPU pin (same checks as the
+    // daemon). Note the editor's QQuickWindows never attach this instance —
+    // no editor-side consumer reads PVulkanInstanceProperty, so Qt creates
+    // its own internal QVulkanInstance per window. The call is still wanted
+    // for its side effects: the enumerable-GPU probe (falling back to OpenGL
+    // before the API is locked in) and the QT_VK_PHYSICAL_DEVICE_INDEX
+    // export, which Qt's own instance honors at device selection.
 #if QT_CONFIG(vulkan)
     qRegisterMetaType<QVulkanInstance*>();
     if (useVulkan) {
-        if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app, gpuDevice)) {
+        if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app, renderingConfig.gpuDevice)) {
             qCCritical(PlasmaZones::lcEditor)
                 << "Vulkan unavailable (instance creation failed or no enumerable GPU) —"
                 << "falling back to OpenGL for shader preview. If a GPU driver was upgraded,"
                 << "a reboot may be needed to match the kernel module to the userspace driver.";
-            useVulkan = false;
         }
     }
 #endif
+
+    // Publish the exported/cleared GPU var lists exactly like the daemon:
+    // this process exports the same variables, and the scrub contract is
+    // keyed on these properties, so every GPU-exporting binary must publish
+    // them even while no editor-side spawn site exists today.
+    app.setProperty(PlasmaZones::PGpuExportedVarsProperty, PlasmaZones::exportedGpuPreferenceVariables());
+    app.setProperty(PlasmaZones::PGpuClearedVarsProperty, PlasmaZones::clearedGpuPreferenceVariables());
 
     // Register metatype for QVariant storage (LayerSurface stores itself
     // as a QWindow dynamic property via QVariant::fromValue).

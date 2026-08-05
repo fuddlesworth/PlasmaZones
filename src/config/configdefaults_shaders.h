@@ -5,8 +5,6 @@
 
 #include "configdefaults_limits.h"
 
-#include <QRegularExpression>
-
 namespace PlasmaZones {
 
 // Chain link 4: rendering-backend, audio-spectrum shader, decoration-shader, and
@@ -55,16 +53,10 @@ public:
 
     /// Coerce to "auto" or a well-formed vendor:device hex pair. Anything
     /// else (hand-edited garbage) falls back to "auto" so startup never acts
-    /// on a string DRI_PRIME / the Vulkan matcher can't parse.
-    static QString normalizeGpuDevice(const QString& raw)
-    {
-        const QString normalized = raw.toLower().trimmed();
-        if (normalized.isEmpty() || normalized == gpuDevice()) {
-            return gpuDevice();
-        }
-        static const QRegularExpression pciPair(QStringLiteral("^[0-9a-f]{1,4}:[0-9a-f]{1,4}$"));
-        return pciPair.match(normalized).hasMatch() ? normalized : gpuDevice();
-    }
+    /// on a string DRI_PRIME / the Vulkan matcher can't parse. Defined in
+    /// configdefaults.cpp so this widely-included header doesn't pull in
+    /// QRegularExpression for one cold-path validator.
+    PLASMAZONES_EXPORT static QString normalizeGpuDevice(const QString& raw);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Shader Settings

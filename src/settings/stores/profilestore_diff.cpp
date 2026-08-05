@@ -232,6 +232,13 @@ QVariantList ProfileStore::configChanges(const QString& id) const
         const QJsonObject group = git.value().toObject();
         const QJsonObject baseGroup = parentResolved.value(git.key()).toObject();
         for (auto kit = group.constBegin(); kit != group.constEnd(); ++kit) {
+            // Machine-scoped keys (see isMachineScopedKey in profilestore.cpp)
+            // cannot enter a delta through diffConfig, but a hand-edited
+            // profile file could carry one — activation ignores it, so a
+            // change row here would advertise an override with no effect.
+            if (git.key() == ConfigKeys::renderingGroup() && kit.key() == ConfigKeys::gpuKey()) {
+                continue;
+            }
             appendLeafRows(git.key(), kit.key(), humanizeGroupSegments(git.key()) + QStringList{humanizeKey(kit.key())},
                            QVariantList(), baseGroup.value(kit.key()), kit.value(), 0, rows);
         }

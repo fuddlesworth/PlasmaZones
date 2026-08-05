@@ -453,6 +453,12 @@ SettingsController::SettingsController(QObject* parent)
     connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {
         Q_EMIT daemonRunningChanged();
         if (m_daemonController.isRunning()) {
+            // The freshly started daemon has just read the current rendering
+            // config, so the General page's "restart required" banner must
+            // stop comparing against the values this app started with.
+            if (m_generalPage) {
+                m_generalPage->rebaselineStartupSnapshots();
+            }
             // Daemon just came online — reload all D-Bus-dependent data.
             // scheduleLayoutLoad() and ScreenHelper::refreshScreens() emit their
             // own NOTIFY (layoutsChanged / screensChanged). refreshVirtualDesktops

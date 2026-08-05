@@ -49,9 +49,15 @@ namespace {
 // A tiny fixed schema-defaults blob (stamped like Store::exportToJson).
 QJsonObject baseDefaults()
 {
+    // Rendering.Gpu mirrors the real defaultsToJson(), which emits EVERY
+    // schema-declared key: the machine-scoped strip in resolveConfig only has
+    // work to do when the defaults seed carries the key, so a defaults stub
+    // without it would leave that path unexecuted and make
+    // machineScopedKeyStaysOutOfProfiles pass even against broken code.
     return QJsonObject{
         {QStringLiteral("GroupA"), QJsonObject{{QStringLiteral("k1"), 1}, {QStringLiteral("k2"), QStringLiteral("x")}}},
         {QStringLiteral("GroupB"), QJsonObject{{QStringLiteral("b"), false}}},
+        {QStringLiteral("Rendering"), QJsonObject{{QStringLiteral("Gpu"), QStringLiteral("auto")}}},
         {QStringLiteral("_version"), 5},
     };
 }
@@ -211,6 +217,43 @@ private Q_SLOTS:
         QCOMPARE(groupAStr(m_lastApplied, QStringLiteral("k2")), QStringLiteral("x"));
         // The resolved blob carries the version marker so it round-trips through the store.
         QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), 5);
+    }
+
+    /// Rendering.Gpu names THIS machine's hardware: it must never be captured
+    /// into a profile delta, never appear in a resolved blob (so activation
+    /// cannot overwrite the live pin — an absent key is a no-op on import),
+    /// and never make the active profile read as modified.
+    void machineScopedKeyStaysOutOfProfiles()
+    {
+        m_current = baseDefaults();
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 2}, {QStringLiteral("k2"), QStringLiteral("x")}};
+        m_current[QStringLiteral("Rendering")] = QJsonObject{{QStringLiteral("Gpu"), QStringLiteral("10de:1e84")}};
+
+        const QString id = m_store->createProfile(QStringLiteral("Pinned"), QString(), QString());
+        QVERIFY(!id.isEmpty());
+
+        // Capture side: the ordinary change is stored, the hardware identity
+        // is not (and the emptied Rendering group is dropped entirely).
+        const QJsonObject delta = storedConfig(id);
+        QCOMPARE(delta.value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 2);
+        QVERIFY(!delta.contains(QStringLiteral("Rendering")));
+
+        // Resolve side: the defaults seed DOES carry Rendering.Gpu (see
+        // baseDefaults), so an unstripped resolved blob would stage
+        // Gpu="auto" over the live pin. The strip must remove it.
+
+        // Apply side: the staged blob carries no Rendering.Gpu.
+        QVERIFY(m_store->activateProfile(id));
+        QVERIFY(!m_lastApplied.value(QStringLiteral("Rendering")).toObject().contains(QStringLiteral("Gpu")));
+
+        // Modified predicate: with the live config still carrying the pin, the
+        // active profile reads clean, so re-activation short-circuits before
+        // applyConfig runs.
+        m_lastApplied = QJsonObject();
+        QVERIFY(m_store->activateProfile(id));
+        QVERIFY2(m_lastApplied.isEmpty(),
+                 "re-activation applied a blob: isActiveModified treated the machine-scoped pin as a modification");
     }
 
     /// Three-level chain: each node stores its delta against its parent, and

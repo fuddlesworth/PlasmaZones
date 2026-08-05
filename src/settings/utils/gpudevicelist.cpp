@@ -3,8 +3,13 @@
 
 #include "gpudevicelist.h"
 
+#include "core/platform/logging.h"
+#include "phosphor_i18n.h"
+
 #include <QDir>
 #include <QFile>
+#include <QHash>
+#include <QPair>
 #include <QSet>
 #include <QVariantMap>
 
@@ -46,14 +51,29 @@ QString vendorFallbackName(const QString& vendorId)
     return QString();
 }
 
-/// Look up "vendorId:deviceId" in the hwdata pci.ids database. The format is
-/// line-oriented: a vendor line is "<4 hex>  <name>" at column 0, its device
-/// lines follow as "\t<4 hex>  <name>" until the next vendor line. Returns
-/// the device name (preferred) or the vendor name, or empty when the
-/// database is absent or has no match.
-QString pciIdsLookup(const QString& vendorId, const QString& deviceId, bool& deviceMatched)
+struct PciName
 {
-    deviceMatched = false;
+    QString name; ///< Device name when deviceMatched, else the vendor name (or empty).
+    bool deviceMatched = false;
+};
+
+/// Resolve every wanted "vendor:device" pair against the hwdata pci.ids
+/// database in a SINGLE pass. The format is line-oriented: a vendor line is
+/// "<4 hex>  <name>" at column 0, its device lines follow as
+/// "\t<4 hex>  <name>" until the next vendor line. One pass for all pairs —
+/// the database is ~1.5 MB and re-scanning it per GPU was the dominant cost
+/// of building this list.
+QHash<QString, PciName> pciIdsLookupAll(const QList<QPair<QString, QString>>& wanted)
+{
+    QHash<QString, PciName> results;
+    if (wanted.isEmpty()) {
+        return results;
+    }
+    QSet<QString> wantedVendors;
+    for (const auto& pair : wanted) {
+        wantedVendors.insert(pair.first);
+    }
+
     static const QStringList dbPaths = {
         QStringLiteral("/usr/share/hwdata/pci.ids"),
         QStringLiteral("/usr/share/misc/pci.ids"),
@@ -64,43 +84,85 @@ QString pciIdsLookup(const QString& vendorId, const QString& deviceId, bool& dev
         if (!db.open(QIODevice::ReadOnly | QIODevice::Text)) {
             continue;
         }
-        QString vendorName;
-        bool inVendor = false;
+        QString currentVendorId;
+        QString currentVendorName;
         while (!db.atEnd()) {
             const QByteArray raw = db.readLine();
-            if (raw.startsWith('#') || raw.trimmed().isEmpty()) {
+            // Cheap skip without allocating a trimmed copy: comments and
+            // blank lines start with '#', '\n' or '\r'.
+            if (raw.isEmpty() || raw.at(0) == '#' || raw.at(0) == '\n' || raw.at(0) == '\r') {
                 continue;
             }
-            if (!raw.startsWith('\t')) {
-                // Vendor line — entering or leaving the block we care about.
-                if (inVendor) {
-                    break; // Left the vendor block without a device match.
-                }
+            if (raw.at(0) != '\t') {
+                // Vendor line. Only decode it when its 4-hex id is wanted.
                 const QString line = QString::fromLatin1(raw).trimmed();
-                if (line.startsWith(vendorId + QLatin1String("  "), Qt::CaseInsensitive)) {
-                    inVendor = true;
-                    vendorName = line.mid(vendorId.size()).trimmed();
+                currentVendorId.clear();
+                currentVendorName.clear();
+                for (const QString& vendorId : wantedVendors) {
+                    if (line.startsWith(vendorId + QLatin1String("  "), Qt::CaseInsensitive)) {
+                        currentVendorId = vendorId;
+                        currentVendorName = line.mid(vendorId.size()).trimmed();
+                        break;
+                    }
                 }
-            } else if (inVendor && !raw.startsWith("\t\t")) {
+                if (!currentVendorId.isEmpty()) {
+                    // Seed the vendor-name fallback for every wanted pair of
+                    // this vendor; a later device-line match overwrites it.
+                    // Done once here on the vendor line, not per device line.
+                    for (const auto& pair : wanted) {
+                        if (pair.first != currentVendorId) {
+                            continue;
+                        }
+                        PciName& entry = results[pair.first + QLatin1Char(':') + pair.second];
+                        if (!entry.deviceMatched && entry.name.isEmpty()) {
+                            entry.name = currentVendorName;
+                        }
+                    }
+                }
+            } else if (!currentVendorId.isEmpty() && !raw.startsWith("\t\t")) {
                 const QString line = QString::fromLatin1(raw).trimmed();
-                if (line.startsWith(deviceId + QLatin1String("  "), Qt::CaseInsensitive)) {
-                    deviceMatched = true;
-                    return line.mid(deviceId.size()).trimmed();
+                for (const auto& pair : wanted) {
+                    if (pair.first != currentVendorId) {
+                        continue;
+                    }
+                    if (line.startsWith(pair.second + QLatin1String("  "), Qt::CaseInsensitive)) {
+                        PciName& entry = results[pair.first + QLatin1Char(':') + pair.second];
+                        entry.name = line.mid(pair.second.size()).trimmed();
+                        entry.deviceMatched = true;
+                    }
                 }
             }
         }
-        if (!vendorName.isEmpty()) {
-            return vendorName;
+        // Try the next database path only when this one resolved nothing at
+        // all. Deliberately all-or-nothing across pairs: a machine with two
+        // databases of differing completeness keeps the first one's answers
+        // rather than mixing sources per pair.
+        bool anyResolved = false;
+        for (const PciName& entry : results) {
+            if (!entry.name.isEmpty()) {
+                anyResolved = true;
+                break;
+            }
         }
+        if (anyResolved) {
+            break;
+        }
+        results.clear();
     }
-    return QString();
+    return results;
 }
 
 } // namespace
 
 QVariantList enumerate()
 {
-    QVariantList result;
+    struct Node
+    {
+        QString vendorId;
+        QString deviceId;
+        QString pair;
+    };
+    QList<Node> gpus;
     QSet<QString> seen;
 
     const QDir drm(QStringLiteral("/sys/class/drm"));
@@ -111,6 +173,11 @@ QVariantList enumerate()
         const QString vendorId = readSysfsHex(deviceDir + QStringLiteral("/vendor"));
         const QString deviceId = readSysfsHex(deviceDir + QStringLiteral("/device"));
         if (vendorId.isEmpty() || deviceId.isEmpty()) {
+            // Non-PCI GPU or unreadable attributes — the device cannot be
+            // expressed as a vendor:device pin, so it is unpickable. Log it
+            // so the omission is diagnosable from a log rather than by
+            // reading sysfs by hand.
+            qCDebug(lcCore) << "GpuDeviceList: skipping" << node << "— no readable PCI vendor/device attributes";
             continue;
         }
         const QString pair = vendorId + QLatin1Char(':') + deviceId;
@@ -118,37 +185,58 @@ QVariantList enumerate()
             continue;
         }
         seen.insert(pair);
+        gpus.append(Node{vendorId, deviceId, pair});
+    }
 
-        bool deviceMatched = false;
-        QString name = pciIdsLookup(vendorId, deviceId, deviceMatched);
-        // pci.ids names read like "TU104 [GeForce RTX 2080 Rev. A]" — the
-        // chip code first, the marketing name users actually recognize in
-        // brackets. Show the bracketed part, prefixed with the vendor when
-        // the name doesn't already carry it.
-        const qsizetype b1 = name.indexOf(QLatin1Char('['));
-        const qsizetype b2 = name.lastIndexOf(QLatin1Char(']'));
-        if (b1 >= 0 && b2 > b1) {
-            name = name.mid(b1 + 1, b2 - b1 - 1).trimmed();
+    QList<QPair<QString, QString>> wanted;
+    wanted.reserve(gpus.size());
+    for (const Node& gpu : gpus) {
+        wanted.append({gpu.vendorId, gpu.deviceId});
+    }
+    const QHash<QString, PciName> names = pciIdsLookupAll(wanted);
+
+    QVariantList result;
+    for (const Node& gpu : gpus) {
+        const PciName resolved = names.value(gpu.pair);
+        QString name = resolved.name;
+        const QString vendorLabel = vendorFallbackName(gpu.vendorId);
+        if (resolved.deviceMatched) {
+            // pci.ids DEVICE names read like "TU104 [GeForce RTX 2080 Rev. A]"
+            // — the chip code first, the marketing name users actually
+            // recognize in brackets. Show the bracketed part, prefixed with
+            // the vendor when the name doesn't already carry it. Vendor names
+            // keep their own bracket suffix ("... [AMD/ATI]") untouched: the
+            // transform is for device names only.
+            const qsizetype b1 = name.indexOf(QLatin1Char('['));
+            const qsizetype b2 = name.lastIndexOf(QLatin1Char(']'));
+            if (b1 >= 0 && b2 > b1) {
+                name = name.mid(b1 + 1, b2 - b1 - 1).trimmed();
+            }
+            if (!vendorLabel.isEmpty() && !name.contains(vendorLabel, Qt::CaseInsensitive)) {
+                name = vendorLabel + QLatin1Char(' ') + name;
+            }
+        } else if (!vendorLabel.isEmpty()) {
+            // Prefer the curated short label ("AMD") over the database's
+            // long vendor string ("Advanced Micro Devices, Inc. [AMD/ATI]").
+            name = vendorLabel;
         }
-        const QString vendorLabel = vendorFallbackName(vendorId);
-        if (deviceMatched && !vendorLabel.isEmpty() && !name.contains(vendorLabel, Qt::CaseInsensitive)) {
-            name = vendorLabel + QLatin1Char(' ') + name;
-        }
-        // Hardware names are not translatable strings, so plain formatting is
-        // fine here. The raw PCI pair only appears when the device name is
-        // unknown: a bare vendor label could otherwise repeat for two
-        // different unidentified cards, and the pair keeps them apart.
+        // Hardware names are not translatable strings, so plain formatting
+        // covers the named cases. The raw PCI pair only appears when the
+        // device name is unknown: a bare vendor label could otherwise repeat
+        // for two different unidentified cards, and the pair keeps them
+        // apart. The last-resort label leads with a translated "GPU" — the
+        // one English word in these labels.
         QString text;
-        if (deviceMatched && !name.isEmpty()) {
+        if (resolved.deviceMatched && !name.isEmpty()) {
             text = name;
-        } else if (!name.isEmpty() || !vendorLabel.isEmpty()) {
-            text = QStringLiteral("%1 (%2)").arg(name.isEmpty() ? vendorLabel : name, pair);
+        } else if (!name.isEmpty()) {
+            text = QStringLiteral("%1 (%2)").arg(name, gpu.pair);
         } else {
-            text = QStringLiteral("GPU %1").arg(pair);
+            text = PhosphorI18n::tr("GPU %1").arg(gpu.pair);
         }
         QVariantMap entry;
         entry.insert(QStringLiteral("text"), text);
-        entry.insert(QStringLiteral("value"), pair);
+        entry.insert(QStringLiteral("value"), gpu.pair);
         result.append(entry);
     }
     return result;
