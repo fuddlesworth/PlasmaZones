@@ -47,6 +47,29 @@ namespace TilingStateHelpers {
 // Border state accessors (pure data queries)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * @brief The screen a tiled window is tracked on, or empty if it is not tiled.
+ *
+ * Membership and screen come from the SAME entry here, so they cannot
+ * disagree. That matters wherever a consumer needs both facts: the sibling
+ * per-window screen map is written under a narrower condition than
+ * tiled-membership is, so a window can be a tiled member that map has no entry
+ * for, and a consumer requiring both then silently gets "unknown".
+ */
+inline QString screenForTiledWindow(const BorderState& border, const QString& windowId)
+{
+    for (auto it = border.tiledWindowsByScreen.constBegin(); it != border.tiledWindowsByScreen.constEnd(); ++it) {
+        if (it.value().contains(windowId)) {
+            return it.key();
+        }
+    }
+    return QString();
+}
+
+// Deliberately its OWN loop rather than screenForTiledWindow(...).isEmpty():
+// membership must stay a pure "is it in any bucket" test. Routing it through
+// the screen lookup would make a window held under an empty screen key read as
+// untiled, and this predicate has far more callers than that refactor is worth.
 inline bool isTiledWindow(const BorderState& border, const QString& windowId)
 {
     for (auto it = border.tiledWindowsByScreen.constBegin(); it != border.tiledWindowsByScreen.constEnd(); ++it) {

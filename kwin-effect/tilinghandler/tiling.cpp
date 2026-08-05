@@ -144,6 +144,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         bool isMonocle = false;
         QString screenId; ///< daemon's TARGET screen for this window (req.screenId)
         QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
+        QString scrollEdge; ///< scrolling strip: screen edge to animate from ("left"/"right"), else empty
     };
     QVector<Entry> entries;
 
@@ -216,6 +217,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         entry.isMonocle = req.monocle;
         entry.screenId = req.screenId;
         entry.stacking = req.stacking;
+        entry.scrollEdge = req.scrollEdge;
         if (candidates.size() > 1) {
             entry.candidates = candidates;
         }
@@ -275,6 +277,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString screenId;
         bool isMonocle = false;
         QString stacking;
+        QString scrollEdge;
     };
     QVector<TileSnap> toApply;
     for (Entry& e : entries) {
@@ -298,8 +301,58 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // re-tiled). req.screenId is the screen the daemon tiled the window on,
         // and TileRequestEntry::validationError() rejects an empty screenId
         // before it ever reaches `entries`, so it is always present here.
-        toApply.append(
-            {QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle, e.stacking});
+        toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
+                        e.stacking, e.scrollEdge});
+    }
+
+    // Cascade order follows the direction of travel for a scrolling strip.
+    //
+    // applyStaggeredOrImmediate below delays entry i by i * interval, so the
+    // ORDER of toApply is the order the user watches windows move in. The
+    // batch arrives in strip order (left to right) whichever way the strip
+    // scrolled, so the cascade ran left-to-right both ways and the two
+    // directions did not mirror each other — scrolling one way looked like it
+    // led with the near edge, the other like it led with the far one.
+    //
+    // Sort on where each window is SEEN, not on its committed rect: an
+    // arriving column's target is its on-screen rect, but a leaving column's
+    // target is the park, which is far off-screen on whichever side was safe
+    // and would sort it to an extreme unrelated to the motion the user
+    // watches. A leaving column is keyed on where it currently sits instead,
+    // which is the start of its exit slide.
+    const bool isScrollBatch = std::any_of(toApply.cbegin(), toApply.cend(), [](const TileSnap& s) {
+        return !s.scrollEdge.isEmpty();
+    });
+    if (isScrollBatch) {
+        QHash<QString, QRect> screenRectCache;
+        const auto visibleX = [&](const TileSnap& s) {
+            auto it = screenRectCache.find(s.screenId);
+            if (it == screenRectCache.end()) {
+                QRect outRect;
+                if (const KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
+                    const KWin::Rect g = out->geometry();
+                    outRect = QRect(g.x(), g.y(), g.width(), g.height());
+                }
+                it = screenRectCache.insert(s.screenId, outRect);
+            }
+            const bool arriving = !it->isValid() || it->intersects(s.geometry);
+            if (arriving || !s.window) {
+                return s.geometry.x();
+            }
+            return qRound(s.window->frameGeometry().x());
+        };
+        // Net travel across the batch decides which end leads. Measured on the
+        // same visible-position basis, against where each window is now.
+        qint64 netDx = 0;
+        for (const TileSnap& s : toApply) {
+            if (s.window) {
+                netDx += visibleX(s) - qRound(s.window->frameGeometry().x());
+            }
+        }
+        const bool movingRight = netDx > 0;
+        std::stable_sort(toApply.begin(), toApply.end(), [&](const TileSnap& a, const TileSnap& b) {
+            return movingRight ? visibleX(a) > visibleX(b) : visibleX(a) < visibleX(b);
+        });
     }
 
     // A TILE window the daemon asked us to tile that we could not resolve to a
@@ -755,7 +808,59 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 
                 if (!skipMoveResize) {
                     m_centeredWaylandZones.remove(snap.windowId);
-                    m_effect->applyWindowGeometry(snap.window, geo);
+                    // Scrolling strip: scrollEdge names the screen edge this
+                    // column's motion belongs to. It is NOT recoverable from
+                    // the geometry — parking picks a side clear of adjacent
+                    // outputs, which on a multi-monitor layout is routinely
+                    // the opposite side from the one the user scrolled.
+                    //
+                    // Two cases, and they need opposite treatment:
+                    //  - ARRIVING (target is on the window's own screen): the
+                    //    window was parked somewhere unrelated, so animate it
+                    //    in from just outside the named edge. This is the
+                    //    origin parking used to supply implicitly, back when
+                    //    position and direction were the same number.
+                    //  - LEAVING (target is a park, off the screen): the window
+                    //    must be seen sliding OUT past the named edge, but its
+                    //    committed rect is the park, which is routinely on the
+                    //    far side. Animating to the park directly would sweep
+                    //    it backwards across the whole screen to exit by the
+                    //    wrong edge. So the animation ends just past the named
+                    //    edge while the commit still goes to the park. Both
+                    //    are off-screen, so the step between them when the
+                    //    animation finishes is never visible.
+                    QRectF originOverride;
+                    QRectF visualTargetOverride;
+                    if (!snap.scrollEdge.isEmpty()) {
+                        if (const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId)) {
+                            const QRect screenRect = out->geometry();
+                            const bool arriving = screenRect.intersects(geo);
+                            // Arriving: start from the target's own row and
+                            // size. Leaving: keep the rect the window occupies
+                            // right now, so it slides out as itself rather
+                            // than jumping to the park's row first.
+                            QRect atEdge = geo;
+                            if (!arriving) {
+                                const KWin::RectF cur = snap.window->frameGeometry();
+                                atEdge =
+                                    QRect(qRound(cur.x()), qRound(cur.y()), qRound(cur.width()), qRound(cur.height()));
+                            }
+                            if (snap.scrollEdge == QLatin1String("left")) {
+                                atEdge.moveLeft(screenRect.left() - atEdge.width());
+                            } else {
+                                atEdge.moveLeft(screenRect.right() + 1);
+                            }
+                            if (arriving) {
+                                originOverride = QRectF(atEdge);
+                            } else {
+                                visualTargetOverride = QRectF(atEdge);
+                            }
+                        }
+                    }
+                    m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false,
+                                                  /*skipAnimation=*/false,
+                                                  PhosphorAnimation::ProfilePaths::WindowSnapIn, originOverride,
+                                                  visualTargetOverride);
                 }
             }
 

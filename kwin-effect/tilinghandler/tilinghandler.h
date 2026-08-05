@@ -253,6 +253,9 @@ public:
     /// the daemon's scrollingScreensChanged lags, and until it lands every
     /// id-keyed consumer would keep resolving to the dead output.
     QString scrollTrackedScreenFor(const QString& windowId) const;
+    /// Announce, once per window per episode, that the scroll clip predicate
+    /// could not answer and which gate stopped it.
+    void reportScrollClipLoss(const QString& windowId, const QString& reason) const;
 
     /// Cheap gate for callers that want to skip scroll-specific work in a
     /// session with no scrolling screens at all.
@@ -591,6 +594,16 @@ private:
     /// (see isScrollingScreen); all lifecycle gating keys on
     /// m_managedScreens, which carries the union.
     QSet<QString> m_scrollingScreens;
+    /// Windows already reported as having lost their scroll clip. Every exit
+    /// from scrollTrackedScreenFor fails OPEN at both consumers (the paint
+    /// clip and the overhang input filter read an invalid rect as "not a
+    /// straddler"), so a silent failure looks exactly like "suppression was
+    /// never needed". The report names which gate went, and this set keeps it
+    /// to once per window per episode — the predicate runs per window, per
+    /// output, per frame, so an unthrottled report would flood the journal and
+    /// slow down the very thing being measured. Cleared when the window's
+    /// answer comes back, so a later failure reports again.
+    mutable QSet<QString> m_scrollClipLossReported;
     /// Authoritative write for the scrolling discriminator. A screen that
     /// flips engine WITHIN the managed union transits no managedScreensChanged,
     /// so this re-announces the flipped screens' windows to hand them to the

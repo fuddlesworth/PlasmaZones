@@ -165,6 +165,7 @@ public:
     // hooks; effects now self-source time (our CompositorClock samples
     // std::chrono::steady_clock, matching KWin's own AnimationEffect clock).
     void prePaintScreen(KWin::ScreenPrePaintData& data) override;
+    bool blocksDirectScanout() const override;
     void postPaintScreen() override;
     void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data) override;
     // Per-window borders are rendered by routing the redirected window through
@@ -716,6 +717,10 @@ private:
      * both sub-screens render in the same output pass, so a same-monitor
      * overhang is drawn and remains interactive either way.
      */
+    /// The output a scroll-strip window is managed by, or nullptr when the
+    /// window is not a strip column (or is exempt: user move/resize, floating).
+    /// The paint path compares this against the output currently being painted.
+    KWin::LogicalOutput* scrollManagedOutputFor(KWin::EffectWindow* w) const;
     QRect scrollClipGeometryFor(KWin::EffectWindow* w) const;
     TilingHandler* tilingHandler() const
     {
@@ -750,9 +755,31 @@ private:
     // motion that flowed through this chokepoint — snap-in, snap-out, resnap, resize, restore, etc.
     // Callers now pass the logical event path so the shader tree can route each one independently.
     // Default is WindowSnapIn (the kwin-effect's default snap-into-zone window animation).
+    //
+    // originOverride replaces the window's CURRENT frame as the animation's
+    // departure rect. Normally the two are the same — a window animates from
+    // where it is. The scrolling strip is the exception: its off-viewport
+    // columns are parked wherever is safe (never on a neighbouring output),
+    // which is not necessarily the edge the user scrolled them off, so the
+    // park rect is the wrong place to animate from. The engine sends the
+    // intended edge as TileRequestEntry::scrollEdge and the caller turns it
+    // into this rect. Invalid (the default) keeps the current-frame
+    // behaviour.
+    //
+    // visualTargetOverride is the mirror, for motion that must LOOK like it
+    // ends somewhere other than where the window is committed. The window
+    // still moveResizes to `geometry`; only the animation (and its shader
+    // morph) travels to this rect instead. The scrolling strip uses it for a
+    // column leaving the viewport: it has to be seen sliding out by the edge
+    // the user scrolled toward, while its committed rect is the park, which
+    // is chosen for safety and may be on the far side. Both rects are
+    // off-screen, so the jump between them at the end of the animation is
+    // never visible. Do NOT use this to end an animation somewhere on screen —
+    // the window would visibly snap at the end.
     void applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
                              bool skipAnimation = false,
-                             const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn);
+                             const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn,
+                             const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF());
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
@@ -1777,6 +1804,18 @@ private:
     // guaranteed by destruction order (animator declared after).
     std::unique_ptr<CompositorClock> m_motionClockFallback;
     std::unordered_map<KWin::LogicalOutput*, std::unique_ptr<CompositorClock>> m_motionClocksByOutput;
+    /// The output whose pass is currently executing, latched in prePaintScreen
+    /// and cleared in postPaintScreen. The scroll-strip overhang suppression
+    /// compares against this by IDENTITY rather than testing the pass viewport
+    /// against the managed output's rect: the rect test silently assumes
+    /// renderRect() is expressed in global logical coordinates, and if any pass
+    /// builds it output-local instead, the neighbouring output's viewport reads
+    /// as (0,0,w,h), overlaps the managed output's rect, and the cull never
+    /// fires. Comparing pointers cannot be wrong about which output is being
+    /// painted. Null outside an output pass (offscreen captures), where the
+    /// suppression must not engage at all.
+    KWin::LogicalOutput* m_currentPassOutput = nullptr;
+    /// Sample counter for the scroll-cull diagnostic. Diagnostic-only.
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
     void onScreenAdded(KWin::LogicalOutput* output);
     void onScreenRemoved(KWin::LogicalOutput* output);
@@ -2209,6 +2248,12 @@ private:
     // ms between each window start when cascading. Canonical constant for the
     // reason the member above now gives; it was 30 against a shipped 40.
     int m_cachedAnimationStaggerInterval = PhosphorAnimation::Limits::DefaultAnimationStaggerIntervalMs;
+    /// Mirror of the scrollingCropStraddlers setting. While true and any
+    /// scrolling screen exists, blocksDirectScanout() answers true so the
+    /// per-output cull is guaranteed to run for straddler overhangs (a
+    /// surface presented on a hardware plane bypasses the effect chain and
+    /// with it the crop).
+    bool m_cachedScrollCropStraddlers = false;
 
     // Per-drag activation / float tracking. Fields + rationale in effect_state.h
     // (DragActivationState).

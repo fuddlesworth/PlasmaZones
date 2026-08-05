@@ -772,6 +772,13 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_tilingHandler->setFocusFollowsMouse(v.toBool());
     });
 
+    loadSettingAsync(QStringLiteral("scrollingCropStraddlers"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        m_cachedScrollCropStraddlers = v.toBool();
+    });
+
     loadSettingAsync(QStringLiteral("scrollingFocusFollowsMouse"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;

@@ -148,7 +148,8 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
 }
 
 void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
-                                            bool skipAnimation, const QString& profilePath)
+                                            bool skipAnimation, const QString& profilePath,
+                                            const QRectF& originOverride, const QRectF& visualTargetOverride)
 {
     if (!window) {
         qCWarning(lcEffect) << "applyGeometry: window is null";
@@ -239,8 +240,15 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // the autotile path, which already logs "Autotile tile request: QRect=".
     qCInfo(lcEffect) << "Setting window geometry from" << window->frameGeometry() << "to" << geo;
 
-    // Capture old frame before moveResize for repaint region
-    const QRectF oldFrame = window->frameGeometry();
+    // Capture old frame before moveResize for repaint region.
+    const QRectF trueOldFrame = window->frameGeometry();
+    // The animation's departure rect. Identical to the true frame except for a
+    // scrolling strip tile, whose parked position is chosen for safety and so
+    // says nothing about which edge it should appear to come from — see the
+    // originOverride contract on the declaration. Only the ANIMATION uses
+    // this; the repaint region below must keep the true frame, or the pixels
+    // the window actually vacated never get repainted.
+    const QRectF oldFrame = originOverride.isValid() ? originOverride : trueOldFrame;
 
     // In KWin 6, we use the window's moveResize methods
     // When allowDuringDrag is false: defer if window is in user move/resize (snap on release)
@@ -317,6 +325,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     if (!skipAnimation && !allowDuringDrag && !openAnimationInFlight && m_windowAnimator->isEnabled()
         && shouldAnimateWindow(window, &sharedQuery)) {
         const QRectF targetFrame(geo);
+        // Where the window is COMMITTED (targetFrame) versus where the motion
+        // is seen to END (animTarget). Identical unless the caller split them
+        // — see visualTargetOverride on the declaration. Everything the
+        // animator and the shader morph touch below uses animTarget; only the
+        // moveResize uses targetFrame.
+        const QRectF animTarget = visualTargetOverride.isValid() ? visualTargetOverride : targetFrame;
 
         // Bail before any work when the in-flight animation already
         // targets this frame — saves both the moveResize signal
@@ -325,7 +339,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // here (kwin's moveResize is internally a no-op when geometry
         // already matches, but still pays signal-dispatch cost on the
         // hot path of rapid drag retargets).
-        if (m_windowAnimator->hasAnimation(window) && m_windowAnimator->isAnimatingToTarget(window, targetFrame)) {
+        if (m_windowAnimator->hasAnimation(window) && m_windowAnimator->isAnimatingToTarget(window, animTarget)) {
             return; // Already animating to this target
         }
 
@@ -403,7 +417,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             const QRectF displacedTarget = m_windowAnimator->animationFor(window)->to();
             const QRectF visualPos = m_windowAnimator->currentValue(window, QRectF(oldFrame));
             const auto result = m_windowAnimator->retargetWithResult(
-                window, targetFrame, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
+                window, animTarget, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
             morphAnchor = visualPos;
             if (result == PhosphorAnimation::RetargetResult::DegenerateReap) {
                 // Retarget collapsed (current visual ≈ new target). The reap
@@ -418,12 +432,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // as the reap/replace paths in WindowAnimator. morphAnchor is
                 // still set so that, when a replacement DOES play, its iFromRect
                 // matches the animator's re-anchored departure point.
-                const QRectF animFrom = (displacedTarget != targetFrame) ? displacedTarget : visualPos;
-                m_windowAnimator->startAnimation(window, animFrom, targetFrame, motionOverridePtr);
+                const QRectF animFrom = (displacedTarget != animTarget) ? displacedTarget : visualPos;
+                m_windowAnimator->startAnimation(window, animFrom, animTarget, motionOverridePtr);
                 morphAnchor = animFrom;
             }
         } else {
-            m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame, motionOverridePtr);
+            m_windowAnimator->startAnimation(window, QRectF(oldFrame), animTarget, motionOverridePtr);
         }
 
         if (m_windowAnimator->hasAnimation(window)) {
@@ -537,7 +551,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                     if (mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
                         endShaderTransition(window);
                     }
-                    repaintSnapRegions(window, oldFrame, geo);
+                    repaintSnapRegions(window, trueOldFrame, geo);
                     return;
                 }
                 // If the installed shader is a geometry morph (declares
@@ -551,7 +565,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // the morph's progress timeline.
                 if (mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
                     // Always retarget the morph to the new destination.
-                    mt->toGeometry = targetFrame;
+                    mt->toGeometry = animTarget;
                     // On a RETARGET mid-morph, beginShaderTransition short-
                     // circuits (same shader) and keeps the existing transition,
                     // so its captured snapshot already holds the ORIGINAL old
@@ -605,7 +619,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             }
         }
 
-        repaintSnapRegions(window, oldFrame, geo);
+        repaintSnapRegions(window, trueOldFrame, geo);
         return;
     }
 
@@ -628,7 +642,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         qCDebug(lcEffect) << "moveResize: QRect=" << geo << "-> QRectF=" << QRectF(geo);
         kwinWindow->moveResize(QRectF(geo));
 
-        repaintSnapRegions(window, oldFrame, geo);
+        repaintSnapRegions(window, trueOldFrame, geo);
     } else {
         qCWarning(lcEffect) << "Cannot get underlying Window from EffectWindow";
     }

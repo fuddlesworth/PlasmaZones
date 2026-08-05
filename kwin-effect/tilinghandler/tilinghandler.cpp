@@ -31,6 +31,7 @@
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+Q_DECLARE_LOGGING_CATEGORY(lcEffectDiag)
 
 TilingHandler::TilingHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
@@ -226,9 +227,55 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
 // Integration points
 // ═══════════════════════════════════════════════════════════════════════════════
 
+void TilingHandler::reportScrollClipLoss(const QString& windowId, const QString& reason) const
+{
+    // Warning-level and on the diag category, so it shows with no logging rule
+    // set: this condition is always a defect, never routine. Deduplicated per
+    // window (see m_scrollClipLossReported) because the caller runs per frame.
+    if (m_scrollClipLossReported.contains(windowId)) {
+        return;
+    }
+    m_scrollClipLossReported.insert(windowId);
+    qCWarning(lcEffectDiag) << "scrollClip LOST for" << windowId << "-" << reason;
+}
+
 QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
 {
-    const QString tracked = m_notifiedWindowScreens.value(windowId);
+    // Membership FIRST, and it supplies the screen. The two facts used to come
+    // from different maps written under different conditions: the apply loop
+    // marks a window tiled unconditionally but only records its screen when
+    // the window is in m_notifiedWindows, so a window demoted or rolled back
+    // between the two ends up a tiled member with no recorded screen. This
+    // function needs both, so it answered "unknown" — which is fail-open for
+    // every caller: the paint clip and the input filter treat an invalid rect
+    // as "not a straddler", so a centred column's overhang rendered on, and
+    // took clicks on, the neighbouring output.
+    const QString tiledScreen = TilingStateHelpers::screenForTiledWindow(m_border, windowId);
+    if (tiledScreen.isEmpty()) {
+        reportScrollClipLoss(windowId, QStringLiteral("not a tiled member of any screen"));
+        return QString();
+    }
+    // Both maps get a say, and the one that names an actual scrolling screen
+    // wins. Neither is trustworthy enough alone:
+    //   - tiledWindowsByScreen carries the daemon's authoritative screenId and
+    //     nothing positional ever writes it, but it is a per-screen bucket set
+    //     and a window can be left in a stale bucket; the lookup returns the
+    //     first match in unspecified hash order, so a stale entry can shadow
+    //     the live one.
+    //   - m_notifiedWindowScreens is a single value per window so it cannot be
+    //     ambiguous, but three of its five writers store a POSITION-derived
+    //     screen (the outputChanged frame-centre resolve, the virtual-screen
+    //     re-resolve). A centred column straddling the screen edge can have
+    //     its centre on the neighbouring output, so those can stamp a screen
+    //     that runs no strip at all.
+    // Taking whichever answer survives the scrolling-set test uses each map's
+    // strength: a stale bucket or a positional stamp names a screen that is
+    // not scrolling and is simply skipped, and both have to be wrong at once
+    // for the predicate to fail. That matters because failing here fails OPEN
+    // — the paint clip and the input filter both read an invalid rect as "not
+    // a straddler", so a wrong answer does not merely mislocate the overhang,
+    // it stops suppressing it at all.
+    //
     // The RAW set, deliberately, NOT the isScrollingScreen intersection. Both
     // consumers want the conservative answer: the paint clip / input filter,
     // and getWindowScreenId's engine-authoritative screen override (a parked
@@ -236,17 +283,31 @@ QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
     // the scrolling set arrive on independent signals, so intersecting made a
     // screen leaving scrolling lose clip AND override together for the frames
     // between them. The intersection belongs on the rule and verb consumers.
-    if (tracked.isEmpty() || !m_scrollingScreens.contains(tracked)) {
-        return QString();
-    }
-    if (!TilingStateHelpers::isTiledWindow(m_border, windowId)) {
+    QString tracked;
+    if (m_scrollingScreens.contains(tiledScreen)) {
+        tracked = tiledScreen;
+    } else if (const QString recorded = m_notifiedWindowScreens.value(windowId);
+               m_scrollingScreens.contains(recorded)) {
+        tracked = recorded;
+    } else {
+        reportScrollClipLoss(windowId,
+                             QStringLiteral("no scrolling screen: bucket=%1 recorded=%2 scrollingSet=%3")
+                                 .arg(tiledScreen, m_notifiedWindowScreens.value(windowId),
+                                      QStringList(m_scrollingScreens.values()).join(QLatin1Char(','))));
         return QString();
     }
     // Connected-output gate (see the header doc): cached set lookup, so the
     // per-candidate calls inside the focus-follows-mouse stacking walks pay
     // a hash probe instead of an O(outputs) id-building scan.
     const QString trackedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(tracked);
-    return m_effect->connectedPhysicalIds().contains(trackedPhysical) ? tracked : QString();
+    if (!m_effect->connectedPhysicalIds().contains(trackedPhysical)) {
+        reportScrollClipLoss(windowId, QStringLiteral("tracked screen %1 has no connected output").arg(tracked));
+        return QString();
+    }
+    // Answered. Re-arm the report so a LATER loss for this window is announced
+    // rather than swallowed as already-seen.
+    m_scrollClipLossReported.remove(windowId);
+    return tracked;
 }
 
 bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating)
