@@ -397,11 +397,20 @@ public:
     /// `primary` = column index; `newSlot` true opens a NEW column at
     /// `primary`; otherwise the window joins column `primary` as tile
     /// `secondary` (a MODEL-column tile index — minimized tiles count).
-    /// The dragged window is DETACHED while a preview is live, so the strip
-    /// hit-tested here is stable across ticks and no own-slot special case
-    /// exists (nothing the cursor hovers can be the dragged window). While
-    /// a preview is live for @p screenId the hit-test resolves against the
-    /// preview's captured context key, not the screen's current one.
+    /// Zone map, symmetric by construction: a visible column's SIDE bands
+    /// open a new column at that column's own spot (it steps aside and the
+    /// indicator covers it), its middle joins it, and each inter-column
+    /// boundary belongs to exactly one band — the right neighbour's left
+    /// band. Only the view's two extremes differ: the first visible
+    /// column's left band (plus everything left of it) aims the leading
+    /// slot as a past-the-edge hint (`leadingEdge`), and the last visible
+    /// column's right band (plus everything right of it) appends after the
+    /// strip. The dragged window is DETACHED while a preview is live, so
+    /// the strip hit-tested here is stable across ticks and no own-slot
+    /// special case exists (nothing the cursor hovers can be the dragged
+    /// window). While a preview is live for @p screenId the hit-test
+    /// resolves against the preview's captured context key, not the
+    /// screen's current one.
     DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
     void updateDragInsertPreview(const DragInsertTarget& target) override;
     /// The rect the dragged window would occupy if it were dropped at the

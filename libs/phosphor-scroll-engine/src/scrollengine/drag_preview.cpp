@@ -518,33 +518,51 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     // needed (nothing the cursor hovers can be the dragged window).
     const ResolvedStrip resolved = state->strip().relayout(params);
 
-    const ResolvedColumn* lastVisible = nullptr;
+    // Visible columns gathered up front: the band mapping below needs to
+    // know whether a column is the first or last visible one, which a
+    // single streaming pass cannot answer at the column being tested.
+    QVector<const ResolvedColumn*> visibleColumns;
     for (const ResolvedColumn& column : resolved.columns) {
-        if (!column.rect.intersects(params.workArea)) {
-            continue;
+        if (column.rect.intersects(params.workArea)) {
+            visibleColumns.append(&column);
         }
-        lastVisible = &column;
+    }
+    const ResolvedColumn* lastVisible = visibleColumns.isEmpty() ? nullptr : visibleColumns.constLast();
+    for (int vi = 0; vi < visibleColumns.size(); ++vi) {
+        const ResolvedColumn& column = *visibleColumns.at(vi);
+        const bool isFirstVisible = vi == 0;
+        const bool isLastVisible = vi == visibleColumns.size() - 1;
         // Cursor left of this visible column's span: the gap before it (or
-        // the strip's visible left edge) → a new column at its index.
+        // the strip's visible left edge) → a new column at its index. From
+        // the leading edge that is "insert left of everything I can see",
+        // rendered as a past-the-edge hint.
         if (cursorPos.x() < column.rect.left()) {
             target.primary = column.columnIndex;
             target.newSlot = true;
+            target.leadingEdge = isFirstVisible;
             return target;
         }
         if (cursorPos.x() > column.rect.right()) {
             continue;
         }
-        // Inside this column's x-span: edge bands open a new column beside
-        // it, the middle joins it as a tile at the y-resolved slot. Floor of
-        // 1 so integer division on a degenerate sliver still leaves bands.
+        // Inside this column's x-span: the side bands open a new column at
+        // THIS column's spot (the column steps aside and the indicator
+        // covers it), the middle joins it as a tile at the y-resolved slot.
+        // Symmetric by construction: each boundary belongs to exactly one
+        // band — the right neighbour's left band — and only the view's two
+        // extremes differ, hinting past their screen edge instead (the
+        // first visible column's left band and the last one's right band).
+        // Floor of 1 so integer division on a degenerate sliver still
+        // leaves bands.
         const int band = std::clamp(column.rect.width() / kEdgeBandDivisor, 1, kEdgeBandMaxPx);
         if (cursorPos.x() < column.rect.left() + band) {
             target.primary = column.columnIndex;
             target.newSlot = true;
+            target.leadingEdge = isFirstVisible;
             return target;
         }
         if (cursorPos.x() > column.rect.right() - band) {
-            target.primary = column.columnIndex + 1;
+            target.primary = isLastVisible ? column.columnIndex + 1 : column.columnIndex;
             target.newSlot = true;
             return target;
         }
@@ -654,18 +672,7 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // shift below must isolate the insert's view side effect, and measuring
     // the two sides under different gap regimes would fold the smart-gaps
     // difference into it as well.
-    const ResolvedStrip liveResolved = state->strip().relayout(params);
-    const int liveViewX = liveResolved.viewX;
-    // The FIRST VISIBLE column decides which new-column slot means "insert
-    // to the left of everything I can see" — its own index, not strip index
-    // 0, once the view has scrolled past earlier columns.
-    int firstVisibleIndex = -1;
-    for (const ResolvedColumn& column : liveResolved.columns) {
-        if (column.rect.intersects(params.workArea)) {
-            firstVisibleIndex = column.columnIndex;
-            break;
-        }
-    }
+    const int liveViewX = state->strip().relayout(params).viewX;
 
     // Mirror of commit's insert selection, deliberately kept line-for-line
     // comparable with it: if the two ever diverge, the indicator lies.
@@ -721,23 +728,19 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.windowId == p.windowId) {
                 QRect rect = tile.rect.translated(shiftToLiveView, 0);
-                // A BEFORE-THE-FIRST-VISIBLE slot mirrors the after-the-last
-                // one: its raw promise is the current position of the first
-                // column the user can see, so it would cover that column at
-                // full size — reading as "replace this" while the drop
-                // actually shifts it aside — and nothing like the edge band
-                // the right side shows. Place the promise just OUTSIDE that
-                // column instead (niri positions its leading insert hint the
-                // same way), which balances the two ends: on a flush edge
-                // both resolve past their screen edge and both reach the
-                // half-in clamp below, and with dead space the promise fills
-                // it. Keyed on the first VISIBLE column, not strip index 0 —
-                // with the view scrolled past earlier columns, "insert left
-                // of everything I see" is that column's own slot. Skipped
-                // for an empty strip, whose promise genuinely is the first
-                // column's spot.
-                if (target.newSlot && firstVisibleIndex >= 0
-                    && std::clamp(target.primary, 0, preInsertColumns) == firstVisibleIndex) {
+                // A LEADING-EDGE aim ("insert left of everything I can see",
+                // tagged by the hit-test) mirrors the after-the-last one:
+                // its raw promise is the current position of the first
+                // visible column, so it would cover that column at full
+                // size. Place it just OUTSIDE that column instead (niri
+                // positions its leading insert hint the same way): with
+                // dead space the promise fills it, and on a flush edge it
+                // crosses the screen edge and reaches the half-in clamp
+                // below — the mirror of the trailing edge. The SAME slot
+                // aimed from the first visible column's INNER band carries
+                // no tag and keeps the full rect over that column, exactly
+                // as the right neighbour's inner band covers it.
+                if (target.newSlot && target.leadingEdge && preInsertColumns > 0) {
                     rect.translate(-(rect.width() + params.gap), 0);
                 }
                 // niri-parity visibility clamp, new-column slots only (niri

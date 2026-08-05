@@ -371,12 +371,18 @@ public:
     ///   drop opens a NEW column at `primary` (existing columns from
     ///   `primary` shift right); otherwise the window joins the column at
     ///   `primary` as a tile at `secondary` (clamped into the stack;
-    ///   -1 appends at the bottom).
+    ///   -1 appends at the bottom). `leadingEdge` marks a new-column target
+    ///   aimed from BEYOND the view's leading edge (left of everything
+    ///   visible, or the first visible column's outer band): the drop is
+    ///   identical, but the indicator renders it as a past-the-edge hint
+    ///   instead of a full rect over the first visible column. Purely a
+    ///   presentation tag — commit ignores it, autotile never sets it.
     struct DragInsertTarget
     {
         int primary = -1;
         int secondary = -1;
         bool newSlot = false;
+        bool leadingEdge = false;
 
         bool isValid() const
         {
