@@ -16,6 +16,7 @@
 #include <QSignalSpy>
 #include <QObject>
 
+#include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -329,6 +330,44 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.first().at(0).toStringList(), (QStringList{QStringLiteral("HDMI-1"), QStringLiteral("HDMI-2")}));
+    }
+
+    // -------------------------------------------------------------------------
+    // relayTileRequestsJson JSON→struct parse. This pins the JSON key spelling
+    // shared with the engine producer (engine_apply.cpp writes "scrollEdge"
+    // et al) — a rename on either side would otherwise yield an empty field
+    // with no error and no failing test — plus the validator drop for an
+    // illegal scrollEdge value and the duplicate-windowId collapse.
+    // -------------------------------------------------------------------------
+    void testRelayTileRequestsJson_parsesScrollEdgeAndDropsInvalid()
+    {
+        PhosphorProtocol::registerWireTypes();
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        QSignalSpy spy(&adaptor, &TilingAdaptor::windowsTileRequested);
+
+        const QString json = QStringLiteral(
+            "["
+            "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
+            "\"scrollEdge\":\"left\"},"
+            "{\"windowId\":\"b|2\",\"screenId\":\"S1\",\"x\":600,\"y\":0,\"width\":600,\"height\":800},"
+            "{\"windowId\":\"c|3\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
+            "\"scrollEdge\":\"up\"},"
+            "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":50,\"y\":0,\"width\":600,\"height\":800,"
+            "\"scrollEdge\":\"right\"}"
+            "]");
+        adaptor.relayTileRequestsJson(json);
+
+        QCOMPARE(spy.count(), 1);
+        const auto requests = spy.first().at(0).value<PhosphorProtocol::TileRequestList>();
+        // c|3 dropped by the validator (illegal edge), the second a|1 dropped
+        // as a duplicate (first entry wins).
+        QCOMPARE(requests.size(), 2);
+        QCOMPARE(requests.at(0).windowId, QStringLiteral("a|1"));
+        QCOMPARE(requests.at(0).scrollEdge, QStringLiteral("left"));
+        QCOMPARE(requests.at(0).x, 0);
+        QCOMPARE(requests.at(1).windowId, QStringLiteral("b|2"));
+        QVERIFY(requests.at(1).scrollEdge.isEmpty());
     }
 };
 

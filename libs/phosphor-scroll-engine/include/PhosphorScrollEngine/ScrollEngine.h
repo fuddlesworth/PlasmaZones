@@ -68,9 +68,12 @@ struct ScrollOpenParams
  * just below the union of all outputs — the one place no monitor topology
  * can occupy, and never at extreme coordinates — so input hit-testing stays
  * sane; the enter/leave animation origin comes from the tile request's
- * scrollEdge field, not from where the park happens to sit. Hidden tiles of
- * a tabbed column park the same way (a hidden tab must not sit under the
- * active tile stealing clicks).
+ * scrollEdge field, not from where the park happens to sit. A column
+ * STRADDLING a screen edge is committed CLAMPED at that edge (both edges,
+ * both axes) unless the crop-straddlers setting keeps the true rect for the
+ * effect to crop; a remainder below the peek floor parks instead. Hidden
+ * tiles of a tabbed column park the same way (a hidden tab must not sit
+ * under the active tile stealing clicks).
  *
  * Floating reuses the shared PlasmaZones float model: a floated window
  * leaves the strip (its column closes up) and the engine remembers the
@@ -266,10 +269,15 @@ public:
     /// intersection with the work area is EMPTY (a stack whose min heights
     /// overflow the work area resolves its tail below the bottom edge) all
     /// carry no number and cannot be reached by a digit. Partially-visible
-    /// columns are CLIPPED, not dropped, with no minimum-visibility
-    /// threshold: an arbitrarily thin sliver still carries its own number,
-    /// because the cut-off edge is what tells the viewer the strip
-    /// continues off-screen. Empty when the screen has no state, no visible
+    /// columns are CLIPPED, not dropped: an arbitrarily thin sliver still
+    /// carries its own number, because the cut-off edge is what tells the
+    /// viewer the strip continues off-screen. Note the walk numbers by the
+    /// STRIP rect clipped to the work area, while the APPLIED geometry may
+    /// differ: the apply path clamps straddlers to the SCREEN edge and
+    /// parks a remainder below its peek floor, so a barely-visible column
+    /// can carry a number here while sitting parked — a digit press still
+    /// works, because focusing re-anchors the view and scrolls it back in.
+    /// Empty when the screen has no state, no visible
     /// tile, or no valid work area (unknown/removed screen, or outer gaps
     /// that swallowed it).
     ///
@@ -539,12 +547,24 @@ public:
     /// Embedder/test seam: inject screen geometry when NO ScreenManager is
     /// wired (headless hosts). @p availableGeometry supplies the work area,
     /// @p screenGeometry the full rect used for off-canvas parking bounds.
-    /// Ignored while a ScreenManager is present.
+    /// Ignored while a ScreenManager is present. Without a ScreenManager the
+    /// parking union degrades to the single screen's own bottom unless
+    /// setAllScreenGeometriesProvider is also wired — a multi-output embedder
+    /// must supply one or the other, or a park below one monitor may land on
+    /// the one beneath it.
     void setScreenGeometryProviders(std::function<QRect(const QString&)> availableGeometry,
                                     std::function<QRect(const QString&)> screenGeometry)
     {
         m_availableGeometryProvider = std::move(availableGeometry);
         m_screenGeometryProvider = std::move(screenGeometry);
+    }
+
+    /// The union half of the provider seam: every output's full rect, used
+    /// only for the parking union's bottom edge. Ignored while a
+    /// ScreenManager is present (it answers authoritatively).
+    void setAllScreenGeometriesProvider(std::function<QList<QRect>()> allScreenGeometries)
+    {
+        m_allScreenGeometriesProvider = std::move(allScreenGeometries);
     }
 
     void setContextGapProvider(ContextGapProvider provider)
@@ -759,6 +779,7 @@ private:
     /// ScreenManager present they are ignored.
     std::function<QRect(const QString&)> m_availableGeometryProvider;
     std::function<QRect(const QString&)> m_screenGeometryProvider;
+    std::function<QList<QRect>()> m_allScreenGeometriesProvider;
     PhosphorEngine::WindowRegistry* m_windowRegistry = nullptr;
     PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
 
@@ -810,6 +831,9 @@ private:
     bool m_cropStraddlers = false;
     ColumnWidth m_defaultColumnWidth = ColumnWidth::makeProportion(0.5);
     /// "Client decides" default width: open at the client's initial size.
+    /// This is the GLOBAL verdict only — a per-screen kind override answers
+    /// for its own screen through effectiveWidthClientDecides, which every
+    /// open-path consumer must use instead of reading this directly.
     bool m_defaultWidthClientDecides = false;
     ColumnDisplay m_defaultColumnDisplay = ColumnDisplay::Normal;
     /// Tab-indicator GEOMETRY, the half of Scrolling.TabIndicator that changes
@@ -835,12 +859,16 @@ private:
     /// "right"), so that when it scrolls back INTO the viewport the batch can
     /// tell the effect which side to animate it in from.
     ///
-    /// It has to be remembered rather than derived: parking picks a side that
-    /// is free of adjacent outputs, which on a multi-monitor layout is
-    /// routinely the opposite side from the one the column left by, so the
-    /// parked rect cannot answer the question. The entry is written when the
-    /// window parks and consumed when it comes back on screen; windows that
-    /// are never parked never appear here.
+    /// It has to be remembered rather than derived: the park position is
+    /// direction-agnostic (below the union of all outputs), so the parked
+    /// rect cannot answer the question. The entry is written when the window
+    /// parks and consumed when it comes back on screen; windows that are
+    /// never parked never appear here. Every path that drops the window's
+    /// m_lastAppliedRect while it stays alive drops this too, and the
+    /// aliveness sweep reclaims died-parked entries. One seam-only gap: an
+    /// embedder driving strip-level minimize directly (production models
+    /// minimize as a float toggle, which clears) can strand an entry until
+    /// the sweep.
     QHash<QString, QString> m_parkedScrollEdge;
     /// What a floated/minimized window's column held, so unfloat restores
     /// the slot AND the user's width/display intent (a Proportion/Preset
@@ -1086,6 +1114,13 @@ private:
     /// cached config default.
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
     ColumnWidth effectiveDefaultColumnWidth(const QString& screenId) const;
+    /// Whether "the client decides" is the EFFECTIVE default-width verdict
+    /// for @p screenId: a per-screen kind override answers for itself (true
+    /// only when it IS ClientDecides), and only an absent override defers to
+    /// the cached global flag. The open path must use this rather than the
+    /// raw global, or a monitor scoped TO ClientDecides reads as "pinned to
+    /// a width" and gets the opposite of what the user chose.
+    bool effectiveWidthClientDecides(const QString& screenId) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QString& screenId) const;
     /// Height needs the work area: the rule channel's bare fraction is
     /// committed as Fixed pixels against the live work area.

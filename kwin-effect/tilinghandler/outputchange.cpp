@@ -160,8 +160,37 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // already assumed rather than adding a new rule: the comment on the marker
     // block above states the old-vs-new diff "is an identity for scroll
     // windows and can never route a scroll handoff".
-    if (const QString scrollMemberScreen = TilingStateHelpers::screenForTiledWindow(m_border, windowId);
-        !scrollMemberScreen.isEmpty() && m_scrollingScreens.contains(scrollMemberScreen)) {
+    //
+    // The test must answer the same question scrollTrackedScreenFor answers
+    // (without CALLING it — oldScreenId derives from it, which is the
+    // circularity the paragraph above rejects): "is this window in ANY
+    // scrolling bucket, or recorded on a scrolling screen while tiled".
+    // screenForTiledWindow alone returns the FIRST bucket in hash order and
+    // has no recorded-screen fallback, so it can miss exactly the stale-
+    // bucket rescue case the predicate was built for — and a miss here runs
+    // the transfer, whose onWindowClosed wipes the bucket permanently.
+    //
+    // A scroll window returning here deliberately keeps any armed
+    // m_expectedOutputMove marker: the marker path is the only reliable
+    // scroll transfer signal, and the same-screen drain above already
+    // handles its disposal for scroll windows.
+    //
+    // The RAW m_scrollingScreens set, deliberately (not isScrollingScreen's
+    // managed intersection): this is a BAIL, and wide is its fail-safe
+    // direction — the union and the scrolling set arrive on independent
+    // signals, and skipping a transfer for a frame is recoverable while a
+    // wrongly-run transfer wipes the bucket for good.
+    bool inScrollBucket = false;
+    for (const QString& scrollScreen : std::as_const(m_scrollingScreens)) {
+        if (m_border.tiledWindowsByScreen.value(scrollScreen).contains(windowId)) {
+            inScrollBucket = true;
+            break;
+        }
+    }
+    if (inScrollBucket) {
+        return;
+    }
+    if (isTiledWindow(windowId) && m_scrollingScreens.contains(m_notifiedWindowScreens.value(windowId))) {
         return;
     }
 

@@ -9,7 +9,6 @@
 #include <QDBusAbstractAdaptor>
 #include <QObject>
 #include <QString>
-#include <QTimer>
 #include <QRect>
 #include <QUuid>
 #include <QSet>
@@ -320,12 +319,12 @@ public:
 
     /**
      * Cancel any live drag-insert preview on either engine. The daemon's
-     * context-change handlers route through
-     * these instead of hand-inlining the two-engine sweep (a third engine,
-     * or the timer stop, would otherwise need three call sites updated).
-     * The ForScreen form cancels only previews whose target or prior screen
-     * shares @p screenId's physical output — a desktop switch or output
-     * removal on monitor A must not snap monitor B's live preview back.
+     * context-change handlers route through these instead of hand-inlining
+     * the two-engine sweep (a third engine would otherwise need every call
+     * site updated). The ForScreen form cancels only previews whose target
+     * or prior screen shares @p screenId's physical output — a desktop
+     * switch or output removal on monitor A must not snap monitor B's live
+     * preview back.
      */
     void cancelDragInsertPreviews();
     void cancelDragInsertPreviewsForScreen(const QString& screenId);
@@ -735,14 +734,14 @@ private:
     /// the screen the indicator is ON, which after a cross-screen drag is no
     /// longer the screen under the cursor.
     QString m_dropIndicatorScreenId;
-    /// Push the drop-target indicator for a live preview. Hides the previous
-    /// screen's indicator first when the drag crossed screens, so a cross-
-    /// screen drag cannot strand one behind it.
-    /// Paint the drop indicator on @p screenId. @p animate is true for a
-    /// TARGET CHANGE (the cursor picked a different slot) and false for a
-    /// scroll-tracking re-projection, which the overlay must not animate —
-    /// see ScrollDropIndicatorContent::animateMoves.
-    void pushScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate);
+    /// Push the drop-target indicator for a live preview on @p screenId,
+    /// hiding the previous screen's indicator first when the drag crossed
+    /// screens so a cross-screen drag cannot strand one behind it. Always
+    /// animated: the only caller follows a cursor move, so a rect change is
+    /// the user aiming somewhere new (the overlay change-gates, so an
+    /// unchanged rect animates nothing). Hides ride the overlay's
+    /// animate=false path directly — see clearScrollDropIndicator.
+    void pushScrollDropIndicator(const QString& screenId, const QRect& rect);
     /// Preview-end teardown for the drop indicator. Safe to call with none
     /// showing.
     ///
@@ -757,8 +756,12 @@ private:
     ///   - cancelDragInsertPreviewsForScreen, keyed on the DEPARTING screen
     ///     rather than on whether it cancelled anything, since a prune may
     ///     have self-cancelled first;
-    ///   - dragMoved's failed-begin arm and its trigger-release cancel arm,
-    ///     neither of which routes through the shared teardown.
+    ///   - dragMoved's failed-begin arm, its trigger-release cancel arm, and
+    ///     its cross-engine / cross-screen preview-cancel arm, none of which
+    ///     route through the shared teardown;
+    ///   - endDrag's disabled/suppressed arm (SnappingDisabled,
+    ///     ContextDisabled, LayoutSuppressed), which ends the drag with the
+    ///     preview alive.
     /// Adding a new preview-end path means adding a call here; the earlier
     /// version of this comment asserted the rule without the code keeping it.
     void clearScrollDropIndicator();

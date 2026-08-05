@@ -314,8 +314,10 @@ void ScrollEngine::commitDragInsertPreview()
         // Same drop floatWindowInternal makes on this transition. The window
         // is leaving the tiled set, so a remembered tile rect can only serve
         // as a stale comparand for the emit-on-change gate; the sibling paths
-        // all clear it and this one was the exception.
+        // all clear it and this one was the exception. The parked-edge memory
+        // dies with it — floatWindowInternal drops it for the same reason.
         m_lastAppliedRect.remove(p.windowId);
+        m_parkedScrollEdge.remove(p.windowId);
         m_states.setKeyForWindow(p.windowId, p.targetKey);
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
         Q_EMIT placementChanged(p.targetScreenId);
@@ -338,8 +340,11 @@ void ScrollEngine::commitDragInsertPreview()
     // Drop the last-applied memory so the re-tile emit survives the
     // emit-on-change gate even when the window resolves back to its
     // pre-drag rect (single-column strip: no neighbour ever moves, so this
-    // is the ONLY signal that re-tiles the dropped frame).
+    // is the ONLY signal that re-tiles the dropped frame). A parked edge
+    // recorded before the drag detached the window is stale for the drop
+    // slot and would mis-anchor its arrival.
     m_lastAppliedRect.remove(p.windowId);
+    m_parkedScrollEdge.remove(p.windowId);
     applyLayout(p.targetScreenId, false);
     // The window's float/tracking state changed for every entry mode except
     // the plain same-screen tiled reorder. floating=false routes through the
@@ -416,12 +421,14 @@ void ScrollEngine::cancelDragInsertPreview()
             dragPreviewRestoreSlot(targetState, p.windowId, p.priorSlot, params, p.targetScreenId);
             // Same emit-on-change escape as commit: the restored slot is
             // typically the pre-drag rect, so without dropping the memory
-            // the re-tile emit is suppressed.
+            // the re-tile emit is suppressed. Parked-edge memory goes with
+            // it, as on commit.
             m_lastAppliedRect.remove(p.windowId);
+            m_parkedScrollEdge.remove(p.windowId);
         }
         applyLayout(p.targetScreenId, false);
         // The detach at begin and this restore both mutate persisted strip
-        // structure (and the view anchor when edge-scroll ran mid-hold).
+        // structure.
         Q_EMIT placementChanged(p.targetScreenId);
         return;
     }
@@ -438,6 +445,7 @@ void ScrollEngine::cancelDragInsertPreview()
                                               p.carried.minWidth, p.carried.minHeight, ScrollInsertPosition::Last);
             m_states.setKeyForWindow(p.windowId, p.targetKey);
             m_lastAppliedRect.remove(p.windowId);
+            m_parkedScrollEdge.remove(p.windowId);
             applyLayout(p.targetScreenId, false);
             Q_EMIT placementChanged(p.targetScreenId);
         } else {
@@ -462,6 +470,7 @@ void ScrollEngine::cancelDragInsertPreview()
         dragPreviewRestoreSlot(priorState, p.windowId, p.priorSlot, layoutParamsForScreen(p.priorKey.screenId),
                                p.priorKey.screenId);
         m_lastAppliedRect.remove(p.windowId);
+        m_parkedScrollEdge.remove(p.windowId);
     }
     m_states.setKeyForWindow(p.windowId, p.priorKey);
     applyLayout(p.targetScreenId, false);
@@ -492,7 +501,7 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     // screen. screensMatch above accepts a virtual/physical spelling
     // difference between the two, and layoutParamsForScreen resolves gaps and
     // the work area per SCREEN ID — so passing the caller's spelling could
-    // hit-test against a work area the commit path never uses. Both siblings
+    // hit-test against a work area the commit path never uses. Its sibling
     // (dragInsertIndicatorRect) already uses the preview's.
     const ScrollLayoutParams params =
         layoutParamsForScreen(previewOwnsScreen ? m_dragInsertPreview->targetScreenId : screenId);
@@ -610,9 +619,18 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // separate defect with a separate patch, and the list kept growing.
     //
     // So: copy the strip, apply the SAME insert commitDragInsertPreview would,
-    // relayout, and read back the rect the dropped window actually gets. The
+    // relayout, and read back the rect the dropped window resolves to. The
     // layout code becomes the single source of truth for the layout, which is
     // the only way this can stay correct as the strip gains features.
+    //
+    // The probe stops at RELAYOUT: applyLayout's screen-boundary pass (edge
+    // clamp, peek-floor park) runs after it and is not simulated, so a slot
+    // at the screen edge promises the unclamped rect while the commit clamps
+    // it, and a slot whose remainder falls under the peek floor promises an
+    // on-screen rect for a window the commit parks. Deliberate: the
+    // indicator marks the SLOT being aimed at, and simulating the boundary
+    // pass would need the clamp/park decision factored out of applyLayout —
+    // more coupling than an aiming aid justifies.
     //
     // The copy is per call and the strip is a plain value type. That is not
     // free, and the ledger already tracks the per-tick relayout cost of this
@@ -664,27 +682,16 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
         probe.setWindowHeightIntent(p.windowId, p.carried.height);
     }
 
-    // MIRRORS commit's focusWindow, which re-anchors the view so the dropped
-    // column is scrolled into place. This used to be deliberately omitted, on
-    // the reasoning that the indicator should mark the place under the cursor
-    // rather than jump to where the window lands after the view scrolls. That
-    // reasoning only holds while the target slot is ON SCREEN.
-    //
-    // With a FULL viewport it is not, and omitting the re-anchor produced no
-    // indicator at all. Two columns filling a 1200px work area, aim at either
-    // outer edge: inserting before the first resolves the slot to x=-600 and
-    // inserting after the last to x=1200. Both are outside the work area, so
-    // the overlay clipped them and the drag ran with no drop feedback in the
-    // one configuration where a user most needs it. The DROP was correct
-    // throughout — commit re-anchors and the window lands visibly — so the
-    // indicator was contradicting an outcome that was already right.
-    //
-    // Mirroring it costs nothing when the slot is already visible: focusWindow
-    // re-anchors only when the focused column actually changes, so a target in
-    // the middle of a partly-filled strip still resolves under the cursor.
-    // Every drop-equivalence test in the suite pins that, comparing this rect
-    // against the post-commit tile rect.
-    // TEMP-OFF
+    // The probe does NOT mirror commit's focusWindow re-anchor. It once did
+    // (to keep an indicator visible for the outer slots of a FULL viewport,
+    // where the raw slot resolves outside the work area and the overlay clips
+    // it), but the live-view translation below cancels a probe-side re-anchor
+    // by construction: shiftToLiveView subtracts the probe's view to pin the
+    // rectangle to what is on screen RIGHT NOW. The two behaviours are
+    // mutually exclusive, and the live-view pin is the one in force — so at a
+    // full viewport, aiming at either outer slot shows no indicator (the
+    // drop itself still lands correctly; commit re-anchors and the window
+    // arrives visibly).
     const ResolvedStrip resolved = probe.relayout(params);
     // Translate the slot back into the LIVE view.
     //
@@ -692,9 +699,8 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // read-only preview must not inherit: insertWindowIntoColumnAt makes the
     // joined column active and re-anchors onto it, and commit additionally
     // focuses the dropped window. Left in, they pin the indicator to a
-    // post-drop viewport that ignores the live scroll — the columns slide
-    // under an edge-scroll while the rectangle sits still, which is precisely
-    // what a drop indicator must not do.
+    // post-drop viewport rather than the one the user is looking at, which
+    // is precisely what a drop indicator must not do.
     //
     // Both terms are needed and neither substitutes for the other: the STRIP
     // position must be POST-insert, because that is the slot being previewed,
@@ -739,11 +745,11 @@ void ScrollEngine::dropClosedWindowFromDragPreview(const QString& windowId)
     // indexes were hit-tested against a structure that is about to change,
     // and a stationary cursor never re-aims. Discard the stale aim — commit
     // then takes the restore-slot / append fallback instead of silently
-    // landing at a shifted index, and the next motion or scroll tick
-    // re-resolves a fresh target.
+    // landing at a shifted index, and the next cursor motion re-resolves a
+    // fresh target.
     //
-    // With the cursor held still and outside the edge-scroll bands, neither
-    // of those ticks fires, so the indicator stays dark until the user moves
+    // With the cursor held still no tick fires at all, so the indicator
+    // stays dark until the user moves
     // again. That is deliberate: after a neighbour vanishes there is no
     // honest target to paint, and painting the OLD rect would promise a slot
     // that no longer exists. A dark indicator says "aim again", which is what

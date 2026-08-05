@@ -32,9 +32,10 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     }
     // The remembered park edge is written only while a window sits parked and
     // consumed when it scrolls back on screen, so a window that DIES parked
-    // never consumes its entry; this aliveness sweep reclaims those. A window
-    // that leaves the strip alive (float, cross-engine handoff) is handled at
-    // those sites — it never becomes stale enough to reach this sweep.
+    // never consumes its entry; this aliveness sweep reclaims those. Every
+    // path that drops m_lastAppliedRect for a still-alive window (float,
+    // handoff, cross-screen move, drag commit/cancel, the context sweeps)
+    // drops the edge beside it, so this sweep only ever sees dead ids.
     for (auto it = m_parkedScrollEdge.begin(); it != m_parkedScrollEdge.end();) {
         if (!aliveWindowIds.contains(it.key())) {
             it = m_parkedScrollEdge.erase(it);
@@ -73,6 +74,7 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         }
         m_states.removeWindow(windowId);
         m_lastAppliedRect.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         // A dead window's queued self-activation echo can never be answered;
@@ -226,7 +228,18 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
     // m_scrollingScreens iteration would invalidate the live iterator.
     QStringList displacedWindows;
     QSet<QString> displacedScreens;
-    for (const QString& screenId : std::as_const(m_scrollingScreens)) {
+    // Iterate a SNAPSHOT, not the member: the unpin-migration arm cancels a
+    // live drag-insert preview, whose synchronous placementChanged reaches
+    // the daemon's tiled-count gate and can re-enter setActiveScreens, which
+    // REASSIGNS m_scrollingScreens mid-loop. QSet is implicitly shared, so
+    // the copy is O(1) and keeps the iterated node hash alive. The per-
+    // iteration membership re-check skips a screen such a re-entrant pass
+    // removed, instead of migrating it into a torn-down state.
+    const QSet<QString> scrollingSnapshot = m_scrollingScreens;
+    for (const QString& screenId : scrollingSnapshot) {
+        if (!m_scrollingScreens.contains(screenId)) {
+            continue;
+        }
         const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
         ScrollState* state = m_states.stateForKey(key);
         if (!state) {
@@ -326,6 +339,15 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
         }
     }
     if (!displacedWindows.isEmpty()) {
+        // A re-entrant setActiveScreens (see the snapshot note above) may
+        // already have released some collected windows through its own
+        // teardown; re-announcing those would double-release. Keep only the
+        // ids the engine still tracks.
+        displacedWindows.removeIf([this](const QString& wid) {
+            return !m_states.windowKeys().contains(wid);
+        });
+    }
+    if (!displacedWindows.isEmpty()) {
         const QSet<QString> displacedSet(displacedWindows.cbegin(), displacedWindows.cend());
         m_states.removeWindowsIf([&displacedSet](const QString& wid, const PhosphorEngine::PlacementStateKey&) {
             return displacedSet.contains(wid);
@@ -336,6 +358,7 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
         // ordering contract as pruneStatesForRemovedScreen).
         for (const QString& windowId : std::as_const(displacedWindows)) {
             m_lastAppliedRect.remove(windowId);
+            m_parkedScrollEdge.remove(windowId);
             m_scrollFloatedWindows.remove(windowId);
         }
     }
@@ -384,6 +407,7 @@ void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
     const QStringList windows = state->managedWindows();
     for (const QString& windowId : windows) {
         m_lastAppliedRect.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         // The dying context's windows can never answer their queued echoes;
@@ -590,6 +614,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     // no second collection to keep in step with it.
     for (const QString& windowId : std::as_const(releasedWindows)) {
         m_lastAppliedRect.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
     }

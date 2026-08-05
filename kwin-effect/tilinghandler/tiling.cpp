@@ -79,7 +79,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // (see suppressFfmUntilCursorMoves) so the next pointer twitch cannot
     // steal focus onto whatever landed under it.
     for (const auto& req : validatedRequests) {
-        if (m_scrollingScreens.contains(req.screenId)) {
+        if (isScrollingScreen(req.screenId)) {
             suppressFfmUntilCursorMoves();
             break;
         }
@@ -325,31 +325,58 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     });
     if (isScrollBatch) {
         QHash<QString, QRect> screenRectCache;
-        const auto visibleX = [&](const TileSnap& s) {
+        const auto screenRectFor = [&](const TileSnap& s) -> const QRect& {
             auto it = screenRectCache.find(s.screenId);
             if (it == screenRectCache.end()) {
                 QRect outRect;
                 if (const KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
-                    const KWin::Rect g = out->geometry();
-                    outRect = QRect(g.x(), g.y(), g.width(), g.height());
+                    outRect = out->geometry();
                 }
                 it = screenRectCache.insert(s.screenId, outRect);
             }
-            const bool arriving = !it->isValid() || it->intersects(s.geometry);
-            if (arriving || !s.window) {
+            return it.value();
+        };
+        // An UNRESOLVED output does not read as arriving: the committed rect
+        // of a leaving column is the park, and sorting on it would feed the
+        // cascade a coordinate unrelated to what the user watches. The
+        // current frame is the visible truth either way.
+        const auto isArriving = [&](const TileSnap& s) {
+            const QRect& rect = screenRectFor(s);
+            return rect.isValid() && rect.intersects(s.geometry);
+        };
+        const auto visibleX = [&](const TileSnap& s) {
+            if (!s.window || isArriving(s)) {
                 return s.geometry.x();
             }
             return qRound(s.window->frameGeometry().x());
         };
-        // Net travel across the batch decides which end leads. Measured on the
-        // same visible-position basis, against where each window is now.
+        // Net travel across the batch decides which end leads, measured on
+        // STAYING columns only: an arriving column's current frame is the
+        // park, whose x carries no direction (the park is direction-agnostic
+        // by design), so its term could swamp every staying column's true
+        // delta with an arbitrary sign. Leaving columns contribute zero by
+        // construction (visibleX keys them on their own current frame).
         qint64 netDx = 0;
         for (const TileSnap& s : toApply) {
-            if (s.window) {
+            if (s.window && !isArriving(s)) {
                 netDx += visibleX(s) - qRound(s.window->frameGeometry().x());
             }
         }
-        const bool movingRight = netDx > 0;
+        bool movingRight = netDx > 0;
+        if (netDx == 0) {
+            // No staying column moved (all-leaving or all-arriving batch).
+            // The scrollEdge is authoritative there: a column LEAVES by the
+            // edge the content moves toward, and ARRIVES from the edge it
+            // once left by (content moving away from it).
+            for (const TileSnap& s : toApply) {
+                if (s.scrollEdge.isEmpty()) {
+                    continue;
+                }
+                const bool edgeIsRight = s.scrollEdge != QLatin1String("left");
+                movingRight = isArriving(s) ? !edgeIsRight : edgeIsRight;
+                break;
+            }
+        }
         std::stable_sort(toApply.begin(), toApply.end(), [&](const TileSnap& a, const TileSnap& b) {
             return movingRight ? visibleX(a) > visibleX(b) : visibleX(a) < visibleX(b);
         });
@@ -737,12 +764,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry
                              << "monocle=" << snap.isMonocle << "maximizeMode="
                              << (kwForLog ? maximizeModeName(kwForLog->maximizeMode()) : "no-window");
-            // A window can only be tile-managed by one screen at a time.
-            // If this is a cross-screen transfer, strip the stale tracking
-            // from any other screen before recording the new owner. This
-            // keeps the tracking map coherent when e.g. a window drags
-            // from an autotile VS onto a sibling autotile VS.
-            TilingStateHelpers::removeFromOtherScreens(m_border, snap.windowId, snap.screenId);
+            // A window can only be tile-managed by one screen at a time —
+            // markWindowTiled enforces the single-owner sweep itself.
             markWindowTiled(snap.screenId, snap.windowId);
             // Title-bar (borderless) state is driven by rules through the
             // effect's reconcileRuleHiddenTitleBar → DecorationManager path.
@@ -810,9 +833,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     m_centeredWaylandZones.remove(snap.windowId);
                     // Scrolling strip: scrollEdge names the screen edge this
                     // column's motion belongs to. It is NOT recoverable from
-                    // the geometry — parking picks a side clear of adjacent
-                    // outputs, which on a multi-monitor layout is routinely
-                    // the opposite side from the one the user scrolled.
+                    // the geometry — the park position is direction-agnostic
+                    // (below the union of all outputs), so the rect cannot
+                    // say which side the user scrolled.
                     //
                     // Two cases, and they need opposite treatment:
                     //  - ARRIVING (target is on the window's own screen): the
@@ -822,18 +845,29 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     //    position and direction were the same number.
                     //  - LEAVING (target is a park, off the screen): the window
                     //    must be seen sliding OUT past the named edge, but its
-                    //    committed rect is the park, which is routinely on the
-                    //    far side. Animating to the park directly would sweep
-                    //    it backwards across the whole screen to exit by the
-                    //    wrong edge. So the animation ends just past the named
+                    //    committed rect is the park, which is below every
+                    //    output. Animating to the park directly would sweep
+                    //    it downwards across the whole screen instead of out
+                    //    by the edge. So the animation ends just past the named
                     //    edge while the commit still goes to the park. Both
                     //    are off-screen, so the step between them when the
-                    //    animation finishes is never visible.
+                    //    animation finishes is never visible. Accepted cost:
+                    //    the animation's swept bounds touch the neighbouring
+                    //    output's coordinate range, so that output takes
+                    //    full transformed repaints for the slide's duration
+                    //    even though the cull draws nothing there (the
+                    //    committed geometry never enters its render list).
+                    //
+                    // The edge math resolves the screen id to its OUTPUT
+                    // geometry; scrolling is assigned per physical screen, so
+                    // a virtual sub-screen spelling never reaches this path.
                     QRectF originOverride;
                     QRectF visualTargetOverride;
+                    bool skipScrollAnimation = false;
                     if (!snap.scrollEdge.isEmpty()) {
-                        if (const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId)) {
-                            const QRect screenRect = out->geometry();
+                        const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
+                        const QRect screenRect = out ? QRect(out->geometry()) : QRect();
+                        if (screenRect.isValid()) {
                             const bool arriving = screenRect.intersects(geo);
                             // Arriving: start from the target's own row and
                             // size. Leaving: keep the rect the window occupies
@@ -848,6 +882,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             if (snap.scrollEdge == QLatin1String("left")) {
                                 atEdge.moveLeft(screenRect.left() - atEdge.width());
                             } else {
+                                // QRect::right() is x+width-1, so +1 sits one
+                                // past the edge. screenRect must stay a QRect
+                                // (KWin::Rect::right() is x+width and would
+                                // shift the slide by a pixel).
                                 atEdge.moveLeft(screenRect.right() + 1);
                             }
                             if (arriving) {
@@ -855,10 +893,31 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             } else {
                                 visualTargetOverride = QRectF(atEdge);
                             }
+                        } else {
+                            // No resolvable output (disconnect race): with no
+                            // edge rect to anchor to, an animated apply would
+                            // be the exact backwards park-sweep the overrides
+                            // exist to prevent. Teleport instead.
+                            qCDebug(lcEffect) << "scroll batch: no output for" << snap.screenId << "- teleporting"
+                                              << snap.windowId << "to its target";
+                            skipScrollAnimation = true;
+                        }
+                    } else if (!scrollTrackedScreenFor(snap.windowId).isEmpty()) {
+                        // Edge-less commit of a scroll-tracked window whose
+                        // target is entirely off its own output: a vertical
+                        // stack-overflow park. There is no side to slide out
+                        // by, and animating to a target below the union would
+                        // sweep the window down the whole screen. Commit
+                        // without an animation. (Autotile batches never take
+                        // this branch — their windows are not scroll-tracked
+                        // and their targets are on-screen anyway.)
+                        const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
+                        const QRect screenRect = out ? QRect(out->geometry()) : QRect();
+                        if (screenRect.isValid() && !screenRect.intersects(geo)) {
+                            skipScrollAnimation = true;
                         }
                     }
-                    m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false,
-                                                  /*skipAnimation=*/false,
+                    m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
                                                   PhosphorAnimation::ProfilePaths::WindowSnapIn, originOverride,
                                                   visualTargetOverride);
                 }
@@ -1104,7 +1163,7 @@ void TilingHandler::slotFocusWindowRequested(const QString& windowId)
     // strip just scrolled — pause FFM until the cursor moves deliberately,
     // or a pointer twitch immediately re-focuses whatever column slid
     // under it and undoes this activation.
-    if (m_scrollingScreens.contains(m_effect->getWindowScreenId(w))) {
+    if (isScrollingScreen(m_effect->getWindowScreenId(w))) {
         suppressFfmUntilCursorMoves();
     }
     m_pendingAutotileFocusWindowId = windowId;

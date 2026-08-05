@@ -196,13 +196,17 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // while the global kind was ClientDecides, with no diagnostic. (The
     // per-WINDOW open rule below is applied after this block and wins over
     // both, which is the intended precedence.)
-    // Any width key counts — the rule channel's bare fraction OR the
-    // settings channel's kind trio; a per-screen kind=Preset would otherwise
-    // be silently overridden by the global ClientDecides.
+    // The rule channel's bare fraction pins a width outright. The settings
+    // channel's kind trio answers BY VALUE through
+    // effectiveWidthClientDecides: a per-screen kind of Fixed/Preset/
+    // Proportion pins a width (effectiveDefaultColumnWidth above already
+    // resolved it), while a per-screen kind of ClientDecides means exactly
+    // that — testing the kind key's mere PRESENCE here inverted the setting,
+    // gating the client-size branch off on precisely the monitors scoped to
+    // it.
     const QVariantMap screenOverrides = m_perScreenOverrides.value(screenId);
-    const bool screenPinsWidth = screenOverrides.contains(ScrollPerScreenKeys::defaultColumnWidth())
-        || screenOverrides.contains(ScrollPerScreenKeys::defaultColumnWidthKind());
-    if (m_defaultWidthClientDecides && m_windowTracker && !screenPinsWidth) {
+    const bool rulePinsWidth = screenOverrides.contains(ScrollPerScreenKeys::defaultColumnWidth());
+    if (effectiveWidthClientDecides(screenId) && m_windowTracker && !rulePinsWidth) {
         // Open at the client's own size when one is on record; the first
         // client resize reconciles it afterwards.
         if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
@@ -441,6 +445,12 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // a single-window screen sits at the geometry the OTHER mode left it in.
     const QRect priorAppliedRect = m_lastAppliedRect.value(windowId);
     m_lastAppliedRect.remove(windowId);
+    // The parked-edge memory follows the rect memory: a re-adopted window
+    // never parked here, and a stale side would mis-anchor its first arrival
+    // slide. Taken (not dropped) so the refuse branch can put it back — a
+    // refused insert means the window is a live tile that may genuinely be
+    // parked right now.
+    const QString priorParkedEdge = m_parkedScrollEdge.take(windowId);
     if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight)) {
         // Every insert refused (the strip already holds the window). Nothing
         // moved and nothing was adopted, so neither the geometry batch nor
@@ -450,6 +460,9 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // geometry, which is the poison this map exists to prevent.
         if (priorAppliedRect.isValid()) {
             m_lastAppliedRect.insert(windowId, priorAppliedRect);
+        }
+        if (!priorParkedEdge.isEmpty()) {
+            m_parkedScrollEdge.insert(windowId, priorParkedEdge);
         }
         return;
     }
@@ -804,6 +817,7 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         staleState->strip().takeWindow(windowId, staleParams);
         staleState->removeFloating(windowId);
         m_lastAppliedRect.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         if (staleWasFloating) {
@@ -834,8 +848,10 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // Re-adoption starts from a blank rect memory: handoffRelease/windowClosed
     // only retain m_lastAppliedRect long enough to survive the close/capture
     // window, and a leftover entry would defeat applyLayout's emit-on-change
-    // gate so no windowsTiled batch ever fires for the re-adopted window.
+    // gate so no windowsTiled batch ever fires for the re-adopted window. A
+    // leftover parked edge is equally foreign to the adopting strip.
     m_lastAppliedRect.remove(windowId);
+    m_parkedScrollEdge.remove(windowId);
     if (ctx.wasFloating) {
         state->addFloating(windowId);
         // The window arrives floating and so is never a strip tile here: the

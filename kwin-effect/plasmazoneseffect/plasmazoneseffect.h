@@ -696,16 +696,23 @@ private:
     /// or not-yet-resolved id. The counterpart to outputScreenId, for the
     /// paths that hold an id and need the output's geometry.
     KWin::LogicalOutput* outputForScreenId(const QString& screenId) const;
+    /// The output a scroll-strip window is managed by, or nullptr when the
+    /// window is not a strip column (or is exempt: user move/resize, floating).
+    /// The paint path compares this against the output currently being painted.
+    /// Answers are memoised per output pass (see m_scrollManagedCache) so the
+    /// prePaintWindow and paintWindow probes for one window cost one predicate
+    /// walk between them.
+    KWin::LogicalOutput* scrollManagedOutputFor(KWin::EffectWindow* w) const;
     /**
      * @brief The screen rect a scrolling-strip window's rendering AND input
      *        are confined to, or an invalid rect when no confinement applies.
      *
      * Valid only for a scroll-managed, non-floating window that is not in a
      * user move/resize: the managed output's geometry. paintWindow skips the
-     * window in OUTPUT paint passes whose viewport misses this rect (offscreen
-     * capture passes are exempt — their viewport is the window's own rect, so
-     * the test would blank a parked column's snapshot), and the overhang input
-     * filter treats hits outside it as landing on the clipped-away (invisible)
+     * window in OUTPUT paint passes whose output is not the managed one
+     * (snapshot captures are exempt via m_capturingSnapshot — the test would
+     * blank a parked column's snapshot), and the overhang input filter treats
+     * hits outside this rect as landing on the clipped-away (invisible)
      * overhang. One predicate, two consumers — keep them in lockstep.
      *
      * Answers an invalid rect immediately when no screen is scrolling, so the
@@ -717,10 +724,6 @@ private:
      * both sub-screens render in the same output pass, so a same-monitor
      * overhang is drawn and remains interactive either way.
      */
-    /// The output a scroll-strip window is managed by, or nullptr when the
-    /// window is not a strip column (or is exempt: user move/resize, floating).
-    /// The paint path compares this against the output currently being painted.
-    KWin::LogicalOutput* scrollManagedOutputFor(KWin::EffectWindow* w) const;
     QRect scrollClipGeometryFor(KWin::EffectWindow* w) const;
     TilingHandler* tilingHandler() const
     {
@@ -1812,10 +1815,26 @@ private:
     /// builds it output-local instead, the neighbouring output's viewport reads
     /// as (0,0,w,h), overlaps the managed output's rect, and the cull never
     /// fires. Comparing pointers cannot be wrong about which output is being
-    /// painted. Null outside an output pass (offscreen captures), where the
-    /// suppression must not engage at all.
+    /// painted. Null only OUTSIDE any prePaintScreen→postPaintScreen bracket
+    /// (defensive bootstrap, test harnesses, a null data.screen from KWin) —
+    /// offscreen captures run INSIDE a pass and keep that pass's output,
+    /// which is what makes the desktop-capture cull agree with the live
+    /// scene; the window-snapshot captures are exempted by
+    /// m_capturingSnapshot instead. With the latch null the suppression does
+    /// not engage (fails open).
     KWin::LogicalOutput* m_currentPassOutput = nullptr;
-    /// Sample counter for the scroll-cull diagnostic. Diagnostic-only.
+    /// Per-pass memo for scrollManagedOutputFor: prePaintWindow and
+    /// paintWindow each probe the predicate for every window, and its chain
+    /// (id lookup, tiled-bucket scan, float check, output resolve) is not
+    /// free at per-window-per-output-per-frame rate. Cleared in
+    /// prePaintScreen when the pass begins, and consulted/populated ONLY
+    /// while a pass is executing — the input filter shares the predicate but
+    /// runs between passes, where a tile batch may just have moved a column,
+    /// so it always computes fresh. In default clamp mode the answer never
+    /// differs from the window's own output (committed geometry cannot
+    /// cross), so the cache also bounds what that mode pays for a cull that
+    /// cannot fire for it.
+    mutable QHash<KWin::EffectWindow*, KWin::LogicalOutput*> m_scrollManagedCache;
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
     void onScreenAdded(KWin::LogicalOutput* output);
     void onScreenRemoved(KWin::LogicalOutput* output);

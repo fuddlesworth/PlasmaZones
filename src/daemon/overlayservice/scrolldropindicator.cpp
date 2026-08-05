@@ -74,10 +74,11 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     // Deliberate — a rule that silences the indicator is a property of where
     // you are working, not of the window you happened to pick up.
     bool indicatorEnabled = !m_settings || m_settings->scrollingDropIndicatorEnabled();
-    // constFind on a LOCAL const copy of the entry: indexing the member with
-    // operator[] default-inserts an empty map for every screen that ever
-    // pushed a rect, which then reads back as "has overrides" in the
-    // change-gate above.
+    // constFind on a value() lookup (bound as a lifetime-extended const
+    // reference): indexing the member with operator[] default-inserts an
+    // empty map for every screen that ever pushed a rect, which then reads
+    // back as "has overrides" in the change-gate above. The settings-layering
+    // block further down reuses this same lookup for the same reason.
     const QVariantMap& screenOverrides = m_scrollDropIndicatorOverrides.value(screenId);
     if (const auto it = screenOverrides.constFind(QStringLiteral("indicatorEnabled"));
         it != screenOverrides.constEnd()) {
@@ -211,7 +212,7 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
         // screen's CONTEXT rule, which beats the setting, which the content
         // item resolves against the theme when it is the empty sentinel. That
         // is the tab colours' order, and niri's.
-        const QVariantMap& ctx = m_scrollDropIndicatorOverrides[screenId];
+        const QVariantMap& ctx = screenOverrides;
         const QVariantMap& win = m_scrollDropIndicatorWindowOverrides;
         const auto layered = [&ctx, &win](const QString& key, const QVariant& fromSettings) {
             if (const auto it = win.constFind(key); it != win.constEnd()) {

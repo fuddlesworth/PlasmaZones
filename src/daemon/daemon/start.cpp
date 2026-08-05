@@ -148,6 +148,15 @@ void Daemon::connectScreenSignals()
                 // (unrelated) rule edit doesn't diff it as a change and
                 // spuriously resnap it — the screen-add path lays it out here.
                 diffActiveAssignments();
+                // Topology changed, so every scroll park position derived
+                // from the OUTPUT UNION is stale: a monitor attached below
+                // raises the union bottom, and parks committed against the
+                // old union would sit inside the new output. The debounced
+                // geometry pass retiles every active scroll screen; the
+                // sensor/geometry signals usually fire it anyway, but this
+                // makes the retile unconditional rather than incidental.
+                m_geometryUpdatePending = true;
+                m_geometryUpdateTimer.start();
             });
 
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenRemoved, this,
@@ -249,6 +258,11 @@ void Daemon::connectScreenSignals()
                 // doesn't linger as a stale entry (kept consistent with the
                 // add / context-switch / apply refresh points).
                 diffActiveAssignments();
+                // Same union-park staleness rule as the screenAdded tail: a
+                // removed bottom monitor lowers the output union, so every
+                // scroll park must re-derive against the new topology.
+                m_geometryUpdatePending = true;
+                m_geometryUpdateTimer.start();
             });
 
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenGeometryChanged, this, [this] {

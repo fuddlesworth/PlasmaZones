@@ -1085,10 +1085,10 @@ void SettingsAdaptor::initializeRegistry()
                                  setScrollingMaximizeColumnShortcut)
         REGISTER_CONCRETE_STRING("scrollingExpandColumnShortcut", scrollingExpandColumnShortcut,
                                  setScrollingExpandColumnShortcut)
-        REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightBackShortcut", scrollingCycleWindowHeightBackShortcut,
-                                 setScrollingCycleWindowHeightBackShortcut)
         REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightShortcut", scrollingCycleWindowHeightShortcut,
                                  setScrollingCycleWindowHeightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightBackShortcut", scrollingCycleWindowHeightBackShortcut,
+                                 setScrollingCycleWindowHeightBackShortcut)
         REGISTER_CONCRETE_STRING("scrollingIncreaseWindowHeightShortcut", scrollingIncreaseWindowHeightShortcut,
                                  setScrollingIncreaseWindowHeightShortcut)
         REGISTER_CONCRETE_STRING("scrollingDecreaseWindowHeightShortcut", scrollingDecreaseWindowHeightShortcut,

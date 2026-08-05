@@ -247,8 +247,10 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
         const ScrollLayoutParams params = layoutParamsForScreen(targetScreen);
         // Same as handoffReceive: the retained close/release rect only has to
         // outlive the capture window, and carrying it into a re-adoption would
-        // gate away the first windowsTiled batch for this window.
+        // gate away the first windowsTiled batch for this window. Parked-edge
+        // memory is dropped for the same re-adoption reason.
         m_lastAppliedRect.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
         // Whatever clamp is on record for the window while it floats — the
         // seed a float-at-open left, or a live windowMinSizeUpdated
         // write-through. This route inserts without min sizes, so without the

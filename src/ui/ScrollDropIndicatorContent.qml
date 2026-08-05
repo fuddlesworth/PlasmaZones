@@ -40,15 +40,13 @@ Item {
     required property real indicatorOpacity
     required property int indicatorBorderWidth
     required property int indicatorBorderRadius
-    /// Whether a rect change should be ANIMATED. True for a target change,
-    /// which is what the transitions exist to make legible. False while the
-    /// edge auto-scroll is driving, because then the rect is re-projected
-    /// every frame for the same slot and animating that is actively wrong:
-    /// the daemon's scroll timer fires at ~16ms against a 100ms transition,
-    /// so each update retargets an animation six times before it can settle.
-    /// x, width and height interpolate INDEPENDENTLY, so a rect that should
-    /// translate instead stretches — the edges arrive at different times and
-    /// the indicator visibly grows and shrinks as it slides.
+    /// Whether a rect change should be ANIMATED. True for a cursor-driven
+    /// target change, which is what the transitions exist to make legible.
+    /// False only on the clear/hide paths (cross-screen hide, preview-end
+    /// teardown): a rectangle that must stop being painted has no target to
+    /// make legible, and x, width and height interpolate INDEPENDENTLY, so
+    /// animating a hide would stretch the rect as its edges arrive at
+    /// different times.
     property bool animateMoves: true
 
     /// Resolved paint colours. The empty test is the only fallback: the D-Bus

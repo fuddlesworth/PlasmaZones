@@ -230,8 +230,12 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
 void TilingHandler::reportScrollClipLoss(const QString& windowId, const QString& reason) const
 {
     // Warning-level and on the diag category, so it shows with no logging rule
-    // set: this condition is always a defect, never routine. Deduplicated per
-    // window (see m_scrollClipLossReported) because the caller runs per frame.
+    // set. Reserved for the genuinely anomalous gate (a tracked scrolling
+    // screen with no connected output) — the routine negatives ("not a strip
+    // member", "screen not scrolling") are the predicate's normal answer for
+    // every dialog and autotile window and must never reach here. Deduplicated
+    // per window (see m_scrollClipLossReported) because the caller runs per
+    // frame.
     if (m_scrollClipLossReported.contains(windowId)) {
         return;
     }
@@ -252,7 +256,8 @@ QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
     // took clicks on, the neighbouring output.
     const QString tiledScreen = TilingStateHelpers::screenForTiledWindow(m_border, windowId);
     if (tiledScreen.isEmpty()) {
-        reportScrollClipLoss(windowId, QStringLiteral("not a tiled member of any screen"));
+        // Routine negative: every dialog, popup and non-strip window takes
+        // this exit per frame. Not a clip loss — nothing to report.
         return QString();
     }
     // Both maps get a say, and the one that names an actual scrolling screen
@@ -290,10 +295,10 @@ QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
                m_scrollingScreens.contains(recorded)) {
         tracked = recorded;
     } else {
-        reportScrollClipLoss(windowId,
-                             QStringLiteral("no scrolling screen: bucket=%1 recorded=%2 scrollingSet=%3")
-                                 .arg(tiledScreen, m_notifiedWindowScreens.value(windowId),
-                                      QStringList(m_scrollingScreens.values()).join(QLatin1Char(','))));
+        // Routine negative: a tiled member of a NON-scrolling screen — every
+        // autotile and snap window in a mixed session answers here per frame.
+        // Not a clip loss, and the message would have to allocate (a values()
+        // copy plus a join) on the paint path just to say so.
         return QString();
     }
     // Connected-output gate (see the header doc): cached set lookup, so the
@@ -541,6 +546,11 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QStri
     m_unfloatRetryAttempts.remove(windowId);
     m_pendingFreshWindows.remove(windowId);
     m_deferredWindowRoutes.remove(windowId);
+    // The clip-loss dedupe entry dies with the window too: ids are
+    // appId-derived and reusable, and a stale entry would swallow a reused
+    // id's first genuine report (the success-path re-arm only runs when the
+    // predicate answers).
+    m_scrollClipLossReported.remove(windowId);
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreTileForDesktopMove is NOT cleared
@@ -806,6 +816,7 @@ void TilingHandler::onDaemonReady()
     // notifyWindowsAddedBatch inserts BOTH maps synchronously before the D-Bus
     // dispatch, and the daemon cannot tile a window it has not been told about.
     m_notifiedWindowScreens.clear();
+    m_scrollClipLossReported.clear();
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreTileForDesktopMove.clear();
     // Tiled membership belongs to the dead session as well. The

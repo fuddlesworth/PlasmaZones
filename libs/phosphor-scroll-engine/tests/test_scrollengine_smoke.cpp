@@ -780,13 +780,12 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
     QVERIFY2(!bEntry.contains(QLatin1String("scrollEdge")),
              "a column that was never parked must not carry a scrollEdge");
 
-    // Committed geometry NEVER crosses onto a neighbouring output. This is
-    // the clamp contract: render-side suppression of an overhang is not
-    // enforceable (the compositor may present an idle surface on a hardware
-    // plane, bypassing the effect chain), so a partial edge column is clamped
-    // at any boundary with an adjacent output. Checked across every batch
-    // this test produced: no committed rect may extend past the screen's
-    // right edge, because S2 sits there.
+    // No committed rect from this fixture crosses the RIGHT screen edge,
+    // where S2 sits. Narrow by construction: this fixture's columns are
+    // either fully on screen or fully off (they park), so the clamp branches
+    // never run here and only the park bound is exercised — the genuine
+    // straddler clamp contract (both edges, screen-not-work-area, peek
+    // floor, crop mode) is pinned by test_scrollengine_boundary.cpp.
     for (int sig = 0; sig < tiled.count(); ++sig) {
         const QJsonArray b = QJsonDocument::fromJson(tiled.at(sig).at(0).toString().toUtf8()).array();
         for (const QJsonValue& v : b) {

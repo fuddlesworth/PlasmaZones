@@ -33,6 +33,12 @@ static_assert(ConfigDefaults::scrollingTabIndicatorEnabled(),
               "ISettings::scrollingTabIndicatorEnabled defaults to true — update it with this default");
 static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
               "ISettings::scrollingRestoreFloatedWindowsOnLogin defaults to true — update it with this default");
+// IScrollSettings (the LGPL engine interface) carries its own defaulted
+// getter for crop mode, returning `false` — the safe clamp for every
+// implementor that has not heard of the option. Same duplication class,
+// same pin, different interface and direction.
+static_assert(!ConfigDefaults::scrollingCropStraddlers(),
+              "IScrollSettings::scrollingCropStraddlers defaults to false — update it with this default");
 // The tab indicator's paint half carries the same interface-side defaults, for
 // the same reason: the overlay service reads them through ISettings.
 static_assert(ConfigDefaults::scrollingTabIndicatorStyle() == 1,

@@ -506,10 +506,12 @@ void TestScrollEngineZoneNumbers::clippedEdgeTilesKeepTheirNumbers()
 {
     // "Clipped, not dropped": centering the middle of three 600px columns
     // pushes its neighbours halfway off BOTH edges. They keep their numbers,
-    // there is no minimum-visibility threshold, and the rects the walk
-    // reports are the CLIPPED ones — which, since the geometry clamp, are
-    // also the APPLIED rects (see the assertions at the bottom for why the
-    // old keep-the-true-rect contract was reversed).
+    // and the rects the walk reports are the CLIPPED ones — which, IN THIS
+    // FIXTURE (screen rect == work area, crop mode off, remainders above the
+    // peek floor), also equal the APPLIED rects. The equality is not general:
+    // with a panel the walk clips to the work area while the apply clamps to
+    // the screen, a remainder below the peek floor parks while keeping its
+    // number, and crop mode applies the true rect.
     //
     // Work area is 1200 wide with 600px columns: centering the middle one
     // puts it at 300..900, leaving the outer two at -300..300 and 900..1500.

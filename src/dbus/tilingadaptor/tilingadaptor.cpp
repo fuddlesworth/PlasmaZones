@@ -94,10 +94,21 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
     }
 
     PhosphorProtocol::TileRequestList requests;
+    QSet<QString> seenWindowIds;
     for (const QJsonValue& val : doc.array()) {
         QJsonObject obj = val.toObject();
         PhosphorProtocol::TileRequestEntry entry;
         entry.windowId = obj.value(QLatin1String("windowId")).toString();
+        // One entry per window per batch: the effect applies entries in
+        // order, so a duplicate would apply twice (last wins) and, with
+        // scrollEdge now driving the animation anchor, two entries naming
+        // different edges would animate the window in from one side and
+        // re-anchor it to the other. No producer emits duplicates today;
+        // this is boundary hardening, first-entry-wins.
+        if (seenWindowIds.contains(entry.windowId)) {
+            qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping duplicate entry for" << entry.windowId;
+            continue;
+        }
         entry.floating = obj.value(QLatin1String("floating")).toBool(false);
         if (!entry.floating) {
             entry.x = obj.value(QLatin1String("x")).toInt();
@@ -121,6 +132,7 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
             qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping entry:" << validationError;
             continue;
         }
+        seenWindowIds.insert(entry.windowId);
         requests.append(entry);
     }
 

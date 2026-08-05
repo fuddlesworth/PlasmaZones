@@ -4,7 +4,6 @@
 #include "windowdragadaptor.h"
 #include <QGuiApplication>
 #include <QKeySequence>
-#include <QTimer>
 #include <QScreen>
 #include <algorithm>
 #include <cmath>
@@ -281,7 +280,7 @@ bool WindowDragAdaptor::effectiveDragReorderModeFor(const QString& screenId) con
     return false;
 }
 
-void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate)
+void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const QRect& rect)
 {
     if (!m_overlayService || screenId.isEmpty()) {
         return;
@@ -290,20 +289,18 @@ void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const Q
     // new one. Without this the departed screen keeps painting a target the
     // drop can no longer land in, and nothing else would clear it — the
     // teardown paths only know the screen recorded here.
-    // screensMatch, not raw !=, because the two push drivers source the id
-    // differently: dragMoved passes the resolver's id and the scroll tick
-    // passes the engine's own dragInsertPreviewScreenId. Those can spell the
-    // same output as a physical id or a virtual one, and a raw compare then
-    // reads a spelling change as a screen change and pushes a hide the very
-    // next line un-hides — a one-frame flicker on every tick that crosses the
-    // two drivers. Every sibling comparison in this file already uses it.
+    // screensMatch, not raw !=, defensively: the recorded id and an incoming
+    // one can spell the same output as a physical id or a virtual one, and a
+    // raw compare would read a spelling change as a screen change — pushing a
+    // hide the very next line un-hides. Every sibling comparison in this file
+    // already uses it.
     if (!m_dropIndicatorScreenId.isEmpty()
         && !PhosphorScreens::ScreenIdentity::screensMatch(m_dropIndicatorScreenId, screenId)) {
         // The departing screen's hide is never animated: there is no target
         // to make legible, only a rectangle that must stop being painted.
         m_overlayService->updateScrollDropIndicator(m_dropIndicatorScreenId, QRect(), /*animate=*/false);
     }
-    m_overlayService->updateScrollDropIndicator(screenId, rect, animate);
+    m_overlayService->updateScrollDropIndicator(screenId, rect, /*animate=*/true);
     // An empty rect means the engine has no paintable target (autotile by
     // interface default, or a preview with nothing hit-tested yet). The
     // overlay treats that as a hide, so do not record the screen as lit —
@@ -359,21 +356,18 @@ void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenI
         return PhosphorIdentity::VirtualScreenId::samePhysical(engine->dragInsertPreviewScreenId(), screenId)
             || PhosphorIdentity::VirtualScreenId::samePhysical(engine->dragInsertPreviewPriorScreenId(), screenId);
     };
-    bool cancelled = false;
     if (affected(m_autotileEngine)) {
         m_autotileEngine->cancelDragInsertPreview();
-        cancelled = true;
     }
     if (affected(m_scrollEngine)) {
         m_scrollEngine->cancelDragInsertPreview();
-        cancelled = true;
     }
-    if (cancelled) { }
-    // Clear the indicator on the departing output INDEPENDENTLY of `cancelled`.
-    // The engine may have self-cancelled its own preview during a prune before
-    // this call arrives (pruneStatesForRemovedScreen does exactly that), in
-    // which case `affected` is false, nothing is cancelled here, and the
-    // rectangle would stay painted on a screen that is going away.
+    // Clear the indicator on the departing output regardless of whether any
+    // engine cancel ran above. The engine may have self-cancelled its own
+    // preview during a prune before this call arrives
+    // (pruneStatesForRemovedScreen does exactly that), in which case
+    // `affected` is false, nothing is cancelled here, and the rectangle would
+    // stay painted on a screen that is going away.
     if (!m_dropIndicatorScreenId.isEmpty()
         && PhosphorIdentity::VirtualScreenId::samePhysical(m_dropIndicatorScreenId, screenId)) {
         clearScrollDropIndicator();
@@ -387,8 +381,7 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
         // No preview to settle — but the drag is ENDING here, so this is a
         // teardown path like the two below it. The engine may have dropped its
         // own preview after the last push (five engine-side self-cancel sites
-        // do exactly that), leaving the indicator painted and the edge-scroll
-        // timer armed with the old drag's parked cursor. Both must go.
+        // do exactly that), leaving the indicator painted. It must go.
         clearScrollDropIndicator();
         return false;
     }

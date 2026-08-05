@@ -54,10 +54,14 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
     // itself.
     // Known enable-order gap, deliberately unfixed: the engine flips to true
     // rects synchronously on the settings change while this cached flag
-    // arrives over an async D-Bus read, so a handful of frames can commit
-    // overhang with scanout still permitted. Closing it needs an effect-side
-    // ack the settings path does not have, and the exposure is a sub-second
-    // window on an explicit settings flip — not worth that machinery.
+    // arrives over an async D-Bus read. The exposure is NOT bounded by the
+    // retile debounce — applyLayout also runs synchronously from window
+    // lifecycle and float events, so any open/close/float landing inside the
+    // reply latency (one getSetting queued behind loadCachedSettings' whole
+    // burst) commits overhang with scanout still permitted. Closing it needs
+    // an effect-side ack the settings path does not have; crop is off by
+    // default and the flip is an explicit user action, so the window is
+    // accepted rather than engineered away.
     return m_cachedScrollCropStraddlers && m_tilingHandler && m_tilingHandler->hasScrollingScreens();
 }
 
@@ -87,6 +91,9 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // steady_clock) so rebinds between per-output and fallback remain
     // compatible.
     m_currentPassOutput = data.screen;
+    // New pass, new scroll-managed answers: the memo is only valid while the
+    // strip state cannot change under it, which one output pass guarantees.
+    m_scrollManagedCache.clear();
     if (data.screen) {
         auto it = m_motionClocksByOutput.find(data.screen);
         if (it != m_motionClocksByOutput.end()) {
@@ -296,8 +303,12 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
 
 void PlasmaZonesEffect::postPaintScreen()
 {
-    // Pass over: the latched output must not leak into an offscreen capture,
-    // which would make the scroll suppression compare against a stale output.
+    // Pass over. Defensive hygiene: every capture path in this tree reaches
+    // paintWindow from INSIDE the pass (before this runs), so the clear only
+    // protects a hypothetical paintWindow outside any bracket. Cleared at the
+    // TOP deliberately — nothing below reads the latch, and clearing first
+    // means any future reader added to this function sees the bracket as
+    // already closed rather than a stale output.
     m_currentPassOutput = nullptr;
     // Schedule targeted repaints for active animations instead of full-screen
     m_windowAnimator->scheduleRepaints();
@@ -679,7 +690,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     if (w && m_shaderManager.hasOpacityRules() && m_shaderManager.hasTransition(w)) {
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
-            m_shaderManager.cacheFrameOpacity(w, resolveWindowOpacity(resolveRuleActions(w, getWindowId(w))));
+            m_shaderManager.cacheFrameOpacity(w, resolveWindowOpacity(resolveRuleActions(w, windowId)));
         }
     }
 
@@ -753,50 +764,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     OffscreenEffect::prePaintWindow(view, w, data);
 }
 
-KWin::LogicalOutput* PlasmaZonesEffect::scrollManagedOutputFor(KWin::EffectWindow* w) const
-{
-    // Same predicate as scrollClipGeometryFor, stopping one step earlier at the
-    // output itself. The paint path wants the output (to compare by identity
-    // against the pass being rendered); the input filter genuinely wants a
-    // rect, so it keeps the rect-returning wrapper below. Both must stay in
-    // step — a window suppressed from a foreign output's paint must also be
-    // non-interactive there — so the wrapper is defined in terms of this.
-    if (!m_tilingHandler || !m_tilingHandler->hasScrollingScreens()) {
-        return nullptr;
-    }
-    if (!w || w->isDeleted() || w->isUserMove() || w->isUserResize()) {
-        return nullptr;
-    }
-    const QString windowId = getWindowId(w);
-    const QString trackedScreen = m_tilingHandler->scrollTrackedScreenFor(windowId);
-    if (trackedScreen.isEmpty() || !m_navigationHandler || m_navigationHandler->isWindowFloating(windowId)) {
-        return nullptr;
-    }
-    return outputForScreenId(trackedScreen);
-}
-
-QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w) const
-{
-    // The rect form of scrollManagedOutputFor, for the input filter, which
-    // needs the boundary itself rather than an output to compare against.
-    // Defined in terms of it so the two can never disagree about WHICH windows
-    // are strip straddlers: a window whose overhang is suppressed from a
-    // foreign output's paint must be non-interactive in that same region.
-    //
-    // The predicate's own reasoning lives on scrollManagedOutputFor. The part
-    // worth repeating here: it routes through scrollTrackedScreenFor, NOT
-    // m_trackedScreenPerWindow, because that map is populated for EVERY window
-    // setupWindowConnections runs on — dialogs, popups, excluded apps,
-    // keep-above overlays — so keying on it clipped any window merely sitting
-    // on a scrolling screen, and a modal straddling the boundary had half of
-    // itself treated as dead overhang.
-    const KWin::LogicalOutput* managedOutput = scrollManagedOutputFor(w);
-    if (!managedOutput) {
-        return QRect();
-    }
-    const KWin::Rect g = managedOutput->geometry();
-    return QRect(g.x(), g.y(), g.width(), g.height());
-}
+// scrollManagedOutputFor / scrollClipGeometryFor live in scroll_clip.cpp —
+// the clip predicate is its own concern; this file consumes it.
 
 void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
@@ -804,13 +773,17 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 {
     // Scrolling-strip boundary clip. A strip column legitimately straddles
     // its screen's edge (centering the active column pushes both neighbours
-    // across it), and the engine commits the true rect on edges with no adjacent output (boundaries with a neighbour
-    // are clamped engine-side) — clamping the window geometry instead was tried and rejected, the user wants the
-    // full-size window with its drawing cut at the monitor boundary. On the column's own output the render target
-    // already scissors at the edge; the only place the overhang becomes visible is the ADJACENT output's paint pass, so
-    // skip the window entirely in passes whose viewport doesn't touch its managed screen. The predicate lives in
-    // scrollClipGeometryFor and is shared with the overhang input filter, which keeps the same invisible region from
-    // receiving pointer/touch input.
+    // across it). In default clamp mode the engine clamps BOTH edges
+    // engine-side, so no committed rect crosses an output and this cull has
+    // nothing to do; in crop mode (scrollingCropStraddlers) the engine keeps
+    // the TRUE rect — the user wants the full-size window with its drawing
+    // cut at the monitor boundary — and this cull is what does the cutting.
+    // On the column's own output the render target already scissors at the
+    // edge; the only place the overhang becomes visible is the ADJACENT
+    // output's paint pass, so skip the window entirely in passes whose output
+    // is not its managed screen. The predicate lives in scrollClipGeometryFor
+    // and is shared with the overhang input filter, which keeps the same
+    // invisible region from receiving pointer/touch input.
     //
     // OUTPUT PASSES ONLY. An offscreen capture (captureOldWindowSnapshot,
     // captureWindowSurface) re-enters paintWindow with a viewport built from
@@ -833,9 +806,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // needs clipping: each output renders into its own framebuffer, so
         // the overhang past the edge is clipped by the hardware.
         //
-        // m_currentPassOutput null means this is not an output pass (offscreen
-        // capture), where the suppression must not engage — the same case the
-        // m_capturingSnapshot exemption covers.
+        // m_currentPassOutput is null only outside any prePaintScreen bracket
+        // (defensive bootstrap, test harness, a null data.screen) — NOT for
+        // offscreen captures, which run inside a pass and keep its output;
+        // the window-snapshot captures are exempted by m_capturingSnapshot
+        // above. With the latch null the suppression fails open, matching
+        // the permissive treatment every other null-screen branch in this
+        // file applies.
         if (const KWin::LogicalOutput* managed = scrollManagedOutputFor(w); managed && managed != m_currentPassOutput) {
             return;
         }

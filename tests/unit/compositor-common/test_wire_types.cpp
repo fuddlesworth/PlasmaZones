@@ -36,6 +36,20 @@ public Q_SLOTS:
     }
 };
 
+/// Same shape for TileRequestEntry, whose wire signature this PR-line widened
+/// with scrollEdge — the round-trip pins operator<< and operator>> agree on
+/// the field order.
+class TileRequestEcho : public QObject
+{
+    Q_OBJECT
+
+public Q_SLOTS:
+    PhosphorProtocol::TileRequestEntry echoEntry(const PhosphorProtocol::TileRequestEntry& entry) const
+    {
+        return entry;
+    }
+};
+
 namespace {
 
 /**
@@ -136,6 +150,7 @@ private Q_SLOTS:
         QCOMPARE(entry.monocle, true);
         QCOMPARE(entry.floating, false);
         QCOMPARE(entry.stacking, QStringLiteral("lastOnTop"));
+        QCOMPARE(entry.scrollEdge, QStringLiteral("right"));
 
         // Verify default construction
         PhosphorProtocol::TileRequestEntry defaultEntry;
@@ -143,6 +158,56 @@ private Q_SLOTS:
         QCOMPARE(defaultEntry.monocle, false);
         QCOMPARE(defaultEntry.floating, false);
         QVERIFY(defaultEntry.stacking.isEmpty());
+        QVERIFY(defaultEntry.scrollEdge.isEmpty());
+    }
+
+    // A real bus round-trip so operator>> is exercised too — the signature
+    // check above only drives operator<<, which is exactly where a
+    // field-order divergence between the two would hide after a widening
+    // like scrollEdge's.
+    void testTileRequestEntryBusRoundtrip()
+    {
+        PhosphorProtocol::registerWireTypes();
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected()) {
+            QSKIP("No session bus available for a wire round-trip");
+        }
+        TileRequestEcho echo;
+        const QString path = QStringLiteral("/test/wiretypes/tilerequestecho");
+        QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+
+        const PhosphorProtocol::TileRequestEntry sent{QStringLiteral("konsole|7"),
+                                                      50,
+                                                      100,
+                                                      640,
+                                                      480,
+                                                      QStringLiteral("{zone-uuid}"),
+                                                      QStringLiteral("screen-0"),
+                                                      true,
+                                                      false,
+                                                      QStringLiteral("lastOnTop"),
+                                                      QStringLiteral("left")};
+
+        QDBusMessage call =
+            QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
+        call << QVariant::fromValue(sent);
+        const QDBusMessage reply = bus.call(call);
+        bus.unregisterObject(path);
+
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(reply.arguments().size(), 1);
+        const auto got = qdbus_cast<PhosphorProtocol::TileRequestEntry>(reply.arguments().at(0));
+        QCOMPARE(got.windowId, sent.windowId);
+        QCOMPARE(got.x, sent.x);
+        QCOMPARE(got.y, sent.y);
+        QCOMPARE(got.width, sent.width);
+        QCOMPARE(got.height, sent.height);
+        QCOMPARE(got.zoneId, sent.zoneId);
+        QCOMPARE(got.screenId, sent.screenId);
+        QCOMPARE(got.monocle, sent.monocle);
+        QCOMPARE(got.floating, sent.floating);
+        QCOMPARE(got.stacking, sent.stacking);
+        QCOMPARE(got.scrollEdge, sent.scrollEdge);
     }
 
     // =================================================================

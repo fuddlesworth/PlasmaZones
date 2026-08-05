@@ -264,32 +264,40 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         const QString deferScreen = getWindowScreenId(window);
         const uint64_t deferGen = m_daemonGate.batchGenByScreen.value(deferScreen);
         auto conn = std::make_shared<QMetaObject::Connection>();
-        *conn = connect(
-            window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
-            [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, deferGen](KWin::EffectWindow*) {
-                disconnect(*conn);
-                if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
-                    return;
-                }
-                const QString nowScreen = getWindowScreenId(safeWindow.data());
-                if (nowScreen != deferScreen || m_daemonGate.batchGenByScreen.value(deferScreen) != deferGen) {
-                    qCDebug(lcEffect) << "Deferred geometry superseded (screen or batch changed), dropping:"
-                                      << getWindowId(safeWindow.data());
-                    return;
-                }
-                // Re-assert the self-caused-frame-change guard the
-                // original (batch) apply held — without it the
-                // synchronous frame change from this moveResize
-                // reads as an external move and can report a
-                // phantom cross-VS unsnap.
-                // Save/restore, not set/clear (nesting-safe).
-                const bool prevInApply = m_daemonGate.inGeometryApply;
-                m_daemonGate.inGeometryApply = true;
-                const auto guard = qScopeGuard([this, prevInApply] {
-                    m_daemonGate.inGeometryApply = prevInApply;
-                });
-                applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath);
-            });
+        *conn =
+            connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
+                    [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, deferGen, originOverride,
+                     visualTargetOverride](KWin::EffectWindow*) {
+                        disconnect(*conn);
+                        if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
+                            return;
+                        }
+                        const QString nowScreen = getWindowScreenId(safeWindow.data());
+                        if (nowScreen != deferScreen || m_daemonGate.batchGenByScreen.value(deferScreen) != deferGen) {
+                            qCDebug(lcEffect) << "Deferred geometry superseded (screen or batch changed), dropping:"
+                                              << getWindowId(safeWindow.data());
+                            return;
+                        }
+                        // Re-assert the self-caused-frame-change guard the
+                        // original (batch) apply held — without it the
+                        // synchronous frame change from this moveResize
+                        // reads as an external move and can report a
+                        // phantom cross-VS unsnap.
+                        // Save/restore, not set/clear (nesting-safe).
+                        const bool prevInApply = m_daemonGate.inGeometryApply;
+                        m_daemonGate.inGeometryApply = true;
+                        const auto guard = qScopeGuard([this, prevInApply] {
+                            m_daemonGate.inGeometryApply = prevInApply;
+                        });
+                        // Forward BOTH scroll overrides: dropping them replayed a
+                        // leaving column as a direct animate-to-park, sweeping it
+                        // backwards across the screen — the exact artifact the
+                        // override split exists to prevent. They are frame-relative
+                        // snapshots from defer time; the batch-generation guard above
+                        // already dropped the replay if anything moved since.
+                        applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath, originOverride,
+                                            visualTargetOverride);
+                    });
         return;
     }
 
@@ -339,8 +347,21 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // here (kwin's moveResize is internally a no-op when geometry
         // already matches, but still pays signal-dispatch cost on the
         // hot path of rapid drag retargets).
-        if (m_windowAnimator->hasAnimation(window) && m_windowAnimator->isAnimatingToTarget(window, animTarget)) {
-            return; // Already animating to this target
+        //
+        // When the caller SPLIT the visual target from the committed frame
+        // (leaving scroll columns), the bail must ALSO require the committed
+        // frame to already match: two successive leaving-column batches can
+        // share an animTarget (derived from the screen edge and the window's
+        // size) while carrying DIFFERENT park rects — bailing on animTarget
+        // alone would skip the moveResize and strand the committed geometry
+        // at the previous park. Without a split, animTarget IS geo and the
+        // extra term is deliberately not evaluated: frameGeometry() can lag
+        // a size-changing moveResize until the client acks, and a defeated
+        // bail would fall through to a retarget that re-anchors the running
+        // animation on every rapid identical retarget.
+        if (m_windowAnimator->hasAnimation(window) && m_windowAnimator->isAnimatingToTarget(window, animTarget)
+            && (!visualTargetOverride.isValid() || window->frameGeometry().toRect() == geo)) {
+            return; // Already animating to this target (with the frame committed, when split)
         }
 
         // Apply final geometry immediately — client starts re-rendering at new size.

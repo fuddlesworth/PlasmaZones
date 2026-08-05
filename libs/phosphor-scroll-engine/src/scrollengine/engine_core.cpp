@@ -131,15 +131,21 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
             [&currentKey](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
                 return key == currentKey;
             },
-            [this, &releasedWindows](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
+            [this, &releasedWindows, &releasedScreens, &screenId](const PhosphorEngine::PlacementStateKey& key,
+                                                                  ScrollState* state) {
                 // Mode reassignment: remember the strip's structure so a
                 // cycle back to Scrolling rebuilds it (stacks, widths,
                 // tabbed flags) instead of a default one-window-per-column
                 // strip. Captured BEFORE the release strips the state.
                 stashStripStructure(key, state);
                 releaseScreenState(state, releasedWindows);
+                // Inside the callback so the payload names only screens that
+                // had a MATCHING STATE — the daemon's release handler uses
+                // it as a skip filter, and a leaving screen that never built
+                // a state widening it would let an unrelated window through
+                // (the sibling prune's payload keeps the same contract).
+                releasedScreens.insert(screenId);
             });
-        releasedScreens.insert(screenId);
         m_context.removeScreen(screenId);
         // Even a STATELESS leaving screen (seed pushed before any window
         // arrived) must drop its per-screen bookkeeping — the state-driven
@@ -830,6 +836,12 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) c
             const int presetIdx = presetIt != overrides.constEnd()
                 ? presetIt->toInt()
                 : (m_defaultColumnWidth.kind == ColumnWidth::Preset ? m_defaultColumnWidth.presetIdx : 0);
+            // Deliberate exception to the validate-then-fall-back contract
+            // above: the preset LIST can legitimately shrink under a stored
+            // index, so clamping is the correct read of a stale-but-honest
+            // value (refreshConfigFromSettings clamps the global the same
+            // way). Fixed and Proportion keep the strict fall-back because
+            // an out-of-range value there is malformed, not stale.
             return ColumnWidth::makePreset(qBound(0, presetIdx, int(m_presetColumnWidths.size()) - 1));
         }
         if (kind == static_cast<int>(DefaultWidthKind::Proportion)) {
@@ -841,10 +853,21 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) c
             }
         }
         // ClientDecides (and a kind whose resolved value is still out of
-        // range) falls through to the global — the open path handles
-        // client-decides via screenPinsWidth.
+        // range) falls through to the global — the open path decides the
+        // client-sized case via effectiveWidthClientDecides, and this
+        // function only ever supplies the fallback width for it.
     }
     return m_defaultColumnWidth;
+}
+
+bool ScrollEngine::effectiveWidthClientDecides(const QString& screenId) const
+{
+    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    const auto kindIt = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidthKind());
+    if (kindIt != overrides.constEnd()) {
+        return kindIt->toInt() == static_cast<int>(DefaultWidthKind::ClientDecides);
+    }
+    return m_defaultWidthClientDecides;
 }
 
 WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const
