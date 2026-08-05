@@ -563,14 +563,23 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
     QVERIFY(!rectB.isNull());
 
-    // New column BEFORE b: opens where b currently starts, full column height.
+    // New column BEFORE b: the promise sits just OUTSIDE b (niri's index-0
+    // hint placement) — covering b would read as "replace this" while the
+    // drop actually shifts b aside. b sits flush at the view's left edge
+    // here (the detach's dead space is on the right), so the outside-left
+    // position crosses the screen edge and the visibility clamp pins it
+    // half-in there. Full column height either way.
     DragTarget newCol;
     newCol.primary = 0;
     newCol.newSlot = true;
     engine->updateDragInsertPreview(newCol);
     const QRect openSlot = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(openSlot.isValid());
-    QCOMPARE(openSlot.x(), rectB.x());
+    // Outside-left placement, then the visibility clamp — deleting either
+    // fails this: without the shift the promise sits at b's own x, without
+    // the clamp it sits a full column past the edge.
+    const QRect wa = ScrollTestUtils::defaultScreenRect();
+    QCOMPARE(openSlot.x(), qMax(rectB.x() - openSlot.width(), wa.left() - openSlot.width() / 2));
     QCOMPARE(openSlot.height(), rectB.height());
     // Width pinned CONCRETELY, not just non-zero: both windows open at the
     // default column width, so the opening slot is exactly b's width. A
@@ -739,16 +748,17 @@ void TestScrollEngineDragInsert::fullViewportOuterSlotIndicatorClampsToTheEdge()
     QCOMPARE(right.left(), wa.left() + wa.width() - right.width() / 2);
     QCOMPARE(right.intersected(wa).width(), right.width() / 2);
 
-    // Before-the-first slot: the live-view pin maps it onto the post-insert
-    // strip origin, which is on screen — the clamp bounds are no-ops and the
-    // promise stays fully visible.
+    // Before-the-first slot: placed just outside the first column, which on
+    // a full strip is past the LEFT screen edge — clamped to half-in there,
+    // mirroring the right side exactly.
     DragTarget leftOuter;
     leftOuter.primary = 0;
     leftOuter.newSlot = true;
     engine->updateDragInsertPreview(leftOuter);
     const QRect left = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(left.isValid());
-    QCOMPARE(left.intersected(wa), left);
+    QCOMPARE(left.left(), wa.left() - left.width() / 2);
+    QCOMPARE(left.intersected(wa).width(), left.width() - left.width() / 2);
 
     // Control: a slot between the two visible columns is on screen and
     // untouched.

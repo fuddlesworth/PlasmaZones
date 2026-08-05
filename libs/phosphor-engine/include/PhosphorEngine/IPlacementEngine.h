@@ -470,12 +470,15 @@ public:
     /// DETACH-ONCE contract above) has a target that is otherwise invisible.
     ///
     /// Mostly not clamped to the viewport — a join target's rect is where the
-    /// slot genuinely is — with one deliberate exception: a NEW-COLUMN slot
-    /// past the visible edge is clamped so at least half the rect stays on
-    /// screen (niri's insert-hint rule). Without it, the outer slots of a
-    /// FULL viewport resolve entirely off screen and the overlay clips the
-    /// indicator away, leaving the drop that most needs feedback with none;
-    /// the half-in band at the edge marks "insert past this edge" without
+    /// slot genuinely is — with two deliberate NEW-COLUMN exceptions, both
+    /// niri's insert-hint rules: a before-the-first slot is placed just
+    /// OUTSIDE the first column (its raw post-insert position coincides with
+    /// that column and would read as "replace this"), and any new-column
+    /// slot past a visible edge is clamped so at least half the rect stays
+    /// on screen. Without the clamp, the end slots of a FULL viewport
+    /// resolve entirely off screen and the overlay clips the indicator
+    /// away, leaving the drop that most needs feedback with none; the
+    /// half-in band at the edge marks "insert past this edge" without
     /// pretending to be the slot's true position.
     virtual QRect dragInsertIndicatorRect(const QString& screenId) const
     {

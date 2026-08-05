@@ -658,6 +658,7 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
 
     // Mirror of commit's insert selection, deliberately kept line-for-line
     // comparable with it: if the two ever diverge, the indicator lies.
+    const int preInsertColumns = probe.columnCount();
     bool inserted = false;
     if (target.newSlot || probe.isEmpty()) {
         inserted = probe.insertWindowAt(std::clamp(target.primary, 0, probe.columnCount()), p.windowId, p.carried.width,
@@ -709,6 +710,19 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.windowId == p.windowId) {
                 QRect rect = tile.rect.translated(shiftToLiveView, 0);
+                // A BEFORE-THE-FIRST slot mirrors the after-the-last one:
+                // the post-insert strip origin is where the first column
+                // currently sits, so the raw promise would cover that column
+                // at full size — reading as "replace this" while the drop
+                // actually shifts it aside. Place the promise just OUTSIDE
+                // the first column instead (niri positions its index-0
+                // insert hint the same way), which balances the two ends:
+                // both resolve past their screen edge on a full strip and
+                // both reach the half-in clamp below. Skipped for an empty
+                // strip, whose promise genuinely is the first column's spot.
+                if (target.newSlot && preInsertColumns > 0 && std::clamp(target.primary, 0, preInsertColumns) == 0) {
+                    rect.translate(-(rect.width() + params.gap), 0);
+                }
                 // niri-parity visibility clamp, new-column slots only (niri
                 // gates its identical clamp on InsertPosition::NewColumn, and
                 // a join target's column is on screen by construction — it
