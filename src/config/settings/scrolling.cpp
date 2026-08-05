@@ -69,6 +69,9 @@ P_STORE_GET(bool, scrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCente
 P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCenterSingleColumnKey,
                  scrollingAlwaysCenterSingleColumnChanged)
 
+P_STORE_GET(bool, scrollingCropStraddlers, scrollingGroup, cropStraddlersKey, bool)
+P_STORE_SET_BOOL(setScrollingCropStraddlers, scrollingGroup, cropStraddlersKey, scrollingCropStraddlersChanged)
+
 P_STORE_GET(int, scrollingDefaultColumnWidthKind, scrollingGroup, defaultColumnWidthKindKey, int)
 
 // Hand-written kind setter: the shared value key serves two kinds under one

@@ -399,6 +399,10 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // (they followed the card over when the View leaf was folded in).
              {CD::scrollingGroup(), CD::centerFocusedColumnKey()},
              {CD::scrollingGroup(), CD::alwaysCenterSingleColumnKey()},
+             // No UI row yet (config/D-Bus only while the crop experiment
+             // proves itself); owned here so per-page reset covers it and
+             // the ownership sweep stays green.
+             {CD::scrollingGroup(), CD::cropStraddlersKey()},
              {CD::scrollingGroup(), CD::wheelFocusEnabledKey()},
              {CD::scrollingGroup(), CD::wheelFocusInvertedKey()},
              // Scrolling.Behavior — the strip's window-handling and focus

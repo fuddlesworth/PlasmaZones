@@ -752,6 +752,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("alwaysCenterSingleColumn"),
                PhosphorI18n::tr("Center a lone column"),
                {PhosphorI18n::tr("center"), PhosphorI18n::tr("single"), PhosphorI18n::tr("column")});
+    addSetting(
+        search, QStringLiteral("scrolling-window"), QStringLiteral("cropStraddlers"),
+        PhosphorI18n::tr("Crop columns at the screen edge"),
+        {PhosphorI18n::tr("crop"), PhosphorI18n::tr("clip"), PhosphorI18n::tr("edge"), PhosphorI18n::tr("straddle")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingFocusNewWindows"),
                PhosphorI18n::tr("Focus new windows"),
                {PhosphorI18n::tr("focus"), PhosphorI18n::tr("new"), PhosphorI18n::tr("open")});

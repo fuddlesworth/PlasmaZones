@@ -62,6 +62,22 @@ SettingsCard {
         SettingsSeparator {}
 
         SettingsRow {
+            title: i18n("Crop columns at the screen edge")
+            searchAnchor: "cropStraddlers"
+            description: i18n("A partially visible column keeps its full size and its drawing is cut at the edge of the screen. When this is off, the column is resized to fit the visible space instead. Turning this on keeps the compositor compositing every frame itself, which can cost some efficiency in fullscreen video and games while a screen is scrolling.")
+
+            SettingsSwitch {
+                checked: appSettings.scrollingCropStraddlers
+                accessibleName: i18n("Crop columns at the screen edge")
+                onToggled: function (newValue) {
+                    appSettings.scrollingCropStraddlers = newValue;
+                }
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
             title: i18n("Focus new windows")
             searchAnchor: "scrollingFocusNewWindows"
             description: i18n("Focus a window when it opens.")
