@@ -13,6 +13,7 @@
 #include <PhosphorScrollEngine/ScrollState.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
+#include <QElapsedTimer>
 #include <QHash>
 #include <QJsonObject>
 #include <QObject>
@@ -748,13 +749,10 @@ private:
     /// Refreshes the clamp on an existing entry rather than overwriting a
     /// real remembered slot with a slotless one.
     void seedFloatRestoreForOpen(const QString& windowId, int minWidth, int minHeight);
-    /// Accept-predicate term for a FLOATING scroll slot in the open-time
-    /// restore branches (autotile's rule, term for term): same-instance
-    /// records restore unconditionally, FIFO consumption additionally needs a
-    /// real float-back rect, and the record's screen must match @p screenId
-    /// (or be unscreened).
-    bool acceptsFloatingRecord(const PhosphorEngine::WindowPlacement& p, const QString& windowId,
-                               const QString& screenId) const;
+    /// The strip column a record-branch restore should insert at: the
+    /// recorded absolute column, rank-corrected against other record-restored
+    /// windows still present (see m_reopenRestoredColumn).
+    int reopenInsertColumn(const ScrollState* state, int restoreColumn) const;
     /// Consume the window's FLOATING placement record on an engine-decided
     /// float at open (oversized / rule / sticky) and apply the gated
     /// float-back position restore — the same record consumption and
@@ -914,6 +912,39 @@ private:
         WindowHeight height;
     };
     QHash<QString, FloatRestore> m_floatRestore;
+    /// Recorded column order of windows the RECORD branch of
+    /// insertOpenedWindow restored, kept while they stay in a strip. A reopen
+    /// burst delivers windows in KWin's announce order, not column order, so
+    /// inserting each at its recorded ABSOLUTE column permutes the strip
+    /// (announce 2,1,0 → wrong order). Ranking a new arrival against the
+    /// recorded orders of already-restored PRESENT windows makes the relative
+    /// order come out right whatever the announce order; with no ranked
+    /// neighbour present the absolute column stands (the single in-session
+    /// reopen, where it is exact). Lifetime mirrors m_floatRestore's removal
+    /// sites; entries for windows no longer in a strip are inert (the rank
+    /// only counts present windows).
+    QHash<QString, int> m_reopenRestoredColumn;
+    /// Close-burst compaction ledger, per placement context. A mass close
+    /// (logout teardown) untracks windows one at a time, and each removal
+    /// compacts the strip's column indices — so closes 2..N capture an
+    /// already-shifted order (a {0..5} strip persisted as {0,0,1,1,2,2}) and
+    /// the login restore rebuilds a collapsed strip with half the windows
+    /// parked off-viewport. Each entry remembers the ORIGINAL (pre-burst)
+    /// column a close vacated; preCloseBurstColumn reconstructs a window's
+    /// pre-burst column from its current index plus the ledger (the
+    /// deleted-positions correction). Burst-scoped: entries expire
+    /// CloseBurstWindowMs after the last close, and any open-insert clears
+    /// the context's ledger — a burst is closes and nothing else.
+    struct CloseCompaction
+    {
+        QList<int> removedColumns;
+        QElapsedTimer sinceLastClose;
+    };
+    QHash<PhosphorEngine::PlacementStateKey, CloseCompaction> m_closeCompaction;
+    static constexpr int CloseBurstWindowMs = 2000;
+    /// @p currentColumn's pre-burst value per the context's live ledger;
+    /// identity when no burst is active (or @p currentColumn is -1).
+    int preCloseBurstColumn(const PhosphorEngine::PlacementStateKey& key, int currentColumn) const;
     /// Live drag-insert preview state (drag_preview.cpp). The structural
     /// edits a preview makes while it is LIVE are signal-silent, mirroring
     /// autotile's contract, so the daemon's float bookkeeping never sees the

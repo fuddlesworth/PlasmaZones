@@ -123,11 +123,13 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         }
         // A pure-float record carries no engine slot, and record()'s merge
         // only adopts context alongside engine slots — synthesize a floating
-        // slot (recordFloatingClose's convention) so the close screen lands.
+        // slot (recordFloatingClose's convention, including the owning-engine
+        // key: the tiling reopen accepts read strictly their own slot) so the
+        // close screen lands.
         if (preserved->engines.isEmpty() && !preserved->freeGeometryByScreen.isEmpty()) {
             PhosphorEngine::EngineSlot slot;
             slot.state = PhosphorEngine::WindowPlacement::stateFloating();
-            preserved->engines.insert(QString(PhosphorEngine::WindowPlacement::snapEngineId()), slot);
+            preserved->engines.insert(m_service->owningModeEngineId(windowId, authoritativeScreen), slot);
         }
         // Contentless residue must never enter the appId FIFO (mirrors the
         // primary capture path's gate): it would starve and evict real

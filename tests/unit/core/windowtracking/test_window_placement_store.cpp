@@ -4,6 +4,7 @@
 #include <QTest>
 
 #include <QJsonArray>
+#include <QSet>
 
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
@@ -263,7 +264,8 @@ private Q_SLOTS:
         store.record(makePlacement(QStringLiteral("app|old"), QStringLiteral("app"), WindowPlacement::stateFloating(),
                                    WindowPlacement::scrollingEngineId()));
 
-        auto p = store.takeForReopen(QStringLiteral("app|new"), QStringLiteral("app"));
+        auto p = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("app|new"),
+                                     QStringLiteral("app"), QStringLiteral("DP-1"), 0, QString());
         QVERIFY(p.has_value());
         QCOMPARE(p->windowId, QStringLiteral("app|new")); // already re-bound
         QCOMPARE(store.size(), 1); // re-recorded, not consumed away
@@ -278,45 +280,117 @@ private Q_SLOTS:
 
     void testTakeForReopen_rejectedExactRecordIsFinal()
     {
-        // A LIVE window whose own record fails the accept predicate must NOT
-        // fall through to a sibling's FIFO record: consuming it would re-bind
-        // the sibling's placement under this window's id, where the store's
-        // merge overwrites the window's own other-context slot.
+        // A LIVE window whose own record carries this engine's slot but fails
+        // the shared accept (tiled in another context) must NOT fall through
+        // to a sibling's FIFO record: consuming it would re-bind the sibling's
+        // placement under this window's id, where the store's merge overwrites
+        // the window's own other-context slot.
         WindowPlacementStore store;
         store.record(makePlacement(QStringLiteral("app|live"), QStringLiteral("app"), WindowPlacement::stateTiled(),
                                    WindowPlacement::autotileEngineId(), QStringLiteral("DP-2")));
         store.record(makePlacement(QStringLiteral("app|sibling"), QStringLiteral("app"), WindowPlacement::stateTiled(),
                                    WindowPlacement::autotileEngineId(), QStringLiteral("DP-1")));
 
-        auto p = store.takeForReopen(QStringLiteral("app|live"), QStringLiteral("app"), [](const WindowPlacement& r) {
-            return r.screenId == QStringLiteral("DP-1"); // rejects app|live's own DP-2 record
-        });
+        // Asking for DP-1 rejects app|live's own tiled-on-DP-2 record.
+        auto p = store.takeForReopen(WindowPlacement::autotileEngineId(), QStringLiteral("app|live"),
+                                     QStringLiteral("app"), QStringLiteral("DP-1"), 0, QString());
         QVERIFY(!p.has_value());
         QCOMPARE(store.size(), 2); // sibling untouched
         QVERIFY(store.peekExact(QStringLiteral("app|sibling")).has_value());
     }
 
-    void testTakeForReopen_secondInstanceStillTakesOlderSibling()
+    void testTakeForReopen_slotlessExactStubDoesNotVetoFifo()
     {
-        // Re-binding appends under the live uuid (newest in the bucket), so a
-        // SECOND instance of the same app reopening still takes the OLDER
-        // sibling record first — multi-instance FIFO distribution holds.
+        // The octopi float-reopen regression: every fresh open writes a
+        // geometry-only, engine-slot-less record under the LIVE uuid (the
+        // pre-tile free-geometry capture) BEFORE the engine's restore runs. A
+        // record that says nothing about the asking engine is not a verdict —
+        // the exact-final gate must fall through to the appId FIFO, where the
+        // window's real floating record waits.
         WindowPlacementStore store;
+        store.record(makePlacement(QStringLiteral("octopi|old"), QStringLiteral("octopi"),
+                                   WindowPlacement::stateFloating(), WindowPlacement::scrollingEngineId(),
+                                   QStringLiteral("DP-1"), QRect(100, 100, 400, 300)));
+        WindowPlacement stub;
+        stub.windowId = QStringLiteral("octopi|new");
+        stub.appId = QStringLiteral("octopi");
+        stub.screenId = QStringLiteral("DP-1");
+        stub.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(0, 0, 500, 500)); // spawn frame
+        store.record(stub);
+        QCOMPARE(store.size(), 2);
+
+        auto p = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("octopi|new"),
+                                     QStringLiteral("octopi"), QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(p.has_value());
+        QCOMPARE(p->slotFor(WindowPlacement::scrollingEngineId()).state, QString(WindowPlacement::stateFloating()));
+
+        // Re-bound and merged into the live window's record: the remembered
+        // float-back wins over the stub's spawn frame.
+        const auto rebound = store.peekExact(QStringLiteral("octopi|new"));
+        QVERIFY(rebound.has_value());
+        QCOMPARE(rebound->slotFor(WindowPlacement::scrollingEngineId()).state,
+                 QString(WindowPlacement::stateFloating()));
+        QCOMPARE(rebound->freeGeometryFor(QStringLiteral("DP-1")), QRect(100, 100, 400, 300));
+        QCOMPARE(store.size(), 1); // FIFO record consumed into the live record
+    }
+
+    void testTakeForReopen_newestFirstWithoutStealingLiveRebound()
+    {
+        // The appId fallback consumes the NEWEST record ("the most recent
+        // placement is current truth", peek()'s rule) — and the live-instance
+        // probe is what keeps a SECOND instance of the same app from stealing
+        // the record just re-bound to the first: multi-instance distribution
+        // holds via liveness, not via oldest-first.
+        WindowPlacementStore store;
+        QSet<QString> liveInstances;
+        store.setLiveInstanceProbe([&liveInstances](const QString& windowId) {
+            return liveInstances.contains(windowId.section(QLatin1Char('|'), 1));
+        });
         store.record(makePlacement(QStringLiteral("app|a"), QStringLiteral("app"), WindowPlacement::stateFloating(),
                                    WindowPlacement::scrollingEngineId(), QStringLiteral("DP-1"), QRect(0, 0, 10, 10)));
         store.record(makePlacement(QStringLiteral("app|b"), QStringLiteral("app"), WindowPlacement::stateFloating(),
                                    WindowPlacement::scrollingEngineId(), QStringLiteral("DP-1"),
                                    QRect(50, 50, 10, 10)));
 
-        auto first = store.takeForReopen(QStringLiteral("app|n1"), QStringLiteral("app"));
+        liveInstances.insert(QStringLiteral("n1"));
+        auto first = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("app|n1"),
+                                         QStringLiteral("app"), QStringLiteral("DP-1"), 0, QString());
         QVERIFY(first.has_value());
-        QCOMPARE(first->freeGeometryFor(QStringLiteral("DP-1")), QRect(0, 0, 10, 10)); // oldest first
+        QCOMPARE(first->freeGeometryFor(QStringLiteral("DP-1")), QRect(50, 50, 10, 10)); // newest first
 
-        auto second = store.takeForReopen(QStringLiteral("app|n2"), QStringLiteral("app"));
+        liveInstances.insert(QStringLiteral("n2"));
+        auto second = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("app|n2"),
+                                          QStringLiteral("app"), QStringLiteral("DP-1"), 0, QString());
         QVERIFY(second.has_value());
         QCOMPARE(second->freeGeometryFor(QStringLiteral("DP-1")),
-                 QRect(50, 50, 10, 10)); // NOT the just-re-bound n1 record
+                 QRect(0, 0, 10, 10)); // NOT the record now bound to live n1
         QCOMPARE(store.size(), 2);
+    }
+
+    void testTakeForReopen_newestRecordOutranksStaleGraveyard()
+    {
+        // The octopi regression's second act: years of gate-vetoed reopens
+        // left a graveyard of stale TILED records ahead of the fresh FLOATING
+        // close record. Oldest-first consumed the graveyard head (re-tiling
+        // the window at a months-old column); newest-first must return the
+        // last close's floating record.
+        WindowPlacementStore store;
+        for (int i = 0; i < 5; ++i) {
+            auto stale = makePlacement(QStringLiteral("octopi|stale%1").arg(i), QStringLiteral("octopi"),
+                                       WindowPlacement::stateTiled(), WindowPlacement::scrollingEngineId(),
+                                       QStringLiteral("DP-1"));
+            stale.engines[QString(WindowPlacement::scrollingEngineId())].order = i;
+            store.record(stale);
+        }
+        store.record(makePlacement(QStringLiteral("octopi|fresh"), QStringLiteral("octopi"),
+                                   WindowPlacement::stateFloating(), WindowPlacement::scrollingEngineId(),
+                                   QStringLiteral("DP-1"), QRect(870, 811, 1626, 813)));
+
+        auto p = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("octopi|new"),
+                                     QStringLiteral("octopi"), QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(p.has_value());
+        QCOMPARE(p->slotFor(WindowPlacement::scrollingEngineId()).state, QString(WindowPlacement::stateFloating()));
+        QCOMPARE(p->freeGeometryFor(QStringLiteral("DP-1")), QRect(870, 811, 1626, 813));
     }
 
     void testTake_preferredOutranksOlderAcceptedSibling()

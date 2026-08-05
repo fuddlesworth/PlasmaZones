@@ -36,6 +36,14 @@ WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layo
 {
     Q_ASSERT(layoutManager);
 
+    // Live-window probe for the placement store's reopen fallback: a record
+    // whose window is still open must never be consumed by a sibling's
+    // reopen (see WindowPlacementStore::takeForReopen). Evaluated at consume
+    // time; registry-less test services answer false, i.e. no exclusion.
+    m_placementStore.setLiveInstanceProbe([this](const QString& windowId) {
+        return m_windowRegistry && m_windowRegistry->contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    });
+
     // No save timer here: the service is an in-memory state manager whose
     // persistence is driven by the WindowTrackingAdaptor's dirty-mask
     // save/load (WindowTrackingAdaptor::saveState/loadState, debounced via
@@ -579,12 +587,14 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     if (p.engines.isEmpty()) {
         // No prior record, or a geometry-only record with no engine slot (the
         // shape recordFreeGeometry produces): synthesize a floating slot so
-        // the merge still adopts the screen. A floated restore
-        // keys off screenId + freeGeometryByScreen, not the slot's engine id, so
-        // the slot id is not load-bearing here.
+        // the merge still adopts the screen. The slot's engine id IS
+        // load-bearing: the tiling engines' reopen accept reads strictly their
+        // OWN slot, so a float verdict filed under snap is invisible to a
+        // scroll/autotile reopen on this screen (the window re-tiles). Key it
+        // on the engine owning the close screen's mode; snap when unwired.
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateFloating();
-        p.engines.insert(QString(PhosphorEngine::WindowPlacement::snapEngineId()), slot);
+        p.engines.insert(owningModeEngineId(windowId, screenId), slot);
     }
     if (m_placementStore.record(p)) {
         markDirty(DirtyWindowPlacements);

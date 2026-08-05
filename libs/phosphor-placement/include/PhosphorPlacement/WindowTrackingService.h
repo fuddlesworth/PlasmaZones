@@ -235,6 +235,27 @@ public:
     bool isWindowEngineTiled(const QString& windowId) const;
 
     /**
+     * @brief Resolver: which engine id owns @p windowId's mode on @p screenId?
+     *
+     * Injected by the daemon (engine-/settings-agnostic LGPL boundary), same
+     * pattern as AutotileModePredicate but answering with the OWNING engine's
+     * WindowPlacement engine id ("snap" / "autotile" / "scrolling") for an
+     * explicit screen. Used wherever a slot must be synthesized for a window
+     * no engine captured (recordFloatingClose, the minimize preserve): the
+     * reopen accepts are keyed strictly per engine slot, so a synthesized
+     * float slot filed under the wrong engine is invisible to the engine that
+     * will actually field the reopen — the float-is-per-mode invariant read
+     * from the store side.
+     */
+    using ModeEngineIdResolver = std::function<QString(const QString& windowId, const QString& screenId)>;
+    void setModeEngineIdResolver(ModeEngineIdResolver resolver);
+
+    /// The owning engine id for @p windowId on @p screenId per the resolver;
+    /// snap's engine id when unwired (snap-only tests) or when the resolver
+    /// answers empty.
+    QString owningModeEngineId(const QString& windowId, const QString& screenId) const;
+
+    /**
      * @brief Accessor for consumers that need direct access (effect, adaptor).
      */
     PhosphorEngine::WindowRegistry* windowRegistry() const;
@@ -1124,6 +1145,7 @@ private:
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     AutotileModePredicate m_autotileModePredicate{};
     EngineTiledPredicate m_engineTiledPredicate{};
+    ModeEngineIdResolver m_modeEngineIdResolver{};
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence.

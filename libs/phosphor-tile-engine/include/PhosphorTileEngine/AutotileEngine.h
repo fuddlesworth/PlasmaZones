@@ -21,6 +21,7 @@
 #include <PhosphorEngine/ScreenContextTracker.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorTiles/TilingState.h>
+#include <QElapsedTimer>
 #include <QHash>
 #include <QJsonObject>
 #include <QObject>
@@ -1681,6 +1682,32 @@ private:
     void dropStashedScriptStatesForAlgorithmChange(const QString& screenId, const QString& newAlgorithmId);
 
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
+    /// Recorded window order of windows the placement-record branch of
+    /// insertWindow restored, kept while they stay tiled. A reopen burst
+    /// arrives in KWin's announce order, not saved order, so inserting each
+    /// at its ABSOLUTE saved index permutes the layout; ranking a new arrival
+    /// against the saved orders of already-restored present windows keeps
+    /// the relative order right (scroll's m_reopenRestoredColumn twin).
+    QHash<QString, int> m_reopenRestoredOrder;
+    /// Close-burst compaction ledger, per placement context (scroll's
+    /// m_closeCompaction twin — see ScrollEngine.h for the full rationale).
+    /// A mass close (logout teardown) removes windows one at a time and each
+    /// removal compacts windowOrder(), so closes 2..N capture already-shifted
+    /// orders and the login restore rebuilds a collapsed layout. The ledger
+    /// holds the ORIGINAL (pre-burst) index each removal vacated;
+    /// preCloseBurstOrder reconstructs pre-burst indices. Burst-scoped:
+    /// expires CloseBurstWindowMs after the last removal; any insert clears
+    /// the context's ledger.
+    struct CloseCompaction
+    {
+        QList<int> removedOrders;
+        QElapsedTimer sinceLastClose;
+    };
+    QHash<PhosphorEngine::TilingStateKey, CloseCompaction> m_closeCompaction;
+    static constexpr int CloseBurstWindowMs = 2000;
+    /// @p currentOrder's pre-burst value per the context's live ledger;
+    /// identity when no burst is active (or @p currentOrder is -1).
+    int preCloseBurstOrder(const PhosphorEngine::TilingStateKey& key, int currentOrder) const;
 
     // Canonical windowId → tile rect last emitted for it by applyTiling.
     // Backs lastManagedRect(): deliberately NOT cleared when the window

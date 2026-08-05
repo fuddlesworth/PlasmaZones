@@ -76,6 +76,7 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
+        m_reopenRestoredColumn.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         // A dead window's queued self-activation echo can never be answered;
         // left behind it would eat the first genuine focus of a reused id
@@ -409,6 +410,7 @@ void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
+        m_reopenRestoredColumn.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         // The dying context's windows can never answer their queued echoes;
         // a stale entry would swallow the first genuine focus of a reused
@@ -616,6 +618,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
+        m_reopenRestoredColumn.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
     }
 }

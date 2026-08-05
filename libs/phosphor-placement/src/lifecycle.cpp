@@ -798,6 +798,22 @@ bool WindowTrackingService::isWindowEngineTiled(const QString& windowId) const
     return m_engineTiledPredicate && m_engineTiledPredicate(windowId);
 }
 
+void WindowTrackingService::setModeEngineIdResolver(ModeEngineIdResolver resolver)
+{
+    m_modeEngineIdResolver = std::move(resolver);
+}
+
+QString WindowTrackingService::owningModeEngineId(const QString& windowId, const QString& screenId) const
+{
+    if (m_modeEngineIdResolver) {
+        const QString resolved = m_modeEngineIdResolver(windowId, screenId);
+        if (!resolved.isEmpty()) {
+            return resolved;
+        }
+    }
+    return QString(PhosphorEngine::WindowPlacement::snapEngineId());
+}
+
 PhosphorEngine::WindowRegistry* WindowTrackingService::windowRegistry() const
 {
     return m_windowRegistry;

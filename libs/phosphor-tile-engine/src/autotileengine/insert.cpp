@@ -108,6 +108,9 @@ bool AutotileEngine::insertShouldFloat(const QString& windowId, const QString& s
 
 bool AutotileEngine::insertWindow(const QString& windowId, const QString& screenId)
 {
+    // An open ends any close burst for this context — a burst is closes and
+    // nothing else (see m_closeCompaction).
+    m_closeCompaction.remove(currentKeyForScreen(screenId));
     PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     if (!state) {
         qCWarning(PhosphorTileEngine::lcTileEngine)
@@ -249,34 +252,13 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     const TilingStateKey currentKey = currentKeyForScreen(screenId);
     if (!inserted && hasStableAppId && m_windowTracker) {
         using PhosphorEngine::WindowPlacement;
-        const auto accept = [&](const WindowPlacement& p) {
-            const PhosphorEngine::EngineSlot s = p.slotFor(engineId());
-            if (s.state == WindowPlacement::stateFloating()) {
-                // A geometry-less floating record (the order-only slot the
-                // capture writes to preserve float intent through an
-                // immediate minimize/teardown) is meaningful for the SAME
-                // instance — restore floating in place — but consumed by a
-                // FIFO sibling it floats a fresh window at its spawn rect
-                // for no user-visible reason while burning a slot a real
-                // placement may need. Same-instance restores stay
-                // unconditional; FIFO consumption requires a real float-back.
-                const bool sameInstance = ::PhosphorIdentity::WindowId::extractInstanceId(p.windowId)
-                    == ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
-                if (!sameInstance && !p.anyFreeGeometry().isValid()) {
-                    return false;
-                }
-                return p.screenId.isEmpty() || p.screenId == screenId;
-            }
-            if (s.state == WindowPlacement::stateTiled()) {
-                return p.screenId == currentKey.screenId && p.virtualDesktop == currentKey.desktop
-                    && p.activity == currentKey.activity;
-            }
-            return false;
-        };
-        // takeForReopen carries the two reopen rules (rejected-exact is FINAL,
-        // consumed record re-bound to the live uuid) — see the store contract.
-        const std::optional<WindowPlacement> rec =
-            m_windowTracker->placementStore().takeForReopen(windowId, appId, accept);
+        // takeForReopen carries the shared accept predicate (floating slot:
+        // screen match, FIFO consumption needs a real float-back; tiled slot:
+        // same full context) and the two reopen rules (rejected-exact WITH a
+        // slot for this engine is FINAL, consumed record re-bound to the live
+        // uuid) — see the store contract.
+        const std::optional<WindowPlacement> rec = m_windowTracker->placementStore().takeForReopen(
+            engineId(), windowId, appId, currentKey.screenId, currentKey.desktop, currentKey.activity);
         if (rec) {
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
             const QString restoreScreen = rec->screenId.isEmpty() ? screenId : rec->screenId;
@@ -307,9 +289,40 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     << "move=" << (freeGeo.isValid() && restorePosition);
             } else {
                 const int savedPos = slot.order;
-                const int clampedPos = savedPos < 0 ? state->windowCount() : qMin(savedPos, state->windowCount());
+                // Rank against the record-restored windows still present:
+                // after the rightmost with a saved order <= this one, else
+                // before the leftmost with a greater one. Only with no ranked
+                // neighbour does the absolute saved index stand (the single
+                // in-session reopen, where it is exact) — a reopen BURST
+                // arrives in announce order, not saved order, and absolute
+                // indices then permute the layout.
+                int rankedPos = -1;
+                int beforeGreater = -1;
+                const QStringList order = state->windowOrder();
+                for (auto rit = m_reopenRestoredOrder.constBegin(); rit != m_reopenRestoredOrder.constEnd(); ++rit) {
+                    const int pos = order.indexOf(rit.key());
+                    if (pos < 0) {
+                        continue; // no longer tiled here — inert entry
+                    }
+                    if (rit.value() <= savedPos) {
+                        rankedPos = qMax(rankedPos, pos + 1);
+                    } else {
+                        beforeGreater = beforeGreater < 0 ? pos : qMin(beforeGreater, pos);
+                    }
+                }
+                if (rankedPos < 0 && beforeGreater >= 0) {
+                    rankedPos = beforeGreater;
+                } else if (rankedPos >= 0 && beforeGreater >= 0) {
+                    rankedPos = qMin(rankedPos, beforeGreater);
+                }
+                const int clampedPos = rankedPos >= 0
+                    ? qMin(rankedPos, state->windowCount())
+                    : (savedPos < 0 ? state->windowCount() : qMin(savedPos, state->windowCount()));
                 state->addWindow(windowId, clampedPos);
                 inserted = true;
+                if (savedPos >= 0) {
+                    m_reopenRestoredOrder.insert(windowId, savedPos);
+                }
                 qCDebug(PhosphorTileEngine::lcTileEngine)
                     << "insertWindow: restored" << windowId << "from placement store at position=" << clampedPos
                     << "(saved=" << savedPos << ")";
@@ -389,6 +402,7 @@ void AutotileEngine::purgeFromPendingOrders(const QString& windowId)
 void AutotileEngine::removeWindow(const QString& windowId)
 {
     m_windowMinSizes.remove(windowId);
+    m_reopenRestoredOrder.remove(windowId);
     m_overflow.clearOverflow(windowId);
 
     // Purge a closed window from pending initial orders even when it was a
@@ -412,11 +426,26 @@ void AutotileEngine::removeWindow(const QString& windowId)
     PhosphorTiles::TilingState* state = m_states.stateForKey(key);
     if (state) {
         // No position is saved here. The window's autotiled placement (its position)
-        // is captured into the unified WindowPlacementStore by the common close hook
-        // (WindowTrackingAdaptor::windowClosed → capturePlacement) BEFORE this
-        // removal runs, and by the save-time snapshot for still-open windows. The
-        // reopen consumes that record in insertWindow().
+        // is captured into the unified WindowPlacementStore by the tiling close
+        // relay (TilingAdaptor::windowClosed runs the shared capture funnel
+        // BEFORE forwarding the close here — the WindowTracking close arrives
+        // only after this removal, when this engine no longer answers), and by
+        // the save-time snapshot for still-open windows. The reopen consumes
+        // that record in insertWindow().
+        const int removedIdx = state->windowOrder().indexOf(windowId);
         state->removeWindow(windowId);
+        // Close-burst ledger (see m_closeCompaction): remember the ORIGINAL
+        // index this removal vacated so the remaining captures of the same
+        // burst still answer pre-burst orders. Expiry runs BEFORE the append
+        // so a stale ledger never corrects a fresh burst.
+        if (removedIdx >= 0) {
+            CloseCompaction& burst = m_closeCompaction[key];
+            if (burst.sinceLastClose.isValid() && burst.sinceLastClose.elapsed() > CloseBurstWindowMs) {
+                burst.removedOrders.clear();
+            }
+            burst.removedOrders.append(preCloseBurstOrder(key, removedIdx));
+            burst.sinceLastClose.restart();
+        }
     }
 }
 

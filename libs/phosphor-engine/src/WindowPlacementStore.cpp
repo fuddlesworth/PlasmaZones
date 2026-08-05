@@ -6,6 +6,7 @@
 
 #include <QJsonArray>
 #include <QLatin1Char>
+#include <QLoggingCategory>
 
 #include <algorithm>
 #include <limits>
@@ -14,6 +15,8 @@
 namespace PhosphorEngine {
 
 namespace {
+Q_LOGGING_CATEGORY(lcPlacementStore, "org.phosphor.engine.placementstore")
+
 // Instance-identity match for STORE keys. Contract note: ids without a '|'
 // separator only match EXACTLY here — unlike the registry's
 // extractInstanceId, which treats a bare string AS the instance id. The store
@@ -308,24 +311,95 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
     return std::nullopt;
 }
 
-std::optional<WindowPlacement>
-WindowPlacementStore::takeForReopen(const QString& windowId, const QString& appId,
-                                    const std::function<bool(const WindowPlacement&)>& accept,
-                                    const std::function<bool(const WindowPlacement&)>& preferred)
+namespace {
+/// The shared reopen accept — see the takeForReopen header doc. Hoisted into
+/// the store (rather than per-engine lambdas) so autotile and scroll cannot
+/// drift apart, and so the exact-final gate can reason about the SAME
+/// predicate it applies.
+bool acceptsReopen(const WindowPlacement& p, const QString& engineId, const QString& windowId, const QString& screenId,
+                   int virtualDesktop, const QString& activity, WindowPlacementStore::ReopenSlots slots)
 {
-    // Exact-record rejection is FINAL — see the header contract. Only
-    // meaningful when a predicate exists; without one every record is
-    // accepted and the gate cannot fire.
-    if (accept) {
-        if (const auto own = peekExact(windowId); own && !accept(*own)) {
-            return std::nullopt;
+    const EngineSlot s = p.slotFor(engineId);
+    if (s.state == WindowPlacement::stateFloating()) {
+        // A geometry-less floating record is meaningful for the SAME instance
+        // (restore floating in place), but consumed by a FIFO sibling it
+        // floats a fresh window at its spawn rect for no user-visible reason
+        // while burning a slot a real placement may need.
+        const bool sameInstance = PhosphorIdentity::WindowId::extractInstanceId(p.windowId)
+            == PhosphorIdentity::WindowId::extractInstanceId(windowId);
+        if (!sameInstance && !p.anyFreeGeometry().isValid()) {
+            return false;
+        }
+        return p.screenId.isEmpty() || p.screenId == screenId;
+    }
+    if (slots == WindowPlacementStore::ReopenSlots::FloatingOrTiled && s.state == WindowPlacement::stateTiled()) {
+        return p.screenId == screenId && p.virtualDesktop == virtualDesktop && p.activity == activity;
+    }
+    return false;
+}
+} // namespace
+
+std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString& engineId, const QString& windowId,
+                                                                   const QString& appId, const QString& screenId,
+                                                                   int virtualDesktop, const QString& activity,
+                                                                   ReopenSlots slots)
+{
+    const auto accept = [&](const WindowPlacement& p) {
+        return acceptsReopen(p, engineId, windowId, screenId, virtualDesktop, activity, slots);
+    };
+    // Exact-record rejection is FINAL — see the header contract — but only a
+    // record carrying a slot FOR THE ASKING ENGINE is a verdict. Every fresh
+    // open writes a geometry-only, slot-less record under the live uuid (the
+    // pre-tile free-geometry capture) before any engine's restore runs, so an
+    // exact hit alone proves nothing; gating on that stub vetoed the FIFO
+    // fallback and lost every close/reopen float and column restore.
+    if (const auto own = peekExact(windowId); own && own->engines.contains(engineId) && !accept(*own)) {
+        qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "exact record for" << windowId
+                                  << "rejected (slot state" << own->slotFor(engineId).state << "screen" << own->screenId
+                                  << ") — final, no FIFO fallback";
+        return std::nullopt;
+    }
+    // Same-instance match first (daemon restart, uuid stable) — take()'s
+    // branch 1, scoped by the empty appId.
+    std::optional<WindowPlacement> rec = take(windowId, QString(), accept);
+    if (!rec && !appId.isEmpty()) {
+        // appId fallback: the NEWEST accepted record not bound to a live
+        // window — see the header doc. (take()'s oldest-first FIFO stays as
+        // is for the snap paths that consume through it directly.)
+        const auto it = m_byApp.find(appId);
+        if (it != m_byApp.end()) {
+            QList<WindowPlacement>& bucket = it.value();
+            int best = -1;
+            for (int i = 0; i < bucket.size(); ++i) {
+                const WindowPlacement& p = bucket.at(i);
+                if (!accept(p)) {
+                    continue;
+                }
+                if (m_liveInstanceProbe && m_liveInstanceProbe(p.windowId)) {
+                    continue; // an open sibling's record is not up for grabs
+                }
+                if (best < 0 || p.sequence > bucket.at(best).sequence) {
+                    best = i;
+                }
+            }
+            if (best >= 0) {
+                rec = bucket.takeAt(best);
+                if (bucket.isEmpty()) {
+                    m_byApp.erase(it);
+                }
+            }
         }
     }
-    std::optional<WindowPlacement> rec = take(windowId, appId, accept, preferred);
     if (rec) {
+        qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "consumed" << rec->windowId << "for" << windowId
+                                  << "slot state" << rec->slotFor(engineId).state << "order"
+                                  << rec->slotFor(engineId).order << "screen" << rec->screenId;
         // Re-bind to the live windowId and re-record — header contract rule 2.
         rec->windowId = windowId;
         record(*rec);
+    } else {
+        qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "no restorable record for" << windowId << "appId"
+                                  << appId << "on" << screenId;
     }
     return rec;
 }

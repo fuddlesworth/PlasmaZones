@@ -64,32 +64,68 @@ public:
                                         const std::function<bool(const WindowPlacement&)>& accept = {},
                                         const std::function<bool(const WindowPlacement&)>& preferred = {});
 
+    /// Which engine-slot states takeForReopen may consume.
+    enum class ReopenSlots {
+        /// The normal open-time restore: a floating record reopens floating, a
+        /// tiled record reopens at its recorded order.
+        FloatingOrTiled,
+        /// The caller already decided the window floats (rule float, oversized):
+        /// only a floating record is consumed; a tiled record is neither
+        /// consumed nor allowed to block a later tiled reopen.
+        FloatingOnly,
+    };
+
     /// Reopen resolve: the shared consumption pattern the TILING engines'
     /// open-time restores use (SnapEngine::resolveWindowRestore keeps its own
     /// take + re-bind: its snapped records restore cross-screen and its accept
     /// depends on a mode-defer bypass, so rule 1 below does not fit it) —
-    /// take() wrapped in the two rules that make a close/reopen (fresh uuid,
-    /// appId-FIFO match) behave correctly:
+    /// take() wrapped in the accept predicate both tiling engines share and
+    /// the two rules that make a close/reopen (fresh uuid, appId-FIFO match)
+    /// behave correctly.
     ///
-    ///   1. A REJECTED exact record is FINAL — no FIFO fallback past it. The
-    ///      fallback exists for a reopen, whose fresh uuid by definition has no
-    ///      exact record. A LIVE window whose own record was rejected on
-    ///      context (tiled on another desktop, say) is not that case: falling
-    ///      through would consume a SIBLING's record, and the re-bind below
-    ///      would re-record it under this window's id, where the merge
-    ///      overwrites the window's own other-context slot.
+    /// The accept predicate, hoisted here so the two engines cannot drift: a
+    /// record whose @p engineId slot is FLOATING restores when its screen
+    /// matches @p screenId (or is empty), and FIFO consumption by a DIFFERENT
+    /// instance additionally requires a valid anyFreeGeometry (a geometry-less
+    /// floating record is meaningful only same-instance — consumed by a
+    /// sibling it floats a fresh window at its spawn rect for no reason while
+    /// burning a FIFO slot). A TILED slot restores only in the SAME full
+    /// context (@p screenId + @p virtualDesktop + @p activity), and only under
+    /// ReopenSlots::FloatingOrTiled.
+    ///
+    ///   1. A REJECTED exact record is FINAL — no FIFO fallback past it — but
+    ///      ONLY when that record carries a slot for the ASKING engine. The
+    ///      fallback exists for a reopen, whose fresh uuid has no exact record
+    ///      WITH A VERDICT: every open writes a geometry-only, slot-less
+    ///      record under the live uuid (the pre-tile free-geometry capture)
+    ///      before the engine's restore runs, and that stub says nothing about
+    ///      this engine, so it must not veto the FIFO. A LIVE window whose own
+    ///      record holds this engine's slot but was rejected on context (tiled
+    ///      on another desktop, say) IS final: falling through would consume a
+    ///      SIBLING's record, and the re-bind below would re-record it under
+    ///      this window's id, where the merge overwrites the window's own
+    ///      other-context slot.
     ///   2. The consumed record is RE-BOUND to the live @p windowId and
     ///      re-recorded, so the other engines' slots + per-screen free/float
-    ///      geometry survive the reopen. Re-binding appends under the live id
-    ///      (newest in the appId bucket), so a SECOND instance of the same app
-    ///      still takes an OLDER sibling record first on its own reopen —
-    ///      multi-instance FIFO distribution is preserved.
+    ///      geometry survive the reopen.
+    ///
+    /// The appId fallback consumes the NEWEST accepted record — matching
+    /// peek()'s "the most recent placement is current truth" — and never one
+    /// whose window instance is still LIVE (per the live-instance probe): the
+    /// last close is the state the user expects back, and consuming oldest
+    /// first handed a reopen whichever stale record had sat unconsumed
+    /// longest (the octopi graveyard: eleven leftover tiled records shadowing
+    /// the fresh floating one, and colliding months-old column ranks on a
+    /// compositor-restart restore). The live exclusion is what makes
+    /// newest-first safe for multi-instance apps: a record just re-bound to
+    /// an OPEN sibling is the newest in the bucket, and without the probe the
+    /// next reopen would steal it, leaving the sibling recordless.
     ///
     /// Returns the consumed record (already re-recorded), or nullopt when no
-    /// record passed. `accept`/`preferred` as in take().
-    std::optional<WindowPlacement> takeForReopen(const QString& windowId, const QString& appId,
-                                                 const std::function<bool(const WindowPlacement&)>& accept = {},
-                                                 const std::function<bool(const WindowPlacement&)>& preferred = {});
+    /// record passed.
+    std::optional<WindowPlacement> takeForReopen(const QString& engineId, const QString& windowId, const QString& appId,
+                                                 const QString& screenId, int virtualDesktop, const QString& activity,
+                                                 ReopenSlots slots = ReopenSlots::FloatingOrTiled);
 
     /// Non-consuming lookup (unlike take): the record for the same live instance, else
     /// the NEWEST record in the appId bucket whose `accept` passes. Leaves the
@@ -110,6 +146,15 @@ public:
     /// True if a record exists for the same live instance, or (if @p appId non-empty)
     /// any record in that appId bucket.
     bool contains(const QString& windowId, const QString& appId = QString()) const;
+
+    /// Inject the live-window probe takeForReopen's appId fallback uses to
+    /// skip records bound to a still-open window (see its doc). Answers per
+    /// full windowId; evaluated at consume time. Unwired (tests) means no
+    /// exclusion.
+    void setLiveInstanceProbe(std::function<bool(const QString& windowId)> probe)
+    {
+        m_liveInstanceProbe = std::move(probe);
+    }
 
     /// Collapse stale pure-float duplicates for an app, keeping @p keepWindowId.
     /// A "pure-float" record carries float-back geometry but NO managed
@@ -177,6 +222,7 @@ private:
     /// appId → FIFO list of records (preserves multi-instance + close/reopen order).
     QHash<QString, QList<WindowPlacement>> m_byApp;
     quint64 m_sequence = 0;
+    std::function<bool(const QString&)> m_liveInstanceProbe;
 };
 
 } // namespace PhosphorEngine

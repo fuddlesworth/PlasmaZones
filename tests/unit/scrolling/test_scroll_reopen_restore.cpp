@@ -177,6 +177,55 @@ private Q_SLOTS:
         QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("two|b2")), closedColumn);
     }
 
+    void massCloseCapturesPreBurstColumnsAndLoginRestoresOrder()
+    {
+        // The logout regression: session teardown closes every window one at
+        // a time, and each removal compacts the strip — so closes 2..N used
+        // to capture already-shifted columns (a {0..3} strip persisted with
+        // duplicate orders) and the login rebuilt a collapsed strip with
+        // windows parked off-viewport. The close-burst ledger must make each
+        // capture answer its PRE-burst column, whatever the close order, and
+        // the reopen rank logic must rebuild the original order whatever the
+        // announce order.
+        QObject owner;
+        FakeStickyWindowTracking tracker;
+        ScrollEngine* engine = makeEngine(&owner, &tracker);
+        const QString screen = QLatin1String(Screen);
+
+        engine->windowOpened(QStringLiteral("aa|a1"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("bb|b1"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("cc|c1"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("dd|d1"), screen, 0, 0);
+        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("aa|a1")), 0);
+        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("dd|d1")), 3);
+
+        // Teardown sweep in a compaction-provoking order.
+        captureClose(engine, &tracker, QStringLiteral("bb|b1"));
+        captureClose(engine, &tracker, QStringLiteral("dd|d1"));
+        captureClose(engine, &tracker, QStringLiteral("aa|a1"));
+        captureClose(engine, &tracker, QStringLiteral("cc|c1"));
+
+        // Every record carries its PRE-burst column, not the compacted one.
+        const auto orderOf = [&tracker](const QString& windowId) {
+            const auto rec = tracker.placementStore().peekExact(windowId);
+            return rec ? rec->slotFor(WindowPlacement::scrollingEngineId()).order : -99;
+        };
+        QCOMPARE(orderOf(QStringLiteral("aa|a1")), 0);
+        QCOMPARE(orderOf(QStringLiteral("bb|b1")), 1);
+        QCOMPARE(orderOf(QStringLiteral("cc|c1")), 2);
+        QCOMPARE(orderOf(QStringLiteral("dd|d1")), 3);
+
+        // Login: fresh uuids, shuffled announce order — original order back.
+        engine->windowOpened(QStringLiteral("cc|c2"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("aa|a2"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("dd|d2"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("bb|b2"), screen, 0, 0);
+        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("aa|a2")), 0);
+        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("bb|b2")), 1);
+        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("cc|c2")), 2);
+        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("dd|d2")), 3);
+    }
+
     void geometrylessFloatingResidueNotConsumedByFreshSibling()
     {
         // A floating record with NO float-back rect is meaningful only for

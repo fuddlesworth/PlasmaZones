@@ -530,14 +530,16 @@ void Daemon::initEnginesAndWiring()
     // window's own context along with the reader — deliberate: all three
     // answer "which engine owns this window", and that has one answer.
     {
-        auto screenModeForWindow =
-            [this, autotilePtr = QPointer(autotileEngine),
-             scrollTrackPtr = QPointer(scrollEngine)](const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {
-            QString screenId;
+        auto modeForWindowOnScreen =
+            [this, autotilePtr = QPointer(autotileEngine), scrollTrackPtr = QPointer(scrollEngine)](
+                const QString& windowId, const QString& screenOverride) -> PhosphorZones::AssignmentEntry::Mode {
+            QString screenId = screenOverride;
             const PhosphorPlacement::WindowTrackingService* wts = nullptr;
             if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
                 wts = m_windowTrackingAdaptor->service();
-                screenId = wts->screenForWindow(windowId);
+                if (screenId.isEmpty()) {
+                    screenId = wts->screenForWindow(windowId);
+                }
             }
             if (!screenId.isEmpty() && m_layoutManager) {
                 const int screenCurrent = currentDesktopForScreen(screenId);
@@ -569,6 +571,28 @@ void Daemon::initEnginesAndWiring()
             }
             return PhosphorZones::AssignmentEntry::Snapping;
         };
+        auto screenModeForWindow =
+            [modeForWindowOnScreen](const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {
+            return modeForWindowOnScreen(windowId, QString());
+        };
+
+        // Owning-engine-id resolver for synthesized slots (recordFloatingClose,
+        // the minimize preserve): same screen→mode resolution as the float
+        // routing above, but keyed on an EXPLICIT screen — those call sites
+        // hold the authoritative close screen, and the window's tracked screen
+        // may already be stale or gone at that point.
+        m_windowTrackingAdaptor->service()->setModeEngineIdResolver(
+            [modeForWindowOnScreen](const QString& windowId, const QString& screenId) -> QString {
+                switch (modeForWindowOnScreen(windowId, screenId)) {
+                case PhosphorZones::AssignmentEntry::Autotile:
+                    return QString(PhosphorEngine::WindowPlacement::autotileEngineId());
+                case PhosphorZones::AssignmentEntry::Scrolling:
+                    return QString(PhosphorEngine::WindowPlacement::scrollingEngineId());
+                case PhosphorZones::AssignmentEntry::Snapping:
+                    break;
+                }
+                return QString(PhosphorEngine::WindowPlacement::snapEngineId());
+            });
 
         m_windowTrackingAdaptor->service()->setEngineFloatResolver(
             [screenModeForWindow, snapEnginePtr = QPointer(snapEngine), autotilePtr = QPointer(autotileEngine),

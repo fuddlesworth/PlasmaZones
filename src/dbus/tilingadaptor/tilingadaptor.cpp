@@ -523,6 +523,20 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     }
     qCDebug(lcDbusTiling) << "windowClosed: windowId=" << windowId;
     if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
+        // Capture the window's final engine slot BEFORE the engine untracks
+        // it. The effect relays Tiling.windowClosed ahead of
+        // WindowTracking.windowClosed (in-order connection), so by the time
+        // the WindowTracking close capture runs, this engine has already
+        // dropped the window and its capturePlacement returns nullopt — the
+        // persisted slot (float verdict, column order) was then only as fresh
+        // as the last save-timer sweep. Capturing here runs the shared funnel
+        // while the engine still answers authoritatively; the screen-less form
+        // deliberately skips the close-only branches (minimize preserve,
+        // orphan float-back fallback, sibling collapse), which stay with the
+        // WindowTracking close where the authoritative screen is known.
+        if (m_windowTrackingAdaptor) {
+            m_windowTrackingAdaptor->captureWindowPlacement(windowId);
+        }
         engine->windowClosed(windowId);
     }
 }

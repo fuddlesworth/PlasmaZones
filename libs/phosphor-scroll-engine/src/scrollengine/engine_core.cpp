@@ -226,6 +226,7 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // report when the window comes back to scrolling.
     for (const QString& windowId : windows) {
         m_floatRestore.remove(windowId);
+        m_reopenRestoredColumn.remove(windowId);
         m_pendingSelfActivations.removeAll(windowId);
     }
     releasedWindows.append(windows);
