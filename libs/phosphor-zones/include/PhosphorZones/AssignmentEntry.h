@@ -383,6 +383,26 @@ struct ContextScrollingParams
     std::optional<QString> tabIndicatorInactiveColor;
     std::optional<QString> tabIndicatorUrgentColor;
 
+    /// The drop indicator's overrides. ALL PAINT — unlike the tab indicator
+    /// there is no geometry half, because the indicator's rect comes from the
+    /// engine's own layout math and cannot be positioned independently of
+    /// where the drop lands. So none of these reaches the scrolling engine's
+    /// per-screen override map; they go straight to the overlay.
+    std::optional<bool> dropIndicatorEnabled;
+    std::optional<QString> dropIndicatorColor;
+    std::optional<QString> dropIndicatorBorderColor;
+    std::optional<double> dropIndicatorOpacity; ///< fill only; the border is always opaque
+    std::optional<int> dropIndicatorBorderWidth; ///< px; 0 is a fill with no edge
+    std::optional<int> dropIndicatorBorderRadius; ///< px; 0 is square, no sentinel
+
+    /// True when at least one drop-indicator slot resolved. Same purpose as
+    /// the tab-indicator predicate below.
+    bool hasDropIndicatorOverrides() const
+    {
+        return dropIndicatorEnabled || dropIndicatorColor || dropIndicatorBorderColor || dropIndicatorOpacity
+            || dropIndicatorBorderWidth || dropIndicatorBorderRadius;
+    }
+
     /// True when at least one tab-indicator slot resolved, so the daemon can
     /// skip the whole indicator-override path when it is false rather than
     /// testing thirteen optionals.
@@ -397,7 +417,7 @@ struct ContextScrollingParams
     bool isEmpty() const
     {
         return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay && !insertPosition
-            && !defaultWindowHeight && !hasTabIndicatorOverrides();
+            && !defaultWindowHeight && !hasTabIndicatorOverrides() && !hasDropIndicatorOverrides();
     }
 };
 

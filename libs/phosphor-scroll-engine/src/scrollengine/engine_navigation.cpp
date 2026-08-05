@@ -365,8 +365,11 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         // the target, so its retained rect belongs to the OTHER output. Left
         // standing it can equal what the target resolves and defeat
         // applyLayout's emit-on-change gate, so no batch would ever be issued
-        // for the window that just crossed.
+        // for the window that just crossed. The parked-edge memory belongs to
+        // the other output too — a stale side would anchor the arrival slide
+        // to the wrong edge of the NEW screen.
         m_lastAppliedRect.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
     } else {
         // Refused, with the window already out of the source strip: it is now
         // held by neither side. Drop it from the reverse map too — a mapping
@@ -396,6 +399,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
             state->strip().setWindowHeightIntent(partner, partnerHeight);
             m_states.setKeyForWindow(partner, sourceKey);
             m_lastAppliedRect.remove(partner); // same rationale as the mover's
+            m_parkedScrollEdge.remove(partner);
         } else {
             // Same shape as the mover's refusal: out of the target strip,
             // refused by the source strip, so the reverse map must not keep

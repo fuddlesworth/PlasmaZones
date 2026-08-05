@@ -148,7 +148,8 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
 }
 
 void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
-                                            bool skipAnimation, const QString& profilePath)
+                                            bool skipAnimation, const QString& profilePath,
+                                            const QRectF& originOverride, const QRectF& visualTargetOverride)
 {
     if (!window) {
         qCWarning(lcEffect) << "applyGeometry: window is null";
@@ -239,8 +240,15 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // the autotile path, which already logs "Autotile tile request: QRect=".
     qCInfo(lcEffect) << "Setting window geometry from" << window->frameGeometry() << "to" << geo;
 
-    // Capture old frame before moveResize for repaint region
-    const QRectF oldFrame = window->frameGeometry();
+    // Capture old frame before moveResize for repaint region.
+    const QRectF trueOldFrame = window->frameGeometry();
+    // The animation's departure rect. Identical to the true frame except for a
+    // scrolling strip tile, whose parked position is chosen for safety and so
+    // says nothing about which edge it should appear to come from — see the
+    // originOverride contract on the declaration. Only the ANIMATION uses
+    // this; the repaint region below must keep the true frame, or the pixels
+    // the window actually vacated never get repainted.
+    const QRectF oldFrame = originOverride.isValid() ? originOverride : trueOldFrame;
 
     // In KWin 6, we use the window's moveResize methods
     // When allowDuringDrag is false: defer if window is in user move/resize (snap on release)
@@ -256,32 +264,40 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         const QString deferScreen = getWindowScreenId(window);
         const uint64_t deferGen = m_daemonGate.batchGenByScreen.value(deferScreen);
         auto conn = std::make_shared<QMetaObject::Connection>();
-        *conn = connect(
-            window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
-            [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, deferGen](KWin::EffectWindow*) {
-                disconnect(*conn);
-                if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
-                    return;
-                }
-                const QString nowScreen = getWindowScreenId(safeWindow.data());
-                if (nowScreen != deferScreen || m_daemonGate.batchGenByScreen.value(deferScreen) != deferGen) {
-                    qCDebug(lcEffect) << "Deferred geometry superseded (screen or batch changed), dropping:"
-                                      << getWindowId(safeWindow.data());
-                    return;
-                }
-                // Re-assert the self-caused-frame-change guard the
-                // original (batch) apply held — without it the
-                // synchronous frame change from this moveResize
-                // reads as an external move and can report a
-                // phantom cross-VS unsnap.
-                // Save/restore, not set/clear (nesting-safe).
-                const bool prevInApply = m_daemonGate.inGeometryApply;
-                m_daemonGate.inGeometryApply = true;
-                const auto guard = qScopeGuard([this, prevInApply] {
-                    m_daemonGate.inGeometryApply = prevInApply;
-                });
-                applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath);
-            });
+        *conn =
+            connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
+                    [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, deferGen, originOverride,
+                     visualTargetOverride](KWin::EffectWindow*) {
+                        disconnect(*conn);
+                        if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
+                            return;
+                        }
+                        const QString nowScreen = getWindowScreenId(safeWindow.data());
+                        if (nowScreen != deferScreen || m_daemonGate.batchGenByScreen.value(deferScreen) != deferGen) {
+                            qCDebug(lcEffect) << "Deferred geometry superseded (screen or batch changed), dropping:"
+                                              << getWindowId(safeWindow.data());
+                            return;
+                        }
+                        // Re-assert the self-caused-frame-change guard the
+                        // original (batch) apply held — without it the
+                        // synchronous frame change from this moveResize
+                        // reads as an external move and can report a
+                        // phantom cross-VS unsnap.
+                        // Save/restore, not set/clear (nesting-safe).
+                        const bool prevInApply = m_daemonGate.inGeometryApply;
+                        m_daemonGate.inGeometryApply = true;
+                        const auto guard = qScopeGuard([this, prevInApply] {
+                            m_daemonGate.inGeometryApply = prevInApply;
+                        });
+                        // Forward BOTH scroll overrides: dropping them replayed a
+                        // leaving column as a direct animate-to-park, sweeping it
+                        // backwards across the screen — the exact artifact the
+                        // override split exists to prevent. They are frame-relative
+                        // snapshots from defer time; the batch-generation guard above
+                        // already dropped the replay if anything moved since.
+                        applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath, originOverride,
+                                            visualTargetOverride);
+                    });
         return;
     }
 
@@ -317,6 +333,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     if (!skipAnimation && !allowDuringDrag && !openAnimationInFlight && m_windowAnimator->isEnabled()
         && shouldAnimateWindow(window, &sharedQuery)) {
         const QRectF targetFrame(geo);
+        // Where the window is COMMITTED (targetFrame) versus where the motion
+        // is seen to END (animTarget). Identical unless the caller split them
+        // — see visualTargetOverride on the declaration. Everything the
+        // animator and the shader morph touch below uses animTarget; only the
+        // moveResize uses targetFrame.
+        const QRectF animTarget = visualTargetOverride.isValid() ? visualTargetOverride : targetFrame;
 
         // Bail before any work when the in-flight animation already
         // targets this frame — saves both the moveResize signal
@@ -325,8 +347,21 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // here (kwin's moveResize is internally a no-op when geometry
         // already matches, but still pays signal-dispatch cost on the
         // hot path of rapid drag retargets).
-        if (m_windowAnimator->hasAnimation(window) && m_windowAnimator->isAnimatingToTarget(window, targetFrame)) {
-            return; // Already animating to this target
+        //
+        // When the caller SPLIT the visual target from the committed frame
+        // (leaving scroll columns), the bail must ALSO require the committed
+        // frame to already match: two successive leaving-column batches can
+        // share an animTarget (derived from the screen edge and the window's
+        // size) while carrying DIFFERENT park rects — bailing on animTarget
+        // alone would skip the moveResize and strand the committed geometry
+        // at the previous park. Without a split, animTarget IS geo and the
+        // extra term is deliberately not evaluated: frameGeometry() can lag
+        // a size-changing moveResize until the client acks, and a defeated
+        // bail would fall through to a retarget that re-anchors the running
+        // animation on every rapid identical retarget.
+        if (m_windowAnimator->hasAnimation(window) && m_windowAnimator->isAnimatingToTarget(window, animTarget)
+            && (!visualTargetOverride.isValid() || window->frameGeometry().toRect() == geo)) {
+            return; // Already animating to this target (with the frame committed, when split)
         }
 
         // Apply final geometry immediately — client starts re-rendering at new size.
@@ -403,7 +438,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             const QRectF displacedTarget = m_windowAnimator->animationFor(window)->to();
             const QRectF visualPos = m_windowAnimator->currentValue(window, QRectF(oldFrame));
             const auto result = m_windowAnimator->retargetWithResult(
-                window, targetFrame, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
+                window, animTarget, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
             morphAnchor = visualPos;
             if (result == PhosphorAnimation::RetargetResult::DegenerateReap) {
                 // Retarget collapsed (current visual ≈ new target). The reap
@@ -418,12 +453,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // as the reap/replace paths in WindowAnimator. morphAnchor is
                 // still set so that, when a replacement DOES play, its iFromRect
                 // matches the animator's re-anchored departure point.
-                const QRectF animFrom = (displacedTarget != targetFrame) ? displacedTarget : visualPos;
-                m_windowAnimator->startAnimation(window, animFrom, targetFrame, motionOverridePtr);
+                const QRectF animFrom = (displacedTarget != animTarget) ? displacedTarget : visualPos;
+                m_windowAnimator->startAnimation(window, animFrom, animTarget, motionOverridePtr);
                 morphAnchor = animFrom;
             }
         } else {
-            m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame, motionOverridePtr);
+            m_windowAnimator->startAnimation(window, QRectF(oldFrame), animTarget, motionOverridePtr);
         }
 
         if (m_windowAnimator->hasAnimation(window)) {
@@ -511,7 +546,35 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 }
             }
             if (snapShaderApplies) {
-                beginShaderTransition(window, shaderProfile);
+                const bool installed = beginShaderTransition(window, shaderProfile);
+                // Identity gate before mutating the live leg — the same rule
+                // as the heldMove stamp and the maximize morph endpoints. The
+                // applicability gate above filtered the empty/refused shapes,
+                // but beginShaderTransition can still return false for a
+                // compile failure, the sticky null-shader sentinel, a
+                // registry miss, or a collapsed surface — and in those cases
+                // findTransition hands back an UNRELATED leg (a maximize
+                // morph mid-flight is the reachable one). Retargeting that
+                // leg's endpoints toward this snap would mutate a foreign
+                // event's animation; but leaving a foreign GEOMETRY leg alive
+                // is the frozen-stale-morph hazard the declined branch below
+                // documents, because the window has already moved. So: owned
+                // leg → retarget; foreign geometry-owning leg → tear down,
+                // exactly as the animator-declined branch does.
+                bool ownsSnapLeg = installed;
+                auto* mt = m_shaderManager.findTransition(window);
+                if (!ownsSnapLeg && mt) {
+                    const auto cacheIt = m_shaderManager.m_shaderCache.find(snapShaderId);
+                    ownsSnapLeg = cacheIt != m_shaderManager.m_shaderCache.end() && cacheIt->second.shader
+                        && mt->cached == &cacheIt->second;
+                }
+                if (!ownsSnapLeg) {
+                    if (mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
+                        endShaderTransition(window);
+                    }
+                    repaintSnapRegions(window, trueOldFrame, geo);
+                    return;
+                }
                 // If the installed shader is a geometry morph (declares
                 // iFromRect), hand it the old/new frames and request the
                 // old-content snapshot. The morph then owns the visual
@@ -521,10 +584,9 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // C++ WindowAnimator translate+scale for this window. The
                 // WindowAnimator still runs (durationMs == 0) purely to drive
                 // the morph's progress timeline.
-                if (auto* mt = m_shaderManager.findTransition(window);
-                    mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
+                if (mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
                     // Always retarget the morph to the new destination.
-                    mt->toGeometry = targetFrame;
+                    mt->toGeometry = animTarget;
                     // On a RETARGET mid-morph, beginShaderTransition short-
                     // circuits (same shader) and keeps the existing transition,
                     // so its captured snapshot already holds the ORIGINAL old
@@ -544,7 +606,17 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                     // at the already-committed previous target instead of the
                     // animator's departure rect.
                     mt->fromGeometry = morphAnchor;
-                    if (!mt->oldSnapshot) {
+                    // Gate on the compiled shader actually LINKING uOldWindow,
+                    // matching the two sibling request sites (the move-start
+                    // hookup and beginMaximizeShaderMorph) and the bind/unbind
+                    // pair in decoration_render.cpp, which already test this
+                    // same predicate. The bundled window-morph is vertex-only
+                    // and samples no old frame, so an ungated request paid a
+                    // full-window drawWindow re-entry plus an RGBA8 allocation
+                    // on every snap, tile and reflow to fill a texture nothing
+                    // would ever read. A cross-fade pack keeps its snapshot by
+                    // declaring the uniform.
+                    if (mt->cached->iOldWindowLoc >= 0 && !mt->oldSnapshot) {
                         mt->needsSnapshot = true;
                     }
                 }
@@ -568,7 +640,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             }
         }
 
-        repaintSnapRegions(window, oldFrame, geo);
+        repaintSnapRegions(window, trueOldFrame, geo);
         return;
     }
 
@@ -591,7 +663,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         qCDebug(lcEffect) << "moveResize: QRect=" << geo << "-> QRectF=" << QRectF(geo);
         kwinWindow->moveResize(QRectF(geo));
 
-        repaintSnapRegions(window, oldFrame, geo);
+        repaintSnapRegions(window, trueOldFrame, geo);
     } else {
         qCWarning(lcEffect) << "Cannot get underlying Window from EffectWindow";
     }

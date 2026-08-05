@@ -693,7 +693,7 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // Spurious-pair suppression: plasmashell notification stacking makes
     // KWin emit minimizedChanged(true) on tiled windows with the matching
     // unminimize ~1-2 ms later (the same quirk kMinimizeFloatDebounceMs
-    // in tilinghandler/signals.cpp debounces on the float side). The
+    // in tilinghandler/minimizefloat.cpp debounces on the float side). The
     // reverse leg installs immediately — a genuine minimize must not
     // start late, and a spurious pair paints at most one barely-started
     // frame — but an unminimize landing inside the window means the pair

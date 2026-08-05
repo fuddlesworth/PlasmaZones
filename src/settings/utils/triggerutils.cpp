@@ -49,7 +49,21 @@ bool hasAlwaysActiveTrigger(const QVariantList& triggers)
 {
     const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
     for (const auto& t : triggers) {
-        if (t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt() == alwaysActive) {
+        const QVariantMap map = t.toMap();
+        if (map.value(ConfigDefaults::triggerModifierField(), 0).toInt() != alwaysActive) {
+            continue;
+        }
+        // The BARE sentinel only. The daemon's per-tick anyTriggerHeld ANDs
+        // the mouse button in alongside the modifier match, so a sentinel
+        // paired with a button still requires that button held and is not
+        // unconditional. Answering true for it would light the master
+        // "activate on every drag" toggle over a policy the daemon does not
+        // apply, and the daemon's own effectiveDragReorderModeFor already
+        // spells the same pair. No in-tree writer produces one
+        // (makeAlwaysActiveTriggerList always writes 0), so this only ever
+        // sees a hand-edited config — which is exactly when the two halves
+        // must not disagree.
+        if (map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt() == 0) {
             return true;
         }
     }

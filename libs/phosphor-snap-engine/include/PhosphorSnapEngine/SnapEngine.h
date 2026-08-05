@@ -830,7 +830,9 @@ public:
         return m_lastActiveScreenId;
     }
 
-    /// Wire the daemon's filtered Exclude rule set into the snap engine.
+    /// Wire the daemon's filtered placement-exclusion rule set (rules
+    /// carrying an `Exclude` or `ExcludePlacement` action) into the snap
+    /// engine.
     /// See the comment block on the private members and the impl in
     /// navigation_actions.cpp for the lifetime contract — the pointer is
     /// borrowed and the cached evaluator drops on a pointer change.
@@ -872,7 +874,8 @@ public:
         m_exclusionQueryProvider = std::move(provider);
     }
 
-    /// True if @p appId matches an enabled `Exclude`-action Rule
+    /// True if @p appId matches an enabled rule in the borrowed
+    /// placement-exclusion set (`Exclude` or `ExcludePlacement` action)
     /// resolved against an appId-ONLY `WindowQuery`. This is a narrow seam:
     /// the runtime exclusion path is @ref isWindowExcluded, which evaluates the
     /// FULL window attributes; this method survives as (a) the early-init /
@@ -1088,8 +1091,8 @@ private:
     bool tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId);
 
     /// Check whether the window is excluded from the given navigation
-    /// action by a terminal `Exclude` action in the unified Rule
-    /// store. Emits navigationFeedback(false, action, "excluded", ...)
+    /// action by an `Exclude` or `ExcludePlacement` action in the borrowed
+    /// placement-exclusion set. Emits navigationFeedback(false, action, "excluded", ...)
     /// and returns true when excluded so callers can early-return. False
     /// otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
@@ -1099,11 +1102,12 @@ private:
     // docstrings live with those declarations.
 
     /// Shared tail of both exclusion entry points: bind the lazy evaluator to
-    /// the current Exclude rule set (empty/null set short-circuits) and resolve
+    /// the current placement-exclusion rule set (empty/null set short-circuits) and resolve
     /// @p query. Keeps the rule-set/evaluator invariant in one place.
     bool evaluateExcludeRules(const PhosphorRules::WindowQuery& query) const;
 
-    /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr
+    /// Borrowed pointer to the daemon's filtered placement-exclusion rule
+    /// set (Exclude ∪ ExcludePlacement). nullptr
     /// in early-init paths (before the daemon wires the store) — the
     /// `evaluateExcludeRules` fast path short-circuits to false in that case.
     ///

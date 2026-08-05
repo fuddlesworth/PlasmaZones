@@ -793,6 +793,14 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // m_notifiedWindows the whole time — the daemon never untiles on
         // fullscreen) returns to its tiled rect, so re-establish the
         // decoration claim and border tracking the enter-path released.
+        // EVERY exit path below must re-drive decorations, not just the
+        // tracked-retile one: the ENTER branch unconditionally removed this
+        // window's decoration, and shouldDecorateWindow's fullscreen reject
+        // has now lifted — a snap-mode or plain-floating window (untracked
+        // here, screen not managed) otherwise stays undecorated until an
+        // unrelated sweep (focus change, rule edit). KWin does not re-fire
+        // windowActivated for an already-active window on fullscreen exit,
+        // so nothing else heals it.
         const QString screenId = m_notifiedWindowScreens.value(windowId);
         if (!m_notifiedWindows.contains(windowId)) {
             // Never-tracked window: a window that OPENED fullscreen was
@@ -804,9 +812,11 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             if (m_managedScreens.contains(currentScreen)) {
                 notifyWindowAdded(w, /*knownFreeFloating=*/true);
             }
+            m_effect->updateAllDecorations();
             return;
         }
         if (screenId.isEmpty()) {
+            m_effect->updateAllDecorations();
             return;
         }
         // Autotile was disabled on this window's tracked screen while it was
@@ -817,12 +827,14 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         if (!m_managedScreens.contains(screenId)) {
             m_notifiedWindows.remove(windowId);
             m_notifiedWindowScreens.remove(windowId);
+            m_effect->updateAllDecorations();
             return;
         }
         // Floating windows stay untracked: a window floated while fullscreen
         // (manual toggle, minimize-float, overflow batch-float — all keep
         // m_notifiedWindows intact) is free-floating on exit.
         if (m_effect->isWindowFloating(windowId)) {
+            m_effect->updateAllDecorations();
             return;
         }
         markWindowTiled(screenId, windowId);

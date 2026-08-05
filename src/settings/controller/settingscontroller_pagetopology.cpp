@@ -218,6 +218,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         {QStringLiteral("general"),
          {
              {CD::renderingGroup(), CD::backendKey()},
+             {CD::renderingGroup(), CD::gpuKey()},
              // Shader Effects moved here from snapping-overlay-appearance, and
              // the Shaders.Audio group (the full CAVA parameter set) lives with
              // it: frame rate + audio spectrum drive EVERY shader category
@@ -343,10 +344,10 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::tilingAlgorithmGroup(), CD::maxWindowsKey()},
              {CD::tilingAlgorithmGroup(), CD::perAlgorithmSettingsKey()},
          }},
-        // The two advanced scrolling leaves split the former single page's
+        // The three advanced scrolling leaves split the former single page's
         // keys by concern; the one-owner invariant holds per (group, key).
         // The master switch (Scrolling.enabled) is deliberately absent from
-        // both: like snappingEnabled/autotileEnabled it is committed
+        // all three: like snappingEnabled/autotileEnabled it is committed
         // through the sidebar toggle's beginExternalEdit/endExternalEdit
         // pair, not staged through per-page dirtiness.
         //
@@ -399,6 +400,8 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // (they followed the card over when the View leaf was folded in).
              {CD::scrollingGroup(), CD::centerFocusedColumnKey()},
              {CD::scrollingGroup(), CD::alwaysCenterSingleColumnKey()},
+             // The crop-at-edge switch on the Focus and view card.
+             {CD::scrollingGroup(), CD::cropStraddlersKey()},
              {CD::scrollingGroup(), CD::wheelFocusEnabledKey()},
              {CD::scrollingGroup(), CD::wheelFocusInvertedKey()},
              // Scrolling.Behavior — the strip's window-handling and focus
@@ -414,6 +417,18 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingBehaviorGroup(), CD::restoreFloatedOnLoginKey()},
              {CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()},
              {CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()},
+             // Drag re-insert triggers (the Triggers card on this page).
+             {CD::scrollingBehaviorGroup(), CD::triggersKey()},
+             {CD::scrollingBehaviorGroup(), CD::toggleActivationKey()},
+             // Scrolling.DropIndicator — the Drop indicator card on this page.
+             // It lives beside the Triggers card because it only appears
+             // during the drag those triggers arm.
+             {CD::scrollingDropIndicatorGroup(), CD::enabledKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::colorKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::borderColorKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::opacityKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::widthKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::radiusKey()},
          }},
         // Only the GLOBAL Windows.* / Gaps.* keys are listed. Per-monitor gap
         // overrides live in the per-screen autotile store (AutotileScreen:*), not

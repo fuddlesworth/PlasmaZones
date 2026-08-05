@@ -38,8 +38,8 @@ P_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey
 P_STORE_GET(bool, zoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, bool)
 P_STORE_SET_BOOL(setZoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, zoneSpanToggleModeChanged)
 
-// Shared helper for the three "plain" trigger-list setters (activation,
-// snap-assist, autotile-insert). Post-write compare — the schema's
+// Shared helper for the four "plain" trigger-list setters (activation,
+// snap-assist, autotile-insert, scrolling-insert in settings/scrolling.cpp). Post-write compare — the schema's
 // canonicalTriggerList validator drops non-map entries, strips unknown keys,
 // and caps the list. A pre-write equality check against the stored canonical
 // form would fire a spurious changed signal whenever the caller passed a
@@ -339,7 +339,7 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 }
 
 // ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
-// Largest group — seven sub-groups. defaultAutotileAlgorithm passes through
+// Three sub-groups (Algorithm, Behavior, Gaps) plus the top-level toggle. defaultAutotileAlgorithm passes through
 // PhosphorTiles::AlgorithmRegistry for validation; per-algorithm settings round-trip as a
 // JSON string and sanitize via AutotileConfig::perAlgoFromVariantMap.
 

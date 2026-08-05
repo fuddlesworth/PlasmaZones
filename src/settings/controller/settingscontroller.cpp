@@ -12,8 +12,9 @@
 #include "settings/pages/snappingeffectscontroller.h"
 #include "settings/pages/snappingzoneselectorcontroller.h"
 #include "settings/pages/tilingalgorithmcontroller.h"
-#include "settings/pages/windowappearancecontroller.h"
+#include "settings/pages/scrollingbehaviorcontroller.h"
 #include "settings/pages/tilingbehaviorcontroller.h"
+#include "settings/pages/windowappearancecontroller.h"
 #include "settings/utils/virtualscreenutils.h"
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
@@ -151,6 +152,15 @@ QVariantMap SettingsController::scrollingConstants() const
         {QStringLiteral("tabGapsBetweenMax"), ConfigDefaults::scrollingTabIndicatorGapsBetweenTabsMax()},
         {QStringLiteral("tabCornerRadiusPill"), ConfigDefaults::scrollingTabIndicatorCornerRadiusPill()},
         {QStringLiteral("tabCornerRadiusMax"), ConfigDefaults::scrollingTabIndicatorCornerRadiusMax()},
+        // Drop indicator (Scrolling.DropIndicator). Bounds only, same policy
+        // as the tab block above. The border bounds mirror the snapping zone
+        // overlay's so the two highlights cannot drift apart visually.
+        {QStringLiteral("dropOpacityMin"), ConfigDefaults::scrollingDropIndicatorOpacityMin()},
+        {QStringLiteral("dropOpacityMax"), ConfigDefaults::scrollingDropIndicatorOpacityMax()},
+        {QStringLiteral("dropBorderWidthMin"), ConfigDefaults::scrollingDropIndicatorBorderWidthMin()},
+        {QStringLiteral("dropBorderWidthMax"), ConfigDefaults::scrollingDropIndicatorBorderWidthMax()},
+        {QStringLiteral("dropBorderRadiusMin"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMin()},
+        {QStringLiteral("dropBorderRadiusMax"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMax()},
     };
 }
 
@@ -443,6 +453,12 @@ SettingsController::SettingsController(QObject* parent)
     connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {
         Q_EMIT daemonRunningChanged();
         if (m_daemonController.isRunning()) {
+            // The freshly started daemon has just read the current rendering
+            // config, so the General page's "restart required" banner must
+            // stop comparing against the values this app started with.
+            if (m_generalPage) {
+                m_generalPage->rebaselineStartupSnapshots();
+            }
             // Daemon just came online — reload all D-Bus-dependent data.
             // scheduleLayoutLoad() and ScreenHelper::refreshScreens() emit their
             // own NOTIFY (layoutsChanged / screensChanged). refreshVirtualDesktops
@@ -536,13 +552,14 @@ SettingsController::SettingsController(QObject* parent)
     m_editorPage = new EditorPageController(m_settings, this);
     connect(m_editorPage, &EditorPageController::changed, this, &SettingsController::onSettingsPropertyChanged);
 
-    // Snapping→Behavior + Tiling→Behavior page sub-controllers. Their
+    // Snapping→Behavior + Tiling→Behavior + Scrolling→Window page sub-controllers. Their
     // underlying settings ARE Q_PROPERTY on Settings, so the meta-object
     // loop above already wires them to onSettingsPropertyChanged(); the
     // sub-controllers only provide the QML-facing forwarders + storage/QML
     // trigger-list conversion.
     m_snappingBehaviorPage = new SnappingBehaviorController(m_settings, this);
     m_tilingBehaviorPage = new TilingBehaviorController(m_settings, this);
+    m_scrollingBehaviorPage = new ScrollingBehaviorController(m_settings, this);
 
     // Snapping→Zone Selector page sub-controller. Pure CONSTANT bounds
     // facade over ConfigDefaults — no Settings wiring required.
@@ -1073,6 +1090,21 @@ SettingsController::SettingsController(QObject* parent)
 SnappingZonesController* SettingsController::snappingZonesPage() const
 {
     return m_snappingZonesPage;
+}
+
+SnappingBehaviorController* SettingsController::snappingBehaviorPage() const
+{
+    return m_snappingBehaviorPage;
+}
+
+TilingBehaviorController* SettingsController::tilingBehaviorPage() const
+{
+    return m_tilingBehaviorPage;
+}
+
+ScrollingBehaviorController* SettingsController::scrollingBehaviorPage() const
+{
+    return m_scrollingBehaviorPage;
 }
 
 WindowAppearanceController* SettingsController::windowAppearancePage() const

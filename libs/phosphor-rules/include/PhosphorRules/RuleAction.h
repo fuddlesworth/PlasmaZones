@@ -101,8 +101,10 @@ struct PHOSPHORRULES_EXPORT RuleAction
  *     QColor::HexArgb); seeded by the settings layer's `defaultPayloadFor`
  *     "color" branch (defaultDisplay is a double, so it cannot carry a colour
  *     seed). Shorter `#RGB`/`#RRGGBB` shapes still load for hand-edited values.
- *   - picker-aware kinds carry no schema state — the QML loader knows
- *     to swap in the catalogue-driven ComboBox.
+ *   - picker-aware kinds normally carry no schema state — the QML loader
+ *     knows to swap in the catalogue-driven ComboBox — though one MAY carry
+ *     advisory bounds (RouteToDesktop's `virtualDesktop` declares min/max);
+ *     the loader dispatches on `kind` alone either way.
  */
 struct PHOSPHORRULES_EXPORT ParamSchema
 {
@@ -164,7 +166,8 @@ inline constexpr QLatin1StringView Overlay{"overlay"};
  *   - a `validate` predicate run on load,
  *   - the set of param keys the action accepts (`allowedKeys`) — the strict
  *     loader rejects any action carrying a key not in this set,
- *   - whether the action is **terminal** (an `Exclude` action stops evaluation),
+ *   - whether the action is **terminal** (an Exclude-family action stops
+ *     evaluation — see the four Exclude* action types),
  *   - the structural `params` schema consumed by the editor UI,
  *   - the `userAuthorable` visibility flag used by the action-type picker
  *     to filter out actions that are registered for back-compat / loader
@@ -187,7 +190,10 @@ struct PHOSPHORRULES_EXPORT ActionDescriptor
     SlotResolver slotFor;
     /// Returns true if @p params is a well-formed payload for this type.
     Validator validate;
-    /// Terminal actions (Exclude) stop evaluation once their rule matches.
+    /// Terminal actions (the Exclude family: Exclude / ExcludePlacement /
+    /// ExcludeAnimations / ExcludeDecorations) stop evaluation once their
+    /// rule matches — within the evaluator's terminal-action scope, see
+    /// RuleEvaluator::setTerminalActionScope.
     bool terminal = false;
     /// The complete set of param keys this action type accepts. The strict
     /// loader (`RuleAction::fromJson`) rejects an action whose `params`
@@ -259,7 +265,7 @@ public:
     /// type is unregistered or its descriptor rejects the params.
     QString slotFor(const RuleAction& action) const;
 
-    /// True if @p action is a terminal action (Exclude).
+    /// True if @p action is a terminal action (one of the Exclude family).
     bool isTerminal(const RuleAction& action) const;
 
     /// True if @p action passes its descriptor's validation.
@@ -329,6 +335,25 @@ inline constexpr QLatin1StringView LockContext{"lockContext"};
 /// `LayoutRegistry::resolveContextDefaultAssignment`, mirroring `LockContext`.
 inline constexpr QLatin1StringView DefaultLayoutAssignment{"defaultLayoutAssignment"};
 inline constexpr QLatin1StringView Exclude{"exclude"};
+/// Exclude a matched window from the placement engines ONLY — snapping,
+/// autotile and scrolling all treat it as unmanaged (open path, drag gate,
+/// keyboard navigation), so it stays floating — while decorations and
+/// animations still apply. The scoped sibling of the blanket `Exclude`,
+/// which additionally strips decorations. Terminal like `Exclude`, and
+/// sliced into the same placement-exclusion set consumers bind
+/// (`ExclusionRules::excludePlacementRulesFrom` returns Exclude ∪
+/// ExcludePlacement rules). Distinct from `Float`, which is an open-path
+/// placement verdict on a MANAGED window (a floated window can still be
+/// dragged into a zone; an excluded one cannot).
+///
+/// Scope enforcement: evaluators bound to the FULL store declare a
+/// terminal-action scope (RuleEvaluator::setTerminalActionScope) so this
+/// action terminates only placement-policy walks — on a mixed rule, its
+/// presence does not cancel animation/appearance or context resolution.
+/// Carries no tags, deliberately: no in-tree tag reader consumes the
+/// exclusion family, and its placement effect flows exclusively through
+/// the slicer.
+inline constexpr QLatin1StringView ExcludePlacement{"excludePlacement"};
 inline constexpr QLatin1StringView Float{"float"};
 /// Snap a matched window into one or more zones on open. Carries a non-empty
 /// list of 1-based zone ordinals (`ActionParam::Zones`); a single ordinal snaps
@@ -409,6 +434,24 @@ inline constexpr QLatin1StringView SetOverlayShowZoneNumbers{"setOverlayShowZone
 /// animationExcludedApplications / animationExcludedWindowClasses
 /// settings lists by the v3→v4 chain.
 inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
+
+/// Disable window decorations (the border + surface-pack chain) on a matched
+/// window — the decoration mirror of `ExcludeAnimations`. The KWin effect's
+/// `shouldDecorateWindow` gate binds the decoration-exclusion slice
+/// (`ExclusionRules::excludeDecorationsRulesFrom`, Exclude ∪
+/// ExcludeDecorations), so the blanket `Exclude` keeps stripping decorations
+/// while this action strips ONLY decorations — placement and animations are
+/// untouched (full-store evaluators enforce this by scoping which terminal
+/// actions they honour, see RuleEvaluator::setTerminalActionScope, so a
+/// mixed rule carrying this action cannot cancel placement or animation
+/// resolution). Like ExcludeAnimations it deliberately omits `Tag::Effect`:
+/// carrying it would admit the rule into the effect's animation rule set,
+/// whose "any match force-animates" opt-in gate must not fire for a
+/// decoration opt-out. Carries `Tag::Border` as classification only — no
+/// in-tree tag reader consumes it, and blanket `Exclude`'s decoration
+/// effect flows exclusively through the slicer, never through tags.
+/// Terminal.
+inline constexpr QLatin1StringView ExcludeDecorations{"excludeDecorations"};
 
 /// Per-window override for floated-position restore on login. A boolean `value`
 /// action: true forces the window's previous floated position (and original
@@ -587,6 +630,33 @@ inline constexpr QLatin1StringView SetTabIndicatorActiveColor{"setTabIndicatorAc
 inline constexpr QLatin1StringView SetTabIndicatorInactiveColor{"setTabIndicatorInactiveColor"};
 inline constexpr QLatin1StringView SetTabIndicatorUrgentColor{"setTabIndicatorUrgentColor"};
 
+// ── Per-context drop-indicator overrides (domain Context) ──
+// The drop-target highlight painted while a drag re-insert is armed. Context
+// domain rather than Window for the same reason as the tab indicator's bulk:
+// the indicator describes an empty SLOT on a screen, not a window, so a rule
+// that matches a window has no referent for it. Every one of these is PAINT —
+// unlike the tab indicator there is no geometry half, because the rect comes
+// from the engine's own layout math and cannot be positioned independently of
+// where the drop lands. They are therefore collected daemon-side and handed
+// straight to the overlay, never through the engine's per-screen override map.
+/// Whether the drop indicator is painted at all. Boolean `ActionParam::Value`.
+inline constexpr QLatin1StringView SetDropIndicatorEnabled{"setDropIndicatorEnabled"};
+/// Fill and border colours. Hex `ActionParam::Value`. EMPTY is not expressible
+/// as a rule value — a rule that does not set the colour simply leaves the
+/// setting (and through it the "follow the colour scheme" sentinel) in place.
+inline constexpr QLatin1StringView SetDropIndicatorColor{"setDropIndicatorColor"};
+inline constexpr QLatin1StringView SetDropIndicatorBorderColor{"setDropIndicatorBorderColor"};
+/// Fill opacity, 0.0-1.0. Numeric `ActionParam::Value` (stored fraction,
+/// edited as a percent). The border is always opaque, so this is the fill's
+/// alone — see ScrollDropIndicatorContent.
+inline constexpr QLatin1StringView SetDropIndicatorOpacity{"setDropIndicatorOpacity"};
+/// Border thickness in px. Numeric `ActionParam::Value`. Zero is legal and
+/// means a fill with no edge, so this floors at 0 rather than at 1.
+inline constexpr QLatin1StringView SetDropIndicatorBorderWidth{"setDropIndicatorBorderWidth"};
+/// Corner radius in px. Numeric `ActionParam::Value`. UNSIGNED, unlike the tab
+/// indicator's: there is no pill sentinel here, 0 means square.
+inline constexpr QLatin1StringView SetDropIndicatorBorderRadius{"setDropIndicatorBorderRadius"};
+
 // ── Per-window scrolling open overrides (domain Window) ──
 // Read on the open path for the matched window, layered over the context /
 // config defaults above, so one application can open wide or tabbed without
@@ -605,6 +675,17 @@ inline constexpr QLatin1StringView OpenTabbed{"openTabbed"};
 inline constexpr QLatin1StringView TabColorActive{"tabColorActive"};
 inline constexpr QLatin1StringView TabColorInactive{"tabColorInactive"};
 inline constexpr QLatin1StringView TabColorUrgent{"tabColorUrgent"};
+/// Per-window drop-indicator colours, keyed on the DRAGGED window. The only
+/// per-window slice of the drop indicator that has a coherent referent: while
+/// a drag is in flight exactly one window is being dragged, so "show this
+/// colour when dragging Firefox" resolves unambiguously at drag start. The
+/// remaining four properties stay context-only — a per-window opacity or
+/// border width would name the same slot the context rule already describes
+/// with no added meaning. These outrank the per-context colours, which outrank
+/// the config, which falls back to the theme: the tab colours' exact order.
+/// Hex `ActionParam::Value`.
+inline constexpr QLatin1StringView DropIndicatorColor{"dropIndicatorColor"};
+inline constexpr QLatin1StringView DropIndicatorBorderColor{"dropIndicatorBorderColor"};
 /// Whether the opening window starts its own column or is consumed into the
 /// focused one. Closed enum token (`ActionParam::Value`, ColumnPlacementToken).
 inline constexpr QLatin1StringView OpenColumnPlacement{"openColumnPlacement"};
@@ -679,8 +760,10 @@ inline constexpr int MaxZoneOrdinal = 64;
 
 /// Upper bounds for the per-window border appearance overrides
 /// (`SetBorderWidth` / `SetBorderRadius`), in logical px. Shared so the
-/// load-time descriptor validators (ruleaction_builtins_appearance.cpp for the
-/// per-window pair, ruleaction_builtins_engine.cpp for the overlay pair) and the KWin-effect
+/// load-time descriptor validators (ruleaction_builtins_appearance.cpp for
+/// the per-window pair, ruleaction_builtins_engine.cpp for the overlay
+/// WIDTH — the overlay RADIUS deliberately uses its own wider
+/// `kMaxOverlayBorderRadius`, see ruleaction_builtins_p.h) and the KWin-effect
 /// consumer re-validation (shader_resolve.cpp) stay in lockstep — a
 /// programmatically-built or hand-edited payload out of this range is
 /// rejected at both boundaries rather than drawn.
@@ -727,6 +810,20 @@ inline constexpr double TabIndicatorCornerRadiusPill = -1.0;
 inline constexpr double MaxTabIndicatorCornerRadius = 64.0;
 inline constexpr double MinTabIndicatorLengthRatio = 0.05;
 inline constexpr double MaxTabIndicatorLengthRatio = 1.0;
+
+/// Drop-indicator numeric bounds, mirroring the config layer's
+/// (ConfigDefaults::scrollingDropIndicator*Min/Max) so a rule cannot author a
+/// value the settings page would refuse. Both floors are 0 and neither is a
+/// sentinel: a zero border width is a fill with no edge, and a zero radius is
+/// a square corner. Deliberately NOT shared with the tab-indicator constants
+/// above — the two families' ranges agree today by coincidence of taste, not
+/// by contract, and tying them would make retuning one silently move the other.
+inline constexpr double MinDropIndicatorOpacity = 0.0;
+inline constexpr double MaxDropIndicatorOpacity = 1.0;
+inline constexpr double MinDropIndicatorBorderWidth = 0.0;
+inline constexpr double MaxDropIndicatorBorderWidth = 10.0;
+inline constexpr double MinDropIndicatorBorderRadius = 0.0;
+inline constexpr double MaxDropIndicatorBorderRadius = 50.0;
 
 /// Upper bound for a `RouteToDesktop` 1-based virtual-desktop number. KWin tops
 /// out far below this in practice; the cap exists only to reject a grossly
@@ -948,6 +1045,15 @@ inline constexpr QLatin1StringView TabIndicatorCornerRadius{"tab-indicator-corne
 inline constexpr QLatin1StringView TabIndicatorActiveColor{"tab-indicator-active-color"};
 inline constexpr QLatin1StringView TabIndicatorInactiveColor{"tab-indicator-inactive-color"};
 inline constexpr QLatin1StringView TabIndicatorUrgentColor{"tab-indicator-urgent-color"};
+// Per-context drop-indicator slots, one per property so independent context
+// rules cascade per-property. Filled by the SetDropIndicator* actions and read
+// by LayoutRegistry::resolveContextScrollingParams into ContextScrollingParams.
+inline constexpr QLatin1StringView DropIndicatorEnabled{"drop-indicator-enabled"};
+inline constexpr QLatin1StringView DropIndicatorColor{"drop-indicator-color"};
+inline constexpr QLatin1StringView DropIndicatorBorderColor{"drop-indicator-border-color"};
+inline constexpr QLatin1StringView DropIndicatorOpacity{"drop-indicator-opacity"};
+inline constexpr QLatin1StringView DropIndicatorBorderWidth{"drop-indicator-border-width"};
+inline constexpr QLatin1StringView DropIndicatorBorderRadius{"drop-indicator-border-radius"};
 // Per-window scrolling open slots (one per property so independent rules
 // cascade per-property). Filled by OpenColumnWidth / OpenTabbed /
 // OpenColumnPlacement / OpenWindowHeight, read on the open path by the
@@ -959,6 +1065,10 @@ inline constexpr QLatin1StringView OpenTabbed{"open-tabbed"};
 inline constexpr QLatin1StringView TabColorActive{"tab-color-active"};
 inline constexpr QLatin1StringView TabColorInactive{"tab-color-inactive"};
 inline constexpr QLatin1StringView TabColorUrgent{"tab-color-urgent"};
+/// Per-window drop-indicator colour slots, filled by the DropIndicator*
+/// window actions and resolved at drag start from the DRAGGED window's rules.
+inline constexpr QLatin1StringView DragDropIndicatorColor{"drag-drop-indicator-color"};
+inline constexpr QLatin1StringView DragDropIndicatorBorderColor{"drag-drop-indicator-border-color"};
 inline constexpr QLatin1StringView OpenColumnPlacement{"open-column-placement"};
 inline constexpr QLatin1StringView OpenWindowHeight{"open-window-height"};
 // Per-context overlay-property slots (one per property so independent rules
@@ -1005,6 +1115,13 @@ inline constexpr QLatin1StringView DecorationChain{"decoration-chain"};
 /// terminal (e.g. composing with override actions) would start
 /// filling the slot, so the id stays load-bearing for that path.
 inline constexpr QLatin1StringView AnimExclude{"anim-exclude"};
+/// Window-scoped. Declared for ActionDescriptor completeness the same way
+/// AnimExclude is — ExcludeDecorations is `.terminal = true`, so
+/// `RuleEvaluator::resolve` calls `markExcluded()` and breaks before
+/// `fillSlot()` runs. The effect's `shouldDecorateWindow` gates on
+/// `ResolvedActions::isExcluded()` over the dedicated decoration-exclusion
+/// evaluator, never on this slot id.
+inline constexpr QLatin1StringView DecorationExclude{"decoration-exclude"};
 } // namespace ActionSlot
 
 } // namespace PhosphorRules

@@ -22,6 +22,8 @@
 #include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
 
+#include <algorithm>
+
 #include <QByteArray>
 #include <QColor>
 #include <QDir>
@@ -129,8 +131,18 @@ void PlasmaZonesEffect::ensureSurfaceRegistryPaths()
     // packs that appear later (a fresh install). The daemon-delivered path
     // mechanism the animation registry uses (loadShaderRegistryFromDbus) is a
     // follow-up for surface packs; QStandardPaths covers the bundled pack today.
+    // ASCENDING priority (system lowest first, the user dir LAST).
+    // standardLocations hands back the writable user location first, and
+    // MetadataPackScanStrategy reverse-iterates the registered paths with
+    // first-wins on an id collision — so registering that order verbatim let
+    // /usr/share claim a bundled id before the user dir could, and a user pack
+    // overriding a bundled one ("border", "shadow") was silently shadowed in
+    // the compositor while the daemon honoured it. Every sibling that feeds a
+    // pack registry reverses for exactly this reason (shader_warmup.cpp,
+    // animationbootstrap.cpp, settingscontroller.cpp, ShaderRegistry).
     QStringList paths;
-    const QStringList bases = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    QStringList bases = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    std::reverse(bases.begin(), bases.end());
     paths.reserve(bases.size());
     for (const QString& base : bases) {
         paths.append(base + QStringLiteral("/plasmazones/surface"));

@@ -496,6 +496,18 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     if (!m_shaderManager.animationRuleSet().isEmpty()) {
         m_shaderManager.animationRuleEvaluator().clearCache();
     }
+    // The exclusion verdicts are cached the same way and IsFocused is just as
+    // matchable in an exclusion rule (`ExcludeDecorations WHEN focused`), so
+    // drop both exclusion caches on the same edge — without this, the verdict
+    // computed at the window's first consult pins for the session and the
+    // decoration never flips on focus change. Same per-slice gating as the
+    // class-swap invalidation in window_connections.cpp.
+    if (!m_snappingExclusionRuleSet.isEmpty()) {
+        m_snappingExclusionEvaluator.clearCache();
+    }
+    if (!m_decorationExclusionRuleSet.isEmpty()) {
+        m_decorationExclusionEvaluator.clearCache();
+    }
 
     // Re-resolve every window's border against the new focus state so the
     // active window picks up the active colour and the rest the inactive one.

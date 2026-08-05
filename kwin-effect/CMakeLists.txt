@@ -78,6 +78,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/input_filter.cpp
     plasmazoneseffect/input_filter.h
     plasmazoneseffect/paint_pipeline.cpp
+    plasmazoneseffect/scroll_clip.cpp
     plasmazoneseffect/paint_shader_window.cpp
     plasmazoneseffect/paint_capture.cpp
     plasmazoneseffect/paint_internal.h
@@ -189,9 +190,10 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     PhosphorAnimation::PhosphorAnimation
     # PhosphorRules: the unified LGPL rule engine. The effect resolves
     # its per-window animation overrides AND its exclusion gates through
-    # RuleEvaluator over slices of rules.json — the snap-drag gate
-    # binds to `ExclusionRules::excludeRulesFrom`, the animation gate to
-    # `ExclusionRules::excludeAnimationsRulesFrom`, both filtering the
+    # RuleEvaluator over slices of rules.json — the snap-drag gate binds
+    # `ExclusionRules::excludePlacementRulesFrom`, the decoration gate
+    # `ExclusionRules::excludeDecorationsRulesFrom`, and the animation gate
+    # `ExclusionRules::excludeAnimationsRulesFrom`, all filtering the
     # same unified rule-store push that drives the OverrideAnimation*
     # pipeline. Both the effect and the daemon link this one library so
     # there is exactly one match-code implementation (GPL->LGPL link is

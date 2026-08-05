@@ -77,6 +77,55 @@ private Q_SLOTS:
         m_wta->setWindowRegistry(nullptr);
     }
 
+    void testRestorePolicy_scopedExclusionDoesNotCancelLowerPriorityRule()
+    {
+        // Consumer-level guard for the WTA evaluator's terminal-action scope
+        // ({Exclude, ExcludePlacement}, set in ensureRuleEvaluator): a
+        // higher-priority decoration-only opt-out must NOT stop the walk
+        // before a lower-priority RestorePosition rule resolves. Deleting the
+        // setTerminalActionScope call from ensureRuleEvaluator leaves every
+        // primitive-level scope test green while this one fails — the
+        // exclusion would terminate the walk and the global default (forced
+        // FALSE below) would come back instead of the rule's TRUE.
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst9"), QStringLiteral("deskflow"), QString(), QString(), QString(),
+                                 0, 0, QString(), 0, QVariantMap());
+        m_settings->setSnappingRestoreFloatedWindowsOnLogin(false);
+
+        using namespace PhosphorRules;
+        Rule decoRule;
+        decoRule.id = QUuid::createUuid();
+        decoRule.enabled = true;
+        decoRule.priority = 500;
+        decoRule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("deskflow"));
+        RuleAction decoAction;
+        decoAction.type = QString(ActionType::ExcludeDecorations);
+        decoRule.actions = {decoAction};
+
+        Rule restoreRule;
+        restoreRule.id = QUuid::createUuid();
+        restoreRule.enabled = true;
+        restoreRule.priority = 100;
+        restoreRule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("deskflow"));
+        RuleAction restoreAction;
+        restoreAction.type = QString(ActionType::RestorePosition);
+        restoreAction.params.insert(QString(ActionParam::Value), true);
+        restoreRule.actions = {restoreAction};
+
+        RuleStore store(ConfigDefaults::rulesFilePath(), nullptr); // stack object: no QObject parent
+        QVERIFY(store.addRule(decoRule));
+        QVERIFY(store.addRule(restoreRule));
+        m_wta->setRuleStore(&store);
+
+        QVERIFY(m_wta->shouldRestoreFloatedPosition(QStringLiteral("deskflow|inst9"),
+                                                    PhosphorZones::AssignmentEntry::Mode::Snapping));
+
+        m_wta->setRuleStore(nullptr);
+        m_wta->setWindowRegistry(nullptr);
+        m_settings->setSnappingRestoreFloatedWindowsOnLogin(true);
+    }
+
     void testApplyOpenRoutingForTiling_acceptsScrollingTarget()
     {
         // DP-2 is a SCROLLING screen: org.plasmazones.Tiling serves both

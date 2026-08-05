@@ -137,6 +137,11 @@ public:
     // a dozen Tab*-prefixed leaves on Scrolling, so the settings page, the
     // per-page reset manifest and the rule slots all address one subtree.
     P_CONFIG_GROUP(scrollingTabIndicatorGroup, "Scrolling.TabIndicator")
+    // Scrolling.DropIndicator — the drop-target highlight painted during a
+    // drag re-insert. Its own group for the same reason as TabIndicator: the
+    // settings page, the per-page reset manifest and any later rule slots all
+    // address one subtree.
+    P_CONFIG_GROUP(scrollingDropIndicatorGroup, "Scrolling.DropIndicator")
 
     // Decorations — per-surface decoration tree (DecorationProfileTree:
     // shader-pack chain + per-pack parameters, keyed on a dot-path surface
@@ -240,6 +245,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     P_CONFIG_KEY(backendKey, "Backend")
+    P_CONFIG_KEY(gpuKey, "Gpu")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping (top-level)
@@ -409,6 +415,7 @@ public:
 
     P_CONFIG_KEY(centerFocusedColumnKey, "CenterFocusedColumn")
     P_CONFIG_KEY(alwaysCenterSingleColumnKey, "AlwaysCenterSingleColumn")
+    P_CONFIG_KEY(cropStraddlersKey, "CropStraddlers")
     P_CONFIG_KEY(defaultColumnWidthKindKey, "DefaultColumnWidthKind")
     P_CONFIG_KEY(defaultColumnWidthValueKey, "DefaultColumnWidthValue")
     P_CONFIG_KEY(defaultColumnDisplayKey, "DefaultColumnDisplay")
@@ -437,6 +444,13 @@ public:
     P_CONFIG_KEY(activeColorKey, "ActiveColor")
     P_CONFIG_KEY(inactiveColorKey, "InactiveColor")
     P_CONFIG_KEY(urgentColorKey, "UrgentColor")
+
+    // Scrolling.DropIndicator. Reuses the shared enabledKey / opacityKey /
+    // widthKey / radiusKey leaves above, the same way Snapping.Zones.Border
+    // spells its border as Width + Radius. Only the fill and border colours
+    // need names of their own.
+    P_CONFIG_KEY(colorKey, "Color")
+    P_CONFIG_KEY(borderColorKey, "BorderColor")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Behavior
@@ -841,6 +855,11 @@ public:
         P_CONFIG_KEY(v1QuickLayoutShortcutKeyPattern, "QuickLayout%1Shortcut")
         P_CONFIG_KEY(v2QuickLayoutKeyPattern, "QuickLayout%1")
         P_CONFIG_KEY(v2SnapToZoneKeyPattern, "SnapToZone%1")
+        // The hardcoded 9 below is FROZEN at the v1/v2 wire formats, which
+        // only ever had nine slots — do NOT retarget these bounds at
+        // QuickLayoutSlotCount like the live builders above: if that constant
+        // is ever raised, these must keep generating exactly the keys a
+        // historical config could hold.
         static QString v1QuickLayoutShortcutKey(int n)
         {
             if (n < 1 || n > 9) {

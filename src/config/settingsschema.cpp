@@ -3,6 +3,8 @@
 
 #include "settingsschema.h"
 
+#include <QColor>
+
 #include "settingsschemachoices.h"
 #include "settingsschema_p.h"
 
@@ -13,8 +15,11 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <QtGlobal>
 #include <PhosphorScreens/ScreenIdentity.h>
+
+#include <iterator>
 
 using namespace Qt::StringLiterals;
 
@@ -120,16 +125,32 @@ QVariant canonicalCommaList(const QVariant& v)
     return QVariant(parts.join(QLatin1Char(',')));
 }
 
+/// Both this cap and Settings::MaxTriggersPerAction resolve to
+/// ConfigDefaults::maxTriggersPerAction() — single source of truth, no
+/// drift possible because neither TU carries its own literal.
+constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
+
+} // namespace
+
 /// Canonicalize a trigger list: cap size, coerce each entry to a
 /// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
 /// every write so the flush loop enforces the cap even when the setter
 /// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
 ///
-/// Both this file's cap and Settings::MaxTriggersPerAction resolve to
-/// ConfigDefaults::maxTriggersPerAction() — single source of truth, no
-/// drift possible because neither TU carries its own literal.
-constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
+/// See the header. Namespace scope so settingsschema_scrolling.cpp can reach
+/// it for the five colour keys that carry the empty sentinel.
+QVariant canonicalThemeFallbackColor(const QVariant& v)
+{
+    const QString s = v.toString();
+    if (s.isEmpty() || QColor::isValidColorName(s)) {
+        return s;
+    }
+    return QString();
+}
 
+/// Namespace scope (declared in settingsschema.h): shared with
+/// settingsschema_scrolling.cpp, whose Scrolling.Behavior group carries the
+/// scrolling drag-insert trigger list.
 QVariant canonicalTriggerList(const QVariant& v)
 {
     const QVariantList raw = v.toList();
@@ -154,6 +175,8 @@ QVariant canonicalTriggerList(const QVariant& v)
     }
     return QVariant(out);
 }
+
+namespace {
 
 /// Canonicalize a per-algorithm settings map: round-trip through
 /// @c AutotileConfig so each algorithm's settings are validated against
@@ -358,8 +381,8 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Rendering ──────────────────────────────────────────────────────────────
-// Single-key group selecting the GPU backend. The validator coerces any
-// unknown string to a known value via ConfigDefaults::normalizeRenderingBackend
+// Two keys: the graphics API backend token and the GPU device pin. Each has
+// its own coercing validator (normalizeRenderingBackend / normalizeGpuDevice)
 // so hand-edited configs can't persist garbage.
 
 void appendRenderingSchema(PhosphorConfig::Schema& schema)
@@ -374,6 +397,17 @@ void appendRenderingSchema(PhosphorConfig::Schema& schema)
              return QVariant(CD::normalizeRenderingBackend(v.toString()));
          },
          tokenChoices(CD::renderingBackendOptions())},
+        // Gpu is a free string, not a token enum: the legal values are the
+        // machine's GPUs ("auto" or a "vendor:device" hex PCI pair), so there
+        // are no declared choices — the picker enumerates DRM render nodes at
+        // runtime. The validator still coerces malformed strings to "auto".
+        {CD::gpuKey(),
+         CD::gpuDevice(),
+         QMetaType::QString,
+         {},
+         [](const QVariant& v) {
+             return QVariant(CD::normalizeGpuDevice(v.toString()));
+         }},
     };
 }
 
@@ -421,11 +455,12 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Shortcuts ──────────────────────────────────────────────────────────────
-// Three sub-groups: Global (editor/settings launchers, zone navigation,
-// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation),
-// Tiling (autotile master/ratio/count controls + retile toggle), Editor
-// (zone editor shortcuts — duplicate, split, fill). All QString keys, no
-// validators needed.
+// TWO sub-groups: Global (editor/settings launchers, zone navigation,
+// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation)
+// and Tiling (autotile master/ratio/count controls + retile toggle). All
+// QString keys, no validators needed. There is no Editor group here — the
+// zone editor's shortcuts are not part of the daemon's schema; EditorController
+// owns its own settings in a separate process.
 
 namespace {
 // Helper: append a string KeyDef with no validator. Cuts the noise in the
@@ -446,12 +481,19 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut());
     addShortcut(globals, CD::previousLayoutKey(), CD::previousLayoutShortcut());
     addShortcut(globals, CD::nextLayoutKey(), CD::nextLayoutShortcut());
-    const QString quickDefaults[9] = {
+    const QString quickDefaults[] = {
         CD::quickLayout1Shortcut(), CD::quickLayout2Shortcut(), CD::quickLayout3Shortcut(),
         CD::quickLayout4Shortcut(), CD::quickLayout5Shortcut(), CD::quickLayout6Shortcut(),
         CD::quickLayout7Shortcut(), CD::quickLayout8Shortcut(), CD::quickLayout9Shortcut(),
     };
-    for (int i = 0; i < 9; ++i) {
+    // Bound by the protocol constant, not a local 9: quickLayoutKey() qFatals
+    // outside [1, QuickLayoutSlotCount], so a raised constant with a stale
+    // local literal would silently declare too few keys and a LOWERED one
+    // would abort at startup. The static_assert makes the defaults array
+    // track the constant at compile time instead.
+    static_assert(std::size(quickDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "quick-layout defaults array must cover every protocol slot");
+    for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
         addShortcut(globals, CD::quickLayoutKey(i + 1), quickDefaults[i]);
     }
     addShortcut(globals, CD::moveWindowLeftKey(), CD::moveWindowLeftShortcut());
@@ -473,12 +515,15 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::spanWindowRightKey(), CD::spanWindowRightShortcut());
     addShortcut(globals, CD::spanWindowUpKey(), CD::spanWindowUpShortcut());
     addShortcut(globals, CD::spanWindowDownKey(), CD::spanWindowDownShortcut());
-    const QString snapToZoneDefaults[9] = {
+    const QString snapToZoneDefaults[] = {
         CD::snapToZone1Shortcut(), CD::snapToZone2Shortcut(), CD::snapToZone3Shortcut(),
         CD::snapToZone4Shortcut(), CD::snapToZone5Shortcut(), CD::snapToZone6Shortcut(),
         CD::snapToZone7Shortcut(), CD::snapToZone8Shortcut(), CD::snapToZone9Shortcut(),
     };
-    for (int i = 0; i < 9; ++i) {
+    // Same protocol-constant bound as the quick-layout loop above.
+    static_assert(std::size(snapToZoneDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "snap-to-zone defaults array must cover every protocol slot");
+    for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
         addShortcut(globals, CD::snapToZoneKey(i + 1), snapToZoneDefaults[i]);
     }
     addShortcut(globals, CD::rotateWindowsClockwiseKey(), CD::rotateWindowsClockwiseShortcut());
@@ -774,8 +819,9 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingGroup()] = {
         {CD::enabledKey(), CD::snappingEnabled(), QMetaType::Bool},
     };
-    // Snapping.Behavior owns two scalar keys directly (Triggers, ToggleActivation);
-    // the SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
+    // Snapping.Behavior owns FOUR scalar keys directly — Triggers,
+    // ToggleActivation, FocusNewWindows and FocusFollowsMouse — while the
+    // SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
     // sub-groups each get their own Schema entry below (or already migrated).
     schema.groups[CD::snappingBehaviorGroup()] = {
         {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},

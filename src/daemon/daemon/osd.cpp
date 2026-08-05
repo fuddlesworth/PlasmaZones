@@ -1012,7 +1012,8 @@ void Daemon::showCheatsheetOnCursorScreen()
     }
     // No cheatsheet during an interactive drag: the kwin-effect holds a
     // keyboard grab for the drag's lifetime and routes Escape to cancelSnap
-    // itself (see windowdragadaptor/drag.cpp), so the dismiss grab bound
+    // itself (grabbedKeyboardEvent, kwin-effect/plasmazoneseffect.cpp), so
+    // the dismiss grab bound
     // below would never fire, and the sheet would also overlap the live
     // drag surfaces. The user can re-press after dropping the window.
     if (m_windowDragAdaptor && m_windowDragAdaptor->isDragInFlight()) {

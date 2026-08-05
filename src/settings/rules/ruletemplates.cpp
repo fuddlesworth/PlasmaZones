@@ -145,10 +145,15 @@ QVariantList ruleTemplates()
                      QLatin1String("monitor")));
     out.append(entry(QLatin1String("floatApp"), PhosphorI18n::tr("Float an app"),
                      PhosphorI18n::tr("Keep one application's windows floating instead of tiled. The windows stay "
-                                      "managed, unlike a full exclusion."),
+                                      "managed, so they can still be dragged into a zone."),
                      QLatin1String("window-restore")));
-    out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from tiling"),
-                     PhosphorI18n::tr("Keep one application's windows out of window placement entirely."),
+    out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from placement"),
+                     PhosphorI18n::tr("Keep one application's windows out of tiling, snapping, and scrolling. "
+                                      "Borders, decoration packs, and animations still apply."),
+                     QLatin1String("edit-delete-remove")));
+    out.append(entry(QLatin1String("undecorateApp"), PhosphorI18n::tr("Remove decorations from an app"),
+                     PhosphorI18n::tr("Turn off borders and decoration packs for one application's windows. "
+                                      "Tiling, snapping, scrolling, and animations still apply."),
                      QLatin1String("edit-delete-remove")));
     out.append(entry(QLatin1String("excludeSmallFromAnimations"), PhosphorI18n::tr("Don't animate small windows"),
                      PhosphorI18n::tr("Skip open and close animations for windows narrower than a chosen width. Handy "
@@ -255,11 +260,29 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         action.type = QString::fromLatin1(ActionType::Float);
         rule.actions.append(action);
     } else if (templateId == QLatin1String("excludeApp")) {
-        rule.name = PhosphorI18n::tr("Exclude an app from tiling");
+        // The id predates the ExcludePlacement retarget and is not persisted
+        // anywhere (newRuleFromTemplate returns plain rule JSON), so it keeps
+        // its historical spelling.
+        rule.name = PhosphorI18n::tr("Exclude an app from placement");
         rule.priority = kApplicationBandBase;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
+        // ExcludePlacement, not the blanket Exclude: the template's title and
+        // description promise a placement-only exclusion, and stripping
+        // decorations/animations too was the pre-split behavior of the only
+        // action available then. Rules already created from this template keep
+        // their stored blanket action.
         RuleAction action;
-        action.type = QString::fromLatin1(ActionType::Exclude);
+        action.type = QString::fromLatin1(ActionType::ExcludePlacement);
+        rule.actions.append(action);
+    } else if (templateId == QLatin1String("undecorateApp")) {
+        rule.name = PhosphorI18n::tr("Remove decorations from an app");
+        rule.priority = kApplicationBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
+        // The decoration mirror of excludeApp: ExcludeDecorations strips the
+        // border + surface-pack chain only (SetHideTitleBar owns the title
+        // bar; placement and animations untouched).
+        RuleAction action;
+        action.type = QString::fromLatin1(ActionType::ExcludeDecorations);
         rule.actions.append(action);
     } else if (templateId == QLatin1String("excludeSmallFromAnimations")) {
         rule.name = PhosphorI18n::tr("Don't animate small windows");

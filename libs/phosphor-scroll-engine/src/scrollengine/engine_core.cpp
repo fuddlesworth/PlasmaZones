@@ -99,6 +99,15 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
     const bool wasEnabled = isEnabled();
     const QSet<QString> removed = m_scrollingScreens - screens;
     const QSet<QString> added = screens - m_scrollingScreens;
+    // A live drag-insert preview whose target or restore-source screen is
+    // leaving the set must be unwound BEFORE the state teardown below, while
+    // both states still exist (autotile's setAutotileScreens cancels for the
+    // same reason).
+    if (m_dragInsertPreview
+        && (removed.contains(m_dragInsertPreview->targetScreenId)
+            || (m_dragInsertPreview->hadPriorState && removed.contains(m_dragInsertPreview->priorKey.screenId)))) {
+        cancelDragInsertPreview();
+    }
     m_scrollingScreens = screens;
 
     QStringList releasedWindows;
@@ -122,15 +131,21 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
             [&currentKey](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
                 return key == currentKey;
             },
-            [this, &releasedWindows](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
+            [this, &releasedWindows, &releasedScreens, &screenId](const PhosphorEngine::PlacementStateKey& key,
+                                                                  ScrollState* state) {
                 // Mode reassignment: remember the strip's structure so a
                 // cycle back to Scrolling rebuilds it (stacks, widths,
                 // tabbed flags) instead of a default one-window-per-column
                 // strip. Captured BEFORE the release strips the state.
                 stashStripStructure(key, state);
                 releaseScreenState(state, releasedWindows);
+                // Inside the callback so the payload names only screens that
+                // had a MATCHING STATE — the daemon's release handler uses
+                // it as a skip filter, and a leaving screen that never built
+                // a state widening it would let an unrelated window through
+                // (the sibling prune's payload keeps the same contract).
+                releasedScreens.insert(screenId);
             });
-        releasedScreens.insert(screenId);
         m_context.removeScreen(screenId);
         // Even a STATELESS leaving screen (seed pushed before any window
         // arrived) must drop its per-screen bookkeeping — the state-driven
@@ -681,6 +696,7 @@ void ScrollEngine::refreshConfigFromSettings()
     m_centerFocusedColumn =
         (center >= 0 && center <= 2) ? static_cast<CenterFocusedColumn>(center) : CenterFocusedColumn::Never;
     m_alwaysCenterSingleColumn = settings->scrollingAlwaysCenterSingleColumn();
+    m_cropStraddlers = settings->scrollingCropStraddlers();
 
     const auto widthKind = static_cast<DefaultWidthKind>(settings->scrollingDefaultColumnWidthKind());
     const qreal widthValue = settings->scrollingDefaultColumnWidthValue();
@@ -890,7 +906,9 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrid
         }
         if (kind == static_cast<int>(DefaultWidthKind::Preset)) {
             // The per-screen SPIN is an index into this screen's EFFECTIVE
-            // vocabulary; resolve it to a value anchor here. An absent spin
+            // vocabulary; resolve it to a value anchor here (the index clamp
+            // is the deliberate stale-but-honest read — the preset list can
+            // legitimately shrink under a stored spin). An absent spin
             // inherits the global slot, which is already a fraction —
             // relayout snaps it into this screen's vocabulary. The .value
             // fallback is a belt: the effective lists cannot be empty today.
@@ -911,12 +929,23 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrid
             }
         }
         // ClientDecides (and a kind whose resolved value is still out of
-        // range) falls through to the global — the open path handles
-        // client-decides via screenPinsWidth.
+        // range) falls through to the global — the open path decides the
+        // client-sized case via effectiveWidthClientDecides, and this
+        // function only ever supplies the fallback width for it.
     }
     // The global default is a value anchor now — no effective-list clamp
     // needed; resolution snaps it into whatever vocabulary is live.
     return m_defaultColumnWidth;
+}
+
+bool ScrollEngine::effectiveWidthClientDecides(const QString& screenId) const
+{
+    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    const auto kindIt = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidthKind());
+    if (kindIt != overrides.constEnd()) {
+        return kindIt->toInt() == static_cast<int>(DefaultWidthKind::ClientDecides);
+    }
+    return m_defaultWidthClientDecides;
 }
 
 WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const

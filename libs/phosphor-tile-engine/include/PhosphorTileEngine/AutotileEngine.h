@@ -757,7 +757,7 @@ public:
      *
      * @param delta Amount to increase (default 0.05 = 5%)
      */
-    Q_INVOKABLE void increaseMasterRatio(qreal delta = 0.05) override;
+    Q_INVOKABLE void increaseMasterRatio(qreal delta = kDefaultSplitRatioStep) override;
 
     /**
      * @brief Decrease the master area ratio
@@ -766,7 +766,7 @@ public:
      *
      * @param delta Amount to decrease (default 0.05 = 5%)
      */
-    Q_INVOKABLE void decreaseMasterRatio(qreal delta = 0.05) override;
+    Q_INVOKABLE void decreaseMasterRatio(qreal delta = kDefaultSplitRatioStep) override;
 
     /**
      * @brief Set master ratio globally (config + every state, every desktop)
@@ -1049,14 +1049,28 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Begin a drag-insert preview for a window already tiled on a screen.
+     * @brief Begin a drag-insert preview on @p screenId, ADOPTING the window
+     * when necessary.
      *
-     * Captures the window's current position so it can be restored on cancel.
-     * While a preview is active, applyTiling() skips emitting geometry for the
-     * dragged window — KWin's interactive move remains in control — but still
-     * animates the other windows shifting to leave a gap at the preview index.
+     * Handles four entry modes, not just "already tiled here": a window
+     * tracked on a DIFFERENT screen is migrated in (its prior state is
+     * cleaned and the source screen retiled), a FLOATING window on the same
+     * screen is unfloated in place (overflow mark cleared), and a wholly
+     * UNTRACKED window is adopted fresh. When adoption pushes past
+     * effectiveMaxWindows, the last tiled neighbour is EVICTED by floating
+     * (commit reports it via windowsBatchFloated). Callers that must not
+     * adopt (e.g. "floating windows drag free") gate on isWindowTiled
+     * themselves — the daemon's reorder seed does exactly that.
      *
-     * @return true if the window is tiled on the screen and preview was started.
+     * Captures the window's prior position so cancel can restore it. While
+     * a preview is active, applyTiling() skips emitting geometry for the
+     * dragged window — KWin's interactive move remains in control — but
+     * still animates the other windows shifting to leave a gap at the
+     * preview index.
+     *
+     * @return true when a preview started (all adoption modes included);
+     * false on an empty id, a non-autotile screen, a missing state, or the
+     * post-setup tiledWindowIndex < 0 rollback.
      */
     bool beginDragInsertPreview(const QString& rawWindowId, const QString& screenId) override;
 
@@ -1066,8 +1080,21 @@ public:
      * Moves the dragged window within PhosphorTiles::TilingState to the new index (clamped
      * to [0, tiledWindowCount()-1]) and retiles. No-op if the index hasn't
      * changed from the last update.
+     *
+     * Engine-local int form — autotile's native slot vocabulary IS a flat
+     * tiled-only index, so internal callers and tests keep the honest unit.
+     * The IPlacementEngine struct override below delegates here.
      */
-    void updateDragInsertPreview(int insertIndex) override;
+    void updateDragInsertPreview(int insertIndex);
+
+    /**
+     * @brief IPlacementEngine drop-target form: `primary` is the tiled-only
+     * insert index; `secondary`/`newSlot` are meaningless for a flat stack
+     * and ignored. An INVALID target is ignored outright — NOT clamped the
+     * way the int form clamps a negative index; a caller crossing the
+     * polymorphic seam must not rely on the int form's clamping contract.
+     */
+    void updateDragInsertPreview(const DragInsertTarget& target) override;
 
     /**
      * @brief Commit the active drag-insert preview.
@@ -1100,8 +1127,17 @@ public:
      * test: cursor-over-own-zone returns its current index (stable identity),
      * preventing an oscillating shuffle where moving to a neighbour slot
      * immediately re-matches under the cursor every dragMoved tick.
+     *
+     * Engine-local int form (see updateDragInsertPreview); the struct
+     * override below wraps it for IPlacementEngine callers.
      */
-    int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
+    int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const;
+
+    /**
+     * @brief IPlacementEngine drop-target form: wraps the flat index into
+     * DragInsertTarget::primary (invalid when the screen has no state).
+     */
+    DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
 
     /**
      * @brief Query whether a drag-insert preview is currently active.
@@ -1113,6 +1149,8 @@ public:
 
     /**
      * @brief Get the window ID of the active drag-insert preview, or empty.
+     * Test seam — no production caller; the daemon compares against its own
+     * dragged-window id instead (ScrollEngine's twin carries the same note).
      */
     QString dragInsertPreviewWindowId() const
     {
@@ -1125,6 +1163,19 @@ public:
     QString dragInsertPreviewScreenId() const override
     {
         return m_dragInsertPreview ? m_dragInsertPreview->targetScreenId : QString();
+    }
+
+    /**
+     * @brief The screen the previewed window sat on before begin adopted it.
+     *
+     * Empty without a preview, and empty when begin took the window from
+     * untracked (hadPriorState false), in which case there is nothing to
+     * restore it to and no prior screen to speak of.
+     */
+    QString dragInsertPreviewPriorScreenId() const override
+    {
+        return m_dragInsertPreview && m_dragInsertPreview->hadPriorState ? m_dragInsertPreview->priorKey.screenId
+                                                                         : QString();
     }
 
     /**
@@ -1166,16 +1217,12 @@ Q_SIGNALS:
     // windowsReleased(const QStringList&, const QSet<QString>&) — inherited
     //   from PlacementEngineBase. Replaces windowsReleasedFromTiling.
 
-    /**
-     * @brief Emitted when a window's floating state changes due to a user action
-     *
-     * User-intent semantics: the downstream handler restores pre-tile geometry,
-     * shows the navigation OSD, etc. Emitted from performToggleFloat and
-     * setWindowFloat (explicit user/caller toggles).
-     *
-     * windowFloatingChanged, activateWindowRequested, and navigationFeedback
-     * are inherited from PlacementEngineBase.
-     */
+    // windowFloatingChanged (emitted from performToggleFloat and
+    // setWindowFloat with user-intent semantics: the downstream handler
+    // restores pre-tile geometry, shows the navigation OSD, etc.),
+    // activateWindowRequested, and navigationFeedback are inherited from
+    // PlacementEngineBase. Plain comments, not a doxygen block — this class
+    // declares no signal of those names for a doc block to attach to.
 
     // windowFloatingStateSynced and windowsBatchFloated are inherited from
     // PlacementEngineBase. Autotile-specific documentation: windowFloatingStateSynced

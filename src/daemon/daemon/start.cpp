@@ -76,6 +76,13 @@ void Daemon::connectScreenSignals()
     // windows, and schedules downstream geometry updates. NOTE: this
     // handler no longer writes back to Settings — Settings is now the
     // source, not the sink.
+    // Ordering note, BY DESIGN: start() above already fired its initial
+    // refreshVirtualConfigs pass (which emits virtualScreensChanged per
+    // stored config) BEFORE this connect, so onVirtualScreensReconfigured
+    // never runs for the startup configuration — the adaptors it touches do
+    // not exist yet at start() time, and migrateStartupScreenAssignments
+    // covers the assignment-migration half explicitly. Do not reorder the
+    // connect above start().
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::virtualScreensChanged, this,
             &Daemon::onVirtualScreensReconfigured);
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this,
@@ -141,6 +148,15 @@ void Daemon::connectScreenSignals()
                 // (unrelated) rule edit doesn't diff it as a change and
                 // spuriously resnap it — the screen-add path lays it out here.
                 diffActiveAssignments();
+                // Topology changed, so every scroll park position derived
+                // from the OUTPUT UNION is stale: a monitor attached below
+                // raises the union bottom, and parks committed against the
+                // old union would sit inside the new output. The debounced
+                // geometry pass retiles every active scroll screen; the
+                // sensor/geometry signals usually fire it anyway, but this
+                // makes the retile unconditional rather than incidental.
+                m_geometryUpdatePending = true;
+                m_geometryUpdateTimer.start();
             });
 
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenRemoved, this,
@@ -156,7 +172,9 @@ void Daemon::connectScreenSignals()
 
                 // Drop the removed output's per-output virtual-desktop entries (#648)
                 // so the maps don't retain stale desktops across monitor hot-plug.
-                // The autotile engine self-prunes via updateEngineScreens; the VDM
+                // (The engines' own per-screen desktop maps are cleared inside
+                // their pruneStatesForRemovedScreen calls below — this handler
+                // does NOT call updateEngineScreens.) The VDM
                 // and layout registry are physical-id keyed (the effect reports
                 // physical output ids), matching removedScreenId. The overlay service
                 // delegates to the layout registry, so clearing it there suffices.
@@ -166,6 +184,15 @@ void Daemon::connectScreenSignals()
                     // resolves per-screen desktops via the injected provider
                     // that reads this manager, so this removal covers them.
                     m_virtualDesktopManager->removeScreenDesktop(removedScreenId);
+                }
+
+                // A live drag-insert preview on the departing output (any
+                // virtual sub-screen of it) must unwind BEFORE the prunes
+                // tear its states down — the scroll engine's prune cancels
+                // internally, the autotile prune does not, and the daemon
+                // path must not depend on which engine holds the preview.
+                if (m_windowDragAdaptor) {
+                    m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(removedScreenId);
                 }
 
                 // All three engines need the explicit whole-output reap:
@@ -232,6 +259,11 @@ void Daemon::connectScreenSignals()
                 // doesn't linger as a stale entry (kept consistent with the
                 // add / context-switch / apply refresh points).
                 diffActiveAssignments();
+                // Same union-park staleness rule as the screenAdded tail: a
+                // removed bottom monitor lowers the output union, so every
+                // scroll park must re-derive against the new topology.
+                m_geometryUpdatePending = true;
+                m_geometryUpdateTimer.start();
             });
 
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenGeometryChanged, this, [this] {
@@ -287,9 +319,13 @@ void Daemon::connectDesktopActivity()
     connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopChanged, this,
             [this](const QString& screenId, int desktop) {
                 // [SEQ A] Cancel any active drag-insert preview before the engine's
-                // desktop changes, else cancel/commit would hit the wrong TilingState.
-                if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-                    m_autotileEngine->cancelDragInsertPreview();
+                // desktop changes, else cancel/commit would hit the wrong state.
+                // Scoped to the ONE output that switched (this signal is
+                // per-output): a desktop flip on monitor A must not snap
+                // monitor B's live preview back mid-drag. The activity twin
+                // below stays unconditional — an activity switch is global.
+                if (m_windowDragAdaptor) {
+                    m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(screenId);
                 }
                 // [SEQ B] Pin screens where all autotiled windows are sticky BEFORE
                 // changing the desktop context, so currentKeyForScreen() still
@@ -358,7 +394,10 @@ void Daemon::connectDesktopActivity()
                 // removing desktop 2 of 4 shifts 3→2 and 4→3). We only prune out-of-range
                 // entries here; mid-range renumbering would require tracking which desktop was
                 // removed (not available from desktopCountChanged). A future improvement could
-                // use KDE's desktop UUIDs instead of 1-based numbers.
+                // use KDE's desktop UUIDs instead of 1-based numbers. The same limitation
+                // applies to the per-screen CURRENT-desktop maps (VDM / layout registry /
+                // engine context): they are corrected by the effect's next per-output
+                // desktop report rather than re-derived here.
                 if (m_settings) {
                     // Prune both per-mode lists — a stale entry in either side leaks
                     // gates on now-deleted desktops just as effectively.
@@ -373,6 +412,15 @@ void Daemon::connectDesktopActivity()
                     if (changed) {
                         m_settings->save();
                     }
+                }
+
+                // A live preview must unwind BEFORE the prunes: autotile's
+                // cancel resolves its state via a create-if-missing lookup,
+                // so a cancel arriving AFTER the prune would resurrect a
+                // state for the deleted desktop (the two context-switch
+                // handlers carry the same ordering).
+                if (m_windowDragAdaptor) {
+                    m_windowDragAdaptor->cancelDragInsertPreviews();
                 }
 
                 // Desktop numbers are 1-based. Any state with desktop > newCount is
@@ -440,6 +488,13 @@ void Daemon::connectDesktopActivity()
                 }
             }
 
+            // Same cancel-before-prune ordering as desktopCountChanged: an
+            // after-the-fact cancel would re-create state for a removed
+            // activity through autotile's create-if-missing lookup.
+            if (m_windowDragAdaptor) {
+                m_windowDragAdaptor->cancelDragInsertPreviews();
+            }
+
             // All three engines carry their own per-(screen,desktop,activity)
             // stores, so prune removed activities from each.
             for (PhosphorEngine::PlacementEngineBase* engine :
@@ -478,10 +533,12 @@ void Daemon::connectDesktopActivity()
                     if (m_unifiedLayoutController) {
                         m_unifiedLayoutController->setCurrentActivity(activityId);
                     }
-                    // Activity switch invalidates the TilingStateKey context — cancel
-                    // any active drag-insert preview before the engine's activity changes.
-                    if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-                        m_autotileEngine->cancelDragInsertPreview();
+                    // Activity switch invalidates the placement-state context — cancel
+                    // any active drag-insert preview before the engines' activity
+                    // changes. Unconditional on purpose: an activity switch is
+                    // global, unlike the per-output desktop switch above.
+                    if (m_windowDragAdaptor) {
+                        m_windowDragAdaptor->cancelDragInsertPreviews();
                     }
                     // Pin sticky screens before changing activity context
                     // (null-guarded service, matching every other daemon
@@ -721,6 +778,19 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // if the signal somehow fires before construction (e.g. early Settings
     // load); guard those uses individually.
     const PhosphorScreens::VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
+
+    // Cancel any live drag-insert preview on this output BEFORE the screen id
+    // set is re-derived, the same ordering rule the four sibling
+    // context-change handlers document (screenRemoved, screenDesktopChanged,
+    // the activity switch and the mode reassignment). Subdividing or
+    // un-subdividing an output rewrites its screen ids, so a preview holding
+    // "DP-1" while the topology moves everything to "DP-1/vs:0" is left with
+    // captured keys nothing resolves, and neither its commit nor its cancel
+    // can put the window anywhere. Scoped to the reconfigured output because
+    // samePhysical covers the physical id and every virtual child of it.
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(physicalScreenId);
+    }
 
     // Recalculate zone geometries inline for the affected screens FIRST so
     // that any PhosphorTiles::TilingState created by the upcoming updateEngineScreens

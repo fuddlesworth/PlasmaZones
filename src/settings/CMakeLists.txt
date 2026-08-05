@@ -19,7 +19,9 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dir
 set(plasmazones_settings_SRCS
     main.cpp
     search/searchcatalog.h
+    search/searchcatalog_p.h
     search/searchcatalog.cpp
+    search/searchcatalog_animations.cpp
     search/searchproviders.h
     search/searchproviders.cpp
     utils/registryshaderpreviewbackend.h
@@ -147,6 +149,8 @@ set(plasmazones_settings_SRCS
     pages/tilingalgorithmcontroller.cpp
     pages/tilingbehaviorcontroller.h
     pages/tilingbehaviorcontroller.cpp
+    pages/scrollingbehaviorcontroller.h
+    pages/scrollingbehaviorcontroller.cpp
     # PhosphorControl integration scaffold. PageAdapter wraps existing
     # plain-QObject page controllers so they can be registered with
     # PhosphorControl::PageRegistry without changing each controller's
@@ -222,6 +226,8 @@ set(plasmazones_settings_SRCS
     utils/screenhelper.cpp
     utils/screenprovider.h
     utils/screenprovider.cpp
+    utils/gpudevicelist.h
+    utils/gpudevicelist.cpp
     utils/dbusutils.h
 )
 
@@ -319,17 +325,20 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/tiling/TilingWindowHandlingCard.qml
         qml/pages/tiling/TilingFocusCard.qml
         # Scrolling: the condensed simple page, the three advanced leaves
-        # (Columns / Tabs / Window), the two cards both surfaces share, the
-        # preset-list editor the Columns page hosts twice, and the tab-colour
-        # row it hosts three times.
+        # (Columns / Tabs / Window), the cards both surfaces share, the
+        # preset-list editor the Columns page hosts twice, and the
+        # theme-fallback colour row, hosted three times by the Tabs page and
+        # twice by the drop-indicator card.
         qml/pages/scrolling/ScrollingSimplePage.qml
         qml/pages/scrolling/ScrollingColumnsPage.qml
         qml/pages/scrolling/ScrollingTabsPage.qml
         qml/pages/scrolling/ScrollingWindowPage.qml
         qml/pages/scrolling/ScrollingWindowHandlingCard.qml
+        qml/pages/scrolling/ScrollingDragInsertCard.qml
+        qml/pages/scrolling/ScrollingDropIndicatorCard.qml
         qml/pages/scrolling/ScrollingFocusCard.qml
         qml/pages/scrolling/PresetListEditor.qml
-        qml/pages/scrolling/TabIndicatorColorRow.qml
+        qml/pages/scrolling/ThemeFallbackColorRow.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which
         # also hosts the unified inner/outer gap controls.
         qml/pages/decoration/WindowAppearancePage.qml

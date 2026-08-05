@@ -183,16 +183,45 @@ int scrollFractionPercent(const QJsonValue& raw)
     if (raw.isNull() || raw.isUndefined()) {
         return -1;
     }
-    const QVariant rv = raw.toVariant();
-    if (rv.typeId() == QMetaType::Bool) {
+    // isDouble() mirrors the validators (a JSON string or bool is rejected
+    // at load), so a staged "0.5" cannot render as a confident percent.
+    if (!raw.isDouble()) {
         return -1;
     }
-    bool ok = false;
-    const double v = rv.toDouble(&ok);
-    if (!ok || v < 0.0 || v > 1.0) {
+    const double v = raw.toDouble();
+    // Floor at the validators' shared minimum, not 0: all five callers'
+    // descriptors reject fractions below MinColumnWidthRatio (the
+    // tab-indicator length shares the same 0.05 floor via
+    // MinTabIndicatorLengthRatio), so a summary confidently printing "3%"
+    // would claim a size the runtime refuses.
+    if (v < PhosphorRules::MinColumnWidthRatio || v > 1.0) {
         return -1;
     }
     return qRound(v * 100.0);
+}
+
+/// True when @p value has one of the hex colour shapes the descriptor
+/// validators admit (#RGB / #RRGGBB / #AARRGGBB). Mirrors the lib's
+/// hasHexColor so a summary never echoes a value the runtime discards.
+bool isHexColorShape(const QString& value)
+{
+    if (value.size() != 4 && value.size() != 7 && value.size() != 9) {
+        return false;
+    }
+    if (!value.startsWith(QLatin1Char('#'))) {
+        return false;
+    }
+    for (qsizetype i = 1; i < value.size(); ++i) {
+        const QChar c = value.at(i);
+        // Explicit ASCII ranges, exactly like the validator — QChar::isDigit
+        // admits Unicode digits the validator rejects.
+        const bool hex = (c >= QLatin1Char('0') && c <= QLatin1Char('9'))
+            || (c >= QLatin1Char('a') && c <= QLatin1Char('f')) || (c >= QLatin1Char('A') && c <= QLatin1Char('F'));
+        if (!hex) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// True when a closed-vocabulary token failed to resolve to a label.
@@ -265,12 +294,24 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         }
         return PhosphorI18n::tr("Disable: %1").arg(label);
     }
+    // The exclusion family: all terminal with no Value param — the action's
+    // presence IS the effect, so each summary states the outcome. One shape
+    // ("Excluded from <scope>") mirroring the picker labels, with the same
+    // umbrella terms: "placement" is the tiling/snapping/scrolling engines,
+    // "decorations" is borders plus decoration packs. The blanket form names
+    // both scopes so it reads distinctly beside the scoped siblings in a
+    // mixed list.
     if (action.type == ActionType::Exclude) {
-        return PhosphorI18n::tr("Excluded");
+        return PhosphorI18n::tr("Excluded from placement and decorations");
+    }
+    if (action.type == ActionType::ExcludePlacement) {
+        return PhosphorI18n::tr("Excluded from placement");
     }
     if (action.type == ActionType::ExcludeAnimations) {
-        // Terminal, no Value param — like Exclude, its presence IS the effect.
-        return PhosphorI18n::tr("No animations");
+        return PhosphorI18n::tr("Excluded from animations");
+    }
+    if (action.type == ActionType::ExcludeDecorations) {
+        return PhosphorI18n::tr("Excluded from decorations");
     }
     if (action.type == ActionType::Float) {
         return PhosphorI18n::tr("Float");
@@ -331,7 +372,11 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     if (action.type == ActionType::OverrideDecorationChain) {
         const QJsonArray chain = action.params.value(PhosphorRules::ActionParam::Chain).toArray();
         if (chain.isEmpty()) {
-            return PhosphorI18n::tr("Block decoration");
+            // The empty-chain sentinel clears the CUSTOM packs; the config-
+            // backed border and opacity-tint layers still render (easy mode).
+            // "Block decoration" was wrong — that outcome belongs to
+            // ExcludeDecorations' "Excluded from decorations".
+            return PhosphorI18n::tr("Decoration packs: none");
         }
         QStringList names;
         for (const QJsonValue& entry : chain) {
@@ -341,10 +386,10 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             }
         }
         // A non-empty array of only empty-string ids (hand-edited / malformed
-        // rule) leaves `names` empty; fall back to the "Block decoration" label
+        // rule) leaves `names` empty; fall back to the empty-chain label
         // rather than render a bare "Decoration: " with a trailing separator.
         if (names.isEmpty()) {
-            return PhosphorI18n::tr("Block decoration");
+            return PhosphorI18n::tr("Decoration packs: none");
         }
         return PhosphorI18n::tr("Decoration: %1").arg(names.join(QStringLiteral(", ")));
     }
@@ -553,12 +598,16 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             || action.type == ActionType::SetTabIndicatorInactiveColor
             || action.type == ActionType::SetTabIndicatorUrgentColor || action.type == ActionType::TabColorActive
             || action.type == ActionType::TabColorInactive || action.type == ActionType::TabColorUrgent) {
-            // Accent shows as a word and hex as upper case, the border-colour
-            // treatment. The per-window trio says "this window" so a mixed
-            // list cannot confuse a context recolour with a per-app one.
+            // Hex shows upper-cased; anything else — INCLUDING the accent
+            // sentinel, which these six validators deliberately reject
+            // (hasHexColor, not hasHexColorOrAccent: only the border/tint
+            // family has an accent resolver) — reads "(invalid)", mirroring
+            // the SetOpacity / SetWindowLayer reject treatment so the summary
+            // never claims a colour the runtime discards. The per-window trio
+            // says "this window" so a mixed list cannot confuse a context
+            // recolour with a per-app one.
             const QString value = raw.toString();
-            const QString shown =
-                value == PhosphorRules::BorderColorToken::Accent ? PhosphorI18n::tr("Accent") : value.toUpper();
+            const QString shown = isHexColorShape(value) ? value.toUpper() : PhosphorI18n::tr("(invalid)");
             if (action.type == ActionType::SetTabIndicatorActiveColor) {
                 return PhosphorI18n::tr("Active tab: %1").arg(shown);
             }
@@ -575,6 +624,41 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                 return PhosphorI18n::tr("This window's inactive tab: %1").arg(shown);
             }
             return PhosphorI18n::tr("This window's urgent tab: %1").arg(shown);
+        }
+        // ── drop indicator ──
+        // Same treatment as the tab family: numerics carry their unit, colours
+        // upper-case a valid hex and read "(invalid)" otherwise so the summary
+        // never claims a colour the runtime discards.
+        if (action.type == ActionType::SetDropIndicatorOpacity) {
+            const int pct = scrollFractionPercent(raw);
+            return pct < 0 ? PhosphorI18n::tr("Drop indicator fill opacity (invalid)")
+                           : PhosphorI18n::tr("Drop indicator fill opacity: %1%").arg(pct);
+        }
+        if (action.type == ActionType::SetDropIndicatorBorderWidth) {
+            return PhosphorI18n::tr("Drop indicator border width: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetDropIndicatorBorderRadius) {
+            // No sentinel here, unlike the tab corner radius: 0 is square.
+            return PhosphorI18n::tr("Drop indicator corner radius: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetDropIndicatorColor || action.type == ActionType::SetDropIndicatorBorderColor
+            || action.type == ActionType::DropIndicatorColor || action.type == ActionType::DropIndicatorBorderColor) {
+            const QString value = raw.toString();
+            const QString shown = isHexColorShape(value) ? value.toUpper() : PhosphorI18n::tr("(invalid)");
+            if (action.type == ActionType::SetDropIndicatorColor) {
+                return PhosphorI18n::tr("Drop indicator fill: %1").arg(shown);
+            }
+            if (action.type == ActionType::SetDropIndicatorBorderColor) {
+                return PhosphorI18n::tr("Drop indicator border: %1").arg(shown);
+            }
+            // The per-window pair says "when dragging this window", matching
+            // its authoring label: these paint a slot elsewhere on screen
+            // because this window is the one in hand, rather than painting on
+            // the window itself the way the tab colours do.
+            if (action.type == ActionType::DropIndicatorColor) {
+                return PhosphorI18n::tr("Drop indicator fill when dragging this window: %1").arg(shown);
+            }
+            return PhosphorI18n::tr("Drop indicator border when dragging this window: %1").arg(shown);
         }
         // ── window-management overrides ──
         if (action.type == ActionType::SetWindowLayer) {
@@ -594,21 +678,42 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                 .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, v));
         }
         // ── overlay-appearance overrides (colours upper-cased hex; opacities
-        //    are [0,1] on the wire, shown as a percent to match the editor) ──
+        //    are [0,1] on the wire, shown as a percent to match the editor).
+        //    Same staged-payload reject treatment as the tab colours above
+        //    and the SetOpacity / SetTintStrength guards: a non-hex colour or
+        //    an out-of-shape opacity reads "(invalid)" instead of echoing a
+        //    value the runtime discards. ──
         if (action.type == ActionType::SetOverlayHighlightColor) {
-            return PhosphorI18n::tr("Highlight color: %1").arg(raw.toString().toUpper());
+            const QString v = raw.toString();
+            return PhosphorI18n::tr("Highlight color: %1")
+                .arg(isHexColorShape(v) ? v.toUpper() : PhosphorI18n::tr("(invalid)"));
         }
         if (action.type == ActionType::SetOverlayInactiveColor) {
-            return PhosphorI18n::tr("Inactive zone color: %1").arg(raw.toString().toUpper());
+            const QString v = raw.toString();
+            return PhosphorI18n::tr("Inactive zone color: %1")
+                .arg(isHexColorShape(v) ? v.toUpper() : PhosphorI18n::tr("(invalid)"));
         }
         if (action.type == ActionType::SetOverlayBorderColor) {
-            return PhosphorI18n::tr("Overlay border color: %1").arg(raw.toString().toUpper());
+            const QString v = raw.toString();
+            return PhosphorI18n::tr("Overlay border color: %1")
+                .arg(isHexColorShape(v) ? v.toUpper() : PhosphorI18n::tr("(invalid)"));
         }
-        if (action.type == ActionType::SetOverlayActiveOpacity) {
-            return PhosphorI18n::tr("Active opacity: %1%").arg(qRound(raw.toDouble() * 100.0));
-        }
-        if (action.type == ActionType::SetOverlayInactiveOpacity) {
-            return PhosphorI18n::tr("Inactive opacity: %1%").arg(qRound(raw.toDouble() * 100.0));
+        if (action.type == ActionType::SetOverlayActiveOpacity
+            || action.type == ActionType::SetOverlayInactiveOpacity) {
+            const bool active = action.type == ActionType::SetOverlayActiveOpacity;
+            if (raw.isNull() || raw.isUndefined()) {
+                return active ? PhosphorI18n::tr("Active opacity") : PhosphorI18n::tr("Inactive opacity");
+            }
+            // isDouble() mirrors the validator (hasNumberInRange requires a
+            // JSON number), so a staged string like "0.5" reads "(invalid)"
+            // instead of rendering a percent the runtime drops.
+            const double v = raw.isDouble() ? raw.toDouble() : -1.0;
+            if (v < 0.0 || v > 1.0) {
+                return active ? PhosphorI18n::tr("Active opacity (invalid)")
+                              : PhosphorI18n::tr("Inactive opacity (invalid)");
+            }
+            return active ? PhosphorI18n::tr("Active opacity: %1%").arg(qRound(v * 100.0))
+                          : PhosphorI18n::tr("Inactive opacity: %1%").arg(qRound(v * 100.0));
         }
         if (action.type == ActionType::SetOverlayBorderWidth) {
             return PhosphorI18n::tr("Overlay border width: %1 px").arg(raw.toInt());

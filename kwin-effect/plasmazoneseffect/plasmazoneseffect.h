@@ -111,11 +111,13 @@ static_assert(
 
 // Plasmashell notification stacking makes KWin emit spurious
 // minimizedChanged(true) events on tiled windows, with the matching
-// unminimize ~1-2 ms later. Two suppressions key off this window and MUST
+// unminimize ~1-2 ms later. THREE suppressions key off this window and MUST
 // agree on its width: the autotile minimize→float debounce
-// (tilinghandler/signals.cpp) and the minimize shader-event
-// spurious-pair cancel (plasmazoneseffect/daemon_apply.cpp,
-// slotWindowMinimizedChanged). Shared here so the two can never desync.
+// (tilinghandler/minimizefloat.cpp), the SNAP-mode minimize→float debounce
+// (handlers/snaphandler.cpp) and the minimize shader-event spurious-pair
+// cancel (plasmazoneseffect/daemon_apply.cpp, slotWindowMinimizedChanged).
+// Shared here so the three can never desync — which is the whole point of
+// enumerating them, so keep the list complete when a fourth appears.
 inline constexpr int kSpuriousMinimizePairMs = 75;
 
 // Forward declarations for helper classes
@@ -163,6 +165,7 @@ public:
     // hooks; effects now self-source time (our CompositorClock samples
     // std::chrono::steady_clock, matching KWin's own AnimationEffect clock).
     void prePaintScreen(KWin::ScreenPrePaintData& data) override;
+    bool blocksDirectScanout() const override;
     void postPaintScreen() override;
     void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data) override;
     // Per-window borders are rendered by routing the redirected window through
@@ -217,7 +220,7 @@ protected:
         Continue,
     };
 
-    /// The ~970-line shader-transition branch of paintWindow, extracted verbatim
+    /// The shader-transition branch of paintWindow, extracted verbatim
     /// (paint_shader_window.cpp). Runs the snapshot capture-only frame, computes
     /// progress, binds every animation-shader uniform, draws the redirected
     /// window, and drives the deferred expiry teardown. @p st is the live
@@ -380,11 +383,16 @@ private:
      *                     true return. @see shouldHandleWindow.
      */
     bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
-    // Cached user-Exclude-rule verdict shared by shouldHandleWindow and
-    // shouldAnimateWindow. Fast-paths on an empty exclusion slice; otherwise
-    // resolves through the exclusion evaluator's per-window cache (same
-    // freshness contract as the animation verdicts — see the implementation).
+    // Cached placement-exclusion verdict (Exclude ∪ ExcludePlacement slice)
+    // consumed by shouldHandleWindow's drag gate. Fast-paths on an empty
+    // exclusion slice; otherwise resolves through the exclusion evaluator's
+    // per-window cache (same freshness contract as the animation verdicts —
+    // see the implementation).
     bool isExcludedBySnappingRule(KWin::EffectWindow* w) const;
+    // Cached decoration-exclusion verdict (Exclude ∪ ExcludeDecorations
+    // slice) consumed by shouldDecorateWindow. Same empty-slice fast path
+    // and per-window cache contract as isExcludedBySnappingRule.
+    bool isExcludedByDecorationRule(KWin::EffectWindow* w) const;
 
     /// Classify a window's structural kind for the snap-restore consume gate.
     PhosphorEngine::WindowKind classifyWindowKind(KWin::EffectWindow* w) const;
@@ -441,8 +449,10 @@ private:
      * with it off the effect draws borders onto dialogs / popups. Rejects the
      * always-wrong surfaces (own overlay / editor, xdg-portal, plasma-shell,
      * special / desktop / dock / fullscreen / skipSwitcher, notification / OSD),
-     * honours the same user Exclude rule slice shouldHandleWindow uses (so an
-     * excluded app stays undecorated), then applies the transient toggle and the
+     * honours the dedicated decoration-exclusion slice (Exclude ∪
+     * ExcludeDecorations via m_decorationExclusionEvaluator — blanket Exclude
+     * still leaves an app undecorated, the scoped ExcludePlacement
+     * deliberately does not), then applies the transient toggle and the
      * min-size threshold. Defaults preserve the prior behavior (transient on,
      * size off), so a default config decorates exactly what it did before.
      */
@@ -686,16 +696,23 @@ private:
     /// or not-yet-resolved id. The counterpart to outputScreenId, for the
     /// paths that hold an id and need the output's geometry.
     KWin::LogicalOutput* outputForScreenId(const QString& screenId) const;
+    /// The output a scroll-strip window is managed by, or nullptr when the
+    /// window is not a strip column (or is exempt: user move/resize, floating).
+    /// The paint path compares this against the output currently being painted.
+    /// Answers are memoised per output pass (see m_scrollManagedCache) so the
+    /// prePaintWindow and paintWindow probes for one window cost one predicate
+    /// walk between them.
+    KWin::LogicalOutput* scrollManagedOutputFor(KWin::EffectWindow* w) const;
     /**
      * @brief The screen rect a scrolling-strip window's rendering AND input
      *        are confined to, or an invalid rect when no confinement applies.
      *
      * Valid only for a scroll-managed, non-floating window that is not in a
      * user move/resize: the managed output's geometry. paintWindow skips the
-     * window in OUTPUT paint passes whose viewport misses this rect (offscreen
-     * capture passes are exempt — their viewport is the window's own rect, so
-     * the test would blank a parked column's snapshot), and the overhang input
-     * filter treats hits outside it as landing on the clipped-away (invisible)
+     * window in OUTPUT paint passes whose output is not the managed one
+     * (snapshot captures are exempt via m_capturingSnapshot — the test would
+     * blank a parked column's snapshot), and the overhang input filter treats
+     * hits outside this rect as landing on the clipped-away (invisible)
      * overhang. One predicate, two consumers — keep them in lockstep.
      *
      * Answers an invalid rect immediately when no screen is scrolling, so the
@@ -741,9 +758,31 @@ private:
     // motion that flowed through this chokepoint — snap-in, snap-out, resnap, resize, restore, etc.
     // Callers now pass the logical event path so the shader tree can route each one independently.
     // Default is WindowSnapIn (the kwin-effect's default snap-into-zone window animation).
+    //
+    // originOverride replaces the window's CURRENT frame as the animation's
+    // departure rect. Normally the two are the same — a window animates from
+    // where it is. The scrolling strip is the exception: its off-viewport
+    // columns are parked wherever is safe (never on a neighbouring output),
+    // which is not necessarily the edge the user scrolled them off, so the
+    // park rect is the wrong place to animate from. The engine sends the
+    // intended edge as TileRequestEntry::scrollEdge and the caller turns it
+    // into this rect. Invalid (the default) keeps the current-frame
+    // behaviour.
+    //
+    // visualTargetOverride is the mirror, for motion that must LOOK like it
+    // ends somewhere other than where the window is committed. The window
+    // still moveResizes to `geometry`; only the animation (and its shader
+    // morph) travels to this rect instead. The scrolling strip uses it for a
+    // column leaving the viewport: it has to be seen sliding out by the edge
+    // the user scrolled toward, while its committed rect is the park, which
+    // is chosen for safety and may be on the far side. Both rects are
+    // off-screen, so the jump between them at the end of the animation is
+    // never visible. Do NOT use this to end an animation somewhere on screen —
+    // the window would visibly snap at the end.
     void applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
                              bool skipAnimation = false,
-                             const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn);
+                             const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn,
+                             const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF());
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
@@ -797,18 +836,9 @@ public:
     /// add/remove/reconfigure (same invalidation points as screenIdCache).
     const QSet<QString>& connectedPhysicalIds() const;
 
-    // Animation sequence mode: 0=all at once, 1=one by one in zone order (for batch snaps)
-    int cachedAnimationSequenceMode() const
-    {
-        return m_cachedAnimationSequenceMode;
-    }
     int animationDurationMs() const
     {
         return m_cachedAnimationDuration;
-    }
-    int cachedAnimationStaggerInterval() const
-    {
-        return m_cachedAnimationStaggerInterval;
     }
 
     /**
@@ -1089,9 +1119,9 @@ private:
     /// must be the EXACT window, never a fuzzy same-app sibling.
     ///
     /// Three other sites erase m_surfaceMultipass directly, and each is deliberate:
-    ///   - lifecycle.cpp's surface-pack hot-reload clears the WHOLE map, because every
+    ///   - lifecycle_wiring.cpp's surface-pack hot-reload clears the WHOLE map, because every
     ///     compiled pack is about to be recompiled and no composite survives it;
-    ///   - lifecycle.cpp's windowDeleted backstop, which runs after the window is gone
+    ///   - lifecycle_wiring.cpp's windowDeleted backstop, which runs after the window is gone
     ///     and there is nothing left to animate;
     ///   - surface_capture.cpp's ensureSurfaceTargets, which on an allocation failure
     ///     erases the half-built state it just failed to allocate and returns false;
@@ -1637,7 +1667,8 @@ private:
     void seedDecorationTreeBaseline();
 
     // Constructor wiring, decomposed from the ctor along its original comment
-    // seams (definitions in lifecycle_wiring.cpp). Each is called exactly once,
+    // seams (definitions in lifecycle_wiring.cpp, except connectDaemonSubscriptions
+    // which is in lifecycle_wiring_daemon.cpp). Each is called exactly once,
     // from the ctor, in this declared order. Not part of the public surface —
     // pure ctor decomposition, so their bodies keep the ordering guarantees the
     // inline sequence had (notably: connect the screen signals before iterating
@@ -1661,11 +1692,27 @@ private:
     /// Those are rule MATCH inputs now, so without this a window stays resolved
     /// at its prior state (e.g. a `WHEN isSnapped` border never reverting on
     /// unsnap). Mirrors slotWindowActivated's focus invalidation. A no-op only when the
-    /// window has nothing that could re-resolve: no rules AND no config-default window
-    /// appearance AND no decoration tree content. The last two matter — a config-default
-    /// border scoped to tiled windows must still reconcile on a snap flip with an empty
-    /// rule set.
+    /// window has nothing that could re-resolve: no animation/appearance rules AND no
+    /// config-default window appearance AND no decoration tree content AND both
+    /// exclusion slices empty (their verdicts are cached the same way and can scope on
+    /// placement fields). The appearance terms matter — a config-default border scoped
+    /// to tiled windows must still reconcile on a snap flip with an empty rule set.
     void invalidateRuleCacheForStateChange(const QString& windowId);
+
+    /// Targeted sibling of invalidateRuleCacheForStateChange for the
+    /// frame-geometry edge: evicts ONLY @p windowId's entry from the three
+    /// per-window verdict caches and re-drives that window's decoration,
+    /// title-bar and layer reconciles directly. The coalesced helper above
+    /// clears the GLOBAL animation match cache per flush — fine for discrete
+    /// placement flips, but the geometry edge fires per 50 ms flush for the
+    /// whole duration of a drag, and a global clear there cold-starts every
+    /// other window's verdict twenty times a second (the same cost argument
+    /// that keeps caption changes from clearing at all). The layer and
+    /// title-bar reconciles are change-gated; updateWindowDecoration re-runs
+    /// its chain resolve but keeps the cached prefix fold when the fold
+    /// inputs have not moved, and the extra damage lands on a window that is
+    /// already repainting every frame of its own motion.
+    void invalidateRuleCachesForWindowGeometry(const QString& windowId, KWin::EffectWindow* w);
 
     /// Bulk analog of invalidateRuleCacheForStateChange for placement changes that
     /// affect EVERY window at once — daemon loss (the zone / floating caches are
@@ -1680,8 +1727,10 @@ private:
     /// bake into the decoration at updateWindowDecoration time, so each caller
     /// pairs this with its own decoration path: daemon loss tears the
     /// decorations down (clearAllDecorations), the daemon-ready re-seeds
-    /// schedule a border sweep to re-fold against the fresh placement. No-op
-    /// when there are no animation rules and no rule-held layer snapshots.
+    /// schedule a border sweep to re-fold against the fresh placement. Always
+    /// drops both exclusion evaluators' caches first (they are cleared even
+    /// when the early return below fires); the rest is a no-op when there are
+    /// no animation rules and no rule-held layer snapshots.
     void invalidateAllRuleCaches();
 
     /// Flush coalesced per-rule-cache invalidations queued by
@@ -1758,6 +1807,34 @@ private:
     // guaranteed by destruction order (animator declared after).
     std::unique_ptr<CompositorClock> m_motionClockFallback;
     std::unordered_map<KWin::LogicalOutput*, std::unique_ptr<CompositorClock>> m_motionClocksByOutput;
+    /// The output whose pass is currently executing, latched in prePaintScreen
+    /// and cleared in postPaintScreen. The scroll-strip overhang suppression
+    /// compares against this by IDENTITY rather than testing the pass viewport
+    /// against the managed output's rect: the rect test silently assumes
+    /// renderRect() is expressed in global logical coordinates, and if any pass
+    /// builds it output-local instead, the neighbouring output's viewport reads
+    /// as (0,0,w,h), overlaps the managed output's rect, and the cull never
+    /// fires. Comparing pointers cannot be wrong about which output is being
+    /// painted. Null only OUTSIDE any prePaintScreen→postPaintScreen bracket
+    /// (defensive bootstrap, test harnesses, a null data.screen from KWin) —
+    /// offscreen captures run INSIDE a pass and keep that pass's output,
+    /// which is what makes the desktop-capture cull agree with the live
+    /// scene; the window-snapshot captures are exempted by
+    /// m_capturingSnapshot instead. With the latch null the suppression does
+    /// not engage (fails open).
+    KWin::LogicalOutput* m_currentPassOutput = nullptr;
+    /// Per-pass memo for scrollManagedOutputFor: prePaintWindow and
+    /// paintWindow each probe the predicate for every window, and its chain
+    /// (id lookup, tiled-bucket scan, float check, output resolve) is not
+    /// free at per-window-per-output-per-frame rate. Cleared in
+    /// prePaintScreen when the pass begins, and consulted/populated ONLY
+    /// while a pass is executing — the input filter shares the predicate but
+    /// runs between passes, where a tile batch may just have moved a column,
+    /// so it always computes fresh. In default clamp mode the answer never
+    /// differs from the window's own output (committed geometry cannot
+    /// cross), so the cache also bounds what that mode pays for a cull that
+    /// cannot fire for it.
+    mutable QHash<KWin::EffectWindow*, KWin::LogicalOutput*> m_scrollManagedCache;
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
     void onScreenAdded(KWin::LogicalOutput* output);
     void onScreenRemoved(KWin::LogicalOutput* output);
@@ -1868,9 +1945,19 @@ private:
     void loadShaderProfileFromDbus();
     void loadMotionProfileTreeFromDbus();
     void loadShaderRegistryFromDbus();
+    /// @param outOwnsResolvedLeg when non-null, receives true iff the live
+    /// transition after this call is THIS event's leg — either freshly
+    /// installed, or the same-effect short-circuit kept a leg whose cached
+    /// shader IS this event's resolved pack (the identity test heldMove
+    /// stamping uses). False on every early return (no shader assigned,
+    /// applicability refusal, compile failure, filter rejection). Callers
+    /// that mutate the transition after this call (the maximize morph
+    /// endpoint writes) MUST gate on it: findTransition alone hands back
+    /// whatever leg is live, and mutating an unrelated event's leg
+    /// re-anchors its drawn rect mid-flight.
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                 bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false,
-                                bool animateMinimized = false);
+                                bool animateMinimized = false, bool* outOwnsResolvedLeg = nullptr);
     /// Arm the duration teardown for a time-driven transition, generation-guarded.
     ///
     /// Re-arms itself when the transition's own clock says the leg is not finished.
@@ -2020,27 +2107,60 @@ private:
      * The enum values are defined in src/core/interfaces.h (DragModifier).
      */
     /**
-     * @brief Detect activation trigger and grab keyboard if needed
+     * @brief Whether this drag's cursor/modifier ticks must reach the daemon.
      *
-     * Sets m_dragActivation.detected and grabs keyboard when an activation
-     * trigger is first detected during a drag. Returns true if activation
-     * was detected (either previously or just now).
+     * True once any activation family is in play, and latched thereafter via
+     * m_dragActivation.detected so a mid-drag release does not silence the
+     * stream the daemon's rising-edge latches depend on.
+     *
+     * Pure predicate. It does NOT take the keyboard grab, despite the name it
+     * used to carry: the grab is the SNAP path's, taken unconditionally at
+     * dragStarted so Escape reaches cancelSnap rather than KWin's
+     * MoveResizeFilter, and engine-owned drags deliberately take none. Doing
+     * it here made a held drag-insert trigger (the shipped default is Alt)
+     * swallow the keyboard on an ordinary snap-screen drag.
      */
-    bool detectActivationAndGrab();
+    bool shouldForwardDragTicks();
 
     // beginDrag is called unconditionally at drag-start; the deferred-send
     // optimization is obsolete now that the daemon always knows about the drag.
 
-    // Drag-gate exclusion rule set — the Exclude-shaped slice of the
-    // unified Rule store the effect mirrors over D-Bus. Filled by
-    // loadRuleAnimationsFromDbus's parse step (which already
-    // deserialises the full rule set for the animation override path),
-    // via `PhosphorRules::ExclusionRules::excludeRulesFrom`. The
+    // Drag-gate exclusion rule set — the placement-exclusion slice
+    // (Exclude ∪ ExcludePlacement) of the unified Rule store the effect
+    // mirrors over D-Bus. Filled by loadRuleAnimationsFromDbus's parse step
+    // (which already deserialises the full rule set for the animation
+    // override path), via
+    // `PhosphorRules::ExclusionRules::excludePlacementRulesFrom`. The
     // bound RuleEvaluator drives shouldHandleWindow()'s exclusion gate.
     // Declaration ORDER MATTERS — the rule set must precede (and outlive)
     // the evaluator that binds a reference to it.
     PhosphorRules::RuleSet m_snappingExclusionRuleSet;
     PhosphorRules::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
+
+    // Decoration exclusion rule set — the decoration-exclusion slice
+    // (Exclude ∪ ExcludeDecorations) of the unified Rule store, filled at
+    // the same loadRuleAnimationsFromDbus sync point via
+    // `PhosphorRules::ExclusionRules::excludeDecorationsRulesFrom`. The
+    // bound RuleEvaluator drives shouldDecorateWindow()'s exclusion gate:
+    // blanket Exclude keeps stripping decorations (the behavior from when
+    // that gate reused the snapping slice), while the scoped
+    // ExcludeDecorations strips only decorations. Same declaration-order
+    // contract as the pair above.
+    PhosphorRules::RuleSet m_decorationExclusionRuleSet;
+    PhosphorRules::RuleEvaluator m_decorationExclusionEvaluator{m_decorationExclusionRuleSet};
+
+    // True when any enabled rule in the unified store references a frame-
+    // geometry match field (Width / Height / PositionX / PositionY).
+    // Recomputed at the loadRuleAnimationsFromDbus sync point. Gates the
+    // geometry-edge rule-cache invalidation in flushPendingFrameGeometry:
+    // those fields are stamped live into the per-window query but the
+    // verdict caches key on (windowId, ruleSet revision), so without an
+    // invalidation edge a `Width LessThan N` appearance or exclusion verdict
+    // pins at the window's first resolve. The per-tick geometry lambda must
+    // NEVER invalidate directly (discussion #816 — animated geometry fires
+    // hundreds of ticks per second); the 50 ms flush plus this set-level
+    // gate keeps the no-geometry-rules user at zero cost.
+    bool m_hasGeometryScopedRules = false;
 
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForTilingNotify() to prevent small utility
@@ -2079,9 +2199,8 @@ private:
     // (loadCachedSettings). Initialised to the config defaults so a pre-D-Bus
     // decoration pass matches the prior behavior: transients were already never
     // decorated (exclude-transient on), and no size threshold was ever applied
-    // (min-size 0). The transient/min-size filters here reuse the snapping
-    // exclusion rule set (m_snappingExclusionEvaluator) rather than a dedicated
-    // decoration rule slice, so no new rule action is involved.
+    // (min-size 0). The rule-driven exclusion gate binds the dedicated
+    // decoration slice (m_decorationExclusionEvaluator above).
     bool m_decorationExcludeTransientWindows = true;
     int m_decorationMinWindowWidth = 0;
     int m_decorationMinWindowHeight = 0;
@@ -2113,10 +2232,17 @@ private:
     // Once real settings arrive, they override these conservative defaults.
     QVector<ParsedTrigger> m_parsedTriggers; // pre-parsed via TriggerParser::parseTriggers() at load time (avoids
                                              // QVariant unboxing in hot path)
+    // Drag-insert trigger lists, cached so shouldForwardDragTicks can force
+    // tick forwarding while a HOLD-mode insert trigger is physically held
+    // (the toggle bools below cover toggle mode only; without these, a drag
+    // starting off-engine could never reach hold-mode drag-insert).
+    QVector<ParsedTrigger> m_parsedAutotileDragInsertTriggers;
+    QVector<ParsedTrigger> m_parsedScrollingDragInsertTriggers;
     bool m_triggersLoaded =
         false; // false until D-Bus reply arrives — permissive default bypasses trigger gating (#175)
     bool m_cachedToggleActivation = false;
     bool m_cachedAutotileDragInsertToggle = false;
+    bool m_cachedScrollingDragInsertToggle = false;
     bool m_cachedZoneSpanToggleMode = false;
     // AutotileDragBehavior cached so the synchronous drag-start fast path can
     // decide whether to skip the handleDragToFloat(immediate=true) call.
@@ -2126,7 +2252,11 @@ private:
     // daemon doesn't silently enter the wrong mode.
     EffectAutotileDragBehavior m_cachedAutotileDragBehavior = EffectAutotileDragBehavior::Float;
     bool m_cachedZoneSelectorEnabled = true; // true until proven false — ensures dragMoved passes through at startup
-    int m_cachedAnimationSequenceMode = 0; // 0=all at once, 1=one by one in zone order
+    // Same rule as the duration two members below: seeded from the canonical
+    // constant, not an inline literal. It was 0 (all at once) while the
+    // shipped default is the cascade, so every batch apply before the async
+    // reply lands — bringup included — ran the wrong sequencing.
+    int m_cachedAnimationSequenceMode = PhosphorAnimation::Limits::DefaultAnimationSequenceMode;
     // Pinned to the canonical Limits constant rather than an inline magic
     // number so a future bump in the suite-wide default propagates here
     // automatically and a malformed daemon reply (zero/negative) clamped
@@ -2134,7 +2264,15 @@ private:
     // before the first reply arrives.
     int m_cachedAnimationDuration =
         PhosphorAnimation::Limits::DefaultAnimationDurationMs; // ms, fallback until loaded from daemon
-    int m_cachedAnimationStaggerInterval = 30; // ms between each window start when animating one by one (cascading)
+    // ms between each window start when cascading. Canonical constant for the
+    // reason the member above now gives; it was 30 against a shipped 40.
+    int m_cachedAnimationStaggerInterval = PhosphorAnimation::Limits::DefaultAnimationStaggerIntervalMs;
+    /// Mirror of the scrollingCropStraddlers setting. While true and any
+    /// scrolling screen exists, blocksDirectScanout() answers true so the
+    /// per-output cull is guaranteed to run for straddler overhangs (a
+    /// surface presented on a hardware plane bypasses the effect chain and
+    /// with it the crop).
+    bool m_cachedScrollCropStraddlers = false;
 
     // Per-drag activation / float tracking. Fields + rationale in effect_state.h
     // (DragActivationState).
@@ -2180,7 +2318,7 @@ private:
     // minimize→unminimize pairs (plasmashell notification stacking emits
     // them on tiled windows ~1-2 ms apart; the float side debounces the
     // same quirk with the shared kSpuriousMinimizePairMs — see
-    // tilinghandler/signals.cpp). An unminimize landing inside the
+    // tilinghandler/minimizefloat.cpp). An unminimize landing inside the
     // window silently drops the reverse leg instead of replaying a full
     // un-minimize animation. `generation` pins the stamp to the exact
     // transition the minimize event installed (or kept running), so the
@@ -2258,10 +2396,16 @@ private Q_SLOTS:
     /// Fetch the unified Rule store via `org.plasmazones.Rules.
     /// getAllRules`, filter to rules carrying any effect-consumed
     /// (Tag::Effect) action, and forward them to the shader manager — the
-    /// sole source of per-window effect overrides. Called once at bringup; the bringup also
-    /// subscribes to the interface's `rulesChanged` signal (via a debounce
-    /// timer — see m_animationRulesRefreshDebounce) so a settings-UI edit
-    /// takes effect without restarting the effect.
+    /// sole source of per-window effect overrides. The effect's ONE
+    /// rule-store sync point: the same parsed payload also refreshes the
+    /// three exclusion slices (placement = Exclude ∪ ExcludePlacement for the
+    /// drag gate, decoration = Exclude ∪ ExcludeDecorations for
+    /// shouldDecorateWindow, animation = the ExcludeAnimations slice for
+    /// shouldAnimateWindow) and the geometry-scoped-rules gate. Called once
+    /// at bringup; the bringup also subscribes to the interface's
+    /// `rulesChanged` signal (via a debounce timer — see
+    /// m_animationRulesRefreshDebounce) so a settings-UI edit takes effect
+    /// without restarting the effect.
     void loadRuleAnimationsFromDbus();
 
     /// D-Bus signal handler for `Rules.rulesChanged`. Re-arms the

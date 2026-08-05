@@ -35,6 +35,7 @@ private Q_SLOTS:
     void presetIntentRoundTripsExactly();
     void legacyPresetIndexBlobResolvesAgainstEffectiveList();
     void outOfRangePresetFractionIsClampedAtTheBoundary();
+    void serializeKeepsAnUnclaimedStashTileBesideALiveStrip();
 
 private:
     /// The state for a screen, or nullptr. QVERIFY'd at every call site: a
@@ -577,6 +578,45 @@ void TestScrollEnginePersistence::coTenantClaimDoesNotRenewSiblingLease()
     const int aCol = columnOf(engine5, QStringLiteral("app|a"));
     const int bCol = columnOf(engine5, QStringLiteral("app|b"));
     QVERIFY2(aCol != bCol, "a returning co-tenant's claim must not renew the dead sibling tile's lease");
+}
+
+void TestScrollEnginePersistence::serializeKeepsAnUnclaimedStashTileBesideALiveStrip()
+{
+    // A key can hold a live strip AND an unconsumed stash at the same time,
+    // and serializeStripState used to write them to the same QJsonObject key
+    // in two passes, so the second insert REPLACED the first instead of
+    // merging. The window still waiting in the stash vanished from the save.
+    //
+    // Three windows are persisted. Two of them come back, which claims two of
+    // the three staged tiles and builds a live strip, but leaves the entry
+    // unconsumed and still carrying the third. Saving there must not lose it.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("app|u2"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("other|u3"), QStringLiteral("S1"), 0, 0);
+    const QJsonObject blob = engine1->serializeStripState();
+    QVERIFY(!blob.isEmpty());
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    // Only the two "app" windows return. "other" stays away, so its tile is
+    // still staged when the save runs.
+    engine2->windowOpened(QStringLiteral("app|n1"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("app|n2"), QStringLiteral("S1"), 0, 0);
+
+    ScrollState* live = stateFor(engine2, QStringLiteral("S1"));
+    QVERIFY(live);
+    // Both halves genuinely present, or the assertion below could pass for
+    // the wrong reason: no live strip at this key means no collision to merge.
+    QCOMPARE(live->windowCount(), 2);
+
+    const QByteArray saved = QJsonDocument(engine2->serializeStripState()).toJson();
+    QVERIFY2(saved.contains("app|n1"), "the live strip's own windows must be written");
+    QVERIFY2(saved.contains("other|u3"),
+             "the tile still waiting in the stash must survive a save taken while a live strip shares its key");
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePersistence)

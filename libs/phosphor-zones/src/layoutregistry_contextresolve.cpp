@@ -982,6 +982,26 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     readColor(PWR::ActionSlot::TabIndicatorActiveColor, params.tabIndicatorActiveColor);
     readColor(PWR::ActionSlot::TabIndicatorInactiveColor, params.tabIndicatorInactiveColor);
     readColor(PWR::ActionSlot::TabIndicatorUrgentColor, params.tabIndicatorUrgentColor);
+
+    // Drop indicator. Same per-property cascade as the tab indicator above, so
+    // a theme rule can set the colours while a separate rule turns it off.
+    readBool(PWR::ActionSlot::DropIndicatorEnabled, params.dropIndicatorEnabled);
+    readColor(PWR::ActionSlot::DropIndicatorColor, params.dropIndicatorColor);
+    readColor(PWR::ActionSlot::DropIndicatorBorderColor, params.dropIndicatorBorderColor);
+    readInt(PWR::ActionSlot::DropIndicatorBorderWidth, params.dropIndicatorBorderWidth,
+            PWR::MinDropIndicatorBorderWidth, PWR::MaxDropIndicatorBorderWidth);
+    readInt(PWR::ActionSlot::DropIndicatorBorderRadius, params.dropIndicatorBorderRadius,
+            PWR::MinDropIndicatorBorderRadius, PWR::MaxDropIndicatorBorderRadius);
+    // Fraction, not an int: read the way TabIndicatorLength is, and bounded to
+    // the same [min, max] the descriptor validates so a hand-edited rule
+    // cannot smuggle an out-of-range opacity past the authoring UI.
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::DropIndicatorOpacity))) {
+        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
+        const double fraction = v.toDouble();
+        if (v.isDouble() && fraction >= PWR::MinDropIndicatorOpacity && fraction <= PWR::MaxDropIndicatorOpacity) {
+            params.dropIndicatorOpacity = fraction;
+        }
+    }
     if (const auto action = resolved.slot(QString(PWR::ActionSlot::TabIndicatorLength))) {
         const QJsonValue v = action->params.value(PWR::ActionParam::Value);
         const double fraction = v.toDouble();

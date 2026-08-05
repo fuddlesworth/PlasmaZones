@@ -42,6 +42,12 @@ QString matchValueHint(const QString& op);
 /// here and surfaces this list verbatim.
 QVariantList actionTypes();
 
+/// Translated picker label for one action type wire id — the same label
+/// `actionTypes()` carries per entry, exposed singly so per-issue surfaces
+/// (the validation status bar) can name an action without walking the full
+/// list. Falls back to the raw wire id for an unknown type.
+QString actionTypeLabel(const QString& typeWire);
+
 /// Polarity-aware phrase for a boolean action's current value — e.g.
 /// `SetBorderVisible` → "Show border" when @p on, "Hide border" when off. The
 /// single source of truth shared by the rule-list summary (`RuleModel`) and the

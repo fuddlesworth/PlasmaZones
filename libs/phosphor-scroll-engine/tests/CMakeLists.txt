@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 # PhosphorScrollEngine unit tests. Headless throughout, in three categories:
-# two files exercise the pure strip model, four drive the engine through null
+# two files exercise the pure strip model, six drive the engine through null
 # daemon dependencies and the geometry-provider seam, and one covers the pure
 # template-vocabulary extractor. None needs a QPA platform, so the strip and
 # extractor tests run APPLESS and the engine tests GUILESS (they need an event
@@ -44,6 +44,8 @@ pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp)
 pse_add_test(test_scrolltemplate test_scrolltemplate.cpp)
+pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp)
+pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp)
 
 # Shared fixture header, listed so IDE/target file listings see it (every
 # strip and engine test includes it — the pure extractor test does not; it
@@ -54,3 +56,5 @@ target_sources(test_scrollengine_smoke PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollengine_persistence PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollengine_zonenumbers PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollengine_perscreen PRIVATE scrollstriptestutils.h)
+target_sources(test_scrollengine_draginsert PRIVATE scrollstriptestutils.h)
+target_sources(test_scrollengine_boundary PRIVATE scrollstriptestutils.h)

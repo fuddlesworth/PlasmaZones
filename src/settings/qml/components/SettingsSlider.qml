@@ -73,5 +73,8 @@ RowLayout {
     Label {
         text: root.formatValue ? root.formatValue(slider.value) : Math.round(slider.value) + root.valueSuffix
         Layout.preferredWidth: root.labelWidth
+        // The unit suffixes are translatable; a locale whose rendering is
+        // wider than the fixed label width must elide rather than overflow.
+        elide: Text.ElideRight
     }
 }

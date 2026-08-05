@@ -39,6 +39,50 @@ void ScrollEngine::seedFloatRestoreForOpen(const QString& windowId, int minWidth
     m_floatRestore.insert(windowId, restore);
 }
 
+bool ScrollEngine::acceptsFloatingRecord(const PhosphorEngine::WindowPlacement& p, const QString& windowId,
+                                         const QString& screenId) const
+{
+    // A geometry-less floating record is meaningful for the SAME instance
+    // (restore floating in place), but consumed by a FIFO sibling it floats a
+    // fresh window at its spawn rect for no user-visible reason while burning
+    // a slot a real placement may need.
+    const bool sameInstance = PhosphorIdentity::WindowId::extractInstanceId(p.windowId)
+        == PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    if (!sameInstance && !p.anyFreeGeometry().isValid()) {
+        return false;
+    }
+    return p.screenId.isEmpty() || p.screenId == screenId;
+}
+
+void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QString& screenId)
+{
+    const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+    if (!m_windowTracker || appId.isEmpty() || appId == windowId) {
+        return;
+    }
+    using PhosphorEngine::WindowPlacement;
+    // FLOATING-only accept: the window floats regardless (the caller already
+    // decided that), so a tiled record must neither be consumed nor block a
+    // later tiled reopen — a rejected exact record simply leaves the store
+    // untouched via takeForReopen's exact-final gate.
+    const auto accept = [&](const WindowPlacement& p) {
+        return p.slotFor(engineId()).state == WindowPlacement::stateFloating()
+            && acceptsFloatingRecord(p, windowId, screenId);
+    };
+    const auto record = m_windowTracker->placementStore().takeForReopen(windowId, appId, accept);
+    if (!record) {
+        return;
+    }
+    // Same gate and screen-local rule as the record-float branch of
+    // insertOpenedWindow (which documents both).
+    const QString restoreScreen = record->screenId.isEmpty() ? screenId : record->screenId;
+    const QRect freeGeo = record->freeGeometryFor(restoreScreen);
+    const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
+    if (freeGeo.isValid() && restorePosition) {
+        Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+    }
+}
+
 bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId,
                                       int minWidth, int minHeight)
 {
@@ -72,16 +116,46 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // list never empties and the stale entry survives every later mode
         // transition.
         consumePendingInitialOrder(screenId, windowId);
+        // An engine-decided float still consumes its FLOATING placement
+        // record and restores the remembered float-back — autotile reaches
+        // the same outcome through its record branch (record first, rule
+        // float layered on top); this engine floats before ever consulting
+        // the store, so the consumption happens here or never.
+        restoreFloatRecordForOpen(windowId, screenId);
         Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
         return true;
     }
 
     // Unified-placement restore: a window recorded tiled in scrolling mode
     // reopens at its recorded column slot; a floating record reopens
-    // floating (the shared free geometry is restored by the common layer).
+    // floating, with the recorded float-back applied through this engine's
+    // own gated geometryRestoreRequested emit below (the daemon's passive
+    // float-sync arm deliberately restores no geometry).
+    // Resolved via the store's takeForReopen so a close/reopen — fresh KWin
+    // uuid, appId-FIFO match — restores exactly like a daemon restart's
+    // uuid-exact match. peekExact alone covered only the restart case: a
+    // reopened floated window missed its record and fell through to a tile
+    // insert. The accept predicate is autotile's (insert.cpp), term for term:
+    // a floating slot restores per acceptsFloatingRecord (screen match, and
+    // FIFO consumption needs a real float-back rect); a tiled slot restores
+    // only in the SAME full context.
     int restoreColumn = -1;
-    if (m_windowTracker) {
-        if (const auto record = m_windowTracker->placementStore().peekExact(windowId)) {
+    const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+    if (m_windowTracker && !appId.isEmpty() && appId != windowId) {
+        using PhosphorEngine::WindowPlacement;
+        const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
+        const auto accept = [&](const WindowPlacement& p) {
+            const PhosphorEngine::EngineSlot s = p.slotFor(engineId());
+            if (s.state == WindowPlacement::stateFloating()) {
+                return acceptsFloatingRecord(p, windowId, screenId);
+            }
+            if (s.state == WindowPlacement::stateTiled()) {
+                return p.screenId == currentKey.screenId && p.virtualDesktop == currentKey.desktop
+                    && p.activity == currentKey.activity;
+            }
+            return false;
+        };
+        if (const auto record = m_windowTracker->placementStore().takeForReopen(windowId, appId, accept)) {
             const PhosphorEngine::EngineSlot slot = record->slotFor(engineId());
             if (slot.state == PhosphorEngine::WindowPlacement::stateFloating()) {
                 state->addFloating(windowId);
@@ -122,13 +196,17 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // while the global kind was ClientDecides, with no diagnostic. (The
     // per-WINDOW open rule below is applied after this block and wins over
     // both, which is the intended precedence.)
-    // Any width key counts — the rule channel's bare fraction OR the
-    // settings channel's kind trio; a per-screen kind=Preset would otherwise
-    // be silently overridden by the global ClientDecides.
+    // The rule channel's bare fraction pins a width outright. The settings
+    // channel's kind trio answers BY VALUE through
+    // effectiveWidthClientDecides: a per-screen kind of Fixed/Preset/
+    // Proportion pins a width (effectiveDefaultColumnWidth above already
+    // resolved it), while a per-screen kind of ClientDecides means exactly
+    // that — testing the kind key's mere PRESENCE here inverted the setting,
+    // gating the client-size branch off on precisely the monitors scoped to
+    // it.
     const QVariantMap screenOverrides = m_perScreenOverrides.value(screenId);
-    const bool screenPinsWidth = screenOverrides.contains(ScrollPerScreenKeys::defaultColumnWidth())
-        || screenOverrides.contains(ScrollPerScreenKeys::defaultColumnWidthKind());
-    if (m_defaultWidthClientDecides && m_windowTracker && !screenPinsWidth) {
+    const bool rulePinsWidth = screenOverrides.contains(ScrollPerScreenKeys::defaultColumnWidth());
+    if (effectiveWidthClientDecides(screenId) && m_windowTracker && !rulePinsWidth) {
         // Open at the client's own size when one is on record; the first
         // client resize reconciles it afterwards.
         if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
@@ -367,6 +445,12 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // a single-window screen sits at the geometry the OTHER mode left it in.
     const QRect priorAppliedRect = m_lastAppliedRect.value(windowId);
     m_lastAppliedRect.remove(windowId);
+    // The parked-edge memory follows the rect memory: a re-adopted window
+    // never parked here, and a stale side would mis-anchor its first arrival
+    // slide. Taken (not dropped) so the refuse branch can put it back — a
+    // refused insert means the window is a live tile that may genuinely be
+    // parked right now.
+    const QString priorParkedEdge = m_parkedScrollEdge.take(windowId);
     if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight)) {
         // Every insert refused (the strip already holds the window). Nothing
         // moved and nothing was adopted, so neither the geometry batch nor
@@ -376,6 +460,9 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // geometry, which is the poison this map exists to prevent.
         if (priorAppliedRect.isValid()) {
             m_lastAppliedRect.insert(windowId, priorAppliedRect);
+        }
+        if (!priorParkedEdge.isEmpty()) {
+            m_parkedScrollEdge.insert(windowId, priorParkedEdge);
         }
         return;
     }
@@ -427,7 +514,6 @@ void ScrollEngine::endArrivalBurst()
         return;
     }
     const QHash<QString, bool> pending = std::move(m_burstPendingApplies);
-    m_burstPendingApplies.clear();
     // Sorted, not hash order: with focus-taking arrivals on two screens the
     // LAST activation request wins the compositor's focus, and hash order
     // would make that winner vary run to run.
@@ -443,6 +529,10 @@ void ScrollEngine::endArrivalBurst()
 void ScrollEngine::windowClosed(const QString& rawWindowId)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
+    // Before any state mutation: a preview whose dragged window just closed
+    // must not survive to restore a dead id (autotile's
+    // dropClosedWindowFromDragPreview twin).
+    dropClosedWindowFromDragPreview(windowId);
     // A pending self-activation for a window that closes before its echo
     // lands can never be answered; without this a later genuine focus of a
     // reused id would be eaten as that echo.
@@ -589,6 +679,15 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // retile the wrong strip.
     Q_UNUSED(screenId)
     const QString windowId = canonicalizeForLookup(rawWindowId);
+    // A window under a compositor interactive move: its frames are drag
+    // motion, not a size the user settled on. Reconciling them pinned the
+    // column's width/height intents to transient drag rects, and the
+    // refused-ack arm below re-emitted the slot rect against the move —
+    // the ~1 Hz mid-drag teleport fight. The daemon clears the mark before
+    // the drop settles, and the drop paths re-apply authoritative geometry.
+    if (!m_interactiveDragWindow.isEmpty() && windowId == m_interactiveDragWindow) {
+        return;
+    }
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state || state->isFloating(windowId)) {
@@ -649,232 +748,15 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     }
 }
 
-// ── Float management ────────────────────────────────────────────────────────
-
-bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
-                                       const QString& windowId, const QString& screenId)
-{
-    if (state->isFloating(windowId)) {
-        return false;
-    }
-    const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
-    const int columnIdx = state->strip().columnOfWindow(windowId);
-    if (columnIdx < 0) {
-        // Tracked in the reverse map yet in neither the strip nor the
-        // floating set — a genuine bookkeeping inconsistency, not a
-        // documented no-op like the other bails in this file.
-        qCWarning(lcScrollEngine) << "floatWindowInternal:" << windowId
-                                  << "tracked but absent from strip and floating set on" << key.screenId;
-        return false;
-    }
-    FloatRestore restore;
-    restore.column = columnIdx;
-    const Column& sourceColumn = state->strip().columns().at(columnIdx);
-    restore.width = sourceColumn.width;
-    restore.display = sourceColumn.display;
-    const QSize minSize = state->strip().windowMinimumSize(windowId);
-    restore.minWidth = minSize.width();
-    restore.minHeight = minSize.height();
-    // The height intent dies with the tile too, and the minimize path rides
-    // this same round trip — without it a minimize/restore silently reset a
-    // user-set window height to Auto.
-    const int tileIdx = sourceColumn.indexOfWindow(windowId);
-    if (tileIdx >= 0) {
-        restore.height = sourceColumn.tiles.at(tileIdx).height;
-    }
-    if (sourceColumn.tiles.size() > 1) {
-        restore.tileIndex = tileIdx;
-        // Anchor on a surviving sibling so the stack can be re-located even
-        // after column indices shift (prefer the neighbour above, else below).
-        for (int i = restore.tileIndex - 1; i >= 0 && restore.stackAnchor.isEmpty(); --i) {
-            restore.stackAnchor = sourceColumn.tiles.at(i).windowId;
-        }
-        for (int i = restore.tileIndex + 1; i < sourceColumn.tiles.size() && restore.stackAnchor.isEmpty(); ++i) {
-            restore.stackAnchor = sourceColumn.tiles.at(i).windowId;
-        }
-    }
-    state->strip().takeWindow(windowId, params);
-    state->addFloating(windowId);
-    m_floatRestore.insert(windowId, restore);
-    m_scrollFloatedWindows.insert(windowId);
-    m_lastAppliedRect.remove(windowId);
-    Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
-    // Background-context guard: see windowClosed.
-    if (key == currentKeyForScreen(key.screenId)) {
-        applyLayout(key.screenId, false);
-    }
-    Q_EMIT placementChanged(key.screenId);
-    return true;
-}
-
-bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
-                                         bool applyAfter)
-{
-    if (!state->removeFloating(windowId)) {
-        return false;
-    }
-    // Captured before the re-insert so the guard at the tail reads the
-    // context the window actually belongs to.
-    const PhosphorEngine::PlacementStateKey key = m_states.keyForWindow(windowId);
-    // The window's OWN context screen, the way floatWindowInternal reads
-    // key.screenId throughout: a caller that passes the operation screen
-    // instead would resolve the params and the background guard against a
-    // strip this window does not live on. The caller's value is the fallback
-    // only for a window the reverse map has no key for at all.
-    const QString contextScreen = key.screenId.isEmpty() ? screenId : key.screenId;
-    const ScrollLayoutParams params = layoutParamsForScreen(contextScreen);
-    // Restore the remembered column slot (minimize/unminimize and float
-    // round-trips keep their place); fall back to next-to-focus.
-    const bool hadSlot = m_floatRestore.contains(windowId);
-    const FloatRestore restore = m_floatRestore.take(windowId);
-    bool inserted = false;
-    if (hadSlot && restore.tileIndex >= 0) {
-        // The window left a SHARED column: return to the surviving stack.
-        // The stack is re-located through the surviving-sibling anchor —
-        // the remembered index goes stale when columns close during the
-        // float and would splice into a stranger's stack. Anchor gone →
-        // fall through to a fresh column.
-        const int anchoredColumn =
-            restore.stackAnchor.isEmpty() ? -1 : state->strip().columnOfWindow(restore.stackAnchor);
-        if (anchoredColumn >= 0) {
-            inserted = state->strip().insertWindowIntoColumnAt(anchoredColumn, restore.tileIndex, windowId, params,
-                                                               restore.minWidth, restore.minHeight);
-        }
-    }
-    if (!inserted && hadSlot && restore.column >= 0) {
-        // column >= 0 keeps a SEEDED slot (seedFloatRestoreForOpen writes
-        // column = -1 for a window floated at open, which never held a strip
-        // position) out of this arm — insertWindowAt would qBound -1 to the
-        // leftmost column and stamp the record's default width/display over
-        // the configured defaults. A slotless seed falls through to the plain
-        // next-to-focus insert below.
-        inserted = state->strip().insertWindowAt(restore.column, windowId, restore.width, restore.display, params);
-    }
-    if (!inserted) {
-        inserted = state->strip().insertWindow(windowId, effectiveDefaultColumnWidth(contextScreen),
-                                               effectiveDefaultColumnDisplay(contextScreen), params);
-    }
-    if (!inserted) {
-        // Every insert refused (an empty id is the only way today). The float
-        // set was already given up above, so returning now would leave the
-        // window tracked but in NEITHER the strip nor the floating set — the
-        // inconsistency floatWindowInternal warns about. Put it back.
-        qCWarning(lcScrollEngine) << "unfloatWindowInternal: every insert refused for" << windowId
-                                  << "— restoring floating state";
-        state->addFloating(windowId);
-        if (hadSlot) {
-            m_floatRestore.insert(windowId, restore);
-        }
-        return false;
-    }
-    {
-        // `inserted` is necessarily true here — the !inserted arm above
-        // returns — so no second guard.
-        //
-        // Re-apply the min size the floated tile carried (the fresh-column
-        // branches insert without it).
-        if (restore.minWidth > 0 || restore.minHeight > 0) {
-            state->strip().setWindowMinimumSize(windowId, restore.minWidth, restore.minHeight);
-        }
-        // Same for the height intent, but only from an entry that captured a
-        // real tile: a SEEDED entry (seedFloatRestoreForOpen, column = -1)
-        // carries a default-constructed Auto height that never belonged to a
-        // tile, and stamping it here overwrote the context default height the
-        // fresh insert just seeded — so a window floated at open and then
-        // unfloated came back at Auto instead of the configured default.
-        if (restore.column >= 0 || restore.tileIndex >= 0) {
-            state->strip().setWindowHeightIntent(windowId, restore.height);
-        }
-        state->strip().focusWindow(windowId, params);
-    }
-    m_scrollFloatedWindows.remove(windowId);
-    Q_EMIT windowFloatingChanged(windowId, false, screenId);
-    // Batch callers (snapAllWindows) relayout once for the whole batch.
-    if (applyAfter) {
-        // Background-context guard, same terms as floatWindowInternal:
-        // applyLayout resolves the screen's CURRENT context, so an unfloat on
-        // another desktop's state would relayout the wrong strip. The
-        // placement announcement still fires — the managed set did change.
-        if (key == currentKeyForScreen(contextScreen)) {
-            applyLayout(contextScreen, false);
-        }
-        Q_EMIT placementChanged(contextScreen);
-    }
-    return inserted;
-}
-
-void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, const QString& screenId)
-{
-    const QString windowId = canonicalizeForLookup(rawWindowId);
-    PhosphorEngine::PlacementStateKey key;
-    ScrollState* state = stateForWindow(windowId, &key);
-
-    if (!state) {
-        if (shouldFloat) {
-            return; // never tracked — nothing to pull out of a strip
-        }
-        // Unfloat a window the engine has not adopted yet (e.g. floated
-        // before the screen switched to scrolling): adopt into the
-        // authoritative screen's current strip.
-        const QString targetScreen = resolveOperationScreen(screenId);
-        if (targetScreen.isEmpty()) {
-            return;
-        }
-        ScrollState* target = stateForKey(currentKeyForScreen(targetScreen), true);
-        if (!target || target->containsWindow(windowId)) {
-            return;
-        }
-        const ScrollLayoutParams params = layoutParamsForScreen(targetScreen);
-        // Same as handoffReceive: the retained close/release rect only has to
-        // outlive the capture window, and carrying it into a re-adoption would
-        // gate away the first windowsTiled batch for this window.
-        m_lastAppliedRect.remove(windowId);
-        // Whatever clamp is on record for the window while it floats — the
-        // seed a float-at-open left, or a live windowMinSizeUpdated
-        // write-through. This route inserts without min sizes, so without the
-        // re-apply the adopted tile relayouts unclamped until the client
-        // happens to re-report, which for a fixed-size window is never.
-        const FloatRestore adopted = m_floatRestore.value(windowId);
-        if (target->strip().insertWindow(windowId, effectiveDefaultColumnWidth(targetScreen),
-                                         effectiveDefaultColumnDisplay(targetScreen), params, adopted.minWidth,
-                                         adopted.minHeight)) {
-            // The tile owns the clamp from here; a refused insert keeps the
-            // entry so a later attempt still has it.
-            m_floatRestore.remove(windowId);
-            // Third unfloat route: clear the mode-transition float marker
-            // like unfloatWindowInternal/handoffRelease do.
-            m_scrollFloatedWindows.remove(windowId);
-            m_states.setKeyForWindow(windowId, currentKeyForScreen(targetScreen));
-            Q_EMIT windowFloatingStateSynced(windowId, false, targetScreen);
-            applyLayout(targetScreen, false);
-            Q_EMIT placementChanged(targetScreen);
-        }
-        return;
-    }
-
-    if (shouldFloat) {
-        floatWindowInternal(state, key, windowId, screenId);
-    } else {
-        unfloatWindowInternal(state, windowId, key.screenId);
-    }
-}
-
-void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& screenId)
-{
-    // setWindowFloat canonicalizes its own input; canonicalizeForLookup is
-    // idempotent, so passing the resolved id through is a single-pass
-    // pipeline, not a second translation.
-    const QString windowId = canonicalizeForLookup(rawWindowId);
-    ScrollState* state = stateForWindow(windowId);
-    const bool floating = state && state->isFloating(windowId);
-    setWindowFloat(windowId, !floating, screenId);
-}
-
 // ── Cross-engine handoff ────────────────────────────────────────────────────
 
 void ScrollEngine::handoffRelease(const QString& rawWindowId)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
+    // A preview naming this window must not survive its tracking: commit
+    // would re-insert into a strip another engine has since adopted the
+    // window from (shared contract gap with autotile's twin, closed here).
+    dropClosedWindowFromDragPreview(windowId);
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
@@ -886,6 +768,10 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     state->strip().takeWindow(windowId, params);
     state->removeFloating(windowId);
     m_states.removeWindow(windowId);
+    // A released window's queued echo can never be answered — the stale
+    // entry would eat the first genuine focus when the window comes back
+    // (releaseScreenState documents the same sweep).
+    m_pendingSelfActivations.removeAll(windowId);
     // m_lastAppliedRect deliberately retained (same rationale as
     // windowClosed: a close/capture racing the handoff still needs the
     // poison-guard memory; pruneStaleWindows reclaims it).
@@ -894,6 +780,10 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     // tracking: the receiving engine owns the float bit from here, and a
     // stale entry would keep isModeSpecificFloated answering true.
     m_scrollFloatedWindows.remove(windowId);
+    // Same orphan rule as the float path: the window leaves this engine
+    // alive, so the park-edge memory has to go here or it survives to
+    // mis-anchor the first arrival after a later re-adoption.
+    m_parkedScrollEdge.remove(windowId);
     // Background-context guard, as windowClosed and the float paths carry: a
     // release out of another desktop's state must not retile the strip that
     // is on screen right now. The switch back retiles the mutated one.
@@ -908,6 +798,9 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     if (windowId.isEmpty() || !m_scrollingScreens.contains(ctx.toScreenId)) {
         return;
     }
+    // Same preview hygiene as handoffRelease: an arriving window that a
+    // live preview still names would be double-placed at commit.
+    dropClosedWindowFromDragPreview(windowId);
     PhosphorEngine::PlacementStateKey key = currentKeyForScreen(ctx.toScreenId);
     if (ctx.toDesktop > 0) {
         key.desktop = ctx.toDesktop;
@@ -924,6 +817,7 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         staleState->strip().takeWindow(windowId, staleParams);
         staleState->removeFloating(windowId);
         m_lastAppliedRect.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         if (staleWasFloating) {
@@ -954,8 +848,10 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // Re-adoption starts from a blank rect memory: handoffRelease/windowClosed
     // only retain m_lastAppliedRect long enough to survive the close/capture
     // window, and a leftover entry would defeat applyLayout's emit-on-change
-    // gate so no windowsTiled batch ever fires for the re-adopted window.
+    // gate so no windowsTiled batch ever fires for the re-adopted window. A
+    // leftover parked edge is equally foreign to the adopting strip.
     m_lastAppliedRect.remove(windowId);
+    m_parkedScrollEdge.remove(windowId);
     if (ctx.wasFloating) {
         state->addFloating(windowId);
         // The window arrives floating and so is never a strip tile here: the
@@ -1021,6 +917,26 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
 std::optional<PhosphorEngine::WindowPlacement> ScrollEngine::capturePlacement(const QString& rawWindowId) const
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
+
+    // A window mid-drag-insert has NO capturable placement, and answering
+    // anyway silently destroys the one it had. Under DETACH-ONCE, begin drops
+    // the window from the floating set and out of the strip while KEEPING it
+    // tracked — so the else arm below would read isFloating()==false, take the
+    // tiled branch, and record columnOfWindow() == -1. A pre-drag FLOATING
+    // window would have its floating record overwritten with tiled/order=-1;
+    // insertOpenedWindow's restore ladder then never reaches the floating arm,
+    // its `order >= 0` test fails too, and the window reopens tiled with its
+    // remembered float-back gone.
+    //
+    // This is reachable on an ordinary hold: the save timer is restarted by
+    // markDirty, which this engine's own placementChanged triggers, and begin
+    // emits that when the neighbours close up. Returning nullopt leaves the
+    // pre-drag record intact, which is the same answer the adaptor already
+    // documents for an unmanaged window.
+    if (m_dragInsertPreview && m_dragInsertPreview->windowId == windowId) {
+        return std::nullopt;
+    }
+
     PhosphorEngine::PlacementStateKey key;
     const ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {

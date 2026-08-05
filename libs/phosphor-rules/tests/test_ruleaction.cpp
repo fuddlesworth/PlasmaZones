@@ -98,9 +98,24 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetTabIndicatorActiveColor,
     ActionType::SetTabIndicatorInactiveColor,
     ActionType::SetTabIndicatorUrgentColor,
+    // Drop indicator — context-domain for the whole family, because the
+    // indicator describes an empty SLOT on a screen and a window-matching rule
+    // has no referent for it. The two per-window COLOURS below are the
+    // exception, keyed on the dragged window.
+    ActionType::SetDropIndicatorEnabled,
+    ActionType::SetDropIndicatorColor,
+    ActionType::SetDropIndicatorBorderColor,
+    ActionType::SetDropIndicatorOpacity,
+    ActionType::SetDropIndicatorBorderWidth,
+    ActionType::SetDropIndicatorBorderRadius,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
+    // Scoped exclusion siblings — window-domain like the blanket Exclude:
+    // placement-only (daemon engines + drag gate) and decoration-only
+    // (shouldDecorateWindow) respectively.
+    ActionType::ExcludePlacement,
+    ActionType::ExcludeDecorations,
     ActionType::Float,
     ActionType::SnapToZone,
     // Open-routing actions are window-domain — resolved per window on the
@@ -144,6 +159,10 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::TabColorActive,
     ActionType::TabColorInactive,
     ActionType::TabColorUrgent,
+    // Per-window drop-indicator colours — resolved at drag start from the
+    // DRAGGED window's rules, where they outrank the context pair.
+    ActionType::DropIndicatorColor,
+    ActionType::DropIndicatorBorderColor,
 };
 } // namespace
 
@@ -894,6 +913,34 @@ private Q_SLOTS:
         QJsonObject stray = withZones(QJsonArray{1});
         stray.insert(QStringLiteral("value"), 3);
         QVERIFY(!RuleAction::fromJson(stray).has_value());
+    }
+
+    void testScopedExclusions_fromJsonRoundTrip()
+    {
+        // The two scoped exclusion wire strings ("excludePlacement" /
+        // "excludeDecorations") load through the public fromJson boundary —
+        // the path a saved rules.json takes. Both are free-form (empty
+        // allowedKeys opts out of the strict-key check, matching Exclude and
+        // Float), so a bare payload AND a payload carrying a stray future
+        // param both load; that acceptance is the deliberate contract, pinned
+        // here for the first time. A typo in either ActionType constant, or a
+        // future validator tightened away from acceptAny, fails this before
+        // it can break loading saved rules silently.
+        for (const QLatin1StringView type : {ActionType::ExcludePlacement, ActionType::ExcludeDecorations}) {
+            QJsonObject bare;
+            bare.insert(QStringLiteral("type"), QString(type));
+            const auto action = RuleAction::fromJson(bare);
+            QVERIFY2(action.has_value(), type.data());
+            QCOMPARE(action->type, QString(type));
+            const auto roundTripped = RuleAction::fromJson(action->toJson());
+            QVERIFY2(roundTripped.has_value(), type.data());
+            QCOMPARE(roundTripped->type, QString(type));
+
+            QJsonObject stray;
+            stray.insert(QStringLiteral("type"), QString(type));
+            stray.insert(QStringLiteral("futureParam"), QStringLiteral("x"));
+            QVERIFY2(RuleAction::fromJson(stray).has_value(), type.data());
+        }
     }
 
     void testLockContext_fromJsonRoundTrip()

@@ -62,6 +62,7 @@ struct PerScreenOverlayState
     QQuickItem* mainOverlaySlot() const;
     QQuickItem* cheatsheetSlot() const;
     QQuickItem* scrollTabsSlot() const;
+    QQuickItem* scrollDropIndicatorSlot() const;
 
     // overlayPhysScreen != nullptr is the sentinel for "main overlay
     // mode is active on this screen" - set in createOverlayWindow,

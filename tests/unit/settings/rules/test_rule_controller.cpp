@@ -509,11 +509,11 @@ void TestRuleController::authoringMetadata()
     // grouping can be spot-checked. Context-domain categories come first
     // (Gaps=0, Engine=1, Snapping=2, Tiling/Algorithm and Tiling/Behavior both
     // =3, Scrolling=4, Overlay=5), then the window-domain categories
-    // (Animation=6, Appearance=7, Window=8, Window/Scrolling=9 — the per-app
-    // scrolling Open* actions live in that submenu so the picker's
-    // context/window divider stays honest). An unregistered or uncategorized
-    // action falls to Other=99. The old flat "Layout & engine" category was
-    // split into Engine / Snapping / Tiling / Scrolling.
+    // (Animation=6, Appearance=7, Window=8, with Window/Scrolling sharing
+    // Window's 8 — the per-app scrolling Open* actions live in that submenu so
+    // the picker's context/window divider stays honest). An unregistered or
+    // uncategorized action falls to Other=99. The old flat "Layout & engine"
+    // category was split into Engine / Snapping / Tiling / Scrolling.
     QHash<QString, int> actionCategoryOrder;
     for (const QVariant& v : actions) {
         const QVariantMap a = v.toMap();
@@ -521,8 +521,17 @@ void TestRuleController::authoringMetadata()
             sawFloat = true;
         QVERIFY(!a.value(QStringLiteral("category")).toString().isEmpty());
         QVERIFY(a.contains(QStringLiteral("categoryOrder")));
-        actionCategoryOrder.insert(a.value(QStringLiteral("value")).toString(),
-                                   a.value(QStringLiteral("categoryOrder")).toInt());
+        // Every picker entry needs a real translated label: the label table's
+        // fallback returns the RAW WIRE STRING, so a future authorable action
+        // added without a label branch would silently show "excludePlacement"
+        // in the picker while every count-free assertion stays green. The
+        // label != wire guard is the picker-side twin of
+        // test_rule_model.cpp's summary-label registry loop.
+        const QString wire = a.value(QStringLiteral("value")).toString();
+        const QString label = a.value(QStringLiteral("label")).toString();
+        QVERIFY2(!label.isEmpty(), qPrintable(wire));
+        QVERIFY2(label != wire, qPrintable(wire));
+        actionCategoryOrder.insert(wire, a.value(QStringLiteral("categoryOrder")).toInt());
     }
     QVERIFY(sawFloat);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap"), -1), 0); // Gaps (context)
@@ -539,6 +548,12 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations"), -1), 6); // Animation (window)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity"), -1), 7); // Appearance (window)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude"), -1), 8); // Window (window)
+    // The scoped exclusion siblings: placement rides Window with the blanket
+    // Exclude; decorations rides Appearance with the border family. A
+    // descriptor category typo on either would land it in the wrong picker
+    // bucket (or Other=99) with no other test noticing.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludePlacement"), -1), 8); // Window (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeDecorations"), -1), 7); // Appearance (window)
 }
 
 void TestRuleController::matchIsContextOnlyClassifies()

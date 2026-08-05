@@ -10,10 +10,12 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Two siblings carry the rest of the suite, both split off at this file's size
+// Four siblings carry the rest of the suite, split off at this file's size
 // ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
-// zone-number walk and the verbs that address it.
+// zone-number walk and the verbs that address it, test_scrollengine_perscreen
+// owns the per-screen override resolution, and test_scrollengine_draginsert
+// owns the drag-insert state machine.
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -51,7 +53,8 @@ private Q_SLOTS:
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
     void seedAdoptionClampsViewToStripEnd();
-    void parkingAvoidsAdjacentOutputs();
+    void parkingAvoidsNeighbourOutputs();
+    void parkingReportsDepartureEdge();
     void modeRoundTripRestoresStripStructure();
     void operationScreenFallbackIsDeterministic();
     void minSizeSeedsAndCarries();
@@ -63,6 +66,7 @@ private Q_SLOTS:
     void orderedOpenForwardArrivalsKeepSeedOrder();
     void floatedOpenConsumesSeed();
     void migrateOutAnnouncesDroppedFloat();
+    void tileFlaggedFloatingBySiblingEngineSyncsClear();
     void contextSwitchFlagRidesChangedScreenSets();
 
 private:
@@ -96,11 +100,11 @@ void TestScrollEngineSmoke::screensSetLifecycle()
     QVERIFY(!engine->isEnabled());
     // Capability contract the daemon's layout-selection gates rest on: the
     // strip consumes layouts as sizing TEMPLATES, never as placement (snap
-    // and autotile answer Placement). Asserted through the base pointer too
-    // — the daemon dispatches via IPlacementEngine*.
+    // and autotile answer Placement). One call, not two: layoutSupport is
+    // virtual, so an added base-pointer cast would dispatch through the
+    // identical vtable slot and prove nothing.
     using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
     QCOMPARE(engine->layoutSupport(), LayoutSupport::Templates);
-    QCOMPARE(static_cast<PhosphorEngine::IPlacementEngine*>(engine)->layoutSupport(), LayoutSupport::Templates);
     QSignalSpy screensSpy(engine, &ScrollEngine::scrollingScreensChanged);
 
     QSignalSpy enabledSpy(engine, &ScrollEngine::enabledChanged);
@@ -233,6 +237,12 @@ void TestScrollEngineSmoke::capturePlacementReportsSlot()
     QCOMPARE(stackedB->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId()).order, 0);
 }
 
+// Named for handoffRelease but covers the RELEASE-then-RECEIVE round trip:
+// the release half asserts the window leaves tracking without disturbing its
+// neighbour, and the receive half asserts it comes back tracked on the new
+// screen. Kept as one slot because the two halves only mean anything
+// together — a release that drops tracking is only correct if something can
+// pick the window back up.
 void TestScrollEngineSmoke::handoffReleaseIsTrackingOnly()
 {
     QObject owner;
@@ -645,20 +655,23 @@ void TestScrollEngineSmoke::seedAdoptionClampsViewToStripEnd()
     QCOMPARE(engine->lastManagedRect(QStringLiteral("app|b")).x(), 0);
 }
 
-void TestScrollEngineSmoke::parkingAvoidsAdjacentOutputs()
+void TestScrollEngineSmoke::parkingAvoidsNeighbourOutputs()
 {
-    // "Just outside the right edge" is only off-screen when nothing sits
-    // there: with a monitor to the right, a right-parked column lands
-    // visibly ON that monitor and KWin reassigns the window's output (the
-    // dolphin-on-the-second-monitor bug). With a right neighbour, the park
-    // must fall to the free LEFT side instead.
+    // ONE park rule for every topology: an off-viewport column parks just
+    // BELOW the union of all outputs, x kept within its own screen's span.
+    // No point below the union belongs to any monitor, so there is no
+    // resolver consultation, no per-side preference, and no boxed-in
+    // degraded case. The departure side travels separately as scrollEdge
+    // (pinned by parkingReportsDepartureEdge), so the park position carries
+    // no direction meaning. A resolver reporting a right neighbour is
+    // installed here to pin exactly that irrelevance: its presence must not
+    // move the park.
     //
-    // The two geometries are deliberately DIFFERENT here: a 100px panel on
-    // each side makes the work area 100..1100 while the screen stays
-    // 0..1200. Parking bounds come from the SCREEN rect, because a rect just
-    // outside the work area would still sit on-screen over the panel — and
-    // with one shared geometry, swapping the two provider arguments changed
-    // nothing and the claim was unpinned. Every bound below is the screen's.
+    // The two geometries are deliberately DIFFERENT: a 100px panel on each
+    // side makes the work area 100..1100 while the screen stays 0..1200,
+    // and the park bound is the SCREEN rect (provider engines have no
+    // ScreenManager, so the union degrades to the parked screen's own
+    // rect).
     struct RightNeighbourResolver : PhosphorEngine::ICrossSurfaceResolver
     {
         QString neighborOutputInDirection(const QString&, const QString& direction) const override
@@ -684,30 +697,126 @@ void TestScrollEngineSmoke::parkingAvoidsAdjacentOutputs()
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
-    // View shows [b, c]; focusing the first column scrolls to [a, b] and c
-    // would naturally park off the RIGHT edge — occupied, so it parks left.
+    // View shows [b, c]; focusing the first column scrolls to [a, b], so c
+    // leaves by the RIGHT edge. It parks BELOW the screen regardless.
     engine->focusColumnFirst(QStringLiteral("S1"));
     const QRect parked = engine->lastManagedRect(QStringLiteral("app|c"));
-    // Clear of the SCREEN's left edge, not merely of the work area's: a park
-    // measured against the work area would sit at x < 100 and still be
-    // visible over the panel.
-    QVERIFY2(parked.right() < defaultScreenRect().left(),
-             qPrintable(QStringLiteral("expected a park clear of the screen's left edge, got x=%1, right=%2")
-                            .arg(parked.x())
-                            .arg(parked.right())));
+    QVERIFY2(parked.top() > defaultScreenRect().bottom(),
+             qPrintable(QStringLiteral("expected a park below the screen, got y=%1").arg(parked.y())));
+    QVERIFY2(parked.left() >= defaultScreenRect().left() && parked.left() <= defaultScreenRect().right(),
+             qPrintable(QStringLiteral("parked x must stay within the screen's span, got x=%1").arg(parked.x())));
     engine->setCrossSurfaceResolver(nullptr);
+}
 
-    // Baseline WITHOUT a resolver: the same sequence parks c off its NATURAL
-    // right side, so an unconditional-left-park mutation cannot pass both.
-    // Same panel inset, same reasoning about which edge the bound comes from.
-    ScrollEngine* unresolved = makeProviderEngine(&owner, {QStringLiteral("S1")}, screenGeometry, panelInsetGeometry);
-    unresolved->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
-    unresolved->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
-    unresolved->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
-    unresolved->focusColumnFirst(QStringLiteral("S1"));
-    const QRect natural = unresolved->lastManagedRect(QStringLiteral("app|c"));
-    QVERIFY2(natural.left() > defaultScreenRect().right(),
-             qPrintable(QStringLiteral("expected a park clear of the screen's right edge, got x=%1").arg(natural.x())));
+void TestScrollEngineSmoke::parkingReportsDepartureEdge()
+{
+    // The companion to parkingAvoidsNeighbourOutputs: wherever a column ends
+    // up parked, the tile request must still name the edge it actually left
+    // by, because that is what the effect animates from. These two properties
+    // used to be one number (the park position), which is exactly why they
+    // could not both be satisfied on a horizontally-adjacent monitor pair.
+    // Here the right neighbour forces the park LEFT while the edge stays
+    // "right" — the pair that the old design could not express.
+    struct RightNeighbourResolver : PhosphorEngine::ICrossSurfaceResolver
+    {
+        QString neighborOutputInDirection(const QString&, const QString& direction) const override
+        {
+            return direction == QLatin1String("right") ? QStringLiteral("S2") : QString();
+        }
+        int neighborDesktopInDirection(int, const QString&) const override
+        {
+            return 0;
+        }
+    } resolver;
+
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCrossSurfaceResolver(&resolver);
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->focusColumnFirst(QStringLiteral("S1"));
+    QVERIFY(!tiled.isEmpty());
+
+    // Read the LAST batch: it is the one the focus move produced.
+    const QJsonArray batch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+    QJsonObject cEntry;
+    for (const QJsonValue& v : batch) {
+        if (v.toObject().value(QLatin1String("windowId")).toString() == QLatin1String("app|c")) {
+            cEntry = v.toObject();
+        }
+    }
+    QVERIFY2(!cEntry.isEmpty(), "expected app|c in the tile batch");
+    QCOMPARE(cEntry.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("right"));
+    // Parked BELOW the union (position carries no direction) while reporting
+    // the right edge as data. Asserting BOTH is the point: the pair is what
+    // the old single-number design could not express.
+    QVERIFY2(cEntry.value(QLatin1String("y")).toInt() > defaultScreenRect().bottom(),
+             "expected the park itself to sit below the outputs");
+
+    // app|a was parked off the left before this move (the view opened on
+    // [b, c]) and has just scrolled in, so it reports the edge it arrives
+    // from. Same rule as c, opposite direction.
+    QJsonObject aEntry;
+    for (const QJsonValue& v : batch) {
+        if (v.toObject().value(QLatin1String("windowId")).toString() == QLatin1String("app|a")) {
+            aEntry = v.toObject();
+        }
+    }
+    QVERIFY2(!aEntry.isEmpty(), "expected app|a in the tile batch");
+    QCOMPARE(aEntry.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("left"));
+
+    // app|b has been on screen throughout — never parked, so nothing to
+    // anchor and no edge. This is what stops the field being emitted blanket.
+    QJsonObject bEntry;
+    for (const QJsonValue& v : batch) {
+        if (v.toObject().value(QLatin1String("windowId")).toString() == QLatin1String("app|b")) {
+            bEntry = v.toObject();
+        }
+    }
+    QVERIFY2(!bEntry.isEmpty(), "expected app|b in the tile batch");
+    QVERIFY2(!bEntry.contains(QLatin1String("scrollEdge")),
+             "a column that was never parked must not carry a scrollEdge");
+
+    // No committed rect from this fixture crosses the RIGHT screen edge,
+    // where S2 sits. Narrow by construction: this fixture's columns are
+    // either fully on screen or fully off (they park), so the clamp branches
+    // never run here and only the park bound is exercised — the genuine
+    // straddler clamp contract (both edges, screen-not-work-area, peek
+    // floor, crop mode) is pinned by test_scrollengine_boundary.cpp.
+    for (int sig = 0; sig < tiled.count(); ++sig) {
+        const QJsonArray b = QJsonDocument::fromJson(tiled.at(sig).at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : b) {
+            const QJsonObject o = v.toObject();
+            const int right = o.value(QLatin1String("x")).toInt() + o.value(QLatin1String("width")).toInt() - 1;
+            QVERIFY2(right <= defaultScreenRect().right(),
+                     qPrintable(QStringLiteral("rect for %1 crosses the neighbour boundary (right=%2)")
+                                    .arg(o.value(QLatin1String("windowId")).toString())
+                                    .arg(right)));
+        }
+    }
+
+    // The half that matters most and the one that was missed first time
+    // round: scrolling BACK must report the edge the column is arriving from.
+    // c went out by the right, so when it returns it must come back in from
+    // the right — even though it has been sitting parked off the LEFT the
+    // whole time, which is exactly why the edge cannot be read off its rect.
+    tiled.clear();
+    engine->focusColumnLast(QStringLiteral("S1"));
+    QVERIFY(!tiled.isEmpty());
+    const QJsonArray backBatch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+    QJsonObject cBack;
+    for (const QJsonValue& v : backBatch) {
+        if (v.toObject().value(QLatin1String("windowId")).toString() == QLatin1String("app|c")) {
+            cBack = v.toObject();
+        }
+    }
+    QVERIFY2(!cBack.isEmpty(), "expected app|c in the scroll-back batch");
+    QVERIFY2(cBack.value(QLatin1String("x")).toInt() >= defaultScreenRect().left(),
+             "app|c should be back on screen after scrolling to the last column");
+    QCOMPARE(cBack.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("right"));
+    engine->setCrossSurfaceResolver(nullptr);
 }
 
 void TestScrollEngineSmoke::modeRoundTripRestoresStripStructure()
@@ -993,6 +1102,49 @@ void TestScrollEngineSmoke::floatedOpenConsumesSeed()
     engine->windowOpened(QStringLiteral("app|f"), QStringLiteral("S1"), 0, 0);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              (QStringList{QStringLiteral("app|t"), QStringLiteral("app|f")}));
+}
+
+void TestScrollEngineSmoke::tileFlaggedFloatingBySiblingEngineSyncsClear()
+{
+    // The one-way float trap, seen live: a window can be a strip TILE here
+    // while the SHARED float set still flags it, because a sibling engine
+    // floated it (snap's no-zone-match default on its own screen, which is
+    // correct there) and the window later joined this strip.
+    //
+    // unfloatWindowInternal used to bail at removeFloating() and return in
+    // silence, so nothing ever cleared the shared flag: every unfloat route
+    // refused, and a window the shared set calls floating is never adopted
+    // into a strip again. The engine must announce its real view instead —
+    // on the PASSIVE arm, because the window is already placed and must not
+    // be moved.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QVERIFY(engine->isWindowTiled(QStringLiteral("app|a")));
+    // The engine holds NO float for it — exactly the sibling-floated shape.
+    QVERIFY(!engine->isWindowFloatingInScroll(QStringLiteral("app|a")));
+
+    QSignalSpy syncSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+    QSignalSpy activeSpy(engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+    engine->setWindowFloat(QStringLiteral("app|a"), false, QStringLiteral("S1"));
+
+    // Exactly one passive sync clearing the flag, and no active transition
+    // (which would drag the tile back to a float-back geometry).
+    QCOMPARE(syncSpy.count(), 1);
+    QCOMPARE(syncSpy.last().at(0).toString(), QStringLiteral("app|a"));
+    QCOMPARE(syncSpy.last().at(1).toBool(), false);
+    QCOMPARE(syncSpy.last().at(2).toString(), QStringLiteral("S1"));
+    QCOMPARE(activeSpy.count(), 0);
+    // Still a tile, untouched.
+    QVERIFY(engine->isWindowTiled(QStringLiteral("app|a")));
+
+    // Boundary: a window this state has never seen is NOT the heal arm's
+    // case — setWindowFloat's adopt route takes it, inserting it into the
+    // strip and announcing that on the same passive arm. Pinned here so the
+    // heal is never widened into a second adopt path.
+    engine->setWindowFloat(QStringLiteral("app|ghost"), false, QStringLiteral("S1"));
+    QCOMPARE(syncSpy.count(), 2);
+    QVERIFY(engine->isWindowTiled(QStringLiteral("app|ghost")));
 }
 
 void TestScrollEngineSmoke::migrateOutAnnouncesDroppedFloat()

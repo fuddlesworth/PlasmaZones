@@ -132,6 +132,14 @@ public:
     virtual bool autotileDragInsertToggle() const = 0;
     virtual void setAutotileDragInsertToggle(bool enable) = 0;
 
+    // Scrolling twins: hold-to-activate list for live re-inserting a dragged
+    // window into the scroll strip (WindowDragAdaptor reads them per drag,
+    // beside the autotile pair above).
+    virtual QVariantList scrollingDragInsertTriggers() const = 0;
+    virtual void setScrollingDragInsertTriggers(const QVariantList& triggers) = 0;
+    virtual bool scrollingDragInsertToggle() const = 0;
+    virtual void setScrollingDragInsertToggle(bool enable) = 0;
+
     // Per-algorithm autotile settings map. Settings inherits from
     // PhosphorEngine::IAutotileSettings (which also declares these),
     // so the override in Settings covers both bases — the redundant
@@ -177,6 +185,12 @@ public:
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
+
+    // GPU the daemon renders on: "auto" or a "vendor:device" hex PCI pair.
+    // Applied at daemon/editor startup (before QGuiApplication), so like the
+    // backend it takes effect on restart.
+    virtual QString gpuDevice() const = 0;
+    virtual void setGpuDevice(const QString& gpu) = 0;
 
     // Window decoration appearance (tiled/snapped window border + title bar).
     // Mode-neutral, distinct from the ZONE OVERLAY border settings
@@ -359,6 +373,61 @@ public:
     {
     }
 
+    /// Drop-target indicator during a scrolling drag re-insert. Virtual with
+    /// an always-on default so the overlay service can gate through the
+    /// interface, same pattern as scrollingTabIndicatorEnabled above.
+    virtual bool scrollingDropIndicatorEnabled() const
+    {
+        return true;
+    }
+    virtual void setScrollingDropIndicatorEnabled(bool /*enabled*/)
+    {
+    }
+    /// Fill and border colours; empty means "follow the theme" (see
+    /// ConfigDefaults).
+    virtual QString scrollingDropIndicatorColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingDropIndicatorColor(const QString& /*color*/)
+    {
+    }
+    virtual QString scrollingDropIndicatorBorderColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingDropIndicatorBorderColor(const QString& /*color*/)
+    {
+    }
+    /// Fill opacity; the border always draws opaque.
+    virtual double scrollingDropIndicatorOpacity() const
+    {
+        return 0.25;
+    }
+    virtual void setScrollingDropIndicatorOpacity(double /*opacity*/)
+    {
+    }
+    virtual int scrollingDropIndicatorBorderWidth() const
+    {
+        return 2;
+    }
+    virtual void setScrollingDropIndicatorBorderWidth(int /*px*/)
+    {
+    }
+    /// 8 px, the zone overlay's radius. The static_assert in
+    /// settings/scrolling.cpp pins the CONFIGDEFAULTS value, so moving it (or
+    /// the ZoneDefaults constant it forwards) fails the build and prompts an
+    /// update here. It cannot see a change made on THIS side — editing the
+    /// literal below compiles cleanly and drifts silently, so keep the two in
+    /// step by hand.
+    virtual int scrollingDropIndicatorBorderRadius() const
+    {
+        return 8;
+    }
+    virtual void setScrollingDropIndicatorBorderRadius(int /*px*/)
+    {
+    }
+
     /// Float-position restore for scroll-floated windows. Virtual with an
     /// always-on default so the WindowTrackingAdaptor's restore predicate
     /// can resolve it through the interface, like its snap/autotile twins.
@@ -460,6 +529,8 @@ Q_SIGNALS:
     void dragActivationTriggersChanged();
     void autotileDragInsertTriggersChanged();
     void autotileDragInsertToggleChanged();
+    void scrollingDragInsertTriggersChanged();
+    void scrollingDragInsertToggleChanged();
     void zoneSpanEnabledChanged();
     void zoneSpanModifierChanged();
     void zoneSpanTriggersChanged();
@@ -561,6 +632,7 @@ Q_SIGNALS:
     void perScreenScrollingSettingsChanged();
     // Rendering
     void renderingBackendChanged();
+    void gpuDeviceChanged();
     // Window decoration appearance (border + title bar)
     void showWindowBorderChanged();
     void windowBorderScopeChanged();
@@ -738,6 +810,7 @@ Q_SIGNALS:
     void scrollingEnabledChanged();
     void scrollingCenterFocusedColumnChanged();
     void scrollingAlwaysCenterSingleColumnChanged();
+    void scrollingCropStraddlersChanged();
     void scrollingDefaultColumnWidthKindChanged();
     void scrollingDefaultColumnWidthValueChanged();
     void scrollingDefaultColumnDisplayChanged();
@@ -765,6 +838,14 @@ Q_SIGNALS:
     void scrollingTabIndicatorActiveColorChanged();
     void scrollingTabIndicatorInactiveColorChanged();
     void scrollingTabIndicatorUrgentColorChanged();
+
+    // Scrolling drop indicator (Scrolling.DropIndicator)
+    void scrollingDropIndicatorEnabledChanged();
+    void scrollingDropIndicatorColorChanged();
+    void scrollingDropIndicatorBorderColorChanged();
+    void scrollingDropIndicatorOpacityChanged();
+    void scrollingDropIndicatorBorderWidthChanged();
+    void scrollingDropIndicatorBorderRadiusChanged();
 
     // Scrolling behavior settings
     void scrollingInsertPositionChanged();

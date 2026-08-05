@@ -17,6 +17,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QCoreApplication>
 #include <array>
@@ -47,7 +48,31 @@ void LayoutAdaptor::launchEditor(const QStringList& args, const QString& descrip
     }();
 
     qCInfo(lcDbusLayout) << "Launching editor" << description;
-    if (!QProcess::startDetached(editor, args)) {
+    // Scrub the GPU-preference variables this daemon exported (published as
+    // an app property by daemon main): an inherited DRI_PRIME or
+    // QT_VK_PHYSICAL_DEVICE_INDEX would trip the editor's pre-set-value
+    // guards and freeze it on this process's stale pin instead of its own
+    // config read. Only daemon-exported names are removed, so a user's own
+    // session exports still reach the editor.
+    QProcess process;
+    process.setProgram(editor);
+    process.setArguments(args);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    if (QCoreApplication::instance()) {
+        const QStringList gpuVars = QCoreApplication::instance()->property(PGpuExportedVarsProperty).toStringList();
+        for (const QString& var : gpuVars) {
+            env.remove(var);
+        }
+        // Restore variables this process cleared for its own rendering (a
+        // user's session-wide NVIDIA offload export) — the clear is not the
+        // child's business.
+        const QVariantMap cleared = QCoreApplication::instance()->property(PGpuClearedVarsProperty).toMap();
+        for (auto it = cleared.constBegin(); it != cleared.constEnd(); ++it) {
+            env.insert(it.key(), it.value().toString());
+        }
+    }
+    process.setProcessEnvironment(env);
+    if (!process.startDetached()) {
         qCWarning(lcDbusLayout) << "Failed to launch editor" << description;
     }
 }

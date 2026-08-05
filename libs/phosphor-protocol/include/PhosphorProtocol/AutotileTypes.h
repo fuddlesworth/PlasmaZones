@@ -12,7 +12,7 @@
 
 namespace PhosphorProtocol {
 
-/// D-Bus struct for autotile tile requests: (siiiissbbs)
+/// D-Bus struct for autotile tile requests: (siiiissbbss)
 struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 {
     QString windowId;
@@ -27,6 +27,19 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// Overlap-layout stacking direction: "firstOnTop" or "lastOnTop".
     /// Empty for non-overlap layouts (the effect leaves z-order alone).
     QString stacking;
+    /// Scrolling mode: which screen edge this window's motion is anchored to,
+    /// "left" or "right". Empty for every other placement.
+    ///
+    /// This exists because a scrolling strip's off-viewport columns have to be
+    /// committed somewhere, and where they are committed must NOT decide which
+    /// way they appear to move. Parking a column just past the edge it left by
+    /// encodes the direction in the position, which forces a choice between a
+    /// believable animation and keeping the rect off a neighbouring output —
+    /// on a horizontally-adjacent monitor pair those two demands are in direct
+    /// conflict and the position can only satisfy one. Carrying the edge as
+    /// data lets the engine park wherever is safe while the effect still
+    /// animates from the side the user scrolled from.
+    QString scrollEdge;
 
     QRect toRect() const
     {

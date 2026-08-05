@@ -59,6 +59,27 @@ inline RuleAction floatAction()
     return a;
 }
 
+inline RuleAction excludePlacementAction()
+{
+    RuleAction a;
+    a.type = QString(ActionType::ExcludePlacement);
+    return a;
+}
+
+inline RuleAction excludeDecorationsAction()
+{
+    RuleAction a;
+    a.type = QString(ActionType::ExcludeDecorations);
+    return a;
+}
+
+inline RuleAction excludeAnimationsAction()
+{
+    RuleAction a;
+    a.type = QString(ActionType::ExcludeAnimations);
+    return a;
+}
+
 inline RuleAction overrideShader(const QString& event, const QString& effectId)
 {
     RuleAction a;

@@ -273,33 +273,13 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
             }
             return false;
         };
-        // A REJECTED exact record is FINAL — no FIFO fallback past it. The
-        // fallback exists for a cross-session reopen, whose fresh uuid by
-        // definition has no exact record. A LIVE window whose own record was
-        // rejected on context (tiled on another desktop, say) is not that
-        // case: falling through would consume a SIBLING's record and the
-        // re-bind below would re-record it under this window's id, where the
-        // store's merge overwrites this window's own other-context slot — its
-        // remembered desktop-2 tile dies because it happened to reopen on
-        // desktop 1.
-        std::optional<WindowPlacement> rec;
-        const auto own = m_windowTracker->placementStore().peekExact(windowId);
-        if (!own || accept(*own)) {
-            rec = m_windowTracker->placementStore().take(windowId, appId, accept);
-        }
+        // takeForReopen carries the two reopen rules (rejected-exact is FINAL,
+        // consumed record re-bound to the live uuid) — see the store contract.
+        const std::optional<WindowPlacement> rec =
+            m_windowTracker->placementStore().takeForReopen(windowId, appId, accept);
         if (rec) {
-            // Re-record bound to the LIVE windowId so the autotile slot + per-screen
-            // free/float geometry survive the reopen. KWin assigns a NEW uuid at
-            // logout/login, so the record matches by appId FIFO (not uuid-exact);
-            // without re-binding, a FIFO reopen consumes the record and the window
-            // loses its remembered float-back. Re-binding appends under the live uuid
-            // (newest in the appId bucket), so a SECOND instance of the same app still
-            // takes an OLDER sibling record first on its own reopen — multi-instance
-            // FIFO distribution is preserved.
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
             const QString restoreScreen = rec->screenId.isEmpty() ? screenId : rec->screenId;
-            rec->windowId = windowId;
-            m_windowTracker->placementStore().record(*rec);
             if (slot.state == WindowPlacement::stateFloating()) {
                 state->addWindow(windowId);
                 state->setFloating(windowId, true);

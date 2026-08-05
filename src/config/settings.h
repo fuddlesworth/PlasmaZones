@@ -338,6 +338,14 @@ public:
                    setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
     Q_PROPERTY(bool autotileDragInsertToggle READ autotileDragInsertToggle WRITE setAutotileDragInsertToggle NOTIFY
                    autotileDragInsertToggleChanged)
+    // The scrolling drag-insert pair sits HERE, beside its autotile twin,
+    // rather than under the Scrolling banner below — the two features are
+    // maintained in lockstep (same rationale as their ConfigDefaults
+    // placement note).
+    Q_PROPERTY(QVariantList scrollingDragInsertTriggers READ scrollingDragInsertTriggers WRITE
+                   setScrollingDragInsertTriggers NOTIFY scrollingDragInsertTriggersChanged)
+    Q_PROPERTY(bool scrollingDragInsertToggle READ scrollingDragInsertToggle WRITE setScrollingDragInsertToggle NOTIFY
+                   scrollingDragInsertToggleChanged)
 
     // Scrolling Settings (Scrolling)
     Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
@@ -345,6 +353,8 @@ public:
                    NOTIFY scrollingCenterFocusedColumnChanged)
     Q_PROPERTY(bool scrollingAlwaysCenterSingleColumn READ scrollingAlwaysCenterSingleColumn WRITE
                    setScrollingAlwaysCenterSingleColumn NOTIFY scrollingAlwaysCenterSingleColumnChanged)
+    Q_PROPERTY(bool scrollingCropStraddlers READ scrollingCropStraddlers WRITE setScrollingCropStraddlers NOTIFY
+                   scrollingCropStraddlersChanged)
     Q_PROPERTY(int scrollingDefaultColumnWidthKind READ scrollingDefaultColumnWidthKind WRITE
                    setScrollingDefaultColumnWidthKind NOTIFY scrollingDefaultColumnWidthKindChanged)
     Q_PROPERTY(qreal scrollingDefaultColumnWidthValue READ scrollingDefaultColumnWidthValue WRITE
@@ -388,6 +398,19 @@ public:
                    setScrollingTabIndicatorInactiveColor NOTIFY scrollingTabIndicatorInactiveColorChanged)
     Q_PROPERTY(QString scrollingTabIndicatorUrgentColor READ scrollingTabIndicatorUrgentColor WRITE
                    setScrollingTabIndicatorUrgentColor NOTIFY scrollingTabIndicatorUrgentColorChanged)
+    // Scrolling.DropIndicator
+    Q_PROPERTY(bool scrollingDropIndicatorEnabled READ scrollingDropIndicatorEnabled WRITE
+                   setScrollingDropIndicatorEnabled NOTIFY scrollingDropIndicatorEnabledChanged)
+    Q_PROPERTY(QString scrollingDropIndicatorColor READ scrollingDropIndicatorColor WRITE setScrollingDropIndicatorColor
+                   NOTIFY scrollingDropIndicatorColorChanged)
+    Q_PROPERTY(QString scrollingDropIndicatorBorderColor READ scrollingDropIndicatorBorderColor WRITE
+                   setScrollingDropIndicatorBorderColor NOTIFY scrollingDropIndicatorBorderColorChanged)
+    Q_PROPERTY(double scrollingDropIndicatorOpacity READ scrollingDropIndicatorOpacity WRITE
+                   setScrollingDropIndicatorOpacity NOTIFY scrollingDropIndicatorOpacityChanged)
+    Q_PROPERTY(int scrollingDropIndicatorBorderWidth READ scrollingDropIndicatorBorderWidth WRITE
+                   setScrollingDropIndicatorBorderWidth NOTIFY scrollingDropIndicatorBorderWidthChanged)
+    Q_PROPERTY(int scrollingDropIndicatorBorderRadius READ scrollingDropIndicatorBorderRadius WRITE
+                   setScrollingDropIndicatorBorderRadius NOTIFY scrollingDropIndicatorBorderRadiusChanged)
     Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
                    NOTIFY scrollingWheelFocusEnabledChanged)
     Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
@@ -533,6 +556,7 @@ public:
 
     // Rendering
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
+    Q_PROPERTY(QString gpuDevice READ gpuDevice WRITE setGpuDevice NOTIFY gpuDeviceChanged)
 
     // Shader Effects
     Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
@@ -1111,6 +1135,12 @@ public:
     bool autotileDragInsertToggle() const override;
     void setAutotileDragInsertToggle(bool enable) override;
 
+    // Beside the autotile twin on purpose — see the Q_PROPERTY note above.
+    QVariantList scrollingDragInsertTriggers() const override;
+    void setScrollingDragInsertTriggers(const QVariantList& triggers) override;
+    bool scrollingDragInsertToggle() const override;
+    void setScrollingDragInsertToggle(bool enable) override;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Scrolling Settings (IScrollSettings + Scrolling group)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1125,6 +1155,8 @@ public:
     void setScrollingCenterFocusedColumn(int mode);
     bool scrollingAlwaysCenterSingleColumn() const override;
     void setScrollingAlwaysCenterSingleColumn(bool center);
+    bool scrollingCropStraddlers() const override;
+    void setScrollingCropStraddlers(bool crop);
     int scrollingDefaultColumnWidthKind() const override;
     void setScrollingDefaultColumnWidthKind(int value);
     qreal scrollingDefaultColumnWidthValue() const override;
@@ -1171,6 +1203,21 @@ public:
     void setScrollingTabIndicatorInactiveColor(const QString& color) override;
     QString scrollingTabIndicatorUrgentColor() const override;
     void setScrollingTabIndicatorUrgentColor(const QString& color) override;
+    // Scrolling.DropIndicator. Paint-only, so ISettings alone — the engine
+    // never reads these (it resolves the indicator's rect from the same layout
+    // math the drop uses).
+    bool scrollingDropIndicatorEnabled() const override;
+    void setScrollingDropIndicatorEnabled(bool enabled) override;
+    QString scrollingDropIndicatorColor() const override;
+    void setScrollingDropIndicatorColor(const QString& color) override;
+    QString scrollingDropIndicatorBorderColor() const override;
+    void setScrollingDropIndicatorBorderColor(const QString& color) override;
+    double scrollingDropIndicatorOpacity() const override;
+    void setScrollingDropIndicatorOpacity(double opacity) override;
+    int scrollingDropIndicatorBorderWidth() const override;
+    void setScrollingDropIndicatorBorderWidth(int px) override;
+    int scrollingDropIndicatorBorderRadius() const override;
+    void setScrollingDropIndicatorBorderRadius(int px) override;
     bool scrollingWheelFocusEnabled() const;
     void setScrollingWheelFocusEnabled(bool enabled);
     bool scrollingWheelFocusInverted() const;
@@ -1456,6 +1503,10 @@ public:
     // unknown strings are coerced to a valid choice.
     QString renderingBackend() const override;
     void setRenderingBackend(const QString& backend) override;
+    // GPU pin ("auto" or "vendor:device" hex) — schema validator runs
+    // normalizeGpuDevice so malformed strings coerce to "auto".
+    QString gpuDevice() const override;
+    void setGpuDevice(const QString& gpu) override;
 
     // Shader Effects — backed by PhosphorConfig::Store (see settingsschema.cpp).
     // Getters read through the store (validator clamps FrameRate and BarCount
@@ -1793,8 +1844,8 @@ private:
     /// passed into @ref writeTriggerList.
     using TriggerListSignalFn = void (Settings::*)();
 
-    /// Shared trigger-list setter used by the three "plain" setters
-    /// (activation, snap-assist, autotile-insert). Caps at
+    /// Shared trigger-list setter used by the four "plain" setters
+    /// (activation, snap-assist, autotile-insert, scrolling-insert). Caps at
     /// @c MaxTriggersPerAction, round-trips through the schema's validator,
     /// and only emits @p specificSignal + @c settingsChanged on a real change.
     /// @c setZoneSpanTriggers does its own dance because it also synchronises

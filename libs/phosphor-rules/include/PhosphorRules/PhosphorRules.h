@@ -21,7 +21,8 @@
  *   - RuleStore   — QObject persistent store over rules.json
  *   - ContextRuleBridge — header-only context-rule helpers (per-desktop /
  *                         per-activity layer-rule fan-out)
- *   - ExclusionRules    — slicers for the Exclude / ExcludeAnimations
+ *   - ExclusionRules    — slicers for the Exclude / ExcludePlacement /
+ *                         ExcludeDecorations / ExcludeAnimations
  *                         action shapes (declarations in
  *                         ExclusionRules.h, bodies in
  *                         src/exclusionrules.cpp)

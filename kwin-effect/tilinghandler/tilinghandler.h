@@ -374,10 +374,11 @@ public:
     // the write mirrors NavigationHandler's snap/float setters, so a caller can't
     // change tiling membership and forget to re-resolve a tiled-scoped border /
     // title-bar / opacity rule. markWindowTiled only invalidates on a genuine
-    // not-tiled→tiled transition (re-adding an already-tiled window is a no-op),
-    // so a cross-screen transfer that first runs removeFromOtherScreens does
-    // invalidate (the window is briefly not-tiled), while a same-screen re-assert
-    // does not.
+    // not-tiled→tiled transition (its own single-owner sweep runs after the
+    // wasTiled read, so a cross-screen transfer of an already-tiled window
+    // does NOT invalidate here — IsTiled never flipped, and the per-batch
+    // invalidation in slotWindowsTileRequested covers the ScreenId field
+    // change); a same-screen re-assert is likewise a no-op.
     void markWindowTiled(const QString& screenId, const QString& windowId);
     void clearWindowTiledAllScreens(const QString& windowId);
     void clearWindowTiledOnScreen(const QString& screenId, const QString& windowId);
@@ -437,6 +438,12 @@ private:
     // ═══════════════════════════════════════════════════════════════════
     // Utility methods
     // ═══════════════════════════════════════════════════════════════════
+
+    /// Announce, once per window per episode, that a window on a tracked
+    /// scrolling screen lost its clip because the screen's physical output is
+    /// not connected. The routine negatives (non-member, non-scrolling screen)
+    /// never report — see scrollTrackedScreenFor.
+    void reportScrollClipLoss(const QString& windowId, const QString& reason) const;
 
     void unmaximizeMonocleWindow(const QString& windowId);
 
@@ -606,6 +613,17 @@ private:
     /// (see isScrollingScreen); all lifecycle gating keys on
     /// m_managedScreens, which carries the union.
     QSet<QString> m_scrollingScreens;
+    /// Windows already reported as having lost their scroll clip via the
+    /// connected-output gate. Every exit from scrollTrackedScreenFor fails
+    /// OPEN at both consumers (the paint clip and the overhang input filter
+    /// read an invalid rect as "not a straddler"), but only that gate is
+    /// anomalous enough to announce — the membership negatives are the
+    /// predicate's routine answer for every non-strip window. This set keeps
+    /// the report to once per window per episode (the predicate runs per
+    /// window, per output, per frame), is cleared when the window's answer
+    /// comes back so a later failure reports again, and entries die with the
+    /// window in cleanupAutotileTracking and on daemon bring-up.
+    mutable QSet<QString> m_scrollClipLossReported;
     /// Authoritative write for the scrolling discriminator. A screen that
     /// flips engine WITHIN the managed union transits no managedScreensChanged,
     /// so this re-announces the flipped screens' windows to hand them to the

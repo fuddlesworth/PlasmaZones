@@ -307,6 +307,38 @@ private Q_SLOTS:
         QVERIFY(e.validationError().isEmpty());
     }
 
+    void tileRequestEntry_invalidScrollEdge_rejected()
+    {
+        // The effect treats any non-"left" value as right, so an unvalidated
+        // unknown string would silently flip an entry's side — the whitelist
+        // is what makes that a dropped entry instead.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        e.scrollEdge = QStringLiteral("up");
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("scrollEdge")));
+    }
+
+    void tileRequestEntry_scrollEdgeValues_tolerated()
+    {
+        // Empty (no strip motion) and the two screen edges are the only
+        // legal values.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("left");
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("right");
+        QVERIFY(e.validationError().isEmpty());
+    }
+
     // ═════════════════════════════════════════════════════════════════════
     // PhosphorProtocol::BridgeRegistrationResult
     // ═════════════════════════════════════════════════════════════════════

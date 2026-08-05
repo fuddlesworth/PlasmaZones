@@ -45,6 +45,13 @@ public:
     /// CenterFocusedColumn as int (0 = never, 1 = always, 2 = on-overflow).
     virtual int scrollingCenterFocusedColumn() const = 0;
     virtual bool scrollingAlwaysCenterSingleColumn() const = 0;
+    /// Crop mode for partial edge columns (see ConfigDefaults). DEFAULTED,
+    /// not pure: the safe clamp is the answer for every implementor that has
+    /// not heard of the option, including the test stubs.
+    virtual bool scrollingCropStraddlers() const
+    {
+        return false;
+    }
     /// Default width for new columns: kind (0 = proportion, 1 = fixed px,
     /// 2 = client decides, 3 = preset index) + value (proportion in [0,1]
     /// or pixels) + the preset index the Preset kind resolves.

@@ -950,6 +950,17 @@ target_link_libraries(test_scrolling_adaptor PRIVATE Qt6::Test Qt6::Core Qt6::DB
                                                      PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_scrolling_adaptor COMMAND test_scrolling_adaptor)
 
+# Close/reopen restore on the scroll engine through the unified placement
+# store: a reopened window's fresh uuid must match its record by appId FIFO
+# (WindowPlacementStore::takeForReopen), not uuid-exact only.
+add_executable(test_scroll_reopen_restore
+               scrolling/test_scroll_reopen_restore.cpp
+               # Q_OBJECT fake — listed so AUTOMOC generates its metaobject.
+               helpers/AutotileFakes.h)
+target_link_libraries(test_scroll_reopen_restore PRIVATE Qt6::Test Qt6::Core plasmazones_core
+                                                         PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_scroll_reopen_restore COMMAND test_scroll_reopen_restore)
+
 # RuleAdaptor's refusals are refusals to OVERWRITE the persisted rule set, so
 # a guard that quietly stops working loses user data rather than a feature.
 # The contract-sync test only checks the XML's shape; this pins the behaviour.
@@ -1092,6 +1103,16 @@ add_executable(test_snapping_behavior_controller
 target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
     PhosphorControl::PhosphorControl)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
+
+# The scrolling twin, same compile-the-sources-directly reason as above.
+add_executable(test_scrolling_behavior_controller
+    settings/pages/test_scrolling_behavior_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/pages/scrollingbehaviorcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/utils/triggerutils.cpp
+)
+target_link_libraries(test_scrolling_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorControl::PhosphorControl)
+add_test(NAME test_scrolling_behavior_controller COMMAND test_scrolling_behavior_controller)
 
 # Pure string helpers behind AlgorithmService::createNewAlgorithm. Compiled
 # directly because they live in the plasmazones-settings executable rather than

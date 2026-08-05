@@ -9,10 +9,10 @@
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorEngine/WindowPlacement.h>
 
-#include <QJsonArray>
 #include <QJsonObject>
 #include <QPoint>
 #include <QRect>
+#include <QSize>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -90,6 +90,15 @@ public:
                               int minHeight = 0) = 0;
 
     /// Convenience overload — equivalent to windowOpened(id, screen, 0, 0).
+    ///
+    /// UNCALLABLE through this interface as written: every implementation
+    /// overrides the four-argument virtual, and an override HIDES every
+    /// same-named base overload, so `engine->windowOpened(id, screen)` fails
+    /// to compile against a concrete engine. Each engine restores it with a
+    /// `using IPlacementEngine::windowOpened;`, which is what actually makes
+    /// the two-argument form work — so this overload is real but only for
+    /// implementations that opt back into it, not for interface-typed callers
+    /// that never see a concrete type.
     void windowOpened(const QString& windowId, const QString& screenId)
     {
         windowOpened(windowId, screenId, 0, 0);
@@ -275,8 +284,9 @@ public:
     /// take()/claim the record themselves) because those paths carry engine-specific
     /// policy (snap's auto-snap fallback chain; autotile's burst-insert coalescing;
     /// scrolling's strip-stash claim) that a single apply-this-record call cannot
-    /// express. A minimal future engine may instead implement only this method and
-    /// have its own open path invoke it directly.
+    /// express. NOTHING in-tree calls this virtual today — a minimal future
+    /// engine that implements it MUST have its own open path invoke it
+    /// directly; no orchestrator will.
     virtual bool restorePlacement(const WindowPlacement& placement, const QString& screenId)
     {
         Q_UNUSED(placement)
@@ -347,6 +357,53 @@ public:
     // OPTIONAL: Drag insert preview (override if engine supports drag-to-insert)
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// Where a drag-insert preview should place the dragged window, in the
+    /// TARGET ENGINE's slot vocabulary. A flat int cannot address the strip's
+    /// two-axis drop space ("column 3, tile 1" vs "a new column between 2 and
+    /// 3"), so the drag-insert verbs speak this struct; each engine documents
+    /// its own field meaning.
+    ///
+    /// - Autotile: `primary` is the TILED-ONLY insert index (the unit
+    ///   updateDragInsertPreview clamps against tiledWindowCount — NOT the
+    ///   raw window-order index HandoffContext::insertIndex carries).
+    ///   `secondary` and `newSlot` are unused.
+    /// - Scrolling: `primary` is the COLUMN index. With `newSlot` true the
+    ///   drop opens a NEW column at `primary` (existing columns from
+    ///   `primary` shift right); otherwise the window joins the column at
+    ///   `primary` as a tile at `secondary` (clamped into the stack;
+    ///   -1 appends at the bottom). `leadingEdge` marks a new-column target
+    ///   aimed from BEYOND the view's leading edge (left of everything
+    ///   visible, or the first visible column's outer band): the drop is
+    ///   identical, but the indicator renders it as a past-the-edge hint
+    ///   instead of a full rect over the first visible column. Purely a
+    ///   presentation tag — commit ignores it, autotile never sets it.
+    struct DragInsertTarget
+    {
+        int primary = -1;
+        int secondary = -1;
+        bool newSlot = false;
+        bool leadingEdge = false;
+
+        bool isValid() const
+        {
+            return primary >= 0;
+        }
+        bool operator==(const DragInsertTarget& other) const = default;
+    };
+
+    // Contract shared by the preview verbs, which the two implementations
+    // honour with OPPOSITE internal shapes:
+    //  - begin MAY mutate managed state, and MAY adopt the window from
+    //    another screen, from a floating set, or from untracked entirely
+    //    (both engines do all three).
+    //  - an engine may or may not keep the window MANAGED while its preview
+    //    is live — autotile keeps it a tile and restructures per update;
+    //    scrolling DETACHES it until commit. Cross-engine callers must not
+    //    use isWindowTiled/isWindowManaged as a drag-state probe.
+    //  - begin on an engine already holding a preview cancels the old one
+    //    first; commit/cancel are no-ops with no preview live; and
+    //    dragInsertPreviewScreenId is empty with no preview live.
+
     virtual bool hasDragInsertPreview() const
     {
         return false;
@@ -366,6 +423,90 @@ public:
     virtual QString dragInsertPreviewScreenId() const
     {
         return {};
+    }
+
+    /// The screen the previewed window was on BEFORE begin adopted it, or
+    /// empty when it had no prior state (begin took it from untracked) or no
+    /// preview is live. Distinct from dragInsertPreviewScreenId whenever the
+    /// drag crossed outputs, and the two together are what a caller needs to
+    /// decide whether an output going away concerns this preview: cancel
+    /// restores the window to the PRIOR screen, so a preview whose prior
+    /// screen is disappearing can no longer be cancelled meaningfully even
+    /// though its target survives.
+    virtual QString dragInsertPreviewPriorScreenId() const
+    {
+        return {};
+    }
+
+    /// Compute the drop target for a cursor position on a managed screen.
+    /// Returns an invalid target when the screen has no active state.
+    virtual DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(cursorPos)
+        return {};
+    }
+
+    /// Update the drop target for an active drag-insert preview. An invalid
+    /// target is IGNORED, never clamped — implementations keep the previous
+    /// stored target (autotile's engine-local int form clamps instead; that
+    /// contract does not cross this seam).
+    virtual void updateDragInsertPreview(const DragInsertTarget& target)
+    {
+        Q_UNUSED(target)
+    }
+
+    /// The rect the dragged window would occupy if the live preview were
+    /// dropped now, in absolute px on @p screenId, for a caller that wants to
+    /// PAINT the drop target. Empty when no preview is live, no target has
+    /// been hit-tested yet, or the preview belongs to another screen.
+    ///
+    /// Measured in the layout's CURRENT view. A drop may additionally scroll
+    /// the view — the scroll engine focuses the dropped window, which can
+    /// re-anchor the strip — so this marks the place under the cursor that the
+    /// user is aiming at, not the screen position the window settles at once
+    /// any post-drop scroll finishes. Painting the post-scroll position would
+    /// move the indicator away from the cursor while the user is still
+    /// choosing, which is the worse of the two.
+    ///
+    /// Default empty, and that is the right answer for an engine that
+    /// restructures live: autotile's feedback IS its restructure, so painting
+    /// a second indicator over it would double-report the same thing. Only an
+    /// engine that defers structure to the drop (the scroll strip, per the
+    /// DETACH-ONCE contract above) has a target that is otherwise invisible.
+    ///
+    /// Mostly not clamped to the viewport — a join target's rect is where the
+    /// slot genuinely is — with two deliberate NEW-COLUMN exceptions, both
+    /// niri's insert-hint rules: a before-the-first slot is placed just
+    /// OUTSIDE the first column (its raw post-insert position coincides with
+    /// that column and would read as "replace this"), and any new-column
+    /// slot past a visible edge is clamped so at least half the rect stays
+    /// on screen. Without the clamp, the end slots of a FULL viewport
+    /// resolve entirely off screen and the overlay clips the indicator
+    /// away, leaving the drop that most needs feedback with none; the
+    /// half-in band at the edge marks "insert past this edge" without
+    /// pretending to be the slot's true position.
+    virtual QRect dragInsertIndicatorRect(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return {};
+    }
+
+    /// The window currently under a compositor interactive move (the whole
+    /// drag, preview or not). Empty clears. While set, an engine that still
+    /// models the window as tiled must neither emit geometry for it nor
+    /// reconcile its geometry acks — KWin's interactive move owns the frame
+    /// until drop, and fighting it yanks the window from the cursor (and a
+    /// per-ack reconcile pins size intents to transient drag frames). The
+    /// daemon sets it at beginDrag and clears it before the drop is
+    /// finalized, so commit/float paths apply normally. Today the daemon
+    /// calls this on the SCROLL engine only, and only ScrollEngine
+    /// overrides it: autotile also retiles mid-drag but exempts the dragged
+    /// window inside applyTiling's emit filter instead. Override this when
+    /// an engine has no such filter of its own.
+    virtual void setInteractiveDragWindow(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -570,21 +711,6 @@ public:
         return {};
     }
 
-    /// Compute the insert index for a cursor position on a managed screen.
-    /// Returns -1 if the screen has no active state.
-    virtual int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const
-    {
-        Q_UNUSED(screenId)
-        Q_UNUSED(cursorPos)
-        return -1;
-    }
-
-    /// Update the target insert index for an active drag-insert preview.
-    virtual void updateDragInsertPreview(int insertIndex)
-    {
-        Q_UNUSED(insertIndex)
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Layout capability (UI-facing; distinct from algorithm identity)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -723,10 +849,13 @@ public:
     virtual void refreshConfigFromSettings()
     {
     }
+    /// One home for the master/split ratio step so the default return below
+    /// and the two default arguments cannot drift apart.
+    static constexpr qreal kDefaultSplitRatioStep = 0.05;
     virtual qreal effectiveSplitRatioStep(const QString& screenId) const
     {
         Q_UNUSED(screenId)
-        return 0.05;
+        return kDefaultSplitRatioStep;
     }
     /// Runtime max-windows limit. Returns -1 (unlimited sentinel) by default;
     /// engines that enforce a cap override with the actual value.
@@ -781,11 +910,11 @@ public:
     // OPTIONAL: Master operations (autotile-specific, no-op on snap engine)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    virtual void increaseMasterRatio(qreal delta = 0.05)
+    virtual void increaseMasterRatio(qreal delta = kDefaultSplitRatioStep)
     {
         Q_UNUSED(delta)
     }
-    virtual void decreaseMasterRatio(qreal delta = 0.05)
+    virtual void decreaseMasterRatio(qreal delta = kDefaultSplitRatioStep)
     {
         Q_UNUSED(delta)
     }

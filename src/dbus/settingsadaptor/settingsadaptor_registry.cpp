@@ -180,18 +180,23 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
-// A tab-indicator colour: EMPTY (follow the theme) or a colour QColor can
+// A theme-fallback colour: EMPTY (follow the theme) or a colour QColor can
 // parse. Rejects anything else at the boundary rather than letting it reach
 // the QML `color` property, where an unparseable string renders as an invalid
 // colour rather than falling back. Returning false surfaces the rejection to
 // the D-Bus caller instead of silently dropping the write.
-#define REGISTER_TAB_COLOR(name, getter, setter)                                                                       \
+//
+// These ride as strings rather than REGISTER_COLOR_SETTING precisely because
+// a QColor round-trip cannot carry the empty "follow the theme" value.
+#define REGISTER_THEME_FALLBACK_COLOR(name, getter, setter)                                                            \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
         const QString s = v.toString();                                                                                \
-        if (!s.isEmpty() && !QColor::isValidColorName(s)) {                                                            \
+        /* Same validity predicate as REGISTER_COLOR_SETTING; only the                                                 \
+           empty-string exemption ("follow the theme") is extra here. */                                               \
+        if (!s.isEmpty() && !QColor(s).isValid()) {                                                                    \
             return false;                                                                                              \
         }                                                                                                              \
         concrete->setter(s);                                                                                           \
@@ -235,9 +240,11 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("zoneSpanTriggers")] = QStringLiteral("stringlist");
 
-    // Autotile drag-insert triggers list (multi-bind) — consumed by the KWin
-    // effect so it knows which modifier/mouse-button combos should forward
-    // dragMoved events to the daemon during an autotile-bypassed drag.
+    // Autotile drag-insert triggers list (multi-bind). Consumers: the
+    // daemon's own WindowDragAdaptor::beginDrag per-drag trigger cache is
+    // the authoritative one (which combos count as "insert held" per tick),
+    // and the KWin effect also fetches the list to OR a held insert trigger
+    // into its tick-forwarding gate (detectActivationAndGrab).
     m_getters[QStringLiteral("autotileDragInsertTriggers")] = [this]() {
         return QVariant::fromValue(m_settings->autotileDragInsertTriggers());
     };
@@ -247,7 +254,19 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("autotileDragInsertTriggers")] = QStringLiteral("stringlist");
 
+    // Scrolling twin — same consumer contract (daemon beginDrag cache +
+    // the effect's tick-forwarding gate).
+    m_getters[QStringLiteral("scrollingDragInsertTriggers")] = [this]() {
+        return QVariant::fromValue(m_settings->scrollingDragInsertTriggers());
+    };
+    m_setters[QStringLiteral("scrollingDragInsertTriggers")] = [this](const QVariant& v) {
+        m_settings->setScrollingDragInsertTriggers(v.toList());
+        return true;
+    };
+    m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("stringlist");
+
     REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
+    REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
     REGISTER_BOOL_SETTING("zoneSpanToggleMode", zoneSpanToggleMode, setZoneSpanToggleMode)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
@@ -265,7 +284,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("osdStyle")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= ConfigDefaults::osdStyleMin() && val <= ConfigDefaults::osdStyleMax()) {
             m_settings->setOsdStyle(static_cast<OsdStyle>(val));
             return true;
         }
@@ -278,18 +297,19 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("overlayDisplayMode")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 1) {
+        if (val >= ConfigDefaults::overlayDisplayModeMin() && val <= ConfigDefaults::overlayDisplayModeMax()) {
             m_settings->setOverlayDisplayMode(static_cast<OverlayDisplayMode>(val));
             return true;
         }
         return false;
     };
     m_schemas[QStringLiteral("overlayDisplayMode")] = QStringLiteral("int");
-    // Per-mode disable lists. Six entries — one per (context, mode) pair —
-    // because both the read and the write need a Mode argument that the
-    // REGISTER_STRINGLIST_SETTING macro doesn't expose. Pre-v3 these were a
-    // single set of three keys whose values silently gated both modes; the
-    // new wire schema names the mode explicitly so consumers can't conflate.
+    // Per-mode disable lists — one entry per (context, mode) pair, three
+    // contexts by three modes — because both the read and the write need a
+    // Mode argument that the REGISTER_STRINGLIST_SETTING macro doesn't
+    // expose. Pre-v3 these were a single set of three keys whose values
+    // silently gated every mode; the new wire schema names the mode
+    // explicitly so consumers can't conflate.
 #define REGISTER_PER_MODE_DISABLE(keyName, modeEnum, getterFn, setterFn)                                               \
     m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
         return m_settings->getterFn(modeEnum);                                                                         \
@@ -357,14 +377,19 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_STRING_SETTING("windowTintColor", windowTintColor, setWindowTintColor)
     REGISTER_INT_SETTING("focusFadeDuration", focusFadeDuration, setFocusFadeDuration)
     REGISTER_STRING_SETTING("labelFontFamily", labelFontFamily, setLabelFontFamily)
-    // Custom setter with range validation (0.25-3.0) instead of REGISTER_DOUBLE_SETTING
+    // Custom setter with range validation instead of REGISTER_DOUBLE_SETTING.
+    // Bounds through ConfigDefaults, per CLAUDE.md's rule that config values
+    // route through the accessors: with the numbers inlined this guard and the
+    // schema's clamp were two independently-maintained spellings of the same
+    // range, and retuning one left the other rejecting values the other
+    // accepts.
     m_getters[QStringLiteral("labelFontSizeScale")] = [this]() {
         return m_settings->labelFontSizeScale();
     };
     m_setters[QStringLiteral("labelFontSizeScale")] = [this](const QVariant& v) {
         bool ok;
         double val = v.toDouble(&ok);
-        if (!ok || val < 0.25 || val > 3.0) {
+        if (!ok || val < ConfigDefaults::labelFontSizeScaleMin() || val > ConfigDefaults::labelFontSizeScaleMax()) {
             return false;
         }
         m_settings->setLabelFontSizeScale(val);
@@ -376,6 +401,25 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("labelFontUnderline", labelFontUnderline, setLabelFontUnderline)
     REGISTER_BOOL_SETTING("labelFontStrikeout", labelFontStrikeout, setLabelFontStrikeout)
     REGISTER_STRING_SETTING("renderingBackend", renderingBackend, setRenderingBackend)
+    // gpuDevice: custom validating setter. The schema validator COERCES a
+    // malformed value to "auto", and the key deliberately declares no choices
+    // a D-Bus caller could consult — so a plain pass-through setter would
+    // report success for a write that was silently discarded. Reject at the
+    // boundary instead: only "auto" or a well-formed vendor:device pair (in
+    // any case/whitespace variation that normalizes to itself) is accepted.
+    m_getters[QStringLiteral("gpuDevice")] = [this]() {
+        return m_settings->gpuDevice();
+    };
+    m_setters[QStringLiteral("gpuDevice")] = [this](const QVariant& v) {
+        const QString raw = v.toString();
+        const QString normalized = ConfigDefaults::normalizeGpuDevice(raw);
+        if (normalized != raw.toLower().trimmed()) {
+            return false;
+        }
+        m_settings->setGpuDevice(normalized);
+        return true;
+    };
+    m_schemas[QStringLiteral("gpuDevice")] = QStringLiteral("string");
     REGISTER_INT_SETTING("shaderFrameRate", shaderFrameRate, setShaderFrameRate)
     REGISTER_BOOL_SETTING("enableAudioVisualizer", enableAudioVisualizer, setEnableAudioVisualizer)
     REGISTER_INT_SETTING("audioSpectrumBarCount", audioSpectrumBarCount, setAudioSpectrumBarCount)
@@ -418,7 +462,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("snappingStickyWindowHandling")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
+            && val <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
             m_settings->setSnappingStickyWindowHandling(static_cast<StickyWindowHandling>(val));
             return true;
         }
@@ -438,6 +483,8 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("scrollingRestoreFloatedWindowsOnLogin", scrollingRestoreFloatedWindowsOnLogin,
                           setScrollingRestoreFloatedWindowsOnLogin)
     REGISTER_BOOL_SETTING("scrollingTabIndicatorEnabled", scrollingTabIndicatorEnabled, setScrollingTabIndicatorEnabled)
+    REGISTER_BOOL_SETTING("scrollingDropIndicatorEnabled", scrollingDropIndicatorEnabled,
+                          setScrollingDropIndicatorEnabled)
     REGISTER_BOOL_SETTING("snapUnfloatFallbackToZone", snapUnfloatFallbackToZone, setSnapUnfloatFallbackToZone)
     REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
     REGISTER_BOOL_SETTING("suppressDefaultLayoutAssignment", suppressDefaultLayoutAssignment,
@@ -518,7 +565,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("zoneSelectorPosition")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 8) {
+        if (val >= static_cast<int>(ZoneSelectorPosition::TopLeft)
+            && val <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
             m_settings->setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(val));
             return true;
         }
@@ -531,7 +579,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("zoneSelectorLayoutMode")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= static_cast<int>(ZoneSelectorLayoutMode::Grid)
+            && val <= static_cast<int>(ZoneSelectorLayoutMode::Vertical)) {
             m_settings->setZoneSelectorLayoutMode(static_cast<ZoneSelectorLayoutMode>(val));
             return true;
         }
@@ -544,7 +593,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("zoneSelectorSizeMode")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 1) {
+        if (val >= static_cast<int>(ZoneSelectorSizeMode::Auto)
+            && val <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
             m_settings->setZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(val));
             return true;
         }
@@ -634,6 +684,18 @@ void SettingsAdaptor::initializeRegistry()
         QStringList paths =
             QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/animations"),
                                       QStandardPaths::LocateDirectory);
+        // REVERSE into ascending priority, exactly as the daemon's own registry
+        // population does (shader_warmup.cpp). This list is registered verbatim
+        // by the effect via addSearchPaths, and MetadataPackScanStrategy
+        // reverse-iterates the registered paths and applies first-wins on an id
+        // collision — so it requires lowest-priority-FIRST, while locateAll
+        // hands back highest-priority-first. Publishing locateAll's order made
+        // the strategy examine /usr/share before the user dir, so a user pack
+        // that deliberately overrides a bundled id ("window-morph") was silently
+        // shadowed in the COMPOSITOR while the daemon (which reverses) honoured
+        // it — the same pack id resolving to different files in the two
+        // processes.
+        std::reverse(paths.begin(), paths.end());
         const QString userDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
             + QStringLiteral("/plasmazones/animations");
         if (!paths.contains(userDir))
@@ -660,39 +722,6 @@ void SettingsAdaptor::initializeRegistry()
             return true;
         };
         m_schemas[QStringLiteral("autotilePerAlgorithmSettings")] = QStringLiteral("map");
-        // The shared inner/outer gaps are config-backed (the Gaps group), written
-        // by the settings app's Window Appearance page — not over this generic
-        // map. But the editor (a separate process) reads the resolved global gap
-        // values over D-Bus, so register READ-ONLY getters (no setter) for them; a
-        // write attempt still fails because no setter is registered.
-        m_getters[QStringLiteral("innerGap")] = [concrete]() {
-            return concrete->innerGap();
-        };
-        m_schemas[QStringLiteral("innerGap")] = QStringLiteral("int");
-        m_getters[QStringLiteral("outerGap")] = [concrete]() {
-            return concrete->outerGap();
-        };
-        m_schemas[QStringLiteral("outerGap")] = QStringLiteral("int");
-        m_getters[QStringLiteral("usePerSideOuterGap")] = [concrete]() {
-            return concrete->usePerSideOuterGap();
-        };
-        m_schemas[QStringLiteral("usePerSideOuterGap")] = QStringLiteral("bool");
-        m_getters[QStringLiteral("outerGapTop")] = [concrete]() {
-            return concrete->outerGapTop();
-        };
-        m_schemas[QStringLiteral("outerGapTop")] = QStringLiteral("int");
-        m_getters[QStringLiteral("outerGapBottom")] = [concrete]() {
-            return concrete->outerGapBottom();
-        };
-        m_schemas[QStringLiteral("outerGapBottom")] = QStringLiteral("int");
-        m_getters[QStringLiteral("outerGapLeft")] = [concrete]() {
-            return concrete->outerGapLeft();
-        };
-        m_schemas[QStringLiteral("outerGapLeft")] = QStringLiteral("int");
-        m_getters[QStringLiteral("outerGapRight")] = [concrete]() {
-            return concrete->outerGapRight();
-        };
-        m_schemas[QStringLiteral("outerGapRight")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("autotileFocusNewWindows", autotileFocusNewWindows, setAutotileFocusNewWindows)
         REGISTER_CONCRETE_BOOL("autotileSmartGaps", autotileSmartGaps, setAutotileSmartGaps)
         REGISTER_CONCRETE_INT("autotileMaxWindows", autotileMaxWindows, setAutotileMaxWindows)
@@ -703,7 +732,8 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_setters[QStringLiteral("autotileInsertPosition")] = [concrete](const QVariant& v) {
             int val = v.toInt();
-            if (val >= 0 && val <= 2) {
+            if (val >= static_cast<int>(AutotileInsertPosition::End)
+                && val <= static_cast<int>(AutotileInsertPosition::AsMaster)) {
                 concrete->setAutotileInsertPosition(static_cast<Settings::AutotileInsertPosition>(val));
                 return true;
             }
@@ -711,6 +741,43 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_schemas[QStringLiteral("autotileInsertPosition")] = QStringLiteral("int");
     }
+
+    // The shared inner/outer gaps are config-backed (the Gaps group), written
+    // by the settings app's Window Appearance page — not over this generic
+    // map. But the editor (a separate process) reads the resolved global gap
+    // values over D-Bus, so register READ-ONLY getters (no setter) for them; a
+    // write attempt still fails because no setter is registered. All seven are
+    // on the ISettings geometry interface (IZoneGeometrySettings), so they
+    // register through m_settings like adjacentThreshold — a non-Settings
+    // backend keeps the keys.
+    m_getters[QStringLiteral("innerGap")] = [this]() {
+        return m_settings->innerGap();
+    };
+    m_schemas[QStringLiteral("innerGap")] = QStringLiteral("int");
+    m_getters[QStringLiteral("outerGap")] = [this]() {
+        return m_settings->outerGap();
+    };
+    m_schemas[QStringLiteral("outerGap")] = QStringLiteral("int");
+    m_getters[QStringLiteral("usePerSideOuterGap")] = [this]() {
+        return m_settings->usePerSideOuterGap();
+    };
+    m_schemas[QStringLiteral("usePerSideOuterGap")] = QStringLiteral("bool");
+    m_getters[QStringLiteral("outerGapTop")] = [this]() {
+        return m_settings->outerGapTop();
+    };
+    m_schemas[QStringLiteral("outerGapTop")] = QStringLiteral("int");
+    m_getters[QStringLiteral("outerGapBottom")] = [this]() {
+        return m_settings->outerGapBottom();
+    };
+    m_schemas[QStringLiteral("outerGapBottom")] = QStringLiteral("int");
+    m_getters[QStringLiteral("outerGapLeft")] = [this]() {
+        return m_settings->outerGapLeft();
+    };
+    m_schemas[QStringLiteral("outerGapLeft")] = QStringLiteral("int");
+    m_getters[QStringLiteral("outerGapRight")] = [this]() {
+        return m_settings->outerGapRight();
+    };
+    m_schemas[QStringLiteral("outerGapRight")] = QStringLiteral("int");
 
     // Per-surface decoration tree (JSON blob round-trip via D-Bus), mirroring
     // the animation shaderProfileTree registration above. The out-of-process
@@ -738,7 +805,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("autotileStickyWindowHandling")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
+            && val <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
             m_settings->setAutotileStickyWindowHandling(static_cast<StickyWindowHandling>(val));
             return true;
         }
@@ -809,6 +877,7 @@ void SettingsAdaptor::initializeRegistry()
         m_schemas[QStringLiteral("scrollingCenterFocusedColumn")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("scrollingAlwaysCenterSingleColumn", scrollingAlwaysCenterSingleColumn,
                                setScrollingAlwaysCenterSingleColumn)
+        REGISTER_CONCRETE_BOOL("scrollingCropStraddlers", scrollingCropStraddlers, setScrollingCropStraddlers)
         // scrollingDefaultColumnWidthKind: enum (0=Proportion, 1=Fixed, 2=ClientDecides, 3=Preset)
         m_getters[QStringLiteral("scrollingDefaultColumnWidthKind")] = [concrete]() {
             return concrete->scrollingDefaultColumnWidthKind();
@@ -915,12 +984,30 @@ void SettingsAdaptor::initializeRegistry()
         // passed through — the string lands on a QML `color` property, where an
         // unparseable value renders as an invalid colour instead of falling
         // back to the theme, so an arbitrary D-Bus write must not reach it.
-        REGISTER_TAB_COLOR("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
-                           setScrollingTabIndicatorActiveColor)
-        REGISTER_TAB_COLOR("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
-                           setScrollingTabIndicatorInactiveColor)
-        REGISTER_TAB_COLOR("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
-                           setScrollingTabIndicatorUrgentColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
+                                      setScrollingTabIndicatorActiveColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
+                                      setScrollingTabIndicatorInactiveColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
+                                      setScrollingTabIndicatorUrgentColor)
+
+        // ── Scrolling.DropIndicator ──
+        // scrollingDropIndicatorEnabled is registered through ISettings above;
+        // the other FIVE live here (two colours, opacity, border width and
+        // radius) so the whole group is reachable. Same
+        // every-key-must-be-present rule as the tab indicator block above:
+        // this generic surface is the settings app's ONLY channel to the
+        // daemon, so an unregistered key looks wired and does nothing.
+        REGISTER_THEME_FALLBACK_COLOR("scrollingDropIndicatorColor", scrollingDropIndicatorColor,
+                                      setScrollingDropIndicatorColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingDropIndicatorBorderColor", scrollingDropIndicatorBorderColor,
+                                      setScrollingDropIndicatorBorderColor)
+        REGISTER_CONCRETE_DOUBLE("scrollingDropIndicatorOpacity", scrollingDropIndicatorOpacity,
+                                 setScrollingDropIndicatorOpacity)
+        REGISTER_CONCRETE_INT("scrollingDropIndicatorBorderWidth", scrollingDropIndicatorBorderWidth,
+                              setScrollingDropIndicatorBorderWidth)
+        REGISTER_CONCRETE_INT("scrollingDropIndicatorBorderRadius", scrollingDropIndicatorBorderRadius,
+                              setScrollingDropIndicatorBorderRadius)
 
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusEnabled", scrollingWheelFocusEnabled, setScrollingWheelFocusEnabled)
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusInverted", scrollingWheelFocusInverted,
@@ -998,10 +1085,10 @@ void SettingsAdaptor::initializeRegistry()
                                  setScrollingMaximizeColumnShortcut)
         REGISTER_CONCRETE_STRING("scrollingExpandColumnShortcut", scrollingExpandColumnShortcut,
                                  setScrollingExpandColumnShortcut)
-        REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightBackShortcut", scrollingCycleWindowHeightBackShortcut,
-                                 setScrollingCycleWindowHeightBackShortcut)
         REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightShortcut", scrollingCycleWindowHeightShortcut,
                                  setScrollingCycleWindowHeightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightBackShortcut", scrollingCycleWindowHeightBackShortcut,
+                                 setScrollingCycleWindowHeightBackShortcut)
         REGISTER_CONCRETE_STRING("scrollingIncreaseWindowHeightShortcut", scrollingIncreaseWindowHeightShortcut,
                                  setScrollingIncreaseWindowHeightShortcut)
         REGISTER_CONCRETE_STRING("scrollingDecreaseWindowHeightShortcut", scrollingDecreaseWindowHeightShortcut,
@@ -1104,6 +1191,7 @@ void SettingsAdaptor::initializeRegistry()
 #undef REGISTER_CONCRETE_INT
 #undef REGISTER_CONCRETE_DOUBLE
 #undef REGISTER_CONCRETE_STRING
+#undef REGISTER_THEME_FALLBACK_COLOR
 }
 
 } // namespace PlasmaZones

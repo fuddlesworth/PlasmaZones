@@ -96,6 +96,36 @@ private Q_SLOTS:
         QVERIFY(e.validationError().isEmpty());
     }
 
+    void testTileRequestValidationStacking()
+    {
+        TileRequestEntry e;
+        e.windowId = QStringLiteral("w");
+        e.screenId = QStringLiteral("s");
+        e.width = 100;
+        e.height = 100;
+        e.stacking = QStringLiteral("firstOnTop");
+        QVERIFY(e.validationError().isEmpty());
+        e.stacking = QStringLiteral("lastOnTop");
+        QVERIFY(e.validationError().isEmpty());
+        e.stacking = QStringLiteral("sideways");
+        QVERIFY(e.validationError().contains(QStringLiteral("stacking")));
+    }
+
+    void testTileRequestValidationScrollEdge()
+    {
+        TileRequestEntry e;
+        e.windowId = QStringLiteral("w");
+        e.screenId = QStringLiteral("s");
+        e.width = 100;
+        e.height = 100;
+        e.scrollEdge = QStringLiteral("left");
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("right");
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("up");
+        QVERIFY(e.validationError().contains(QStringLiteral("scrollEdge")));
+    }
+
     void testDragPolicyValidationAutotileNoScreen()
     {
         DragPolicy p;
@@ -145,11 +175,12 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // Bumped to 5 alongside the Autotile→Tiling interface rename: a v4
-        // effect would pass the handshake and then silently hear nothing on
-        // the renamed lifecycle surface, so both sides must move together.
-        QCOMPARE(Service::ApiVersion, 5);
-        QCOMPARE(Service::MinPeerApiVersion, 5);
+        // Bumped to 6 alongside the TileRequestEntry scrollEdge widening
+        // (a(siiiissbbs) → a(siiiissbbss)): Qt matches signal-hook
+        // signatures before demarshalling, so a v5 effect's tiling slot
+        // would silently never fire — both sides must move together.
+        QCOMPARE(Service::ApiVersion, 6);
+        QCOMPARE(Service::MinPeerApiVersion, 6);
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.

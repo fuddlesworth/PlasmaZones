@@ -484,16 +484,35 @@ void PlasmaZonesEffect::connectDragTracker()
                     // where the user drops it, not snap back to a stored rect.
                     m_dragActivation.floatedWindowIds.insert(windowId);
                 }
+                // Honour the DAEMON's grab decision before leaving. This early
+                // return used to skip the grab unconditionally, which was
+                // right when an engine drag had no overlay and nothing Escape
+                // could cancel — the comment that introduced it said exactly
+                // that ("the drag proceeds freely", Feb 2026). Drag-insert
+                // previews and the drop indicator gave it both, so the policy
+                // now asks for a grab under always-on re-insert and this is
+                // where that has to be obeyed.
+                //
+                // The cached fast path can be stale, so it reads the policy
+                // rather than re-deriving: the async beginDrag reply below
+                // corrects the flag, and the correction arm takes the grab
+                // itself if the drag turns out to be a snap one after all.
+                if (m_currentDragPolicy.grabKeyboard && !m_keyboardGrabbed) {
+                    KWin::effects->grabKeyboard(this);
+                    m_keyboardGrabbed = true;
+                }
                 return;
             }
             m_dragBypassedForEngine = false;
             m_dragActivation.detected = false;
 
             // beginDrag already initialized daemon-side snap-drag state
-            // (called internally from the adaptor). The effect only needs
-            // to decide whether to grab the keyboard for local Escape
-            // handling.
-            detectActivationAndGrab();
+            // (called internally from the adaptor). Called for its LATCH, not
+            // its answer: it sets m_dragActivation.detected so the per-tick
+            // gates downstream keep forwarding after a mid-drag release. The
+            // grab below is unconditional and is this path's own, which is
+            // why the predicate no longer takes one.
+            shouldForwardDragTicks();
             // Grab keyboard to intercept Escape before KWin's MoveResizeFilter.
             // Without this, Escape cancels the interactive move AND the overlay.
             // With the grab, Escape only dismisses the overlay while the drag continues.
@@ -525,7 +544,7 @@ void PlasmaZonesEffect::connectDragTracker()
                     // without any intent to use zones doesn't flood the bus
                     // at 30Hz. This is a local input-event optimization; it
                     // isn't policy and doesn't come from the daemon.
-                    if (!detectActivationAndGrab() && !m_cachedZoneSelectorEnabled && m_triggersLoaded) {
+                    if (!shouldForwardDragTicks() && !m_cachedZoneSelectorEnabled && m_triggersLoaded) {
                         return;
                     }
                 }
@@ -901,6 +920,14 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         m_idCaches.screenIdCache.clear();
         m_idCaches.connectedPhysicalIdsValid = false;
         m_lastEffectiveScreenId.clear();
+        // A rotation or mode change keeps the same connector and EDID id, so
+        // no per-window outputChanged fires — yet ScreenOrientation is a
+        // matchable rule field stamped live from the output geometry, and
+        // every verdict cache keys on (windowId, ruleSet revision) only.
+        // Drop the caches and sweep the borders so orientation-scoped rules
+        // re-resolve, mirroring the daemon-ready re-seed pattern.
+        invalidateAllRuleCaches();
+        scheduleBorderSweep();
     });
 }
 

@@ -272,8 +272,8 @@ Q_SIGNALS:
      * many windows are retiled (e.g. rotate).
      *
      * @param tileRequests Typed list of TileRequestEntry structs, wire shape
-     *        a(siiiissbbs): (windowId, x, y, width, height, zoneId, screenId,
-     *        monocle, floating, stacking)
+     *        a(siiiissbbss): (windowId, x, y, width, height, zoneId, screenId,
+     *        monocle, floating, stacking, scrollEdge)
      */
     void windowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
 

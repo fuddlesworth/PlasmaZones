@@ -102,7 +102,9 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {}
+                SettingsSeparator {
+                    enabled: root.indicatorOn
+                }
 
                 SettingsRow {
                     title: i18n("Style")
@@ -286,10 +288,17 @@ SettingsFlickable {
                     title: i18n("Corner radius")
                     searchAnchor: "tabIndicatorCornerRadius"
                     description: i18n("How rounded each tab's corners are. On a segment bar with no gap between tabs, only the two ends of the run are rounded.")
-                    // Disabled, not hidden, while the pill sentinel is stored:
-                    // a row that vanishes makes the switch above look like it
-                    // deleted a setting, and the row carries a search anchor a
-                    // deep link has to be able to reveal.
+                    // Collapses out while the pill sentinel is stored. This
+                    // says `enabled`, and SettingsRow is visible:enabled, so
+                    // the row HIDES rather than greying — the component's
+                    // documented policy for a setting that cannot apply, and
+                    // the same thing every other conditional row on this page
+                    // does. (An earlier note here claimed the opposite,
+                    // "disabled, not hidden". It never was.) The consequence
+                    // is that a deep link to this row's search anchor lands on
+                    // a row that is not on screen until the sentinel is
+                    // cleared, which it shares with every disabled row in the
+                    // app rather than being specific to this one.
                     enabled: appSettings.scrollingTabIndicatorCornerRadius !== root._scrollConsts.tabCornerRadiusPill
 
                     SettingsSpinBox {
@@ -331,7 +340,7 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                TabIndicatorColorRow {
+                ThemeFallbackColorRow {
                     Layout.fillWidth: true
                     title: i18n("Active tab")
                     searchAnchor: "tabIndicatorActiveColor"
@@ -344,7 +353,7 @@ SettingsFlickable {
                     }
                 }
 
-                TabIndicatorColorRow {
+                ThemeFallbackColorRow {
                     Layout.fillWidth: true
                     title: i18n("Inactive tabs")
                     searchAnchor: "tabIndicatorInactiveColor"
@@ -357,7 +366,7 @@ SettingsFlickable {
                     }
                 }
 
-                TabIndicatorColorRow {
+                ThemeFallbackColorRow {
                     Layout.fillWidth: true
                     title: i18n("Urgent tab")
                     searchAnchor: "tabIndicatorUrgentColor"

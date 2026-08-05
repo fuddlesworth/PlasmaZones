@@ -309,6 +309,28 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
 }
 
 std::optional<WindowPlacement>
+WindowPlacementStore::takeForReopen(const QString& windowId, const QString& appId,
+                                    const std::function<bool(const WindowPlacement&)>& accept,
+                                    const std::function<bool(const WindowPlacement&)>& preferred)
+{
+    // Exact-record rejection is FINAL — see the header contract. Only
+    // meaningful when a predicate exists; without one every record is
+    // accepted and the gate cannot fire.
+    if (accept) {
+        if (const auto own = peekExact(windowId); own && !accept(*own)) {
+            return std::nullopt;
+        }
+    }
+    std::optional<WindowPlacement> rec = take(windowId, appId, accept, preferred);
+    if (rec) {
+        // Re-bind to the live windowId and re-record — header contract rule 2.
+        rec->windowId = windowId;
+        record(*rec);
+    }
+    return rec;
+}
+
+std::optional<WindowPlacement>
 WindowPlacementStore::peek(const QString& windowId, const QString& appId,
                            const std::function<bool(const WindowPlacement&)>& accept) const
 {
