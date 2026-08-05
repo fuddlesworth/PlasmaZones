@@ -53,6 +53,7 @@ private Q_SLOTS:
     void indicatorRectTracksTarget();
     void indicatorRectMatchesTheDropUnderAGap();
     void indicatorRectMatchesTheDropForANewColumn();
+    void fullViewportOuterSlotIndicatorClampsToTheEdge();
     void windowClosedDropsPreview();
     void screenSetChangeCancelsPreview();
     void interactiveDragMarkSuppressesEmitAndReconcile();
@@ -708,6 +709,58 @@ void TestScrollEngineDragInsert::indicatorRectMatchesTheDropForANewColumn()
     // what this test was written to pin: a dropped gap term or a mis-shared
     // column height changes it immediately.
     QCOMPARE(promised.size(), delivered.size());
+}
+
+void TestScrollEngineDragInsert::fullViewportOuterSlotIndicatorClampsToTheEdge()
+{
+    // The niri-parity visibility clamp. A strip window's own drag can never
+    // face a full viewport (detach-once frees its column's width), so the
+    // fixture drags a FRESH window — the cross-screen / floating shape —
+    // onto a strip whose two 600px columns exactly fill the 1200px view.
+    // The after-the-last slot then resolves at x=1200, entirely off screen,
+    // where the per-screen overlay would clip the indicator away; the clamp
+    // pins it half-in at the right edge instead. Deleting the clamp fails
+    // the first QCOMPARE with left()==1200.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
+
+    const QRect wa = ScrollTestUtils::defaultScreenRect();
+
+    // Right-outer slot (after the last column): clamped to exactly half-in
+    // at the right edge instead of resolving at x=1200.
+    DragTarget rightOuter;
+    rightOuter.primary = 2;
+    rightOuter.newSlot = true;
+    engine->updateDragInsertPreview(rightOuter);
+    const QRect right = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(right.isValid());
+    QCOMPARE(right.left(), wa.left() + wa.width() - right.width() / 2);
+    QCOMPARE(right.intersected(wa).width(), right.width() / 2);
+
+    // Before-the-first slot: the live-view pin maps it onto the post-insert
+    // strip origin, which is on screen — the clamp bounds are no-ops and the
+    // promise stays fully visible.
+    DragTarget leftOuter;
+    leftOuter.primary = 0;
+    leftOuter.newSlot = true;
+    engine->updateDragInsertPreview(leftOuter);
+    const QRect left = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(left.isValid());
+    QCOMPARE(left.intersected(wa), left);
+
+    // Control: a slot between the two visible columns is on screen and
+    // untouched.
+    DragTarget between;
+    between.primary = 1;
+    between.newSlot = true;
+    engine->updateDragInsertPreview(between);
+    const QRect mid = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(mid.isValid());
+    QCOMPARE(mid.intersected(wa), mid);
+
+    engine->cancelDragInsertPreview();
 }
 
 void TestScrollEngineDragInsert::windowClosedDropsPreview()

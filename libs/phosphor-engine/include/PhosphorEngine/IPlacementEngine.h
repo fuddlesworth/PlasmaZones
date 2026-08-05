@@ -469,9 +469,14 @@ public:
     /// engine that defers structure to the drop (the scroll strip, per the
     /// DETACH-ONCE contract above) has a target that is otherwise invisible.
     ///
-    /// NOT clamped to the viewport: a target past the visible edge genuinely
-    /// lies off screen, and clamping would report a plausible-looking rect for
-    /// the wrong slot.
+    /// Mostly not clamped to the viewport — a join target's rect is where the
+    /// slot genuinely is — with one deliberate exception: a NEW-COLUMN slot
+    /// past the visible edge is clamped so at least half the rect stays on
+    /// screen (niri's insert-hint rule). Without it, the outer slots of a
+    /// FULL viewport resolve entirely off screen and the overlay clips the
+    /// indicator away, leaving the drop that most needs feedback with none;
+    /// the half-in band at the edge marks "insert past this edge" without
+    /// pretending to be the slot's true position.
     virtual QRect dragInsertIndicatorRect(const QString& screenId) const
     {
         Q_UNUSED(screenId)

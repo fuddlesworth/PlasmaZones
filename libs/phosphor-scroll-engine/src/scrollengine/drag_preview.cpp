@@ -687,11 +687,9 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // where the raw slot resolves outside the work area and the overlay clips
     // it), but the live-view translation below cancels a probe-side re-anchor
     // by construction: shiftToLiveView subtracts the probe's view to pin the
-    // rectangle to what is on screen RIGHT NOW. The two behaviours are
-    // mutually exclusive, and the live-view pin is the one in force — so at a
-    // full viewport, aiming at either outer slot shows no indicator (the
-    // drop itself still lands correctly; commit re-anchors and the window
-    // arrives visibly).
+    // rectangle to what is on screen RIGHT NOW. The full-viewport case is
+    // covered instead by the niri-parity visibility clamp at the return —
+    // see the comment there.
     const ResolvedStrip resolved = probe.relayout(params);
     // Translate the slot back into the LIVE view.
     //
@@ -710,7 +708,29 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.windowId == p.windowId) {
-                return tile.rect.translated(shiftToLiveView, 0);
+                QRect rect = tile.rect.translated(shiftToLiveView, 0);
+                // niri-parity visibility clamp, new-column slots only (niri
+                // gates its identical clamp on InsertPosition::NewColumn, and
+                // a join target's column is on screen by construction — it
+                // was hit-tested under the cursor). Reachable when a window
+                // that detached NOTHING from this strip (a cross-screen or
+                // floating drag) aims past the last column of a FULL
+                // viewport: the slot resolves outside the work area and the
+                // per-screen overlay clips the unclamped rect away, leaving
+                // the one drop that most needs feedback with none. (A strip
+                // window's own drag cannot reach this — detach-once frees
+                // its column's width and the outer slot resolves into that
+                // dead space.) Clamp the x so at least HALF the rect stays
+                // visible: the half-in band hugging the screen edge is the
+                // standard "insert past this edge" affordance, it never lies
+                // about the direction, and slots already on screen are
+                // untouched (the bounds are no-ops for them).
+                if (target.newSlot) {
+                    const int minLeft = params.workArea.left() - rect.width() / 2;
+                    const int maxLeft = params.workArea.left() + params.workArea.width() - rect.width() / 2;
+                    rect.moveLeft(qBound(minLeft, rect.left(), maxLeft));
+                }
+                return rect;
             }
         }
     }
