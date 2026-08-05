@@ -654,7 +654,18 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // shift below must isolate the insert's view side effect, and measuring
     // the two sides under different gap regimes would fold the smart-gaps
     // difference into it as well.
-    const int liveViewX = state->strip().relayout(params).viewX;
+    const ResolvedStrip liveResolved = state->strip().relayout(params);
+    const int liveViewX = liveResolved.viewX;
+    // The FIRST VISIBLE column decides which new-column slot means "insert
+    // to the left of everything I can see" — its own index, not strip index
+    // 0, once the view has scrolled past earlier columns.
+    int firstVisibleIndex = -1;
+    for (const ResolvedColumn& column : liveResolved.columns) {
+        if (column.rect.intersects(params.workArea)) {
+            firstVisibleIndex = column.columnIndex;
+            break;
+        }
+    }
 
     // Mirror of commit's insert selection, deliberately kept line-for-line
     // comparable with it: if the two ever diverge, the indicator lies.
@@ -710,17 +721,23 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.windowId == p.windowId) {
                 QRect rect = tile.rect.translated(shiftToLiveView, 0);
-                // A BEFORE-THE-FIRST slot mirrors the after-the-last one:
-                // the post-insert strip origin is where the first column
-                // currently sits, so the raw promise would cover that column
-                // at full size — reading as "replace this" while the drop
-                // actually shifts it aside. Place the promise just OUTSIDE
-                // the first column instead (niri positions its index-0
-                // insert hint the same way), which balances the two ends:
-                // both resolve past their screen edge on a full strip and
-                // both reach the half-in clamp below. Skipped for an empty
-                // strip, whose promise genuinely is the first column's spot.
-                if (target.newSlot && preInsertColumns > 0 && std::clamp(target.primary, 0, preInsertColumns) == 0) {
+                // A BEFORE-THE-FIRST-VISIBLE slot mirrors the after-the-last
+                // one: its raw promise is the current position of the first
+                // column the user can see, so it would cover that column at
+                // full size — reading as "replace this" while the drop
+                // actually shifts it aside — and nothing like the edge band
+                // the right side shows. Place the promise just OUTSIDE that
+                // column instead (niri positions its leading insert hint the
+                // same way), which balances the two ends: on a flush edge
+                // both resolve past their screen edge and both reach the
+                // half-in clamp below, and with dead space the promise fills
+                // it. Keyed on the first VISIBLE column, not strip index 0 —
+                // with the view scrolled past earlier columns, "insert left
+                // of everything I see" is that column's own slot. Skipped
+                // for an empty strip, whose promise genuinely is the first
+                // column's spot.
+                if (target.newSlot && firstVisibleIndex >= 0
+                    && std::clamp(target.primary, 0, preInsertColumns) == firstVisibleIndex) {
                     rect.translate(-(rect.width() + params.gap), 0);
                 }
                 // niri-parity visibility clamp, new-column slots only (niri

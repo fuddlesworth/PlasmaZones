@@ -54,6 +54,7 @@ private Q_SLOTS:
     void indicatorRectMatchesTheDropUnderAGap();
     void indicatorRectMatchesTheDropForANewColumn();
     void fullViewportOuterSlotIndicatorClampsToTheEdge();
+    void scrolledStripEdgeSlotsMirror();
     void windowClosedDropsPreview();
     void screenSetChangeCancelsPreview();
     void interactiveDragMarkSuppressesEmitAndReconcile();
@@ -764,6 +765,56 @@ void TestScrollEngineDragInsert::fullViewportOuterSlotIndicatorClampsToTheEdge()
     // untouched.
     DragTarget between;
     between.primary = 1;
+    between.newSlot = true;
+    engine->updateDragInsertPreview(between);
+    const QRect mid = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(mid.isValid());
+    QCOMPARE(mid.intersected(wa), mid);
+
+    engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::scrolledStripEdgeSlotsMirror()
+{
+    // The common scrolled shape: three 600px columns, view on the last two,
+    // column a off screen to the LEFT. The screen-edge landing zones must
+    // MIRROR — "insert left of everything I see" (slot 1, the first VISIBLE
+    // column's index) shows the same half-in edge band as "insert right of
+    // everything I see" (slot 3). Keying the outside-left shift on strip
+    // index 0 instead of the first visible column left the left edge
+    // painting a full rect over column b while the right edge showed the
+    // band — the imbalance this test exists to pin.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    // Focus-new-windows left c focused: the view shows b and c, a is parked.
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
+
+    const QRect wa = ScrollTestUtils::defaultScreenRect();
+
+    // Left edge: before the first VISIBLE column — half-in at the left.
+    DragTarget beforeVisible;
+    beforeVisible.primary = 1;
+    beforeVisible.newSlot = true;
+    engine->updateDragInsertPreview(beforeVisible);
+    const QRect left = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(left.isValid());
+    QCOMPARE(left.left(), wa.left() - left.width() / 2);
+    QCOMPARE(left.intersected(wa).width(), left.width() - left.width() / 2);
+
+    // Right edge: after the last visible column — half-in at the right.
+    DragTarget afterLast;
+    afterLast.primary = 3;
+    afterLast.newSlot = true;
+    engine->updateDragInsertPreview(afterLast);
+    const QRect right = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(right.isValid());
+    QCOMPARE(right.left(), wa.left() + wa.width() - right.width() / 2);
+    QCOMPARE(right.intersected(wa).width(), right.width() / 2);
+
+    // Between the two visible columns: on screen, no shift, no clamp.
+    DragTarget between;
+    between.primary = 2;
     between.newSlot = true;
     engine->updateDragInsertPreview(between);
     const QRect mid = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
