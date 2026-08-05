@@ -5,9 +5,8 @@
 // Daemon — scrolling-engine screen-set management
 //
 // The scrolling counterpart of updateEngineScreens' engine push: order
-// seeding across mode transitions, per-context rule-param resolution, the
-// TEMPLATE vocabulary push (each screen's resolved template layout extracted
-// into per-screen preset lists), and the setActiveScreens handoff. Driven
+// seeding across mode transitions, per-context rule-param resolution, and
+// the setActiveScreens handoff. Driven
 // from updateEngineScreens (one cascade walk derives both engines' sets) so
 // the two sets always flip in the same recompute.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -18,7 +17,6 @@
 // Complete type needed for setScrollTabIndicatorOverrides — daemon.h forward
 // declares OverlayService only.
 #include "daemon/overlayservice.h"
-#include "scrollingtemplateprojection.h"
 #include "seedorderfilter.h"
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -27,10 +25,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
-#include <PhosphorScrollEngine/ScrollTemplate.h>
-#include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorZones/Zone.h>
 
 namespace PlasmaZones {
 
@@ -169,34 +164,11 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultWindowHeight(),
                              *params.defaultWindowHeight);
         }
-        // TEMPLATE channel (a fourth tier over the settings seed and the
-        // rule slots above — it wholesale-replaces the settings PRESET
-        // LISTS, never a rule slot; ContextScrollingParams carries no
-        // preset-list slot so no collision is possible): the context's
-        // assigned template layout, resolved through the same cascade walk,
-        // becomes the screen's preset vocabulary. Fixed-geometry zones
-        // normalize against the same basis their own layout resolution
-        // uses — the AVAILABLE geometry unless the layout opts into the
-        // full screen (mirrors GeometryUtils' reference selection); an
-        // invalid rect degrades normalizedGeometry to the stored relative
-        // geometry, which only matters for Fixed-geometry zones. An
-        // extraction that yields no usable widths inserts nothing, so the
-        // engine keeps the settings preset lists — deleted, degenerate or
-        // row-only templates fail soft.
-        if (PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity)) {
-            // The projection itself (reference-rect selection, zone
-            // normalization, vocabulary extraction, key insertion) lives in
-            // scrollingtemplateprojection.cpp so it is unit-testable without
-            // a Daemon; this site owns only WHICH template the context
-            // resolves and the screen-geometry lookups.
-            const QRect fullGeometry = m_screenManager ? m_screenManager->screenGeometry(screenId) : QRect();
-            const QRect availableGeometry =
-                m_screenManager ? m_screenManager->screenAvailableGeometry(screenId) : QRect();
-            const QVariantMap templateOverrides = scrollingTemplateOverrides(templ, fullGeometry, availableGeometry);
-            for (auto it = templateOverrides.cbegin(); it != templateOverrides.cend(); ++it) {
-                overrides.insert(it.key(), it.value());
-            }
-        }
+        // TEMPLATE channel: the mined-from-zone-layouts projection was
+        // removed with the pivot to native ScrollingTemplate objects; the
+        // native template push (preset vocabularies + column blueprint +
+        // defaults from the resolved ScrollingTemplate) lands here when the
+        // template store ships. Until then the settings preset lists stand.
         // The tab indicator's GEOMETRY overrides. Only these seven reach the
         // engine: the six paint fields alongside them in ContextScrollingParams
         // cannot change a resolved rect, so they are collected separately below

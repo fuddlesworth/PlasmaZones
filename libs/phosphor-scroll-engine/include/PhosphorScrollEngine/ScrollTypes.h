@@ -104,8 +104,8 @@ inline QString tabIndicatorPosition()
 {
     return QStringLiteral("TabIndicatorPosition");
 }
-/// TEMPLATE channel: preset lists derived from the screen's assigned layout
-/// template (extractTemplateVocabulary), as a QVariantList of doubles. A
+/// TEMPLATE channel: preset lists from the screen's assigned scrolling
+/// template, as a QVariantList of doubles. A
 /// present, non-empty list replaces the settings-configured preset list
 /// WHOLESALE for that screen — no merge, so preset indices and the cycle
 /// order stay stable within one template. The daemon writes these from the

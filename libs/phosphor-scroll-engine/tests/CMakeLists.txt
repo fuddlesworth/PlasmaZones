@@ -1,11 +1,10 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-# PhosphorScrollEngine unit tests. Headless throughout, in three categories:
-# two files exercise the pure strip model, six drive the engine through null
-# daemon dependencies and the geometry-provider seam, and one covers the pure
-# template-vocabulary extractor. None needs a QPA platform, so the strip and
-# extractor tests run APPLESS and the engine tests GUILESS (they need an event
+# PhosphorScrollEngine unit tests. Headless throughout: two files exercise
+# the pure strip model, six drive the engine through null daemon dependencies
+# and the geometry-provider seam. None needs a QPA platform, so the strip
+# tests run APPLESS and the engine tests GUILESS (they need an event
 # dispatcher for the coalesced retile and the prunes' deleteLater).
 #
 # These route through phosphor_apply_test_isolation like every other
@@ -43,7 +42,6 @@ pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp)
-pse_add_test(test_scrolltemplate test_scrolltemplate.cpp)
 pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp)
 pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp)
 

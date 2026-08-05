@@ -527,18 +527,6 @@ target_include_directories(test_autotile_seed_filter PRIVATE ${CMAKE_SOURCE_DIR}
 target_link_libraries(test_autotile_seed_filter PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_autotile_seed_filter COMMAND test_autotile_seed_filter)
 
-# The template push's pure zone-projection half (Layout* + screen rects →
-# ScrollPerScreenKeys preset-list overrides). Compiles the daemon source
-# directly, same shape as test_autotile_seed_filter above.
-add_executable(test_scrolling_template_projection
-    daemon/test_scrolling_template_projection.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/daemon/scrollingtemplateprojection.cpp
-)
-target_include_directories(test_scrolling_template_projection PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(test_scrolling_template_projection
-    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorScrollEngine::PhosphorScrollEngine)
-add_test(NAME test_scrolling_template_projection COMMAND test_scrolling_template_projection)
-
 # Cheatsheet family compression: compiles the daemon source directly because
 # ShortcutManager lives in the plasmazonesd executable, not plasmazones_core.
 # The test drives only the static compressCheatsheetFamilies helper, so no
