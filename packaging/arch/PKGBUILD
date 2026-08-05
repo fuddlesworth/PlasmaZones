@@ -49,6 +49,7 @@ makedepends=(
 )
 optdepends=(
     'plasma-activities: activity-based layouts'
+    'hwdata: readable GPU names in the rendering device picker'
 )
 conflicts=('plasmazones-bin' 'plasmazones-git')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")

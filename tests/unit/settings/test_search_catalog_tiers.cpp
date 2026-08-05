@@ -7,7 +7,8 @@
  *
  * A row's advanced-mode tier is declared in QML (`advancedOnly: true`, or a
  * `visible:` binding gated on `advancedMode`). The global search index is built
- * in C++ from searchcatalog.cpp before any page is instantiated, so it cannot
+ * in C++ from searchcatalog.cpp and searchcatalog_animations.cpp before any
+ * page is instantiated, so it cannot
  * read that declaration at runtime — the QML anchor registry is per-page and
  * only populates once a page is built. The flag therefore has to be mirrored
  * into the catalogue by hand, and a hand-mirrored fact drifts.
@@ -426,7 +427,12 @@ private Q_SLOTS:
     {
         m_qmlDir = QStringLiteral(P_SOURCE_DIR "/src/settings/qml");
         m_catalog = QStringLiteral(P_SOURCE_DIR "/src/settings/search/searchcatalog.cpp");
+        // The catalogue is seeded from TWO TUs since the animation-event
+        // anchors split into their own file; every check below must parse the
+        // union or the split silently removes those entries from coverage.
+        m_catalogAnimations = QStringLiteral(P_SOURCE_DIR "/src/settings/search/searchcatalog_animations.cpp");
         QVERIFY2(QFileInfo::exists(m_catalog), qPrintable(m_catalog));
+        QVERIFY2(QFileInfo::exists(m_catalogAnimations), qPrintable(m_catalogAnimations));
         QVERIFY2(QDir(m_qmlDir).exists(), qPrintable(m_qmlDir));
     }
 
@@ -624,7 +630,7 @@ private Q_SLOTS:
 
     void catalogueTiersMatchTheQml()
     {
-        const QString catalogSrc = stripLineComments(readAll(m_catalog));
+        const QString catalogSrc = stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations));
 
         // Every (page, anchor) the catalogue marks advanced-only.
         QSet<QString> flagged;
@@ -833,7 +839,7 @@ private Q_SLOTS:
         }
 
         // Every (pageId, anchor) the catalogue registers.
-        const QString catalogSrc = stripLineComments(readAll(m_catalog));
+        const QString catalogSrc = stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations));
         static const QRegularExpression kCall(
             QStringLiteral("\\badd(?:Setting|Section)\\(\\s*search\\s*,\\s*QStringLiteral\\(\"([^\"]+)\"\\)\\s*,"
                            "\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
@@ -889,7 +895,7 @@ private Q_SLOTS:
     /// simple/advanced rework and nothing replaced it.
     void everyCataloguePageIdIsRegistered()
     {
-        const QString catalogSrc = stripLineComments(readAll(m_catalog));
+        const QString catalogSrc = stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations));
         const QString registration =
             readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp"));
         const QString topology =
@@ -962,6 +968,7 @@ private Q_SLOTS:
 private:
     QString m_qmlDir;
     QString m_catalog;
+    QString m_catalogAnimations;
 };
 
 QTEST_MAIN(TestSearchCatalogTiers)

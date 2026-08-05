@@ -26,10 +26,8 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QIcon>
-#include <QLibrary>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QQuickWindow>
 #include <QThread>
 #include <QTimer>
 #include <QtQml/qqml.h>
@@ -131,17 +129,28 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     QVulkanInstance vulkanInstance;
 #endif
+    const PlasmaZones::ConfigDefaults::RenderingBootConfig renderingConfig =
+        PlasmaZones::ConfigDefaults::readRenderingConfigFromDisk();
     {
-        const QString backend = PlasmaZones::ConfigDefaults::readRenderingBackendFromDisk();
+        const QString& backend = renderingConfig.backend;
         useVulkan = PlasmaZones::probeAndSetGraphicsApi(backend);
         if (!useVulkan && backend == QLatin1String("vulkan")) {
             qCCritical(PlasmaZones::lcDaemon) << "Vulkan library not found — falling back to OpenGL."
                                               << "Install vulkan-icd-loader or equivalent for your distro.";
         }
+        // The parenthetical reports the probe OUTCOME, not the config string:
+        // a configured "vulkan" whose library failed to load is already on
+        // OpenGL at this point (probeAndSetGraphicsApi set it during the probe).
         qCInfo(PlasmaZones::lcDaemon) << "Rendering backend:" << backend
                                       << (useVulkan                                ? "(Vulkan)"
+                                              : backend == QLatin1String("vulkan") ? "(OpenGL fallback)"
                                               : backend == QLatin1String("opengl") ? "(OpenGL)"
                                                                                    : "(Qt default)");
+        // GL device choice happens when Mesa opens the DRI screen during
+        // platform init, so DRI_PRIME must be exported before the app object.
+        // Applied on the Vulkan path too: it only steers the GL loader, and
+        // covers the case where Vulkan falls back to OpenGL below.
+        PlasmaZones::applyOpenGlGpuPreference(renderingConfig.gpuDevice);
     }
 
     QGuiApplication app(argc, argv);
@@ -151,7 +160,7 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     qRegisterMetaType<QVulkanInstance*>();
     if (useVulkan) {
-        if (PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app)) {
+        if (PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app, renderingConfig.gpuDevice)) {
             qCInfo(PlasmaZones::lcDaemon) << "Vulkan instance created successfully";
         } else {
             qCCritical(PlasmaZones::lcDaemon)
@@ -159,10 +168,17 @@ int main(int argc, char* argv[])
                 << "Check that Vulkan drivers are installed and match the running kernel module"
                 << "(a GPU driver upgrade without a reboot leaves a userspace/kernel version skew that"
                 << "breaks device enumeration).";
-            useVulkan = false;
         }
     }
 #endif
+
+    // Publish the GPU-preference env var names this process exported (and the
+    // ones it cleared, with values) so spawn sites in plasmazones_core (e.g.
+    // LayoutAdaptor::launchEditor) can scrub and restore child environments
+    // without a link dependency on this target.
+    app.setProperty(PlasmaZones::PGpuExportedVarsProperty, PlasmaZones::exportedGpuPreferenceVariables());
+    app.setProperty(PlasmaZones::PGpuClearedVarsProperty, PlasmaZones::clearedGpuPreferenceVariables());
+
     PlasmaZones::loadTranslations(&app);
 
     // Register D-Bus struct types for typed signal/method exchange

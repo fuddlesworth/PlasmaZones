@@ -197,6 +197,14 @@ public:
         Q_EMIT showZonesOnAllMonitorsChanged();
         Q_EMIT settingsChanged();
     }
+    // DELIBERATE OMISSION: production's disable-axis accessors expand the
+    // queried screen id through PhosphorScreens::ScreenIdentity::variantsFor
+    // (connector-name <-> EDID-id aliases) and disabledMonitors() additionally
+    // resolves + dedups stored entries on read (settings/disable.cpp). These
+    // stubs store and compare the given strings verbatim — mirroring the
+    // resolution would drag live QScreen lookups into the fixture. Tests must
+    // disable and query the same spelling; one that needs alias semantics
+    // must use the real Settings. (Same rule as isContextLocked below.)
     QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const override
     {
         return m_disabledMonitors.value(static_cast<int>(mode));
@@ -1468,6 +1476,96 @@ public:
         Q_EMIT scrollingRestoreFloatedWindowsOnLoginChanged();
         Q_EMIT settingsChanged();
     }
+    // The scrolling tab-indicator family: all seven pairs are DEFAULTED
+    // virtuals on ISettings that answer frozen constants, which makes any
+    // consumer predicate (overlayservice scrolltabs reads enabled/style)
+    // untestable through an unoverridden stub — the same hazard the
+    // scrollingRestoreFloatedWindowsOnLogin comment above records. Override
+    // all seven, member-backed and ConfigDefaults-seeded.
+    bool scrollingTabIndicatorEnabled() const override
+    {
+        return m_scrollingTabIndicatorEnabled;
+    }
+    void setScrollingTabIndicatorEnabled(bool enabled) override
+    {
+        if (m_scrollingTabIndicatorEnabled == enabled)
+            return;
+        m_scrollingTabIndicatorEnabled = enabled;
+        Q_EMIT scrollingTabIndicatorEnabledChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingTabIndicatorStyle() const override
+    {
+        return m_scrollingTabIndicatorStyle;
+    }
+    void setScrollingTabIndicatorStyle(int style) override
+    {
+        if (m_scrollingTabIndicatorStyle == style)
+            return;
+        m_scrollingTabIndicatorStyle = style;
+        Q_EMIT scrollingTabIndicatorStyleChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingTabIndicatorGapsBetweenTabs() const override
+    {
+        return m_scrollingTabIndicatorGapsBetweenTabs;
+    }
+    void setScrollingTabIndicatorGapsBetweenTabs(int px) override
+    {
+        if (m_scrollingTabIndicatorGapsBetweenTabs == px)
+            return;
+        m_scrollingTabIndicatorGapsBetweenTabs = px;
+        Q_EMIT scrollingTabIndicatorGapsBetweenTabsChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingTabIndicatorCornerRadius() const override
+    {
+        return m_scrollingTabIndicatorCornerRadius;
+    }
+    void setScrollingTabIndicatorCornerRadius(int px) override
+    {
+        if (m_scrollingTabIndicatorCornerRadius == px)
+            return;
+        m_scrollingTabIndicatorCornerRadius = px;
+        Q_EMIT scrollingTabIndicatorCornerRadiusChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString scrollingTabIndicatorActiveColor() const override
+    {
+        return m_scrollingTabIndicatorActiveColor;
+    }
+    void setScrollingTabIndicatorActiveColor(const QString& color) override
+    {
+        if (m_scrollingTabIndicatorActiveColor == color)
+            return;
+        m_scrollingTabIndicatorActiveColor = color;
+        Q_EMIT scrollingTabIndicatorActiveColorChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString scrollingTabIndicatorInactiveColor() const override
+    {
+        return m_scrollingTabIndicatorInactiveColor;
+    }
+    void setScrollingTabIndicatorInactiveColor(const QString& color) override
+    {
+        if (m_scrollingTabIndicatorInactiveColor == color)
+            return;
+        m_scrollingTabIndicatorInactiveColor = color;
+        Q_EMIT scrollingTabIndicatorInactiveColorChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString scrollingTabIndicatorUrgentColor() const override
+    {
+        return m_scrollingTabIndicatorUrgentColor;
+    }
+    void setScrollingTabIndicatorUrgentColor(const QString& color) override
+    {
+        if (m_scrollingTabIndicatorUrgentColor == color)
+            return;
+        m_scrollingTabIndicatorUrgentColor = color;
+        Q_EMIT scrollingTabIndicatorUrgentColorChanged();
+        Q_EMIT settingsChanged();
+    }
     // ISettings getter/setter; the ISnapSettings bridge (unfloatFallbackToZone)
     // is defined alongside the other ISnapSettings overrides below.
     bool snapUnfloatFallbackToZone() const override
@@ -2123,6 +2221,19 @@ public:
             Q_EMIT settingsChanged();
         }
     }
+    QString gpuDevice() const override
+    {
+        return m_gpuDevice;
+    }
+    void setGpuDevice(const QString& gpu) override
+    {
+        const QString value = ConfigDefaults::normalizeGpuDevice(gpu);
+        if (m_gpuDevice != value) {
+            m_gpuDevice = value;
+            Q_EMIT gpuDeviceChanged();
+            Q_EMIT settingsChanged();
+        }
+    }
 
     // Per-screen autotile config (used by WindowAppearanceController's
     // per-monitor gapValue/writeGap and the per-screen gap accessors). Stored in
@@ -2141,15 +2252,15 @@ public:
     {
         return m_perScreenAutotile.value(screenIdOrName);
     }
+    // Mirrors production (settings/perscreen.cpp setPerScreenAutotileSetting):
+    // empty-argument guard, emit only on an actual change, and the
+    // gap-dimension write fires perScreenSnappingSettingsChanged (the daemon's
+    // gap-resnap trigger) exactly like the clear path below. DELIBERATE
+    // OMISSION: production also runs validatePerScreenAutotileValue and
+    // rejects invalid values; the stub stores what it is given, so a test
+    // exercising the rejection path must use the real Settings.
     void setPerScreenAutotileSetting(const QString& screenIdOrName, const QString& key, const QVariant& value) override
     {
-        // Mirrors production (settings/perscreen.cpp): empty-input guard,
-        // changed-check before any emit, and the gap-dimension write fires
-        // the gap-resnap trigger (perScreenSnappingSettingsChanged) exactly
-        // like the clear path below claims parity with. Production's
-        // validatePerScreenAutotileValue key allow-list is a DELIBERATE
-        // simplification here (a stub-backed test may seed keys the real
-        // Settings would reject; use the real Settings to test validation).
         if (screenIdOrName.isEmpty() || key.isEmpty()) {
             return;
         }
@@ -2210,14 +2321,14 @@ public:
     // ISettings defaults are no-ops, and a stub falling through to them
     // passes any consumer test vacuously (empty map, swallowed writes).
     // Keys are stored verbatim: PerScreenScrollingKey carries no prefix
-    // asymmetry (see settings/perscreen.cpp). Two DELIBERATE OMISSIONS, both
-    // because no stub-backed test drives them today: the zone-selector
-    // quartet, and production's width re-seed — the real
+    // asymmetry (see settings/perscreen.cpp). DELIBERATE OMISSION, because no
+    // stub-backed test drives it today: production's width re-seed — the real
     // setPerScreenScrollingSetting runs repairPerScreenScrollingWidth after a
     // kind change so the stored value cannot belong to the wrong kind, and
-    // this stores whatever it is handed. Mirror either when a test needs it,
-    // and expect a test of the kind-change path to fail against this stub
-    // until you do.
+    // this stores whatever it is handed. Mirror it when a test needs it, and
+    // expect a test of the kind-change path to fail against this stub until
+    // you do. (The zone-selector quartet has its own hash-backed overrides
+    // further down.)
     QVariantMap getPerScreenScrollingSettings(const QString& screenIdOrName) const override
     {
         return m_perScreenScrolling.value(screenIdOrName);
@@ -2269,6 +2380,46 @@ public:
         return gapKeys;
     }
 
+    // Per-screen ZONE-SELECTOR overrides, hash-backed like the autotile and
+    // scrolling stores above so the zone-selector resolver's per-screen arm
+    // can be driven from the stub instead of silently taking the
+    // defaulted-virtual "no override" arm. Mirrors production's emit-on-change
+    // and empty-argument guards. DELIBERATE OMISSIONS, as for the siblings:
+    // no validatePerScreenValue rejection, no screen-identity alias matching,
+    // and the has* accessors test entry EMPTINESS where production tests
+    // entry EXISTENCE (unreachable divergence: the setter never leaves an
+    // empty entry behind) — a test needing any of those must use the real
+    // Settings.
+    QVariantMap getPerScreenZoneSelectorSettings(const QString& screenIdOrName) const override
+    {
+        return m_perScreenZoneSelector.value(screenIdOrName);
+    }
+    void setPerScreenZoneSelectorSetting(const QString& screenIdOrName, const QString& key,
+                                         const QVariant& value) override
+    {
+        if (screenIdOrName.isEmpty() || key.isEmpty()) {
+            return;
+        }
+        QVariantMap& entry = m_perScreenZoneSelector[screenIdOrName];
+        if (entry.value(key) == value) {
+            return;
+        }
+        entry[key] = value;
+        Q_EMIT perScreenZoneSelectorSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) const override
+    {
+        return !m_perScreenZoneSelector.value(screenIdOrName).isEmpty();
+    }
+    void clearPerScreenZoneSelectorSettings(const QString& screenIdOrName) override
+    {
+        if (m_perScreenZoneSelector.remove(screenIdOrName) > 0) {
+            Q_EMIT perScreenZoneSelectorSettingsChanged();
+            Q_EMIT settingsChanged();
+        }
+    }
+
     // Persistence (ISettings)
     void load() override
     {
@@ -2277,6 +2428,11 @@ public:
     {
         return true;
     }
+    // DELIBERATELY UNIMPLEMENTED: returns success without restoring any
+    // member to its ConfigDefaults seed. Production reset() deletes every
+    // managed group and re-loads; re-seeding 100+ members by hand here would
+    // be its own drift surface. No stub-backed test may exercise a reset
+    // path — one that needs real reset semantics must use the real Settings.
     bool reset() override
     {
         return true;
@@ -2285,15 +2441,24 @@ public:
 private:
     QHash<QString, QVariantMap> m_perScreenAutotile;
     QHash<QString, QVariantMap> m_perScreenScrolling;
+    QHash<QString, QVariantMap> m_perScreenZoneSelector;
     QString m_defaultLayoutId;
     bool m_suppressDefaultLayoutAssignment = ConfigDefaults::suppressDefaultLayoutAssignment();
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
+    QString m_gpuDevice = ConfigDefaults::gpuDevice();
     bool m_snapAssistFeatureEnabled = ConfigDefaults::snapAssistFeatureEnabled();
     bool m_snapAssistEnabled = ConfigDefaults::snapAssistEnabled();
     bool m_autoAssignAllLayouts = ConfigDefaults::autoAssignAllLayouts();
     bool m_snappingRestoreFloatedWindowsOnLogin = ConfigDefaults::snappingRestoreFloatedWindowsOnLogin();
     bool m_autotileRestoreFloatedWindowsOnLogin = ConfigDefaults::autotileRestoreFloatedWindowsOnLogin();
     bool m_scrollingRestoreFloatedWindowsOnLogin = ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin();
+    bool m_scrollingTabIndicatorEnabled = ConfigDefaults::scrollingTabIndicatorEnabled();
+    int m_scrollingTabIndicatorStyle = ConfigDefaults::scrollingTabIndicatorStyle();
+    int m_scrollingTabIndicatorGapsBetweenTabs = ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs();
+    int m_scrollingTabIndicatorCornerRadius = ConfigDefaults::scrollingTabIndicatorCornerRadius();
+    QString m_scrollingTabIndicatorActiveColor = ConfigDefaults::scrollingTabIndicatorActiveColor();
+    QString m_scrollingTabIndicatorInactiveColor = ConfigDefaults::scrollingTabIndicatorInactiveColor();
+    QString m_scrollingTabIndicatorUrgentColor = ConfigDefaults::scrollingTabIndicatorUrgentColor();
     bool m_snapUnfloatFallbackToZone = ConfigDefaults::snapUnfloatFallbackToZone();
     bool m_snappingFocusNewWindows = ConfigDefaults::snappingFocusNewWindows();
     bool m_snappingFocusFollowsMouse = ConfigDefaults::snappingFocusFollowsMouse();

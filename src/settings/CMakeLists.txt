@@ -19,7 +19,9 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dir
 set(plasmazones_settings_SRCS
     main.cpp
     search/searchcatalog.h
+    search/searchcatalog_p.h
     search/searchcatalog.cpp
+    search/searchcatalog_animations.cpp
     search/searchproviders.h
     search/searchproviders.cpp
     utils/registryshaderpreviewbackend.h
@@ -224,6 +226,8 @@ set(plasmazones_settings_SRCS
     utils/screenhelper.cpp
     utils/screenprovider.h
     utils/screenprovider.cpp
+    utils/gpudevicelist.h
+    utils/gpudevicelist.cpp
     utils/dbusutils.h
 )
 

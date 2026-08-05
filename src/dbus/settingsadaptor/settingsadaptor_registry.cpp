@@ -194,7 +194,9 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
         const QString s = v.toString();                                                                                \
-        if (!s.isEmpty() && !QColor::isValidColorName(s)) {                                                            \
+        /* Same validity predicate as REGISTER_COLOR_SETTING; only the                                                 \
+           empty-string exemption ("follow the theme") is extra here. */                                               \
+        if (!s.isEmpty() && !QColor(s).isValid()) {                                                                    \
             return false;                                                                                              \
         }                                                                                                              \
         concrete->setter(s);                                                                                           \
@@ -399,6 +401,25 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("labelFontUnderline", labelFontUnderline, setLabelFontUnderline)
     REGISTER_BOOL_SETTING("labelFontStrikeout", labelFontStrikeout, setLabelFontStrikeout)
     REGISTER_STRING_SETTING("renderingBackend", renderingBackend, setRenderingBackend)
+    // gpuDevice: custom validating setter. The schema validator COERCES a
+    // malformed value to "auto", and the key deliberately declares no choices
+    // a D-Bus caller could consult — so a plain pass-through setter would
+    // report success for a write that was silently discarded. Reject at the
+    // boundary instead: only "auto" or a well-formed vendor:device pair (in
+    // any case/whitespace variation that normalizes to itself) is accepted.
+    m_getters[QStringLiteral("gpuDevice")] = [this]() {
+        return m_settings->gpuDevice();
+    };
+    m_setters[QStringLiteral("gpuDevice")] = [this](const QVariant& v) {
+        const QString raw = v.toString();
+        const QString normalized = ConfigDefaults::normalizeGpuDevice(raw);
+        if (normalized != raw.toLower().trimmed()) {
+            return false;
+        }
+        m_settings->setGpuDevice(normalized);
+        return true;
+    };
+    m_schemas[QStringLiteral("gpuDevice")] = QStringLiteral("string");
     REGISTER_INT_SETTING("shaderFrameRate", shaderFrameRate, setShaderFrameRate)
     REGISTER_BOOL_SETTING("enableAudioVisualizer", enableAudioVisualizer, setEnableAudioVisualizer)
     REGISTER_INT_SETTING("audioSpectrumBarCount", audioSpectrumBarCount, setAudioSpectrumBarCount)
@@ -441,7 +462,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("snappingStickyWindowHandling")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
+            && val <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
             m_settings->setSnappingStickyWindowHandling(static_cast<StickyWindowHandling>(val));
             return true;
         }
@@ -543,7 +565,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("zoneSelectorPosition")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 8) {
+        if (val >= static_cast<int>(ZoneSelectorPosition::TopLeft)
+            && val <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
             m_settings->setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(val));
             return true;
         }
@@ -556,7 +579,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("zoneSelectorLayoutMode")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= static_cast<int>(ZoneSelectorLayoutMode::Grid)
+            && val <= static_cast<int>(ZoneSelectorLayoutMode::Vertical)) {
             m_settings->setZoneSelectorLayoutMode(static_cast<ZoneSelectorLayoutMode>(val));
             return true;
         }
@@ -569,7 +593,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("zoneSelectorSizeMode")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 1) {
+        if (val >= static_cast<int>(ZoneSelectorSizeMode::Auto)
+            && val <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
             m_settings->setZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(val));
             return true;
         }
@@ -697,39 +722,6 @@ void SettingsAdaptor::initializeRegistry()
             return true;
         };
         m_schemas[QStringLiteral("autotilePerAlgorithmSettings")] = QStringLiteral("map");
-        // The shared inner/outer gaps are config-backed (the Gaps group), written
-        // by the settings app's Window Appearance page — not over this generic
-        // map. But the editor (a separate process) reads the resolved global gap
-        // values over D-Bus, so register READ-ONLY getters (no setter) for them; a
-        // write attempt still fails because no setter is registered.
-        m_getters[QStringLiteral("innerGap")] = [concrete]() {
-            return concrete->innerGap();
-        };
-        m_schemas[QStringLiteral("innerGap")] = QStringLiteral("int");
-        m_getters[QStringLiteral("outerGap")] = [concrete]() {
-            return concrete->outerGap();
-        };
-        m_schemas[QStringLiteral("outerGap")] = QStringLiteral("int");
-        m_getters[QStringLiteral("usePerSideOuterGap")] = [concrete]() {
-            return concrete->usePerSideOuterGap();
-        };
-        m_schemas[QStringLiteral("usePerSideOuterGap")] = QStringLiteral("bool");
-        m_getters[QStringLiteral("outerGapTop")] = [concrete]() {
-            return concrete->outerGapTop();
-        };
-        m_schemas[QStringLiteral("outerGapTop")] = QStringLiteral("int");
-        m_getters[QStringLiteral("outerGapBottom")] = [concrete]() {
-            return concrete->outerGapBottom();
-        };
-        m_schemas[QStringLiteral("outerGapBottom")] = QStringLiteral("int");
-        m_getters[QStringLiteral("outerGapLeft")] = [concrete]() {
-            return concrete->outerGapLeft();
-        };
-        m_schemas[QStringLiteral("outerGapLeft")] = QStringLiteral("int");
-        m_getters[QStringLiteral("outerGapRight")] = [concrete]() {
-            return concrete->outerGapRight();
-        };
-        m_schemas[QStringLiteral("outerGapRight")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("autotileFocusNewWindows", autotileFocusNewWindows, setAutotileFocusNewWindows)
         REGISTER_CONCRETE_BOOL("autotileSmartGaps", autotileSmartGaps, setAutotileSmartGaps)
         REGISTER_CONCRETE_INT("autotileMaxWindows", autotileMaxWindows, setAutotileMaxWindows)
@@ -740,7 +732,8 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_setters[QStringLiteral("autotileInsertPosition")] = [concrete](const QVariant& v) {
             int val = v.toInt();
-            if (val >= 0 && val <= 2) {
+            if (val >= static_cast<int>(AutotileInsertPosition::End)
+                && val <= static_cast<int>(AutotileInsertPosition::AsMaster)) {
                 concrete->setAutotileInsertPosition(static_cast<Settings::AutotileInsertPosition>(val));
                 return true;
             }
@@ -748,6 +741,43 @@ void SettingsAdaptor::initializeRegistry()
         };
         m_schemas[QStringLiteral("autotileInsertPosition")] = QStringLiteral("int");
     }
+
+    // The shared inner/outer gaps are config-backed (the Gaps group), written
+    // by the settings app's Window Appearance page — not over this generic
+    // map. But the editor (a separate process) reads the resolved global gap
+    // values over D-Bus, so register READ-ONLY getters (no setter) for them; a
+    // write attempt still fails because no setter is registered. All seven are
+    // on the ISettings geometry interface (IZoneGeometrySettings), so they
+    // register through m_settings like adjacentThreshold — a non-Settings
+    // backend keeps the keys.
+    m_getters[QStringLiteral("innerGap")] = [this]() {
+        return m_settings->innerGap();
+    };
+    m_schemas[QStringLiteral("innerGap")] = QStringLiteral("int");
+    m_getters[QStringLiteral("outerGap")] = [this]() {
+        return m_settings->outerGap();
+    };
+    m_schemas[QStringLiteral("outerGap")] = QStringLiteral("int");
+    m_getters[QStringLiteral("usePerSideOuterGap")] = [this]() {
+        return m_settings->usePerSideOuterGap();
+    };
+    m_schemas[QStringLiteral("usePerSideOuterGap")] = QStringLiteral("bool");
+    m_getters[QStringLiteral("outerGapTop")] = [this]() {
+        return m_settings->outerGapTop();
+    };
+    m_schemas[QStringLiteral("outerGapTop")] = QStringLiteral("int");
+    m_getters[QStringLiteral("outerGapBottom")] = [this]() {
+        return m_settings->outerGapBottom();
+    };
+    m_schemas[QStringLiteral("outerGapBottom")] = QStringLiteral("int");
+    m_getters[QStringLiteral("outerGapLeft")] = [this]() {
+        return m_settings->outerGapLeft();
+    };
+    m_schemas[QStringLiteral("outerGapLeft")] = QStringLiteral("int");
+    m_getters[QStringLiteral("outerGapRight")] = [this]() {
+        return m_settings->outerGapRight();
+    };
+    m_schemas[QStringLiteral("outerGapRight")] = QStringLiteral("int");
 
     // Per-surface decoration tree (JSON blob round-trip via D-Bus), mirroring
     // the animation shaderProfileTree registration above. The out-of-process
@@ -775,7 +805,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_setters[QStringLiteral("autotileStickyWindowHandling")] = [this](const QVariant& v) {
         int val = v.toInt();
-        if (val >= 0 && val <= 2) {
+        if (val >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
+            && val <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
             m_settings->setAutotileStickyWindowHandling(static_cast<StickyWindowHandling>(val));
             return true;
         }
