@@ -130,9 +130,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
         <signal name="windowsTileRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows should be moved to new geometries (batch)."/>
-            <arg name="tileRequests" type="a(siiiissbbs)">
+            <arg name="tileRequests" type="a(siiiissbbss)">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::TileRequestList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, zoneId, screenId, monocle, floating, stacking)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, zoneId, screenId, monocle, floating, stacking, scrollEdge)."/>
             </arg>
         </signal>
 

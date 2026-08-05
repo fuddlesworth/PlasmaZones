@@ -113,11 +113,13 @@ private Q_SLOTS:
                                                  QStringLiteral("screen-0"),
                                                  true,
                                                  false,
-                                                 QStringLiteral("lastOnTop")};
+                                                 QStringLiteral("lastOnTop"),
+                                                 QStringLiteral("right")};
 
-        // Verify D-Bus signature: (siiiissbbs) = string + 4 ints + 2 strings + 2 bools + string
+        // Verify D-Bus signature: (siiiissbbss) = string + 4 ints + 2 strings
+        // + 2 bools + stacking + scrollEdge
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiissbbs)"));
+        QCOMPARE(sig, QStringLiteral("(siiiissbbss)"));
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
@@ -208,8 +210,8 @@ private Q_SLOTS:
     void testTileRequestToRect()
     {
         PhosphorProtocol::TileRequestEntry entry{
-            QStringLiteral("app|5"), 15,    25,    640,      480, QStringLiteral("{z}"),
-            QStringLiteral("s0"),    false, false, QString()};
+            QStringLiteral("app|5"), 15,    25,    640,       480,      QStringLiteral("{z}"),
+            QStringLiteral("s0"),    false, false, QString(), QString()};
         QCOMPARE(entry.toRect(), QRect(15, 25, 640, 480));
     }
 

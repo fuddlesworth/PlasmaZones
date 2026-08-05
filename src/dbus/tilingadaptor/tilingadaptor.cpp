@@ -113,6 +113,7 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         entry.screenId = obj.value(QLatin1String("screenId")).toString();
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
+        entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
         // The protocol type ships its own validator (empty windowId /
         // screenId, degenerate rect) — run it rather than re-deriving a
         // subset of its checks here.

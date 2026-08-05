@@ -103,6 +103,13 @@ QString TileRequestEntry::validationError() const
     if (!stacking.isEmpty() && stacking != QLatin1String("firstOnTop") && stacking != QLatin1String("lastOnTop")) {
         return QStringLiteral("TileRequestEntry: invalid stacking '%1' (windowId=%2)").arg(stacking, windowId);
     }
+    // scrollEdge is optional (empty = not a scrolling placement). Same
+    // reasoning as stacking: the effect re-anchors a window's animation origin
+    // on any non-empty value, so an unrecognised string would silently move
+    // the window's apparent entry side. Reject it at the unmarshal boundary.
+    if (!scrollEdge.isEmpty() && scrollEdge != QLatin1String("left") && scrollEdge != QLatin1String("right")) {
+        return QStringLiteral("TileRequestEntry: invalid scrollEdge '%1' (windowId=%2)").arg(scrollEdge, windowId);
+    }
     return {};
 }
 
