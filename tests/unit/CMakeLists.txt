@@ -591,6 +591,8 @@ p_add_test(test_layout_zones core/layout/test_layout_zones.cpp)
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_layoutmanager_persistence core/layout/test_layoutmanager_persistence.cpp)
 p_add_test(test_layoutmanager_cycling core/layout/test_layoutmanager_cycling.cpp)
+p_add_test(test_scrollingtemplate_store core/layout/test_scrollingtemplate_store.cpp)
+
 p_add_test(test_layoutmanager_assignment core/layout/test_layoutmanager_assignment.cpp)
 p_add_test(test_layoutmanager_default_synthesis core/layout/test_layoutmanager_default_synthesis.cpp)
 # The shared fixture header holds a Q_OBJECT base class; AUTOMOC only scans
