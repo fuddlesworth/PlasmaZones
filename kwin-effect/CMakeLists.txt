@@ -78,6 +78,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/input_filter.cpp
     plasmazoneseffect/input_filter.h
     plasmazoneseffect/paint_pipeline.cpp
+    plasmazoneseffect/scroll_clip.cpp
     plasmazoneseffect/paint_shader_window.cpp
     plasmazoneseffect/paint_capture.cpp
     plasmazoneseffect/paint_internal.h

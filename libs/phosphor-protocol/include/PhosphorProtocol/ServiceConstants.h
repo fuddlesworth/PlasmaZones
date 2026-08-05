@@ -161,8 +161,14 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       verbs split onto org.plasmazones.Autotile / org.plasmazones.Scrolling.
 //       A v4 effect would pass the handshake and then silently receive
 //       nothing on the renamed surface, so both sides must move together.
-inline constexpr int ApiVersion = 5;
-inline constexpr int MinPeerApiVersion = 5;
+//   v6: TileRequestEntry gained a trailing scrollEdge field, widening the
+//       windowsTileRequested signal from a(siiiissbbs) to a(siiiissbbss).
+//       Qt's signal hooks are signature-matched before demarshalling, so a
+//       v5 effect's slot would simply never fire on the widened payload —
+//       ALL tiling silently dead until logout — which is exactly the
+//       failure mode the handshake exists to surface up front.
+inline constexpr int ApiVersion = 6;
+inline constexpr int MinPeerApiVersion = 6;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

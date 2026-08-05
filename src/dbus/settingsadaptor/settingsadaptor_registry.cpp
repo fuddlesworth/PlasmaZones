@@ -877,6 +877,7 @@ void SettingsAdaptor::initializeRegistry()
         m_schemas[QStringLiteral("scrollingCenterFocusedColumn")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("scrollingAlwaysCenterSingleColumn", scrollingAlwaysCenterSingleColumn,
                                setScrollingAlwaysCenterSingleColumn)
+        REGISTER_CONCRETE_BOOL("scrollingCropStraddlers", scrollingCropStraddlers, setScrollingCropStraddlers)
         // scrollingDefaultColumnWidthKind: enum (0=Proportion, 1=Fixed, 2=ClientDecides, 3=Preset)
         m_getters[QStringLiteral("scrollingDefaultColumnWidthKind")] = [concrete]() {
             return concrete->scrollingDefaultColumnWidthKind();
@@ -1084,10 +1085,10 @@ void SettingsAdaptor::initializeRegistry()
                                  setScrollingMaximizeColumnShortcut)
         REGISTER_CONCRETE_STRING("scrollingExpandColumnShortcut", scrollingExpandColumnShortcut,
                                  setScrollingExpandColumnShortcut)
-        REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightBackShortcut", scrollingCycleWindowHeightBackShortcut,
-                                 setScrollingCycleWindowHeightBackShortcut)
         REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightShortcut", scrollingCycleWindowHeightShortcut,
                                  setScrollingCycleWindowHeightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightBackShortcut", scrollingCycleWindowHeightBackShortcut,
+                                 setScrollingCycleWindowHeightBackShortcut)
         REGISTER_CONCRETE_STRING("scrollingIncreaseWindowHeightShortcut", scrollingIncreaseWindowHeightShortcut,
                                  setScrollingIncreaseWindowHeightShortcut)
         REGISTER_CONCRETE_STRING("scrollingDecreaseWindowHeightShortcut", scrollingDecreaseWindowHeightShortcut,

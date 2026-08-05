@@ -415,6 +415,7 @@ public:
 
     P_CONFIG_KEY(centerFocusedColumnKey, "CenterFocusedColumn")
     P_CONFIG_KEY(alwaysCenterSingleColumnKey, "AlwaysCenterSingleColumn")
+    P_CONFIG_KEY(cropStraddlersKey, "CropStraddlers")
     P_CONFIG_KEY(defaultColumnWidthKindKey, "DefaultColumnWidthKind")
     P_CONFIG_KEY(defaultColumnWidthValueKey, "DefaultColumnWidthValue")
     P_CONFIG_KEY(defaultColumnDisplayKey, "DefaultColumnDisplay")

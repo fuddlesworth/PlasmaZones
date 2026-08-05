@@ -150,6 +150,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always), "always"_L1},
                      {static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::OnOverflow), "onOverflow"_L1}})},
         {CD::alwaysCenterSingleColumnKey(), CD::scrollingAlwaysCenterSingleColumn(), QMetaType::Bool},
+        {CD::cropStraddlersKey(), CD::scrollingCropStraddlers(), QMetaType::Bool},
         // NOTE: the width-kind CONFIG space {0 proportion, 1 fixed,
         // 2 clientDecides, 3 preset} must never be static_cast to
         // ColumnWidth::Kind, whose 2 is Preset — the engine translates into

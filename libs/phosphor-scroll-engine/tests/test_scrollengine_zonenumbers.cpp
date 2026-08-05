@@ -506,13 +506,12 @@ void TestScrollEngineZoneNumbers::clippedEdgeTilesKeepTheirNumbers()
 {
     // "Clipped, not dropped": centering the middle of three 600px columns
     // pushes its neighbours halfway off BOTH edges. They keep their numbers,
-    // there is no minimum-visibility threshold, and the rects the walk
-    // reports are the CLIPPED ones — while the APPLIED geometry keeps the
-    // full 600px width on both sides. Clamping the applied rect to the work
-    // area was tried and rejected: it resized the windows instead of
-    // clipping their drawing. (The overhang is stopped from rendering on the
-    // neighbouring output by the compositor effect, which skips strip
-    // windows in foreign outputs' paint passes.)
+    // and the rects the walk reports are the CLIPPED ones — which, IN THIS
+    // FIXTURE (screen rect == work area, crop mode off, remainders above the
+    // peek floor), also equal the APPLIED rects. The equality is not general:
+    // with a panel the walk clips to the work area while the apply clamps to
+    // the screen, a remainder below the peek floor parks while keeping its
+    // number, and crop mode applies the true rect.
     //
     // Work area is 1200 wide with 600px columns: centering the middle one
     // puts it at 300..900, leaving the outer two at -300..300 and 900..1500.
@@ -536,12 +535,16 @@ void TestScrollEngineZoneNumbers::clippedEdgeTilesKeepTheirNumbers()
     QCOMPARE(numberOf(engine, "b"), 2);
     QCOMPARE(numberOf(engine, "c"), 3);
 
-    // The APPLIED geometry keeps the full width on BOTH edges. A clamped
-    // left of (0, 0, 300, 800) — or a clamped right of (900, 0, 300, 800) —
-    // is exactly the rejected resize.
+    // The APPLIED geometry is CLAMPED at the screen edge on BOTH sides, and
+    // symmetrically — this reverses the old keep-the-true-rect contract.
+    // Render-side cropping of a committed overhang proved unenforceable (the
+    // compositor may present an idle surface on a hardware plane, bypassing
+    // the effect chain), so the rect itself stops at the boundary; and the
+    // clamp applies on edges WITHOUT an adjacent output too, so the two
+    // peeks of a centred column look the same on every topology.
     QCOMPARE(engine->lastManagedRect(wid("b")), QRect(300, 0, 600, 800));
-    QCOMPARE(engine->lastManagedRect(wid("a")), QRect(-300, 0, 600, 800));
-    QCOMPARE(engine->lastManagedRect(wid("c")), QRect(900, 0, 600, 800));
+    QCOMPARE(engine->lastManagedRect(wid("a")), QRect(0, 0, 300, 800));
+    QCOMPARE(engine->lastManagedRect(wid("c")), QRect(900, 0, 300, 800));
 }
 
 void TestScrollEngineZoneNumbers::crossOutputMoveKeepsHeightAndAnnouncesOnDestination()

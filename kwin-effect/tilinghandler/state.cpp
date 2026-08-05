@@ -660,6 +660,12 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
 void TilingHandler::markWindowTiled(const QString& screenId, const QString& windowId)
 {
     const bool wasTiled = isTiledWindow(windowId);
+    // Single-owner enforced HERE, not by call-site discipline: a window
+    // belongs to exactly one screen bucket, and readers that answer with the
+    // first bucket found (screenForTiledWindow, the outputchange scroll
+    // guard) are only correct while that holds. A future caller that skipped
+    // its own removeFromOtherScreens would otherwise break them silently.
+    TilingStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
     TilingStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
     // Re-resolve only on the false→true transition: a window already tiled on
     // another screen stays tiled, so re-adding it changes no rule outcome.

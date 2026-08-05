@@ -14,7 +14,8 @@
                 "New: on machines with more than one graphics device, a picker under Settings → General → Rendering chooses which GPU draws the zone overlays and on-screen displays. The choice takes effect after a daemon restart (#883)",
                 "Changed: scripts that used the org.plasmazones.Autotile D-Bus interface for shared window and screen queries should switch to the new org.plasmazones.Tiling interface. Autotile keeps only its own verbs, and scrolling screens announce on org.plasmazones.Scrolling (#852)",
                 "Changed: continuously animated decoration packs now animate only the window you are working in, and unfocused windows hold their last frame. The Animate only the active window switch under Settings → Window Appearance, shown when the advanced settings are on, turns the old behavior back on (#872)",
-                "Fixed: window animations no longer force a full repaint of every monitor on every frame, and a decorated window's cached content survives the animation instead of being re-rendered each frame. This matters most on laptops and other machines with integrated graphics, and the zone overlay also frees its graphics memory once a drag ends (#872)"
+                "Fixed: window animations no longer force a full repaint of every monitor on every frame, and a decorated window's cached content survives the animation instead of being re-rendered each frame. This matters most on laptops and other machines with integrated graphics, and the zone overlay also frees its graphics memory once a drag ends (#872)",
+                "Fixed: a scrolling column partly scrolled off its screen now resizes at the screen edge instead of overhanging the neighbouring monitor. A new Crop columns at the screen edge switch under Settings → Scrolling keeps the full-size look by cutting the drawing at the edge instead (#885)"
             ]
         },
         {

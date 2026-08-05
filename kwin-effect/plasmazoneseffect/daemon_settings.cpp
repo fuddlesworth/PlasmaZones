@@ -762,14 +762,32 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
 
-    // Type-guard — see showWindowBorder above. scrollingWheelFocusEnabled
-    // defaults to TRUE, so a non-bool reply would invert it and tear down the
-    // registered Meta+wheel QActions for the duration of the skew.
+    // Type-guard — see showWindowBorder above.
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;
         }
         m_tilingHandler->setFocusFollowsMouse(v.toBool());
+    });
+
+    // Note the guard's failure direction is the permissive one here: a
+    // swallowed reply leaves the flag false, i.e. scanout stays allowed while
+    // the engine may already commit true rects. Accepted — the only skew
+    // source is a daemon mid-restart, and crop mode's enable-order gap (see
+    // blocksDirectScanout) already covers that shape. The change-gate plus
+    // repaint makes a real flip take effect without waiting for incidental
+    // damage, since blocksDirectScanout is only re-evaluated on frames.
+    loadSettingAsync(QStringLiteral("scrollingCropStraddlers"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        const bool crop = v.toBool();
+        if (m_cachedScrollCropStraddlers != crop) {
+            m_cachedScrollCropStraddlers = crop;
+            if (KWin::effects) {
+                KWin::effects->addRepaintFull();
+            }
+        }
     });
 
     loadSettingAsync(QStringLiteral("scrollingFocusFollowsMouse"), [this](const QVariant& v) {
@@ -779,6 +797,9 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_tilingHandler->setScrollingFocusFollowsMouse(v.toBool());
     });
 
+    // Type-guard matters doubly here: scrollingWheelFocusEnabled defaults to
+    // TRUE, so a non-bool reply would invert it and tear down the registered
+    // Meta+wheel QActions for the duration of the skew.
     loadSettingAsync(QStringLiteral("scrollingWheelFocusEnabled"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;

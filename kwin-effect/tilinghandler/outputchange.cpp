@@ -138,6 +138,62 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         return; // Same screen or unknown — no transfer needed
     }
 
+    // A window still in a SCROLLING screen's tiled bucket belongs to that
+    // strip, and only the engine moves it between strips — through the marker
+    // path above, which has already had its chance. Everything past this point
+    // is a POSITIONAL transfer, and a strip column's position is not evidence
+    // about which strip owns it: a centred column legitimately straddles the
+    // screen edge, so its frame centre can sit on the neighbouring output.
+    //
+    // The identity check just above was the only thing that used to stop that
+    // transfer, and it cannot be relied on: both oldScreenId and newScreenId
+    // derive from scrollTrackedScreenFor, so the moment that answers empty for
+    // any reason the two diverge and the guard opens exactly when it is
+    // needed. The transfer then calls onWindowClosed, which wipes the
+    // membership that scrollTrackedScreenFor reads, so it can never answer
+    // again — and because the tile batch is emit-on-change, a focus-only
+    // relayout resolving to identical rects sends nothing that would restore
+    // it. One transient miss became a permanently broken clip.
+    //
+    // Testing membership directly is independent of that computation, so a
+    // transient miss stays transient. This enforces an invariant the handler
+    // already assumed rather than adding a new rule: the comment on the marker
+    // block above states the old-vs-new diff "is an identity for scroll
+    // windows and can never route a scroll handoff".
+    //
+    // The test must answer the same question scrollTrackedScreenFor answers
+    // (without CALLING it — oldScreenId derives from it, which is the
+    // circularity the paragraph above rejects): "is this window in ANY
+    // scrolling bucket, or recorded on a scrolling screen while tiled".
+    // screenForTiledWindow alone returns the FIRST bucket in hash order and
+    // has no recorded-screen fallback, so it can miss exactly the stale-
+    // bucket rescue case the predicate was built for — and a miss here runs
+    // the transfer, whose onWindowClosed wipes the bucket permanently.
+    //
+    // A scroll window returning here deliberately keeps any armed
+    // m_expectedOutputMove marker: the marker path is the only reliable
+    // scroll transfer signal, and the same-screen drain above already
+    // handles its disposal for scroll windows.
+    //
+    // The RAW m_scrollingScreens set, deliberately (not isScrollingScreen's
+    // managed intersection): this is a BAIL, and wide is its fail-safe
+    // direction — the union and the scrolling set arrive on independent
+    // signals, and skipping a transfer for a frame is recoverable while a
+    // wrongly-run transfer wipes the bucket for good.
+    bool inScrollBucket = false;
+    for (const QString& scrollScreen : std::as_const(m_scrollingScreens)) {
+        if (m_border.tiledWindowsByScreen.value(scrollScreen).contains(windowId)) {
+            inScrollBucket = true;
+            break;
+        }
+    }
+    if (inScrollBucket) {
+        return;
+    }
+    if (isTiledWindow(windowId) && m_scrollingScreens.contains(m_notifiedWindowScreens.value(windowId))) {
+        return;
+    }
+
     const bool oldIsAutotile = m_managedScreens.contains(oldScreenId);
     const bool newIsAutotile = m_managedScreens.contains(newScreenId);
 

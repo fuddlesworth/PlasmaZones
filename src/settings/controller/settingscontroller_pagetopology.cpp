@@ -344,10 +344,10 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::tilingAlgorithmGroup(), CD::maxWindowsKey()},
              {CD::tilingAlgorithmGroup(), CD::perAlgorithmSettingsKey()},
          }},
-        // The two advanced scrolling leaves split the former single page's
+        // The three advanced scrolling leaves split the former single page's
         // keys by concern; the one-owner invariant holds per (group, key).
         // The master switch (Scrolling.enabled) is deliberately absent from
-        // both: like snappingEnabled/autotileEnabled it is committed
+        // all three: like snappingEnabled/autotileEnabled it is committed
         // through the sidebar toggle's beginExternalEdit/endExternalEdit
         // pair, not staged through per-page dirtiness.
         //
@@ -400,6 +400,8 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // (they followed the card over when the View leaf was folded in).
              {CD::scrollingGroup(), CD::centerFocusedColumnKey()},
              {CD::scrollingGroup(), CD::alwaysCenterSingleColumnKey()},
+             // The crop-at-edge switch on the Focus and view card.
+             {CD::scrollingGroup(), CD::cropStraddlersKey()},
              {CD::scrollingGroup(), CD::wheelFocusEnabledKey()},
              {CD::scrollingGroup(), CD::wheelFocusInvertedKey()},
              // Scrolling.Behavior — the strip's window-handling and focus

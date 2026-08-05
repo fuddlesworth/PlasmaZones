@@ -698,41 +698,25 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     // (previewEngine)` cancel arm is unreachable because this
                     // outer branch was taken. A rect pushed on an earlier tick
                     // would stay painted for the rest of the drag.
-                    stopDragScrollTimer();
                     clearScrollDropIndicator();
                 }
             }
             if (insertEngine->hasDragInsertPreview() && insertEngine->dragInsertPreviewScreenId() == insertScreenId) {
-                // Edge auto-scroll is TIMER-driven (see m_dragScrollTimer):
-                // this motion tick only records the cursor and keeps the
-                // timer alive, so a hand parked in the edge band scrolls
-                // continuously instead of stalling with the motion stream.
-                // Scroll engine only — nudgeDragScroll is a base no-op for
-                // autotile, and a 60 Hz timer spinning on a guaranteed false
-                // for the whole preview is pure waste.
-                m_lastDragCursorPos = QPoint(cursorX, cursorY);
-                if (onScrollingScreen) {
-                    ensureDragScrollTimerRunning();
-                }
                 const PhosphorEngine::IPlacementEngine::DragInsertTarget target =
                     insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
                 if (target.isValid()) {
                     insertEngine->updateDragInsertPreview(target);
                 }
                 // Paint the drop target. Pushed AFTER the update above so the
-                // rect reflects this tick's target, and pushed on every tick
-                // rather than only on a target change: the strip can move
-                // under a stationary cursor via edge auto-scroll, which shifts
-                // the rect without changing the target. The overlay
-                // change-gates on the rect itself, so a repeat costs a
-                // compare. Empty for autotile by interface default, which is
-                // correct — its live restructure already shows the target.
-                // animate=true: this push follows a CURSOR MOVE, so any rect
-                // change here is the user aiming somewhere new, which is
-                // exactly what the transitions exist to make legible. The
-                // overlay change-gates, so an unchanged rect animates nothing.
-                pushScrollDropIndicator(insertScreenId, insertEngine->dragInsertIndicatorRect(insertScreenId),
-                                        /*animate=*/true);
+                // rect reflects this tick's target, and pushed unconditionally
+                // because the overlay change-gates on the rect itself, so a
+                // repeat costs a compare. Empty for autotile by interface
+                // default, which is correct — its live restructure already
+                // shows the target. The push is always animated: it follows a
+                // CURSOR MOVE, so any rect change here is the user aiming
+                // somewhere new, which is exactly what the transitions exist
+                // to make legible.
+                pushScrollDropIndicator(insertScreenId, insertEngine->dragInsertIndicatorRect(insertScreenId));
                 // The early return below starves the activation and
                 // zone-span rising-edge latches for as long as the preview
                 // lives; keep them fed here so a release→press performed
@@ -762,11 +746,6 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                                   << "engineResolved=" << (insertEngine != nullptr) << "held=" << insertHeld
                                   << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
             previewEngine->cancelDragInsertPreview();
-            // The edge-scroll timer goes with the preview it was driving. Left
-            // armed, its next firing is up to 16 ms away — long enough for a
-            // new drag's eager preview to begin, at which point a stale tick
-            // would nudge the NEW strip with this drag's parked cursor.
-            stopDragScrollTimer();
             clearScrollDropIndicator();
         }
     }

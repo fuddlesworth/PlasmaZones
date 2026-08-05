@@ -11,9 +11,10 @@ import org.kde.kirigami as Kirigami
  * @brief The scrolling Focus and view card, the peer of TilingFocusCard and
  * SnappingFocusCard. Alongside the two focus rows those siblings carry, it
  * holds the viewport rows the strip needs: how the view follows the focused
- * column and the Meta+wheel column-focus gesture. Both belong with focus
- * rather than on a page of their own, so the card hosts them and the former
- * Scrolling → View leaf is gone.
+ * column, how a column at the screen edge is shown (crop versus resize), and
+ * the Meta+wheel column-focus gesture. All belong with focus rather than on
+ * a page of their own, so the card hosts them and the former Scrolling →
+ * View leaf is gone.
  *
  * All rows bind the appSettings context property, so the card carries no
  * per-page state. App-wide only, matching the tiling/snapping window pages:
@@ -55,6 +56,22 @@ SettingsCard {
                 accessibleName: i18n("Center a lone column")
                 onToggled: function (newValue) {
                     appSettings.scrollingAlwaysCenterSingleColumn = newValue;
+                }
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
+            title: i18n("Crop columns at the screen edge")
+            searchAnchor: "cropStraddlers"
+            description: i18n("When this is on, a column at the screen edge keeps its full size and is cut off at the edge. When it is off, the column shrinks to fit, or slides away once too little of it is left. Cropping costs some efficiency in fullscreen video and games while any screen uses scrolling.")
+
+            SettingsSwitch {
+                checked: appSettings.scrollingCropStraddlers
+                accessibleName: i18n("Crop columns at the screen edge")
+                onToggled: function (newValue) {
+                    appSettings.scrollingCropStraddlers = newValue;
                 }
             }
         }

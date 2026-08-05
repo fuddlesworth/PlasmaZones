@@ -71,6 +71,16 @@ public:
     {
         return false;
     }
+    /// Crop mode for partial edge columns: keep the TRUE column rect and let
+    /// the compositor crop the overhang at the screen edge, instead of the
+    /// default clamp that resizes the window at the boundary. Off by default
+    /// because its safety depends on the effect forcing GL composition
+    /// (blocksDirectScanout) actually covering the running hardware's
+    /// scanout paths, which the clamp needs no assumption about.
+    static constexpr bool scrollingCropStraddlers()
+    {
+        return false;
+    }
     /// Width-kind wire values (0 = proportion, 1 = fixed px, 2 = client
     /// decides, 3 = preset index). Named so the settings layer's
     /// kind-aware branches read against the vocabulary instead of raw ints;

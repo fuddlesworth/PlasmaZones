@@ -40,16 +40,6 @@ namespace {
 constexpr int kEdgeBandMaxPx = 96;
 constexpr int kEdgeBandDivisor = 4;
 
-/// Edge auto-scroll: band inside the work area's left/right edges that arms
-/// the scroll, and the maximum per-step size. The daemon drives steps from
-/// a ~60 Hz timer (niri's dnd-edge-view-scroll shape), and the step scales
-/// QUADRATICALLY with how deep the cursor sits in the band — brushing the
-/// band's inner edge barely moves (no accidental yanks when aiming near an
-/// edge column), parking at the screen edge reaches ~kDragScrollMaxStepPx
-/// per step (~1400 px/s at 60 Hz).
-constexpr int kDragScrollBandPx = 48;
-constexpr int kDragScrollMaxStepPx = 24;
-
 } // namespace
 
 /// Capture @p windowId's current slot in FloatRestore vocabulary — the twin
@@ -324,8 +314,10 @@ void ScrollEngine::commitDragInsertPreview()
         // Same drop floatWindowInternal makes on this transition. The window
         // is leaving the tiled set, so a remembered tile rect can only serve
         // as a stale comparand for the emit-on-change gate; the sibling paths
-        // all clear it and this one was the exception.
+        // all clear it and this one was the exception. The parked-edge memory
+        // dies with it — floatWindowInternal drops it for the same reason.
         m_lastAppliedRect.remove(p.windowId);
+        m_parkedScrollEdge.remove(p.windowId);
         m_states.setKeyForWindow(p.windowId, p.targetKey);
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
         Q_EMIT placementChanged(p.targetScreenId);
@@ -348,8 +340,11 @@ void ScrollEngine::commitDragInsertPreview()
     // Drop the last-applied memory so the re-tile emit survives the
     // emit-on-change gate even when the window resolves back to its
     // pre-drag rect (single-column strip: no neighbour ever moves, so this
-    // is the ONLY signal that re-tiles the dropped frame).
+    // is the ONLY signal that re-tiles the dropped frame). A parked edge
+    // recorded before the drag detached the window is stale for the drop
+    // slot and would mis-anchor its arrival.
     m_lastAppliedRect.remove(p.windowId);
+    m_parkedScrollEdge.remove(p.windowId);
     applyLayout(p.targetScreenId, false);
     // The window's float/tracking state changed for every entry mode except
     // the plain same-screen tiled reorder. floating=false routes through the
@@ -426,12 +421,14 @@ void ScrollEngine::cancelDragInsertPreview()
             dragPreviewRestoreSlot(targetState, p.windowId, p.priorSlot, params, p.targetScreenId);
             // Same emit-on-change escape as commit: the restored slot is
             // typically the pre-drag rect, so without dropping the memory
-            // the re-tile emit is suppressed.
+            // the re-tile emit is suppressed. Parked-edge memory goes with
+            // it, as on commit.
             m_lastAppliedRect.remove(p.windowId);
+            m_parkedScrollEdge.remove(p.windowId);
         }
         applyLayout(p.targetScreenId, false);
         // The detach at begin and this restore both mutate persisted strip
-        // structure (and the view anchor when edge-scroll ran mid-hold).
+        // structure.
         Q_EMIT placementChanged(p.targetScreenId);
         return;
     }
@@ -448,6 +445,7 @@ void ScrollEngine::cancelDragInsertPreview()
                                               p.carried.minWidth, p.carried.minHeight, ScrollInsertPosition::Last);
             m_states.setKeyForWindow(p.windowId, p.targetKey);
             m_lastAppliedRect.remove(p.windowId);
+            m_parkedScrollEdge.remove(p.windowId);
             applyLayout(p.targetScreenId, false);
             Q_EMIT placementChanged(p.targetScreenId);
         } else {
@@ -472,6 +470,7 @@ void ScrollEngine::cancelDragInsertPreview()
         dragPreviewRestoreSlot(priorState, p.windowId, p.priorSlot, layoutParamsForScreen(p.priorKey.screenId),
                                p.priorKey.screenId);
         m_lastAppliedRect.remove(p.windowId);
+        m_parkedScrollEdge.remove(p.windowId);
     }
     m_states.setKeyForWindow(p.windowId, p.priorKey);
     applyLayout(p.targetScreenId, false);
@@ -502,8 +501,8 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     // screen. screensMatch above accepts a virtual/physical spelling
     // difference between the two, and layoutParamsForScreen resolves gaps and
     // the work area per SCREEN ID — so passing the caller's spelling could
-    // hit-test against a work area the commit path never uses. Both siblings
-    // (dragInsertIndicatorRect and nudgeDragScroll) already use the preview's.
+    // hit-test against a work area the commit path never uses. Its sibling
+    // (dragInsertIndicatorRect) already uses the preview's.
     const ScrollLayoutParams params =
         layoutParamsForScreen(previewOwnsScreen ? m_dragInsertPreview->targetScreenId : screenId);
     if (!params.workArea.isValid()) {
@@ -519,33 +518,51 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     // needed (nothing the cursor hovers can be the dragged window).
     const ResolvedStrip resolved = state->strip().relayout(params);
 
-    const ResolvedColumn* lastVisible = nullptr;
+    // Visible columns gathered up front: the band mapping below needs to
+    // know whether a column is the first or last visible one, which a
+    // single streaming pass cannot answer at the column being tested.
+    QVector<const ResolvedColumn*> visibleColumns;
     for (const ResolvedColumn& column : resolved.columns) {
-        if (!column.rect.intersects(params.workArea)) {
-            continue;
+        if (column.rect.intersects(params.workArea)) {
+            visibleColumns.append(&column);
         }
-        lastVisible = &column;
+    }
+    const ResolvedColumn* lastVisible = visibleColumns.isEmpty() ? nullptr : visibleColumns.constLast();
+    for (int vi = 0; vi < visibleColumns.size(); ++vi) {
+        const ResolvedColumn& column = *visibleColumns.at(vi);
+        const bool isFirstVisible = vi == 0;
+        const bool isLastVisible = vi == visibleColumns.size() - 1;
         // Cursor left of this visible column's span: the gap before it (or
-        // the strip's visible left edge) → a new column at its index.
+        // the strip's visible left edge) → a new column at its index. From
+        // the leading edge that is "insert left of everything I can see",
+        // rendered as a past-the-edge hint.
         if (cursorPos.x() < column.rect.left()) {
             target.primary = column.columnIndex;
             target.newSlot = true;
+            target.leadingEdge = isFirstVisible;
             return target;
         }
         if (cursorPos.x() > column.rect.right()) {
             continue;
         }
-        // Inside this column's x-span: edge bands open a new column beside
-        // it, the middle joins it as a tile at the y-resolved slot. Floor of
-        // 1 so integer division on a degenerate sliver still leaves bands.
+        // Inside this column's x-span: the side bands open a new column at
+        // THIS column's spot (the column steps aside and the indicator
+        // covers it), the middle joins it as a tile at the y-resolved slot.
+        // Symmetric by construction: each boundary belongs to exactly one
+        // band — the right neighbour's left band — and only the view's two
+        // extremes differ, hinting past their screen edge instead (the
+        // first visible column's left band and the last one's right band).
+        // Floor of 1 so integer division on a degenerate sliver still
+        // leaves bands.
         const int band = std::clamp(column.rect.width() / kEdgeBandDivisor, 1, kEdgeBandMaxPx);
         if (cursorPos.x() < column.rect.left() + band) {
             target.primary = column.columnIndex;
             target.newSlot = true;
+            target.leadingEdge = isFirstVisible;
             return target;
         }
         if (cursorPos.x() > column.rect.right() - band) {
-            target.primary = column.columnIndex + 1;
+            target.primary = isLastVisible ? column.columnIndex + 1 : column.columnIndex;
             target.newSlot = true;
             return target;
         }
@@ -581,7 +598,7 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     // Nothing visible (fully parked strip): hold the live preview's target
     // rather than snapping somewhere arbitrary. Only for the preview's OWN
     // screen — a stateless sibling screen must not inherit another screen's
-    // remembered target (nudgeDragScroll carries the same guard).
+    // remembered target.
     if (previewOwnsScreen) {
         return m_dragInsertPreview->lastTarget;
     }
@@ -620,9 +637,18 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // separate defect with a separate patch, and the list kept growing.
     //
     // So: copy the strip, apply the SAME insert commitDragInsertPreview would,
-    // relayout, and read back the rect the dropped window actually gets. The
+    // relayout, and read back the rect the dropped window resolves to. The
     // layout code becomes the single source of truth for the layout, which is
     // the only way this can stay correct as the strip gains features.
+    //
+    // The probe stops at RELAYOUT: applyLayout's screen-boundary pass (edge
+    // clamp, peek-floor park) runs after it and is not simulated, so a slot
+    // at the screen edge promises the unclamped rect while the commit clamps
+    // it, and a slot whose remainder falls under the peek floor promises an
+    // on-screen rect for a window the commit parks. Deliberate: the
+    // indicator marks the SLOT being aimed at, and simulating the boundary
+    // pass would need the clamp/park decision factored out of applyLayout —
+    // more coupling than an aiming aid justifies.
     //
     // The copy is per call and the strip is a plain value type. That is not
     // free, and the ledger already tracks the per-tick relayout cost of this
@@ -650,6 +676,7 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
 
     // Mirror of commit's insert selection, deliberately kept line-for-line
     // comparable with it: if the two ever diverge, the indicator lies.
+    const int preInsertColumns = probe.columnCount();
     bool inserted = false;
     if (target.newSlot || probe.isEmpty()) {
         inserted = probe.insertWindowAt(std::clamp(target.primary, 0, probe.columnCount()), p.windowId, p.carried.width,
@@ -674,27 +701,14 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
         probe.setWindowHeightIntent(p.windowId, p.carried.height);
     }
 
-    // MIRRORS commit's focusWindow, which re-anchors the view so the dropped
-    // column is scrolled into place. This used to be deliberately omitted, on
-    // the reasoning that the indicator should mark the place under the cursor
-    // rather than jump to where the window lands after the view scrolls. That
-    // reasoning only holds while the target slot is ON SCREEN.
-    //
-    // With a FULL viewport it is not, and omitting the re-anchor produced no
-    // indicator at all. Two columns filling a 1200px work area, aim at either
-    // outer edge: inserting before the first resolves the slot to x=-600 and
-    // inserting after the last to x=1200. Both are outside the work area, so
-    // the overlay clipped them and the drag ran with no drop feedback in the
-    // one configuration where a user most needs it. The DROP was correct
-    // throughout — commit re-anchors and the window lands visibly — so the
-    // indicator was contradicting an outcome that was already right.
-    //
-    // Mirroring it costs nothing when the slot is already visible: focusWindow
-    // re-anchors only when the focused column actually changes, so a target in
-    // the middle of a partly-filled strip still resolves under the cursor.
-    // Every drop-equivalence test in the suite pins that, comparing this rect
-    // against the post-commit tile rect.
-    // TEMP-OFF
+    // The probe does NOT mirror commit's focusWindow re-anchor. It once did
+    // (to keep an indicator visible for the outer slots of a FULL viewport,
+    // where the raw slot resolves outside the work area and the overlay clips
+    // it), but the live-view translation below cancels a probe-side re-anchor
+    // by construction: shiftToLiveView subtracts the probe's view to pin the
+    // rectangle to what is on screen RIGHT NOW. The full-viewport case is
+    // covered instead by the niri-parity visibility clamp at the return —
+    // see the comment there.
     const ResolvedStrip resolved = probe.relayout(params);
     // Translate the slot back into the LIVE view.
     //
@@ -702,9 +716,8 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // read-only preview must not inherit: insertWindowIntoColumnAt makes the
     // joined column active and re-anchors onto it, and commit additionally
     // focuses the dropped window. Left in, they pin the indicator to a
-    // post-drop viewport that ignores the live scroll — the columns slide
-    // under an edge-scroll while the rectangle sits still, which is precisely
-    // what a drop indicator must not do.
+    // post-drop viewport rather than the one the user is looking at, which
+    // is precisely what a drop indicator must not do.
     //
     // Both terms are needed and neither substitutes for the other: the STRIP
     // position must be POST-insert, because that is the slot being previewed,
@@ -714,91 +727,50 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.windowId == p.windowId) {
-                return tile.rect.translated(shiftToLiveView, 0);
+                QRect rect = tile.rect.translated(shiftToLiveView, 0);
+                // A LEADING-EDGE aim ("insert left of everything I can see",
+                // tagged by the hit-test) mirrors the after-the-last one:
+                // its raw promise is the current position of the first
+                // visible column, so it would cover that column at full
+                // size. Place it just OUTSIDE that column instead (niri
+                // positions its leading insert hint the same way): with
+                // dead space the promise fills it, and on a flush edge it
+                // crosses the screen edge and reaches the half-in clamp
+                // below — the mirror of the trailing edge. The SAME slot
+                // aimed from the first visible column's INNER band carries
+                // no tag and keeps the full rect over that column, exactly
+                // as the right neighbour's inner band covers it.
+                if (target.newSlot && target.leadingEdge && preInsertColumns > 0) {
+                    rect.translate(-(rect.width() + params.gap), 0);
+                }
+                // niri-parity visibility clamp, new-column slots only (niri
+                // gates its identical clamp on InsertPosition::NewColumn, and
+                // a join target's column is on screen by construction — it
+                // was hit-tested under the cursor). Reachable when a window
+                // that detached NOTHING from this strip (a cross-screen or
+                // floating drag) aims past the last column of a FULL
+                // viewport: the slot resolves outside the work area and the
+                // per-screen overlay clips the unclamped rect away, leaving
+                // the one drop that most needs feedback with none. (A strip
+                // window's own drag cannot reach this — detach-once frees
+                // its column's width and the outer slot resolves into that
+                // dead space.) Clamp the x so at least HALF the rect stays
+                // visible: the half-in band hugging the screen edge is the
+                // standard "insert past this edge" affordance, it never lies
+                // about the direction, and slots already on screen are
+                // untouched (the bounds are no-ops for them).
+                if (target.newSlot) {
+                    const int minLeft = params.workArea.left() - rect.width() / 2;
+                    const int maxLeft = params.workArea.left() + params.workArea.width() - rect.width() / 2;
+                    rect.moveLeft(qBound(minLeft, rect.left(), maxLeft));
+                }
+                return rect;
             }
         }
     }
     // Resolved away (every column zero-width on a degenerate work area, or the
     // tile hidden behind an active tab). Nothing truthful to paint.
     return {};
-}
-
-bool ScrollEngine::nudgeDragScroll(const QString& screenId, const QPoint& cursorPos)
-{
-    if (!m_dragInsertPreview
-        || !PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId)) {
-        return false;
-    }
-    ScrollState* state = stateForKey(m_dragInsertPreview->targetKey, /*createIfMissing=*/false);
-    if (!state || state->strip().isEmpty()) {
-        return false;
-    }
-    const ScrollLayoutParams params = layoutParamsForScreen(m_dragInsertPreview->targetScreenId);
-    if (!params.workArea.isValid()) {
-        return false;
-    }
-    ScrollStrip& strip = state->strip();
-    const ResolvedStrip resolved = strip.relayout(params);
-    if (resolved.stripWidth <= params.workArea.width()) {
-        return false; // strip fits the viewport — nothing to reveal
-    }
-    // Quadratic depth ramp: depth 0 at the band's inner edge, 1 at the
-    // screen edge. Shallow contact scrolls barely at all, so dragging near
-    // an edge column doesn't yank the strip; parking at the edge reaches
-    // full speed.
-    // Pick the band by the NEARER edge so a work area narrower than two
-    // bands cannot route a right-edge cursor into the left band, then ramp
-    // quadratically with depth. A depth whose step ROUNDS TO ZERO is treated
-    // as outside the band: with a 24px maximum that is roughly the outer 14%
-    // of the band, so the shallowest contact does nothing at all rather than
-    // creeping. Note this is a rounding threshold, not a 1px floor — the step
-    // goes 0, 1, 2, ... as the cursor deepens, so a slow crawl IS reachable
-    // just inside the threshold. That is the intended feel; the guard only
-    // exists so brushing the very edge of the band is inert.
-    //
-    // The nearer-edge arm is deliberately UNTESTED, and cannot be tested
-    // through the view anchor. The bands only overlap on a work area under
-    // 2*kDragScrollBandPx wide, and on a viewport that small the columns
-    // leave the anchor a single legal value, so it lands there whichever arm
-    // fired. Both regimes were measured: at 90px the overlap yields a zero
-    // step in both arms, and at 60px the anchor is identical for a pure
-    // left-band cursor and a pure right-band one. The arm stays because it
-    // costs nothing and the alternative is a wrong-direction scroll on a
-    // sliver of an output, not because anything pins it.
-    const int leftEdge = params.workArea.left() + kDragScrollBandPx;
-    const int rightEdge = params.workArea.right() - kDragScrollBandPx;
-    const bool inLeftBand = cursorPos.x() <= leftEdge;
-    const bool inRightBand = cursorPos.x() >= rightEdge;
-    int step = 0;
-    if (inLeftBand
-        && (!inRightBand || cursorPos.x() - params.workArea.left() <= params.workArea.right() - cursorPos.x())) {
-        const double depth = std::clamp((leftEdge - cursorPos.x()) / double(kDragScrollBandPx), 0.0, 1.0);
-        step = -static_cast<int>(std::lround(depth * depth * kDragScrollMaxStepPx));
-    } else if (inRightBand) {
-        const double depth = std::clamp((cursorPos.x() - rightEdge) / double(kDragScrollBandPx), 0.0, 1.0);
-        step = static_cast<int>(std::lround(depth * depth * kDragScrollMaxStepPx));
-    } else {
-        return false;
-    }
-    if (step == 0) {
-        return false;
-    }
-    const int maxViewX = resolved.stripWidth - params.workArea.width();
-    const int newViewX = std::clamp(resolved.viewX + step, 0, maxViewX);
-    if (newViewX == resolved.viewX) {
-        return false; // already pinned at this end
-    }
-    // viewX = columnStripX(active) - anchor: shifting the view right means
-    // shrinking the anchor by the same amount. Raw restore — the clamp just
-    // ran through newViewX above.
-    strip.restoreViewAnchor(strip.viewAnchor() - (newViewX - resolved.viewX), params);
-    applyLayout(m_dragInsertPreview->targetScreenId, false);
-    // The anchor is persisted state, and applyLayout's own anchorMoved gate
-    // cannot see this shift (updateViewForFocus is skipped while the preview
-    // steers the view) — without this emit an edge-scroll followed by Escape
-    // loses the anchor across a restart.
-    Q_EMIT placementChanged(m_dragInsertPreview->targetScreenId);
-    return true;
 }
 
 void ScrollEngine::setInteractiveDragWindow(const QString& windowId)
@@ -827,11 +799,11 @@ void ScrollEngine::dropClosedWindowFromDragPreview(const QString& windowId)
     // indexes were hit-tested against a structure that is about to change,
     // and a stationary cursor never re-aims. Discard the stale aim — commit
     // then takes the restore-slot / append fallback instead of silently
-    // landing at a shifted index, and the next motion or scroll tick
-    // re-resolves a fresh target.
+    // landing at a shifted index, and the next cursor motion re-resolves a
+    // fresh target.
     //
-    // With the cursor held still and outside the edge-scroll bands, neither
-    // of those ticks fires, so the indicator stays dark until the user moves
+    // With the cursor held still no tick fires at all, so the indicator
+    // stays dark until the user moves
     // again. That is deliberate: after a neighbour vanishes there is no
     // honest target to paint, and painting the OLD rect would promise a slot
     // that no longer exists. A dark indicator says "aim again", which is what

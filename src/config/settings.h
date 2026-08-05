@@ -353,6 +353,8 @@ public:
                    NOTIFY scrollingCenterFocusedColumnChanged)
     Q_PROPERTY(bool scrollingAlwaysCenterSingleColumn READ scrollingAlwaysCenterSingleColumn WRITE
                    setScrollingAlwaysCenterSingleColumn NOTIFY scrollingAlwaysCenterSingleColumnChanged)
+    Q_PROPERTY(bool scrollingCropStraddlers READ scrollingCropStraddlers WRITE setScrollingCropStraddlers NOTIFY
+                   scrollingCropStraddlersChanged)
     Q_PROPERTY(int scrollingDefaultColumnWidthKind READ scrollingDefaultColumnWidthKind WRITE
                    setScrollingDefaultColumnWidthKind NOTIFY scrollingDefaultColumnWidthKindChanged)
     Q_PROPERTY(qreal scrollingDefaultColumnWidthValue READ scrollingDefaultColumnWidthValue WRITE
@@ -1153,6 +1155,8 @@ public:
     void setScrollingCenterFocusedColumn(int mode);
     bool scrollingAlwaysCenterSingleColumn() const override;
     void setScrollingAlwaysCenterSingleColumn(bool center);
+    bool scrollingCropStraddlers() const override;
+    void setScrollingCropStraddlers(bool crop);
     int scrollingDefaultColumnWidthKind() const override;
     void setScrollingDefaultColumnWidthKind(int value);
     qreal scrollingDefaultColumnWidthValue() const override;

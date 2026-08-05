@@ -371,12 +371,18 @@ public:
     ///   drop opens a NEW column at `primary` (existing columns from
     ///   `primary` shift right); otherwise the window joins the column at
     ///   `primary` as a tile at `secondary` (clamped into the stack;
-    ///   -1 appends at the bottom).
+    ///   -1 appends at the bottom). `leadingEdge` marks a new-column target
+    ///   aimed from BEYOND the view's leading edge (left of everything
+    ///   visible, or the first visible column's outer band): the drop is
+    ///   identical, but the indicator renders it as a past-the-edge hint
+    ///   instead of a full rect over the first visible column. Purely a
+    ///   presentation tag — commit ignores it, autotile never sets it.
     struct DragInsertTarget
     {
         int primary = -1;
         int secondary = -1;
         bool newSlot = false;
+        bool leadingEdge = false;
 
         bool isValid() const
         {
@@ -469,28 +475,21 @@ public:
     /// engine that defers structure to the drop (the scroll strip, per the
     /// DETACH-ONCE contract above) has a target that is otherwise invisible.
     ///
-    /// NOT clamped to the viewport: a target past the visible edge genuinely
-    /// lies off screen, and clamping would report a plausible-looking rect for
-    /// the wrong slot.
+    /// Mostly not clamped to the viewport — a join target's rect is where the
+    /// slot genuinely is — with two deliberate NEW-COLUMN exceptions, both
+    /// niri's insert-hint rules: a before-the-first slot is placed just
+    /// OUTSIDE the first column (its raw post-insert position coincides with
+    /// that column and would read as "replace this"), and any new-column
+    /// slot past a visible edge is clamped so at least half the rect stays
+    /// on screen. Without the clamp, the end slots of a FULL viewport
+    /// resolve entirely off screen and the overlay clips the indicator
+    /// away, leaving the drop that most needs feedback with none; the
+    /// half-in band at the edge marks "insert past this edge" without
+    /// pretending to be the slot's true position.
     virtual QRect dragInsertIndicatorRect(const QString& screenId) const
     {
         Q_UNUSED(screenId)
         return {};
-    }
-
-    /// Edge auto-scroll during a drag-insert preview: an engine whose layout
-    /// is a scrollable viewport (the scroll strip) shifts its view one step
-    /// when the cursor sits inside its edge band, so drops can land past the
-    /// visible columns. Driven by the daemon's FIXED ~60 Hz drag-scroll
-    /// timer, independent of cursor motion — the cursor may be unchanged
-    /// between calls, so per-call step size must be scaled for that rate.
-    /// Returns true when the view actually moved (the caller then
-    /// re-hit-tests). Default no-op for engines with a fixed layout.
-    virtual bool nudgeDragScroll(const QString& screenId, const QPoint& cursorPos)
-    {
-        Q_UNUSED(screenId)
-        Q_UNUSED(cursorPos)
-        return false;
     }
 
     /// The window currently under a compositor interactive move (the whole

@@ -810,6 +810,7 @@ Q_SIGNALS:
     void scrollingEnabledChanged();
     void scrollingCenterFocusedColumnChanged();
     void scrollingAlwaysCenterSingleColumnChanged();
+    void scrollingCropStraddlersChanged();
     void scrollingDefaultColumnWidthKindChanged();
     void scrollingDefaultColumnWidthValueChanged();
     void scrollingDefaultColumnDisplayChanged();

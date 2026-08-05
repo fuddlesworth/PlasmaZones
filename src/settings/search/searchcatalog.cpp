@@ -672,10 +672,13 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                 PhosphorI18n::tr("attention")});
 
     // Triggers card first, matching visual order on the page, then the drop
-    // indicator. Titles must match the QML i18n() strings VERBATIM — in
-    // ScrollingDragInsertCard.qml for the first block and
-    // ScrollingDropIndicatorCard.qml for the second — or the deep link lands
-    // on the page without scrolling to the row. No
+    // indicator. The ANCHOR string is what must match the QML searchAnchor
+    // VERBATIM — that is what the deep-link reveal resolves; the title is
+    // only the search-result label, and a handful of catalog titles
+    // deliberately disambiguate rows that share a QML title (the three
+    // "Apply to" scopes, for instance). Keeping titles identical to the QML
+    // — here ScrollingDragInsertCard.qml and ScrollingDropIndicatorCard.qml
+    // — is still the default, so the result reads like the row it opens. No
     // advancedOnly flag: the whole scrolling-window page is AdvancedOnly,
     // same as the unflagged tiling-behavior twins.
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingTriggers"),
@@ -753,6 +756,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("alwaysCenterSingleColumn"),
                PhosphorI18n::tr("Center a lone column"),
                {PhosphorI18n::tr("center"), PhosphorI18n::tr("single"), PhosphorI18n::tr("column")});
+    addSetting(
+        search, QStringLiteral("scrolling-window"), QStringLiteral("cropStraddlers"),
+        PhosphorI18n::tr("Crop columns at the screen edge"),
+        {PhosphorI18n::tr("crop"), PhosphorI18n::tr("clip"), PhosphorI18n::tr("edge"), PhosphorI18n::tr("cut off")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingFocusNewWindows"),
                PhosphorI18n::tr("Focus new windows"),
                {PhosphorI18n::tr("focus"), PhosphorI18n::tr("new"), PhosphorI18n::tr("open")});
@@ -881,6 +888,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("alwaysCenterSingleColumn"),
                PhosphorI18n::tr("Center a lone column"),
                {PhosphorI18n::tr("center"), PhosphorI18n::tr("single"), PhosphorI18n::tr("column")});
+    addSetting(
+        search, QStringLiteral("scrolling-simple"), QStringLiteral("cropStraddlers"),
+        PhosphorI18n::tr("Crop columns at the screen edge"),
+        {PhosphorI18n::tr("crop"), PhosphorI18n::tr("clip"), PhosphorI18n::tr("edge"), PhosphorI18n::tr("cut off")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusNewWindows"),
                PhosphorI18n::tr("Focus new windows"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("open")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusFollowsMouse"),

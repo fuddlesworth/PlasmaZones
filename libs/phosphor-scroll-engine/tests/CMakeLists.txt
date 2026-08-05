@@ -43,6 +43,7 @@ pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp)
 pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp)
+pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp)
 
 # Shared fixture header, listed so IDE/target file listings see it (every test
 # here includes it; it carries no Q_OBJECT, so automoc scans it and produces
@@ -54,3 +55,4 @@ target_sources(test_scrollengine_persistence PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollengine_zonenumbers PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollengine_perscreen PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollengine_draginsert PRIVATE scrollstriptestutils.h)
+target_sources(test_scrollengine_boundary PRIVATE scrollstriptestutils.h)
