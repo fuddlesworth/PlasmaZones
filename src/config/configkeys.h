@@ -245,6 +245,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     P_CONFIG_KEY(backendKey, "Backend")
+    P_CONFIG_KEY(gpuKey, "Gpu")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping (top-level)
@@ -853,6 +854,11 @@ public:
         P_CONFIG_KEY(v1QuickLayoutShortcutKeyPattern, "QuickLayout%1Shortcut")
         P_CONFIG_KEY(v2QuickLayoutKeyPattern, "QuickLayout%1")
         P_CONFIG_KEY(v2SnapToZoneKeyPattern, "SnapToZone%1")
+        // The hardcoded 9 below is FROZEN at the v1/v2 wire formats, which
+        // only ever had nine slots — do NOT retarget these bounds at
+        // QuickLayoutSlotCount like the live builders above: if that constant
+        // is ever raised, these must keep generating exactly the keys a
+        // historical config could hold.
         static QString v1QuickLayoutShortcutKey(int n)
         {
             if (n < 1 || n > 9) {

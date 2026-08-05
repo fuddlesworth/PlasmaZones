@@ -18,9 +18,12 @@
 #include "dbus/settingsadaptor/settingsadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "core/types/constants.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <QCoreApplication>
 #include <QProcess>
+#include <QProcessEnvironment>
 
 namespace PlasmaZones {
 
@@ -35,13 +38,39 @@ void Daemon::connectShortcutSignals()
     // get stale cursor data. resolveShortcutScreenId() handles both by falling back to
     // the screen reported by the KWin effect's windowActivated D-Bus call.
     connect(m_shortcutManager.get(), &ShortcutManager::openSettingsRequested, this, []() {
+        // Scrub the GPU-preference variables this daemon exported (published
+        // as an app property by daemon main): the settings app spawns the
+        // editor later, and an inherited DRI_PRIME / QT_VK_PHYSICAL_DEVICE_INDEX
+        // reaching that editor would trip its pre-set-value guards and freeze
+        // it on this daemon's stale pin. systemd-run --scope runs the command
+        // as a child of this call, so the environment set here is what the
+        // settings app inherits.
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        if (QCoreApplication::instance()) {
+            const QStringList gpuVars = QCoreApplication::instance()->property(PGpuExportedVarsProperty).toStringList();
+            for (const QString& var : gpuVars) {
+                env.remove(var);
+            }
+            // Restore variables this process cleared for its own rendering —
+            // the child must see the user's session value.
+            const QVariantMap cleared = QCoreApplication::instance()->property(PGpuClearedVarsProperty).toMap();
+            for (auto it = cleared.constBegin(); it != cleared.constEnd(); ++it) {
+                env.insert(it.key(), it.value().toString());
+            }
+        }
         // Launch in its own systemd scope so stopping the daemon service
         // doesn't kill the settings app (they'd share a cgroup otherwise).
-        if (!QProcess::startDetached(
-                QStringLiteral("systemd-run"),
-                {QStringLiteral("--user"), QStringLiteral("--scope"), QStringLiteral("plasmazones-settings")})) {
+        QProcess scoped;
+        scoped.setProgram(QStringLiteral("systemd-run"));
+        scoped.setArguments(
+            {QStringLiteral("--user"), QStringLiteral("--scope"), QStringLiteral("plasmazones-settings")});
+        scoped.setProcessEnvironment(env);
+        if (!scoped.startDetached()) {
             // Fallback if systemd-run is unavailable
-            if (!QProcess::startDetached(QStringLiteral("plasmazones-settings"), {})) {
+            QProcess direct;
+            direct.setProgram(QStringLiteral("plasmazones-settings"));
+            direct.setProcessEnvironment(env);
+            if (!direct.startDetached()) {
                 qCWarning(lcDaemon) << "Failed to launch plasmazones-settings";
             }
         }

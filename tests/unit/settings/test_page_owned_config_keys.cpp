@@ -19,9 +19,10 @@
  * The manifest's own header states both invariants and notes that a guard has
  * to link the whole SettingsController topology TU. This file is that guard.
  * It is scoped to what can be checked cheaply and exactly: the one-owner rule
- * across the WHOLE manifest, and complete coverage of the Scrolling and
- * Scrolling.Behavior schema groups, whose four page manifests are the newest
- * and least exercised.
+ * across the WHOLE manifest, and complete coverage of a swept subset of
+ * schema groups — Scrolling and Scrolling.Behavior (whose four page manifests
+ * are the newest and least exercised) plus Rendering (whose Gpu key once
+ * shipped with no manifest owner).
  */
 
 #include <QSet>
@@ -127,9 +128,10 @@ private Q_SLOTS:
         QVERIFY2(undeclared.isEmpty(), qPrintable(undeclared.join(QLatin1String("; "))));
     }
 
-    /// The other direction for the scrolling family: every key the schema
-    /// declares under Scrolling or Scrolling.Behavior must be owned by exactly
-    /// one page, except the master switch listed in deliberatelyUnowned().
+    /// The other direction, over the swept groups: every key the schema
+    /// declares under Scrolling, Scrolling.Behavior, or Rendering must be
+    /// owned by exactly one page, except the master switch listed in
+    /// deliberatelyUnowned().
     ///
     /// The scrolling pages also SHOW two settings they deliberately do not
     /// own — Tiling.Gaps/SmartGaps, forwarded from the shared gaps group and
@@ -139,7 +141,7 @@ private Q_SLOTS:
     /// scope here; they are called out so a future reader does not "fix" their
     /// absence by adding them to a scrolling page's list and breaking the
     /// one-owner rule.
-    void everyScrollingSchemaKeyIsOwned()
+    void everySweptSchemaKeyIsOwned()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
         const auto& manifest = SettingsController::pageOwnedConfigKeys();
@@ -157,10 +159,14 @@ private Q_SLOTS:
         // outside this sweep, so a key added to either could drop out of
         // per-page Reset with nothing failing — which is the exact class of
         // regression this file exists to catch, and the DropIndicator group
-        // was added while the gap was open.
+        // was added while the gap was open. Rendering rides along for the
+        // same reason: its Gpu key shipped without a manifest owner (no
+        // dirty mark, per-page Reset and Discard silently skipped it)
+        // precisely because this sweep did not cover the group.
         for (const QString& group :
              {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
-              ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup()}) {
+              ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup(),
+              ConfigDefaults::renderingGroup()}) {
             const auto it = schema.groups.constFind(group);
             QVERIFY2(it != schema.groups.constEnd(), qPrintable(group));
             for (const PhosphorConfig::KeyDef& def : *it) {

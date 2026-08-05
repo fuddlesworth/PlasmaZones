@@ -175,6 +175,10 @@ Requires:       qt6-qtwayland >= 6.10.0
 Requires:       kwin >= 6.7.0
 %endif
 Requires:       hicolor-icon-theme
+# Soft dependency, unconditional (Fedora and openSUSE both name it hwdata):
+# readable GPU names in the rendering device picker
+# (/usr/share/hwdata/pci.ids); the picker degrades to vendor labels without it.
+Recommends:     hwdata
 
 # Post-install scriptlet dependencies — must be in preamble (rpmbuild
 # parses Requires(post) only here; placing them after %%install is

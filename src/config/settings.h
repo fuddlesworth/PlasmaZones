@@ -554,6 +554,7 @@ public:
 
     // Rendering
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
+    Q_PROPERTY(QString gpuDevice READ gpuDevice WRITE setGpuDevice NOTIFY gpuDeviceChanged)
 
     // Shader Effects
     Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
@@ -1498,6 +1499,10 @@ public:
     // unknown strings are coerced to a valid choice.
     QString renderingBackend() const override;
     void setRenderingBackend(const QString& backend) override;
+    // GPU pin ("auto" or "vendor:device" hex) — schema validator runs
+    // normalizeGpuDevice so malformed strings coerce to "auto".
+    QString gpuDevice() const override;
+    void setGpuDevice(const QString& gpu) override;
 
     // Shader Effects — backed by PhosphorConfig::Store (see settingsschema.cpp).
     // Getters read through the store (validator clamps FrameRate and BarCount
