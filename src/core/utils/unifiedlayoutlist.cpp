@@ -20,6 +20,8 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
+#include <PhosphorZones/ScrollingTemplateSource.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <algorithm>
@@ -76,6 +78,27 @@ LayoutPreview previewFromLayoutWithSection(PhosphorZones::Layout* layout)
     LayoutPreview preview = PhosphorZones::previewFromLayout(layout);
     setAspectRatioSection(preview);
     return preview;
+}
+
+/// Append every store template as a preview row (its own section, after the
+/// aspect sections and the autotile family). Templates have no
+/// hidden/allow-list/aspect axes today, so no context filtering applies —
+/// which also satisfies the active-selection exemption trivially (the
+/// context's assigned template is always in the list).
+void appendScrollingTemplatePreviews(QVector<LayoutPreview>& list, PhosphorZones::ScrollingTemplateStore* store)
+{
+    if (!store) {
+        return;
+    }
+    const QList<PhosphorZones::ScrollingTemplate> templates = store->templates();
+    list.reserve(list.size() + templates.size());
+    for (const PhosphorZones::ScrollingTemplate& templ : templates) {
+        LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ);
+        preview.sectionKey = QStringLiteral("scrolling-templates");
+        preview.sectionLabel = PhosphorI18n::tr("Scrolling templates");
+        preview.sectionOrder = 10;
+        list.append(preview);
+    }
 }
 
 void appendAutotilePreviewsForCanvas(QVector<LayoutPreview>& list,
@@ -211,7 +234,8 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
                                               PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                               bool includeAutotile, const QStringList& customOrder,
                                               PhosphorLayout::ILayoutSource* autotileSource,
-                                              QSize autotilePreviewCanvas)
+                                              QSize autotilePreviewCanvas,
+                                              PhosphorZones::ScrollingTemplateStore* templateStore)
 {
     QVector<LayoutPreview> list;
 
@@ -229,6 +253,8 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
         appendAutotilePreviews(list, algorithmRegistry, autotileSource, autotilePreviewCanvas);
     }
 
+    appendScrollingTemplatePreviews(list, templateStore);
+
     sortPreviews(list, customOrder);
 
     return list;
@@ -240,7 +266,8 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
                                               bool includeManual, bool includeAutotile, qreal screenAspectRatio,
                                               bool filterByAspectRatio, const QStringList& customOrder,
                                               PhosphorLayout::ILayoutSource* autotileSource,
-                                              QSize autotilePreviewCanvas)
+                                              QSize autotilePreviewCanvas, bool includeScrollingTemplates,
+                                              PhosphorZones::ScrollingTemplateStore* templateStore)
 {
     QVector<LayoutPreview> list;
 
@@ -338,6 +365,10 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
                                       return overrides.value(ZoneJsonKeys::HiddenFromSelector).toBool(false);
                                   }),
                    list.end());
+    }
+
+    if (includeScrollingTemplates) {
+        appendScrollingTemplatePreviews(list, templateStore);
     }
 
     sortPreviews(list, customOrder);

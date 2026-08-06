@@ -27,6 +27,7 @@
 #include "core/types/constants.h"
 #include "core/utils/geometryutils.h"
 #include <PhosphorZones/LayoutComputeService.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include "phosphor_i18n.h"
@@ -324,7 +325,11 @@ SettingsController::SettingsController(QObject* parent)
     // same across daemon/editor/settings. Adding a new engine library
     // doesn't require editing this file unless the engine demands a
     // service the KCM doesn't already publish.
-    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
+    m_localTemplateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
+    m_localTemplateStore->loadTemplates();
+    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get(),
+                                    m_localTemplateStore.get());
+    m_localLayoutManager->setScrollingTemplateStore(m_localTemplateStore.get());
 
     // Begin watching rules.json for external writes. Complements the
     // daemon's rulesChanged D-Bus signal (reloadLocalRuleStore) so the

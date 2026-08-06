@@ -322,7 +322,7 @@ QStringList LayoutAdaptor::getLayoutList()
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, /*includeAutotile=*/true,
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, /*includeManual=*/true, /*includeAutotile=*/true),
-        m_autotileLayoutSource);
+        m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, m_layoutManager->scrollingTemplateStore());
     for (const auto& entry : entries) {
         QJsonObject json = PlasmaZones::toJson(entry);
 

@@ -26,6 +26,7 @@ constexpr QLatin1String Description{"description"};
 constexpr QLatin1String ZoneCount{"zoneCount"};
 constexpr QLatin1String Zones{"zones"};
 constexpr QLatin1String IsAutotile{"isAutotile"};
+constexpr QLatin1String IsScrollingTemplate{"isScrollingTemplate"};
 // PhosphorZones::LayoutCategory mirror — `isAutotile` is the canonical
 // boolean, but QML consumers (LayoutCard, CategoryBadge) read a numeric
 // `category` field (0 = Manual, 1 = Autotile) to match the
@@ -125,6 +126,7 @@ QJsonObject toJson(const PhosphorLayout::LayoutPreview& preview)
     }
     json[K::ZoneCount] = preview.zoneCount;
     json[K::IsAutotile] = preview.isAutotile();
+    json[K::IsScrollingTemplate] = preview.isScrollingTemplate;
     json[K::Category] = preview.isAutotile() ? 1 : 0;
     json[K::IsSystem] = preview.isSystem;
     json[K::Recommended] = preview.recommended;
@@ -173,6 +175,7 @@ QVariantMap toVariantMap(const PhosphorLayout::LayoutPreview& preview)
 {
     QVariantMap map;
     map[K::Id] = preview.id;
+    map[K::IsScrollingTemplate] = preview.isScrollingTemplate;
     map[K::DisplayName] = preview.displayName;
     if (!preview.description.isEmpty()) {
         map[K::Description] = preview.description;

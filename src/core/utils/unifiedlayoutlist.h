@@ -35,6 +35,7 @@ class ILayoutSource;
 
 namespace PhosphorZones {
 class IZoneLayoutRegistry;
+class ScrollingTemplateStore;
 class Layout;
 }
 
@@ -72,7 +73,8 @@ PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
 buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
                        PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, bool includeAutotile = false,
                        const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr,
-                       QSize autotilePreviewCanvas = {});
+                       QSize autotilePreviewCanvas = {},
+                       PhosphorZones::ScrollingTemplateStore* templateStore = nullptr);
 
 /**
  * @brief Build filtered list of layouts visible in the given context
@@ -96,7 +98,8 @@ buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
                        int virtualDesktop, const QString& activity, bool includeManual = true,
                        bool includeAutotile = true, qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
                        const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr,
-                       QSize autotilePreviewCanvas = {});
+                       QSize autotilePreviewCanvas = {}, bool includeScrollingTemplates = false,
+                       PhosphorZones::ScrollingTemplateStore* templateStore = nullptr);
 
 /**
  * @brief Build a combined custom order list from settings

@@ -271,15 +271,23 @@ public Q_SLOTS:
     void clearAssignmentForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                  const QString& activityId);
 
-    // Scrolling template (the manual layout whose zones become the strip's
-    // preset column-width vocabulary, and its window-height vocabulary where
-    // the template defines heights). The setter flips the context to
-    // Scrolling and accepts an empty id as "clear the template"; the getter
-    // answers empty for non-Scrolling contexts and for deleted or unset
-    // templates.
+    // Scrolling template ASSIGNMENT (the native ScrollingTemplate whose
+    // vocabularies and blueprint the strip consumes). The setter flips the
+    // context to Scrolling, refuses ids the store does not know, and accepts
+    // an empty id as "clear the template"; the getter answers empty for
+    // non-Scrolling contexts and for deleted or unset templates.
     void setScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId,
                                     const QString& layoutId);
     QString getScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId);
+
+    // Scrolling template STORE CRUD (daemon-first, like the layout verbs:
+    // the settings app never writes template JSON itself). All four emit
+    // scrollingTemplatesChanged through the store's own change signal.
+    // Impls in assignment.cpp beside the assignment pair above.
+    QString getScrollingTemplates();
+    QString saveScrollingTemplate(const QString& templateJson);
+    bool deleteScrollingTemplate(const QString& id);
+    QString duplicateScrollingTemplate(const QString& id);
 
     /**
      * @brief Get current mode, layout, and algorithm for all screens
@@ -361,6 +369,11 @@ Q_SIGNALS:
     void layoutPropertyChanged(const QString& layoutId, const QString& property, const QDBusVariant& value);
 
     void layoutListChanged();
+
+    /// Relayed from the daemon's ScrollingTemplateStore change signal (the
+    /// composition root wires it) so the settings app can refresh its
+    /// template views on store CRUD from any process.
+    void scrollingTemplatesChanged();
 
     /**
      * @brief Emitted when a new layout is created.

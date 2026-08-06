@@ -196,13 +196,12 @@ void Daemon::initLayoutAndSettingsWiring()
     m_layoutManager->setDefaultAssignmentSuppressedProvider([this]() {
         return m_settings && m_settings->suppressDefaultLayoutAssignment();
     });
-    // Native scrolling-template store: created here (post-construction like
-    // every other injected collaborator), loaded once, and wired into the
-    // registry so the assignment/resolver choke points validate template ids
-    // and resolve template objects. The templatesChanged → engine-recompute
-    // connection is restart-scoped and lives in wireSignals (signals.cpp).
-    m_scrollingTemplateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
-    m_scrollingTemplateStore->loadTemplates();
+    // Native scrolling-template store: created in the ctor (before the
+    // layout-source bundle build so the template provider registers) and
+    // wired into the registry HERE so the assignment/resolver choke points
+    // validate template ids and resolve template objects. The
+    // templatesChanged → engine-recompute connection is restart-scoped and
+    // lives in signals.cpp.
     m_layoutManager->setScrollingTemplateStore(m_scrollingTemplateStore.get());
     // Default-template provider: the setting-backed fallback for a Scrolling
     // context whose cascade entry names no template (parity with snapping's

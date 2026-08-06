@@ -137,7 +137,8 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
             Utils::screenAspectRatio(m_screenManager, m_currentScreenName),
             m_settings && m_settings->filterLayoutsByAspectRatio(),
             PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts),
-            m_autotileLayoutSource);
+            m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, m_includeScrollingTemplates,
+            m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr);
 
         m_cachedScreenDesktop = desktop;
         m_cacheValid = true;
@@ -312,13 +313,14 @@ void UnifiedLayoutController::setCurrentActivity(const QString& activity)
     }
 }
 
-void UnifiedLayoutController::setLayoutFilter(bool includeManual, bool includeAutotile)
+void UnifiedLayoutController::setLayoutFilter(bool includeManual, bool includeAutotile, bool includeScrollingTemplates)
 {
     if (m_includeManualLayouts == includeManual && m_includeAutotileLayouts == includeAutotile) {
         return;
     }
     m_includeManualLayouts = includeManual;
     m_includeAutotileLayouts = includeAutotile;
+    m_includeScrollingTemplates = includeScrollingTemplates;
     m_cacheValid = false;
 }
 
@@ -363,6 +365,21 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
                             << (m_autotileEngine ? "present" : "null") << "and layout manager is"
                             << (m_layoutManager ? "present" : "null");
         return false;
+    }
+
+    // Native scrolling-template entry: commit through the store-validated
+    // per-screen helper (mode stays Scrolling, the engine push re-derives).
+    if (preview.isScrollingTemplate) {
+        if (!m_layoutManager || m_currentScreenName.isEmpty()) {
+            return false;
+        }
+        if (!m_layoutManager->applyScrollingTemplateToScreen(m_currentScreenName, preview.id)) {
+            return false;
+        }
+        setCurrentLayoutId(preview.id);
+        qCInfo(lcDaemon) << "Applied scrolling template=" << preview.displayName << "screen=" << m_currentScreenName;
+        Q_EMIT scrollingTemplateApplied(preview.id, m_currentScreenName);
+        return true;
     }
 
     // Manual layout: assign the UUID to the current screen.

@@ -100,6 +100,7 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/AssignmentEntry.h
     include/PhosphorZones/ScrollingTemplate.h
     include/PhosphorZones/ScrollingTemplateStore.h
+    include/PhosphorZones/ScrollingTemplateSource.h
     include/PhosphorZones/ContextResolveKey.h
     include/PhosphorZones/LayoutRegistry.h
     include/PhosphorZones/LayoutFactory.h
@@ -123,6 +124,7 @@ set(phosphorzones_SRCS
     src/zoneslogging.cpp
     src/scrollingtemplate.cpp
     src/scrollingtemplatestore.cpp
+    src/scrollingtemplatesource.cpp
     src/interfaces.cpp
     src/layoutregistry.cpp
     src/layoutregistry_assignments.cpp

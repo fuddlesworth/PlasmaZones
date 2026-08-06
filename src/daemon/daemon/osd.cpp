@@ -721,6 +721,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
 
     bool autotileActive = false;
     bool manualActive = false;
+    bool scrollingActive = false;
 
     if (m_settings->autotileEnabled() && m_layoutManager && m_screenManager) {
         const QString activity = currentActivity();
@@ -731,16 +732,15 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
                 focusedScreenId, currentDesktopForScreen(focusedScreenId), activity);
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
-            } else if (!PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-                // A scrolling screen sets neither flag; the includeManual
-                // fallback below (manualActive || !autotileActive) then
-                // still offers the MANUAL list — which is CORRECT under
-                // LayoutSupport::Templates: the manual list is exactly what
-                // a scrolling screen's picker browses (template candidates,
-                // no autotile cards). The authoritative per-screen decision
-                // lives in resolvePerScreenLayoutInclude in
-                // overlayservice.cpp; this controller-level filter only has
-                // to avoid contradicting it.
+            } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+                // Since the native-template pivot a scrolling screen's
+                // picker browses TEMPLATE cards, not the manual list. The
+                // authoritative per-screen decision lives in
+                // resolvePerScreenLayoutInclude in overlayservice.cpp; this
+                // controller-level filter only has to avoid contradicting
+                // it.
+                scrollingActive = true;
+            } else {
                 manualActive = true;
             }
         } else {
@@ -763,17 +763,18 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
     } else {
         manualActive = true;
     }
-    const bool includeManual = manualActive || !autotileActive;
-    const bool includeAutotile = autotileActive;
+    const bool includeManual = !scrollingActive && (manualActive || !autotileActive);
+    const bool includeAutotile = !scrollingActive && autotileActive;
 
     if (m_overlayService) {
         m_overlayService->setLayoutFilter(includeManual, includeAutotile);
     }
     if (m_unifiedLayoutController) {
-        m_unifiedLayoutController->setLayoutFilter(includeManual, includeAutotile);
+        m_unifiedLayoutController->setLayoutFilter(includeManual, includeAutotile, scrollingActive);
     }
 
     qCDebug(lcDaemon) << "Layout filter updated: manual=" << includeManual << "autotile=" << includeAutotile
+                      << "templates=" << scrollingActive
                       << "screen=" << (focusedScreenId.isEmpty() ? QStringLiteral("all") : focusedScreenId);
 }
 

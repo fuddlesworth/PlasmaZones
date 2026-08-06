@@ -125,6 +125,13 @@ struct LayoutPreview
     /// recompute from algorithm flags; that's the source's job.
     bool isSystem = false;
 
+    /// True when this preview backs a native scrolling TEMPLATE (the third
+    /// card family beside manual layouts and autotile algorithms). Template
+    /// ids are UUID-shaped like manual layouts, so this flag — not the id
+    /// form — is the family discriminator; zones carry the blueprint's
+    /// column bands for the shared thumbnail renderer.
+    bool isScrollingTemplate = false;
+
     /// Optional autotile algorithm metadata. Presence is the sole signal
     /// that this preview backs an autotile algorithm rather than a static
     /// manual layout — @c isAutotile() reads the optional's has_value().

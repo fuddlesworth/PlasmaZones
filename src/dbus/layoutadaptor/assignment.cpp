@@ -867,6 +867,84 @@ QString LayoutAdaptor::getScrollingTemplateLayout(const QString& screenId, int v
     return templ.isValid() ? templ.id.toString() : QString();
 }
 
+QString LayoutAdaptor::getScrollingTemplates()
+{
+    const PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+    if (!store) {
+        return QStringLiteral("[]");
+    }
+    QJsonArray array;
+    const QList<PhosphorZones::ScrollingTemplate> templates = store->templates();
+    for (const PhosphorZones::ScrollingTemplate& templ : templates) {
+        QJsonObject json = templ.toJson();
+        // Wire-only enrichment: isSystem is store-derived load state, never
+        // part of the persisted schema, but the UI needs it to disable
+        // delete on bundled templates.
+        json.insert(QLatin1String("isSystem"), templ.isSystem);
+        array.append(json);
+    }
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+QString LayoutAdaptor::saveScrollingTemplate(const QString& templateJson)
+{
+    PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+    if (!store) {
+        qCWarning(lcDbusLayout) << "saveScrollingTemplate: no template store wired";
+        return QString();
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(templateJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        qCWarning(lcDbusLayout) << "saveScrollingTemplate: malformed JSON:" << parseError.errorString();
+        return QString();
+    }
+    PhosphorZones::ScrollingTemplate templ = PhosphorZones::ScrollingTemplate::fromJson(doc.object());
+    // A missing/empty name is the one invalidity a fresh editor form can
+    // produce; the store refuses it (returns a null id) and the caller
+    // surfaces the refusal.
+    const QUuid id = store->saveTemplate(templ);
+    if (id.isNull()) {
+        qCWarning(lcDbusLayout) << "saveScrollingTemplate: store refused the template";
+        return QString();
+    }
+    qCInfo(lcDbusLayout) << "Saved scrolling template" << id;
+    return id.toString();
+}
+
+bool LayoutAdaptor::deleteScrollingTemplate(const QString& id)
+{
+    PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+    const QUuid parsed = QUuid::fromString(id);
+    if (!store || parsed.isNull()) {
+        return false;
+    }
+    if (!store->removeTemplate(parsed)) {
+        return false;
+    }
+    // The id-keyed assignment scrub the delete flow owes (same purge layout
+    // deletion drives): every rule referencing the deleted template loses
+    // that reference; only when the id no longer resolves at all — a user
+    // file shadowing a bundled template resurfaces the original under the
+    // SAME id, and scrubbing then would drop live assignments to it.
+    if (!store->contains(parsed)) {
+        m_layoutManager->purgeSnappingLayoutFromAssignments(parsed.toString());
+    }
+    qCInfo(lcDbusLayout) << "Deleted scrolling template" << id;
+    return true;
+}
+
+QString LayoutAdaptor::duplicateScrollingTemplate(const QString& id)
+{
+    PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+    const QUuid parsed = QUuid::fromString(id);
+    if (!store || parsed.isNull()) {
+        return QString();
+    }
+    const QUuid copyId = store->duplicateTemplate(parsed);
+    return copyId.isNull() ? QString() : copyId.toString();
+}
+
 void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDesktop, const QString& activity, int mode,
                                        const QString& snappingLayout, const QString& tilingAlgorithm)
 {

@@ -101,6 +101,39 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="UUID of the imported layout."/>
             </arg>
         </method>
+        <method name="getScrollingTemplates">
+            <annotation name="org.gtk.GDBus.DocString" value="All scrolling templates as a JSON array (id, name, description, columns, defaults, preset lists, isSystem), name-sorted. The daemon-side template store is the authority; bundled templates carry isSystem true."/>
+            <arg name="templatesJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of template objects."/>
+            </arg>
+        </method>
+        <method name="saveScrollingTemplate">
+            <annotation name="org.gtk.GDBus.DocString" value="Create or update a scrolling template from its JSON object. An empty or missing id creates a fresh template. Editing a bundled template writes a user copy that shadows it. Returns the stored template UUID, or empty when the template is invalid."/>
+            <arg name="templateJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object in the scrolling-template schema."/>
+            </arg>
+            <arg name="templateId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="UUID of the stored template, empty on refusal."/>
+            </arg>
+        </method>
+        <method name="deleteScrollingTemplate">
+            <annotation name="org.gtk.GDBus.DocString" value="Delete the user file of the scrolling template with the given id and scrub the id from every assignment rule. Deleting a user copy that shadowed a bundled template resurfaces the bundled original; a pure bundled template is refused."/>
+            <arg name="id" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Template UUID to delete."/>
+            </arg>
+            <arg name="deleted" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Whether the user file was deleted."/>
+            </arg>
+        </method>
+        <method name="duplicateScrollingTemplate">
+            <annotation name="org.gtk.GDBus.DocString" value="Store a copy of the scrolling template under a fresh UUID. Returns the new template UUID, empty when the source is unknown."/>
+            <arg name="id" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Template UUID to duplicate."/>
+            </arg>
+            <arg name="templateId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="UUID of the new copy."/>
+            </arg>
+        </method>
         <method name="exportLayout">
             <annotation name="org.gtk.GDBus.DocString" value="Export a layout to a JSON file at the given path. Returns whether the export was written."/>
             <arg name="layoutId" type="s" direction="in">
@@ -636,6 +669,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </signal>
         <signal name="layoutListChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the list of layouts changes."/>
+        </signal>
+        <signal name="scrollingTemplatesChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the scrolling-template store's loaded set changes (save, delete, duplicate, rescan)."/>
         </signal>
         <signal name="layoutCreated">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a new layout is created (createLayout, createLayoutFromJson, duplicateLayout, importLayout). Carries the new layout's UUID."/>

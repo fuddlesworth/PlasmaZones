@@ -1105,6 +1105,12 @@ private:
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
+    /// Local read view of the scrolling-template store (same files the
+    /// daemon's authoritative store reads); borrowed by the bundle's
+    /// template source, so declared before m_localSources like its
+    /// registry siblings. Refreshed on the daemon's
+    /// scrollingTemplatesChanged D-Bus signal.
+    std::unique_ptr<PhosphorZones::ScrollingTemplateStore> m_localTemplateStore;
     PhosphorLayout::LayoutSourceBundle m_localSources;
     /// Owned here (not parented to `this`) so destruction runs via the
     /// unique_ptr reset in reverse declaration order — BEFORE the

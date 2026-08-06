@@ -230,7 +230,7 @@ public:
      * In manual mode: only manual layouts. In autotile mode: only dynamic layouts.
      * The autotile feature gate controls whether dynamic layouts are ever visible.
      */
-    void setLayoutFilter(bool includeManual, bool includeAutotile);
+    void setLayoutFilter(bool includeManual, bool includeAutotile, bool includeScrollingTemplates = false);
 
     /**
      * @brief Inject the daemon's bundle-owned autotile layout source.
@@ -261,6 +261,11 @@ Q_SIGNALS:
      * @param windowCount Number of currently tiled windows (0 if unknown)
      */
     void autotileApplied(const QString& algorithmName, int windowCount);
+
+    /// Emitted when a native scrolling template was applied through the
+    /// picker (for the template OSD; parity with layoutApplied /
+    /// autotileApplied above).
+    void scrollingTemplateApplied(const QString& templateId, const QString& screenId);
 
     /**
      * @brief Emitted when the current layout ID changes.
@@ -317,6 +322,7 @@ private:
 
     QString m_currentActivity;
     bool m_includeManualLayouts = true;
+    bool m_includeScrollingTemplates = false;
     bool m_includeAutotileLayouts = false;
     mutable QVector<PhosphorLayout::LayoutPreview> m_cachedLayouts;
     mutable bool m_cacheValid = false;

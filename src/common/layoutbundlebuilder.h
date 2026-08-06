@@ -10,6 +10,7 @@ class LayoutSourceBundle;
 }
 
 namespace PhosphorZones {
+class ScrollingTemplateStore;
 class IZoneLayoutRegistry;
 }
 
@@ -47,8 +48,14 @@ namespace PlasmaZones {
 ///                     assert and add a test that exercises the path.
 /// @param tileAlgorithms Borrowed — caller owns. Required: see note
 ///                     above; same reasoning applies symmetrically.
-PLASMAZONES_EXPORT void buildStandardLayoutSourceBundle(PhosphorLayout::LayoutSourceBundle& bundle,
-                                                        PhosphorZones::IZoneLayoutRegistry* zoneLayouts,
-                                                        PhosphorTiles::ITileAlgorithmRegistry* tileAlgorithms);
+/// @param scrollingTemplates Borrowed — caller owns; may be null in roots
+///                     with no template store (the provider is then
+///                     skipped and the bundle carries no template
+///                     entries).
+PLASMAZONES_EXPORT void
+buildStandardLayoutSourceBundle(PhosphorLayout::LayoutSourceBundle& bundle,
+                                PhosphorZones::IZoneLayoutRegistry* zoneLayouts,
+                                PhosphorTiles::ITileAlgorithmRegistry* tileAlgorithms,
+                                PhosphorZones::ScrollingTemplateStore* scrollingTemplates = nullptr);
 
 } // namespace PlasmaZones
