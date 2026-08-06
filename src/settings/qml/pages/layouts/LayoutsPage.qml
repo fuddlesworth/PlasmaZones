@@ -165,8 +165,7 @@ SettingsFlickable {
         }
         let search = filterBar.filterText.toLowerCase();
         if (root.viewMode === 2) {
-            // Templates have no source/visibility filter axes yet; the
-            // search box is the only filter.
+            filtered = filtered.filter(item => (item.isSystem === true ? filterBar.showBuiltInTemplates : filterBar.showUserTemplates));
             if (search.length > 0)
                 filtered = filtered.filter(item => (item.displayName || "").toLowerCase().includes(search) || (item.description || "").toLowerCase().includes(search));
         } else if (root.viewMode === 0)
@@ -179,16 +178,17 @@ SettingsFlickable {
         // algorithm id ("bsp"). The tiling cards are keyed "autotile:<id>", so
         // prefix the tiling order to the card namespace before matching, or the
         // Priority sort silently no-ops for the tiling view.
-        if (root.viewMode !== 2) {
-            let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder().map(id => "autotile:" + id);
-            Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
-        }
+        // Template sort indexes deliberately alias the shared comparators:
+        // 0 = Name, 1 = zoneCount (a template's column count). No custom
+        // order exists for templates, so the Priority arm never engages.
+        let customOrder = root.viewMode === 2 ? [] : (root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder().map(id => "autotile:" + id));
+        Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
         // "None" is the one grouping that should still show its (single) card
         // header — the user wants the title + count even with no grouping. Every
         // other grouping keeps the legacy "drop the header when it collapses to a
         // single group" behaviour (a lone "Built-in" card needs no redundant
         // header).
-        let isNoneGroup = root.viewMode === 2 ? false : (root.viewMode === 0 ? filterBar.groupByIndex === filterBar.groupSnappingNone : filterBar.groupByIndex === filterBar.groupTilingNone);
+        let isNoneGroup = root.viewMode === 2 ? filterBar.groupByIndex === filterBar.groupTemplateNone : (root.viewMode === 0 ? filterBar.groupByIndex === filterBar.groupSnappingNone : filterBar.groupByIndex === filterBar.groupTilingNone);
         root.groupsModel = Core.finalizeGroups(groups, isNoneGroup);
     }
 
@@ -242,10 +242,11 @@ SettingsFlickable {
     // Grouping — kept in QML because group labels require i18n/i18np.
     function buildGroups(filtered, groupIdx) {
         if (root.viewMode === 2) {
-            // Bundled vs user is the one axis a template carries.
-            return Core.groupByBoolKey(filtered, item => {
-                return item.isSystem !== true;
-            }, "user", i18n("Your Templates"), "builtin", i18n("Built-in"));
+            if (groupIdx === filterBar.groupTemplateSource)
+                return Core.groupByBoolKey(filtered, item => {
+                    return item.isSystem !== true;
+                }, "user", i18n("Your Templates"), "builtin", i18n("Built-in"));
+            return Core.ungrouped(filtered, i18n("All templates"));
         }
         if (root.viewMode === 1) {
             if (groupIdx === filterBar.groupCapability)
@@ -351,19 +352,17 @@ SettingsFlickable {
                 const mode = root.availableViewModes[index];
                 root.viewMode = mode;
                 root.selectedLayoutId = "";
-                // For 0/1, rebuildModel() runs via filterBar.onViewModeChanged →
-                // loadState → filterSettingsChanged; the template view bypasses
-                // the filter bar so it rebuilds directly.
-                if (mode === 2)
-                    root.rebuildModel();
+                // rebuildModel() runs via filterBar.onViewModeChanged →
+                // loadState → filterSettingsChanged for every mode.
                 root.selectDefaultLayout(mode);
             }
         }
 
         // ─── Import / Open Folder card (shader-style, drop-zone) ───
         LayoutManageCard {
-            visible: root.viewMode !== 2
             viewMode: root.viewMode
+            onRequestImportTemplate: templateImportDialog.open()
+            onRequestOpenTemplatesFolder: settingsController.openScrollingTemplatesFolder()
             onRequestImportLayout: importDialog.open()
             onRequestImportFromKZones: settingsController.importFromKZones()
             onRequestImportKZonesFile: kzonesFileDialog.open()
@@ -395,7 +394,6 @@ SettingsFlickable {
             }
 
             ToolButton {
-                visible: root.viewMode !== 2
                 icon.name: "view-filter"
                 // Active state is binding-driven, not a user toggle — checkable omitted.
                 checked: filterBar.hasActiveFilters
@@ -425,11 +423,7 @@ SettingsFlickable {
             id: filterBar
 
             Layout.fillWidth: true
-            visible: root.viewMode !== 2
-            // The filter bar has no template axes; pin its own mode to the
-            // snapping vocabulary while the template view is up (search
-            // still routes through it).
-            viewMode: root.viewMode === 2 ? 0 : root.viewMode
+            viewMode: root.viewMode
             onFilterSettingsChanged: root.rebuildModel()
         }
 
@@ -536,9 +530,7 @@ SettingsFlickable {
                                 // (KCM / future preview) `window.layoutContextMenu`
                                 // is undefined; suppress the right-button mask so a
                                 // missing menu doesn't pretend to exist.
-                                // Templates have no context menu (the card's
-                                // own edit/delete affordances cover CRUD).
-                                contextMenuEnabled: root.viewMode !== 2 && !!(typeof window !== "undefined" && window && window.layoutContextMenu)
+                                contextMenuEnabled: !!(typeof window !== "undefined" && window && window.layoutContextMenu)
                                 onSelected: idx => {
                                     root.selectedLayoutId = String(modelData.id);
                                 }
@@ -607,6 +599,32 @@ SettingsFlickable {
         }
     }
 
+    // Template import / export dialogs
+    FileDialog {
+        id: templateImportDialog
+
+        title: i18n("Import Scrolling Template")
+        nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
+        fileMode: FileDialog.OpenFile
+        onAccepted: {
+            settingsController.importScrollingTemplate(root.filePathFromUrl(selectedFile));
+        }
+    }
+
+    FileDialog {
+        id: templateExportDialog
+
+        property string templateId: ""
+
+        title: i18n("Export Scrolling Template")
+        nameFilters: [i18n("JSON files (*.json)")]
+        defaultSuffix: "json"
+        fileMode: FileDialog.SaveFile
+        onAccepted: {
+            settingsController.exportScrollingTemplate(templateExportDialog.templateId, root.filePathFromUrl(selectedFile));
+        }
+    }
+
     // KZones file import dialog
     FileDialog {
         id: kzonesFileDialog
@@ -643,10 +661,19 @@ SettingsFlickable {
             if (layoutId.startsWith("autotile:")) {
                 algorithmExportDialog.algorithmId = settingsController.algorithmIdFromLayoutId(layoutId);
                 algorithmExportDialog.open();
+            } else if (root.viewMode === 2) {
+                // Template ids are UUID-shaped like layouts; the menu only
+                // shows the current view's cards, so the view discriminates.
+                templateExportDialog.templateId = layoutId;
+                templateExportDialog.open();
             } else {
                 exportDialog.layoutId = layoutId;
                 exportDialog.open();
             }
+        }
+
+        function onEditTemplateRequested(templateId) {
+            templateEditorDialog.openForEdit(templateId);
         }
 
         // When LayoutsPage is hosted outside Main.qml (KCM / preview host),

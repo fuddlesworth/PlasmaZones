@@ -318,6 +318,9 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/scrolling/ScrollingWindowPage.qml"), QStringLiteral("preferences-system-windows"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("scrolling-shortcuts"), QStringLiteral("scrolling"), PhosphorI18n::tr("Quick Shortcuts"),
+               QStringLiteral("pages/scrolling/ScrollingQuickShortcutsPage.qml"), QStringLiteral("bookmark"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Animations children — Transitions / Motion / Library categories drill in.
     // The simple-mode surface leads: a SimpleOnly leaf that replaces the whole

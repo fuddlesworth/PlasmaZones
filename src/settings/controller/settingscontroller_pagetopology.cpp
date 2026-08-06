@@ -142,8 +142,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QString kScrollingColumns = QStringLiteral("scrolling-columns");
     static const QString kScrollingTabs = QStringLiteral("scrolling-tabs");
     static const QString kScrollingWindow = QStringLiteral("scrolling-window");
+    static const QString kScrollingShortcuts = QStringLiteral("scrolling-shortcuts");
     static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingColumns, kScrollingTabs,
-                                                   kScrollingWindow};
+                                                   kScrollingWindow, kScrollingShortcuts};
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
@@ -577,6 +578,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("scrolling-columns"),
         QStringLiteral("scrolling-tabs"),
         QStringLiteral("scrolling-window"),
+        QStringLiteral("scrolling-shortcuts"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
         QStringLiteral("window-appearance"),

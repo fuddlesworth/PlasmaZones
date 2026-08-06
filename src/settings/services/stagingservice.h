@@ -158,11 +158,13 @@ public:
 
     void stageSnappingQuickSlot(int slotNumber, const QString& layoutId);
     void stageTilingQuickSlot(int slotNumber, const QString& layoutId);
+    void stageScrollingQuickSlot(int slotNumber, const QString& templateId);
 
     /// Returns true if slot has a staged value. Fills @p out with the
     /// staged layout ID (possibly empty).
     bool stagedSnappingQuickSlot(int slotNumber, QString& out) const;
     bool stagedTilingQuickSlot(int slotNumber, QString& out) const;
+    bool stagedScrollingQuickSlot(int slotNumber, QString& out) const;
 
     /// True if any quick-slot edit is staged for the mode. Backs the per-page
     /// dirty check for the Quick Shortcuts pages.
@@ -174,12 +176,17 @@ public:
     {
         return !m_tilingQuickSlots.isEmpty();
     }
+    bool hasStagedScrollingQuickSlots() const
+    {
+        return !m_scrollingQuickSlots.isEmpty();
+    }
 
     /// Drop all staged quick-slot edits for the mode (per-page Discard reverts
     /// to the daemon's saved slots; the getters fall back to the daemon when a
     /// slot is not staged).
     void clearSnappingQuickSlots();
     void clearTilingQuickSlots();
+    void clearScrollingQuickSlots();
 
     /// Push staged quick-layout slots (both snapping and tiling modes) to the
     /// daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER `notifyReload`
@@ -200,6 +207,7 @@ private:
     QHash<QString, QVariantList> m_virtualScreenConfigs;
     QHash<int, QString> m_snappingQuickSlots;
     QHash<int, QString> m_tilingQuickSlots;
+    QHash<int, QString> m_scrollingQuickSlots;
 };
 
 } // namespace PlasmaZones

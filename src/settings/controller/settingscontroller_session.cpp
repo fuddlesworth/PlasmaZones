@@ -204,6 +204,34 @@ void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString&
     Q_EMIT quickLayoutSlotsChanged();
 }
 
+QString SettingsController::getScrollingQuickLayoutSlot(int slotNumber) const
+{
+    if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
+        return {};
+    QString staged;
+    if (m_staging.stagedScrollingQuickSlot(slotNumber, staged))
+        return staged;
+    // Scrolling quick slots use wire mode 2 (AssignmentEntry::Scrolling) and
+    // hold native template ids.
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("getQuickLayoutSlot"), {2, slotNumber});
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return reply.arguments().first().toString();
+    return {};
+}
+
+void SettingsController::setScrollingQuickLayoutSlot(int slotNumber, const QString& templateId)
+{
+    if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
+        return;
+    m_staging.stageScrollingQuickSlot(slotNumber, templateId);
+    setNeedsSave(true);
+    // See setQuickLayoutSlot above — the staged value has no NOTIFY of its
+    // own, and the getter is staging-aware, so this re-read is what keeps
+    // the pick on screen until Apply.
+    Q_EMIT quickLayoutSlotsChanged();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Virtual desktops / activities (D-Bus queries to daemon)
 // ═══════════════════════════════════════════════════════════════════════════════

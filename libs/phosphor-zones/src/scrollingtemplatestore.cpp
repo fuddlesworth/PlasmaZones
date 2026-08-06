@@ -62,6 +62,7 @@ void ScrollingTemplateStore::loadTemplates()
                 continue;
             }
             templ.isSystem = !isUserDir;
+            templ.sourcePath = dir.absoluteFilePath(fileName);
             // Later directories override earlier ones by id (user shadows
             // system). Within one directory the name-sorted file order makes
             // any same-id collision deterministic.
@@ -109,6 +110,7 @@ QUuid ScrollingTemplateStore::saveTemplate(ScrollingTemplate templ)
     // A save always produces a USER file, whatever the source of the
     // in-memory entry was — editing a bundled template shadows it.
     templ.isSystem = false;
+    templ.sourcePath = userTemplateFilePath(templ.id);
     if (!writeTemplateFile(templ)) {
         return QUuid();
     }

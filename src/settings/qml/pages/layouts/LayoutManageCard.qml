@@ -28,7 +28,7 @@ import org.kde.kirigami as Kirigami
 SettingsCard {
     id: root
 
-    // 0 = Snapping Layouts, 1 = Auto Tile Algorithms
+    // 0 = Snapping Layouts, 1 = Auto Tile Algorithms, 2 = Scrolling Templates
     property int viewMode: 0
 
     signal requestImportLayout
@@ -37,11 +37,14 @@ SettingsCard {
     signal requestOpenLayoutsFolder
     signal requestImportAlgorithm
     signal requestOpenAlgorithmsFolder
+    signal requestImportTemplate
+    signal requestOpenTemplatesFolder
 
     readonly property bool _snapping: viewMode === 0
+    readonly property bool _templates: viewMode === 2
 
     Layout.fillWidth: true
-    headerText: _snapping ? i18n("User layouts") : i18n("User algorithms")
+    headerText: _templates ? i18n("User templates") : (_snapping ? i18n("User layouts") : i18n("User algorithms"))
     searchAnchor: "manageLayouts"
     collapsible: true
 
@@ -52,7 +55,7 @@ SettingsCard {
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
-            text: root._snapping ? i18n("Drop a layout file here to import it, or use the buttons below. User layouts live under your data directory.") : i18n("Drop a Luau algorithm file here to import it, or use the buttons below. User algorithms live under your data directory.")
+            text: root._templates ? i18n("Drop a template file here to import it, or use the buttons below. Your templates live under your data directory.") : (root._snapping ? i18n("Drop a layout file here to import it, or use the buttons below. User layouts live under your data directory.") : i18n("Drop a Luau algorithm file here to import it, or use the buttons below. User algorithms live under your data directory."))
             wrapMode: Text.WordWrap
             color: Kirigami.Theme.disabledTextColor
         }
@@ -61,11 +64,16 @@ SettingsCard {
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
-            idleText: root._snapping ? i18n("Drop a layout file here") : i18n("Drop an algorithm file here")
-            hoverText: root._snapping ? i18n("Release to import layout") : i18n("Release to import algorithm")
+            idleText: root._templates ? i18n("Drop a template file here") : (root._snapping ? i18n("Drop a layout file here") : i18n("Drop an algorithm file here"))
+            hoverText: root._templates ? i18n("Release to import template") : (root._snapping ? i18n("Release to import layout") : i18n("Release to import algorithm"))
             onFileDropped: function (url) {
                 var path = settingsController.urlToLocalFile(url);
-                if (root._snapping) {
+                if (root._templates) {
+                    // Fire-and-forget like importLayout: failures toast
+                    // through layoutOperationFailed, success rebuilds via
+                    // the scrollingTemplatesChanged refresh.
+                    settingsController.importScrollingTemplate(path);
+                } else if (root._snapping) {
                     // importLayout is fire-and-forget: success → layoutsChanged
                     // rebuild, failure → layoutOperationFailed toast (both
                     // handled by the page, matching the import-dialog path).
@@ -130,10 +138,18 @@ SettingsCard {
 
             // Tiling: single algorithm import (no KZones equivalent).
             Button {
-                visible: !root._snapping
+                visible: !root._snapping && !root._templates
                 text: i18n("Import")
                 icon.name: "document-import"
                 onClicked: root.requestImportAlgorithm()
+            }
+
+            // Templates: single JSON import.
+            Button {
+                visible: root._templates
+                text: i18n("Import")
+                icon.name: "document-import"
+                onClicked: root.requestImportTemplate()
             }
 
             Item {
@@ -144,8 +160,15 @@ SettingsCard {
                 text: i18n("Open Folder")
                 icon.name: "folder-open"
                 flat: true
-                Accessible.name: root._snapping ? i18n("Open user layouts directory") : i18n("Open user algorithms directory")
-                onClicked: root._snapping ? root.requestOpenLayoutsFolder() : root.requestOpenAlgorithmsFolder()
+                Accessible.name: root._templates ? i18n("Open user templates directory") : (root._snapping ? i18n("Open user layouts directory") : i18n("Open user algorithms directory"))
+                onClicked: {
+                    if (root._templates)
+                        root.requestOpenTemplatesFolder();
+                    else if (root._snapping)
+                        root.requestOpenLayoutsFolder();
+                    else
+                        root.requestOpenAlgorithmsFolder();
+                }
             }
         }
     }

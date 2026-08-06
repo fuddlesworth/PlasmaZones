@@ -22,11 +22,13 @@ namespace PhosphorZones {
 /**
  * @brief Category for layout type
  *
- * QML Note: Passed as int to QML. Values: 0 = Manual, 1 = Autotile
+ * QML Note: Passed as int to QML. Values: 0 = Manual, 1 = Autotile,
+ * 2 = ScrollingTemplate.
  */
 enum class LayoutCategory {
     Manual = 0, ///< Traditional zone-based layout
-    Autotile = 1 ///< Dynamic auto-tiling algorithm
+    Autotile = 1, ///< Dynamic auto-tiling algorithm
+    ScrollingTemplate = 2 ///< Native scrolling template (preview family only)
 };
 
 /**

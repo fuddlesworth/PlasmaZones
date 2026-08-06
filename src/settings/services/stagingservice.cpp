@@ -388,6 +388,11 @@ void StagingService::stageTilingQuickSlot(int slotNumber, const QString& layoutI
     m_tilingQuickSlots[slotNumber] = layoutId;
 }
 
+void StagingService::stageScrollingQuickSlot(int slotNumber, const QString& templateId)
+{
+    m_scrollingQuickSlots[slotNumber] = templateId;
+}
+
 bool StagingService::stagedSnappingQuickSlot(int slotNumber, QString& out) const
 {
     auto it = m_snappingQuickSlots.constFind(slotNumber);
@@ -408,6 +413,16 @@ bool StagingService::stagedTilingQuickSlot(int slotNumber, QString& out) const
     return true;
 }
 
+bool StagingService::stagedScrollingQuickSlot(int slotNumber, QString& out) const
+{
+    auto it = m_scrollingQuickSlots.constFind(slotNumber);
+    if (it == m_scrollingQuickSlots.constEnd()) {
+        return false;
+    }
+    out = *it;
+    return true;
+}
+
 void StagingService::clearSnappingQuickSlots()
 {
     m_snappingQuickSlots.clear();
@@ -418,13 +433,21 @@ void StagingService::clearTilingQuickSlots()
     m_tilingQuickSlots.clear();
 }
 
+void StagingService::clearScrollingQuickSlots()
+{
+    m_scrollingQuickSlots.clear();
+}
+
 bool StagingService::flushQuickSlotsToDaemon()
 {
     // Quick slots are mode-keyed in the daemon's LayoutRegistry: snapping
-    // slots hold zone-layout UUIDs, tiling slots hold autotile algorithm IDs.
-    // The wire mode matches AssignmentEntry::Mode (Snapping = 0, Autotile = 1).
+    // slots hold zone-layout UUIDs, tiling slots hold autotile algorithm
+    // IDs, and scrolling slots hold native template ids. The wire mode
+    // matches AssignmentEntry::Mode (Snapping = 0, Autotile = 1,
+    // Scrolling = 2).
     constexpr int kSnappingMode = 0;
     constexpr int kAutotileMode = 1;
+    constexpr int kScrollingMode = 2;
     const auto flush = [](int mode, QHash<int, QString>& slots) {
         bool ok = true;
         for (auto it = slots.constBegin(); it != slots.constEnd(); ++it) {
@@ -448,7 +471,8 @@ bool StagingService::flushQuickSlotsToDaemon()
     // the second flush on a snapping failure and silently skip it.
     const bool snappingOk = flush(kSnappingMode, m_snappingQuickSlots);
     const bool tilingOk = flush(kAutotileMode, m_tilingQuickSlots);
-    return snappingOk && tilingOk;
+    const bool scrollingOk = flush(kScrollingMode, m_scrollingQuickSlots);
+    return snappingOk && tilingOk && scrollingOk;
 }
 
 } // namespace PlasmaZones

@@ -94,6 +94,10 @@ public:
     /// A user edit shadows the bundled file with a same-id user copy, and
     /// deleting that copy resurfaces the bundled original.
     bool isSystem = false;
+    /// Absolute path of the file this template was loaded from. Not
+    /// serialized; stamped by the store at load (empty for a template that
+    /// was never persisted). Feeds the open-in-text-editor affordance.
+    QString sourcePath;
 
     bool isValid() const
     {

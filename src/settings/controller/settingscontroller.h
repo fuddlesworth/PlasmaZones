@@ -465,6 +465,12 @@ public:
     Q_INVOKABLE bool saveScrollingTemplate(const QVariantMap& templateData);
     Q_INVOKABLE void deleteScrollingTemplate(const QString& templateId);
     Q_INVOKABLE void duplicateScrollingTemplate(const QString& templateId);
+    /// Import mints a fresh id and routes through the daemon-first save;
+    /// export writes the persisted schema from the local read view.
+    Q_INVOKABLE void importScrollingTemplate(const QString& filePath);
+    Q_INVOKABLE void exportScrollingTemplate(const QString& templateId, const QString& filePath);
+    Q_INVOKABLE void openScrollingTemplatesFolder();
+    Q_INVOKABLE void openScrollingTemplateFile(const QString& templateId);
     Q_INVOKABLE void editLayout(const QString& layoutId);
     Q_INVOKABLE void editLayoutOnScreen(const QString& layoutId, const QString& screenId);
     Q_INVOKABLE void openLayoutsFolder();
@@ -486,6 +492,8 @@ public:
 
     // Quick layout slots (D-Bus to daemon)
     Q_INVOKABLE QString getQuickLayoutSlot(int slotNumber) const;
+    Q_INVOKABLE QString getScrollingQuickLayoutSlot(int slotNumber) const;
+    Q_INVOKABLE void setScrollingQuickLayoutSlot(int slotNumber, const QString& templateId);
     Q_INVOKABLE void setQuickLayoutSlot(int slotNumber, const QString& layoutId);
     Q_INVOKABLE QString getQuickLayoutShortcut(int slotNumber) const;
     Q_INVOKABLE QString getTilingQuickLayoutSlot(int slotNumber) const;
@@ -926,7 +934,7 @@ private:
     /// clean page for a reset that never happened. Shared by per-page Reset and
     /// defaults() — quick slots are daemon-backed, so Settings::reset() cannot
     /// clear them.
-    bool stageQuickSlotClears(bool snappingMode, bool& stagedAny);
+    bool stageQuickSlotClears(int wireMode, bool& stagedAny);
 
     /// Adopt whatever is on disk as the session's state: reload settings and the
     /// local rule store, re-fetch the daemon's rules into the rules page, refresh

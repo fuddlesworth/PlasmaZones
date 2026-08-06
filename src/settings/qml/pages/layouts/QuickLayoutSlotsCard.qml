@@ -16,7 +16,8 @@ SettingsCard {
     // controller invokables; `settings` is the shared Settings object the
     // combo bridge below reads the global auto-assign toggle from.
     required property var appSettings
-    // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
+    // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms),
+    // 2 = scrolling (native templates)
     property int viewMode: 0
 
     // Bridge for LayoutComboBox — exposes only what it accesses, in the shape
@@ -42,6 +43,8 @@ SettingsCard {
     property int slotRevision: 0
 
     function getSlot(slotNumber) {
+        if (viewMode === 2)
+            return appSettings.getScrollingQuickLayoutSlot(slotNumber);
         return viewMode === 1 ? appSettings.getTilingQuickLayoutSlot(slotNumber) : appSettings.getQuickLayoutSlot(slotNumber);
     }
 
@@ -53,7 +56,9 @@ SettingsCard {
         if (getSlot(slotNumber) === value)
             return;
 
-        if (viewMode === 1)
+        if (viewMode === 2)
+            appSettings.setScrollingQuickLayoutSlot(slotNumber, value);
+        else if (viewMode === 1)
             appSettings.setTilingQuickLayoutSlot(slotNumber, value);
         else
             appSettings.setQuickLayoutSlot(slotNumber, value);
@@ -83,7 +88,7 @@ SettingsCard {
         }
     }
 
-    headerText: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Snapping Quick Shortcuts")
+    headerText: root.viewMode === 2 ? i18n("Scrolling Quick Shortcuts") : (root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Snapping Quick Shortcuts"))
     searchAnchor: "quickShortcuts"
     collapsible: true
 
@@ -142,7 +147,7 @@ SettingsCard {
                         spacing: Kirigami.Units.smallSpacing / 2
 
                         Label {
-                            text: root.viewMode === 1 ? i18n("Quick Tiling %1", slotDelegate.slotNumber) : i18n("Quick Snapping %1", slotDelegate.slotNumber)
+                            text: root.viewMode === 2 ? i18n("Quick Scrolling %1", slotDelegate.slotNumber) : (root.viewMode === 1 ? i18n("Quick Tiling %1", slotDelegate.slotNumber) : i18n("Quick Snapping %1", slotDelegate.slotNumber))
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                         }
@@ -182,13 +187,13 @@ SettingsCard {
                             appSettings: root._comboBridge
                             noneText: i18n("None")
                             showPreview: true
-                            layoutFilter: root.viewMode === 1 ? 1 : 0
+                            layoutFilter: root.viewMode === 2 ? 2 : (root.viewMode === 1 ? 1 : 0)
                             resolvedDefaultId: ""
                             // Nine combos would otherwise all announce the
                             // component's generic "Layout selection", leaving
                             // a screen-reader user no way to tell which slot
                             // they are on.
-                            Accessible.name: root.viewMode === 1 ? i18n("Tiling algorithm for quick shortcut %1", slotDelegate.slotNumber) : i18n("Zone layout for quick shortcut %1", slotDelegate.slotNumber)
+                            Accessible.name: root.viewMode === 2 ? i18n("Scrolling template for quick shortcut %1", slotDelegate.slotNumber) : (root.viewMode === 1 ? i18n("Tiling algorithm for quick shortcut %1", slotDelegate.slotNumber) : i18n("Zone layout for quick shortcut %1", slotDelegate.slotNumber))
                             currentLayoutId: {
                                 void (root.slotRevision);
                                 return root.getSlot(slotDelegate.slotNumber);
@@ -216,8 +221,8 @@ SettingsCard {
                             ToolTip.visible: hovered
                             // The button clears the slot's LAYOUT. The shortcut
                             // itself is not editable here.
-                            ToolTip.text: i18n("Clear layout")
-                            Accessible.name: i18n("Clear layout for quick shortcut %1", slotDelegate.slotNumber)
+                            ToolTip.text: root.viewMode === 2 ? i18n("Clear template") : i18n("Clear layout")
+                            Accessible.name: root.viewMode === 2 ? i18n("Clear template for quick shortcut %1", slotDelegate.slotNumber) : i18n("Clear layout for quick shortcut %1", slotDelegate.slotNumber)
                         }
                     }
                 }

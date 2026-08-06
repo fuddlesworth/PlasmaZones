@@ -32,6 +32,7 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -326,6 +327,89 @@ void SettingsController::onScrollingTemplatesChanged()
     scheduleLayoutLoad();
 }
 
+void SettingsController::importScrollingTemplate(const QString& filePath)
+{
+    const QString safe = Utils::sanitizeIOPath(filePath);
+    if (safe.isEmpty()) {
+        qCWarning(lcCore) << "importScrollingTemplate: refusing unsafe path" << filePath;
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That file path is not allowed."));
+        return;
+    }
+    QFile file(safe);
+    if (!file.open(QIODevice::ReadOnly)) {
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not read the template file."));
+        return;
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That file is not a scrolling template this app can read."));
+        return;
+    }
+    QVariantMap data = doc.object().toVariantMap();
+    // Imports always mint a fresh id: keeping a file's id would silently
+    // OVERWRITE an existing template that happens to share it (or shadow a
+    // bundled one), which is never what "import" means.
+    data.remove(QStringLiteral("id"));
+    // Route through the daemon-first save so the authoritative store
+    // persists it; validation failures toast through the shared path.
+    saveScrollingTemplate(data);
+}
+
+void SettingsController::exportScrollingTemplate(const QString& templateId, const QString& filePath)
+{
+    if (templateId.isEmpty() || !m_localTemplateStore) {
+        return;
+    }
+    const QString safe = Utils::sanitizeIOPath(filePath);
+    if (safe.isEmpty()) {
+        qCWarning(lcCore) << "exportScrollingTemplate: refusing unsafe path" << filePath;
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That export path is not allowed."));
+        return;
+    }
+    const PhosphorZones::ScrollingTemplate templ = m_localTemplateStore->templateById(QUuid::fromString(templateId));
+    if (!templ.isValid()) {
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That template no longer exists."));
+        return;
+    }
+    // Written locally from the read view (the export payload is exactly the
+    // persisted schema); no daemon round-trip needed for a read.
+    QSaveFile out(safe);
+    if (!out.open(QIODevice::WriteOnly)) {
+        Q_EMIT layoutOperationFailed(
+            PhosphorI18n::tr("Could not write the export. Check that the folder is writable."));
+        return;
+    }
+    out.write(QJsonDocument(templ.toJson()).toJson(QJsonDocument::Indented));
+    if (!out.commit()) {
+        Q_EMIT layoutOperationFailed(
+            PhosphorI18n::tr("Could not write the export. Check that the folder is writable."));
+    }
+}
+
+void SettingsController::openScrollingTemplatesFolder()
+{
+    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/plasmazones/scrolling-templates");
+    QDir dir(path);
+    if (!dir.exists()) {
+        dir.mkpath(QStringLiteral("."));
+    }
+    QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+}
+
+void SettingsController::openScrollingTemplateFile(const QString& templateId)
+{
+    if (!m_localTemplateStore) {
+        return;
+    }
+    const PhosphorZones::ScrollingTemplate templ = m_localTemplateStore->templateById(QUuid::fromString(templateId));
+    if (!templ.isValid() || templ.sourcePath.isEmpty()) {
+        return;
+    }
+    QDesktopServices::openUrl(QUrl::fromLocalFile(templ.sourcePath));
+}
+
 QVariantMap SettingsController::scrollingTemplateForEditing(const QString& templateId) const
 {
     // Full template JSON from the LOCAL store (same files the daemon
@@ -340,6 +424,7 @@ QVariantMap SettingsController::scrollingTemplateForEditing(const QString& templ
     }
     QVariantMap map = templ.toJson().toVariantMap();
     map.insert(QStringLiteral("isSystem"), templ.isSystem);
+    map.insert(QStringLiteral("sourcePath"), templ.sourcePath);
     return map;
 }
 

@@ -113,6 +113,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("snapping-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
+    search->setPageKeywords(QStringLiteral("scrolling-shortcuts"),
+                            {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
+                             PhosphorI18n::tr("template"), PhosphorI18n::tr("key")});
     search->setPageKeywords(QStringLiteral("snapping-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect"), PhosphorI18n::tr("glow")});
 
@@ -1064,6 +1067,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Snapping Quick Shortcuts"));
     addSection(search, QStringLiteral("tiling-shortcuts"), QStringLiteral("quickShortcuts"),
                PhosphorI18n::tr("Tiling Quick Shortcuts"));
+    addSection(search, QStringLiteral("scrolling-shortcuts"), QStringLiteral("quickShortcuts"),
+               PhosphorI18n::tr("Scrolling Quick Shortcuts"));
 
     // Shaders (shared ShaderBrowserPage) + animation presets / motion sets /
     // decoration sets. Every page that hosts a ShaderBrowserPage carries its

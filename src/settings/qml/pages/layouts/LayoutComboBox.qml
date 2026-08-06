@@ -50,6 +50,9 @@ ComboBox {
         if (root.layoutFilter === 1)
             return "autotile:" + appSettings.defaultAutotileAlgorithm;
 
+        if (root.layoutFilter === 2)
+            return appSettings.defaultScrollingTemplate;
+
         return appSettings.defaultLayoutId;
     }
     // Defer model swap while the popup is open to prevent scroll resets.
@@ -78,11 +81,15 @@ ComboBox {
     }
 
     // Helper to get category with default fallback.
-    // Layout objects use `isAutotile` (bool), while overlay/D-Bus objects
-    // use `category` (int: 0=Manual, 1=Autotile). Check both fields.
+    // Layout objects use `isAutotile` / `isScrollingTemplate` (bool), while
+    // overlay/D-Bus objects use `category` (int: 0=Manual, 1=Autotile,
+    // 2=ScrollingTemplate). Check both fields.
     function getCategory(layout, defaultCategory) {
         if (!layout)
             return defaultCategory;
+
+        if (layout.isScrollingTemplate === true)
+            return 2;
 
         if (layout.category !== undefined)
             return layout.category;

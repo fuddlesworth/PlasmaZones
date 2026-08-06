@@ -38,7 +38,8 @@ OrderingPageKind orderingPageKind(const QString& page)
 // quick-slot layout assignments in StagingService (daemon-backed).
 bool isShortcutsPage(const QString& page)
 {
-    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts");
+    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts")
+        || page == QLatin1String("scrolling-shortcuts");
 }
 
 // Every animation leaf shares the single AnimationsPageController staging domain

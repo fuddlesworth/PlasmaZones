@@ -127,7 +127,7 @@ QJsonObject toJson(const PhosphorLayout::LayoutPreview& preview)
     json[K::ZoneCount] = preview.zoneCount;
     json[K::IsAutotile] = preview.isAutotile();
     json[K::IsScrollingTemplate] = preview.isScrollingTemplate;
-    json[K::Category] = preview.isAutotile() ? 1 : 0;
+    json[K::Category] = preview.isScrollingTemplate ? 2 : (preview.isAutotile() ? 1 : 0);
     json[K::IsSystem] = preview.isSystem;
     json[K::Recommended] = preview.recommended;
     json[K::AutoAssign] = preview.autoAssign;
@@ -182,7 +182,7 @@ QVariantMap toVariantMap(const PhosphorLayout::LayoutPreview& preview)
     }
     map[K::ZoneCount] = preview.zoneCount;
     map[K::IsAutotile] = preview.isAutotile();
-    map[K::Category] = preview.isAutotile() ? 1 : 0;
+    map[K::Category] = preview.isScrollingTemplate ? 2 : (preview.isAutotile() ? 1 : 0);
     map[K::IsSystem] = preview.isSystem;
     map[K::Recommended] = preview.recommended;
     map[K::AutoAssign] = preview.autoAssign;
