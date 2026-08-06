@@ -382,6 +382,21 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // reset the preview before re-inserting, so no second filter source is
     // needed.) The daemon clears the mark BEFORE the drop settles, so the
     // finalizing relayout runs unfiltered.
+    // How far the VIEW slid since the last emitted batch, as opposed to how
+    // far any one window moved. Every carried window in this batch shares it,
+    // so the effect can spring it ONCE per output and let the strip ride it
+    // rigidly, instead of starting an independent per-window spring each and
+    // watching them desync into a shear.
+    //
+    // Sign: a window's x is `workArea.x - viewX + stripX`, so a view that
+    // scrolls right (viewX grows) moves windows left. The delta below is the
+    // translation that puts a window back where it was rendered last time —
+    // the effect starts its spring there and rings it out to zero.
+    //
+    // Zero on the first batch for a context: there is nothing on screen to
+    // slide from, so the windows are placed outright.
+    const int viewDelta = state->hasLastAppliedViewX() ? resolved.viewX - state->lastAppliedViewX() : 0;
+
     QJsonArray arr;
     bool anyRectMoved = false;
     for (const ResolvedColumn& column : resolved.columns) {
@@ -581,6 +596,23 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             if (!scrollEdge.isEmpty()) {
                 obj[QLatin1String("scrollEdge")] = scrollEdge;
             }
+            // A PARKED tile is not carried by the view. Its committed rect is
+            // the park (below the union of all outputs), which no translation
+            // can put back on screen, so it keeps the existing edge-anchored
+            // slide-out the effect builds from scrollEdge. Zero is the honest
+            // encoding of that rather than a second flag: zero means "the view
+            // does not carry this window", which is equally true of a batch
+            // where the view genuinely did not move.
+            //
+            // An ARRIVING tile (parked until now, on screen in this batch) DOES
+            // ride it, and that is strictly better than the edge origin the
+            // effect would otherwise synthesize: translating its final rect
+            // back by the delta lands it at its real pre-scroll strip position,
+            // which is where it actually was, rather than at a made-up point
+            // just outside the screen edge.
+            if (!parkedNow && viewDelta != 0) {
+                obj[QLatin1String("viewDeltaX")] = viewDelta;
+            }
             arr.append(obj);
             const auto lastIt = m_lastAppliedRect.constFind(tile.windowId);
             if (lastIt == m_lastAppliedRect.constEnd() || *lastIt != rect) {
@@ -604,6 +636,11 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // rect already applied (focus move under Never-centering, redundant
     // scheduled retile) must not re-feed the compositor's apply path.
     if (anyRectMoved) {
+        // The view baseline advances with the EMIT, not with the relayout: a
+        // batch suppressed just above leaves the compositor showing the
+        // previous positions, and a baseline that moved anyway would make the
+        // next batch's delta describe a slide that never happened.
+        state->setLastAppliedViewX(resolved.viewX);
         Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
     }
 

@@ -110,6 +110,12 @@ QString TileRequestEntry::validationError() const
     if (!scrollEdge.isEmpty() && scrollEdge != QLatin1String("left") && scrollEdge != QLatin1String("right")) {
         return QStringLiteral("TileRequestEntry: invalid scrollEdge '%1' (windowId=%2)").arg(scrollEdge, windowId);
     }
+    // viewDeltaX is deliberately NOT validated here, unlike its neighbours.
+    // It is a motion hint, not a placement input: the committed rect stands on
+    // its own whatever the delta says, and an absurd value costs one wild slide
+    // that rings out to the correct position on its own. Rejecting the entry
+    // would instead drop a perfectly good placement over a cosmetic field. The
+    // consumer clamps it when it starts the spring.
     return {};
 }
 

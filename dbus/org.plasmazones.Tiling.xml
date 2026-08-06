@@ -137,9 +137,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
         <signal name="windowsTileRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows should be moved to new geometries (batch)."/>
-            <arg name="tileRequests" type="a(siiiissbbss)">
+            <arg name="tileRequests" type="a(siiiissbbssi)">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::TileRequestList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, zoneId, screenId, monocle, floating, stacking, scrollEdge)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, zoneId, screenId, monocle, floating, stacking, scrollEdge, viewDeltaX). viewDeltaX is how far a scrolling strip's view slid since the last batch, in logical pixels, for this entry's screen; zero for every other placement and for a window the view does not carry, such as a parked column."/>
             </arg>
         </signal>
 

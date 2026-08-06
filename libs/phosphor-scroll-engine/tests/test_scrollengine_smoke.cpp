@@ -55,6 +55,7 @@ private Q_SLOTS:
     void seedAdoptionClampsViewToStripEnd();
     void parkingAvoidsNeighbourOutputs();
     void parkingReportsDepartureEdge();
+    void viewDeltaCarriesOnScreenTilesOnly();
     void modeRoundTripRestoresStripStructure();
     void operationScreenFallbackIsDeterministic();
     void minSizeSeedsAndCarries();
@@ -818,6 +819,89 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
              "app|c should be back on screen after scrolling to the last column");
     QCOMPARE(cBack.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("right"));
     engine->setCrossSurfaceResolver(nullptr);
+}
+
+void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
+{
+    // viewDeltaX is what lets the effect move the strip as ONE object: it
+    // springs the delta once per output rather than starting an independent
+    // per-window spring for every column and watching them desync.
+    //
+    // Three properties, and the third is the one the effect's residual rule
+    // rests on:
+    //   1. the first batch for a context carries none (nothing on screen to
+    //      slide from, so the windows are placed outright);
+    //   2. a PARKED tile carries none (its committed rect is below the
+    //      outputs, where no translation can put it back on screen — it keeps
+    //      the edge-anchored slide-out built from scrollEdge instead);
+    //   3. for a tile on screen in BOTH batches of a pure view change, the
+    //      delta equals its ENTIRE movement. That is the definition of "the
+    //      view carries this window", and it is what makes the effect's
+    //      residual come out at zero so it starts no second animation.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    QVERIFY(!tiled.isEmpty());
+
+    const QJsonArray firstBatch = QJsonDocument::fromJson(tiled.first().at(0).toString().toUtf8()).array();
+    QVERIFY2(!firstBatch.isEmpty(), "expected the opening batch to carry app|a");
+    for (const QJsonValue& v : firstBatch) {
+        QVERIFY2(!v.toObject().contains(QLatin1String("viewDeltaX")),
+                 "a context's first batch has no previous view to slide from");
+    }
+
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+
+    // Rects as committed by the last STRUCTURAL batch, so the comparison
+    // below spans a pure view change and nothing else.
+    const auto rectsOf = [](const QSignalSpy& spy, int index) {
+        QHash<QString, QRect> out;
+        const QJsonArray b = QJsonDocument::fromJson(spy.at(index).at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : b) {
+            const QJsonObject o = v.toObject();
+            out.insert(o.value(QLatin1String("windowId")).toString(),
+                       QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
+                             o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt()));
+        }
+        return out;
+    };
+    const QHash<QString, QRect> before = rectsOf(tiled, tiled.count() - 1);
+
+    tiled.clear();
+    engine->focusColumnFirst(QStringLiteral("S1"));
+    QVERIFY2(!tiled.isEmpty(), "a focus move that shifts the view must emit a batch");
+    const QJsonArray moved = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+
+    int carried = 0;
+    for (const QJsonValue& v : moved) {
+        const QJsonObject o = v.toObject();
+        const QString id = o.value(QLatin1String("windowId")).toString();
+        const QRect now(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
+                        o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
+        const bool parked = now.top() > defaultScreenRect().bottom();
+        if (parked) {
+            QVERIFY2(!o.contains(QLatin1String("viewDeltaX")),
+                     qPrintable(QStringLiteral("parked tile %1 must not claim to ride the view").arg(id)));
+            continue;
+        }
+        const auto prev = before.constFind(id);
+        if (prev == before.constEnd() || prev->top() > defaultScreenRect().bottom()) {
+            continue; // arriving from a park: no on-screen predecessor to difference against
+        }
+        QVERIFY2(o.contains(QLatin1String("viewDeltaX")),
+                 qPrintable(QStringLiteral("on-screen tile %1 should ride the view").arg(id)));
+        // The whole of this window's movement, and nothing but the view's.
+        // Sign: the field is the translation that puts the window BACK where
+        // it was rendered, which is where the effect starts its spring before
+        // ringing it out to zero — so it is the negation of the movement.
+        QCOMPARE(prev->x() - now.x(), o.value(QLatin1String("viewDeltaX")).toInt());
+        QCOMPARE(now.y(), prev->y());
+        QCOMPARE(now.size(), prev->size());
+        ++carried;
+    }
+    QVERIFY2(carried > 0, "expected at least one column carried by the view across the focus move");
 }
 
 void TestScrollEngineSmoke::modeRoundTripRestoresStripStructure()

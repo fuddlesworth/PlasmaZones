@@ -128,12 +128,13 @@ private Q_SLOTS:
                                                  true,
                                                  false,
                                                  QStringLiteral("lastOnTop"),
-                                                 QStringLiteral("right")};
+                                                 QStringLiteral("right"),
+                                                 -240};
 
-        // Verify D-Bus signature: (siiiissbbss) = string + 4 ints + 2 strings
-        // + 2 bools + stacking + scrollEdge
+        // Verify D-Bus signature: (siiiissbbssi) = string + 4 ints + 2 strings
+        // + 2 bools + stacking + scrollEdge + viewDeltaX
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiissbbss)"));
+        QCOMPARE(sig, QStringLiteral("(siiiissbbssi)"));
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
@@ -151,6 +152,7 @@ private Q_SLOTS:
         QCOMPARE(entry.floating, false);
         QCOMPARE(entry.stacking, QStringLiteral("lastOnTop"));
         QCOMPARE(entry.scrollEdge, QStringLiteral("right"));
+        QCOMPARE(entry.viewDeltaX, -240);
 
         // Verify default construction
         PhosphorProtocol::TileRequestEntry defaultEntry;
@@ -159,6 +161,7 @@ private Q_SLOTS:
         QCOMPARE(defaultEntry.floating, false);
         QVERIFY(defaultEntry.stacking.isEmpty());
         QVERIFY(defaultEntry.scrollEdge.isEmpty());
+        QCOMPARE(defaultEntry.viewDeltaX, 0);
     }
 
     // A real bus round-trip so operator>> is exercised too — the signature
@@ -186,7 +189,8 @@ private Q_SLOTS:
                                                       true,
                                                       false,
                                                       QStringLiteral("lastOnTop"),
-                                                      QStringLiteral("left")};
+                                                      QStringLiteral("left"),
+                                                      512};
 
         QDBusMessage call =
             QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
@@ -208,6 +212,7 @@ private Q_SLOTS:
         QCOMPARE(got.floating, sent.floating);
         QCOMPARE(got.stacking, sent.stacking);
         QCOMPARE(got.scrollEdge, sent.scrollEdge);
+        QCOMPARE(got.viewDeltaX, sent.viewDeltaX);
     }
 
     // =================================================================

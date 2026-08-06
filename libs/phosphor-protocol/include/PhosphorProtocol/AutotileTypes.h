@@ -12,7 +12,7 @@
 
 namespace PhosphorProtocol {
 
-/// D-Bus struct for autotile tile requests: (siiiissbbss)
+/// D-Bus struct for autotile tile requests: (siiiissbbssi)
 struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 {
     QString windowId;
@@ -40,6 +40,22 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// data lets the engine park wherever is safe while the effect still
     /// animates from the side the user scrolled from.
     QString scrollEdge;
+    /// Scrolling mode: how far the whole VIEW slid since the last batch, in
+    /// logical pixels, for the screen this entry belongs to. Zero for every
+    /// other placement, and zero within scrolling for a window the view does
+    /// not carry.
+    ///
+    /// It is a property of the batch rather than of the window, carried
+    /// per-entry so a batch spanning several screens stays unambiguous. The
+    /// effect springs it ONCE per output and lets every carrying window ride
+    /// it, which is what makes the strip move as one object instead of as N
+    /// windows that each started their own spring a moment apart.
+    ///
+    /// Zero means "not carried". A parked column is the case that matters:
+    /// its committed rect is off below the union of all outputs, so no
+    /// translation puts it back on screen, and it keeps the edge-anchored
+    /// slide-out built from `scrollEdge` instead.
+    int viewDeltaX = 0;
 
     QRect toRect() const
     {

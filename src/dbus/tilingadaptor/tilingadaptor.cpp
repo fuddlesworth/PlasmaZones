@@ -126,6 +126,10 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
+        // Absent for every non-scrolling producer, and absent within scrolling
+        // for a window the view does not carry — both mean zero, which is what
+        // the default gives.
+        entry.viewDeltaX = obj.value(QLatin1String("viewDeltaX")).toInt(0);
         // The protocol type ships its own validator (empty windowId /
         // screenId, degenerate rect) — run it rather than re-deriving a
         // subset of its checks here.

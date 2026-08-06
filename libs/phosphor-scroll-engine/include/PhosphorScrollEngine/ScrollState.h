@@ -52,6 +52,39 @@ public:
         return m_floating.remove(windowId);
     }
 
+    /// The strip `viewX` carried by the last geometry batch this state
+    /// actually emitted, and whether it has emitted one at all.
+    ///
+    /// The difference between this and the next batch's `viewX` is the view
+    /// DELTA: how far the whole strip slid, as opposed to how far any one
+    /// window moved. The effect springs that delta once per output and lets
+    /// every carried window ride it, instead of starting an independent
+    /// per-window spring each (see the `viewDeltaX` field on the tile-request
+    /// wire).
+    ///
+    /// TRANSIENT — deliberately not serialized. A restored or freshly created
+    /// state has nothing on screen to slide FROM, so its first batch must
+    /// carry a zero delta and place windows outright. Living on the state
+    /// rather than in a parallel per-screen hash means it dies with the
+    /// context it describes, so no pruning path has to remember it.
+    ///
+    /// Only an EMITTED batch updates it. A relayout suppressed by the
+    /// emit-on-change gate leaves the compositor showing the previous
+    /// positions, so the baseline has to keep describing those.
+    bool hasLastAppliedViewX() const
+    {
+        return m_hasLastAppliedViewX;
+    }
+    int lastAppliedViewX() const
+    {
+        return m_lastAppliedViewX;
+    }
+    void setLastAppliedViewX(int viewX)
+    {
+        m_lastAppliedViewX = viewX;
+        m_hasLastAppliedViewX = true;
+    }
+
     // ── IPlacementState ─────────────────────────────────────────────────────
     QString screenId() const override
     {
@@ -101,6 +134,8 @@ private:
     QString m_screenId;
     ScrollStrip m_strip;
     QSet<QString> m_floating;
+    int m_lastAppliedViewX = 0;
+    bool m_hasLastAppliedViewX = false;
 };
 
 } // namespace PhosphorScrollEngine
