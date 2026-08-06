@@ -111,7 +111,8 @@ void Daemon::connectShortcutSignals()
         // screen (scrolling) the slot names a native template and applies
         // through applyEntry's template branch; only a capability-less
         // engine answers with feedback.
-        if (layoutSupportForScreen(screenId) == LayoutSupport::None) {
+        const LayoutSupport support = layoutSupportForScreen(screenId);
+        if (support == LayoutSupport::None) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }
@@ -126,7 +127,7 @@ void Daemon::connectShortcutSignals()
         m_unifiedLayoutController->setCurrentScreenName(screenId);
         // Push the LIVE capability so applyEntry's template branch routes on
         // the engine that actually owns the screen, not the cascade alone.
-        m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
+        m_unifiedLayoutController->setCurrentLayoutSupport(support);
         if (isScreenLockedForLayoutChange(screenId)) {
             return;
         }
@@ -455,6 +456,15 @@ void Daemon::connectShortcutSignals()
                 // open.
                 if (!screenId.isEmpty()) {
                     m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
+                    // The list filter has to be re-pushed with the capability,
+                    // not just alongside it: applyLayoutById resolves the id
+                    // against the FILTERED list, and any global refresh while
+                    // the picker sat open (a KCM apply on another screen seeds
+                    // the union, which a single Templates screen collapses to
+                    // templates-only) leaves this screen's own list excluded.
+                    // The pick then resolves to nothing and the click on a
+                    // visible card is a silent no-op.
+                    updateLayoutFilterForScreen(screenId);
                 }
                 if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
                     return;

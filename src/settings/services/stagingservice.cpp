@@ -12,6 +12,7 @@
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QChar>
@@ -256,11 +257,13 @@ bool StagingService::flushAssignmentsToDaemon()
         // `assignLayoutToScreen(snap)` followed by `setAssignmentEntry(mode=0,
         // "", "")` clobbers the snap we just assigned. Coalesce into a single
         // `setAssignmentEntry` so the daemon writes the combined state in one
-        // shot. Mode = 1 when a non-empty tiling algo is staged, 0 otherwise.
+        // shot. Mode is Autotile when a non-empty tiling algo is staged,
+        // Snapping otherwise.
         if (hasSnap && hasTile) {
             const QString snap = *s.snappingLayoutId;
             const QString tile = normTile(*s.tilingAlgorithmId);
-            const int mode = tile.isEmpty() ? 0 : 1;
+            const int mode = static_cast<int>(tile.isEmpty() ? PhosphorZones::AssignmentEntry::Snapping
+                                                             : PhosphorZones::AssignmentEntry::Autotile);
             check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                          QStringLiteral("setAssignmentEntry"),
                                          {s.screenId, s.virtualDesktop, s.activityId, mode, snap, tile}),
@@ -295,9 +298,10 @@ bool StagingService::flushAssignmentsToDaemon()
             continue;
         }
 
-        // Only tile staged. Empty ≡ tiling-clear (reverts to snapping mode 0).
+        // Only tile staged. Empty ≡ tiling-clear (reverts to Snapping).
         const QString tile = normTile(*s.tilingAlgorithmId);
-        const int mode = tile.isEmpty() ? 0 : 1;
+        const int mode = static_cast<int>(tile.isEmpty() ? PhosphorZones::AssignmentEntry::Snapping
+                                                         : PhosphorZones::AssignmentEntry::Autotile);
         check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                      QStringLiteral("setAssignmentEntry"),
                                      {s.screenId, s.virtualDesktop, s.activityId, mode, QString(), tile}),

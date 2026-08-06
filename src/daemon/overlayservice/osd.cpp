@@ -160,21 +160,25 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     p.zones = layout->zones().isEmpty()
         ? QVariantList()
         : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full, QRectF(screenGeom));
-    p.category = static_cast<int>(PhosphorZones::LayoutCategory::Manual);
     // Since the native-template pivot this path serves NON-template screens
     // only: a template apply carries no Layout* and routes to
     // showScrollingTemplateOsd instead, and every producer of this overload
     // gates on the context's mode not being Scrolling (applyEntry refuses a
     // manual layout on a Templates screen, the lock/unlock and KCM-apply
-    // sites take their template arm first). Category therefore stays Manual.
+    // sites take their template arm first). Category is therefore Manual in
+    // practice.
     //
     // The live-capability read below is defence in depth for that invariant.
     // The Auto badge advertises snap-to-empty-zone, whose ONLY behavioural
     // consumer is the snap engine, so if a Templates screen ever does reach
-    // here the badge and the caption are corrected rather than left claiming
-    // a behaviour the screen cannot perform.
+    // here the badge, the category and the caption are corrected rather than
+    // left claiming a behaviour the screen cannot perform. Category and
+    // isTemplate move together — a "Manual" badge beside a "Column template"
+    // caption is a contradiction on one card.
     const bool templatesScreen =
         m_layoutSupportResolver && m_layoutSupportResolver(effectiveScreenId) == LayoutSupportTemplates;
+    p.category = static_cast<int>(templatesScreen ? PhosphorZones::LayoutCategory::ScrollingTemplate
+                                                  : PhosphorZones::LayoutCategory::Manual);
     p.autoAssign = !templatesScreen && layout->autoAssign();
     p.globalAutoAssign = !templatesScreen && m_settings && m_settings->autoAssignAllLayouts();
     p.isTemplate = templatesScreen;

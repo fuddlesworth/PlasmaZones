@@ -327,8 +327,9 @@ Item {
 
     /// Success copy for the current action, including the zone numbers and
     /// direction arrows the reason token carries. No "layout" arm on
-    /// purpose: that action is failure-only by producer contract (the sole
-    /// emitter, Daemon::showLayoutsUnavailableOsd, hardcodes success=false).
+    /// purpose: that action is failure-only by producer contract. All three
+    /// emitters (Daemon::showLayoutsUnavailableOsd, and the two no_templates
+    /// sites in shortcuts_wiring.cpp and start.cpp) hardcode success=false.
     function successMessage(): string {
         if (action === "rotate") {
             const arrow = rotationArrow(reason);

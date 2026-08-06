@@ -149,7 +149,7 @@ void SettingsController::save()
         Q_EMIT stagedTilingOrderChanged();
 
     // Persistence phase (pre-save): staged VS configs need to be in Settings
-    // before the save flushes to disk. Quick-layout slots (both modes) are
+    // before the save flushes to disk. Quick-layout slots (all three modes) are
     // daemon-backed now and flush via D-Bus after notifyReload, below.
     m_staging.flushVirtualScreensToSettings(m_settings);
 
@@ -201,7 +201,8 @@ void SettingsController::save()
     // Notify daemon to reload KConfig settings (before D-Bus assignment mutations)
     DaemonDBus::notifyReload();
 
-    // Flush staged quick-layout slots (snapping + tiling) via D-Bus (after reload).
+    // Flush staged quick-layout slots (snapping + tiling + scrolling) via D-Bus
+    // (after reload).
     if (!m_staging.flushQuickSlotsToDaemon()) {
         commitOk = false;
     }

@@ -190,6 +190,9 @@ QString engineModeDisplayLabel(const QString& wire)
 /// validator has not run yet, so a bool, a string, or an out-of-range number
 /// is reachable here; the same reject paths SetOpacity and SetTintStrength
 /// mirror, so a summary never claims a size the runtime will not apply.
+///
+/// Only for params whose descriptor floors at 0.05. A fraction param that
+/// admits 0 belongs to zeroFlooredFractionPercent below.
 int scrollFractionPercent(const QJsonValue& raw)
 {
     if (raw.isNull() || raw.isUndefined()) {
@@ -207,6 +210,25 @@ int scrollFractionPercent(const QJsonValue& raw)
     // MinTabIndicatorLengthRatio), so a summary confidently printing "3%"
     // would claim a size the runtime refuses.
     if (v < PhosphorRules::MinColumnWidthRatio || v > 1.0) {
+        return -1;
+    }
+    return qRound(v * 100.0);
+}
+
+/// The zero-floored twin of scrollFractionPercent, for a fraction param whose
+/// descriptor really does admit 0. The drop indicator's fill opacity is the
+/// only one: 0 there is an outline with no fill, a legal value the shared
+/// 0.05 floor would render "(invalid)".
+int zeroFlooredFractionPercent(const QJsonValue& raw)
+{
+    if (raw.isNull() || raw.isUndefined()) {
+        return -1;
+    }
+    if (!raw.isDouble()) {
+        return -1;
+    }
+    const double v = raw.toDouble();
+    if (v < PhosphorRules::MinDropIndicatorOpacity || v > PhosphorRules::MaxDropIndicatorOpacity) {
         return -1;
     }
     return qRound(v * 100.0);
@@ -645,7 +667,7 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // upper-case a valid hex and read "(invalid)" otherwise so the summary
         // never claims a colour the runtime discards.
         if (action.type == ActionType::SetDropIndicatorOpacity) {
-            const int pct = scrollFractionPercent(raw);
+            const int pct = zeroFlooredFractionPercent(raw);
             return pct < 0 ? PhosphorI18n::tr("Drop indicator fill opacity (invalid)")
                            : PhosphorI18n::tr("Drop indicator fill opacity: %1%").arg(pct);
         }

@@ -5,11 +5,12 @@
  * @file test_contextrulebridge.cpp
  * @brief Unit tests for the header-only ContextRuleBridge.
  *
- * Exercises every bridge function: makeContextMatch (single-leaf collapse vs
+ * Exercises the bridge functions: makeContextMatch (single-leaf collapse vs
  * makeAll vs catch-all), makeAssignmentActions / makeAssignmentRule
  * (assignment-slot losslessness across all four slots + empty-field omission
- * + caller-supplied priority), makeDisableRule, and the makeContextMatch →
- * contextDimsOf / disableRuleMode round-trips.
+ * + caller-supplied priority), makeDisableRule, the makeContextMatch →
+ * contextDimsOf / disableRuleMode round-trips, and the axis classifiers
+ * including the strict Activity / Combined pair the batch APIs key on.
  */
 
 #include <QTest>
@@ -348,6 +349,43 @@ private Q_SLOTS:
         QCOMPARE(desk, 0);
     }
 
+    void testContextDimsOf_refusesMalformedVirtualDesktopValue()
+    {
+        // The value guard, sibling of the three duplicate-leaf guards.
+        // QVariant::toInt() turns "abc" into 0 and 0 is the bridge's "no
+        // desktop pinned" reading, so without the guard a hand-edited rule
+        // would silently reclassify from the Desktop axis to the Monitor one
+        // and the batch writers would rewrite it against the wrong key.
+        for (const QVariant& bad : {QVariant(QStringLiteral("abc")), QVariant(0), QVariant(-3), QVariant(QString())}) {
+            const MatchExpression m = MatchExpression::makeAll({
+                MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+                MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, bad),
+            });
+            QString sid = QStringLiteral("stale");
+            int desk = 4;
+            QString act = QStringLiteral("stale");
+            QVERIFY2(!CRB::contextDimsOf(m, sid, desk, act), qPrintable(bad.toString()));
+            // Refusal clears every out-param, not just the desktop, so a
+            // caller that ignores the bool cannot read a half-decoded tuple.
+            QVERIFY(sid.isEmpty());
+            QCOMPARE(desk, 0);
+            QVERIFY(act.isEmpty());
+        }
+
+        // Discriminator: the same shape with a strictly-positive desktop
+        // decodes, so the refusals above are the value and not the two-leaf
+        // All{} wrapper.
+        const MatchExpression good = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+            MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 2),
+        });
+        QString sid;
+        int desk = 0;
+        QString act;
+        QVERIFY(CRB::contextDimsOf(good, sid, desk, act));
+        QCOMPARE(desk, 2);
+    }
+
     void testContextDimsOf_returnTrueOnSuccess()
     {
         // The non-duplicate happy path must return true so callers that care
@@ -520,6 +558,36 @@ private Q_SLOTS:
         // negative on a mismatched desktop number.
         QVERIFY(CRB::matchIsExactContext(combined, QStringLiteral("DP-1"), 3, QStringLiteral("act-x")));
         QVERIFY(!CRB::matchIsExactContext(combined, QStringLiteral("DP-1"), 4, QStringLiteral("act-x")));
+    }
+
+    /// The STRICT pair the batch readers/writers use. The broad
+    /// matchIsExactContextActivity above admits Combined as well, so these two
+    /// are what keep the Activity batch API ((screen, activity) → layout) from
+    /// projecting a desktop-pinned Combined rule through a key that cannot
+    /// represent it. Combined is therefore the discriminating negative for
+    /// Strict, and Activity the discriminating negative for Combined.
+    void testMatchIsExactContextStrictAndCombined()
+    {
+        const MatchExpression monitor = CRB::makeContextMatch(QStringLiteral("DP-1"), 0, QString());
+        const MatchExpression desktop = CRB::makeContextMatch(QStringLiteral("DP-1"), 3, QString());
+        const MatchExpression activity = CRB::makeContextMatch(QStringLiteral("DP-1"), 0, QStringLiteral("act-x"));
+        const MatchExpression combined = CRB::makeContextMatch(QStringLiteral("DP-1"), 3, QStringLiteral("act-x"));
+
+        QVERIFY(CRB::matchIsExactContextActivityStrict(activity));
+        QVERIFY(!CRB::matchIsExactContextActivityStrict(combined));
+        QVERIFY(!CRB::matchIsExactContextActivityStrict(desktop));
+        QVERIFY(!CRB::matchIsExactContextActivityStrict(monitor));
+
+        QVERIFY(CRB::matchIsExactContextCombined(combined));
+        QVERIFY(!CRB::matchIsExactContextCombined(activity));
+        QVERIFY(!CRB::matchIsExactContextCombined(desktop));
+        QVERIFY(!CRB::matchIsExactContextCombined(monitor));
+
+        // The two strict families are disjoint, which is the property the
+        // batch round-trip relies on: no rule is claimed by both.
+        for (const MatchExpression& m : {monitor, desktop, activity, combined}) {
+            QVERIFY(!(CRB::matchIsExactContextActivityStrict(m) && CRB::matchIsExactContextCombined(m)));
+        }
     }
 };
 

@@ -131,8 +131,10 @@ private Q_SLOTS:
 
     void cleanup()
     {
-        m_guards.clear();
+        // Stores first: a store's destructor still resolves paths under the
+        // guard's isolated XDG dirs, so the guard has to outlive it.
         m_stores.clear();
+        m_guards.clear();
     }
 };
 

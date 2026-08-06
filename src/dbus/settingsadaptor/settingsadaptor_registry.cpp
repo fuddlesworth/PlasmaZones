@@ -158,64 +158,17 @@ void SettingsAdaptor::initializeRegistry()
     // returns "key not found" instead of dereferencing a null pointer.
     auto* concrete = qobject_cast<Settings*>(m_settings);
 
-// Macros for concrete Settings entries (same pattern as REGISTER_* but captures 'concrete')
-#define REGISTER_CONCRETE_BOOL(name, getter, setter)                                                                   \
-    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
-        return concrete->getter();                                                                                     \
-    };                                                                                                                 \
-    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
-        concrete->setter(v.toBool());                                                                                  \
-        return true;                                                                                                   \
-    };                                                                                                                 \
-    m_schemas[QStringLiteral(name)] = QStringLiteral("bool");
-#define REGISTER_CONCRETE_INT(name, getter, setter)                                                                    \
-    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
-        return concrete->getter();                                                                                     \
-    };                                                                                                                 \
-    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
-        concrete->setter(v.toInt());                                                                                   \
-        return true;                                                                                                   \
-    };                                                                                                                 \
-    m_schemas[QStringLiteral(name)] = QStringLiteral("int");
-#define REGISTER_CONCRETE_DOUBLE(name, getter, setter)                                                                 \
-    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
-        return concrete->getter();                                                                                     \
-    };                                                                                                                 \
-    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
-        concrete->setter(v.toDouble());                                                                                \
-        return true;                                                                                                   \
-    };                                                                                                                 \
-    m_schemas[QStringLiteral(name)] = QStringLiteral("double");
+// Macro for concrete Settings entries (same pattern as REGISTER_* but captures
+// 'concrete'). Only the string form is left here: the bool / int / double /
+// theme-fallback-colour forms went with the keys that used them when the
+// registry split into per-mode TUs, and each mode TU carries its own copy of
+// whichever forms it needs.
 #define REGISTER_CONCRETE_STRING(name, getter, setter)                                                                 \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
         concrete->setter(v.toString());                                                                                \
-        return true;                                                                                                   \
-    };                                                                                                                 \
-    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
-
-// A theme-fallback colour: EMPTY (follow the theme) or a colour QColor can
-// parse. Rejects anything else at the boundary rather than letting it reach
-// the QML `color` property, where an unparseable string renders as an invalid
-// colour rather than falling back. Returning false surfaces the rejection to
-// the D-Bus caller instead of silently dropping the write.
-//
-// These ride as strings rather than REGISTER_COLOR_SETTING precisely because
-// a QColor round-trip cannot carry the empty "follow the theme" value.
-#define REGISTER_THEME_FALLBACK_COLOR(name, getter, setter)                                                            \
-    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
-        return concrete->getter();                                                                                     \
-    };                                                                                                                 \
-    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
-        const QString s = v.toString();                                                                                \
-        /* Same validity predicate as REGISTER_COLOR_SETTING; only the                                                 \
-           empty-string exemption ("follow the theme") is extra here. */                                               \
-        if (!s.isEmpty() && !QColor(s).isValid()) {                                                                    \
-            return false;                                                                                              \
-        }                                                                                                              \
-        concrete->setter(s);                                                                                           \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("string");
@@ -695,11 +648,7 @@ void SettingsAdaptor::initializeRegistry()
 #undef REGISTER_DOUBLE_SETTING
 #undef REGISTER_COLOR_SETTING
 #undef REGISTER_STRINGLIST_SETTING
-#undef REGISTER_CONCRETE_BOOL
-#undef REGISTER_CONCRETE_INT
-#undef REGISTER_CONCRETE_DOUBLE
 #undef REGISTER_CONCRETE_STRING
-#undef REGISTER_THEME_FALLBACK_COLOR
 }
 
 } // namespace PlasmaZones

@@ -395,6 +395,14 @@ private Q_SLOTS:
                                                        /*autotileMode=*/true, /*snappingLayout=*/QString(),
                                                        /*tilingAlgorithm=*/QStringLiteral("dwindle"));
         QVERIFY(f.store->addRule(mixed));
+        // Scrolling arm of the same property. The template slot is a third
+        // action type carried by the same assignment shape, so a leak could
+        // surface there while mode and tilingAlgorithm both stayed clean.
+        const PWR::Rule mixedScrolling = makeMixedScreenAppRuleForMode(
+            QStringLiteral("DP-2"), QStringLiteral("konsole"), QStringLiteral("scrolling"),
+            /*snappingLayout=*/QString(), /*tilingAlgorithm=*/QString(),
+            /*scrollingTemplate=*/QStringLiteral("{mixed-template}"), /*priority=*/998);
+        QVERIFY(f.store->addRule(mixedScrolling));
 
         // The registry queries the rule set with a WINDOWLESS query — no
         // AppId — so the mixed rule's AppId leaf evaluates false; its All{}
@@ -407,6 +415,7 @@ private Q_SLOTS:
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, QStringLiteral("{provider-snap-default}"));
         QVERIFY(entry.tilingAlgorithm.isEmpty());
+        QVERIFY(entry.scrollingTemplateLayout.isEmpty());
     }
 
     // ─── Case 2: mixed rule inert across the field-level readers ──────────
@@ -424,18 +433,22 @@ private Q_SLOTS:
         RegistryFixture f = makeRegistryFixture();
         // No provider defaults configured → the field readers must observe
         // empty, confirming the mixed rule's actions never won any slot.
+        // The mixed rule carries all THREE layout slots, so no reader can be
+        // clean merely because its slot was never populated.
         const PWR::Rule mixed =
-            makeMixedScreenAppRule(QStringLiteral("DP-2"), QStringLiteral("firefox"),
-                                   /*autotileMode=*/false, /*snappingLayout=*/QStringLiteral("{mixed-snap}"),
-                                   /*tilingAlgorithm=*/QStringLiteral("{mixed-tile}"));
+            makeMixedScreenAppRuleForMode(QStringLiteral("DP-2"), QStringLiteral("firefox"), QStringLiteral("snapping"),
+                                          /*snappingLayout=*/QStringLiteral("{mixed-snap}"),
+                                          /*tilingAlgorithm=*/QStringLiteral("{mixed-tile}"),
+                                          /*scrollingTemplate=*/QStringLiteral("{mixed-template}"));
         QVERIFY(f.store->addRule(mixed));
 
         // POSITIVE CONTROL on a second screen: a plain context rule, the shape
-        // these same three readers are supposed to surface. Without it, readers
+        // these same readers are supposed to surface. Without it, readers
         // that always answered empty would satisfy every assertion below.
-        const PWR::Rule contextOnly = CRB::makeAssignmentRule(
-            QStringLiteral("DP-3"), QStringLiteral("DP-3"), 0, QString(), QStringLiteral("snapping"),
-            QStringLiteral("{context-snap}"), QStringLiteral("{context-tile}"), 301, QString());
+        const PWR::Rule contextOnly =
+            CRB::makeAssignmentRule(QStringLiteral("DP-3"), QStringLiteral("DP-3"), 0, QString(),
+                                    QStringLiteral("snapping"), QStringLiteral("{context-snap}"),
+                                    QStringLiteral("{context-tile}"), 301, QStringLiteral("{context-template}"));
         QVERIFY(f.store->addRule(contextOnly));
 
         const QString screen = QStringLiteral("DP-2");
@@ -445,6 +458,7 @@ private Q_SLOTS:
         QCOMPARE(f.registry->modeForScreen(screen, 1, QString()), PhosphorZones::AssignmentEntry::Snapping);
         QVERIFY(f.registry->snappingLayoutForScreen(screen, 1, QString()).isEmpty());
         QVERIFY(f.registry->tilingAlgorithmForScreen(screen, 1, QString()).isEmpty());
+        QVERIFY(f.registry->scrollingTemplateLayoutForScreen(screen, 1, QString()).isEmpty());
 
         // ...while on DP-3 the very same readers do report the context rule's
         // slots, so the emptiness above is the mixed rule failing to match and
@@ -453,6 +467,8 @@ private Q_SLOTS:
         QCOMPARE(f.registry->modeForScreen(control, 1, QString()), PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(f.registry->snappingLayoutForScreen(control, 1, QString()), QStringLiteral("{context-snap}"));
         QCOMPARE(f.registry->tilingAlgorithmForScreen(control, 1, QString()), QStringLiteral("{context-tile}"));
+        QCOMPARE(f.registry->scrollingTemplateLayoutForScreen(control, 1, QString()),
+                 QStringLiteral("{context-template}"));
     }
 
     // ─── Case 3: context-only rule wins over a higher-priority mixed rule

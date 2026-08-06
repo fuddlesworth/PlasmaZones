@@ -1313,6 +1313,22 @@ private:
     // reconcileActiveAssignments / diffActiveAssignments.
     QHash<QString, ActiveAssignmentSnapshot> m_activeAssignmentByScreen;
 
+    /// Per effective screen, the scrolling template id the LAST OSD card shown
+    /// for that screen announced (empty value = announced with no template).
+    /// A screen is absent when the last card it showed was not a scrolling one,
+    /// or when it has shown none yet.
+    ///
+    /// Separate from m_activeAssignmentByScreen on purpose: that snapshot is
+    /// refreshed by diffActiveAssignments, which the rule-driven setter runs
+    /// synchronously BEFORE handleAssignmentChangesApplied, so a gate reading it
+    /// can never see a pre-apply value. This map advances inside
+    /// showScrollingModeOsd / showScrollingTemplateOsd — the funnels every
+    /// scrolling-card producer routes through — plus the announce loop's
+    /// silent-clear record (no card shows for a template clear). The apply
+    /// loop's up-front remove() covers non-scrolling cards, and the
+    /// screenRemoved tail drops unplugged screens.
+    QHash<QString, QString> m_lastAnnouncedTemplateByScreen;
+
     // Compression latch for the deferred rulesChanged → reconcile pass. The
     // store emits rulesChanged synchronously from inside every mutation, and
     // the daemon's own assignment writes (mode toggle, quick layouts, KCM

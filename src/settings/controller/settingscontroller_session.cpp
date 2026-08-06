@@ -679,9 +679,9 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
         // layout id and an algorithm id, and Scrolling has neither, so a
         // Scrolling pick arrives only through the explicit mode above.
         if (s->tilingAlgorithmId.has_value() && !s->tilingAlgorithmId->isEmpty())
-            map[QStringLiteral("mode")] = 1;
+            map[QStringLiteral("mode")] = static_cast<int>(PhosphorZones::AssignmentEntry::Autotile);
         else if (s->snappingLayoutId.has_value() && !s->snappingLayoutId->isEmpty())
-            map[QStringLiteral("mode")] = 0;
+            map[QStringLiteral("mode")] = static_cast<int>(PhosphorZones::AssignmentEntry::Snapping);
     }
     return map;
 }

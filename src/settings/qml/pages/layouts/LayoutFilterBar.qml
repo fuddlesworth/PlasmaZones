@@ -82,11 +82,11 @@ RowLayout {
     // no priority has been set yet.
     readonly property var snappingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Priority")]
     readonly property var tilingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Priority")]
-    // Column Count deliberately shares sort index 1 with Zone Count: the
+    // Width Count deliberately shares sort index 1 with Zone Count: the
     // shared sort logic reads the same zoneCount field (a template's
-    // column count) so no template-specific comparator is needed. No
+    // width count) so no template-specific comparator is needed. No
     // Priority entry — templates have no custom-order page.
-    readonly property var templateSortModel: [i18n("Name"), i18n("Column Count")]
+    readonly property var templateSortModel: [i18n("Name"), i18n("Width Count")]
     // Guard to suppress redundant filterSettingsChanged during batch resets
     property bool _resetting: false
     property int _previousViewMode: 0

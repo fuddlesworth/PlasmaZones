@@ -157,9 +157,10 @@ public:
     /// value key means the schema's clampDouble has to span both kinds and
     /// cannot enforce either: the hand-written setter (which the D-Bus
     /// registry routes through), and Settings::normalizeScrollingColumnWidthValue,
-    /// called from load() and from applyConfigOverlayStaged. Between them
-    /// those two cover every way a value reaches the store: a hand edit, a
-    /// config import, the Discard reload, and profile staging. The QML SpinBox reads
+    /// called from load(), applyConfigOverlayStaged, discardKeys and resetKeys.
+    /// Between them those cover every way a value reaches the store: a hand
+    /// edit, a config import, the Discard reload, a per-page Reset, and
+    /// profile staging. The QML SpinBox reads
     /// its bounds from here via SettingsController::scrollingConstants().
     /// The engine's qMax(1, …) keeps any bypass value renderable.
     static constexpr qreal scrollingDefaultColumnWidthFixedMin()

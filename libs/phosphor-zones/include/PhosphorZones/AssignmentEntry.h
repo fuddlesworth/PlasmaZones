@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QUuid>
 #include <QVariantMap>
 #include <QtGlobal>
 
@@ -205,7 +206,18 @@ struct AssignmentEntry
             entry.mode = Scrolling;
         } else {
             entry.mode = Snapping;
-            entry.snappingLayout = layoutId;
+            // Normalize a UUID-shaped id to its canonical braced spelling at
+            // this ONE classification choke point, so every caller (the D-Bus
+            // setAssignmentEntry and the four setAll*Assignments verbs, the
+            // batch rebuilds, the controllers) stores one spelling. A braceless
+            // or upper-case bus-supplied uuid stored verbatim defeats the
+            // exact-string compare that purgeLayoutIdFromAssignments does on
+            // layout delete, and the byte-wise action compare in
+            // upsertAssignmentRule's no-op guard. Anything that is not a UUID
+            // passes through untouched — the snapping slot is not required to
+            // hold one.
+            const QUuid parsed = QUuid::fromString(layoutId);
+            entry.snappingLayout = parsed.isNull() ? layoutId : parsed.toString();
         }
         return entry;
     }

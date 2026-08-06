@@ -357,7 +357,14 @@ void Daemon::handleTilingModeToggle()
             // suppressed context, so it does not tile) AND updateLayoutFilter,
             // so the mode filter refreshes off that signal — no explicit call
             // needed here.
-            PhosphorZones::AssignmentEntry entry;
+            // Seed from the stored entry so the slots this arm does not name
+            // (snapping layout, scrolling template) survive the flip:
+            // carryOverNonAssignmentActions excludes SetScrollingTemplate, so a
+            // fresh entry would drop the template outright. Same seeding shape
+            // LayoutAdaptor::setAssignmentEntry uses. The entry stays "bare"
+            // regardless — this arm is only reached when the resolved algorithm
+            // is empty, so the seeded tilingAlgorithm is empty too.
+            PhosphorZones::AssignmentEntry entry = m_layoutManager->exactContextEntry(screenId, desktop, activity);
             entry.mode = PhosphorZones::AssignmentEntry::Autotile;
             m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
             // No layoutApplied/autotileApplied signal fires for a direct
@@ -393,7 +400,14 @@ void Daemon::handleTilingModeToggle()
         // updateEngineScreens' derive pass (driven by the emitted
         // layoutAssigned), which fires before the scroll engine
         // claims the screen.
-        PhosphorZones::AssignmentEntry entry;
+        // Seeded from the stored entry, not built fresh: the scrolling
+        // template lives in a slot this arm never names, and
+        // carryOverNonAssignmentActions excludes SetScrollingTemplate, so a
+        // fresh entry would wipe the template on the way INTO the mode that
+        // consumes it. Same seeding shape LayoutAdaptor::setAssignmentEntry
+        // uses. The two sibling slots below are still re-resolved because their
+        // resolvers widen past the exact context (empty-activity fallback).
+        PhosphorZones::AssignmentEntry entry = m_layoutManager->exactContextEntry(screenId, desktop, activity);
         entry.mode = Mode::Scrolling;
         entry.snappingLayout = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
         if (entry.snappingLayout.isEmpty() && !activity.isEmpty()) {

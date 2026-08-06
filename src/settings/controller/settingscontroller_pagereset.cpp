@@ -27,6 +27,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
+#include <QDBusArgument>
 #include <QDebug>
 #include <QSet>
 #include <QStringList>
@@ -165,7 +166,12 @@ bool SettingsController::stageQuickSlotClears(int wireMode, bool& stagedAny)
                                        << slotsReply.errorMessage();
         return false;
     }
-    const QVariantMap allSlots = slotsReply.arguments().value(0).toMap();
+    // a{sv} arrives as a QDBusArgument, and QVariant::toMap() on one yields an
+    // EMPTY map — indistinguishable from "every slot already unassigned", which
+    // would stage nothing and reconcile the page clean. qdbus_cast demarshals it
+    // and degrades to qvariant_cast when the argument is already a QVariantMap
+    // (an in-process caller that never crossed the bus).
+    const QVariantMap allSlots = qdbus_cast<QVariantMap>(slotsReply.arguments().value(0));
     for (int slot = 1; slot <= QUICK_LAYOUT_SLOT_COUNT; ++slot) {
         // Staged value wins over the daemon's, matching the per-slot accessors'
         // precedence.

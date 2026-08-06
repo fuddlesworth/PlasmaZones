@@ -53,8 +53,8 @@ namespace {
 /// optional holding a "settled" value (e.g. a non-null-but-empty Layout*) stops
 /// the chain, exactly as the inline retries did. Centralizes the rewrite shared
 /// by layoutForScreen / storedAssignmentIdForScreen (which assignmentIdForScreen
-/// delegates to) / assignmentEntryForScreen / hasMatchingAssignmentRule so the
-/// four callers cannot drift.
+/// delegates to) / assignmentEntryForScreen / hasMatchingAssignmentRule /
+/// scrollingTemplateForContext so the five callers cannot drift.
 template<typename TryFn>
 auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> decltype(tryOne(screenId))
 {
@@ -178,7 +178,7 @@ bool LayoutRegistry::removeAssignmentRule(const QString& screenId, int virtualDe
     // MIXED rules (a context assignment the user also hung a SetOpacity or
     // LockContext on), so a wholesale removeRule here would destroy those
     // extra actions when the user merely CLEARS the context's assignment on
-    // the Monitors page. Strip the three assignment slots instead and keep the
+    // the Monitors page. Strip the four assignment slots instead and keep the
     // rule alive for whatever else it carries; only delete it outright when
     // nothing survives. Same shape purgeLayoutIdFromAssignments already
     // uses for its Shape-2 rules.
@@ -246,13 +246,13 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         changed = true;
 
         // Gate on isPureAssignmentRule (not isContextAssignmentRule) — the
-        // Shape-1 rebuild path emits ONLY the three assignment slot actions
+        // Shape-1 rebuild path emits ONLY the four assignment slot actions
         // via makeAssignmentActions, so a mixed context rule carrying
         // SetOpacity / OverrideAnimation* / Float / Exclude / LockContext /
         // DefaultLayoutAssignment alongside its assignment actions would silently lose those
         // non-assignment actions on rebuild. Mixed rules fall through to Shape 2's
-        // surgical SetSnappingLayout removal, which preserves every
-        // other action verbatim.
+        // surgical SetSnappingLayout / SetScrollingTemplate removal, which
+        // preserves every other action verbatim.
         if (isContextAssignmentRule(rule) && isPureAssignmentRule(rule)) {
             // Shape 1: rebuild the lossless context-action set with the dead
             // reference(s) cleared; every slot that does not point at the
@@ -293,8 +293,8 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         }
 
         // Shape 2: a window-property (or otherwise non-context) rule. Remove
-        // only the SetSnappingLayout actions referencing the deleted layout;
-        // every other action is preserved verbatim.
+        // only the SetSnappingLayout / SetScrollingTemplate actions referencing
+        // the deleted id; every other action is preserved verbatim.
         //
         // A MIXED context rule (context-only match + assignment actions +
         // some non-assignment action) lands here too — it fails
@@ -342,9 +342,13 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
     if (changed) {
         m_ruleStore->setAllRules(kept);
         // Notify per-screen observers (overlays, autotile state, settings
-        // tile caption, etc.) so they refresh against the new cascade.
-        // Mirrors `clearAutotileAssignments`'s emit pattern — without it,
-        // a layout delete left those consumers showing stale assignments.
+        // tile caption, etc.) so they refresh against the new cascade —
+        // without it, a layout delete left those consumers showing stale
+        // assignments. Unlike clearAutotileAssignments, which routes through
+        // emitLayoutAssigned to carry the layout the context now resolves to,
+        // this path emits a bare nullptr payload. Consumers are null-safe and
+        // re-derive from the cascade, and the deletion has already invalidated
+        // whatever the old payload named.
         for (const auto& [sid, desk] : std::as_const(affected)) {
             Q_EMIT layoutAssigned(sid, desk, nullptr);
         }
@@ -497,7 +501,15 @@ LayoutRegistry::scrollingTemplateForContext(const QString& screenId, int virtual
     // the picker consume the LIVE template only. The raw field-inspection
     // twin is scrollingTemplateLayoutForScreen, which reads the stored field
     // regardless of mode (parity with snappingLayoutForScreen).
-    const auto entry = resolveAssignmentEntry(screenId, virtualDesktop, activity);
+    //
+    // Connector-name / virtual-screen fallback applies here exactly as it does
+    // to the sibling cascade readers: a virtual sub-screen inheriting its
+    // physical screen's Scrolling assignment must inherit that assignment's
+    // template too. The mode gate stays on the RESOLVED entry, so a fallback
+    // hop that lands on a non-Scrolling entry still resolves no template.
+    const auto entry = resolveWithScreenFallback(screenId, [this, virtualDesktop, &activity](const QString& sid) {
+        return resolveAssignmentEntry(sid, virtualDesktop, activity);
+    });
     if (!entry || entry->mode != AssignmentEntry::Scrolling) {
         return {};
     }

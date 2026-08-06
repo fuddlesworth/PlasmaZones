@@ -20,6 +20,51 @@
 
 namespace PhosphorZones {
 
+namespace {
+
+/// Every *.json file directly under @p dirPath whose stored template id is
+/// @p id, excluding the file whose canonical path is @p keepCanonical.
+///
+/// loadTemplates keys entries by the id INSIDE the file and keeps exactly one
+/// entry per id, so a second file declaring the same id is invisible to the
+/// store: it holds no entry, no sourcePath records it, and the only thing it
+/// can do is win the next rescan's name-ordered collision and revert whatever
+/// the surviving file says. Finding those needs the ids off disk, because the
+/// in-memory map cannot name a file it dropped.
+/// An EMPTY @p keepCanonical answers an empty list rather than sweeping
+/// everything: the kept file is written before this runs, so an empty canonical
+/// path means the file cannot be identified, and without it the sweep would
+/// delete the file it is meant to protect.
+QStringList duplicateIdFiles(const QString& dirPath, const QUuid& id, const QString& keepCanonical)
+{
+    QStringList out;
+    if (keepCanonical.isEmpty()) {
+        return out;
+    }
+    const QDir dir(dirPath);
+    const QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+    for (const QString& fileName : files) {
+        const QString path = dir.absoluteFilePath(fileName);
+        if (QFileInfo(path).canonicalFilePath() == keepCanonical) {
+            continue;
+        }
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            continue;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        if (!doc.isObject()) {
+            continue;
+        }
+        if (QUuid::fromString(doc.object().value(TemplateJsonKeys::Id).toString()) == id) {
+            out.append(path);
+        }
+    }
+    return out;
+}
+
+} // namespace
+
 ScrollingTemplateStore::ScrollingTemplateStore(QObject* parent)
     : QObject(parent)
 {
@@ -116,22 +161,7 @@ QUuid ScrollingTemplateStore::saveTemplate(ScrollingTemplate templ)
     // A save always produces a USER file, whatever the source of the
     // in-memory entry was — editing a bundled template shadows it.
     templ.isSystem = false;
-    // A user template hand-placed under a name other than <id>.json would
-    // otherwise DUPLICATE on save (the id-named file appears beside the
-    // original, and the next rescan resolves the collision by name order).
-    // Capture the old user-owned path so it can be retired after the write.
-    // Canonicalize the user directory ONCE and require it to be non-empty, the
-    // same guard removeTemplate uses: an empty canonical path means the user
-    // directory does not exist yet, and comparing against it would match any
-    // path whose own canonicalPath is also empty.
-    const QString userCanonical = QDir(userTemplateDirectory()).canonicalPath();
-    QString stalePath;
     const auto existing = m_templates.constFind(templ.id);
-    if (existing != m_templates.constEnd() && !existing->isSystem && !existing->sourcePath.isEmpty()
-        && !userCanonical.isEmpty() && existing->sourcePath != userTemplateFilePath(templ.id)
-        && QFileInfo(existing->sourcePath).canonicalPath() == userCanonical) {
-        stalePath = existing->sourcePath;
-    }
     templ.sourcePath = userTemplateFilePath(templ.id);
     // Only emit when the value actually changed. The settings pages re-save on
     // every field commit, and an unchanged save otherwise rewrote the file and
@@ -142,15 +172,21 @@ QUuid ScrollingTemplateStore::saveTemplate(ScrollingTemplate templ)
     if (!writeTemplateFile(templ)) {
         return QUuid();
     }
-    if (!stalePath.isEmpty()) {
-        // The pre-write compare was raw string inequality, which a symlink or a
-        // non-normalized spelling can make wrong in the dangerous direction:
-        // removing the file just written. Both paths exist now that the write
-        // committed, so canonicalFilePath is well defined for each — retire the
-        // old file only when it really is a different file.
-        const QString staleCanonical = QFileInfo(stalePath).canonicalFilePath();
-        const QString writtenCanonical = QFileInfo(templ.sourcePath).canonicalFilePath();
-        if (!staleCanonical.isEmpty() && staleCanonical != writtenCanonical && !QFile::remove(stalePath)) {
+    // Retire every OTHER user file carrying this id. A user template
+    // hand-placed under a name other than <id>.json would otherwise DUPLICATE
+    // on save (the id-named file appears beside the original, and the next
+    // rescan resolves the collision by name order, which can silently revert
+    // the edit that was just saved). The sweep is by file CONTENT rather than
+    // by the entry's recorded sourcePath, because the store keeps one entry per
+    // id and therefore cannot name a second file holding the same id. It runs
+    // AFTER the write commits, so the kept file exists and canonicalFilePath is
+    // well defined for it — comparing canonical paths keeps a symlink or a
+    // non-normalized spelling from making the removal wrong in the dangerous
+    // direction. Scoped to the user directory: a system file is never removed,
+    // and a shadowed bundled template still resurfaces on delete.
+    const QString writtenCanonical = QFileInfo(templ.sourcePath).canonicalFilePath();
+    for (const QString& stalePath : duplicateIdFiles(userTemplateDirectory(), templ.id, writtenCanonical)) {
+        if (!QFile::remove(stalePath)) {
             qCWarning(lcZonesLib) << "ScrollingTemplateStore: failed to retire stale file" << stalePath;
         }
     }
@@ -215,6 +251,16 @@ bool ScrollingTemplateStore::removeTemplate(const QUuid& id)
         if (!ownedByOther) {
             candidates.append(idFile);
         }
+    }
+    if (candidates.isEmpty()) {
+        // No user file this delete could target: the entry's own path lies
+        // outside the user directory (or was never recorded) and <id>.json is
+        // owned by a different live entry. Nothing was deleted, so reporting
+        // success would tell the caller a template it can still see is gone.
+        // The rescan below is deliberately skipped too — the directory was
+        // not touched, so re-reading it could only churn.
+        qCWarning(lcZonesLib) << "ScrollingTemplateStore: no user file to delete for template" << id;
+        return false;
     }
     for (const QString& path : std::as_const(candidates)) {
         if (QFile::exists(path) && !QFile::remove(path)) {

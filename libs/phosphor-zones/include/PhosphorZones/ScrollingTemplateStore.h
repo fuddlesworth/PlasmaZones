@@ -72,7 +72,10 @@ public:
     /// UUID. Normalizes first; refuses (returns null id) when the template
     /// is invalid after normalization or the write fails. A save that would
     /// store a byte-identical entry writes nothing and emits nothing, and
-    /// still returns the stored id. Returns the stored id.
+    /// still returns the stored id. Writes to &lt;id&gt;.json in the user
+    /// directory and retires every other user file declaring the same id, so a
+    /// hand-placed duplicate cannot win the next rescan and revert the save.
+    /// Returns the stored id.
     QUuid saveTemplate(ScrollingTemplate templ);
 
     /// Delete the USER files for @p id. Both candidates are removed: the
@@ -85,7 +88,8 @@ public:
     /// Returns true when no user file for @p id remains afterwards, which
     /// includes the case where the files were already gone: the requested
     /// state holds either way. Returns false when a file survives (a remove
-    /// that failed, which is logged).
+    /// that failed, which is logged) and when there was no user file to target
+    /// at all, since nothing was deleted and the entry is still visible.
     bool removeTemplate(const QUuid& id);
 
     /// Store a copy of @p id under a fresh UUID with @p newName (or a

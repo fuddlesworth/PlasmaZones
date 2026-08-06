@@ -45,9 +45,12 @@ struct ContextDims
     bool operator==(const ContextDims& other) const = default;
 };
 
-/// QSet/QHash key support — the batch driver dedupes emit contexts by the FULL
-/// triple, so two rules differing only in activity each get their own
-/// layoutAssigned resolved under their own activity.
+/// QSet/QHash key support. The batch driver collects its affected/emit contexts
+/// at the FULL triple so an erased context is not conflated with a rebuilt one
+/// on the same screen and desktop, and so the debug log can name the activity.
+/// The emit loops then dedupe down to (screen, desktop): layoutAssigned carries
+/// no activity and the payload resolves under the current activity, so two
+/// rules differing only in activity would fan out byte-identical signals.
 inline size_t qHash(const ContextDims& dims, size_t seed = 0) noexcept
 {
     return qHashMulti(seed, dims.screenId, dims.virtualDesktop, dims.activity);

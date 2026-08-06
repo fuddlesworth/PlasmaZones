@@ -322,7 +322,12 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         emitContexts.insert(ContextDims{stored.screenId, ed, stored.activity});
     }
     // Union in the erased-only contexts; the set dedupes any that a rebuild
-    // already covers.
+    // already covers. These keep the DROPPED RULE'S OWN desktop rather than
+    // going through the #648 per-output resolution above, deliberately: the
+    // sentinel rewrite answers "which desktop is this screen showing" for a
+    // context that still exists, whereas an erased rule's observers are the
+    // ones pinned to the desktop it named. Rewriting them to the live desktop
+    // would leave the erased desktop's observers unnotified.
     emitContexts.unite(droppedContexts);
     // The PAYLOAD resolves under the CURRENT activity: layoutAssigned carries
     // no activity of its own and every consumer reads it as "this screen's
@@ -333,8 +338,10 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     // signals, each re-running the daemon's full engine-screen re-derive.
     QSet<QPair<QString, int>> emitted;
     for (const ContextDims& ctx : std::as_const(emitContexts)) {
-        // ctx.virtualDesktop is already the RESOLVED emit desktop (the #648
-        // per-output sentinel was folded in when emitContexts was built).
+        // ctx.virtualDesktop is the desktop to emit under: the #648 per-output
+        // sentinel was folded in when emitContexts was built for the REBUILT
+        // contexts, and an erased-only context carries the dropped rule's own
+        // desktop (see the unite above).
         const auto emitKey = qMakePair(ctx.screenId, ctx.virtualDesktop);
         if (emitted.contains(emitKey)) {
             continue;
@@ -473,10 +480,11 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     }
 
     int count = 0;
-    // Per-(screen, desktop, activity) rule emit — multiple Combined rules
-    // at the same (screen, desktop) but different activities each fire
-    // their own layoutAssigned so observers can refresh against the
-    // exact rule that landed.
+    // The touched Combined keys, collected at full (screen, desktop, activity)
+    // resolution so the erased keys can be united in below. The emit loop that
+    // consumes this set dedupes down to (screen, desktop) — the payload is
+    // activity-independent — so several Combined keys on one screen+desktop
+    // produce a single signal.
     QSet<CombinedAssignmentKey> emittedKeys;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const CombinedAssignmentKey& key = it.key();
@@ -525,9 +533,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     }
 
     m_ruleStore->setAllRules(kept);
-    // One emit per touched (screen, desktop, activity) key, so a Combined rule
-    // is never collapsed into a sibling's emit. The PAYLOAD resolves under the
-    // CURRENT activity: layoutAssigned carries only (screenId, desktop,
+    // The PAYLOAD resolves under the CURRENT activity: layoutAssigned carries only (screenId, desktop,
     // layoutPtr) and its consumers read that as the screen's live layout, so a
     // Combined rule pinned to a non-current activity must not fan its layout
     // out as though it were on screen.

@@ -20,6 +20,13 @@ class ScrollingTemplateStore;
 /// widths) become full-height x-band zones laid left to right, so the
 /// shared thumbnail renderer draws a strip snapshot with no
 /// template-specific code. isScrollingTemplate marks the family.
+///
+/// PRECONDITION: @p templ is normalized (every template the store hands out
+/// is, and ScrollingTemplate::fromJson normalizes on parse). The width fallback
+/// for a template with neither blueprint columns nor a preset vocabulary relies
+/// on normalize() having demoted a Preset default kind that has nothing to
+/// index; an un-normalized Preset kind previews at half width rather than at
+/// the width it names.
 PHOSPHORZONES_EXPORT PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTemplate& templ);
 
 /// ILayoutSource over a ScrollingTemplateStore — the third card family

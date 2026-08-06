@@ -196,6 +196,15 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             }
             if (!templ.presetWindowHeights.isEmpty()) {
                 overrides.insert(SPK::presetWindowHeights(), fractionList(templ.presetWindowHeights));
+                // The height axis has no template trio to overwrite the seeded
+                // settings ones with (a ScrollingTemplate carries no default
+                // window height), and a preset INDEX only means anything
+                // against the vocabulary it was authored for. Drop ONLY the
+                // index: with the kind left standing, a Preset kind and no
+                // index resolves against this template's own list (the
+                // engine's index fallback), while a Fixed kind keeps reading
+                // its pixel value — which the vocabulary swap never touched.
+                overrides.remove(SPK::defaultWindowHeightPresetIndex());
             }
             // Seed blueprint for columns materializing on the fresh-open
             // path (engine_lifecycle consumes it at column creation).

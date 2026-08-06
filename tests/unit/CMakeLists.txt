@@ -599,15 +599,23 @@ p_add_test(test_layoutmanager_cycling core/layout/test_layoutmanager_cycling.cpp
 p_add_test(test_scrollingtemplate_store core/layout/test_scrollingtemplate_store.cpp)
 # The scrolling-template schema is author-time only (no loader compiles it), so
 # this target reads it straight out of the source tree and runs it through the
-# same validator engine the runtime-gated schemas use.
-target_link_libraries(test_scrollingtemplate_store PRIVATE PhosphorFsLoader::PhosphorFsLoader)
+# same validator engine the runtime-gated schemas use. PhosphorZones is named
+# per this file's convention: the test constructs ScrollingTemplate and drives
+# ScrollingTemplateStore directly rather than reaching them through
+# plasmazones_core.
+target_link_libraries(test_scrollingtemplate_store PRIVATE PhosphorFsLoader::PhosphorFsLoader
+                                                           PhosphorZones::PhosphorZones)
 target_compile_definitions(test_scrollingtemplate_store PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 p_add_test(test_layoutmanager_assignment core/layout/test_layoutmanager_assignment.cpp)
+# The AssignmentEntry-shape half of the suite above, split off at its P6 banner
+# when the single file passed the 1150-line ceiling. Shares the same fixture.
+p_add_test(test_layoutmanager_assignment_entry core/layout/test_layoutmanager_assignment_entry.cpp)
 p_add_test(test_layoutmanager_default_synthesis core/layout/test_layoutmanager_default_synthesis.cpp)
 # The shared fixture header holds a Q_OBJECT base class; AUTOMOC only scans
-# headers listed as target sources, so both targets must list it explicitly.
+# headers listed as target sources, so every target must list it explicitly.
 target_sources(test_layoutmanager_assignment PRIVATE core/layout/LayoutManagerAssignmentFixture.h)
+target_sources(test_layoutmanager_assignment_entry PRIVATE core/layout/LayoutManagerAssignmentFixture.h)
 target_sources(test_layoutmanager_default_synthesis PRIVATE core/layout/LayoutManagerAssignmentFixture.h)
 p_add_test(test_layout_registry_cache core/layout/test_layout_registry_cache.cpp)
 
@@ -635,11 +643,20 @@ target_link_libraries(test_rule_cascade_fidelity
 add_test(NAME test_rule_cascade_fidelity COMMAND test_rule_cascade_fidelity)
 
 # Context-domain half of the cascade proof (gaps, orientation, active layout,
-# tiling params, overlay, lock, per-mode gap rules).
+# tiling and scrolling params, exactContextEntry).
 add_executable(test_rule_cascade_context core/test_rule_cascade_context.cpp)
 target_link_libraries(test_rule_cascade_context
     PRIVATE Qt6::Test Qt6::Core PhosphorRules::PhosphorRules PhosphorZones::PhosphorZones plasmazones_core)
 add_test(NAME test_rule_cascade_context COMMAND test_rule_cascade_context)
+
+# The overlay / lock / mode-routing sections of the same context proof, split
+# off at the overlay banner when the single file passed the 1150-line ceiling.
+# Shares RuleCascadeFixture.h with the two targets above, which is a plain
+# (non-Q_OBJECT) harness and so needs no target_sources entry.
+add_executable(test_rule_cascade_overlay_lock core/test_rule_cascade_overlay_lock.cpp)
+target_link_libraries(test_rule_cascade_overlay_lock
+    PRIVATE Qt6::Test Qt6::Core PhosphorRules::PhosphorRules PhosphorZones::PhosphorZones plasmazones_core)
+add_test(NAME test_rule_cascade_overlay_lock COMMAND test_rule_cascade_overlay_lock)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Virtual Screen Tests (ID utilities, data model, PhosphorScreens::ScreenManager)
@@ -1064,6 +1081,10 @@ target_link_libraries(test_tiling_adaptor_panel_gate PRIVATE Qt6::Test Qt6::Core
                                                                  plasmazones_core)
 add_test(NAME test_tiling_adaptor_panel_gate COMMAND test_tiling_adaptor_panel_gate)
 
+# Emit-on-change gate for TilingAdaptor::setActiveLayouts. The daemon pushes
+# the rules-visible per-screen active-layout map from every updateEngineScreens
+# pass, so identical pushes must collapse to zero broadcasts while a changed map
+# reaches the wire once and reads back through the property getter.
 add_executable(test_tiling_adaptor_active_layouts dbus/test_tiling_adaptor_active_layouts.cpp)
 target_link_libraries(test_tiling_adaptor_active_layouts PRIVATE Qt6::Test Qt6::Core Qt6::DBus
                                                                  plasmazones_core)

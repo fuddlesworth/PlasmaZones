@@ -197,10 +197,12 @@ QString LayoutAdaptor::getAllScreenAssignments()
         // Per-screen base entry — only emit when explicitly stored.
         // assignmentEntryForScreen would happily synthesize the user's
         // global default here (per-368 fallback), but this JSON is the
-        // KCM's view of *stored* state and may be round-tripped back
-        // through SetAllScreenAssignments on save. Persisting the
-        // synthesized default would shadow future global-default
-        // changes and defeat the "synthesized fallback only" intent.
+        // KCM's view of *stored* state, which it stages and writes back
+        // through the per-context setters (this shape is not what
+        // setAllScreenAssignments accepts, so it is a readback, not a
+        // round-trip). Reporting the synthesized default as stored would
+        // shadow future global-default changes on that write-back and
+        // defeat the "synthesized fallback only" intent.
         if (m_layoutManager->hasExplicitAssignment(screenId, 0, QString())) {
             hasAnyStored = true;
             auto entry = m_layoutManager->assignmentEntryForScreen(screenId, 0, QString());
@@ -837,6 +839,14 @@ void LayoutAdaptor::setScrollingTemplateLayout(const QString& screenId, int virt
     // settings preset lists) — every sibling slot setter has a clear form
     // and clearAssignmentForScreenDesktopActivity would wipe the whole
     // entry, which is the wrong tool for "just drop the template".
+    //
+    // The clear is NOT mode-neutral: assignScrollingTemplate stamps
+    // AssignmentEntry::Scrolling on the entry it upserts whatever the
+    // template id is, so clearing on a Snapping context flips it to
+    // Scrolling and materializes an entry that was not there before. The
+    // published DocString states this; leaving the mode alone here would
+    // desync the clear form from the assigning form, which is why the
+    // side effect is contractual rather than guarded.
     if (!layoutId.isEmpty()) {
         // A non-empty id must name an existing native ScrollingTemplate:
         // unlike the mode-only assignment setters there is no sentinel form
@@ -844,6 +854,12 @@ void LayoutAdaptor::setScrollingTemplateLayout(const QString& screenId, int virt
         // would be stored as "no template" (the store-validated clear),
         // silently dropping the context's existing choice. Refusing HERE
         // keeps the prior template.
+        //
+        // The existence half is store-gated, matching the registry's own
+        // check: with no store wired (unit fixtures, embedders) only the
+        // UUID format is enforced and a well-formed unknown id IS stored.
+        // It stays inert — scrollingTemplateForContext resolves it through
+        // the same absent store and answers no template.
         const QUuid parsed = QUuid::fromString(layoutId);
         const PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
         if (parsed.isNull() || (store && !store->contains(parsed))) {
@@ -886,7 +902,7 @@ QString LayoutAdaptor::getScrollingTemplates()
         // Wire-only enrichment: isSystem is store-derived load state, never
         // part of the persisted schema, but the UI needs it to disable
         // delete on bundled templates.
-        json.insert(QLatin1String("isSystem"), templ.isSystem);
+        json.insert(PhosphorZones::TemplateJsonKeys::IsSystem, templ.isSystem);
         array.append(json);
     }
     return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
@@ -1039,7 +1055,9 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
     // shape assignScrollingTemplate uses.
     PhosphorZones::AssignmentEntry entry = m_layoutManager->exactContextEntry(resolvedId, virtualDesktop, activity);
     entry.mode = static_cast<PhosphorZones::AssignmentEntry::Mode>(mode);
-    entry.snappingLayout = snappingLayout;
+    // Canonicalize to the braced spelling: the purge sweep and the upsert
+    // no-op guard both compare exact strings against QUuid::toString().
+    entry.snappingLayout = snappingLayout.isEmpty() ? QString() : QUuid::fromString(snappingLayout).toString();
     entry.tilingAlgorithm = tilingAlgorithm;
 
     m_layoutManager->setAssignmentEntryDirect(resolvedId, virtualDesktop, activity, entry);

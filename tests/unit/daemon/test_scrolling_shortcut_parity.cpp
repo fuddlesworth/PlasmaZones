@@ -7,7 +7,7 @@
 //   1. the config schema group Shortcuts.Scrolling (settingsschema_scrolling.cpp)
 //   2. ShortcutManager's registration table          (shortcutmanager.cpp)
 //   3. the cheatsheet catalog                        (shortcutmanager_catalog.cpp)
-//   4. the D-Bus settings registry                   (settingsadaptor_registry.cpp)
+//   4. the D-Bus settings registry                   (settingsadaptor_registry_scrolling.cpp)
 //
 // Both drift directions are silent and user-visible: a row in 1+2 with no
 // catalog entry binds correctly but never appears in Settings or on the

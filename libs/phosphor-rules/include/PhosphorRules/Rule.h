@@ -42,14 +42,18 @@ struct PHOSPHORRULES_EXPORT ValidationIssue
         /// resolution (window fields are absent on the windowless query), so
         /// the action's slot is never filled.
         ContextActionWithWindowMatch = 0,
-        /// A terminal action (any of the Exclude family) on the same rule as
-        /// one or more non-terminal slot-filling actions (border / opacity /
-        /// animation override, but also gap / overlay / engine actions). A
-        /// terminal action stops the evaluator's resolve walk the moment it
-        /// matches, so the co-located action's slot may be dropped (and
-        /// lower-priority rules suppressed for the window). Split the exclusion
-        /// onto its own rule. (Name kept for wire stability; the check is not
-        /// limited to Tag::Effect actions.)
+        /// The blanket `Exclude` on the same rule as one or more other
+        /// slot-filling actions (border / opacity / animation override, but
+        /// also gap / overlay / engine actions). `Exclude` is in every
+        /// full-store evaluator's terminal scope, so it stops the resolve walk
+        /// the moment it matches: the co-located action's slot may be dropped
+        /// and lower-priority rules are suppressed for the window. Split the
+        /// exclusion onto its own rule. The SCOPED exclusions
+        /// (ExcludePlacement / ExcludeDecorations / ExcludeAnimations) are not
+        /// flagged — an evaluator outside their slice skips them entirely
+        /// (RuleEvaluator::setTerminalActionScope), so mixing one with an
+        /// action of another domain is authorable. (Name kept for wire
+        /// stability; the check is not limited to Tag::Effect actions.)
         TerminalActionWithEffectActions = 1,
         /// Two or more SAME-TYPE actions on one rule resolve to the same
         /// slot. Slot decoding is single-winner per (rule, type), so at most
@@ -60,6 +64,18 @@ struct PHOSPHORRULES_EXPORT ValidationIssue
         /// rule rebuild accretes, so surfacing it keeps such growth from
         /// surviving save/load silently.
         DuplicateSlotActions = 2,
+        /// An action whose type is registered but whose params the descriptor
+        /// rejects — most often a picker the author has not filled in yet
+        /// (a rule template seeds an empty screen / layout / algorithm id).
+        /// Such an action is DROPPED by `RuleAction::fromJson`, so saving the
+        /// rule would silently lose it.
+        ///
+        /// Never produced by @ref Rule::validationIssues: a Rule already holds
+        /// parsed actions, so a rejected payload cannot reach it. It is the
+        /// settings editor's live check over the working rule's raw JSON,
+        /// which is the only place the pre-parse shape exists. Declared here
+        /// so the code vocabulary the UI switches on has one home.
+        IncompleteActionPayload = 3,
     };
 
     Code code = Code::ContextActionWithWindowMatch;

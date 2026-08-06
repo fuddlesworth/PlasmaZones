@@ -684,6 +684,12 @@ private:
     /// only fires when the daemon service is registered.
     void reportScreenDesktop(const QString& screenId, int desktop);
     QString getWindowScreenId(KWin::EffectWindow* w) const;
+    /// getWindowScreenId for a caller that has already resolved the window id.
+    /// The engine-authoritative scroll override is keyed on the window id, so
+    /// the plain overload has to look it up; a caller holding one (ruleQuery)
+    /// passes it here instead of paying the id-cache probe twice. Behaviour is
+    /// otherwise identical — the id is the ONLY thing the overloads differ on.
+    QString getWindowScreenId(KWin::EffectWindow* w, const QString& windowId) const;
     /// Resolve the KWin output a window sits on by POSITION (the output whose
     /// geometry contains the window centre), falling back to w->screen() only
     /// when no output contains the centre. Never trust w->screen() first: KWin
@@ -1055,6 +1061,15 @@ private:
     /// Reset by every external loadRuleAnimationsFromDbus invocation,
     /// consumed only by fetchAllRulesOnce's failure-arm re-dispatches.
     int m_ruleFetchRetriesLeft = 0;
+
+    /// Per-DISPATCH guard for the getAllRules fetch, the twin of
+    /// TilingHandler's m_activeLayoutsQueryGeneration. Bumped by every
+    /// fetchAllRulesOnce call and captured by its reply handler, so when the
+    /// debounce, the bring-up load and the seed-edge re-drive put several
+    /// round-trips in flight at once only the newest reply is applied. Without
+    /// it an older reply landing last rewrites all four effect-bound rule sets
+    /// and republishes m_activeLayoutRulesWithheld from a stale store snapshot.
+    quint64 m_ruleFetchQueryGeneration = 0;
 
     /// Wire the DecorationManager into the effect: the windowDecorationRestored
     /// connection. Defined in decorations.cpp with the rest of the decoration code;
@@ -2181,9 +2196,13 @@ private:
     // parse and an updateAllDecorations sweep for rules that do not exist.
     //
     // Cleared on exactly one path: consumption by that seeding edge. Every
-    // successful loadRuleAnimationsFromDbus reply recomputes it outright
-    // (shader_config_dbus.cpp assigns the pass verdict, never ORs), and the
-    // unseeding paths themselves deliberately do NOT clear it — see
+    // loadRuleAnimationsFromDbus reply that PARSES recomputes it outright
+    // (shader_config_dbus.cpp assigns the pass verdict, never ORs). The two
+    // malformed-payload arms (non-object JSON, RuleSet::fromJson refusal)
+    // return before that assignment, which is the right answer rather than a
+    // gap: no slice ran either, so the standing marker still describes the
+    // standing rule sets. The unseeding paths themselves deliberately do NOT
+    // clear it — see
     // TilingHandler::clearActiveLayoutsForTeardown, which re-slices the
     // ActiveLayout rules out of the four rule sets and SETS this marker when
     // it removed any. Clearing on teardown or bring-up would disarm the edge
@@ -2460,9 +2479,11 @@ private:
     ///
     /// Runs no border sweep and no rule-cache invalidation of its own — the
     /// sanctioned callers of `TilingHandler::clearActiveLayoutsForTeardown`
-    /// (its only caller) already pair `invalidateAllRuleCaches` +
-    /// `scheduleBorderSweep`, and that invalidate also carries the
-    /// window-layer sweep a removed `SetWindowLayer` rule needs.
+    /// (its only caller) already run `invalidateAllRuleCaches`, whose
+    /// window-layer sweep a removed `SetWindowLayer` rule needs, and each then
+    /// rebuilds the affected decorations its own way: `onDaemonReady` with
+    /// `scheduleBorderSweep`, the `serviceUnregistered` teardown with
+    /// `clearAllDecorations` (which needs no sweep, having removed them).
     ///
     /// It DOES take the `SetOpacity` repaint bookend, because nothing else
     /// covers it on the bring-up caller: opacity resolves in the paint path,

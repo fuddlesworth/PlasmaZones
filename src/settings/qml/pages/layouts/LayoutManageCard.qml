@@ -11,8 +11,9 @@ import org.kde.kirigami as Kirigami
  *
  * Mirrors the shader browser's "User shaders" card: a drop-zone for installing
  * by drag-and-drop plus an Open Folder action, with the explicit import sources
- * as buttons. View-mode aware — in Snapping view it imports layout JSON (and
- * exposes the KZones import sources); in Tiling view it imports Luau algorithms.
+ * as buttons. View-mode aware. Snapping view imports layout JSON and exposes
+ * the KZones import sources, Tiling view imports Luau algorithms, and
+ * Scrolling Templates view imports template JSON.
  *
  * The drop-zone imports the dropped file directly via settingsController; the
  * dialog-backed sources (file pickers) are surfaced as signals the page wires to

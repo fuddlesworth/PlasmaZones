@@ -18,18 +18,3 @@ function values(presets) {
 function count(presets) {
     return values(presets).length;
 }
-
-/// One entry as a usable [0, 1] fraction. A hand-edited config can hold
-/// anything, and an unguarded parseFloat would paint a "NaN%" label over a
-/// band of no width, so anything unusable reads as 0.
-function fraction(raw) {
-    var v = parseFloat(raw);
-    if (isNaN(v))
-        return 0;
-    return Math.max(0, Math.min(1, v));
-}
-
-/// One entry as the whole percent the UI labels it with.
-function percent(raw) {
-    return Math.round(fraction(raw) * 100);
-}

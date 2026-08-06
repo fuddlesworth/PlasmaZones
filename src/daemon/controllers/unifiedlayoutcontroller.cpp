@@ -416,15 +416,49 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
         return false;
     }
 
-    // Native scrolling-template entry: commit through the store-validated
-    // per-screen helper (mode stays Scrolling, the engine push re-derives).
+    // Native scrolling-template entry. Written to the CURRENT (screen,
+    // desktop, activity) tuple, like the autotile and manual branches around
+    // it — a picker press applies to the context the user is looking at, and
+    // an activity-scoped context must not have its entry cleared out from
+    // under it.
+    //
+    // This is the one convention split with
+    // LayoutRegistry::applyScrollingTemplateToScreen, which the quick-slot and
+    // D-Bus paths still use: that helper writes the empty-activity entry and
+    // clears the activity-keyed one, so a press there applies across
+    // activities. Do not collapse the two without deciding which semantics the
+    // quick slots should have.
     if (preview.isScrollingTemplate) {
         if (!m_layoutManager || m_currentScreenName.isEmpty()) {
             return false;
         }
-        if (!m_layoutManager->applyScrollingTemplateToScreen(m_currentScreenName, preview.id)) {
+        const int desktop = m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName);
+        // The resolver-first-then-cascade double check this branch has always
+        // been documented to make (see setCurrentLayoutSupport): the LIVE
+        // capability must be Templates AND the cascade mode Scrolling.
+        // Otherwise a template card that slipped past the include filters would
+        // flip the screen's mode through assignScrollingTemplate, which is the
+        // mirror of what the autotile and manual branches refuse.
+        if (m_currentLayoutSupport != PhosphorEngine::IPlacementEngine::LayoutSupport::Templates
+            || m_layoutManager->modeForScreen(m_currentScreenName, desktop, m_currentActivity)
+                != PhosphorZones::AssignmentEntry::Scrolling) {
+            qCWarning(lcDaemon) << "applyEntry: refusing scrolling template" << preview.id
+                                << "on a screen that is not live in scrolling mode";
             return false;
         }
+        // Store validation stays at this site because assignScrollingTemplate
+        // DOWNGRADES an unknown id to "no template" rather than refusing, and
+        // a mis-routed press must read as "nothing happened" instead of
+        // clearing the context's template. Same refusal
+        // applyScrollingTemplateToScreen performs for its own callers.
+        const auto templateUuid = Utils::parseUuid(preview.id);
+        PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+        if (!templateUuid || (store && !store->contains(*templateUuid))) {
+            qCWarning(lcDaemon) << "applyEntry: refusing unknown scrolling template" << preview.id;
+            return false;
+        }
+        m_layoutManager->assignScrollingTemplate(m_currentScreenName, desktop, m_currentActivity,
+                                                 templateUuid->toString());
         setCurrentLayoutId(preview.id);
         qCInfo(lcDaemon) << "Applied scrolling template=" << preview.displayName << "screen=" << m_currentScreenName;
         Q_EMIT scrollingTemplateApplied(preview.id, m_currentScreenName);

@@ -110,6 +110,19 @@ protected:
     PWR::Rule makeMixedScreenAppRule(const QString& screenId, const QString& appId, bool autotileMode,
                                      const QString& snappingLayout, const QString& tilingAlgorithm, int priority = 999)
     {
+        return makeMixedScreenAppRuleForMode(screenId, appId,
+                                             autotileMode ? QStringLiteral("autotile") : QStringLiteral("snapping"),
+                                             snappingLayout, tilingAlgorithm, QString(), priority);
+    }
+
+    /// The three-mode form of @ref makeMixedScreenAppRule: takes the engine
+    /// mode as its wire token and can carry a scrolling template, so the
+    /// leak-proof properties can be stated over the scrolling slot too. The
+    /// bool overload above delegates here, so the two shapes cannot drift.
+    PWR::Rule makeMixedScreenAppRuleForMode(const QString& screenId, const QString& appId, const QString& modeToken,
+                                            const QString& snappingLayout, const QString& tilingAlgorithm,
+                                            const QString& scrollingTemplate, int priority = 999)
+    {
         PWR::Rule mixed;
         mixed.id = QUuid::createUuid();
         mixed.name = screenId + QLatin1Char(' ') + appId;
@@ -118,9 +131,7 @@ protected:
         mixed.match = PWR::MatchExpression::makeAll(
             {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId),
              PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals, appId)});
-        mixed.actions =
-            CRB::makeAssignmentActions(autotileMode ? QStringLiteral("autotile") : QStringLiteral("snapping"),
-                                       snappingLayout, tilingAlgorithm, QString());
+        mixed.actions = CRB::makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm, scrollingTemplate);
         return mixed;
     }
 
@@ -132,14 +143,23 @@ protected:
     PWR::Rule makeUserCatchAllRule(bool autotileMode, const QString& snappingLayout, const QString& tilingAlgorithm,
                                    int priority)
     {
+        return makeUserCatchAllRuleForMode(autotileMode ? QStringLiteral("autotile") : QStringLiteral("snapping"),
+                                           snappingLayout, tilingAlgorithm, QString(), priority);
+    }
+
+    /// The three-mode form of @ref makeUserCatchAllRule, same delegation
+    /// arrangement as the mixed-rule pair above.
+    PWR::Rule makeUserCatchAllRuleForMode(const QString& modeToken, const QString& snappingLayout,
+                                          const QString& tilingAlgorithm, const QString& scrollingTemplate,
+                                          int priority)
+    {
         PWR::Rule r;
         r.id = QUuid::createUuid();
         r.name = QStringLiteral("Default");
         r.enabled = true;
         r.priority = priority;
         r.match = PWR::MatchExpression(); // default-constructed → empty All{} catch-all
-        r.actions = CRB::makeAssignmentActions(autotileMode ? QStringLiteral("autotile") : QStringLiteral("snapping"),
-                                               snappingLayout, tilingAlgorithm, QString());
+        r.actions = CRB::makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm, scrollingTemplate);
         return r;
     }
 };

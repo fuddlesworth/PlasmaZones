@@ -15,6 +15,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 
 namespace PhosphorScrollEngine {
 
@@ -392,9 +393,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // finalizing relayout runs unfiltered.
     QJsonArray arr;
     bool anyRectMoved = false;
+    // Per columnIndex: did EVERY tile this loop emitted for that column end up
+    // parked? A column with no emitted tiles at all gets no entry, so the
+    // tab-strip loop's lookup default leaves it alone — and a column whose
+    // VISIBLE tile was taken by the interactive-drag skip must not tally as
+    // fully parked off its hidden siblings alone, or its live tab bar would
+    // vanish for the whole drag; the skipped set vetoes the tally below.
+    // Consumed at the strip loop.
+    QHash<int, bool> columnAllParked;
+    QSet<int> columnHadSkippedTile;
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
+                columnHadSkippedTile.insert(column.columnIndex);
                 continue;
             }
             QRect rect = tile.rect;
@@ -412,9 +423,16 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 // cannot steal input from the visible tab (hit-testing uses
                 // real geometry only). It follows its COLUMN's side, so a
                 // column off the left edge keeps its hidden tiles anchored
-                // left.
-                const bool naturalLeft = column.rect.right() < params.workArea.left();
-                scrollEdge = naturalLeft ? QStringLiteral("left") : QStringLiteral("right");
+                // left. A column that is ON screen records NO edge: its hidden
+                // tabs are parked for input reasons, not because the strip
+                // scrolled them away, and there is no departure to animate back
+                // from. Defaulting them to "right" made the next tab switch
+                // slide the newly-active tab in from off the right edge.
+                if (column.rect.right() < params.workArea.left()) {
+                    scrollEdge = QStringLiteral("left");
+                } else if (column.rect.left() > params.workArea.right()) {
+                    scrollEdge = QStringLiteral("right");
+                }
                 park(rect);
                 parkedNow = true;
             } else if (rect.right() < params.workArea.left()) {
@@ -426,7 +444,22 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 park(rect);
                 parkedNow = true;
             }
-            if (scrollEdge.isEmpty()) {
+            // The dispatch keys on parkedNow, not on the edge being empty: a
+            // hidden tab of an on-screen column parks WITHOUT an edge, and
+            // treating that as "on screen" would consume a remembered
+            // departure it is not making.
+            if (parkedNow) {
+                if (scrollEdge.isEmpty()) {
+                    // Parked with no departure direction. Any edge remembered
+                    // from an earlier genuine departure is stale now that the
+                    // column has come back, and leaving it would make the next
+                    // activation of this tab slide in from a side it has
+                    // already returned from.
+                    m_parkedScrollEdge.remove(tile.windowId);
+                } else {
+                    m_parkedScrollEdge.insert(tile.windowId, scrollEdge);
+                }
+            } else {
                 // On screen. If it was parked until now, it is arriving, and
                 // the edge it went out by is the edge it must come back in
                 // from — the whole reason that edge is remembered rather than
@@ -435,8 +468,6 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 // and leaving the entry would re-anchor a later unrelated
                 // move to a stale side.
                 scrollEdge = m_parkedScrollEdge.take(tile.windowId);
-            } else {
-                m_parkedScrollEdge.insert(tile.windowId, scrollEdge);
             }
             // A partially-visible edge column is CLAMPED at BOTH screen
             // edges, adjacent output or not, and the same enforcement runs
@@ -590,6 +621,11 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 obj[QLatin1String("scrollEdge")] = scrollEdge;
             }
             arr.append(obj);
+            if (const auto parkedIt = columnAllParked.find(column.columnIndex); parkedIt != columnAllParked.end()) {
+                *parkedIt = *parkedIt && parkedNow;
+            } else {
+                columnAllParked.insert(column.columnIndex, parkedNow);
+            }
             const auto lastIt = m_lastAppliedRect.constFind(tile.windowId);
             if (lastIt == m_lastAppliedRect.constEnd() || *lastIt != rect) {
                 anyRectMoved = true;
@@ -628,6 +664,16 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // never re-tests those and cannot disagree with the relayout that
         // decided how much space to reserve.
         if (!column.tabbed || column.tabIndicatorRect.isNull() || !column.rect.intersects(params.workArea)) {
+            continue;
+        }
+        // Every tile of this column got parked, so nothing it labels is on
+        // screen — the column's TRUE rect still intersects the work area (the
+        // test above), which is exactly how a straddling column whose peek fell
+        // below the floor left an orphan bar sitting at the edge. The parked
+        // tally is read rather than tabIndicatorRect re-derived: re-deriving
+        // from the clamped extent would disagree with the reservation the
+        // relayout already spent (see the KNOWN LIMIT note below).
+        if (columnAllParked.value(column.columnIndex, false) && !columnHadSkippedTile.contains(column.columnIndex)) {
             continue;
         }
         QJsonObject strip;

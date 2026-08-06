@@ -10,9 +10,11 @@
 // layer writes the trio's keys independently, so a per-screen kind beside an
 // absent value is the ordinary case and each slot falls back on its own to
 // the global's matching slot. The TEMPLATE channel is a fourth of a
-// different shape — not a default at all but a wholesale replacement of the
-// preset LISTS the Preset kinds index into (presetColumnWidths /
-// presetWindowHeights); its tests live at the bottom of this file.
+// different shape. It is not a default at all: it replaces the preset LISTS
+// the Preset kinds index into (presetColumnWidths / presetWindowHeights)
+// wholesale, and it also carries the seed blueprint for the first columns.
+// Its tests come in two groups, the preset-list ones straight after the
+// default-channel tests and the blueprint ones closing the file.
 //
 // None of that is directly observable: the two resolvers are private. What IS
 // observable is the width a freshly-opened column takes and the height intent
@@ -214,13 +216,13 @@ private Q_SLOTS:
     void templatePresetHeightsReplaceSettingsHeights();
     void templateListShrinkClampsResolvedPresetWidth();
     void invalidTemplateEntriesFallBackToSettingsList();
+    void tabIndicatorOverridesArePerProperty();
+    void tabIndicatorRejectsGarbageNumericOverrides();
+    void tabIndicatorRejectsAGarbagePositionOverride();
     void templateBlueprintSeedsFirstColumns();
     void openRuleOutranksTemplateBlueprint();
     void templateBlueprintNeverResizesExistingColumns();
     void templateBlueprintEntryWithoutDisplayKeepsTheDefault();
-    void tabIndicatorOverridesArePerProperty();
-    void tabIndicatorRejectsGarbageNumericOverrides();
-    void tabIndicatorRejectsAGarbagePositionOverride();
 
 private:
     /// A headless engine active on the three screens, with @p settings
@@ -775,12 +777,18 @@ void TestScrollEnginePerScreen::templateBlueprintSeedsFirstColumns()
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.6);
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|b")).proportion, 0.4);
     // The second blueprint column opened tabbed; the strip stores display
-    // per column, so find app|b's column.
+    // per column, so find app|b's column. The found flag keeps the assertion
+    // honest: without it a missing app|b column would satisfy the loop
+    // vacuously, which is the same discipline columnExists enforces for the
+    // width reads above.
+    bool foundB = false;
     for (const Column& col : state->strip().columns()) {
         if (col.indexOfWindow(QStringLiteral("app|b")) >= 0) {
+            foundB = true;
             QCOMPARE(col.display, ColumnDisplay::Tabbed);
         }
     }
+    QVERIFY(foundB);
     // Beyond the blueprint: the template's declared default.
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|c")).proportion, 0.3);
 }

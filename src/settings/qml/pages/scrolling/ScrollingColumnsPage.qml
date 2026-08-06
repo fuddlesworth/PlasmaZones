@@ -220,7 +220,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset width")
                     searchAnchor: "defaultColumnWidthPresetIndex"
-                    description: i18n("Which entry of the column width presets a new column opens at, counted from 1. Columns opened this way follow later preset changes. On a screen with a layout template the number counts into the template's widths instead.")
+                    description: i18n("Which width a new column opens at, counted from 1 into the widths of the screen's layout template. Screens with no template of their own use the default template below, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.")
                     enabled: newColumnsCard.effectiveWidthKind === root.widthKindPreset
                     visible: true
 
@@ -314,7 +314,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset height")
                     searchAnchor: "defaultWindowHeightPresetIndex"
-                    description: i18n("Which entry of the window height presets a new window opens at, counted from 1. On a screen with a layout template the number counts into the template's heights instead.")
+                    description: i18n("Which height a new window opens at, counted from 1 into the heights of the screen's layout template. Screens with no template of their own use the default template below, and with no template at all the built-in height steps apply.")
                     enabled: newColumnsCard.effectiveHeightKind === root.heightKindPreset
                     visible: true
 
@@ -367,7 +367,10 @@ SettingsFlickable {
                     searchAnchor: "defaultScrollingTemplate"
                     description: i18n("Used when a scrolling screen has no template assigned")
 
-                    ComboBox {
+                    // `storedValue` is left undefined on purpose: rebuild()
+                    // owns currentIndex so a miss can stay at -1 instead of
+                    // taking WideComboBox's clamp to the leading None.
+                    WideComboBox {
                         id: defaultTemplateCombo
 
                         // Templates from the shared layouts model (the
@@ -399,9 +402,21 @@ SettingsFlickable {
 
                         textRole: "text"
                         valueRole: "value"
-                        displayText: currentIndex >= 0 ? currentText : i18n("Missing template (%1)", appSettings.defaultScrollingTemplate)
+                        // Gate the alarm on the layouts model having landed
+                        // (MonitorStatePage's in-flight rule): before it does,
+                        // every stored id resolves to -1, which is an unloaded
+                        // catalogue rather than a missing template. Once the
+                        // model is live the alarm shows even when only the
+                        // leading None row remains — a stored default with no
+                        // surviving template genuinely IS missing.
+                        displayText: currentIndex >= 0 ? currentText : (settingsController.layouts.length > 0 ? i18n("Missing template (%1)", appSettings.defaultScrollingTemplate) : "")
                         Accessible.name: i18n("Default scrolling template")
                         onActivated: appSettings.defaultScrollingTemplate = currentValue
+                        // Supersedes WideComboBox's own completion handler on
+                        // purpose: rebuild() assigns the model, whose change
+                        // hooks re-run the width sync, and storedValue stays
+                        // undefined so the base sync never fights rebuild()'s
+                        // ownership of currentIndex.
                         Component.onCompleted: rebuild()
 
                         Connections {

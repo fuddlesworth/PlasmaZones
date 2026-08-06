@@ -16,14 +16,6 @@ namespace {
 // Aliases the exported constant so the template editor can mirror it.
 constexpr qreal kEps = FractionDedupeEpsilon;
 
-// Default width kinds, mirroring the engine's DefaultWidthKind wire values.
-// Spelled out here rather than included: this library deliberately does not
-// depend on phosphor-scroll-engine, so the mirror is by documented value
-// (see the ScrollingTemplate class doc for the full vocabulary).
-constexpr int kKindProportion = 0;
-constexpr int kKindFixed = 1;
-constexpr int kKindPreset = 3;
-
 QJsonArray fractionsToJson(const QList<qreal>& values)
 {
     QJsonArray out;
@@ -63,7 +55,7 @@ QList<qreal> normalizeFractionList(QList<qreal> values)
     }
     std::sort(kept.begin(), kept.end());
     QList<qreal> out;
-    out.reserve(qMin(int(kept.size()), MaxTemplateColumns));
+    out.reserve(qMin<qsizetype>(kept.size(), MaxTemplateColumns));
     for (qreal v : kept) {
         if (out.size() == MaxTemplateColumns) {
             break;
@@ -80,7 +72,7 @@ QList<qreal> normalizeFractionList(QList<qreal> values)
 bool ScrollingTemplate::normalize()
 {
     QList<ScrollingTemplateColumn> keptColumns;
-    keptColumns.reserve(qMin(int(columns.size()), MaxTemplateColumns));
+    keptColumns.reserve(qMin<qsizetype>(columns.size(), MaxTemplateColumns));
     for (ScrollingTemplateColumn column : columns) {
         if (keptColumns.size() == MaxTemplateColumns) {
             break;
@@ -96,8 +88,13 @@ bool ScrollingTemplate::normalize()
     }
     columns = keptColumns;
 
-    if (defaultColumnWidthKind < 0 || defaultColumnWidthKind > kKindPreset) {
-        defaultColumnWidthKind = kKindPreset;
+    // An out-of-vocabulary kind coerces to Proportion, not Preset: Proportion
+    // is the one kind whose payload (defaultColumnWidthValue) is always
+    // meaningful on its own, so garbage in the kind field degrades to a plain
+    // fraction. Coercing to Preset instead handed a template with a populated
+    // preset vocabulary a concrete preset width the file never asked for.
+    if (defaultColumnWidthKind < 0 || defaultColumnWidthKind > DefaultWidthKindPreset) {
+        defaultColumnWidthKind = DefaultWidthKindProportion;
     }
     if (defaultColumnWidthPresetIndex < 0) {
         defaultColumnWidthPresetIndex = 0;
@@ -122,8 +119,8 @@ bool ScrollingTemplate::normalize()
     // an empty vocabulary. This is the defaults shape (kind 3, no presets), so
     // demote to Proportion and let defaultColumnWidthValue answer instead.
     // The index is already 0 by the clause above.
-    if (defaultColumnWidthKind == kKindPreset && presetColumnWidths.isEmpty()) {
-        defaultColumnWidthKind = kKindProportion;
+    if (defaultColumnWidthKind == DefaultWidthKindPreset && presetColumnWidths.isEmpty()) {
+        defaultColumnWidthKind = DefaultWidthKindProportion;
     }
 
     if (!qIsFinite(defaultColumnWidthValue) || defaultColumnWidthValue < 0.0) {
@@ -133,9 +130,9 @@ bool ScrollingTemplate::normalize()
     // floor/ceiling as every other fraction here. Fixed is a pixel count with
     // no meaningful upper bound, so it only gets a floor — one physical pixel,
     // since a zero-width column is not a column.
-    if (defaultColumnWidthKind == kKindProportion) {
+    if (defaultColumnWidthKind == DefaultWidthKindProportion) {
         defaultColumnWidthValue = qBound<qreal>(MinTemplateFraction, defaultColumnWidthValue, 1.0);
-    } else if (defaultColumnWidthKind == kKindFixed) {
+    } else if (defaultColumnWidthKind == DefaultWidthKindFixed) {
         defaultColumnWidthValue = qMax<qreal>(defaultColumnWidthValue, 1.0);
     }
     return isValid();
@@ -144,7 +141,7 @@ bool ScrollingTemplate::normalize()
 QJsonObject ScrollingTemplate::toJson() const
 {
     QJsonObject json;
-    json.insert(QLatin1String("id"), id.toString());
+    json.insert(TemplateJsonKeys::Id, id.toString());
     json.insert(QLatin1String("name"), name);
     if (!description.isEmpty()) {
         json.insert(QLatin1String("description"), description);
@@ -173,12 +170,19 @@ QJsonObject ScrollingTemplate::toJson() const
 ScrollingTemplate ScrollingTemplate::fromJson(const QJsonObject& json)
 {
     ScrollingTemplate templ;
-    templ.id = QUuid::fromString(json.value(QLatin1String("id")).toString());
+    templ.id = QUuid::fromString(json.value(TemplateJsonKeys::Id).toString());
     templ.name = json.value(QLatin1String("name")).toString();
     templ.description = json.value(QLatin1String("description")).toString();
     const QJsonArray columnArray = json.value(QLatin1String("columns")).toArray();
     templ.columns.reserve(columnArray.size());
     for (const auto& value : columnArray) {
+        // A non-object element is malformed input, not a column. Without this
+        // gate `"columns": [1, 2, 3]` parsed as three phantom columns at the
+        // default width, because toObject() answers an empty object and every
+        // field then took its default.
+        if (!value.isObject()) {
+            continue;
+        }
         const QJsonObject columnJson = value.toObject();
         ScrollingTemplateColumn column;
         column.width = columnJson.value(QLatin1String("width")).toDouble(0.5);
@@ -186,7 +190,7 @@ ScrollingTemplate ScrollingTemplate::fromJson(const QJsonObject& json)
         templ.columns.append(column);
     }
     const QJsonObject defaultWidth = json.value(QLatin1String("defaultColumnWidth")).toObject();
-    templ.defaultColumnWidthKind = defaultWidth.value(QLatin1String("kind")).toInt(3);
+    templ.defaultColumnWidthKind = defaultWidth.value(QLatin1String("kind")).toInt(DefaultWidthKindPreset);
     templ.defaultColumnWidthValue = defaultWidth.value(QLatin1String("value")).toDouble(0.5);
     templ.defaultColumnWidthPresetIndex = defaultWidth.value(QLatin1String("presetIndex")).toInt(1);
     templ.defaultColumnDisplay = json.value(QLatin1String("defaultColumnDisplay")).toInt(0);

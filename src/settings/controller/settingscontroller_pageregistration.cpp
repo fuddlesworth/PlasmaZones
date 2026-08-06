@@ -101,7 +101,7 @@ void SettingsController::buildApplicationController()
     // ── Block 2: per-feature configuration ──
     regVirtual(QStringLiteral("display"), QString(), PhosphorI18n::tr("Display"), QString(),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/true);
-    // Placement groups the two placement modes (Snapping / Tiling) as an
+    // Placement groups the three placement modes (Snapping / Tiling / Scrolling) as an
     // inline-collapsible category, matching Display. Divider after it (i.e.
     // above Animations) sets the placement categories apart from the
     // Animations / Rules pages that follow.

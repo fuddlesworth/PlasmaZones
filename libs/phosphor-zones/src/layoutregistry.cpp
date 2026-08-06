@@ -436,6 +436,18 @@ bool LayoutRegistry::applyScrollingTemplateToScreen(const QString& screenId, con
     // zone-detector queries a template choice must not repoint). Refuses an
     // id the store does not know so a mis-wired press reads as "nothing
     // happened" instead of clearing the context's template.
+    //
+    // CONVENTION SPLIT with UnifiedLayoutController::applyEntry's picker
+    // branch, deliberate on both sides. This helper serves the template CYCLE,
+    // the quick-slot press and the D-Bus applyQuickLayout, and writes the
+    // EMPTY-activity entry while clearing the activity-keyed one, so a press
+    // here applies across activities. The picker writes the current
+    // (screen, desktop, activity) tuple through assignScrollingTemplate
+    // directly, matching its own autotile and manual siblings: a card press
+    // applies to the context the user is looking at, and an activity-scoped
+    // context must not have its entry cleared out from under it. Do not
+    // collapse the two without deciding which semantics the quick slots and
+    // the cycle should have.
     if (screenId.isEmpty() || templateId.isEmpty()) {
         return false;
     }
@@ -741,8 +753,9 @@ void LayoutRegistry::applyQuickLayout(AssignmentEntry::Mode mode, int number, co
 
 void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, const QString& layoutId)
 {
-    if (number < 1 || number > 9) {
-        qCWarning(lcZonesLib) << "Invalid quick layout slot number:" << number << "(must be 1-9)";
+    if (number < 1 || number > QuickSlotCount) {
+        qCWarning(lcZonesLib) << "Invalid quick layout slot number:" << number
+                              << qUtf8Printable(QStringLiteral("(must be 1-%1)").arg(QuickSlotCount));
         return;
     }
 
@@ -812,7 +825,7 @@ void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QH
         int number = it.key();
         const QString& layoutId = it.value();
 
-        if (number < 1 || number > 9) {
+        if (number < 1 || number > QuickSlotCount) {
             qCWarning(lcZonesLib) << "Skipping invalid quick layout slot number:" << number;
             continue;
         }

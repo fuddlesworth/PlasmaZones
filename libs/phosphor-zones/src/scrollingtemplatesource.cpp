@@ -44,11 +44,13 @@ PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTempla
         widths = templ.presetColumnWidths;
     }
     if (widths.isEmpty()) {
-        // Kind Preset cannot reach here: normalize() demotes it when the
+        // Kind Preset cannot reach here on a NORMALIZED template (see the
+        // precondition on the declaration): normalize() demotes it when the
         // preset list is empty, and a non-empty list was consumed above.
-        // Fixed pixels and ClientDecides have no fraction to draw, so they
+        // Fixed pixels and ClientDecides have no fraction to draw, and an
+        // un-normalized Preset kind has no vocabulary to index, so all three
         // preview at half width.
-        const qreal fallback = templ.defaultColumnWidthKind == 0
+        const qreal fallback = templ.defaultColumnWidthKind == DefaultWidthKindProportion
             ? qBound<qreal>(MinTemplateFraction, templ.defaultColumnWidthValue, 1.0)
             : 0.5;
         widths = {fallback};

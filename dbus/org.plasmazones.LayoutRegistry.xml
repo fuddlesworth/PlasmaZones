@@ -15,7 +15,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getLayoutList">
-            <annotation name="org.gtk.GDBus.DocString" value="Returns an array of strings; each element is one JSON-serialized layout object (manual layouts enriched with origin/visibility/allow-lists, plus autotile algorithm entries). Never bare IDs and never a single JSON array."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Returns an array of strings; each element is one JSON-serialized layout object (manual layouts enriched with origin/visibility/allow-lists, plus autotile algorithm entries). Never bare IDs and never a single JSON array. Scrolling-template entries are appended too, unconditionally — the list is not filtered by the caller's mode. A template entry carries isScrollingTemplate true, and its id is a plain braced UUID with no scheme prefix, so that flag is the only thing distinguishing it from a manual layout entry (autotile entries stay recognisable by their 'autotile:' prefix)."/>
             <arg name="layouts" type="as" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Array of JSON-serialized layout objects, one per string."/>
             </arg>
@@ -117,7 +117,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="deleteScrollingTemplate">
-            <annotation name="org.gtk.GDBus.DocString" value="Delete the user file of the scrolling template with the given id. Deleting a user copy that shadowed a bundled template resurfaces the bundled original, and a pure bundled template is refused. The id is scrubbed from every assignment rule and from every quick layout slot only when it no longer resolves to any template after the delete, so a resurfaced bundled original keeps its live assignments."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Delete the user file of the scrolling template with the given id. Deleting a user copy that shadowed a bundled template resurfaces the bundled original, and a pure bundled template is refused. The id is scrubbed from every assignment rule and from every quick layout slot only when it no longer resolves to any template after the delete, so a resurfaced bundled original keeps its live assignments. The scrub reaches assignment rules and quick slots only. A deleted id still named by the Scrolling default-template setting is deliberately left in place: it resolves to no template at read time and the context falls back to the engine's compiled defaults, so nothing has to rewrite the user's setting behind their back."/>
             <arg name="id" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Template UUID to delete."/>
             </arg>
@@ -251,7 +251,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="setAllScreenAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all base screen assignments (saves once). Clears existing base assignments first."/>
             <arg name="assignments" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of screenId to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of screenId to a plain layoutId string (a Scrolling context stays the bare 'scrolling:' sentinel). Only that string is read here. The matching getter, getAllScreenAssignments, answers a wider and differently keyed shape (a JSON string of connector-keyed per-screen objects), so the two are not a round-trip pair. The scrolling template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <!-- Per-virtual-desktop layout assignment methods -->
@@ -349,9 +349,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getAllScreenAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Returns all screen-to-layout assignments as JSON. The JSON is a view of *stored* assignment state (suitable for round-trip back through setAllScreenAssignments) — synthesized level-1 global-default fallbacks are deliberately NOT serialized, so callers that need the resolved mode for an unconfigured screen must use the per-context lookup methods instead. Only screens with at least one stored entry (base or per-desktop) appear; for screen enumeration use getAvailableScreenIds."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Returns all screen-to-layout assignments as JSON. This is a READBACK of *stored* assignment state, not a payload the batch setter accepts: setAllScreenAssignments takes a flat screenId-to-layoutId string map, while this answers a JSON string of connector-keyed per-screen objects, so the pair does not round-trip. Synthesized level-1 global-default fallbacks are deliberately NOT serialized, so callers that need the resolved mode for an unconfigured screen must use the per-context lookup methods instead. Only screens with at least one stored entry (base or per-desktop) appear; for screen enumeration use getAvailableScreenIds."/>
             <arg name="assignmentsJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON object keyed by connector name, containing one entry per screen with stored assignments. Each entry includes {&quot;screenId&quot;: &lt;stable-id&gt;}. Screens with an explicit base-level assignment additionally include {&quot;default&quot;, &quot;snappingLayout&quot;, &quot;tilingAlgorithm&quot;, &quot;mode&quot;}; screens with explicit per-desktop assignments include numeric-string keys (&quot;1&quot;, &quot;2&quot;, …) mapping to the assigned layout id. Screens with no stored entries are omitted entirely — DO NOT use this method to enumerate available screens; call getAvailableScreenIds instead."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object keyed by connector name, containing one entry per screen with stored assignments. Each entry includes {&quot;screenId&quot;: &lt;stable-id&gt;}. Screens with an explicit base-level assignment additionally include &quot;mode&quot; plus whichever of {&quot;default&quot;, &quot;snappingLayout&quot;, &quot;tilingAlgorithm&quot;, &quot;scrollingTemplate&quot;} the entry actually stores (an empty field is omitted, so a missing key means unset, not empty-string); screens with explicit per-desktop assignments include numeric-string keys (&quot;1&quot;, &quot;2&quot;, …) mapping to the assigned layout id. Screens with no stored entries are omitted entirely — DO NOT use this method to enumerate available screens; call getAvailableScreenIds instead."/>
             </arg>
         </method>
         <!-- Quick Layout Slots (1-9) -->
@@ -498,7 +498,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="setAllCombinedAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-(screen,desktop,activity) Combined assignments (saves once). Key format: 'screenId|virtualDesktop|activityId'. Pure-Activity, pure-Desktop and Monitor-only rules are not touched."/>
             <arg name="assignments" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' keys to a plain layoutId string (a Scrolling context stays the bare 'scrolling:' sentinel). Only that string is read here. The matching getter's value is a wider {layoutId, scrollingTemplate} map, and the scrolling template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <method name="getAllCombinedAssignments">
@@ -551,7 +551,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setScrollingTemplateLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Assign a native scrolling template to the context and flip it to Scrolling mode. The value is a ScrollingTemplate UUID (one of the ids getScrollingTemplates reports), whose column blueprint seeds new columns and whose preset lists become the strip's vocabulary. An id the template store does not know, or a non-UUID string, is rejected and nothing is written, so the context keeps its previous template."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Assign a native scrolling template to the context and flip it to Scrolling mode. The value is a ScrollingTemplate UUID (one of the ids getScrollingTemplates reports), whose column blueprint seeds new columns and whose preset lists become the strip's vocabulary. An id the template store does not know, or a non-UUID string, is rejected and nothing is written, so the context keeps its previous template. The existence half of that check needs the template store wired: an embedder running the daemon libraries without one (unit fixtures) gets the UUID-format check only, and a well-formed but unknown id is stored, then degrades to no template when the strip reads it. The mode flip applies to the empty-id clear form too, which is the one case where it is not implied by the argument: clearing the template still forces the context to Scrolling and materializes a stored entry for it if none existed. To remove the context's assignment outright, call clearAssignmentForScreenDesktopActivity instead."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
             </arg>
@@ -562,7 +562,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID (empty = all activities)."/>
             </arg>
             <arg name="layoutId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Scrolling template UUID to assign (from getScrollingTemplates), or empty to clear the template."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Scrolling template UUID to assign (from getScrollingTemplates), or empty to clear the template (which still forces the context to Scrolling mode)."/>
             </arg>
         </method>
         <method name="getScrollingTemplateLayout">
@@ -581,7 +581,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setAssignmentEntry">
-            <annotation name="org.gtk.GDBus.DocString" value="Set a complete assignment entry (mode + snapping layout + tiling algorithm) for a screen/desktop/activity context. Settings app sends one full entry per staged context during save."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set a complete assignment entry (mode + snapping layout + tiling algorithm) for a screen/desktop/activity context. Settings app sends one full entry per staged context during save. The entry is seeded from the context's stored one first, so a scrolling template already assigned there survives the call even though this signature does not carry it; setScrollingTemplateLayout remains the only way to change it."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen ID."/>
             </arg>

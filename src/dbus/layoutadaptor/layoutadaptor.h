@@ -193,8 +193,12 @@ public Q_SLOTS:
     QStringList getAvailableScreenIds();
 
     QString getAllScreenAssignments();
-    QVariantMap getAllDesktopAssignments(); // Get all per-desktop assignments as key -> layoutId
-    QVariantMap getAllActivityAssignments(); // Get all per-activity assignments as key -> layoutId
+    // The three batch getters below answer key -> {layoutId, scrollingTemplate}
+    // maps, deliberately wider than the plain layoutId string their matching
+    // batch setters read. The template rides the getter for readback only; it
+    // is written through setScrollingTemplateLayout.
+    QVariantMap getAllDesktopAssignments(); // Per-desktop, key "screenId|desktop"
+    QVariantMap getAllActivityAssignments(); // Per-activity, key "screenId|activityId"
     // Combined-context (screen + desktop + activity); key format
     // "screen|desktop|activity"; pure-Activity / pure-Desktop / Monitor
     // rules are not included.

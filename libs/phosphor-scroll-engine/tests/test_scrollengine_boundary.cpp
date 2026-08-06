@@ -145,9 +145,14 @@ public:
     {
         return insertPosition;
     }
+    // Off by default so the geometry tests stay indicator-free; the orphan
+    // tab-bar test flips it on, since a null tabIndicatorRect would gate the
+    // strip emitter shut before the skip under test could ever matter.
+    bool tabIndicatorEnabled = false;
+
     bool scrollingTabIndicatorEnabled() const override
     {
-        return false;
+        return tabIndicatorEnabled;
     }
     bool scrollingTabIndicatorHideWhenSingleTab() const override
     {
@@ -382,6 +387,112 @@ private Q_SLOTS:
                                 .arg(b.value(QLatin1String("y")).toInt())));
         QVERIFY2(!b.contains(QLatin1String("scrollEdge")),
                  "a vertical park carries no scrollEdge (there is no side to animate from)");
+    }
+
+    // A tabbed column's hidden tiles are parked so they cannot take input from
+    // the visible tab, NOT because the strip scrolled them away. While the
+    // column is ON screen they have made no departure, so they report no
+    // scrollEdge — and the next tab switch must not slide the newly active tab
+    // in from a side the column never left.
+    void hiddenTabOfAnOnScreenColumnCarriesNoScrollEdge()
+    {
+        QObject owner;
+        auto* settings = new BoundaryStubSettings(&owner);
+        settings->centerFocused = 0;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setEngineSettings(settings);
+        engine->refreshConfigFromSettings();
+
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+        engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+        engine->consumeOrExpelWindow(-1, kS1); // b joins a's column
+        engine->windowFocused(QStringLiteral("app|a"), kS1);
+        engine->toggleColumnTabbed(kS1);
+        QCoreApplication::processEvents();
+
+        const QRect screen = defaultScreenRect();
+        const QJsonObject hidden = lastEntryFor(tiled, QStringLiteral("app|b"));
+        QVERIFY2(!hidden.isEmpty(), "expected the hidden tab in the tile batch");
+        QVERIFY2(hidden.value(QLatin1String("y")).toInt() > screen.bottom(),
+                 "a hidden tab is parked off-canvas so it cannot take input");
+        QVERIFY2(!hidden.contains(QLatin1String("scrollEdge")),
+                 "a hidden tab of an on-screen column must not report a departure edge");
+
+        // The discriminating leg: with a fallback edge recorded above, this
+        // switch consumed it and slid the newly shown tab in from off the
+        // right, a move the column never made.
+        tiled.clear();
+        engine->windowFocused(QStringLiteral("app|b"), kS1);
+        QCoreApplication::processEvents();
+        const QJsonObject shown = lastEntryFor(tiled, QStringLiteral("app|b"));
+        QVERIFY2(!shown.isEmpty(), "expected the newly active tab in the tile batch");
+        QVERIFY2(shown.value(QLatin1String("y")).toInt() <= screen.bottom(),
+                 "the newly active tab must be placed on screen, not parked");
+        QVERIFY2(!shown.contains(QLatin1String("scrollEdge")),
+                 "a tab switch on an on-screen column must not slide the new tab in from an edge");
+    }
+
+    // A tabbed column whose peek falls below the floor parks every one of its
+    // tiles, so nothing it labels is on screen — yet its TRUE rect still
+    // intersects the work area, which is exactly what left an orphan tab bar
+    // drawn at the edge. The strip emitter skips a column once every tile it
+    // emitted was parked.
+    void fullyParkedTabbedColumnEmitsNoTabStrip()
+    {
+        QObject owner;
+        auto* settings = new BoundaryStubSettings(&owner);
+        settings->tabIndicatorEnabled = true;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
+        engine->setEngineSettings(settings);
+        engine->refreshConfigFromSettings();
+
+        // Same generator as peekFloorParksAThinRemainder: every column opens
+        // at 0.98 of the work area, so centering the first leaves the second a
+        // 12px sliver at the right edge, under the 48px floor.
+        QVariantMap wide;
+        wide.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultColumnWidth(), 0.98);
+        engine->applyPerScreenConfig(kS1, wide);
+
+        QSignalSpy strips(engine, &ScrollEngine::tabStripsChanged);
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+        engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+        engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
+        engine->consumeOrExpelWindow(-1, kS1); // c joins b's column
+        engine->windowFocused(QStringLiteral("app|b"), kS1);
+        engine->toggleColumnTabbed(kS1);
+        QCoreApplication::processEvents();
+
+        // The tabbed column is on screen at this point, so it DOES own a bar.
+        // Asserting that first is what makes the skip below discriminating
+        // rather than vacuous.
+        const auto namesB = [](const QJsonArray& payload) {
+            for (const QJsonValue& v : payload) {
+                if (v.toObject().value(QLatin1String("tabs")).toArray().contains(QJsonValue(QStringLiteral("app|b")))) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        QVERIFY(!strips.isEmpty());
+        QVERIFY2(namesB(QJsonDocument::fromJson(strips.last().at(1).toString().toUtf8()).array()),
+                 "the fixture must first produce a tab bar for the on-screen tabbed column");
+
+        // Centering the first column pushes the tabbed one to a below-floor
+        // remainder, so every one of its tiles parks.
+        engine->windowFocused(QStringLiteral("app|a"), kS1);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+
+        const QRect screen = defaultScreenRect();
+        const QJsonObject b = lastEntryFor(tiled, QStringLiteral("app|b"));
+        QVERIFY2(!b.isEmpty(), "expected the tabbed column's active tile in the tile batch");
+        QVERIFY2(b.value(QLatin1String("y")).toInt() > screen.bottom(),
+                 "the fixture must actually park the tabbed column's every tile");
+
+        QVERIFY2(!namesB(QJsonDocument::fromJson(strips.last().at(1).toString().toUtf8()).array()),
+                 "a fully parked tabbed column must not leave an orphan tab bar at the edge");
     }
 };
 

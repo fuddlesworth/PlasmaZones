@@ -21,14 +21,17 @@
 // purpose: every registry TU defines them inside its registration function and
 // #undefs them at the end, which keeps them out of every other TU in a unity
 // batch — a shared macro header with an include guard would define them only
-// once per batch and leave the later TUs without them. KEEP IN SYNC with the
-// definitions in settingsadaptor_registry.cpp (they are frozen boilerplate; a
-// change there must land here in the same commit).
+// once per batch and leave the later TUs without them. Each TU defines only
+// the forms its own keys use, so the set differs between them. KEEP THE
+// SHARED FORMS IN SYNC across the four registry TUs (they are frozen
+// boilerplate; a change to one spelling must land in every TU that carries
+// that form, in the same commit).
 
 #include "settingsadaptor.h"
 #include "config/settings.h" // For concrete Settings type
 #include "config/configdefaults.h" // ConfigDefaults::isValidScrolling* validators
 #include <QColor>
+#include <QUuid> // defaultScrollingTemplate id-format validation
 
 namespace PlasmaZones {
 
@@ -132,7 +135,31 @@ void SettingsAdaptor::initializeRegistryScrolling()
     // Scrolling settings (concrete Settings only)
     if (concrete) {
         REGISTER_CONCRETE_BOOL("scrollingEnabled", scrollingEnabled, setScrollingEnabled)
-        REGISTER_CONCRETE_STRING("defaultScrollingTemplate", defaultScrollingTemplate, setDefaultScrollingTemplate)
+        // defaultScrollingTemplate holds a ScrollingTemplate UUID (empty means
+        // "no configured default"). Refuse anything that is not one, the same
+        // way the enum setters below refuse an out-of-range int, so a string
+        // that could never name a template does not reach config.json.
+        //
+        // Existence against the template store is NOT checked here and cannot
+        // be: this adaptor holds only ISettings, no store. A well-formed id
+        // naming a deleted template is therefore accepted and stays inert —
+        // LayoutRegistry::scrollingTemplateForContext parses the configured
+        // default, finds no template for it, and the context falls back to the
+        // engine's compiled defaults. Template deletion deliberately leaves
+        // this key alone (see deleteScrollingTemplate's contract), so the
+        // dangling-id case is expected rather than exceptional.
+        m_getters[QStringLiteral("defaultScrollingTemplate")] = [concrete]() {
+            return concrete->defaultScrollingTemplate();
+        };
+        m_setters[QStringLiteral("defaultScrollingTemplate")] = [concrete](const QVariant& v) {
+            const QString id = v.toString();
+            if (!id.isEmpty() && QUuid::fromString(id).isNull()) {
+                return false;
+            }
+            concrete->setDefaultScrollingTemplate(id);
+            return true;
+        };
+        m_schemas[QStringLiteral("defaultScrollingTemplate")] = QStringLiteral("string");
         // scrollingCenterFocusedColumn: enum (0=Never, 1=Always, 2=OnOverflow) — needs range validation
         m_getters[QStringLiteral("scrollingCenterFocusedColumn")] = [concrete]() {
             return concrete->scrollingCenterFocusedColumn();

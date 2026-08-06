@@ -559,6 +559,16 @@ void LayoutAdaptor::setActiveLayout(const QString& id)
 
 void LayoutAdaptor::applyQuickLayout(int mode, int number, const QString& screenId)
 {
+    // Same range refusal as the get/set/batch slot verbs. The registry treats
+    // an out-of-range number as an unset slot and no-ops silently, so without
+    // this the caller gets no trace of a typo'd slot number.
+    if (number < 1 || number > PhosphorProtocol::Service::QuickLayoutSlotCount) {
+        qCWarning(lcDbusLayout)
+            << "Invalid quick layout slot number:" << number
+            << QStringLiteral("(must be 1-%1)").arg(PhosphorProtocol::Service::QuickLayoutSlotCount);
+        return;
+    }
+
     const auto slotMode = quickSlotMode(mode);
     if (!slotMode) {
         qCWarning(lcDbusLayout) << "applyQuickLayout: mode" << mode << "carries no quick slots — ignored";
@@ -719,7 +729,10 @@ void LayoutAdaptor::setQuickLayoutSlot(int mode, int slotNumber, const QString& 
         return;
     }
     m_layoutManager->setQuickLayoutSlot(*slotMode, slotNumber, layoutId);
-    qCInfo(lcDbusLayout) << "Set quick layout slot" << slotNumber << "mode" << mode << "to" << layoutId;
+    // Attempt wording, not success: the registry returns void and refuses a
+    // layout/template id it cannot resolve, warning on its own way out. A
+    // "Set ... to" line here would claim a write that never happened.
+    qCInfo(lcDbusLayout) << "Requested quick layout slot" << slotNumber << "mode" << mode << "set to" << layoutId;
     Q_EMIT quickLayoutSlotsChanged();
 }
 

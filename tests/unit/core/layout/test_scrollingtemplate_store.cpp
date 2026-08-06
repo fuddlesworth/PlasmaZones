@@ -19,6 +19,7 @@
 #include <QSignalSpy>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
@@ -106,13 +107,16 @@ private Q_SLOTS:
         // Same treatment on the height list: 0.02 dropped, 1.4 clamped to
         // 1.0, 0.805 deduped into 0.8, the rest sorted ascending.
         QCOMPARE(templ.presetWindowHeights, (QList<qreal>{0.2, 0.8, 1.0}));
-        QCOMPARE(templ.defaultColumnWidthKind, 3);
+        // An out-of-vocabulary kind coerces to Proportion, not Preset: only
+        // Proportion's payload (defaultColumnWidthValue) is meaningful on its
+        // own, so garbage in the kind field degrades to a plain fraction rather
+        // than to a concrete preset width the file never asked for.
+        QCOMPARE(templ.defaultColumnWidthKind, PhosphorZones::DefaultWidthKindProportion);
         QCOMPARE(templ.defaultColumnDisplay, 0);
         QCOMPARE(templ.defaultColumnWidthPresetIndex, templ.presetColumnWidths.size() - 1);
         // A negative default width is not a value any kind can mean, so it is
-        // repaired to 0.5 rather than clamped. The Proportion-only bound that
-        // follows the repair does not apply here, because the kind landed on
-        // Preset (3) with a non-empty preset list.
+        // repaired to 0.5 first. The Proportion bound then applies (the kind
+        // coerced to Proportion above) and leaves 0.5 inside [0.05, 1.0].
         QCOMPARE(templ.defaultColumnWidthValue, 0.5);
     }
 
@@ -297,21 +301,48 @@ private Q_SLOTS:
             schema.value(QLatin1String("definitions")).toObject().value(QLatin1String("fractionList")).toObject();
         QCOMPARE(fractionList.value(QLatin1String("maxItems")).toInt(), PhosphorZones::MaxTemplateColumns);
 
-        // The kind-0 arm of defaultColumnWidth restates the same fraction bounds
-        // a second time, in its own then-branch rather than by $ref, so it can
-        // drift away from the shared fraction definition above on its own.
-        const QJsonObject kindZeroValue = schema.value(QLatin1String("definitions"))
-                                              .toObject()
-                                              .value(QLatin1String("columnWidth"))
-                                              .toObject()
-                                              .value(QLatin1String("then"))
-                                              .toObject()
-                                              .value(QLatin1String("properties"))
-                                              .toObject()
-                                              .value(QLatin1String("value"))
-                                              .toObject();
+        // The per-kind arms of defaultColumnWidth live under allOf (a second
+        // bare if/then sibling would silently overwrite the first) and restate
+        // their bounds inline rather than by $ref, so each can drift away from
+        // the shared fraction definition above on its own. Walk the arms by
+        // their kind const instead of by position so reordering cannot make
+        // this leg read the wrong branch.
+        const QJsonArray kindArms = schema.value(QLatin1String("definitions"))
+                                        .toObject()
+                                        .value(QLatin1String("columnWidth"))
+                                        .toObject()
+                                        .value(QLatin1String("allOf"))
+                                        .toArray();
+        const auto thenValueForKind = [&kindArms](int kind) {
+            for (const QJsonValue& arm : kindArms) {
+                const QJsonObject armObj = arm.toObject();
+                const int armKind = armObj.value(QLatin1String("if"))
+                                        .toObject()
+                                        .value(QLatin1String("properties"))
+                                        .toObject()
+                                        .value(QLatin1String("kind"))
+                                        .toObject()
+                                        .value(QLatin1String("const"))
+                                        .toInt(-1);
+                if (armKind == kind) {
+                    return armObj.value(QLatin1String("then"))
+                        .toObject()
+                        .value(QLatin1String("properties"))
+                        .toObject()
+                        .value(QLatin1String("value"))
+                        .toObject();
+                }
+            }
+            return QJsonObject();
+        };
+        const QJsonObject kindZeroValue = thenValueForKind(0);
+        QVERIFY2(!kindZeroValue.isEmpty(), "no allOf arm with kind const 0");
         QCOMPARE(kindZeroValue.value(QLatin1String("minimum")).toDouble(), PhosphorZones::MinTemplateFraction);
         QCOMPARE(kindZeroValue.value(QLatin1String("maximum")).toDouble(), 1.0);
+        // The kind-1 arm mirrors normalize()'s one-pixel floor for Fixed.
+        const QJsonObject kindOneValue = thenValueForKind(1);
+        QVERIFY2(!kindOneValue.isEmpty(), "no allOf arm with kind const 1");
+        QCOMPARE(kindOneValue.value(QLatin1String("minimum")).toDouble(), 1.0);
     }
 
     void toJsonAndBundledTemplatesSatisfySchema()

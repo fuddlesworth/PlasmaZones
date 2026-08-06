@@ -4,7 +4,6 @@
 #include "internal.h"
 #include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
-#include "phosphor_i18n.h"
 #include "phosphor_slot_keys.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>

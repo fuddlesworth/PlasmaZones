@@ -152,6 +152,17 @@ void TilingHandler::loadSettings()
                     if (scrollingScreenIntersection() != scrollingBefore) {
                         m_effect->invalidateAllRuleCaches();
                         m_effect->scheduleBorderSweep();
+                        // The Mode-flip repaint bookend setScrollingScreens
+                        // takes for the same discriminator move: opacity is
+                        // resolved in the paint path, so a `Mode Equals
+                        // "scrolling"` SetOpacity rule that flips verdict here
+                        // leaves an undamaged window at its last-painted alpha.
+                        // The border sweep above does not cover it — it rebuilds
+                        // decorations, not the per-frame alpha of windows that
+                        // have none.
+                        if (m_effect->m_shaderManager.hasOpacityRules()) {
+                            KWin::effects->addRepaintFull();
+                        }
                     }
                     qCInfo(lcEffect) << "Loaded managed screens:" << m_managedScreens;
                     const QSet<QString> completedDeferredRoutes = completeDeferredWindowRoutes();

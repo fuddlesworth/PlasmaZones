@@ -451,6 +451,11 @@ public:
     /// the debounced layout refresh.
     Q_SLOT void onScrollingTemplatesChanged();
     Q_INVOKABLE bool saveScrollingTemplate(const QVariantMap& templateData);
+    /// The id-returning form of saveScrollingTemplate, for callers that mint a
+    /// NEW template and want the list to select it once the refresh lands
+    /// (import). Empty on refusal. Not Q_INVOKABLE: QML saves through the bool
+    /// form, which is this one's caller.
+    QString saveScrollingTemplateReturningId(const QVariantMap& templateData);
     Q_INVOKABLE void deleteScrollingTemplate(const QString& templateId);
     Q_INVOKABLE void duplicateScrollingTemplate(const QString& templateId);
     /// Import mints a fresh id and routes through the daemon-first save;
@@ -1199,8 +1204,10 @@ private:
     // settingscontroller.cpp (the ctor-wired LayoutRegistry::layoutsChanged
     // lambda) and settingscontroller_layouts.cpp (D-Bus refresh path) link to the
     // same external-linkage symbol regardless of unity-build batching.
-    // Manual layouts sort first; within each category alphabetical by
-    // displayName (case-insensitive).
+    // The only sort key is isAutotile: tiling algorithms sort last, everything
+    // else first, then alphabetical by displayName (case-insensitive). Manual
+    // layouts and scrolling templates therefore interleave in that first
+    // block — they are distinguished by their row flags, not by position.
     static void sortMergedLayoutList(QVariantList& list);
 };
 

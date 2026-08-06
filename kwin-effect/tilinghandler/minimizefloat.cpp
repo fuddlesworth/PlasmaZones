@@ -184,9 +184,10 @@ void TilingHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
 }
 
 void TilingHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const QString& windowId,
-                                                   const QSet<QString>& screenFilter, bool enteringAutotile)
+                                                   const QSet<QString>& screenFilter, bool enteringAutotile,
+                                                   const QString& resolvedScreenId)
 {
-    const QString screenId = m_effect->getWindowScreenId(w);
+    const QString screenId = resolvedScreenId.isEmpty() ? m_effect->getWindowScreenId(w) : resolvedScreenId;
     if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
         return;
     }

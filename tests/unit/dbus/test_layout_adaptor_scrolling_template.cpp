@@ -13,14 +13,26 @@
  * description clamp saveScrollingTemplate applies (the editor dialog's
  * maximumLength is advisory, a D-Bus caller skips it entirely) and the
  * quickLayoutSlotsChanged refresh hint deleteScrollingTemplate emits after the
- * id-scrub sweeps a bound quick slot.
+ * id-scrub sweeps a bound quick slot, alongside the resurface guard that keeps
+ * that scrub off a shadowed bundled template.
  * Fixture cribbed from test_layout_adaptor_signals.cpp.
+ *
+ * KNOWN GAP: getAllScreenAssignments' own "scrollingTemplate" field is NOT
+ * covered here. That getter iterates m_screenManager->effectiveScreenIds(),
+ * and this fixture wires no ScreenManager, so its loop body never runs and a
+ * leg written against it would pass vacuously. Covering it needs a
+ * ScreenManager stub the fixture does not have. The three FLAT batch getters
+ * below take no such dependency and are covered.
  */
 
+#include <QDir>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QScopeGuard>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include "core/types/constants.h"
@@ -81,8 +93,31 @@ private Q_SLOTS:
         m_adaptor->setScrollingTemplateLayout(QStringLiteral("DP-1"), 0, QString(), m_templateId);
         m_adaptor->setScrollingTemplateLayout(QStringLiteral("DP-1"), 0, QString(), QString());
         QCOMPARE(m_adaptor->getScrollingTemplateLayout(QStringLiteral("DP-1"), 0, QString()), QString());
-        // The clear drops only the template; the context stays Scrolling.
+        // The clear drops the template and leaves the context Scrolling. That
+        // is a FORCE, not a preservation: the clear routes the same
+        // assignScrollingTemplate the assigning form does, which stamps
+        // AssignmentEntry::Scrolling on the entry it upserts whatever the id
+        // is. On an already-Scrolling context the two are indistinguishable,
+        // so the Autotile arm below is what pins the force.
         QCOMPARE(m_layoutManager->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Scrolling);
+    }
+
+    void testSet_emptyIdOnNonScrollingContextForcesScrollingMode()
+    {
+        // The discriminator for the force above. A clear aimed at a context
+        // that is NOT scrolling flips its mode and materializes a Scrolling
+        // entry where there was none, which is the documented (and published)
+        // side effect of routing the clear through the assigning verb.
+        m_layoutManager->assignLayoutById(QStringLiteral("DP-2"), 0, QString(), QStringLiteral("autotile:bsp"));
+        QCOMPARE(m_layoutManager->modeForScreen(QStringLiteral("DP-2"), 0), PhosphorZones::AssignmentEntry::Autotile);
+
+        m_adaptor->setScrollingTemplateLayout(QStringLiteral("DP-2"), 0, QString(), QString());
+
+        QCOMPARE(m_layoutManager->modeForScreen(QStringLiteral("DP-2"), 0), PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(m_adaptor->getScrollingTemplateLayout(QStringLiteral("DP-2"), 0, QString()), QString());
+        // The lossless-toggle contract still holds through the flip: the
+        // autotile choice the context carried is preserved, not wiped.
+        QCOMPARE(m_layoutManager->tilingAlgorithmForScreen(QStringLiteral("DP-2"), 0), QStringLiteral("bsp"));
     }
 
     void testSet_unknownUuidRejected()
@@ -153,19 +188,58 @@ private Q_SLOTS:
 
         // Read the description back over the same wire the pickers use, so the
         // clamp is asserted on what a client actually receives.
-        const QJsonArray listed = QJsonDocument::fromJson(m_adaptor->getScrollingTemplates().toUtf8()).array();
-        QString stored;
         bool found = false;
-        for (const QJsonValue& value : listed) {
-            const QJsonObject json = value.toObject();
-            if (json.value(QLatin1String("id")).toString() == saved) {
-                stored = json.value(QLatin1String("description")).toString();
-                found = true;
-                break;
-            }
-        }
+        const QJsonObject stored = storedTemplate(saved, found);
         QVERIFY(found);
-        QCOMPARE(stored.size(), PlasmaZones::MaxTemplateDescriptionLength);
+        QCOMPARE(stored.value(QLatin1String("description")).toString().size(),
+                 PlasmaZones::MaxTemplateDescriptionLength);
+    }
+
+    void testSave_clampsOverlongName()
+    {
+        // The name arm of the same boundary clamp. saveScrollingTemplate calls
+        // clampName on BOTH fields, and only the description half was pinned,
+        // so a dropped name clamp would have gone unnoticed.
+        PhosphorZones::ScrollingTemplate templ;
+        templ.name = QString(60, QLatin1Char('n'));
+        templ.presetColumnWidths = {0.5};
+        const QString saved = m_adaptor->saveScrollingTemplate(
+            QString::fromUtf8(QJsonDocument(templ.toJson()).toJson(QJsonDocument::Compact)));
+        QVERIFY(!saved.isEmpty());
+
+        bool found = false;
+        const QJsonObject stored = storedTemplate(saved, found);
+        QVERIFY(found);
+        QCOMPARE(stored.value(QLatin1String("name")).toString().size(), PlasmaZones::MaxLayoutNameLength);
+    }
+
+    void testSave_descriptionCutAstrideSurrogatePairDropsThePair()
+    {
+        // The reason the clamp is clampName and not a bare left(): the cut
+        // lands BETWEEN the two halves of a non-BMP character, and a stored
+        // lone high surrogate serializes as U+FFFD. 499 filler units plus a
+        // two-unit emoji is 501, so left(500) would keep the high surrogate
+        // alone; the clamp must drop the whole pair and stop at 499.
+        const QString emoji = QString::fromUcs4(U"\U0001F600", 1);
+        QCOMPARE(emoji.size(), 2);
+
+        PhosphorZones::ScrollingTemplate templ;
+        templ.name = QStringLiteral("Astride");
+        templ.presetColumnWidths = {0.5};
+        templ.description = QString(PlasmaZones::MaxTemplateDescriptionLength - 1, QLatin1Char('a')) + emoji;
+        QCOMPARE(templ.description.size(), PlasmaZones::MaxTemplateDescriptionLength + 1);
+
+        const QString saved = m_adaptor->saveScrollingTemplate(
+            QString::fromUtf8(QJsonDocument(templ.toJson()).toJson(QJsonDocument::Compact)));
+        QVERIFY(!saved.isEmpty());
+
+        bool found = false;
+        const QJsonObject stored = storedTemplate(saved, found);
+        QVERIFY(found);
+        const QString description = stored.value(QLatin1String("description")).toString();
+        QCOMPARE(description.size(), PlasmaZones::MaxTemplateDescriptionLength - 1);
+        QVERIFY(!description.isEmpty());
+        QVERIFY(!description.back().isSurrogate());
     }
 
     void testDelete_sweepsQuickSlotAndSignals()
@@ -181,7 +255,90 @@ private Q_SLOTS:
         QCOMPARE(m_adaptor->getQuickLayoutSlot(PhosphorZones::AssignmentEntry::Scrolling, 1), QString());
     }
 
+    void testDelete_shadowedBundledTemplateKeepsReferences()
+    {
+        // The other side of the delete-scrub's guard
+        // (assignment.cpp: `if (!store->contains(parsed))`). Deleting a USER
+        // file that shadowed a bundled template does not retire the id: the
+        // store rescans, the bundled original resurfaces under the SAME id,
+        // and every assignment and quick slot pointing at it is still live.
+        // Scrubbing here would drop references to a template the user can
+        // still see, so nothing may be swept and no refresh hint may fire.
+        QTemporaryDir systemRoot;
+        QVERIFY(systemRoot.isValid());
+        const QString systemDir =
+            systemRoot.path() + QLatin1Char('/') + PhosphorZones::ScrollingTemplateStore::templateSubdirectory();
+        QVERIFY(QDir().mkpath(systemDir));
+
+        // XDG_DATA_DIRS pinned to the temp root alone, so the scan sees this
+        // bundled template and nothing from a real install on the machine.
+        // XDG_DATA_HOME stays on the fixture guard's isolated dir.
+        const QByteArray oldDataDirs = qgetenv("XDG_DATA_DIRS");
+        qputenv("XDG_DATA_DIRS", systemRoot.path().toUtf8());
+        const auto restoreDataDirs = qScopeGuard([&oldDataDirs] {
+            if (oldDataDirs.isEmpty()) {
+                qunsetenv("XDG_DATA_DIRS");
+            } else {
+                qputenv("XDG_DATA_DIRS", oldDataDirs);
+            }
+        });
+
+        PhosphorZones::ScrollingTemplate bundled;
+        bundled.id = QUuid::fromString(QStringLiteral("{11111111-1111-1111-1111-111111111111}"));
+        bundled.name = QStringLiteral("Bundled");
+        bundled.presetColumnWidths = {0.5};
+        QFile file(systemDir + QStringLiteral("/bundled.json"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.write(QJsonDocument(bundled.toJson()).toJson()) > 0);
+        file.close();
+
+        m_store->loadTemplates();
+        QVERIFY(m_store->contains(bundled.id));
+        QVERIFY(m_store->templateById(bundled.id).isSystem);
+
+        // Shadow it: a save always writes a USER file, whatever the entry's
+        // origin was.
+        PhosphorZones::ScrollingTemplate edited = bundled;
+        edited.name = QStringLiteral("Bundled (edited)");
+        QCOMPARE(m_store->saveTemplate(edited), bundled.id);
+        QVERIFY(!m_store->templateById(bundled.id).isSystem);
+
+        const QString shadowedId = bundled.id.toString();
+        m_adaptor->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Scrolling, 2, shadowedId);
+        m_adaptor->setScrollingTemplateLayout(QStringLiteral("DP-9"), 0, QString(), shadowedId);
+        QCOMPARE(m_adaptor->getScrollingTemplateLayout(QStringLiteral("DP-9"), 0, QString()), shadowedId);
+
+        QSignalSpy spy(m_adaptor, &LayoutAdaptor::quickLayoutSlotsChanged);
+        QVERIFY(m_adaptor->deleteScrollingTemplate(shadowedId));
+
+        // The id still resolves, now to the bundled original again.
+        QVERIFY(m_store->contains(bundled.id));
+        QVERIFY(m_store->templateById(bundled.id).isSystem);
+        QCOMPARE(m_store->templateById(bundled.id).name, QStringLiteral("Bundled"));
+        // So neither reference was scrubbed, and no refresh hint fired.
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(m_adaptor->getQuickLayoutSlot(PhosphorZones::AssignmentEntry::Scrolling, 2), shadowedId);
+        QCOMPARE(m_adaptor->getScrollingTemplateLayout(QStringLiteral("DP-9"), 0, QString()), shadowedId);
+    }
+
 private:
+    /// The stored template with @p id as the pickers receive it, read back
+    /// over getScrollingTemplates rather than out of the store, so the
+    /// boundary clamps are asserted on what a client actually sees.
+    QJsonObject storedTemplate(const QString& id, bool& found) const
+    {
+        found = false;
+        const QJsonArray listed = QJsonDocument::fromJson(m_adaptor->getScrollingTemplates().toUtf8()).array();
+        for (const QJsonValue& value : listed) {
+            const QJsonObject json = value.toObject();
+            if (json.value(QLatin1String("id")).toString() == id) {
+                found = true;
+                return json;
+            }
+        }
+        return {};
+    }
+
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     std::unique_ptr<PhosphorZones::ScrollingTemplateStore> m_store;
     QObject* m_parent = nullptr;

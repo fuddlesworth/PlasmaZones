@@ -252,8 +252,10 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // loadRuleAnimationsFromDbus and restores them.
         //
         // m_activeLayoutRulesWithheld is deliberately never CLEARED here. Each
-        // successful loadRuleAnimationsFromDbus reply recomputes it from the
-        // live store, so a clear here would disarm the next seeding edge (it
+        // loadRuleAnimationsFromDbus reply that PARSES recomputes it from the
+        // live store (the malformed-payload arms return before the assignment,
+        // having run no slice either), so a clear here would disarm the next
+        // seeding edge (it
         // is gated on the marker in TilingHandler's setActiveLayouts) if the
         // next bring-up's getAllRules never lands, stranding the withheld
         // ActiveLayout rules for the session. A stale-TRUE marker costs one

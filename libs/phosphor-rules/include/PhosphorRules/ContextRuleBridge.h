@@ -51,7 +51,7 @@ namespace ContextRuleBridge {
 /// precedence value: callers seed new context rules in this band and the
 /// Settings list-order renormalizer / runtime upsert derive concrete values
 /// from it. Kept numerically in sync with `RuleTemplates::kContextBandBase`
-/// (src/settings/ruletemplates.h), which the settings tree defines separately.
+/// (src/settings/rules/ruletemplates.h), which the settings tree defines separately.
 inline constexpr int kContextBandBase = 300;
 
 /**

@@ -608,9 +608,11 @@ public:
     // RULE channel (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
     // SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
     // SetScrollDefaultWindowHeight), the SETTINGS channel (the per-monitor
-    // New-columns sizing trio pairs), and the TEMPLATE channel (the
-    // presetColumnWidths / presetWindowHeights lists extracted from the
-    // context's assigned template layout; wholesale per-list replacement).
+    // New-columns sizing trio pairs), and the TEMPLATE channel (from the
+    // context's assigned ScrollingTemplate: the presetColumnWidths /
+    // presetWindowHeights lists, replaced wholesale per list; the
+    // TemplateColumns seed blueprint that engine_lifecycle consumes at column
+    // creation; and the beyond-blueprint default width trio and display).
     // Key spellings live in ScrollPerScreenKeys (ScrollTypes.h) — the
     // accessor comments there are the authoritative key list.
     void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides) override;
@@ -731,12 +733,12 @@ private:
     /// caller alike. It has to be every caller — the geometry producers
     /// (applyLayout, the visibleTiles walks) and the pure-math verbs
     /// (navigation, anchor math, the maximize compare) resolve against the
-    /// same work area, and a defaulted parameter only two of eighteen call
-    /// sites passed left the verbs computing against a gapped rect the apply
-    /// path then un-gapped: a lone column off-centre by (outerL+outerR)/2,
-    /// leftover width nobody claimed, and a maximize compare that never
-    /// matched. Inner gaps need no arm — with one column no inter-column gap
-    /// exists.
+    /// same work area, and a defaulted parameter that only a handful of the
+    /// twenty-eight call sites passed left the verbs computing against a
+    /// gapped rect the apply path then un-gapped: a lone column off-centre by
+    /// (outerL+outerR)/2, leftover width nobody claimed, and a maximize
+    /// compare that never matched. Inner gaps need no arm — with one column no
+    /// inter-column gap exists.
     /// @param columnCountOverride When >= 0, the smart-gaps arm judges the
     /// single-column case against THIS count instead of the live strip's.
     /// Only the drop indicator passes it: while a preview holds the dragged
@@ -888,10 +890,16 @@ private:
     /// It has to be remembered rather than derived: the park position is
     /// direction-agnostic (below the union of all outputs), so the parked
     /// rect cannot answer the question. The entry is written when the window
-    /// parks and consumed when it comes back on screen; windows that are
-    /// never parked never appear here. Every path that drops the window's
-    /// m_lastAppliedRect while it stays alive drops this too, and the
-    /// aliveness sweep reclaims died-parked entries. One seam-only gap: an
+    /// parks with a departure direction and consumed when it comes back on
+    /// screen; windows that are never parked never appear here. A park with no
+    /// direction (a hidden tab of an on-screen tabbed column, or a vertical
+    /// stack-overflow park) does not write one, and the tab case clears any
+    /// stale entry so the next activation appears in place. A path that drops
+    /// the window's m_lastAppliedRect while it stays alive drops this too, with
+    /// one deliberate exception: re-adoption TAKES the edge and puts it back
+    /// when the insert is refused, because a refusal leaves this strip alive
+    /// and the window may genuinely be parked right now. The aliveness sweep
+    /// reclaims died-parked entries. One seam-only gap: an
     /// embedder driving strip-level minimize directly (production models
     /// minimize as a float toggle, which clears) can strand an entry until
     /// the sweep.

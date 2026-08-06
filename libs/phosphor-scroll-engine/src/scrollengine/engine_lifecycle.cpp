@@ -157,7 +157,10 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         }
     }
 
-    ColumnWidth width = effectiveDefaultColumnWidth(screenId);
+    // Taken off the params rather than re-resolved: layoutParamsForScreen
+    // already resolved this exact value against this screen's override map and
+    // preset vocabulary, and the screenId overload would parse both again.
+    ColumnWidth width = params.defaultColumnWidth;
     ColumnDisplay display = effectiveDefaultColumnDisplay(screenId);
     // "Client decides" is the CONFIG default, so a per-screen rule override
     // outranks it — the header documents these overrides as layering over the
@@ -169,8 +172,8 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // The rule channel's bare fraction pins a width outright. The settings
     // channel's kind trio answers BY VALUE through
     // effectiveWidthClientDecides: a per-screen kind of Fixed/Preset/
-    // Proportion pins a width (effectiveDefaultColumnWidth above already
-    // resolved it), while a per-screen kind of ClientDecides means exactly
+    // Proportion pins a width (params.defaultColumnWidth above already
+    // carries it resolved), while a per-screen kind of ClientDecides means exactly
     // that — testing the kind key's mere PRESENCE here inverted the setting,
     // gating the client-size branch off on precisely the monitors scoped to
     // it.

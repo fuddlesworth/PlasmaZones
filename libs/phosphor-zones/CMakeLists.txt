@@ -5,8 +5,13 @@
 #
 # Passive data + geometry layer: Zone, Layout, ZoneDetector, ZoneHighlighter,
 # layout JSON serialization, and the IZoneDetector / IZoneLayoutRegistry abstract
-# contracts. Implements PhosphorLayout::ILayoutSource so editor / settings
-# code can render layout previews without depending on the daemon.
+# contracts. It also owns the native scrolling template trio — ScrollingTemplate
+# (the object plus its JSON round trip and normalization), ScrollingTemplateStore
+# (the per-user/system file store) and ScrollingTemplateSource (its
+# ILayoutSource projection) — so scrolling templates are a first-class layout
+# family beside manual layouts. Implements PhosphorLayout::ILayoutSource so
+# editor / settings code can render layout previews without depending on the
+# daemon.
 #
 # This library does NOT include the runtime engine that snaps windows to
 # zones (that's phosphor-snap, future work). It also does NOT include

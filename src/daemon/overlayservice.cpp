@@ -832,14 +832,11 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
         // which is the list its live snapping path actually uses. Same
         // shape as isSnappingContextInactive / activeLayoutIdForScreen.
         //
-        // Null-resolver polarity here is the OPPOSITE of the templatesScreen
-        // checks in buildLayoutsList / visibleLayoutCount, deliberately: an
-        // unwired resolver here trusts the scrolling assignment id and still
-        // yields template cards (the pre-injection default must not blank a
-        // scrolling picker), while there it reads as NOT-templates and keeps
-        // the aspect filter on. The two cannot diverge row-for-row because
-        // that filter only ever removes MANUAL rows, and this arm has
-        // already turned the manual family off.
+        // An unwired resolver trusts the scrolling assignment id and still
+        // yields template cards: the pre-injection default must not blank a
+        // scrolling picker. buildLayoutsList and visibleLayoutCount take their
+        // aspect-filter skip from this flag rather than re-reading the
+        // resolver, so both polarities are decided here, once.
         flags.manual = false;
         flags.autotile = false;
         flags.templates = true;
@@ -864,8 +861,13 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
     // perfectly good template for an ultrawide, and filtering can empty the
     // candidate list so the picker bails silently. Skip the filter there.
     // Mirrored in visibleLayoutCount below — the two must agree row-for-row.
-    const bool templatesScreen =
-        m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportTemplates;
+    //
+    // Read off the include flags, not the live resolver: the include arm
+    // decides "this screen shows templates" from the assignment id AND the
+    // resolver together, and a second, resolver-only read of the same question
+    // answers differently wherever the two disagree (an unwired resolver, most
+    // of all).
+    const bool templatesScreen = inc.templates;
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity,
         inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
@@ -904,9 +906,8 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
     const auto inc = resolvePerScreenLayoutInclude(screenId, &resolvedId);
     // Ordering doesn't affect count - skip custom order for performance.
     // Same gate/rows id agreement as buildLayoutsList, including the
-    // Templates-screen aspect-filter skip.
-    const bool templatesScreen =
-        m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportTemplates;
+    // Templates-screen aspect-filter skip read off the include flags.
+    const bool templatesScreen = inc.templates;
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity,
         inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),

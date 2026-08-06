@@ -878,6 +878,12 @@ void Daemon::stop()
     // them out was an asymmetry in a block whose whole purpose is that reset.
     m_derivedAutotileScreens.clear();
     m_derivedScrollingScreens.clear();
+    // Same shape again: the assignment snapshot is replaced wholesale by the
+    // next diffActiveAssignments, but the announce map beside it is advanced
+    // only when a card is shown, so a template announced before the stop would
+    // otherwise still count as "already seen" a session later.
+    m_activeAssignmentByScreen.clear();
+    m_lastAnnouncedTemplateByScreen.clear();
     // Per-session OSD gates. A resnap armed just before the stop leaves its
     // outstanding count behind, and the screen-removal cooldown deadline can
     // still be in the future — either one carried into the next start()

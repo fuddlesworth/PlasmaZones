@@ -268,7 +268,7 @@ QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
     //     first match in unspecified hash order, so a stale entry can shadow
     //     the live one.
     //   - m_notifiedWindowScreens is a single value per window so it cannot be
-    //     ambiguous, but three of its five writers store a POSITION-derived
+    //     ambiguous, but several of its writers store a POSITION-derived
     //     screen (the outputChanged frame-centre resolve, the virtual-screen
     //     re-resolve). A centred column straddling the screen edge can have
     //     its centre on the neighbouring output, so those can stamp a screen
@@ -415,7 +415,8 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
 
 void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows,
                                             const QSet<QString>& screenFilter, bool resetNotified,
-                                            bool enteringAutotile)
+                                            bool enteringAutotile,
+                                            const QHash<KWin::EffectWindow*, QString>& screenOverrides)
 {
     // Collect eligible windows using the same filtering as notifyWindowAdded,
     // then send one batch D-Bus call instead of per-window round-trips.
@@ -430,7 +431,14 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         }
 
         const QString windowId = m_effect->getWindowId(w);
-        const QString screenId = m_effect->getWindowScreenId(w);
+        // A caller-supplied id wins over the positional resolve, and is then
+        // the ONE value the filter, the notified-screen stamp, the pre-tile
+        // capture and the wire entry all read (see the header): the engine
+        // flip resolves under the pre-flip scrolling set, where a parked strip
+        // column is still attributed to its own output.
+        const auto overrideIt = screenOverrides.constFind(w);
+        const QString screenId =
+            overrideIt != screenOverrides.constEnd() ? overrideIt.value() : m_effect->getWindowScreenId(w);
         if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
             continue;
         }
@@ -461,7 +469,11 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         bool minimizedOnly = false;
         if (!isEligibleForTilingNotify(w, &minimizedOnly)) {
             if (minimizedOnly) {
-                claimAlreadyMinimizedAsFloated(w, windowId, screenFilter, enteringAutotile);
+                // Same resolved id, not a second resolve: this arm reads the
+                // screen filter too, so a re-resolve after an engine flip
+                // would drop the already-minimized windows the flip path
+                // specifically re-announces to claim.
+                claimAlreadyMinimizedAsFloated(w, windowId, screenFilter, enteringAutotile, screenId);
             }
             continue;
         }
@@ -830,8 +842,11 @@ void TilingHandler::onDaemonReady()
     // loadSettings' reply below re-drives the fetch that restores them.
     //
     // m_activeLayoutRulesWithheld is deliberately never CLEARED alongside the
-    // unseeding. Every successful loadRuleAnimationsFromDbus reply recomputes
-    // it outright (shader_config_dbus.cpp assigns, never ORs).
+    // unseeding. Every loadRuleAnimationsFromDbus reply that PARSES recomputes
+    // it outright (shader_config_dbus.cpp assigns, never ORs); the
+    // malformed-payload arms return before the assignment, and correctly so —
+    // they run no slice either, so the standing marker still matches the
+    // standing rule sets.
     // Clearing it here would be unsafe in the one case that matters: if this
     // bring-up's getAllRules errors or times out, no reply recomputes the
     // marker, and a cleared marker leaves the withheld ActiveLayout rules

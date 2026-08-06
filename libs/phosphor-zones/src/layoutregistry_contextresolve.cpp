@@ -114,12 +114,13 @@ bool matchPinsFieldPositively(const PWR::MatchExpression& match, PWR::Field fiel
 std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
                                                                       const QString& activity) const
 {
-    // Resolution is per-slot. There are three independent slots — engine mode,
-    // snapping layout, tiling algorithm — each resolved separately, so a
-    // layout-only rule (a SetSnappingLayout or SetTilingAlgorithm with NO
-    // SetEngineMode) sets the layout for its engine in this context WITHOUT
-    // forcing the engine mode. The engine mode is the global default's (or
-    // another rule's); the layout slot is just filled.
+    // Resolution is per-slot. There are four independent slots — engine mode,
+    // snapping layout, tiling algorithm, scrolling template — each resolved
+    // separately, so a payload-only rule (a SetSnappingLayout,
+    // SetTilingAlgorithm or SetScrollingTemplate with NO SetEngineMode) sets
+    // the payload for its engine in this context WITHOUT forcing the engine
+    // mode. The engine mode is the global default's (or another rule's); the
+    // payload slot is just filled.
     //
     // The winner per slot is simply the HIGHEST-PRIORITY matching rule carrying
     // that slot's action, ties broken by list order. There is no specificity
@@ -132,12 +133,13 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     //
     // If no slot matched at all it's a genuine miss (nullopt) and the caller
     // routes to the global default. If at least one slot matched, the entry's
-    // base is the engine-mode rule (mode + the layout tokens that rule itself
-    // carries, preserving mode-toggle losslessness); the per-slot layout
-    // winners then override the snapping-layout / tiling-algorithm fields. When
-    // only a layout rule matched (no engine-mode rule), the base is the global
-    // default for this context, so the resolved mode is the default's and the
-    // layout rule merely fills its slot.
+    // base is the engine-mode rule (mode + the payload tokens that rule itself
+    // carries, preserving mode-toggle losslessness); the per-slot payload
+    // winners then override the snapping-layout / tiling-algorithm /
+    // scrolling-template fields. When only a payload rule matched (no
+    // engine-mode rule), the base is the global default for this context, so
+    // the resolved mode is the default's and the payload rule merely fills its
+    // slot.
     //
     // Hot-path cache via the shared revision-invalidated memoizer. The linear
     // walk is O(N rules × M predicates per match); overlay/OSD callers issue it
@@ -245,11 +247,12 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
                 return std::nullopt; // genuine miss — the caller routes to the default
             }
 
-            // The engine-mode rule decides the mode (and carries its own layout
-            // tokens, preserving mode-toggle losslessness); the per-slot layout
-            // winners fill their own field. Each slot independently took the
-            // highest-priority matching rule, so the layout slots track their
-            // own winner regardless of the engine-mode rule.
+            // The engine-mode rule decides the mode (and carries its own
+            // payload tokens, preserving mode-toggle losslessness); the
+            // per-slot payload winners fill their own field. Each slot
+            // independently took the highest-priority matching rule, so the
+            // payload slots track their own winner regardless of the
+            // engine-mode rule.
             RuleSlotResolution resolved;
             if (modeRule != nullptr) {
                 resolved.modeEntry = entryFromRuleMatchActions(*modeRule);

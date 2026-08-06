@@ -441,6 +441,15 @@ void Daemon::showScrollingModeOsd(const QString& screenId, OsdTrigger trigger, S
         stopScrollingOsdSettleTimer(screenId);
         return;
     }
+    // This card (rendered now or a settle-beat later) announces the strip
+    // with the template currently in force, so the template-only gate's
+    // ledger advances HERE — the one funnel every mode-card producer routes
+    // through (shortcut toggle, KCM apply, unlock, desktop switch alike).
+    if (m_layoutManager) {
+        const PhosphorZones::ScrollingTemplate current = m_layoutManager->scrollingTemplateForContext(
+            screenId, currentDesktopForScreen(screenId), currentActivity());
+        m_lastAnnouncedTemplateByScreen.insert(screenId, current.isValid() ? current.id.toString() : QString());
+    }
     if (style == OsdStyle::Preview && m_overlayService) {
         // ONE strip resolve, threaded into the render: probing with a
         // different accessor than the renderer used meant two relayouts of
@@ -529,11 +538,16 @@ void Daemon::showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& te
     if (style == OsdStyle::None) {
         return;
     }
+    // Template-card twin of the ledger advance in showScrollingModeOsd: every
+    // producer of a template card routes through here.
+    m_lastAnnouncedTemplateByScreen.insert(screenId, templ.id.toString());
     if (style == OsdStyle::Text) {
         // The text card is a bare D-Bus call to plasmashell's OSD service, so
         // it works without an overlay service. Only the preview arm below
         // needs one, which is why the null check sits there and not above.
-        showKdeTextOsd(QStringLiteral("plasmazones"), PhosphorI18n::tr("Column template: %1").arg(templ.name));
+        showKdeTextOsd(
+            QStringLiteral("plasmazones"),
+            PhosphorI18n::tr("Column template — %1", "OSD caption, %1 is the template name").arg(templ.name));
         return;
     }
     if (!m_overlayService) {
@@ -715,8 +729,11 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
         // scrollingActive false and handed a scrolling screen the manual list.
         const bool autotileEnabled = m_settings->autotileEnabled();
 
-        // Templates needs BOTH conjuncts, exactly as
-        // resolvePerScreenLayoutInclude in overlayservice.cpp spells them:
+        // Templates needs BOTH conjuncts, the same pair
+        // resolvePerScreenLayoutInclude in overlayservice.cpp requires. Not
+        // literally the same test: that one reads an injected resolver and
+        // treats an unwired one as Templates, while this one asks the router
+        // directly and has no such escape.
         // a scrolling assignment id AND a live engine still reporting
         // Templates. The live capability alone is not enough (an engine can
         // report Templates for a screen whose assignment is not scrolling),

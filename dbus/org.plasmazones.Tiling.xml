@@ -23,7 +23,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </property>
         <property name="activeLayouts" type="a{sv}" access="read">
             <annotation name="org.qtproject.QtDBus.QtTypeName" value="QVariantMap"/>
-            <annotation name="org.gtk.GDBus.DocString" value="Per-screen RULES-VISIBLE active layout id (screenId to string): a snapping layout UUID, autotile:&lt;algorithmId&gt;, scrolling:&lt;templateUuid&gt; for a templated scrolling context, or the bare scrolling: sentinel when no template resolves. Pushed by the daemon so effect-evaluated window rules see the same ActiveLayout vocabulary as daemon-evaluated context rules. Covers EVERY effective screen, not just engine-managed ones."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Per-screen RULES-VISIBLE active layout id (screenId to string): a snapping layout UUID, autotile:&lt;algorithmId&gt;, scrolling:&lt;templateUuid&gt; for a templated scrolling context, or the bare scrolling: sentinel when no template resolves. Pushed by the daemon so effect-evaluated window rules see the same ActiveLayout vocabulary as daemon-evaluated context rules. Covers EVERY effective screen, not just engine-managed ones. Changes are announced on the activeLayoutsChanged signal below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
         </property>
 
         <!-- ═══════════════════════════════════════════════════════════════════════════

@@ -22,9 +22,11 @@
 // purpose: every registry TU defines them inside its registration function and
 // #undefs them at the end, which keeps them out of every other TU in a unity
 // batch — a shared macro header with an include guard would define them only
-// once per batch and leave the later TUs without them. KEEP IN SYNC with the
-// definitions in settingsadaptor_registry.cpp (they are frozen boilerplate; a
-// change there must land here in the same commit).
+// once per batch and leave the later TUs without them. Each TU defines only
+// the forms its own keys use, so the set differs between them. KEEP THE
+// SHARED FORMS IN SYNC across the four registry TUs (they are frozen
+// boilerplate; a change to one spelling must land in every TU that carries
+// that form, in the same commit).
 
 #include "settingsadaptor.h"
 #include "core/interfaces/interfaces.h"

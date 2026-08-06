@@ -67,7 +67,16 @@ private:
         PhosphorZones::ScrollingTemplate templ;
         templ.name = name;
         templ.presetColumnWidths = {0.333, 0.5, 0.667};
-        return store->saveTemplate(templ);
+        const QUuid id = store->saveTemplate(templ);
+        // Same guard as LayoutManagerAssignmentFixture's twin: QVERIFY expands
+        // to a bare `return;`, which a QUuid-returning helper cannot use, so
+        // call the macro's own reporting entry point. A refused save is then
+        // the FIRST reported failure instead of whatever the null id goes on
+        // to break. The caller is not aborted and still receives a null id.
+        if (!QTest::qVerify(!id.isNull(), "!id.isNull()", "template save was refused", __FILE__, __LINE__)) {
+            return {};
+        }
+        return id;
     }
 
     PhosphorZones::Layout* createTestLayout(const QString& name)
@@ -92,8 +101,10 @@ private:
 private Q_SLOTS:
     void cleanup()
     {
-        m_guards.clear();
+        // Stores first: a store's destructor still resolves paths under the
+        // guard's isolated XDG dirs, so the guard has to outlive it.
         m_stores.clear();
+        m_guards.clear();
     }
 
     void displayIdForAssignment_substitutesTemplateForSentinel()
@@ -161,19 +172,34 @@ private Q_SLOTS:
         Settings settings(nullptr);
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
+        // A store with a real template assigned, so the two readers below can
+        // actually disagree. Without a wired store every template resolve
+        // answers "no template" and the closing assertions would hold whatever
+        // the downgrade did to the stored field.
+        auto* store = attachTemplateStore(mgr.data());
+        const QUuid templId = createTestTemplate(store, QStringLiteral("Template"));
 
         UnifiedLayoutController controller(mgr.data(), &settings, nullptr, nullptr);
         controller.setCurrentScreenName(QStringLiteral("DP-1"));
         controller.setCurrentLayoutSupport(LayoutSupport::Placement);
 
         const int desktop = mgr->currentVirtualDesktopForScreen(QStringLiteral("DP-1"));
-        mgr->assignLayoutById(QStringLiteral("DP-1"), desktop, QString(),
-                              QString(PhosphorLayout::LayoutId::ScrollingId));
+        // assignScrollingTemplate flips the mode to Scrolling and stores the
+        // template id, which is the cascade state a router downgrade sits on
+        // top of.
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), desktop, QString(), templId.toString());
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), desktop), PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()).id, templId);
 
         QVERIFY(controller.applyLayoutById(layout->id().toString()));
 
         QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), desktop), PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), desktop, QString()), layout);
+        // The lossless-toggle contract: the downgrade applies as snapping and
+        // must NOT clear the stored template. The raw field reader still holds
+        // it, and only the mode-gated resolver goes quiet, so flipping the
+        // screen back to scrolling restores the same template.
+        QCOMPARE(mgr->scrollingTemplateLayoutForScreen(QStringLiteral("DP-1"), desktop, QString()), templId.toString());
         QVERIFY(!mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()).isValid());
     }
 };

@@ -728,13 +728,15 @@ public:
         /// Layouts drive window placement (snap zone layouts, autotile
         /// algorithm cards): the classic picker semantics.
         Placement,
-        /// Layouts are consumed as sizing templates (the scrolling engine's
-        /// column-width vocabulary, plus a height vocabulary when the layout
-        /// has stacked zones): the picker applies a layout as the screen's
-        /// template rather than as window placement. The daemon routes such
-        /// applies to the assignment's template slot and swaps in the native
-        /// scrolling-template cards as the candidate set (no zone layouts, no
-        /// autotile cards).
+        /// The engine consumes a first-class TEMPLATE object rather than a
+        /// placement layout. For the scrolling engine that object is a native
+        /// ScrollingTemplate: a seed blueprint of column widths and displays,
+        /// the default-width trio for columns beyond it, and the preset width
+        /// and height vocabularies the size shortcuts cycle through. Picking an
+        /// entry sets the screen's template, it does not place windows. The
+        /// daemon routes such applies to the assignment's template slot and
+        /// makes the native template cards the candidate set (no zone layouts,
+        /// no autotile cards).
         Templates
     };
 

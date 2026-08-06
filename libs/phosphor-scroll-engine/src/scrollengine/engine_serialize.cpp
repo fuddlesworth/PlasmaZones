@@ -129,10 +129,10 @@ ColumnWidth widthFromJson(const QJsonObject& obj, const QList<qreal>& legacyVoca
     const int kind = obj.value(kKind()).toInt(static_cast<int>(ColumnWidth::Proportion));
     w.kind = (kind == ColumnWidth::Fixed || kind == ColumnWidth::Preset) ? static_cast<ColumnWidth::Kind>(kind)
                                                                          : ColumnWidth::Proportion;
-    w.proportion = qBound<qreal>(0.05, obj.value(kProportion()).toDouble(0.5), 1.0);
+    w.proportion = qBound<qreal>(MinColumnWidthFraction, obj.value(kProportion()).toDouble(0.5), 1.0);
     w.fixedPx = qMax(0, obj.value(kFixedPx()).toInt(0));
     if (obj.contains(kPresetFraction())) {
-        w.presetFraction = qBound<qreal>(0.05, obj.value(kPresetFraction()).toDouble(0.5), 1.0);
+        w.presetFraction = qBound<qreal>(MinColumnWidthFraction, obj.value(kPresetFraction()).toDouble(0.5), 1.0);
     } else {
         // Legacy blob: resolve the stored index against the current
         // vocabulary. If the list changed since the write the anchor lands on
@@ -168,7 +168,7 @@ WindowHeight heightFromJson(const QJsonObject& obj, const QList<qreal>& legacyVo
     h.weight = qBound<qreal>(0.01, obj.value(kWeight()).toDouble(1.0), 100.0);
     h.fixedPx = qMax(0, obj.value(kFixedPx()).toInt(0));
     if (obj.contains(kPresetFraction())) {
-        h.presetFraction = qBound<qreal>(0.05, obj.value(kPresetFraction()).toDouble(0.5), 1.0);
+        h.presetFraction = qBound<qreal>(MinWindowHeightFraction, obj.value(kPresetFraction()).toDouble(0.5), 1.0);
     } else {
         const int legacyIdx = qMax(0, obj.value(kPresetIdx()).toInt(0));
         h.presetFraction =

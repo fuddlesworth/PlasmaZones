@@ -4,7 +4,7 @@
 #pragma once
 
 // Shared fixture helpers for the whole PhosphorScrollEngine test suite — the
-// two strip-model files and the five engine files. One definition of the
+// two strip-model files and the six engine files. One definition of the
 // 1200x800 geometry, because a work area that drifts between files quietly
 // changes what every hardcoded pixel expectation means, and one definition
 // of the headless engine fixture, because its two geometry providers are

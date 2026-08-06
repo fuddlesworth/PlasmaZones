@@ -196,6 +196,7 @@ Kirigami.Dialog {
                 id: nameField
 
                 Kirigami.FormData.label: i18n("Name:")
+                Accessible.name: i18n("Template name")
                 placeholderText: i18n("Template name")
                 // The same cap the D-Bus boundary applies in the layout
                 // adaptor's saveScrollingTemplate (clampName), read from the
@@ -208,6 +209,7 @@ Kirigami.Dialog {
                 id: descriptionField
 
                 Kirigami.FormData.label: i18n("Description:")
+                Accessible.name: i18n("Template description")
                 placeholderText: i18n("Optional description")
                 // Same boundary clamp, description arm.
                 maximumLength: root.scrollingConstants.descriptionMaxLength
@@ -317,6 +319,7 @@ Kirigami.Dialog {
                 id: defaultWidthKindCombo
 
                 Kirigami.FormData.label: i18n("Default width:")
+                Accessible.name: i18n("Default column width")
                 textRole: "text"
                 valueRole: "value"
                 model: [
@@ -345,6 +348,7 @@ Kirigami.Dialog {
                 readonly property bool isFixed: defaultWidthKindCombo.currentValue === root.scrollingConstants.kindFixed
 
                 Kirigami.FormData.label: defaultWidthValueSpin.isFixed ? i18n("Width in pixels:") : i18n("Width:")
+                Accessible.name: defaultWidthValueSpin.isFixed ? i18n("Default column width in pixels") : i18n("Default column width")
                 visible: defaultWidthKindCombo.currentValue === root.scrollingConstants.kindProportion || defaultWidthValueSpin.isFixed
                 // The Fixed floor is deliberate UI policy rather than a hard
                 // limit: ConfigDefaults sets it at 100px, well above the
@@ -360,6 +364,7 @@ Kirigami.Dialog {
                 id: defaultPresetIndexSpin
 
                 Kirigami.FormData.label: i18n("Preset number:")
+                Accessible.name: i18n("Default width preset number")
                 visible: defaultWidthKindCombo.currentValue === root.scrollingConstants.kindPreset
                 // Stored 0-based, shown 1-based, the same offset the Scrolling
                 // pages' preset spins use. The ceiling is the smaller of the
@@ -376,6 +381,7 @@ Kirigami.Dialog {
                 id: defaultDisplayCombo
 
                 Kirigami.FormData.label: i18n("Show windows as:")
+                Accessible.name: i18n("Show windows as")
                 model: root.displayOptions
             }
 
@@ -383,6 +389,7 @@ Kirigami.Dialog {
                 id: presetWidthsField
 
                 Kirigami.FormData.label: i18n("Width presets:")
+                Accessible.name: i18n("Width presets")
                 placeholderText: i18n("For example 0.333, 0.5, 0.667")
             }
 
@@ -390,6 +397,7 @@ Kirigami.Dialog {
                 id: presetHeightsField
 
                 Kirigami.FormData.label: i18n("Height presets:")
+                Accessible.name: i18n("Height presets")
                 placeholderText: i18n("For example 0.333, 0.5, 0.667")
             }
         }

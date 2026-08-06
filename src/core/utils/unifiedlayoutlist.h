@@ -88,12 +88,22 @@ buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
  * Filters out layouts that are:
  * - hiddenFromSelector = true
  * - Not allowed on the given screen/desktop/activity (if allow lists are non-empty)
- * - Not matching the screen's aspect ratio class (if layout has an aspectRatioClass tag)
+ * - Not matching the screen's aspect ratio class, when @p filterByAspectRatio
+ *   is true and @p screenAspectRatio is known
  *
- * Layouts tagged with a non-matching aspect ratio class are not removed entirely;
- * they are moved to the end of the list so the selector can show them in a
- * collapsed "Other" section. The `recommended` field in the returned entry
- * indicates whether the layout matches the current screen's aspect ratio.
+ * The context's ACTIVE layout is exempt from every one of these so the selector and
+ * cycling can never lose it.
+ *
+ * @p screenAspectRatio alone only TAGS rows: it sets `recommended` on each
+ * entry, which a caller can use to group the mismatched ones. Rows are dropped
+ * only when @p filterByAspectRatio is also true.
+ *
+ * @p includeScrollingTemplates gates the native ScrollingTemplate rows, and
+ * @p templateStore supplies them — both are needed for template entries to
+ * appear. Unlike the manual layouts above, template rows pass through
+ * unfiltered: no allow lists, no hidden flag and no aspect filter apply to
+ * them (a column vocabulary is not a placement, so screen shape says nothing
+ * about its fit).
  *
  * See the non-filtered overload for @p autotileSource / @p algorithmRegistry
  * semantics - same fallback rules apply.

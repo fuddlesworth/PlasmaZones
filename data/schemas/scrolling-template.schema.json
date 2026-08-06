@@ -55,7 +55,7 @@
             "type": "array",
             "items": { "$ref": "#/definitions/fraction" },
             "maxItems": 16,
-            "description": "Same 16-entry cap as columns: normalize() truncates longer vocabularies, so a longer authored list would be silently repaired."
+            "description": "Normalization sorts the entries ascending, drops any entry within 0.01 of the one before it, then keeps the smallest 16 that survive. A longer authored list loses its widest entries silently, so the same 16-entry cap as columns is asserted here to make that visible up front."
         },
         "column": {
             "type": "object",
@@ -68,8 +68,9 @@
         },
         "columnWidth": {
             "type": "object",
+            "required": ["kind"],
             "additionalProperties": false,
-            "description": "Shape a column opens at once the blueprint is exhausted. The trio is pushed to the engine as a unit, so kind selects which of value and presetIndex answers.",
+            "description": "Shape a column opens at once the blueprint is exhausted. The trio is pushed to the engine as a unit, so kind selects which of value and presetIndex answers. kind is required because fromJson defaults a missing one to 3 Preset, which makes an authored value silently unread.",
             "properties": {
                 "kind": {
                     "type": "integer",
@@ -88,19 +89,37 @@
                     "description": "Position in presetColumnWidths for kind 3. Clamped to the last entry when it points past the list."
                 }
             },
-            "if": {
-                "properties": { "kind": { "const": 0 } },
-                "required": ["kind"]
-            },
-            "then": {
-                "properties": {
-                    "value": {
-                        "minimum": 0.05,
-                        "maximum": 1,
-                        "description": "Kind 0 reads value as a work-area fraction, so it obeys the same floor and ceiling as every other fraction. Kind 1 reads it as a pixel count and stays unbounded above."
+            "allOf": [
+                {
+                    "if": {
+                        "properties": { "kind": { "const": 0 } },
+                        "required": ["kind"]
+                    },
+                    "then": {
+                        "properties": {
+                            "value": {
+                                "minimum": 0.05,
+                                "maximum": 1,
+                                "description": "Kind 0 reads value as a work-area fraction, so it obeys the same floor and ceiling as every other fraction."
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": { "kind": { "const": 1 } },
+                        "required": ["kind"]
+                    },
+                    "then": {
+                        "properties": {
+                            "value": {
+                                "minimum": 1,
+                                "description": "Kind 1 reads value as a pixel count. It stays unbounded above, and normalize() raises anything under one physical pixel to 1, so a sub-pixel width is a typo rather than a request."
+                            }
+                        }
                     }
                 }
-            }
+            ]
         }
     }
 }

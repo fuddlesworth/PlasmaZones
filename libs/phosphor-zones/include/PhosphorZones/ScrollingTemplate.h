@@ -6,6 +6,7 @@
 #include "phosphorzones_export.h"
 
 #include <QJsonObject>
+#include <QLatin1String>
 #include <QList>
 #include <QString>
 #include <QUuid>
@@ -28,6 +29,17 @@ inline constexpr qreal MinTemplateFraction = 0.05;
 /// Normalization drops the excess from all three lists, and the value is
 /// exported to the settings UI through SettingsController::scrollingConstants().
 inline constexpr int MaxTemplateColumns = 16;
+
+/// The engine's DefaultWidthKind wire values, mirrored the same hand-written
+/// way MinTemplateFraction mirrors its floor: this library deliberately does
+/// not depend on phosphor-scroll-engine, so the vocabulary is repeated by
+/// documented value and is append-only on both sides. Every site in this
+/// library that compares or coerces a default-width kind reads these rather
+/// than a bare integer.
+inline constexpr int DefaultWidthKindProportion = 0;
+inline constexpr int DefaultWidthKindFixed = 1;
+inline constexpr int DefaultWidthKindClientDecides = 2;
+inline constexpr int DefaultWidthKindPreset = 3;
 
 /// Two preset stops closer together than this are the same stop: the
 /// normalization dedupe drops the later one. Exported to the settings UI
@@ -57,6 +69,23 @@ struct PHOSPHORZONES_EXPORT ScrollingTemplateColumn
 
     bool operator==(const ScrollingTemplateColumn&) const = default;
 };
+
+/**
+ * @brief The template JSON keys other modules have to spell.
+ *
+ * `id` is the persisted identity key. `isSystem` and `sourcePath` are NOT
+ * part of the file format (the store stamps both at load); they are the
+ * spellings the settings app's editing map and the D-Bus wire enrichment
+ * add on top, and they live here so the sides cannot drift apart. The rest
+ * of the file format is written and read in one place,
+ * ScrollingTemplate::toJson / fromJson, so those keys stay local to that
+ * translation unit.
+ */
+namespace TemplateJsonKeys {
+inline constexpr QLatin1String Id{"id"};
+inline constexpr QLatin1String IsSystem{"isSystem"};
+inline constexpr QLatin1String SourcePath{"sourcePath"};
+} // namespace TemplateJsonKeys
 
 /**
  * @brief A scrolling screen's first-class sizing template
@@ -103,7 +132,7 @@ public:
 
     /// Default column width for columns beyond the blueprint, spelled in the
     /// engine's settings-channel trio (see class doc for the kind values).
-    int defaultColumnWidthKind = 3; ///< DefaultWidthKind::Preset
+    int defaultColumnWidthKind = DefaultWidthKindPreset;
     qreal defaultColumnWidthValue = 0.5; ///< Proportion fraction / Fixed px
     int defaultColumnWidthPresetIndex = 1; ///< Kind Preset: index into presetColumnWidths
     /// Mirrors ColumnDisplay: 0 Normal, 1 Tabbed.

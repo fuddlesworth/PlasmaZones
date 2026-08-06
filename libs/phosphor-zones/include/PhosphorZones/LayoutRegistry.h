@@ -322,7 +322,7 @@ public:
      *
      * The token is stamped onto every windowless context WindowQuery this
      * registry builds (assignment, gap, lock, overlay, default-assignment,
-     * tiling-params), so an orientation rule can drive any context slot — for example a different
+     * tiling-params, scrolling-params), so an orientation rule can drive any context slot — for example a different
      * tiling algorithm on a rotated (portrait) monitor. Orientation derives from
      * screen geometry alone, independent of the resolved layout, so it carries no
      * recursion risk (unlike an active-layout query). The daemon wires this to
@@ -571,9 +571,14 @@ public:
 
     /// Stamp the screen-orientation token onto @p query from
     /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
-    /// returns nullopt). Called at every windowless-context query build site so a
-    /// @c Field::ScreenOrientation predicate can match regardless of which
-    /// context slot (assignment / gap / lock / overlay) is being resolved.
+    /// returns nullopt). Used by the two UNCACHED param resolvers
+    /// (tiling-params, scrolling-params); the five cached resolvers assign
+    /// @ref screenOrientationToken directly, because they must fold the very
+    /// same token into their cache key and re-reading the provider could hand
+    /// the query a token the key does not describe. Either way every
+    /// windowless-context query carries the token, so a
+    /// @c Field::ScreenOrientation predicate matches regardless of which
+    /// context slot is being resolved.
     /// Orientation is geometry-derived and layout-independent, so this is safe to
     /// call from the assignment cascade (no recursion, unlike an active-layout read).
     void stampScreenOrientation(PhosphorRules::WindowQuery& query, const QString& screenId) const
@@ -905,6 +910,15 @@ private:
     QString layoutSettingsFilePath() const;
     void readQuickLayouts();
     void writeQuickLayouts();
+    /// How many quick-layout slots one mode carries, i.e. the legal slot
+    /// numbers are 1..QuickSlotCount. The ONE authority for the bound: both
+    /// writers validate against it and the persistence reader walks it, so a
+    /// raise cannot half-land. Mirrors
+    /// PhosphorProtocol::Service::QuickLayoutSlotCount by hand, since this
+    /// library does not depend on phosphor-protocol — the same way
+    /// MinTemplateFraction repeats the engine's floor. Raising one side without
+    /// the other makes the extra slots unreadable, not corrupt.
+    static constexpr int QuickSlotCount = 9;
     /// Map a tiling mode to its @ref m_quickLayoutSlots array index — the
     /// ONE authority every quick-slot entry point (read, apply, shortcut
     /// lookup, both writers) consults. Scrolling owns its OWN array since
@@ -1164,7 +1178,7 @@ private:
     }
 
     /// The rule-derived slot resolution cached by @ref resolveAssignmentEntry.
-    /// Holds ONLY what the rule set produced for each of the three independent
+    /// Holds ONLY what the rule set produced for each of the four independent
     /// slots. Given a fixed cache key the value is a pure function of the rule
     /// set (the cache's revision-invalidation contract). The live tiled-window
     /// count and the screen orientation are the non-rule-set inputs that affect
@@ -1175,10 +1189,10 @@ private:
     /// in AFTER the cache returns, so a default-setting change is reflected
     /// immediately without a rule-set revision bump (a settings edit produces
     /// none). @c modeEntry is engaged when an engine-mode rule won (it carries
-    /// that rule's mode plus its own layout tokens); when disengaged the caller
+    /// that rule's mode plus its own payload tokens); when disengaged the caller
     /// bases the entry on the live global default for the context.
-    /// @c snappingLayout / @c tilingAlgorithm are engaged when a layout rule
-    /// filled that slot, and override the base's field.
+    /// @c snappingLayout / @c tilingAlgorithm / @c scrollingTemplate are engaged
+    /// when a payload rule filled that slot, and override the base's field.
     struct RuleSlotResolution
     {
         std::optional<AssignmentEntry> modeEntry;

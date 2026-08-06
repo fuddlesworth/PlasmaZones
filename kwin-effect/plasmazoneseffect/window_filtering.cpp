@@ -157,7 +157,9 @@ void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
 PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);
-    const QString screenId = getWindowScreenId(w);
+    // Id-taking overload: the scroll override resolves off the window id, and
+    // this funnel already holds it.
+    const QString screenId = getWindowScreenId(w, windowId);
     PhosphorRules::WindowQuery query = ruleQueryFor(w, screenId, isWindowFloating(windowId), isWindowSnapped(windowId),
                                                     m_tilingHandler->isTiledWindow(windowId), zoneForWindow(windowId));
     // Scroll-managed windows ride the same tile-request pipeline as autotile,
@@ -202,7 +204,11 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
             orientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
         }
     }
-    if (orientation.isEmpty()) {
+    // The centre-derived fallback is skipped when ruleQueryFor already stamped
+    // one: it takes that branch for exactly the empty-screenId case, from the
+    // same helper on the same frame, so re-running it would recompute a value
+    // that is already in the query (a screenAt walk per rule query).
+    if (orientation.isEmpty() && query.screenOrientation.isEmpty()) {
         orientation = centreScreenOrientation(w);
     }
     if (!orientation.isEmpty()) {

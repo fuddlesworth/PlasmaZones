@@ -20,9 +20,10 @@
  * to link the whole SettingsController topology TU. This file is that guard.
  * It is scoped to what can be checked cheaply and exactly: the one-owner rule
  * across the WHOLE manifest, and complete coverage of a swept subset of
- * schema groups — Scrolling and Scrolling.Behavior (whose four page manifests
- * are the newest and least exercised) plus Rendering (whose Gpu key once
- * shipped with no manifest owner).
+ * schema groups. The swept set is the four scrolling groups (Scrolling,
+ * Scrolling.Behavior, Scrolling.TabIndicator and Scrolling.DropIndicator,
+ * whose page manifests are the newest and least exercised) plus Rendering,
+ * whose Gpu key once shipped with no manifest owner.
  */
 
 #include <QSet>
@@ -137,9 +138,9 @@ private Q_SLOTS:
     }
 
     /// The other direction, over the swept groups: every key the schema
-    /// declares under Scrolling, Scrolling.Behavior, or Rendering must be
-    /// owned by exactly one page, except the master switch listed in
-    /// deliberatelyUnowned().
+    /// declares under Scrolling, Scrolling.Behavior, Scrolling.TabIndicator,
+    /// Scrolling.DropIndicator or Rendering must be owned by exactly one
+    /// page, except the entries listed in deliberatelyUnowned().
     ///
     /// The scrolling pages also SHOW two settings they deliberately do not
     /// own — Tiling.Gaps/SmartGaps, forwarded from the shared gaps group and

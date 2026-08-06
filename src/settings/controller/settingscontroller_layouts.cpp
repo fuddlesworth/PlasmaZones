@@ -26,6 +26,7 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/LayoutComputeService.h>
+#include <PhosphorZones/ScrollingTemplate.h>
 #include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include <QDBusMessage>
@@ -378,6 +379,9 @@ void SettingsController::onScrollingTemplatesChanged()
 
 void SettingsController::importScrollingTemplate(const QString& filePath)
 {
+    // Any exit below without a fresh mint must not leave an earlier create's
+    // reveal id armed (duplicateLayout's shape), so drop it up front.
+    m_pendingSelectLayoutId.clear();
     const QString safe = Utils::sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "importScrollingTemplate: refusing unsafe path" << filePath;
@@ -408,10 +412,15 @@ void SettingsController::importScrollingTemplate(const QString& filePath)
     // Imports always mint a fresh id: keeping a file's id would silently
     // OVERWRITE an existing template that happens to share it (or shadow a
     // bundled one), which is never what "import" means.
-    data.remove(QStringLiteral("id"));
+    data.remove(PhosphorZones::TemplateJsonKeys::Id);
     // Route through the daemon-first save so the authoritative store
     // persists it; validation failures toast through the shared path.
-    saveScrollingTemplate(data);
+    // Stash the minted id so the refresh that follows selects the import in
+    // the list, the way importLayout and duplicateLayout do.
+    const QString newId = saveScrollingTemplateReturningId(data);
+    if (!newId.isEmpty()) {
+        m_pendingSelectLayoutId = newId;
+    }
 }
 
 void SettingsController::exportScrollingTemplate(const QString& templateId, const QString& filePath)
@@ -491,12 +500,17 @@ QVariantMap SettingsController::scrollingTemplateForEditing(const QString& templ
         return {};
     }
     QVariantMap map = templ.toJson().toVariantMap();
-    map.insert(QStringLiteral("isSystem"), templ.isSystem);
-    map.insert(QStringLiteral("sourcePath"), templ.sourcePath);
+    map.insert(PhosphorZones::TemplateJsonKeys::IsSystem, templ.isSystem);
+    map.insert(PhosphorZones::TemplateJsonKeys::SourcePath, templ.sourcePath);
     return map;
 }
 
 bool SettingsController::saveScrollingTemplate(const QVariantMap& templateData)
+{
+    return !saveScrollingTemplateReturningId(templateData).isEmpty();
+}
+
+QString SettingsController::saveScrollingTemplateReturningId(const QVariantMap& templateData)
 {
     // Daemon-first like every layout mutation; the local store refreshes on
     // the scrollingTemplatesChanged subscription.
@@ -511,10 +525,11 @@ bool SettingsController::saveScrollingTemplate(const QVariantMap& templateData)
             : PhosphorI18n::tr("The daemon refused the template. Check that it has a name.");
         qCWarning(lcCore) << "saveScrollingTemplate failed:" << error;
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not save the template: %1").arg(error));
-        return false;
+        return {};
     }
+    const QString savedId = reply.arguments().first().toString();
     scheduleLayoutLoad();
-    return true;
+    return savedId;
 }
 
 void SettingsController::deleteScrollingTemplate(const QString& templateId)
@@ -543,6 +558,9 @@ void SettingsController::duplicateScrollingTemplate(const QString& templateId)
         qCWarning(lcCore) << "duplicateScrollingTemplate failed:" << reply.errorMessage();
         Q_EMIT layoutOperationFailed(
             PhosphorI18n::tr("Could not duplicate the template: %1").arg(reply.errorMessage()));
+        // Clear so a stale create's reply cannot land a layoutAdded() for an
+        // id this failed duplicate never produced, matching duplicateLayout.
+        m_pendingSelectLayoutId.clear();
     } else if (reply.arguments().isEmpty() || reply.arguments().first().toString().isEmpty()) {
         // An empty id is how the daemon reports a refusal it can name (an id
         // that no longer resolves, an unwritable user directory) — same
@@ -550,6 +568,9 @@ void SettingsController::duplicateScrollingTemplate(const QString& templateId)
         // for above.
         qCWarning(lcCore) << "duplicateScrollingTemplate: daemon refused" << templateId;
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not duplicate the template."));
+    } else {
+        // Select the copy once the refresh lands, the way duplicateLayout does.
+        m_pendingSelectLayoutId = reply.arguments().first().toString();
     }
     scheduleLayoutLoad();
 }

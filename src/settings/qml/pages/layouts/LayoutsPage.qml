@@ -179,7 +179,7 @@ SettingsFlickable {
         // prefix the tiling order to the card namespace before matching, or the
         // Priority sort silently no-ops for the tiling view.
         // Template sort indexes deliberately alias the shared comparators:
-        // 0 = Name, 1 = zoneCount (a template's column count). No custom
+        // 0 = Name, 1 = zoneCount (a template's width count). No custom
         // order exists for templates, so the Priority arm never engages.
         let customOrder = root.viewMode === 2 ? [] : (root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder().map(id => "autotile:" + id));
         Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
@@ -243,9 +243,11 @@ SettingsFlickable {
     function buildGroups(filtered, groupIdx) {
         if (root.viewMode === 2) {
             if (groupIdx === filterBar.groupTemplateSource)
+                // Built-in first, matching the snapping and tiling Source
+                // groupings and the filter menu's own entry order.
                 return Core.groupByBoolKey(filtered, item => {
-                    return item.isSystem !== true;
-                }, "user", i18n("Your Templates"), "builtin", i18n("Built-in"));
+                    return item.isSystem === true;
+                }, "builtin", i18n("Built-in"), "user", i18n("Your Templates"));
             return Core.ungrouped(filtered, i18n("All templates"));
         }
         if (root.viewMode === 1) {

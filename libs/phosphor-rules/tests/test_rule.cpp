@@ -39,6 +39,28 @@ private Q_SLOTS:
         QVERIFY(!r.isValid());
     }
 
+    void testInvalidRule_zeroActions()
+    {
+        // A rule with no actions fills no slot, so isValid() rejects it and
+        // RuleSet refuses to store it. Without the actions.isEmpty() guard the
+        // rule would live in memory until the next save/load round-trip
+        // silently dropped it, so assert both halves.
+        Rule r = makeRule(QStringLiteral("x"), 0, MatchExpression{}, {floatAction()});
+        r.actions.clear();
+        QVERIFY(!r.isValid());
+
+        RuleSet set;
+        QVERIFY(!set.addRule(r));
+        QVERIFY(set.rules().isEmpty());
+
+        // Discriminator: the same rule WITH an action is accepted, so the
+        // refusal above is the empty action list and not the id or the match.
+        r.actions.append(floatAction());
+        QVERIFY(r.isValid());
+        QVERIFY(set.addRule(r));
+        QCOMPARE(set.rules().size(), 1);
+    }
+
     void testHasTerminalAction()
     {
         const Rule excludeRule = makeRule(QStringLiteral("excl"), 0, MatchExpression{}, {excludeAction()});
@@ -294,6 +316,60 @@ private Q_SLOTS:
         // action, so the terminal co-location check produces nothing.
         const Rule r = makeRule(QStringLiteral("pure exclude"), 500, MatchExpression{}, {excludeAction()});
         QVERIFY(r.validationIssues().isEmpty());
+    }
+
+    void testValidationIssues_scopedExcludeWithSlotActionNotFlagged()
+    {
+        // The scoped exclusions cancel only the siblings resolved by the ONE
+        // evaluator that honours them. These pairings cross that boundary, so
+        // they are authorable and must stay unflagged: the decoration slice
+        // resolves no other slot, and ExcludePlacement is out of scope for the
+        // effect evaluator that resolves opacity (a Tag::Effect action).
+        const Rule decorations = makeRule(QStringLiteral("undecorate + border"), 500, MatchExpression{},
+                                          {excludeDecorationsAction(), borderWidth(4)});
+        QVERIFY(decorations.validationIssues().isEmpty());
+
+        const Rule placement = makeRule(QStringLiteral("unplace + opacity"), 500, MatchExpression{},
+                                        {excludePlacementAction(), setOpacity(0.8)});
+        QVERIFY(placement.validationIssues().isEmpty());
+    }
+
+    void testValidationIssues_scopedExcludeCancellingItsOwnSliceFlagged()
+    {
+        // The other side of the same boundary: pairings the honouring
+        // evaluator itself resolves ARE cancelled and must be flagged.
+        // ExcludeAnimations terminates the effect evaluator before it can
+        // resolve a border override (Tag::Effect)...
+        const Rule animations = makeRule(QStringLiteral("unanimate + border"), 500, MatchExpression{},
+                                         {excludeAnimationsAction(), borderWidth(2)});
+        const auto animIssues = animations.validationIssues();
+        QCOMPARE(animIssues.size(), 1);
+        QCOMPARE(animIssues.first().code, ValidationIssue::Code::TerminalActionWithEffectActions);
+        QCOMPARE(animIssues.first().actionType, QString(ActionType::SetBorderWidth));
+
+        // ...and ExcludePlacement terminates the window-tracking evaluator
+        // before it can resolve a float override (window-domain slot action
+        // that is not Tag::Effect).
+        const Rule placement = makeRule(QStringLiteral("unplace + float"), 500, MatchExpression{},
+                                        {excludePlacementAction(), floatAction()});
+        const auto placeIssues = placement.validationIssues();
+        QCOMPARE(placeIssues.size(), 1);
+        QCOMPARE(placeIssues.first().code, ValidationIssue::Code::TerminalActionWithEffectActions);
+        QCOMPARE(placeIssues.first().actionType, QString(ActionType::Float));
+    }
+
+    void testValidationIssues_blanketExcludeBesideScopedExcludeFlagged()
+    {
+        // The blanket Exclude is honoured by every full-store evaluator, so it
+        // does cancel its siblings — including a scoped exclusion, which is a
+        // co-located action like any other.
+        const Rule r = makeRule(QStringLiteral("exclude + undecorate"), 500, MatchExpression{},
+                                {excludeAction(), excludeDecorationsAction()});
+        const auto issues = r.validationIssues();
+        QCOMPARE(issues.size(), 1);
+        QCOMPARE(issues.first().code, ValidationIssue::Code::TerminalActionWithEffectActions);
+        QCOMPARE(issues.first().actionType, QString(ActionType::ExcludeDecorations));
+        QCOMPARE(issues.first().actionIndex, 1);
     }
 };
 

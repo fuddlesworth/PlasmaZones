@@ -57,13 +57,6 @@ bool stageJson(QSaveFile& file, const QJsonDocument& doc, const QString& path)
     return true;
 }
 
-/// How many quick-layout slots one mode carries. Mirrors
-/// PhosphorProtocol::Service::QuickLayoutSlotCount by hand: this library does
-/// not depend on phosphor-protocol, so the value is repeated here the same way
-/// MinTemplateFraction repeats the engine's floor. Raising one side without the
-/// other makes the extra slots unreadable, not corrupt.
-constexpr int kQuickSlotCount = 9;
-
 } // namespace
 
 bool LayoutRegistry::isLayoutJsonValid(const QJsonObject& json, const QString& context)
@@ -510,7 +503,7 @@ void LayoutRegistry::readQuickLayouts()
 
     // Reader for one mode's nested slot object ({ "1": id, ... }).
     const auto readModeSlots = [](const QJsonObject& obj, QHash<int, QString>& out) {
-        for (int i = 1; i <= kQuickSlotCount; ++i) {
+        for (int i = 1; i <= QuickSlotCount; ++i) {
             const QString key = QString::number(i);
             if (!obj.contains(key)) {
                 continue;

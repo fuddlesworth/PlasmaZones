@@ -226,8 +226,8 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // broadcast is DEFERRED: this function runs from inside
     // PerScreenStates::removeStatesIf's iteration over m_states, and a
     // consumer slot that touched the engine's state map synchronously would
-    // invalidate the live iterator. The other seven clearTabStripsForScreen
-    // call sites are outside any iteration and emit directly.
+    // invalidate the live iterator. All eight clearTabStripsForScreen call
+    // sites are outside the state map's own iteration and emit directly.
     m_lastTabStripPayload.remove(screenId);
     if (m_screensWithTabStrips.remove(screenId)) {
         QMetaObject::invokeMethod(

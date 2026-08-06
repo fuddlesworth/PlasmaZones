@@ -67,8 +67,8 @@ private Q_SLOTS:
     void partiallyConsumedSeedGuardsReopens();
     void orderedOpenForwardArrivalsKeepSeedOrder();
     void floatedOpenConsumesSeed();
-    void migrateOutAnnouncesDroppedFloat();
     void tileFlaggedFloatingBySiblingEngineSyncsClear();
+    void migrateOutAnnouncesDroppedFloat();
     void contextSwitchFlagRidesChangedScreenSets();
 
 private:

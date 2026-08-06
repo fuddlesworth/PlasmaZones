@@ -314,8 +314,12 @@ inline bool isAnyModeLocked(ISettings* settings, PhosphorZones::IZoneLayoutRegis
     if (currentMode >= 0 && currentMode <= 2) {
         return settings->isContextLocked(Utils::contextLockKey(currentMode, screenId), desktop, activity);
     }
-    // Default: check all lockable modes (maintains PR #247 behavior,
-    // extended to the scrolling template lock)
+    // Default: a lock on ANY of the three modes blocks, snapping (0) and
+    // autotile (1) as PR #247 established, scrolling (2) on the same policy —
+    // a screen whose template choice is pinned is as locked as one whose zone
+    // layout is. The consequence is deliberate: a stale scrolling lock reports
+    // the snapping selector locked too, which is what mode-agnostic means here.
+    // Pass currentMode when only one mode's lock should count.
     return settings->isContextLocked(Utils::contextLockKey(0, screenId), desktop, activity)
         || settings->isContextLocked(Utils::contextLockKey(1, screenId), desktop, activity)
         || settings->isContextLocked(Utils::contextLockKey(2, screenId), desktop, activity);

@@ -115,6 +115,12 @@ public Q_SLOTS:
      * screen. Same silent ownership gate as focusColumn: an empty object when
      * the screen is not scrolling.
      *
+     * NOTE: nothing in this tree calls it. It stays as part of the PUBLISHED
+     * D-Bus read surface (declared in org.plasmazones.Scrolling.xml, covered
+     * by tests/unit/dbus), for external clients that want to know which
+     * fractions the cycle shortcuts will walk. Do not re-justify it by naming
+     * an in-tree caller; there is none.
+     *
      * @param screenId Screen whose vocabulary to describe
      * @return JSON object string
      */

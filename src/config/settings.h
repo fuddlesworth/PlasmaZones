@@ -369,8 +369,6 @@ public:
                    setScrollingDefaultWindowHeightValue NOTIFY scrollingDefaultWindowHeightValueChanged)
     Q_PROPERTY(int scrollingDefaultWindowHeightPresetIndex READ scrollingDefaultWindowHeightPresetIndex WRITE
                    setScrollingDefaultWindowHeightPresetIndex NOTIFY scrollingDefaultWindowHeightPresetIndexChanged)
-    Q_PROPERTY(int scrollingInsertPosition READ scrollingInsertPosition WRITE setScrollingInsertPosition NOTIFY
-                   scrollingInsertPositionChanged)
     // The template an unassigned screen resolves to, empty for none.
     Q_PROPERTY(QString defaultScrollingTemplate READ defaultScrollingTemplate WRITE setDefaultScrollingTemplate NOTIFY
                    defaultScrollingTemplateChanged)
@@ -432,6 +430,8 @@ public:
                    setScrollingPresetWindowHeights NOTIFY scrollingPresetWindowHeightsChanged)
 
     // Scrolling Behavior Settings (Scrolling.Behavior)
+    Q_PROPERTY(int scrollingInsertPosition READ scrollingInsertPosition WRITE setScrollingInsertPosition NOTIFY
+                   scrollingInsertPositionChanged)
     Q_PROPERTY(bool scrollingFocusNewWindows READ scrollingFocusNewWindows WRITE setScrollingFocusNewWindows NOTIFY
                    scrollingFocusNewWindowsChanged)
     Q_PROPERTY(bool scrollingFocusFollowsMouse READ scrollingFocusFollowsMouse WRITE setScrollingFocusFollowsMouse

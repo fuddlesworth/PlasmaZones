@@ -211,6 +211,38 @@ private Q_SLOTS:
         QVERIFY(!RuleAction::fromJson(nonArray.toJson()).has_value());
     }
 
+    void testSetScrollingTemplate_roundTripAndRejections()
+    {
+        // The scrolling assignment action at the public boundary, the way its
+        // snapping and tiling siblings are covered. Its layoutId shares the
+        // wire KEY with SetSnappingLayout, so the strict-key and non-empty
+        // checks are what keep a half-authored template action from loading.
+        QJsonObject params;
+        params.insert(QString(ActionParam::LayoutId), QStringLiteral("{2f2a1b3c-0000-4000-8000-0000000000aa}"));
+        const RuleAction a{QString(ActionType::SetScrollingTemplate), params};
+        const auto reloaded = RuleAction::fromJson(a.toJson());
+        QVERIFY(reloaded.has_value());
+        QCOMPARE(*reloaded, a);
+
+        // An empty id is the unfilled-picker shape and is refused, so the
+        // editor cannot save a template action that resolves to nothing.
+        QJsonObject empty;
+        empty.insert(QString(ActionParam::LayoutId), QString());
+        QVERIFY(
+            !RuleAction::fromJson(RuleAction{QString(ActionType::SetScrollingTemplate), empty}.toJson()).has_value());
+
+        // A missing id is refused for the same reason.
+        QVERIFY(!RuleAction::fromJson(RuleAction{QString(ActionType::SetScrollingTemplate), QJsonObject()}.toJson())
+                     .has_value());
+
+        // A stray key is refused whole — strict-key discipline, not a
+        // silent drop of the extra key.
+        QJsonObject stray = params;
+        stray.insert(QString(ActionParam::Algorithm), QStringLiteral("bsp"));
+        QVERIFY(
+            !RuleAction::fromJson(RuleAction{QString(ActionType::SetScrollingTemplate), stray}.toJson()).has_value());
+    }
+
     void testJson_typeWrittenInline()
     {
         const RuleAction a = engineModeAction(QStringLiteral("snapping"));

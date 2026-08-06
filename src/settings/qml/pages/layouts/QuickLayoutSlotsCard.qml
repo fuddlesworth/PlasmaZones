@@ -35,8 +35,9 @@ SettingsCard {
         readonly property bool autoAssignAllLayouts: root.appSettings.settings ? root.appSettings.settings.autoAssignAllLayouts : false
     }
 
-    // Bumped on EXTERNAL (daemon) quick-layout-slot changes. Both snapping and
-    // tiling slots are daemon-backed (mode-keyed registry) and the daemon emits
+    // Bumped on EXTERNAL (daemon) quick-layout-slot changes. All three slot
+    // families (snapping, tiling, scrolling templates) are daemon-backed
+    // through the same mode-keyed registry and the daemon emits
     // quickLayoutSlotsChanged for any slot change, so a single bump here
     // re-evaluates every slot delegate's currentLayoutId binding. One Connections
     // at root, not one per delegate, so an external change fires a single handler.

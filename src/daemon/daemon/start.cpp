@@ -257,8 +257,11 @@ void Daemon::connectScreenSignals()
                 }
                 // Drop the removed screen from the assignment snapshot so it
                 // doesn't linger as a stale entry (kept consistent with the
-                // add / context-switch / apply refresh points).
+                // add / context-switch / apply refresh points), and from the
+                // announce ledger — a replugged monitor must not carry a
+                // stale "already saw template X" verdict across the unplug.
                 diffActiveAssignments();
+                m_lastAnnouncedTemplateByScreen.remove(removedScreenId);
                 // Same union-park staleness rule as the screenAdded tail: a
                 // removed bottom monitor lowers the output union, so every
                 // scroll park must re-derive against the new topology.
@@ -642,8 +645,9 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     // Push the LIVE capability first so applyEntry's template branch routes
     // on the engine that actually owns the screen (see the quick-slot
     // handler in shortcuts_wiring.cpp).
-    m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
-    if (layoutSupportForScreen(screenId) == LayoutSupport::None) {
+    const LayoutSupport support = layoutSupportForScreen(screenId);
+    m_unifiedLayoutController->setCurrentLayoutSupport(support);
+    if (support == LayoutSupport::None) {
         showLayoutsUnavailableOsd(screenId);
         return;
     }
@@ -661,7 +665,7 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     // is the right answer. Same if/else split as the picker so the two
     // shortcuts never disagree about what an empty list means.
     if (m_overlayService && m_overlayService->visibleLayoutCount(screenId) == 0) {
-        if (layoutSupportForScreen(screenId) == LayoutSupport::Templates) {
+        if (support == LayoutSupport::Templates) {
             qCDebug(lcDaemon) << "Layout cycle: no templates in the store for screen" << screenId;
             if (m_settings && m_settings->showNavigationOsd()) {
                 m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),

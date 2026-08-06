@@ -52,7 +52,10 @@ struct LayoutPreview
     /// Stable identifier for this layout entry. For manual layouts this is
     /// the layout's UUID string (with braces); for autotile entries it's
     /// the prefixed form `"autotile:<algorithmId>"` so manual + autotile
-    /// IDs share a single namespace at the consumer level.
+    /// IDs share a single namespace at the consumer level. Native scrolling
+    /// templates are UUID-shaped too, so the id alone does not tell the two
+    /// UUID families apart — @c isScrollingTemplate is what distinguishes
+    /// them.
     QString id;
 
     /// Human-readable name for the picker UI (i18n'd by the source).

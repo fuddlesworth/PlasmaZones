@@ -23,14 +23,17 @@
  *     different strips produce different payloads.
  *  5. Off-screen columns are excluded at the wire boundary — the payload
  *     describes what is visible, not what is managed.
- *  6. presetVocabularyJson carries the same ownership gates, and its payload
+ *  6. A context outer-gap override reaches the wire: the payload's rects
+ *     track the engine's own gap-inset tiles rather than an ungapped
+ *     recomputation.
+ *  7. presetVocabularyJson carries the same ownership gates, and its payload
  *     mixes the two vocabularies independently: a widths-only template
  *     override replaces the widths and leaves the heights on the fallback.
- *  7. scrollingScreens answers sorted, across several screens.
- *  8. scrollingScreensChanged is gated on an actual change: the engine
+ *  8. scrollingScreens answers sorted, across several screens.
+ *  9. scrollingScreensChanged is gated on an actual change: the engine
  *     re-announces an identical set on every desktop switch, and a wire
  *     consumer comparing successive payloads must not see a phantom one.
- *  9. clearEngine leaves every slot answering safely AND stops relaying.
+ * 10. clearEngine leaves every slot answering safely AND stops relaying.
  */
 
 #include <QTest>
@@ -66,11 +69,13 @@ private Q_SLOTS:
         //
         // Neither provider is at the origin: a (0,0) work area would let a
         // dropped origin-subtraction term pass unnoticed (x/1920 lands well
-        // outside 0..1). The two rects also differ so a reader can see which
-        // basis the payload normalizes against — the FULL screen geometry,
-        // with tiles clipped to the available one — though no assertion here
-        // distinguishes them (a swap normalizes against 760 instead of 800
-        // and stays inside 0..1).
+        // outside 0..1). The two rects also differ, but which basis the
+        // payload normalizes against is NOT pinned here: every assertion in
+        // this file cross-checks the wire payload against the engine's own
+        // relative rects, so a swap to the available geometry would normalize
+        // against 760 instead of 800, stay inside 0..1, and agree with the
+        // engine either way. Known coverage gap, kept because an absolute
+        // expected value would have to be derived from a live run.
         const auto available = [](const QString&) {
             return QRect(1920, 40, 1200, 760);
         };

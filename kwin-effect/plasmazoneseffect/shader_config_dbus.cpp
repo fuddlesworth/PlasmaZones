@@ -22,6 +22,7 @@
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleSet.h>
+#include <PhosphorRules/WindowQuery.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -44,6 +45,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace PlasmaZones {
@@ -57,6 +59,15 @@ namespace {
 /// only the retry chain's own failures consume it.
 constexpr int kRuleFetchRetryMax = 3;
 constexpr int kRuleFetchRetryDelayMs = 1000;
+
+/// Dedicated bound for the getAllRules round-trip. Deliberately NOT
+/// Service::SyncCallTimeoutMs (500 ms), which sizes a single scalar property
+/// Get: this reply carries the whole serialised RuleSet, and the daemon reads
+/// and re-serialises the store to produce it. Qt's unbounded default (25 s) is
+/// the other extreme — multiplied by the retry chain above it leaves
+/// ActiveLayout-referencing rules withheld from the evaluator for over a
+/// minute after a wedged daemon.
+constexpr int kRuleFetchTimeoutMs = 5000;
 
 /// Context fields NO effect-side resolver stamps onto its WindowQuery —
 /// the effect twin of the daemon open-path's neverStampedFields()
@@ -254,7 +265,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // the motion-side cascade in `applyWindowGeometry` doing its own check;
     // both call sites gate identically so the filter is a single concept
     // across the two paths.
-    if (!shouldAnimateWindow(window)) {
+    //
+    // Caller-owned memoisation slot, the applyWindowGeometry pattern
+    // (drag_snap.cpp): when the gate builds the WindowQuery for its rule
+    // probes, the resolver pass below reuses it instead of walking the ~30
+    // KWin accessors a second time per animated event.
+    std::optional<PhosphorRules::WindowQuery> sharedQuery;
+    if (!shouldAnimateWindow(window, &sharedQuery)) {
         return;
     }
     // Cascade: per-window animation Rule → ShaderProfileTree
@@ -263,13 +280,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // tree fallthrough (the user's "no animation for this app on this
     // event" sentinel).
     //
-    // Build the full per-window query once and reuse it for every
-    // resolver call below — same shape `shouldAnimateWindow` already
-    // uses for the rule-override gate, so a rule that passes the gate
-    // also resolves its slot. Caching across resolver calls is built
-    // into the evaluator's `resolveCached(windowId, …)` path; the query
+    // Reuse the gate's query when it built one (rules present) and build only
+    // when the gate's fast paths never needed it — same shape
+    // `shouldAnimateWindow` uses for the rule-override gate, so a rule that
+    // passes the gate also resolves its slot. Caching across resolver calls is
+    // built into the evaluator's `resolveCached(windowId, …)` path; the query
     // here is only the match input, not the cache key.
-    const PhosphorRules::WindowQuery query = ruleQuery(window);
+    const PhosphorRules::WindowQuery query = sharedQuery ? *sharedQuery : ruleQuery(window);
     const QString windowId = getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
     // Per-event motion profile (curve + duration) in ONE walk, via the shared
@@ -529,10 +546,17 @@ void PlasmaZonesEffect::fetchAllRulesOnce()
     const QDBusMessage msg = QDBusMessage::createMethodCall(
         QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
         QString(PhosphorProtocol::Service::Interface::Rules), QStringLiteral("getAllRules"));
-    const QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+    const QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg, kRuleFetchTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+    // Per-dispatch guard (see m_ruleFetchQueryGeneration): the debounce, the
+    // bring-up load and the seed-edge re-drive can each dispatch while another
+    // round-trip is outstanding, and this reply must lose to any later one.
+    const quint64 queryGeneration = ++m_ruleFetchQueryGeneration;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, queryGeneration](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        if (queryGeneration != m_ruleFetchQueryGeneration) {
+            return; // a newer fetch superseded this one
+        }
         const QDBusPendingReply<QString> reply = *w;
         if (reply.isError()) {
             // Daemon may not be up yet at startup; the rulesChanged
@@ -542,8 +566,11 @@ void PlasmaZonesEffect::fetchAllRulesOnce()
             // Bounded retry. This is what recovers the seed-edge re-drive
             // when its fetch fails: without it, rules sliced by the unseeded
             // clear would stay withheld until the next rulesChanged or a
-            // daemon restart. Past the budget those remain the recovery
-            // paths, and the marker's stale-TRUE direction keeps that safe.
+            // daemon restart. The seed edge CONSUMES m_activeLayoutRulesWithheld
+            // before dispatching (see TilingHandler::setActiveLayouts), so mid
+            // chain the marker sits stale-FALSE; the exhaustion arm below
+            // re-arms it so the NEXT seeding edge re-drives instead of
+            // trusting a fetch that never landed.
             if (m_ruleFetchRetriesLeft > 0) {
                 --m_ruleFetchRetriesLeft;
                 QTimer::singleShot(kRuleFetchRetryDelayMs, this, [this] {
@@ -552,6 +579,12 @@ void PlasmaZonesEffect::fetchAllRulesOnce()
             } else {
                 qCWarning(lcEffect) << "loadRuleAnimationsFromDbus: retry budget exhausted;"
                                     << "effect-bound rules refresh on the next rulesChanged or daemon restart";
+                // Re-arm the marker the seed edge consumed before dispatching:
+                // with the budget gone, the withheld rules are still out of
+                // the evaluator, and a stale-FALSE marker would disarm the
+                // NEXT seeding edge's re-drive too. TRUE is the safe polarity
+                // (a spare re-drive is one redundant fetch).
+                m_activeLayoutRulesWithheld = true;
             }
             return;
         }
@@ -566,26 +599,6 @@ void PlasmaZonesEffect::fetchAllRulesOnce()
             qCWarning(lcEffect) << "loadRuleAnimationsFromDbus: RuleSet::fromJson refused payload";
             return;
         }
-        // Sample the prior rule set for SetOpacity BEFORE setRuleAnimationRules
-        // overwrites it. Repaint is needed on BOTH bookends — rule appears
-        // (currently-natural-opacity windows need to apply it) AND rule
-        // disappears (currently-dimmed windows need to revert). The earlier
-        // single-bookend form left previously-dimmed windows stuck at their
-        // last-painted opacity when the user removed the last SetOpacity rule.
-        bool hadSetOpacity = false;
-        const auto& priorRules = m_shaderManager.animationRuleSet().rules();
-        for (const PhosphorRules::Rule& rule : priorRules) {
-            for (const PhosphorRules::RuleAction& action : rule.actions) {
-                if (action.type == PhosphorRules::ActionType::SetOpacity) {
-                    hadSetOpacity = true;
-                    break;
-                }
-            }
-            if (hadSetOpacity) {
-                break;
-            }
-        }
-
         // Sampled once for the whole admission pass so every slice below
         // agrees on the same polarity story (see effectNeverStampedFields).
         const bool layoutsSeeded = m_tilingHandler->activeLayoutsSeeded();
@@ -631,6 +644,17 @@ void PlasmaZonesEffect::fetchAllRulesOnce()
                 animationRules.append(rule);
             }
         }
+        // Sample the prior SetOpacity presence BEFORE setRuleAnimationRules
+        // overwrites the rule set, through the gate the manager already
+        // maintains (hasOpacityRules, recomputed in rebuildAnimationRuleSet)
+        // rather than a second hand-scan of the same list. Repaint is needed on
+        // BOTH bookends — rule appears (currently-natural-opacity windows need
+        // to apply it) AND rule disappears (currently-dimmed windows need to
+        // revert). The earlier single-bookend form left previously-dimmed
+        // windows stuck at their last-painted opacity when the user removed the
+        // last SetOpacity rule. Same read/overwrite ordering as the slice path
+        // in sliceActiveLayoutRulesForUnseededMap.
+        const bool hadSetOpacity = m_shaderManager.hasOpacityRules();
         m_shaderManager.setRuleAnimationRules(std::move(animationRules));
         // A rule edit can route transitions to (or away from) an audio-reactive
         // animation pack via an EffectId payload — re-evaluate the cava run gate.

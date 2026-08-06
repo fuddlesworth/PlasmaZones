@@ -267,7 +267,7 @@ Item {
                 text: {
                     if (root.disabled)
                         return root.disabledReason;
-                    var name = root.isTemplate ? i18n("Column template: %1", root.layoutName) : root.layoutName;
+                    var name = root.isTemplate ? i18nc("OSD caption, %1 is the template name", "Column template — %1", root.layoutName) : root.layoutName;
                     return root.locked ? i18n("%1 (Locked)", name) : name;
                 }
                 font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2

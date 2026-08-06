@@ -94,9 +94,20 @@ public:
      * @param enteringAutotile True when the screen has just changed from snap
      *        mode. Already-minimized windows then need an immediate first
      *        autotile placement when they become visible.
+     * @param screenOverrides Per-window screen ids resolved by the caller,
+     *        used in place of getWindowScreenId for the windows it names. The
+     *        engine-flip caller (setScrollingScreens) MUST supply these: the
+     *        engine-authoritative screen override is gated on the scrolling
+     *        set, so once the flip has been written a parked strip column
+     *        resolves positionally onto the neighbouring output and the
+     *        screenFilter drops it. The value chosen here is the one used for
+     *        the filter, the m_notifiedWindowScreens stamp, the pre-tile
+     *        capture and the wire entry alike, so an override cannot desync
+     *        them.
      */
     void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, const QSet<QString>& screenFilter = {},
-                                 bool resetNotified = false, bool enteringAutotile = false);
+                                 bool resetNotified = false, bool enteringAutotile = false,
+                                 const QHash<KWin::EffectWindow*, QString>& screenOverrides = {});
 
     /// Remove a window from this handler's autotile tracking and notify the daemon.
     /// INTENT NOTE: an earlier m_pendingCloses guard (deduping a close racing
@@ -222,12 +233,6 @@ public:
     // D-Bus signal connections and settings
     void connectSignals();
     void loadSettings();
-    /// The two bring-up property Gets loadSettings dispatches, factored out
-    /// so their bounded failure retries can re-dispatch exactly one fetch.
-    /// Every dispatch bumps the matching per-query generation, so a stale
-    /// retry reply loses to any newer query or live-signal write.
-    void fetchScrollingScreens();
-    void fetchActiveLayouts();
 
     // Cleanup: unmaximize all monocle-maximized windows (called on daemon loss / effect teardown)
     void restoreAllMonocleMaximized();
@@ -351,7 +356,8 @@ public:
     ///
     /// The marker is NOT cleared by either unseeding path — those paths SET
     /// it instead, from the re-slice clearActiveLayoutsForTeardown performs.
-    /// Every successful getAllRules reply recomputes it outright. Clearing it
+    /// Every getAllRules reply that PARSES recomputes it outright (the
+    /// malformed-payload arms return first, having sliced nothing). Clearing it
     /// on teardown or bring-up would disarm this edge for the session if the
     /// following getAllRules never lands; a stale-TRUE marker only costs one
     /// redundant re-drive.
@@ -368,12 +374,15 @@ public:
     /// handler's clearAllDecorations.
     ///
     /// CALL-SITE CONTRACT: two sanctioned callers, both of which must supply
-    /// the invalidate and the border sweep this function deliberately omits.
-    /// The only repaint it takes is the SetOpacity bookend inside the
-    /// re-slice described below.
+    /// the invalidate this function deliberately omits, plus their own answer
+    /// for the decorations those verdicts baked in. The only repaint it takes
+    /// is the SetOpacity bookend inside the re-slice described below.
     ///  - the effect's serviceUnregistered teardown
     ///    (lifecycle_wiring_daemon.cpp), which runs invalidateAllRuleCaches
-    ///    immediately after;
+    ///    immediately after and then clearAllDecorations — it tears the
+    ///    decorations down outright rather than sweeping them, which is why
+    ///    the live chokepoint's SCHEDULED sweep would be wrong there (it would
+    ///    re-create rule-matched decorations one turn after the teardown);
     ///  - TilingHandler::onDaemonReady, whose own tail runs
     ///    invalidateAllRuleCaches and scheduleBorderSweep. Bring-up needs the
     ///    clear because a straight old→new owner handover emits no
@@ -579,9 +588,15 @@ private:
      * Skips windows the daemon already tracks as floating (a user float or
      * another mode's minimize-float record) — mirroring the runtime minimize
      * path, we never claim ownership of a float we did not create.
+     *
+     * @p resolvedScreenId, when non-empty, replaces the positional resolve.
+     * The batch caller passes the id it already resolved for the window so
+     * this arm's screen-filter test cannot disagree with the batch's — see
+     * notifyWindowsAddedBatch's screenOverrides.
      */
     void claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const QString& windowId,
-                                        const QSet<QString>& screenFilter, bool enteringAutotile);
+                                        const QSet<QString>& screenFilter, bool enteringAutotile,
+                                        const QString& resolvedScreenId = {});
 
     /**
      * @brief Cancel a pending debounced minimize→float commit.
@@ -725,6 +740,18 @@ private:
     /// loadSettings owns the re-announce — announcing there desyncs the
     /// daemon's view from the effect's until that batch lands.
     void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true);
+    /// The two bring-up property Gets loadSettings dispatches, factored out
+    /// so their bounded failure retries can re-dispatch exactly one fetch.
+    /// Every dispatch bumps the matching per-query generation, so a stale
+    /// retry reply loses to any newer query or live-signal write.
+    ///
+    /// PRIVATE deliberately: the retry budgets are granted by loadSettings
+    /// alone, so an outside caller invoking either of these directly would
+    /// re-drive a fetch under whatever budget the last loadSettings left.
+    /// loadSettings is the budget-granting entry point, the same shape
+    /// loadRuleAnimationsFromDbus has over fetchAllRulesOnce.
+    void fetchScrollingScreens();
+    void fetchActiveLayouts();
     /// Meta+wheel axis shortcuts for column focus (niri's Mod+wheel).
     /// Registered while ANY screen runs the scrolling engine, unregistered
     /// (by destroying the QActions — KWin drops an axis shortcut with its

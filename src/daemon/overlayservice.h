@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION: this header is over 1200 lines, past the 1150 hard
+// FILE-SIZE EXCEPTION: this header is over 1400 lines, past the 1150 hard
 // ceiling.
 // The exception was granted in the same pull request that carried the file
 // past the ceiling (the scroll tab strip), so it is a live decision rather
@@ -754,6 +754,16 @@ private:
     ///   the same split axis the live tiler will render. Empty (default)
     ///   keeps the legacy square-canvas behaviour for screen-agnostic
     ///   consumers.
+    ///
+    /// PRECONDITION shared with @ref visibleLayoutCount: the algorithm registry
+    /// must be wired before either is called. The two enumerate autotile rows
+    /// through DIFFERENT paths — a non-empty canvas walks the registry
+    /// directly, an empty one (which visibleLayoutCount always passes) walks
+    /// the layout source — so with a null registry and a wired source this one
+    /// contributes no autotile rows while the count still does, and the
+    /// keep-visible bar gets sized for a row set the popup does not render. The
+    /// daemon wires it in initServices (setAlgorithmRegistry), before any popup
+    /// can open, so this holds for every live caller.
     QVariantList buildLayoutsList(const QString& screenId = QString(), QSize autotilePreviewCanvas = {}) const;
     /// Defined in overlayservice_types.h (hoisted with the other value
     /// types); aliased so existing OverlayService::LayoutIncludeFlags
@@ -785,10 +795,10 @@ private:
     /// screenId. In autotile mode this is the resolved "autotile:<algorithm>"
     /// assignment id (matching the autotile cards); in snapping mode it is the
     /// resolved Layout's UUID (matching the manual cards); on a LIVE Templates
-    /// (scrolling) screen it is the context's resolved TEMPLATE layout UUID —
-    /// or the bare "scrolling:" sentinel when no template is assigned, which
-    /// matches no card — so the picker highlights the
-    /// template card. Snapping resolves
+    /// (scrolling) screen it is the context's resolved TEMPLATE layout UUID, so
+    /// the picker highlights the template card, or the bare "scrolling:"
+    /// sentinel when no template is assigned, which matches no card.
+    /// Snapping resolves
     /// through resolveScreenLayout() so its fallback chain is preserved, while
     /// autotile uses the assignment id directly because no Layout object backs
     /// an algorithm.

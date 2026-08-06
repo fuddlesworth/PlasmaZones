@@ -69,6 +69,7 @@ private Q_SLOTS:
         QObject adaptorParent;
         TilingAdaptor adaptor(nullptr, &adaptorParent);
         QSignalSpy spy(&adaptor, &TilingAdaptor::activeLayoutsChanged);
+        QVERIFY(spy.isValid());
 
         QVariantMap map;
         map.insert(QStringLiteral("HDMI-1"), QStringLiteral("{22222222-2222-2222-2222-222222222222}"));

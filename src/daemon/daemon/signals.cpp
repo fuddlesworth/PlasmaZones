@@ -50,9 +50,11 @@ void Daemon::initializeUnifiedController()
     // Registry injected explicitly (not reached via engine->algorithmRegistry()):
     // keeps DI contract visible at the call site and lets unit tests stub the
     // engine without losing algorithm enumeration.
+    // No Qt parent: unique_ptr owns the lifetime, per the convention the
+    // constructor's init list states (daemon.cpp).
     m_unifiedLayoutController =
         std::make_unique<UnifiedLayoutController>(m_layoutManager.get(), m_settings.get(), m_screenManager.get(),
-                                                  m_algorithmRegistry.get(), m_autotileEngine.get(), this);
+                                                  m_algorithmRegistry.get(), m_autotileEngine.get(), nullptr);
 
     // Share the daemon's bundle-owned autotile source with the controller
     // so its internal layout cache's autotile half is populated from the

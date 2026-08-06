@@ -629,6 +629,42 @@ void TestRuleController::validationIssuesForJsonFlags()
     QVariantMap partial = clean;
     partial[QStringLiteral("actions")] = QVariantList{};
     QCOMPARE(controller.validationIssuesForJson(partial).size(), 0);
+
+    // An action whose TYPE is picked but whose required param is still empty
+    // (what every seeded rule template hands the editor). RuleAction::fromJson
+    // drops it, so saving would silently lose the action — it has to surface
+    // as an issue or the Save button stays enabled over a rule that will not
+    // survive the round trip.
+    QVariantMap unfilled = clean;
+    QVariantMap route;
+    route[QStringLiteral("type")] = QStringLiteral("routeToScreen");
+    route[QStringLiteral("targetScreenId")] = QString();
+    unfilled[QStringLiteral("actions")] = QVariantList{route};
+    const QVariantList unfilledIssues = controller.validationIssuesForJson(unfilled);
+    QCOMPARE(unfilledIssues.size(), 1);
+    const QVariantMap unfilledIssue = unfilledIssues.first().toMap();
+    QCOMPARE(unfilledIssue.value(QStringLiteral("code")).toInt(),
+             static_cast<int>(PhosphorRules::ValidationIssue::Code::IncompleteActionPayload));
+    QCOMPARE(unfilledIssue.value(QStringLiteral("actionIndex")).toInt(), 0);
+    QCOMPARE(unfilledIssue.value(QStringLiteral("actionType")).toString(), QStringLiteral("routeToScreen"));
+
+    // Discriminator: the same action WITH its picker filled is clean, so the
+    // issue above is the empty param and not the action type.
+    route[QStringLiteral("targetScreenId")] = QStringLiteral("DP-1");
+    unfilled[QStringLiteral("actions")] = QVariantList{route};
+    QCOMPARE(controller.validationIssuesForJson(unfilled).size(), 0);
+
+    // A type-less placeholder row (the user added an action but has not
+    // picked a type) raises NO issue here: the editor's completeness gate
+    // owns that case, and the library's co-located-exclusion check would
+    // otherwise name the placeholder with an empty action label.
+    QVariantMap placeholder = clean;
+    QVariantMap blank;
+    blank[QStringLiteral("type")] = QString();
+    QVariantMap exclude;
+    exclude[QStringLiteral("type")] = QStringLiteral("exclude");
+    placeholder[QStringLiteral("actions")] = QVariantList{exclude, blank};
+    QCOMPARE(controller.validationIssuesForJson(placeholder).size(), 0);
 }
 
 void TestRuleController::asyncCommitAndRevertAreInvokable()

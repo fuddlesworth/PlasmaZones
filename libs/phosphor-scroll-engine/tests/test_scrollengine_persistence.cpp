@@ -28,15 +28,15 @@ class TestScrollEnginePersistence : public QObject
 
 private Q_SLOTS:
     void modeRoundTripRestoresFocusAndAnchor();
+    void presetIntentRoundTripsExactly();
+    void legacyPresetIndexBlobResolvesAgainstEffectiveList();
+    void outOfRangePresetFractionIsClampedAtTheBoundary();
     void serializedStripRestoreSurvivesIdDrift();
     void arrivalBurstRestoreAppliesOnce();
     void pruneSweepsStashedTilesForClosedWindows();
     void pruneSpareStashStagedFromPersistence();
     void unclaimedStashTilesExpireAfterThreeSessions();
     void coTenantClaimDoesNotRenewSiblingLease();
-    void presetIntentRoundTripsExactly();
-    void legacyPresetIndexBlobResolvesAgainstEffectiveList();
-    void outOfRangePresetFractionIsClampedAtTheBoundary();
     void serializeKeepsAnUnclaimedStashTileBesideALiveStrip();
 
 private:

@@ -418,6 +418,13 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
     if (scrollingScreenIntersection() != scrollingBefore) {
         m_effect->invalidateAllRuleCaches();
         m_effect->scheduleBorderSweep();
+        // Same Mode-flip repaint bookend setScrollingScreens takes: a
+        // `Mode Equals "scrolling"` SetOpacity rule resolves in the paint
+        // path, and the border sweep rebuilds decorations rather than the
+        // per-frame alpha of windows that have none.
+        if (m_effect->m_shaderManager.hasOpacityRules()) {
+            KWin::effects->addRepaintFull();
+        }
     }
     QSet<QString> completedDeferredRoutes;
     bool completedInitialQuery = false;

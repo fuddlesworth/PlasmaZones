@@ -52,6 +52,11 @@ SCHEMA_MAP: dict[str, list[str]] = {
     "data/schemas/whatsnew.schema.json": ["data/whatsnew.json"],
 }
 
+# The one dialect this gate speaks. Draft7Validator is used unconditionally
+# below, so every mapped schema has to declare the matching $schema or it
+# would be validated under rules it did not ask for.
+DRAFT7_URI = "http://json-schema.org/draft-07/schema#"
+
 
 def fail(msg: str) -> None:
     print(f"validate-json-schemas: {msg}", file=sys.stderr)
@@ -226,6 +231,15 @@ def main() -> int:
             Draft7Validator.check_schema(schema)
         except Exception as exc:  # noqa: BLE001 - report any schema defect (parse or schema error)
             fail(f"invalid schema {schema_rel}: {exc}")
+            failures += 1
+            continue
+
+        # check_schema() above validates against draft-07 whatever the schema
+        # declares, so a schema that names a different draft would be checked
+        # and then validated under rules it never asked for. Pin the dialect.
+        declared = schema.get("$schema")
+        if declared != DRAFT7_URI:
+            fail(f"{schema_rel}: $schema must be {DRAFT7_URI} (found {declared!r})")
             failures += 1
             continue
 

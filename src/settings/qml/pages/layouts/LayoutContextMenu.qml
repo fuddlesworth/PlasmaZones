@@ -34,7 +34,10 @@ Menu {
 
     property var layout: null
     /// Tracks the kind (`"snap"` / `"autotile"` / `"none"`) the
-    /// aspect-ratio submenu was last reconciled to. showForLayout
+    /// aspect-ratio submenu was last reconciled to. Scrolling templates
+    /// map onto `"autotile"` here: neither carries zones, so both want
+    /// the submenu taken away, and no third state buys anything.
+    /// showForLayout
     /// only mutates the menu when the current layout's kind
     /// differs from this state — Qt 6's removeMenu() DESTROYS the
     /// Menu itself (docs: "Removes and destroys the specified
