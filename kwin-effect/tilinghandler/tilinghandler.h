@@ -343,11 +343,12 @@ public:
     /// no re-fetch. The edge consumes the marker, so a later unseed→seed cycle
     /// re-drives only on its own evidence.
     ///
-    /// The marker is NOT cleared by either unseeding path. It indexes rule
-    /// sets that deliberately survive daemon loss, and every successful
-    /// getAllRules reply recomputes it. Clearing it on teardown or bring-up
-    /// would disarm this edge for the session if the following getAllRules
-    /// never lands; a stale-TRUE marker only costs one redundant re-drive.
+    /// The marker is NOT cleared by either unseeding path — those paths SET
+    /// it instead, from the re-slice clearActiveLayoutsForTeardown performs.
+    /// Every successful getAllRules reply recomputes it outright. Clearing it
+    /// on teardown or bring-up would disarm this edge for the session if the
+    /// following getAllRules never lands; a stale-TRUE marker only costs one
+    /// redundant re-drive.
     bool activeLayoutsSeeded() const
     {
         return m_activeLayoutsSeeded;
@@ -361,8 +362,9 @@ public:
     /// handler's clearAllDecorations.
     ///
     /// CALL-SITE CONTRACT: two sanctioned callers, both of which must supply
-    /// the invalidate this function deliberately omits (no repaint and no
-    /// sweep happen here).
+    /// the invalidate and the border sweep this function deliberately omits.
+    /// The only repaint it takes is the SetOpacity bookend inside the
+    /// re-slice described below.
     ///  - the effect's serviceUnregistered teardown
     ///    (lifecycle_wiring_daemon.cpp), which runs invalidateAllRuleCaches
     ///    immediately after;
@@ -376,24 +378,31 @@ public:
     /// Clearing the seeded flag does NOT re-drive the rule admission: no
     /// getAllRules reply is coming with the daemon down, and the re-drive's
     /// updateAllDecorations would fight the teardown's clearAllDecorations.
-    /// ActiveLayout rules therefore stay admitted against an empty map for
-    /// the daemon-down interval. On the teardown path the re-admission comes
-    /// from the next bring-up's seed edge; on the bring-up path the clear runs
-    /// before loadSettings re-queries the map, so that same seed edge fires
-    /// from the reply a moment later.
+    /// Instead the clear re-slices the rule sets in place, through
+    /// PlasmaZonesEffect::sliceActiveLayoutRulesForUnseededMap: every rule
+    /// whose match references Field::ActiveLayout comes back OUT of the four
+    /// effect-bound sets (the three exclusion slices and the shader manager's
+    /// effect-rule set). Leaving them in was the defect — the rule sets
+    /// survive daemon loss on purpose, but they were filled while the map was
+    /// seeded, and an unstamped ActiveLayout reads as an ENGAGED empty string,
+    /// so a negated leaf over-matches EVERY window for the whole daemon-down
+    /// interval. Re-slicing restores the both-polarities-inert shape a cold
+    /// start has.
     ///
     /// Neither caller clears the effect's m_activeLayoutRulesWithheld marker
-    /// that gates that seed edge, and neither should: the withheld rules live
-    /// in rule sets the teardown preserves, so the marker stays true across
-    /// the daemon-down interval and is recomputed by the next successful
-    /// getAllRules pass. Clearing it would strand those rules disarmed for the
-    /// session whenever the following getAllRules errors or times out.
-    void clearActiveLayoutsForTeardown()
-    {
-        ++m_activeLayoutsGeneration;
-        m_activeLayouts.clear();
-        m_activeLayoutsSeeded = false;
-    }
+    /// that gates the seed edge, and neither should. The re-slice SETS it
+    /// whenever it removed a rule, so on this path the marker's correctness is
+    /// by construction: the same call that withholds the rules records that it
+    /// did, and the next seeding edge re-drives loadRuleAnimationsFromDbus to
+    /// restore them from the live store. A marker left true from an earlier
+    /// admission pass is still true and must not be cleared here — that would
+    /// strand the withheld rules disarmed for the session whenever the
+    /// following getAllRules errors or times out. A stale-TRUE marker costs
+    /// one redundant re-drive, the safe direction.
+    ///
+    /// Out-of-line (state.cpp) because the re-slice reaches into effect
+    /// internals that are incomplete at this point in the header.
+    void clearActiveLayoutsForTeardown();
 
     /// The set this discriminator actually answers over.
     ///

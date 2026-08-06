@@ -8245,14 +8245,14 @@
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="489"/>
-        <location filename="../src/settings/controller/settingscontroller.cpp" line="820"/>
+        <location filename="../src/settings/controller/settingscontroller.cpp" line="835"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="342"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="381"/>
         <source>Zone %1</source>
         <translation>Strefa %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller.cpp" line="822"/>
+        <location filename="../src/settings/controller/settingscontroller.cpp" line="837"/>
         <source>%1 — %2</source>
         <translation>%1 — %2</translation>
     </message>
@@ -12016,7 +12016,7 @@
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="327"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="617"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="618"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="430"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="269"/>
         <source>%n zone</source>
@@ -12382,7 +12382,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="167"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="466"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="802"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="161"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="175"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="470"/>
         <location filename=".qml-stubs/src/settings/qml/pages/wizard/WizardFooter.qml.cpp" line="85"/>
@@ -13427,7 +13427,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="457"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="155"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="169"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="221"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="123"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="181"/>
@@ -14063,7 +14063,7 @@
         <translation>Nie skonfigurowano wartości domyślnej</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="617"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="618"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="430"/>
         <source>%n width</source>
         <translation type="unfinished">
@@ -14073,7 +14073,7 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="620"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="621"/>
         <source>→ %1 (%2)</source>
         <translation>→ %1 (%2)</translation>
     </message>
@@ -15585,165 +15585,165 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="66"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="71"/>
         <source>That template is no longer available.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="150"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="164"/>
         <source>Edit Scrolling Template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="150"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="164"/>
         <source>New Scrolling Template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="174"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="188"/>
         <source>This is a built-in template. Saving stores your own copy, and deleting that copy brings the built-in one back.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="183"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="197"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorBody.qml.cpp" line="205"/>
         <source>Name:</source>
         <translation>Nazwa:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="184"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="198"/>
         <source>Template name</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="194"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="209"/>
         <source>Description:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="195"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="210"/>
         <source>Optional description</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="203"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="218"/>
         <source>Starting columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="210"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="225"/>
         <source>The first windows you open form these columns, left to right. Later windows use the default width below. Leave the list empty for a template that only sets the width presets.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="233"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="248"/>
         <source>Column %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="240"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="341"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="255"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="354"/>
         <source>%1%</source>
         <translation type="unfinished">%1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="242"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="257"/>
         <source>Width of column %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="264"/>
         <source>Display mode of column %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="255"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="270"/>
         <source>Remove column %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="274"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="287"/>
         <source>Add Column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="290"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="303"/>
         <source>A template can start at most %1 columns.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="296"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="309"/>
         <source>Later columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="305"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="318"/>
         <source>Default width:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="310"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="323"/>
         <source>Fraction of the screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="314"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="327"/>
         <source>Fixed pixels</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="318"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="331"/>
         <source>The window decides</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="322"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="335"/>
         <source>Width preset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="333"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="346"/>
         <source>Width in pixels:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="333"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="346"/>
         <source>Width:</source>
         <translation type="unfinished">Szerokość:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="348"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="361"/>
         <source>Preset number:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="363"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="377"/>
         <source>Show windows as:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="370"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="384"/>
         <source>Width presets:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="371"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="378"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="392"/>
         <source>For example 0.333, 0.5, 0.667</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="377"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="391"/>
         <source>Height presets:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="386"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="400"/>
         <source>The default width is set to a width preset, so this template needs at least one width preset before it can be saved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="393"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="407"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through while this template is assigned.</source>
         <translation type="unfinished"></translation>
     </message>

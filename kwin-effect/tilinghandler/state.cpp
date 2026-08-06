@@ -509,8 +509,11 @@ void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayout
         // the last admission pass actually dropped a rule for referencing
         // ActiveLayout. A pass that ran with the map already seeded leaves the
         // marker false, which is also the right answer: it admitted the field
-        // itself. The marker is consumed here so a later unseed→seed cycle
-        // re-drives only on its own evidence.
+        // itself. The other writer is clearActiveLayoutsForTeardown, which
+        // sets the marker when its re-slice actually removed a rule — so an
+        // unseed that withheld nothing does not arm this edge either. The
+        // marker is consumed here so a later unseed→seed cycle re-drives only
+        // on its own evidence.
         if (m_effect->m_activeLayoutRulesWithheld) {
             m_effect->m_activeLayoutRulesWithheld = false;
             m_effect->loadRuleAnimationsFromDbus();
@@ -535,6 +538,26 @@ void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayout
     if (m_effect->m_shaderManager.hasOpacityRules() && KWin::effects) {
         KWin::effects->addRepaintFull();
     }
+}
+
+void TilingHandler::clearActiveLayoutsForTeardown()
+{
+    ++m_activeLayoutsGeneration;
+    m_activeLayouts.clear();
+    m_activeLayoutsSeeded = false;
+    // Take the rules that resolve against the map back out of the effect's
+    // rule sets — see the header doc for why leaving them bound over the
+    // daemon-down interval over-matches. This also arms the seed edge above
+    // (it sets m_activeLayoutRulesWithheld when it removed anything), so the
+    // rules are re-admitted from the live store on the next real map.
+    //
+    // No border sweep and no cache invalidation here, by the call-site
+    // contract: both callers run invalidateAllRuleCaches (which drops the
+    // verdicts these removals change, and carries the window-layer sweep) and
+    // a border sweep of their own immediately after. The re-slice does take
+    // the SetOpacity repaint bookend, which neither caller covers on the
+    // handover path — see its own doc.
+    m_effect->sliceActiveLayoutRulesForUnseededMap();
 }
 
 void TilingHandler::updateScrollWheelShortcuts()

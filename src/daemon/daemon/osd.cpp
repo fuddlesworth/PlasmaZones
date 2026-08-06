@@ -715,19 +715,24 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
         // scrollingActive false and handed a scrolling screen the manual list.
         const bool autotileEnabled = m_settings->autotileEnabled();
 
-        // Templates is decided by the LIVE engine capability, not by
-        // LayoutId::isScrolling(assignmentId): a scrolling assignment the
-        // router downgraded (master switch off, Scrolling axis
-        // context-disabled) answers Placement and must keep the manual list.
-        // Same gate as resolvePerScreenLayoutInclude in overlayservice.cpp,
-        // which owns the authoritative per-screen decision; this
-        // controller-level filter only has to avoid contradicting it.
+        // Templates needs BOTH conjuncts, exactly as
+        // resolvePerScreenLayoutInclude in overlayservice.cpp spells them:
+        // a scrolling assignment id AND a live engine still reporting
+        // Templates. The live capability alone is not enough (an engine can
+        // report Templates for a screen whose assignment is not scrolling),
+        // and the assignment id alone is not enough (a scrolling assignment
+        // the router downgraded — master switch off, Scrolling axis
+        // context-disabled — answers Placement and must keep the manual
+        // list). overlayservice.cpp owns the authoritative per-screen
+        // decision; this controller-level filter only has to avoid
+        // contradicting it.
         const auto classify = [&](const QString& screenId) {
             const QString assignmentId =
                 m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
             if (autotileEnabled && PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
-            } else if (layoutSupportForScreen(screenId) == LayoutSupport::Templates) {
+            } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)
+                       && layoutSupportForScreen(screenId) == LayoutSupport::Templates) {
                 scrollingActive = true;
             } else {
                 manualActive = true;
@@ -747,6 +752,13 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
             for (const QString& screenId : effectiveIds) {
                 classify(screenId);
             }
+            // Deliberately mixed: with even one Templates screen in the set,
+            // the flags below turn manual and autotile off for everyone, so
+            // the global value is templates-only. That is fine because it is
+            // only a seed — every list consumer (picker, cycle, drag popup)
+            // re-runs updateLayoutFilterForScreen with its own screen id
+            // before reading a list, and OverlayService resolves the include
+            // flags per screen anyway.
         }
     } else {
         manualActive = true;
@@ -755,6 +767,13 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
     const bool includeAutotile = !scrollingActive && autotileActive;
 
     if (m_overlayService) {
+        // No templates argument by design: this only seeds OverlayService's
+        // own m_includeManualLayouts/m_includeAutotileLayouts, which survive
+        // solely as the fall-through default in resolvePerScreenLayoutInclude
+        // (no layout manager, or an empty screen id). Every screen an arm
+        // claims — including the Templates arm — overwrites all three flags
+        // there, so the false/false pair a scrolling screen writes here never
+        // reaches a real picker list.
         m_overlayService->setLayoutFilter(includeManual, includeAutotile);
     }
     if (m_unifiedLayoutController) {

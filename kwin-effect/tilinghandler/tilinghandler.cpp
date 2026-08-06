@@ -823,11 +823,15 @@ void TilingHandler::onDaemonReady()
     // clear) drops every verdict memoised against the dead map, and
     // scheduleBorderSweep rebuilds the decorations those verdicts baked in.
     clearActiveLayoutsForTeardown();
-    // m_activeLayoutRulesWithheld is deliberately NOT cleared alongside the
-    // unseeding. It indexes rule sets that SURVIVE the teardown (the effect
-    // keeps its admitted rule sets across daemon loss), so it stays meaningful
-    // across the gap, and every successful loadRuleAnimationsFromDbus reply
-    // recomputes it outright (shader_config_dbus.cpp assigns, never ORs).
+    // That call also re-slices the ActiveLayout-scoped rules back out of the
+    // four effect-bound rule sets (which SURVIVE the teardown by design) and
+    // SETS m_activeLayoutRulesWithheld when it removed any — so on this path
+    // the marker is correct by construction, and the seed edge fired by
+    // loadSettings' reply below re-drives the fetch that restores them.
+    //
+    // m_activeLayoutRulesWithheld is deliberately never CLEARED alongside the
+    // unseeding. Every successful loadRuleAnimationsFromDbus reply recomputes
+    // it outright (shader_config_dbus.cpp assigns, never ORs).
     // Clearing it here would be unsafe in the one case that matters: if this
     // bring-up's getAllRules errors or times out, no reply recomputes the
     // marker, and a cleared marker leaves the withheld ActiveLayout rules

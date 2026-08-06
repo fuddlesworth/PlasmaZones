@@ -168,7 +168,7 @@ private Q_SLOTS:
         QCOMPARE(stored.size(), PlasmaZones::MaxTemplateDescriptionLength);
     }
 
-    void testDelete_sweepsQuickSlotAndBumpsRevision()
+    void testDelete_sweepsQuickSlotAndSignals()
     {
         // Bind the template to a scrolling quick slot BEFORE the spy: the
         // setter emits the same signal, and the leg under test is the delete.

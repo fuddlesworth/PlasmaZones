@@ -24,8 +24,9 @@ inline constexpr qreal MinTemplateFraction = 0.05;
 /// kMaxTemplateEntries (enginelimits.h) the same hand-written way
 /// MinTemplateFraction mirrors its floor. The engine truncates a pushed
 /// blueprint at this many entries, so columns beyond it could never seed
-/// anything. Normalization drops the excess, and the settings UI reads this
-/// constant for its own column limit.
+/// anything, and it keeps the same number out of a pushed preset vocabulary.
+/// Normalization drops the excess from all three lists, and the value is
+/// exported to the settings UI through SettingsController::scrollingConstants().
 inline constexpr int MaxTemplateColumns = 16;
 
 /**
@@ -123,8 +124,11 @@ public:
     }
 
     /// Clamp every fraction into legal range, drop degenerate entries, sort
-    /// and dedupe the preset lists, and cap the blueprint at the engine's
-    /// entry limit. A Preset default width with an empty preset vocabulary
+    /// and dedupe the preset lists, and cap the blueprint AND both preset
+    /// vocabularies at MaxTemplateColumns. The preset cap applies after the
+    /// sort and dedupe, so what survives is the smallest N distinct stops,
+    /// matching what the engine keeps out of the same pushed list. A Preset
+    /// default width with an empty preset vocabulary
     /// (the bare-defaults shape) demotes to Proportion, so the width trio the
     /// daemon pushes as a unit is always self-consistent. Returns false when
     /// the template is unusable even after normalization (invalid id / empty

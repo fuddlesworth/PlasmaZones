@@ -27,6 +27,7 @@
 #include "core/types/constants.h"
 #include "core/utils/geometryutils.h"
 #include <PhosphorZones/LayoutComputeService.h>
+#include <PhosphorZones/ScrollingTemplate.h>
 #include <PhosphorZones/ScrollingTemplateStore.h>
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
@@ -97,6 +98,13 @@ namespace PlasmaZones {
 // which would otherwise duplicate the kind ints, the slider and spin ranges,
 // and the preset ceiling across the C++/QML boundary.
 //
+// ConfigDefaults is not the only home the map draws from. The last three
+// entries are the template-authoring caps the scrolling template editor has
+// to obey to stay honest about what the store will keep: the column and
+// preset-list ceiling from PhosphorZones::MaxTemplateColumns, and the two
+// text-field caps the D-Bus boundary re-applies through clampName. They ride
+// along here because that dialog already binds this one map.
+//
 // The map covers both dimensions, not just widths: width kinds and their
 // value bounds, the height kinds and their fixed-pixel range, the editing
 // steps for each, the preset-index ceiling, the shortcut adjust-step percent
@@ -162,6 +170,13 @@ QVariantMap SettingsController::scrollingConstants() const
         {QStringLiteral("dropBorderWidthMax"), ConfigDefaults::scrollingDropIndicatorBorderWidthMax()},
         {QStringLiteral("dropBorderRadiusMin"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMin()},
         {QStringLiteral("dropBorderRadiusMax"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMax()},
+        // Scrolling template authoring caps. The store truncates a template's
+        // column list and each preset list at MaxTemplateColumns, and the
+        // layout adaptor clamps the two text fields on the way in, so the
+        // editor dialog binds these to stop the user short of a silent cut.
+        {QStringLiteral("maxTemplateColumns"), PhosphorZones::MaxTemplateColumns},
+        {QStringLiteral("nameMaxLength"), MaxLayoutNameLength},
+        {QStringLiteral("descriptionMaxLength"), MaxTemplateDescriptionLength},
     };
 }
 

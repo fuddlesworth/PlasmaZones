@@ -653,15 +653,22 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     }
     updateLayoutFilterForScreen(screenId);
     // Same empty-vocabulary answer the picker gives (shortcuts_wiring.cpp):
-    // on a Templates screen an empty candidate list means the template store
-    // is empty, and cycling would silently do nothing. The generic "engine
-    // provides no layouts" card would misdescribe it.
-    if (m_overlayService && layoutSupportForScreen(screenId) == LayoutSupport::Templates
-        && m_overlayService->visibleLayoutCount(screenId) == 0) {
-        qCDebug(lcDaemon) << "Layout cycle: no templates in the store for screen" << screenId;
-        if (m_settings && m_settings->showNavigationOsd()) {
-            m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
-                                                QString(), QString(), screenId);
+    // an empty candidate list means cycling would silently do nothing, on
+    // ANY screen. On a Templates screen that means the template store is
+    // empty, which the user can act on and which the generic "engine
+    // provides no layouts" card would misdescribe; everywhere else the
+    // allow-lists plus the aspect filter wiped the list and the generic card
+    // is the right answer. Same if/else split as the picker so the two
+    // shortcuts never disagree about what an empty list means.
+    if (m_overlayService && m_overlayService->visibleLayoutCount(screenId) == 0) {
+        if (layoutSupportForScreen(screenId) == LayoutSupport::Templates) {
+            qCDebug(lcDaemon) << "Layout cycle: no templates in the store for screen" << screenId;
+            if (m_settings && m_settings->showNavigationOsd()) {
+                m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
+                                                    QString(), QString(), screenId);
+            }
+        } else {
+            showLayoutsUnavailableOsd(screenId);
         }
         return;
     }

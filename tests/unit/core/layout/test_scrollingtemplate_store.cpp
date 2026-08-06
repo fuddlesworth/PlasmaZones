@@ -27,6 +27,8 @@
 #include <QStringList>
 #include <QTemporaryDir>
 
+#include <algorithm>
+
 #include <PhosphorFsLoader/SchemaValidator.h>
 #include <PhosphorZones/ScrollingTemplate.h>
 #include <PhosphorZones/ScrollingTemplateStore.h>
@@ -130,6 +132,41 @@ private Q_SLOTS:
         QCOMPARE(templ.defaultColumnWidthKind, 0);
         QCOMPARE(templ.defaultColumnWidthPresetIndex, 0);
         QCOMPARE(templ.defaultColumnWidthValue, 1.0);
+    }
+
+    void normalizeCapsPresetListsAtMaxColumns()
+    {
+        // The engine keeps only MaxTemplateColumns entries out of a pushed
+        // vocabulary, so a longer list carries fractions no shortcut could ever
+        // cycle to. normalize() truncates after the sort and dedupe, which makes
+        // the kept set the smallest N distinct fractions rather than whichever
+        // ones happened to be authored first.
+        const int overflow = PhosphorZones::MaxTemplateColumns + 4;
+        QList<qreal> ascending;
+        ascending.reserve(overflow);
+        for (int i = 0; i < overflow; ++i) {
+            // Spaced well past the dedupe epsilon and inside [floor, 1.0], so
+            // nothing is dropped or merged and the cap is the only thing acting.
+            ascending.append(PhosphorZones::MinTemplateFraction + 0.045 * i);
+        }
+        QVERIFY(ascending.last() <= 1.0);
+        QList<qreal> shuffled = ascending;
+        std::reverse(shuffled.begin(), shuffled.end());
+
+        ScrollingTemplate templ = makeTemplate();
+        templ.presetColumnWidths = shuffled;
+        templ.presetWindowHeights = shuffled;
+        templ.defaultColumnWidthPresetIndex = overflow - 1;
+        QVERIFY(templ.normalize());
+
+        const QList<qreal> expected = ascending.first(PhosphorZones::MaxTemplateColumns);
+        QCOMPARE(templ.presetColumnWidths.size(), PhosphorZones::MaxTemplateColumns);
+        QCOMPARE(templ.presetColumnWidths, expected);
+        QCOMPARE(templ.presetWindowHeights.size(), PhosphorZones::MaxTemplateColumns);
+        QCOMPARE(templ.presetWindowHeights, expected);
+        // The index was valid against the authored list and is out of range
+        // against the capped one, so the re-clamp has to follow the truncation.
+        QCOMPARE(templ.defaultColumnWidthPresetIndex, PhosphorZones::MaxTemplateColumns - 1);
     }
 
     void malformedJsonYieldsInvalid()
@@ -254,6 +291,22 @@ private Q_SLOTS:
         const QJsonObject columns =
             schema.value(QLatin1String("properties")).toObject().value(QLatin1String("columns")).toObject();
         QCOMPARE(columns.value(QLatin1String("maxItems")).toInt(), PhosphorZones::MaxTemplateColumns);
+
+        // The kind-0 arm of defaultColumnWidth restates the same fraction bounds
+        // a second time, in its own then-branch rather than by $ref, so it can
+        // drift away from the shared fraction definition above on its own.
+        const QJsonObject kindZeroValue = schema.value(QLatin1String("definitions"))
+                                              .toObject()
+                                              .value(QLatin1String("columnWidth"))
+                                              .toObject()
+                                              .value(QLatin1String("then"))
+                                              .toObject()
+                                              .value(QLatin1String("properties"))
+                                              .toObject()
+                                              .value(QLatin1String("value"))
+                                              .toObject();
+        QCOMPARE(kindZeroValue.value(QLatin1String("minimum")).toDouble(), PhosphorZones::MinTemplateFraction);
+        QCOMPARE(kindZeroValue.value(QLatin1String("maximum")).toDouble(), 1.0);
     }
 
     void toJsonAndBundledTemplatesSatisfySchema()
@@ -340,6 +393,10 @@ private Q_SLOTS:
         // leaves unbounded above. Without this arm a plain unconditional maximum
         // on value would satisfy the two arms above.
         QVERIFY(!validator.validate(documentWithWidth(1, 2.0)).has_value());
+        // The floor is the half of the branch the top-level minimum of 0 cannot
+        // express, so a sub-floor fraction under kind 0 has to be rejected by
+        // the then-branch or by nothing at all.
+        QVERIFY(validator.validate(documentWithWidth(0, 0.02)).has_value());
     }
 
 private:

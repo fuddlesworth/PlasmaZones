@@ -44,7 +44,12 @@ QList<qreal> fractionsFromJson(const QJsonArray& array)
 
 /// Clamp to [MinTemplateFraction, 1.0] dropping sub-floor entries, sort ascending,
 /// dedupe within kEps — the same normalization the settings preset parser
-/// applies, so a template list and a settings list obey one contract.
+/// applies, so a template list and a settings list obey one contract. The result
+/// is capped at MaxTemplateColumns, the same limit the blueprint obeys: the
+/// engine keeps only that many entries out of a pushed vocabulary, so anything
+/// past it could never be cycled to. Truncating AFTER the sort and dedupe makes
+/// the kept set deterministic and identical to what the engine keeps, the
+/// smallest N distinct fractions.
 QList<qreal> normalizeFractionList(QList<qreal> values)
 {
     QList<qreal> kept;
@@ -57,8 +62,11 @@ QList<qreal> normalizeFractionList(QList<qreal> values)
     }
     std::sort(kept.begin(), kept.end());
     QList<qreal> out;
-    out.reserve(kept.size());
+    out.reserve(qMin(int(kept.size()), MaxTemplateColumns));
     for (qreal v : kept) {
+        if (out.size() == MaxTemplateColumns) {
+            break;
+        }
         if (out.isEmpty() || qAbs(out.last() - v) >= kEps) {
             out.append(v);
         }

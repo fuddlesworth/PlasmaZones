@@ -695,6 +695,71 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
     });
 }
 
+void PlasmaZonesEffect::sliceActiveLayoutRulesForUnseededMap()
+{
+    // Same predicate the admission filter uses for the conditional half of the
+    // never-stamped set, so what the clear removes is exactly what a cold-start
+    // pass would have refused to admit.
+    const auto referencesActiveLayout = [](const PhosphorRules::Rule& rule) {
+        return rule.match.referencesAnyField(activeLayoutField());
+    };
+    const auto sliceRuleSet = [&referencesActiveLayout](PhosphorRules::RuleSet& set) {
+        QList<PhosphorRules::Rule> kept = set.rules();
+        const qsizetype before = kept.size();
+        kept.removeIf(referencesActiveLayout);
+        if (kept.size() == before) {
+            // setRules always bumps the revision and invalidates every bound
+            // evaluator's match cache, so skip the no-op rewrite.
+            return false;
+        }
+        set.setRules(kept);
+        return true;
+    };
+
+    // Non-short-circuiting OR: every set must be sliced, not just up to the
+    // first one that had a match.
+    bool removed = false;
+    removed |= sliceRuleSet(m_snappingExclusionRuleSet);
+    removed |= sliceRuleSet(m_decorationExclusionRuleSet);
+    removed |= sliceRuleSet(m_animationExclusionRuleSet);
+
+    // The shader manager's effect-rule set is written through its own setter
+    // (it keeps the raw list and the bound mirror in step, and recomputes the
+    // SetOpacity / SetWindowLayer presence gates). The setter no-ops on an
+    // unchanged list, so the size check is only for the marker.
+    QList<PhosphorRules::Rule> animationRules = m_shaderManager.animationRuleSet().rules();
+    const qsizetype animationBefore = animationRules.size();
+    animationRules.removeIf(referencesActiveLayout);
+    if (animationRules.size() != animationBefore) {
+        const bool hadSetOpacity = m_shaderManager.hasOpacityRules();
+        m_shaderManager.setRuleAnimationRules(std::move(animationRules));
+        removed = true;
+        // The SetOpacity bookend, for the same reason loadRuleAnimationsFromDbus
+        // takes it on a rule edit: opacity is resolved in the paint path, so a
+        // window dimmed by an ActiveLayout-scoped SetOpacity rule stays at its
+        // last-painted alpha forever once the rule leaves the evaluator, unless
+        // something damages it. The daemon-LOSS caller happens to be covered
+        // (its clearAllDecorations tears down the tint layer), but the bring-up
+        // caller is not: a straight old→new owner handover emits no
+        // serviceUnregistered edge, so decorations are still live there. This
+        // is the one repaint this path owns; borders and rule verdicts remain
+        // the callers' invalidateAllRuleCaches + scheduleBorderSweep.
+        if ((hadSetOpacity || m_shaderManager.hasOpacityRules()) && KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
+    }
+
+    if (removed) {
+        // Arm the seeding edge in TilingHandler::setActiveLayouts: these rules
+        // are gone from the evaluator until a getAllRules pass re-admits them,
+        // and that pass only runs if the marker is set. Never cleared here —
+        // an earlier true from a bring-up admission pass is still true.
+        m_activeLayoutRulesWithheld = true;
+        qCDebug(lcEffect) << "sliceActiveLayoutRulesForUnseededMap: dropped ActiveLayout-scoped rules for the "
+                             "unseeded map — re-drive armed";
+    }
+}
+
 void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
 {
     // The key is named INLINE, not bound to a local alias first. An alias saves nothing

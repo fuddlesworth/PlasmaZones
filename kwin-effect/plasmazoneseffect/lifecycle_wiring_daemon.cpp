@@ -244,11 +244,16 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // verdict against a layout the daemon may no longer publish. Also the
         // TEARDOWN variant (no border sweep, no repaint) for the same reason.
         m_tilingHandler->clearActiveLayoutsForTeardown();
-        // m_activeLayoutRulesWithheld is deliberately NOT cleared with that
-        // unseeding. It indexes the rule sets preserved below, which outlive
-        // the dead session on purpose, so it survives with them; each
+        // That call also re-slices the ActiveLayout-scoped rules back out of
+        // the four effect-bound rule sets, which the teardown otherwise
+        // preserves — bound against an empty map they over-match on their
+        // negated polarity — and SETS m_activeLayoutRulesWithheld when it
+        // removed any, so the next bring-up's seeding edge re-drives
+        // loadRuleAnimationsFromDbus and restores them.
+        //
+        // m_activeLayoutRulesWithheld is deliberately never CLEARED here. Each
         // successful loadRuleAnimationsFromDbus reply recomputes it from the
-        // live store. Clearing it here would disarm the next seeding edge (it
+        // live store, so a clear here would disarm the next seeding edge (it
         // is gated on the marker in TilingHandler's setActiveLayouts) if the
         // next bring-up's getAllRules never lands, stranding the withheld
         // ActiveLayout rules for the session. A stale-TRUE marker costs one

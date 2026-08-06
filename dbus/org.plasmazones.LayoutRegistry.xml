@@ -620,7 +620,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="quickLayoutSlotsChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Refresh hint for subscribers holding quick layout slot state, such as the settings panel's slot cards. Emitted when the slots are modified directly, and also when a layout or scrolling template is deleted and the id-scrub pass ran, whether or not that pass actually swept a slot. Re-read the slots rather than assuming a specific slot changed."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Refresh hint for subscribers holding quick layout slot state, such as the settings panel's slot cards. Emitted when the slots are modified directly, unconditionally when a layout is deleted, and when a scrolling template's deletion scrub changed a rule or swept a slot. Re-read the slots rather than assuming a specific slot changed."/>
         </signal>
         <signal name="assignmentChangesApplied">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted after applyAssignmentChanges finishes a KCM save batch, listing the screens whose assignments changed."/>

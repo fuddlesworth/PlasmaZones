@@ -23,13 +23,18 @@ Kirigami.Dialog {
     property bool editingSystem: false
 
     readonly property var displayOptions: [i18n("Stacked"), i18n("Tabbed")]
-    // Width kind vocabulary and value bounds, read once through the controller
-    // like the Scrolling pages do (SettingsController::scrollingConstants) so
-    // the form never restates a number ConfigDefaults owns.
+    // Width kind vocabulary, value bounds and the template authoring caps, read
+    // once through the controller like the Scrolling pages do
+    // (SettingsController::scrollingConstants) so the form never restates a
+    // number the C++ side owns.
     readonly property var scrollingConstants: root.controller.scrollingConstants()
     // Largest storable preset index.
     readonly property int presetIndexMax: root.scrollingConstants.presetIndexMax
     // Proportion bounds arrive as fractions and the width spins show percent.
+    // The floor is ConfigDefaults::scrollingDefaultColumnWidthProportionMin.
+    // It holds for templates too because the store floors a template fraction
+    // at PhosphorZones::MinTemplateFraction, and both of those are hand-written
+    // mirrors of the engine's PhosphorScrollEngine::MinColumnWidthFraction.
     readonly property int proportionMinPercent: Math.round(root.scrollingConstants.proportionMin * 100)
     readonly property int proportionMaxPercent: Math.round(root.scrollingConstants.proportionMax * 100)
     // How many width presets the field currently parses to. Bound through the
@@ -106,12 +111,21 @@ Kirigami.Dialog {
         root.open();
     }
 
-    // Entries outside (0, 1] are dropped rather than passed on. commit() then
-    // writes the surviving list back into the field, so what stays on screen is
-    // what was sent. The daemon still drops anything below 0.05 and sorts and
-    // dedupes the rest, so the stored list can be shorter again.
+    // Mirrors the store's normalizeFractionList (phosphor-zones): drop anything
+    // below the proportion floor or above 1, sort ascending, drop an entry
+    // within 0.01 of the one kept before it, and keep at most as many as a
+    // template may have columns. commit() writes the surviving list back into
+    // the field, so what stays on screen is what was sent, and the preset-number
+    // spin counts the same entries the store will keep. The daemon remains the
+    // authority and normalizes again on the way in.
     function parseFractionList(text) {
-        return text.split(",").map(part => parseFloat(part.trim())).filter(value => !isNaN(value) && value > 0 && value <= 1);
+        const parsed = text.split(",").map(part => parseFloat(part.trim())).filter(value => !isNaN(value) && value >= root.scrollingConstants.proportionMin && value <= 1).sort((a, b) => a - b);
+        let kept = [];
+        for (let i = 0; i < parsed.length && kept.length < root.scrollingConstants.maxTemplateColumns; i++) {
+            if (kept.length === 0 || Math.abs(kept[kept.length - 1] - parsed[i]) >= 0.01)
+                kept.push(parsed[i]);
+        }
+        return kept;
     }
 
     function commit() {
@@ -182,10 +196,11 @@ Kirigami.Dialog {
 
                 Kirigami.FormData.label: i18n("Name:")
                 placeholderText: i18n("Template name")
-                // Mirrors the D-Bus boundary clamp in the layout adaptor's
-                // saveScrollingTemplate (clampName with MaxLayoutNameLength),
-                // so typing stops where the store would have cut silently.
-                maximumLength: 40
+                // The same cap the D-Bus boundary applies in the layout
+                // adaptor's saveScrollingTemplate (clampName), read from the
+                // constants map so typing stops exactly where the store would
+                // have cut silently.
+                maximumLength: root.scrollingConstants.nameMaxLength
             }
 
             TextField {
@@ -193,8 +208,8 @@ Kirigami.Dialog {
 
                 Kirigami.FormData.label: i18n("Description:")
                 placeholderText: i18n("Optional description")
-                // Same boundary clamp, description arm (MaxTemplateDescriptionLength).
-                maximumLength: 500
+                // Same boundary clamp, description arm.
+                maximumLength: root.scrollingConstants.descriptionMaxLength
             }
         }
 
@@ -261,12 +276,10 @@ Kirigami.Dialog {
         RowLayout {
             id: addColumnRow
 
-            // The store truncates a template's column list at 16 (kMaxColumns
-            // in libs/phosphor-zones/src/scrollingtemplate.cpp, mirroring the
-            // engine's blueprint cap), so rows past that would vanish on save.
-            // scrollingConstants() carries no entry for it, so the number is
-            // restated here and tied by name to PhosphorZones::MaxTemplateColumns.
-            readonly property int columnLimit: 16
+            // The store truncates a template's column list at
+            // PhosphorZones::MaxTemplateColumns (mirroring the engine's
+            // blueprint cap), so rows past that would vanish on save.
+            readonly property int columnLimit: root.scrollingConstants.maxTemplateColumns
 
             spacing: Kirigami.Units.smallSpacing
 
@@ -350,9 +363,10 @@ Kirigami.Dialog {
                 // Stored 0-based, shown 1-based, the same offset the Scrolling
                 // pages' preset spins use. The ceiling is the smaller of the
                 // schema cap (ConfigDefaults::scrollingPresetIndexMax) and the
-                // presets this template itself declares, so the spin can never
-                // offer a number the width-presets field has no entry for. The
-                // floor of 1 keeps the spin valid while that field is empty.
+                // presets the width-presets field yields once normalized the
+                // way the store normalizes them, so the spin can never offer a
+                // number the stored list has no entry for. The floor of 1 keeps
+                // the spin valid while that field is empty.
                 from: 1
                 to: Math.max(1, Math.min(root.presetWidthCount, root.presetIndexMax + 1))
             }

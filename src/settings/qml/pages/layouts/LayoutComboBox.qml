@@ -608,9 +608,10 @@ ComboBox {
                             return i18n("No default configured");
                         }
                         // A scrolling template's zoneCount carries the number of
-                        // bands its preview draws, which is its starting columns
-                        // or its width presets or a synthetic even split, so the
-                        // honest wording here is widths rather than columns.
+                        // bands its preview draws, which is its starting columns,
+                        // or its width presets, or the single fallback band a
+                        // template with neither draws at its own default width,
+                        // so the honest wording here is widths not columns.
                         // Read the category off the resolved layout: the option's
                         // own category follows layoutFilter when one is set.
                         const count = (modelData.layout && modelData.layout.zoneCount) || 0;

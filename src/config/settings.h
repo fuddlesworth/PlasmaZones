@@ -374,8 +374,9 @@ public:
     // The template an unassigned screen resolves to, empty for none.
     Q_PROPERTY(QString defaultScrollingTemplate READ defaultScrollingTemplate WRITE setDefaultScrollingTemplate NOTIFY
                    defaultScrollingTemplateChanged)
-    // View knobs on the plain Scrolling group beside the sizing defaults above,
-    // not on Scrolling.Behavior: they describe how the strip is drawn.
+    // Input knobs on the plain Scrolling group beside the sizing defaults above,
+    // not on Scrolling.Behavior: they say how a wheel event over the strip moves
+    // the focus, not how the strip behaves once a window is placed.
     Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
                    NOTIFY scrollingWheelFocusEnabledChanged)
     Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted

@@ -31,11 +31,11 @@ Item {
     readonly property string autotileDefaultId: "autotile:" + root.appSettings.defaultAutotileAlgorithm
     // A template card's zoneCount carries the number of bands its preview
     // draws, and that comes from one of three sources: the template's starting
-    // columns, the width presets when it has no starting columns, or the
-    // synthetic even split a template with neither falls back to. Bands off the
-    // right edge are dropped either way. Only the first source is literally a
-    // column count, so the footer and the accessible description say "widths",
-    // which is true of all three.
+    // columns, the width presets when it has no starting columns, or the single
+    // fallback band a template with neither draws at its own default width.
+    // Bands off the right edge are dropped either way. Only the first source is
+    // literally a column count, so the footer and the accessible description say
+    // "widths", which is true of all three.
     readonly property bool isTemplateCard: root.viewMode === 2 || root.modelData.isScrollingTemplate === true
     // Global "Auto-assign for all layouts" master toggle (#370). Read once at
     // the root so child controls (auto-assign button, CategoryBadge) share a

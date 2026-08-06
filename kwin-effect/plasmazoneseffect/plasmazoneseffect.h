@@ -2175,9 +2175,15 @@ private:
     // overwhelming majority — pays a getAllRules round-trip, a full RuleSet
     // parse and an updateAllDecorations sweep for rules that do not exist.
     //
-    // Cleared on consumption by that edge, and wherever the seeded flag is
-    // cleared (the serviceUnregistered teardown and TilingHandler's bring-up
-    // clear), since the marker describes a pass over the dead session's store.
+    // Cleared on exactly one path: consumption by that seeding edge. Every
+    // successful loadRuleAnimationsFromDbus reply recomputes it outright
+    // (shader_config_dbus.cpp assigns the pass verdict, never ORs), and the
+    // unseeding paths themselves deliberately do NOT clear it — see
+    // TilingHandler::clearActiveLayoutsForTeardown, which re-slices the
+    // ActiveLayout rules out of the four rule sets and SETS this marker when
+    // it removed any. Clearing on teardown or bring-up would disarm the edge
+    // for the session whenever the following getAllRules never lands; a
+    // stale-TRUE marker only costs one redundant re-drive.
     bool m_activeLayoutRulesWithheld = false;
 
     // Minimum window size for autotile eligibility. Windows smaller than this
@@ -2425,6 +2431,36 @@ private Q_SLOTS:
     /// m_animationRulesRefreshDebounce) so a settings-UI edit takes effect
     /// without restarting the effect.
     void loadRuleAnimationsFromDbus();
+
+    /// Re-slice the four effect-bound rule sets for an active-layout map that
+    /// has just gone UNSEEDED (daemon-loss teardown / bring-up clear), by
+    /// removing every rule whose match references `Field::ActiveLayout`.
+    ///
+    /// The rule sets deliberately survive daemon loss, but the admission
+    /// filter that filled them ran while the map was seeded, so they hold
+    /// rules that resolve against a map which is now empty — and an empty
+    /// ActiveLayout stamp is not inert (a `None{ActiveLayout Equals X}` leaf
+    /// matches EVERY window). Dropping them restores the both-polarities-inert
+    /// shape `effectNeverStampedFields` gives a cold start.
+    ///
+    /// Sets `m_activeLayoutRulesWithheld` when anything was removed, so the
+    /// next seeding edge in `TilingHandler::setActiveLayouts` re-drives
+    /// `loadRuleAnimationsFromDbus` and restores them from the live store.
+    /// That makes the marker correct BY CONSTRUCTION on this path: the same
+    /// call that withholds the rules records that it did.
+    ///
+    /// Runs no border sweep and no rule-cache invalidation of its own — the
+    /// sanctioned callers of `TilingHandler::clearActiveLayoutsForTeardown`
+    /// (its only caller) already pair `invalidateAllRuleCaches` +
+    /// `scheduleBorderSweep`, and that invalidate also carries the
+    /// window-layer sweep a removed `SetWindowLayer` rule needs.
+    ///
+    /// It DOES take the `SetOpacity` repaint bookend, because nothing else
+    /// covers it on the bring-up caller: opacity resolves in the paint path,
+    /// and a straight old→new daemon handover emits no `serviceUnregistered`
+    /// edge, so the decorations (and the tint layer whose teardown covers the
+    /// daemon-loss caller) are still live there.
+    void sliceActiveLayoutRulesForUnseededMap();
 
     /// D-Bus signal handler for `Rules.rulesChanged`. Re-arms the
     /// debounce timer rather than refetching the full ruleset on every

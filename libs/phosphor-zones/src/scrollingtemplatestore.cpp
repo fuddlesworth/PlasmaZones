@@ -192,7 +192,28 @@ bool ScrollingTemplateStore::removeTemplate(const QUuid& id)
         candidates.append(it->sourcePath);
     }
     if (!candidates.contains(idFile)) {
-        candidates.append(idFile);
+        // <id>.json is a guess at where this id lives, not a fact: file names
+        // are free-form and loadTemplates keys each entry by the id INSIDE the
+        // file, so <id-A>.json can perfectly well hold template B while A came
+        // from foo.json. Deleting the guess blindly would take B's file with
+        // it. Skip the append when a live entry other than this one owns that
+        // file. A non-existent idFile canonicalizes to an empty string, which
+        // matches no entry, so the ordinary case still appends.
+        const QString idCanonical = QFileInfo(idFile).canonicalFilePath();
+        bool ownedByOther = false;
+        for (auto other = m_templates.constBegin(); !idCanonical.isEmpty() && other != m_templates.constEnd();
+             ++other) {
+            if (other->id == id || other->sourcePath.isEmpty()) {
+                continue;
+            }
+            if (QFileInfo(other->sourcePath).canonicalFilePath() == idCanonical) {
+                ownedByOther = true;
+                break;
+            }
+        }
+        if (!ownedByOther) {
+            candidates.append(idFile);
+        }
     }
     for (const QString& path : std::as_const(candidates)) {
         if (QFile::exists(path) && !QFile::remove(path)) {
