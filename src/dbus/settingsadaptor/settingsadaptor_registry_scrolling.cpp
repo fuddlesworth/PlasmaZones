@@ -2,20 +2,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The Scrolling-family slice of SettingsAdaptor's getSetting/setSetting
-// registry: every scrolling key on the generic wire (core, tab indicator,
-// drop indicator, behavior, shortcuts). Split out of
-// settingsadaptor_registry.cpp when that TU crossed the file-size ceiling;
-// initializeRegistry() calls initializeRegistryScrolling() where the block
-// used to sit, so registration order is unchanged.
+// registry: every scrolling key on the generic wire (drag insert, core, tab
+// indicator, drop indicator, behavior, shortcuts). Split out of
+// settingsadaptor_registry.cpp alongside the snapping and autotile slices;
+// initializeRegistry() calls initializeRegistryScrolling() so the same keys
+// land in the same maps.
 //
-// The REGISTER_CONCRETE_* / REGISTER_THEME_FALLBACK_COLOR macros are
-// duplicated from settingsadaptor_registry.cpp on purpose: both TUs define
-// them inside their registration function and #undef them at the end, which
-// keeps them out of every other TU in a unity batch — a shared macro header
-// with an include guard would define them only once per batch and leave the
-// second TU without them. KEEP IN SYNC with the definitions in
-// settingsadaptor_registry.cpp (they are frozen boilerplate; a change there
-// must land here in the same commit).
+// BOUNDARY RULE for the four registry TUs: a key belongs to a mode TU when
+// its name carries that mode's prefix or the zone family prefix — scrolling*
+// here, snap* / snapping* / zone* in settingsadaptor_registry_snapping.cpp,
+// autotile* in settingsadaptor_registry_autotile.cpp. Mode-neutral keys
+// (drag activation, navigation / swap / span / quickLayout / cycle / rotate /
+// global shortcuts, display, appearance, filtering, animation and profile
+// trees, cava, gpu, and the per-mode disable lists, which are one shared
+// three-mode mechanism) stay in settingsadaptor_registry.cpp.
+//
+// The REGISTER_* macros are duplicated from settingsadaptor_registry.cpp on
+// purpose: every registry TU defines them inside its registration function and
+// #undefs them at the end, which keeps them out of every other TU in a unity
+// batch — a shared macro header with an include guard would define them only
+// once per batch and leave the later TUs without them. KEEP IN SYNC with the
+// definitions in settingsadaptor_registry.cpp (they are frozen boilerplate; a
+// change there must land here in the same commit).
 
 #include "settingsadaptor.h"
 #include "config/settings.h" // For concrete Settings type
@@ -26,6 +34,16 @@ namespace PlasmaZones {
 
 void SettingsAdaptor::initializeRegistryScrolling()
 {
+#define REGISTER_BOOL_SETTING(name, getter, setter)                                                                    \
+    m_getters[QStringLiteral(name)] = [this]() {                                                                       \
+        return m_settings->getter();                                                                                   \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
+        m_settings->setter(v.toBool());                                                                                \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("bool");
+
 #define REGISTER_CONCRETE_BOOL(name, getter, setter)                                                                   \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
@@ -85,6 +103,31 @@ void SettingsAdaptor::initializeRegistryScrolling()
     m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
     auto* concrete = qobject_cast<Settings*>(m_settings);
+
+    // ── ISettings-level scrolling keys ──
+    // Scrolling twin — same consumer contract (daemon beginDrag cache +
+    // the effect's tick-forwarding gate).
+    m_getters[QStringLiteral("scrollingDragInsertTriggers")] = [this]() {
+        return QVariant::fromValue(m_settings->scrollingDragInsertTriggers());
+    };
+    m_setters[QStringLiteral("scrollingDragInsertTriggers")] = [this](const QVariant& v) {
+        m_settings->setScrollingDragInsertTriggers(v.toList());
+        return true;
+    };
+    m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("stringlist");
+
+    REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
+
+    // The scrolling twin of the snap / autotile restore-floated pair, plus the
+    // tab-strip toggle. All three are ISettings virtuals with defaults, so they
+    // register through the interface like their snap / autotile counterparts
+    // rather than inside the concrete-Settings block below, where a
+    // non-Settings backend would lose the keys entirely.
+    REGISTER_BOOL_SETTING("scrollingRestoreFloatedWindowsOnLogin", scrollingRestoreFloatedWindowsOnLogin,
+                          setScrollingRestoreFloatedWindowsOnLogin)
+    REGISTER_BOOL_SETTING("scrollingTabIndicatorEnabled", scrollingTabIndicatorEnabled, setScrollingTabIndicatorEnabled)
+    REGISTER_BOOL_SETTING("scrollingDropIndicatorEnabled", scrollingDropIndicatorEnabled,
+                          setScrollingDropIndicatorEnabled)
 
     // Scrolling settings (concrete Settings only)
     if (concrete) {
@@ -159,8 +202,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
         REGISTER_CONCRETE_INT("scrollingDefaultWindowHeightPresetIndex", scrollingDefaultWindowHeightPresetIndex,
                               setScrollingDefaultWindowHeightPresetIndex)
         // ── Scrolling.TabIndicator ──
-        // scrollingTabIndicatorEnabled is registered through ISettings in
-        // initializeRegistry; the other twelve live here so the whole family
+        // scrollingTabIndicatorEnabled is registered in the ISettings section
+        // above; the other twelve live here so the whole family
         // sits in one block. EVERY key of the group must be present: this
         // generic surface is the ONLY channel the settings app has to the
         // daemon, so an unregistered key is a control that writes the settings
@@ -221,8 +264,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                       setScrollingTabIndicatorUrgentColor)
 
         // ── Scrolling.DropIndicator ──
-        // scrollingDropIndicatorEnabled is registered through ISettings in
-        // initializeRegistry; the other FIVE live here (two colours, opacity,
+        // scrollingDropIndicatorEnabled is registered in the ISettings section
+        // above; the other FIVE live here (two colours, opacity,
         // border width and radius) so the whole group is reachable. Same
         // every-key-must-be-present rule as the tab indicator block above:
         // this generic surface is the settings app's ONLY channel to the
@@ -275,7 +318,7 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                setScrollingRespectMinimumSize)
         REGISTER_CONCRETE_BOOL("scrollingRestoreStripsOnLogin", scrollingRestoreStripsOnLogin,
                                setScrollingRestoreStripsOnLogin)
-        // scrollingRestoreFloatedWindowsOnLogin is registered through ISettings in initializeRegistry.
+        // scrollingRestoreFloatedWindowsOnLogin is registered in the ISettings section above.
         REGISTER_CONCRETE_INT("scrollingColumnWidthStepPercent", scrollingColumnWidthStepPercent,
                               setScrollingColumnWidthStepPercent)
         REGISTER_CONCRETE_INT("scrollingWindowHeightStepPercent", scrollingWindowHeightStepPercent,
@@ -327,6 +370,7 @@ void SettingsAdaptor::initializeRegistryScrolling()
     }
 
 // Clean up macros (local scope; unity-batch hygiene)
+#undef REGISTER_BOOL_SETTING
 #undef REGISTER_CONCRETE_BOOL
 #undef REGISTER_CONCRETE_INT
 #undef REGISTER_CONCRETE_DOUBLE

@@ -2,13 +2,29 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Getter/setter/schema registry population for SettingsAdaptor:
-//   * initializeRegistry — registers every settings key exposed over the
-//     generic getSetting/setSetting D-Bus surface (REGISTER_* macro block,
-//     enum-validated custom setters, JSON profile-tree blob round-trips)
+//   * initializeRegistry — registers the mode-neutral half of the generic
+//     getSetting/setSetting D-Bus surface (REGISTER_* macro block,
+//     enum-validated custom setters, JSON profile-tree blob round-trips) and
+//     calls the three per-mode slices
 //   * validProfileTreeBlob — shared wire validation for the two profile-tree
 //     blob setters
 //
-// Same class as settingsadaptor.cpp, split into a separate TU without changing
+// The registry is split across FOUR TUs, one per family, all filling the same
+// m_getters / m_setters / m_schemas maps:
+//   * settingsadaptor_registry.cpp (this file) — core / shared
+//   * settingsadaptor_registry_snapping.cpp — initializeRegistrySnapping()
+//   * settingsadaptor_registry_autotile.cpp — initializeRegistryAutotile()
+//   * settingsadaptor_registry_scrolling.cpp — initializeRegistryScrolling()
+//
+// BOUNDARY RULE: a key belongs to a mode TU when its name carries that mode's
+// prefix or the zone family prefix — snap* / snapping* / zone* to snapping,
+// autotile* to autotile, scrolling* to scrolling. Mode-neutral keys stay here:
+// drag activation, the navigation / swap / span / quickLayout / cycle /
+// rotate / global shortcuts, display, appearance, filtering, the animation and
+// profile trees, cava, gpu, and the per-mode disable lists, which are one
+// shared three-mode mechanism rather than three per-mode settings.
+//
+// Same class as settingsadaptor.cpp, split into separate TUs without changing
 // the adaptor's public interface (mirrors the SettingsController multi-TU
 // split, e.g. settingscontroller_pagestate.cpp). The registry contents are
 // otherwise unchanged by the split itself.
@@ -16,7 +32,7 @@
 #include "settingsadaptor.h"
 #include "core/interfaces/interfaces.h"
 #include "config/settings.h" // For concrete Settings type
-#include "config/configdefaults.h" // ConfigDefaults::isValidScrolling* validators
+#include "config/configdefaults.h" // ConfigDefaults range bounds + normalizeGpuDevice
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ProfileTree.h>
@@ -214,62 +230,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("dragActivationTriggers")] = QStringLiteral("stringlist");
 
-    REGISTER_BOOL_SETTING("zoneSpanEnabled", zoneSpanEnabled, setZoneSpanEnabled)
-
-    // PhosphorZones::Zone span modifier (legacy single value)
-    m_getters[QStringLiteral("zoneSpanModifier")] = [this]() {
-        return static_cast<int>(m_settings->zoneSpanModifier());
-    };
-    m_setters[QStringLiteral("zoneSpanModifier")] = [this](const QVariant& v) {
-        int mod = v.toInt();
-        if (mod >= 0 && mod <= static_cast<int>(DragModifier::CtrlAltMeta)) {
-            m_settings->setZoneSpanModifier(static_cast<DragModifier>(mod));
-            return true;
-        }
-        return false;
-    };
-    m_schemas[QStringLiteral("zoneSpanModifier")] = QStringLiteral("int");
-
-    // PhosphorZones::Zone span triggers list (multi-bind)
-    m_getters[QStringLiteral("zoneSpanTriggers")] = [this]() {
-        return QVariant::fromValue(m_settings->zoneSpanTriggers());
-    };
-    m_setters[QStringLiteral("zoneSpanTriggers")] = [this](const QVariant& v) {
-        m_settings->setZoneSpanTriggers(v.toList());
-        return true;
-    };
-    m_schemas[QStringLiteral("zoneSpanTriggers")] = QStringLiteral("stringlist");
-
-    // Autotile drag-insert triggers list (multi-bind). Consumers: the
-    // daemon's own WindowDragAdaptor::beginDrag per-drag trigger cache is
-    // the authoritative one (which combos count as "insert held" per tick),
-    // and the KWin effect also fetches the list to OR a held insert trigger
-    // into its tick-forwarding gate (detectActivationAndGrab).
-    m_getters[QStringLiteral("autotileDragInsertTriggers")] = [this]() {
-        return QVariant::fromValue(m_settings->autotileDragInsertTriggers());
-    };
-    m_setters[QStringLiteral("autotileDragInsertTriggers")] = [this](const QVariant& v) {
-        m_settings->setAutotileDragInsertTriggers(v.toList());
-        return true;
-    };
-    m_schemas[QStringLiteral("autotileDragInsertTriggers")] = QStringLiteral("stringlist");
-
-    // Scrolling twin — same consumer contract (daemon beginDrag cache +
-    // the effect's tick-forwarding gate).
-    m_getters[QStringLiteral("scrollingDragInsertTriggers")] = [this]() {
-        return QVariant::fromValue(m_settings->scrollingDragInsertTriggers());
-    };
-    m_setters[QStringLiteral("scrollingDragInsertTriggers")] = [this](const QVariant& v) {
-        m_settings->setScrollingDragInsertTriggers(v.toList());
-        return true;
-    };
-    m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("stringlist");
-
-    REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
-    REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
-    REGISTER_BOOL_SETTING("zoneSpanToggleMode", zoneSpanToggleMode, setZoneSpanToggleMode)
-    REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
 
     // Display settings
     REGISTER_BOOL_SETTING("showZonesOnAllMonitors", showZonesOnAllMonitors, setShowZonesOnAllMonitors)
@@ -442,74 +403,6 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_STRING_SETTING("audioInputMethod", audioInputMethod, setAudioInputMethod)
     REGISTER_STRING_SETTING("audioInputSource", audioInputSource, setAudioInputSource)
 
-    // Zone settings. The shared inner/outer gaps have NO SETTERS here: they are
-    // config-backed (the Gaps group) and consumed daemon-side by the geometry
-    // cascade, so nothing writes them over this generic map. Read-only getters
-    // and their schemas are registered further down for the effect's benefit.
-    REGISTER_INT_SETTING("adjacentThreshold", adjacentThreshold, setAdjacentThreshold)
-    REGISTER_INT_SETTING("pollIntervalMs", pollIntervalMs, setPollIntervalMs)
-    REGISTER_INT_SETTING("minimumZoneSizePx", minimumZoneSizePx, setMinimumZoneSizePx)
-    REGISTER_INT_SETTING("minimumZoneDisplaySizePx", minimumZoneDisplaySizePx, setMinimumZoneDisplaySizePx)
-
-    // Behavior settings
-    REGISTER_BOOL_SETTING("keepWindowsInZonesOnResolutionChange", keepWindowsInZonesOnResolutionChange,
-                          setKeepWindowsInZonesOnResolutionChange)
-    REGISTER_BOOL_SETTING("moveNewWindowsToLastZone", moveNewWindowsToLastZone, setMoveNewWindowsToLastZone)
-    REGISTER_BOOL_SETTING("restoreOriginalSizeOnUnsnap", restoreOriginalSizeOnUnsnap, setRestoreOriginalSizeOnUnsnap)
-    // snappingStickyWindowHandling: enum (0=TreatAsNormal, 1=RestoreOnly, 2=IgnoreAll)
-    m_getters[QStringLiteral("snappingStickyWindowHandling")] = [this]() {
-        return static_cast<int>(m_settings->snappingStickyWindowHandling());
-    };
-    m_setters[QStringLiteral("snappingStickyWindowHandling")] = [this](const QVariant& v) {
-        int val = v.toInt();
-        if (val >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
-            && val <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
-            m_settings->setSnappingStickyWindowHandling(static_cast<StickyWindowHandling>(val));
-            return true;
-        }
-        return false;
-    };
-    m_schemas[QStringLiteral("snappingStickyWindowHandling")] = QStringLiteral("int");
-    REGISTER_BOOL_SETTING("restoreWindowsToZonesOnLogin", restoreWindowsToZonesOnLogin, setRestoreWindowsToZonesOnLogin)
-    REGISTER_BOOL_SETTING("snappingRestoreFloatedWindowsOnLogin", snappingRestoreFloatedWindowsOnLogin,
-                          setSnappingRestoreFloatedWindowsOnLogin)
-    REGISTER_BOOL_SETTING("autotileRestoreFloatedWindowsOnLogin", autotileRestoreFloatedWindowsOnLogin,
-                          setAutotileRestoreFloatedWindowsOnLogin)
-    // The scrolling twin of the pair above, plus the tab-strip toggle. Both are
-    // ISettings virtuals with defaults, so they register through the interface
-    // like their snap / autotile counterparts rather than inside the
-    // concrete-Settings block below, where a non-Settings backend would lose
-    // the keys entirely.
-    REGISTER_BOOL_SETTING("scrollingRestoreFloatedWindowsOnLogin", scrollingRestoreFloatedWindowsOnLogin,
-                          setScrollingRestoreFloatedWindowsOnLogin)
-    REGISTER_BOOL_SETTING("scrollingTabIndicatorEnabled", scrollingTabIndicatorEnabled, setScrollingTabIndicatorEnabled)
-    REGISTER_BOOL_SETTING("scrollingDropIndicatorEnabled", scrollingDropIndicatorEnabled,
-                          setScrollingDropIndicatorEnabled)
-    REGISTER_BOOL_SETTING("snapUnfloatFallbackToZone", snapUnfloatFallbackToZone, setSnapUnfloatFallbackToZone)
-    REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
-    REGISTER_BOOL_SETTING("suppressDefaultLayoutAssignment", suppressDefaultLayoutAssignment,
-                          setSuppressDefaultLayoutAssignment)
-    REGISTER_BOOL_SETTING("snapAssistFeatureEnabled", snapAssistFeatureEnabled, setSnapAssistFeatureEnabled)
-    REGISTER_BOOL_SETTING("snapAssistEnabled", snapAssistEnabled, setSnapAssistEnabled)
-    REGISTER_BOOL_SETTING("snappingFocusNewWindows", snappingFocusNewWindows, setSnappingFocusNewWindows)
-    REGISTER_BOOL_SETTING("snappingFocusFollowsMouse", snappingFocusFollowsMouse, setSnappingFocusFollowsMouse)
-
-    // Snap assist triggers (when always-enabled is off, hold any trigger at drop to enable)
-    m_getters[QStringLiteral("snapAssistTriggers")] = [this]() {
-        return QVariant::fromValue(m_settings->snapAssistTriggers());
-    };
-    m_setters[QStringLiteral("snapAssistTriggers")] = [this](const QVariant& v) {
-        m_settings->setSnapAssistTriggers(v.toList());
-        return true;
-    };
-    m_schemas[QStringLiteral("snapAssistTriggers")] = QStringLiteral("stringlist");
-
-    // Default layout
-    REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
-
-    // Layout filtering
-    REGISTER_BOOL_SETTING("filterLayoutsByAspectRatio", filterLayoutsByAspectRatio, setFilterLayoutsByAspectRatio)
-
     // Window filtering — the per-app / per-class exclusion lists
     // (excludedApplications, excludedWindowClasses) retired in v4 along
     // with their settings page; only the three global knobs below remain.
@@ -555,58 +448,6 @@ void SettingsAdaptor::initializeRegistry()
     // retired in v4 — folded into ExcludeAnimations Rules; the
     // effect derives its animation exclusion rule set from the unified
     // store via the Rules.rulesChanged subscription instead.
-
-    // PhosphorZones::Zone selector settings
-    REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)
-    REGISTER_INT_SETTING("zoneSelectorTriggerDistance", zoneSelectorTriggerDistance, setZoneSelectorTriggerDistance)
-    // zoneSelectorPosition: enum (0=TopLeft .. 8=BottomRight)
-    m_getters[QStringLiteral("zoneSelectorPosition")] = [this]() {
-        return static_cast<int>(m_settings->zoneSelectorPosition());
-    };
-    m_setters[QStringLiteral("zoneSelectorPosition")] = [this](const QVariant& v) {
-        int val = v.toInt();
-        if (val >= static_cast<int>(ZoneSelectorPosition::TopLeft)
-            && val <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
-            m_settings->setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(val));
-            return true;
-        }
-        return false;
-    };
-    m_schemas[QStringLiteral("zoneSelectorPosition")] = QStringLiteral("int");
-    // zoneSelectorLayoutMode: enum (0=Grid, 1=Horizontal, 2=Vertical)
-    m_getters[QStringLiteral("zoneSelectorLayoutMode")] = [this]() {
-        return static_cast<int>(m_settings->zoneSelectorLayoutMode());
-    };
-    m_setters[QStringLiteral("zoneSelectorLayoutMode")] = [this](const QVariant& v) {
-        int val = v.toInt();
-        if (val >= static_cast<int>(ZoneSelectorLayoutMode::Grid)
-            && val <= static_cast<int>(ZoneSelectorLayoutMode::Vertical)) {
-            m_settings->setZoneSelectorLayoutMode(static_cast<ZoneSelectorLayoutMode>(val));
-            return true;
-        }
-        return false;
-    };
-    m_schemas[QStringLiteral("zoneSelectorLayoutMode")] = QStringLiteral("int");
-    // zoneSelectorSizeMode: enum (0=Auto, 1=Manual)
-    m_getters[QStringLiteral("zoneSelectorSizeMode")] = [this]() {
-        return static_cast<int>(m_settings->zoneSelectorSizeMode());
-    };
-    m_setters[QStringLiteral("zoneSelectorSizeMode")] = [this](const QVariant& v) {
-        int val = v.toInt();
-        if (val >= static_cast<int>(ZoneSelectorSizeMode::Auto)
-            && val <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
-            m_settings->setZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(val));
-            return true;
-        }
-        return false;
-    };
-    m_schemas[QStringLiteral("zoneSelectorSizeMode")] = QStringLiteral("int");
-    REGISTER_INT_SETTING("zoneSelectorMaxRows", zoneSelectorMaxRows, setZoneSelectorMaxRows)
-    REGISTER_INT_SETTING("zoneSelectorPreviewWidth", zoneSelectorPreviewWidth, setZoneSelectorPreviewWidth)
-    REGISTER_INT_SETTING("zoneSelectorPreviewHeight", zoneSelectorPreviewHeight, setZoneSelectorPreviewHeight)
-    REGISTER_BOOL_SETTING("zoneSelectorPreviewLockAspect", zoneSelectorPreviewLockAspect,
-                          setZoneSelectorPreviewLockAspect)
-    REGISTER_INT_SETTING("zoneSelectorGridColumns", zoneSelectorGridColumns, setZoneSelectorGridColumns)
 
     // Animation settings (global — applies to snapping and autotiling)
     REGISTER_BOOL_SETTING("animationsEnabled", animationsEnabled, setAnimationsEnabled)
@@ -707,41 +548,6 @@ void SettingsAdaptor::initializeRegistry()
     m_schemas[QString(PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths)] =
         QStringLiteral("string");
 
-    // Autotile core settings (concrete Settings only)
-    if (concrete) {
-        REGISTER_CONCRETE_BOOL("autotileEnabled", autotileEnabled, setAutotileEnabled)
-        REGISTER_CONCRETE_STRING("defaultAutotileAlgorithm", defaultAutotileAlgorithm, setDefaultAutotileAlgorithm)
-        REGISTER_CONCRETE_DOUBLE("autotileSplitRatio", autotileSplitRatio, setAutotileSplitRatio)
-        REGISTER_CONCRETE_INT("autotileMasterCount", autotileMasterCount, setAutotileMasterCount)
-        // Per-algorithm settings map (QVariantMap)
-        m_getters[QStringLiteral("autotilePerAlgorithmSettings")] = [concrete]() {
-            return QVariant::fromValue(concrete->autotilePerAlgorithmSettings());
-        };
-        m_setters[QStringLiteral("autotilePerAlgorithmSettings")] = [concrete](const QVariant& v) {
-            concrete->setAutotilePerAlgorithmSettings(v.toMap());
-            return true;
-        };
-        m_schemas[QStringLiteral("autotilePerAlgorithmSettings")] = QStringLiteral("map");
-        REGISTER_CONCRETE_BOOL("autotileFocusNewWindows", autotileFocusNewWindows, setAutotileFocusNewWindows)
-        REGISTER_CONCRETE_BOOL("autotileSmartGaps", autotileSmartGaps, setAutotileSmartGaps)
-        REGISTER_CONCRETE_INT("autotileMaxWindows", autotileMaxWindows, setAutotileMaxWindows)
-        REGISTER_CONCRETE_BOOL("autotileRespectMinimumSize", autotileRespectMinimumSize, setAutotileRespectMinimumSize)
-        // autotileInsertPosition: enum (0=End, 1=AfterFocused, 2=AsMaster) — needs range validation
-        m_getters[QStringLiteral("autotileInsertPosition")] = [concrete]() {
-            return static_cast<int>(concrete->autotileInsertPosition());
-        };
-        m_setters[QStringLiteral("autotileInsertPosition")] = [concrete](const QVariant& v) {
-            int val = v.toInt();
-            if (val >= static_cast<int>(AutotileInsertPosition::End)
-                && val <= static_cast<int>(AutotileInsertPosition::AsMaster)) {
-                concrete->setAutotileInsertPosition(static_cast<Settings::AutotileInsertPosition>(val));
-                return true;
-            }
-            return false;
-        };
-        m_schemas[QStringLiteral("autotileInsertPosition")] = QStringLiteral("int");
-    }
-
     // The shared inner/outer gaps are config-backed (the Gaps group), written
     // by the settings app's Window Appearance page — not over this generic
     // map. But the editor (a separate process) reads the resolved global gap
@@ -799,71 +605,17 @@ void SettingsAdaptor::initializeRegistry()
         return true;
     };
     m_schemas[QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree)] = QStringLiteral("string");
-    REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
-    m_getters[QStringLiteral("autotileStickyWindowHandling")] = [this]() {
-        return static_cast<int>(m_settings->autotileStickyWindowHandling());
-    };
-    m_setters[QStringLiteral("autotileStickyWindowHandling")] = [this](const QVariant& v) {
-        int val = v.toInt();
-        if (val >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
-            && val <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
-            m_settings->setAutotileStickyWindowHandling(static_cast<StickyWindowHandling>(val));
-            return true;
-        }
-        return false;
-    };
-    m_schemas[QStringLiteral("autotileStickyWindowHandling")] = QStringLiteral("int");
-    m_getters[QStringLiteral("autotileDragBehavior")] = [this]() {
-        return static_cast<int>(m_settings->autotileDragBehavior());
-    };
-    m_setters[QStringLiteral("autotileDragBehavior")] = [this](const QVariant& v) {
-        int val = v.toInt();
-        if (val >= static_cast<int>(AutotileDragBehavior::Float)
-            && val <= static_cast<int>(AutotileDragBehavior::Reorder)) {
-            m_settings->setAutotileDragBehavior(static_cast<AutotileDragBehavior>(val));
-            return true;
-        }
-        return false;
-    };
-    m_schemas[QStringLiteral("autotileDragBehavior")] = QStringLiteral("int");
-    m_getters[QStringLiteral("autotileOverflowBehavior")] = [this]() {
-        return static_cast<int>(m_settings->autotileOverflowBehavior());
-    };
-    m_setters[QStringLiteral("autotileOverflowBehavior")] = [this](const QVariant& v) {
-        int val = v.toInt();
-        if (val >= static_cast<int>(AutotileOverflowBehavior::Float)
-            && val <= static_cast<int>(AutotileOverflowBehavior::Unlimited)) {
-            m_settings->setAutotileOverflowBehavior(static_cast<AutotileOverflowBehavior>(val));
-            return true;
-        }
-        return false;
-    };
-    m_schemas[QStringLiteral("autotileOverflowBehavior")] = QStringLiteral("int");
     REGISTER_STRINGLIST_SETTING("lockedScreens", lockedScreens, setLockedScreens)
 
-    // Autotile shortcuts (concrete Settings only)
-    if (concrete) {
-        REGISTER_CONCRETE_STRING("autotileToggleShortcut", autotileToggleShortcut, setAutotileToggleShortcut)
-        REGISTER_CONCRETE_STRING("autotileFocusMasterShortcut", autotileFocusMasterShortcut,
-                                 setAutotileFocusMasterShortcut)
-        REGISTER_CONCRETE_STRING("autotileSwapMasterShortcut", autotileSwapMasterShortcut,
-                                 setAutotileSwapMasterShortcut)
-        REGISTER_CONCRETE_STRING("autotileIncMasterRatioShortcut", autotileIncMasterRatioShortcut,
-                                 setAutotileIncMasterRatioShortcut)
-        REGISTER_CONCRETE_STRING("autotileDecMasterRatioShortcut", autotileDecMasterRatioShortcut,
-                                 setAutotileDecMasterRatioShortcut)
-        REGISTER_CONCRETE_STRING("autotileIncMasterCountShortcut", autotileIncMasterCountShortcut,
-                                 setAutotileIncMasterCountShortcut)
-        REGISTER_CONCRETE_STRING("autotileDecMasterCountShortcut", autotileDecMasterCountShortcut,
-                                 setAutotileDecMasterCountShortcut)
-        REGISTER_CONCRETE_STRING("autotileRetileShortcut", autotileRetileShortcut, setAutotileRetileShortcut)
-    }
-
-    // Scrolling settings — the whole family (core, tab indicator, drop
-    // indicator, behavior, shortcuts) lives in its own TU,
-    // settingsadaptor_registry_scrolling.cpp, split out when this file
-    // crossed the size ceiling. Called here so registration order is
-    // unchanged; the callee re-derives `concrete` itself.
+    // Per-mode families, one TU each: settingsadaptor_registry_snapping.cpp,
+    // settingsadaptor_registry_autotile.cpp and
+    // settingsadaptor_registry_scrolling.cpp. Split out of this file when it
+    // crossed the size ceiling; the maps and the keys are the same, and
+    // intra-family order is preserved. See the boundary rule in each file's
+    // banner for which keys live where. Each callee re-derives `concrete`
+    // itself.
+    initializeRegistrySnapping();
+    initializeRegistryAutotile();
     initializeRegistryScrolling();
 
     // Global shortcuts (concrete Settings only)
@@ -908,17 +660,6 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_STRING("spanWindowUpShortcut", spanWindowUpShortcut, setSpanWindowUpShortcut)
         REGISTER_CONCRETE_STRING("spanWindowDownShortcut", spanWindowDownShortcut, setSpanWindowDownShortcut)
 
-        // Snap to zone by number shortcuts
-        REGISTER_CONCRETE_STRING("snapToZone1Shortcut", snapToZone1Shortcut, setSnapToZone1Shortcut)
-        REGISTER_CONCRETE_STRING("snapToZone2Shortcut", snapToZone2Shortcut, setSnapToZone2Shortcut)
-        REGISTER_CONCRETE_STRING("snapToZone3Shortcut", snapToZone3Shortcut, setSnapToZone3Shortcut)
-        REGISTER_CONCRETE_STRING("snapToZone4Shortcut", snapToZone4Shortcut, setSnapToZone4Shortcut)
-        REGISTER_CONCRETE_STRING("snapToZone5Shortcut", snapToZone5Shortcut, setSnapToZone5Shortcut)
-        REGISTER_CONCRETE_STRING("snapToZone6Shortcut", snapToZone6Shortcut, setSnapToZone6Shortcut)
-        REGISTER_CONCRETE_STRING("snapToZone7Shortcut", snapToZone7Shortcut, setSnapToZone7Shortcut)
-        REGISTER_CONCRETE_STRING("snapToZone8Shortcut", snapToZone8Shortcut, setSnapToZone8Shortcut)
-        REGISTER_CONCRETE_STRING("snapToZone9Shortcut", snapToZone9Shortcut, setSnapToZone9Shortcut)
-
         // Other action shortcuts
         REGISTER_CONCRETE_STRING("rotateWindowsClockwiseShortcut", rotateWindowsClockwiseShortcut,
                                  setRotateWindowsClockwiseShortcut)
@@ -928,8 +669,6 @@ void SettingsAdaptor::initializeRegistry()
                                  setCycleWindowForwardShortcut)
         REGISTER_CONCRETE_STRING("cycleWindowBackwardShortcut", cycleWindowBackwardShortcut,
                                  setCycleWindowBackwardShortcut)
-        REGISTER_CONCRETE_STRING("resnapToNewLayoutShortcut", resnapToNewLayoutShortcut, setResnapToNewLayoutShortcut)
-        REGISTER_CONCRETE_STRING("snapAllWindowsShortcut", snapAllWindowsShortcut, setSnapAllWindowsShortcut)
         REGISTER_CONCRETE_STRING("layoutPickerShortcut", layoutPickerShortcut, setLayoutPickerShortcut)
         REGISTER_CONCRETE_STRING("toggleLayoutLockShortcut", toggleLayoutLockShortcut, setToggleLayoutLockShortcut)
 
