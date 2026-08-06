@@ -195,7 +195,16 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
             // (production deps are non-null; tests never reach this path with a
             // null tracker), so no separate guard is needed here.
             uncommitSnap(entry.windowId);
-            m_windowTracker->clearFreeGeometry(entry.windowId);
+            // Screen-scoped when a screen is resolvable: this restore
+            // consumes ONE screen's float-back, and the all-screens form
+            // destroyed the position remembered for every other monitor.
+            // The empty-screen escalation to the wholesale clear is the
+            // pre-existing fallback for an unresolvable entry.
+            QString restoreScreen = entry.targetScreenId;
+            if (restoreScreen.isEmpty() && mgr && entry.targetGeometry.isValid()) {
+                restoreScreen = mgr->effectiveScreenAt(entry.targetGeometry.center());
+            }
+            m_windowTracker->clearFreeGeometry(entry.windowId, restoreScreen);
             resolvedScreens.append(QString());
             continue;
         }

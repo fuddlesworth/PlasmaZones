@@ -103,7 +103,7 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         // down its state, mirroring windowClosed — else commit/cancel would
         // later re-add or float a dead id.
         dropClosedWindowFromDragPreview(windowId);
-        const QString screenId = removeTrackedWindowNoRetile(windowId);
+        const QString screenId = removeTrackedWindowNoRetile(windowId, RemovalOrigin::Untrack);
         if (!screenId.isEmpty()) {
             affectedScreens.insert(screenId);
         }
@@ -194,7 +194,7 @@ void AutotileEngine::onWindowZoneChanged(const QString& rawWindowId, const QStri
                 return;
             }
         }
-        onWindowRemoved(windowId);
+        untrackWindowAndRetile(windowId);
     }
 }
 
@@ -277,6 +277,7 @@ void AutotileEngine::connectSignals()
                         },
                         [&](const TilingStateKey& key, PhosphorTiles::TilingState* state) {
                             const QString sid = key.screenId;
+                            endCloseBurstForKey(key); // ledger goes with the context
                             // This virtual screen no longer exists — release its
                             // windows via the shared teardown body. Only the
                             // IN-MEMORY layers are dropped here; the persisted

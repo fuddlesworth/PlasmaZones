@@ -71,7 +71,14 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
             WindowPlacement merged = bucket.at(i);
             merged.windowId = incoming.windowId;
             if (!incoming.engines.isEmpty()) {
-                merged.screenId = incoming.screenId;
+                // Never blank a known managed screen: an engine capture with
+                // an EMPTY screenId (a floating window whose engine lost its
+                // screen assignment) must not make the record screen-agnostic
+                // forever — the reopen accept and the cross-screen downgrade
+                // both key off a real screen value.
+                if (!incoming.screenId.isEmpty()) {
+                    merged.screenId = incoming.screenId;
+                }
                 merged.virtualDesktop = incoming.virtualDesktop;
                 merged.activity = incoming.activity;
                 if (incoming.kind != WindowKind::Unknown) {
@@ -126,17 +133,29 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
 
 void WindowPlacementStore::evictForCapacity(QList<WindowPlacement>& bucket)
 {
-    // Evict contentless residue FIRST (oldest such entry), and only fall back
-    // to the positionally-oldest record when everything is restorable — a
-    // bare floating slot with no geometry must never push a real snapped or
+    // Evict contentless residue FIRST (oldest such entry), then the oldest
+    // record NOT bound to a still-open window, and only as the last resort
+    // the positionally-oldest record outright. The first tier exists because
+    // a bare floating slot with no geometry must never push a real snapped or
     // tiled placement out of the FIFO (WindowPlacement::hasRestorableContent
-    // documents this exact starvation hazard).
+    // documents this exact starvation hazard); the second because deleting a
+    // LIVE window's record leaves that window recordless — the same harm the
+    // live-instance probe guards takeForReopen's fallback against, reached by
+    // the eviction door instead.
     while (bucket.size() >= MaxPerApp) {
         int victim = -1;
         for (int i = 0; i < bucket.size(); ++i) {
             if (!bucket.at(i).hasRestorableContent()) {
                 victim = i;
                 break;
+            }
+        }
+        if (victim < 0 && m_liveInstanceProbe) {
+            for (int i = 0; i < bucket.size(); ++i) {
+                if (!m_liveInstanceProbe(bucket.at(i).windowId)) {
+                    victim = i;
+                    break;
+                }
             }
         }
         bucket.removeAt(victim >= 0 ? victim : 0);
@@ -222,6 +241,14 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
             if (!isPureFloatRecord(other)) {
                 continue; // never prune a managed placement
             }
+            if (m_liveInstanceProbe && m_liveInstanceProbe(other.windowId)) {
+                // A still-OPEN sibling's record is not a stale duplicate: it
+                // is that window's live float-back, and pruning it leaves the
+                // sibling recordless — the same harm the live-instance probe
+                // guards the reopen fallback against, reached via the close
+                // collapse instead.
+                continue;
+            }
             bool sharesScreen = false;
             for (auto git = other.freeGeometryByScreen.constBegin(); git != other.freeGeometryByScreen.constEnd();
                  ++git) {
@@ -233,13 +260,27 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
             if (!sharesScreen) {
                 continue; // wholly different-monitor record — distinct memory, kept
             }
-            // Copy the sibling's geometry out before mutating bucket[keepIdx]:
+            // Copy the sibling's data out before mutating bucket[keepIdx]:
             // operator[] may detach/reallocate the list and dangle `other`.
             const QHash<QString, QRect> otherFree = other.freeGeometryByScreen;
+            const QHash<QString, EngineSlot> otherEngines = other.engines;
             WindowPlacement& keep = bucket[keepIdx];
             for (auto git = otherFree.constBegin(); git != otherFree.constEnd(); ++git) {
                 if (!keep.freeGeometryByScreen.contains(git.key())) {
                     keep.freeGeometryByScreen.insert(git.key(), git.value()); // kept (newest) wins; fill gaps only
+                }
+            }
+            // Absorb the sibling's engine slots the same fill-gaps-only way.
+            // Since the synthesized close slot is keyed per OWNING engine, two
+            // pure-float siblings can carry float verdicts for DIFFERENT
+            // engines (a scrolling-mode close and an autotile-mode close of
+            // the same app); dropping the sibling without absorbing its slot
+            // silently lost the other mode's float verdict. Safe by
+            // construction: isPureFloatRecord guarantees the sibling carries
+            // no snapped/tiled slot, so this can only add floating slots.
+            for (auto eit = otherEngines.constBegin(); eit != otherEngines.constEnd(); ++eit) {
+                if (!keep.engines.contains(eit.key())) {
+                    keep.engines.insert(eit.key(), eit.value());
                 }
             }
             bucket.removeAt(i);
@@ -324,9 +365,11 @@ bool acceptsReopen(const WindowPlacement& p, const QString& engineId, const QStr
         // A geometry-less floating record is meaningful for the SAME instance
         // (restore floating in place), but consumed by a FIFO sibling it
         // floats a fresh window at its spawn rect for no user-visible reason
-        // while burning a slot a real placement may need.
-        const bool sameInstance = PhosphorIdentity::WindowId::extractInstanceId(p.windowId)
-            == PhosphorIdentity::WindowId::extractInstanceId(windowId);
+        // while burning a slot a real placement may need. sameWindowInstance,
+        // not a raw extractInstanceId compare: a bare id (no '|') must not
+        // fuzzy-match a composite's uuid component — the file's contract note
+        // on sameWindowInstance documents exactly that trap.
+        const bool sameInstance = sameWindowInstance(p.windowId, windowId);
         if (!sameInstance && !p.anyFreeGeometry().isValid()) {
             return false;
         }

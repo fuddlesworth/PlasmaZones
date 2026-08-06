@@ -431,6 +431,15 @@ Q_SIGNALS:
     void windowOrderChanged();
 
     /**
+     * @brief Emitted when already-present windows are REORDERED relative to
+     * each other (move/swap/rotate) — never by a plain add or remove, which
+     * only shift positions. Subscribers that cache order-derived evidence
+     * (e.g. the engine's reopen rank anchors) key their invalidation on this
+     * rather than on windowOrderChanged, which also fires for shifts.
+     */
+    void windowOrderPermuted();
+
+    /**
      * @brief Emitted when master count changes
      */
     void masterCountChanged();

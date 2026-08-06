@@ -16,6 +16,7 @@
  */
 
 #include <QTest>
+#include <QCoreApplication>
 #include <QRect>
 #include <QString>
 #include <QStringList>
@@ -31,8 +32,11 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorTileEngine/AutotileEngine.h>
 #include "FakeScreenProvider.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "helpers/AutotileTestHelpers.h"
 
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
@@ -445,6 +449,110 @@ private Q_SLOTS:
         QCOMPARE(stored->slotFor(snap->engineId()).state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
 
         wta->setEngines(snap.get(), nullptr, nullptr);
+        wta->service()->setSnapState(nullptr);
+        wta->service()->setSnapEngine(nullptr);
+        snap.reset();
+        wta->setWindowRegistry(nullptr);
+    }
+
+    void testTilingCloseRelayCapturesEngineSlotBeforeUntrack()
+    {
+        // The close relay's ordering contract: TilingAdaptor::windowClosed
+        // runs the shared capture funnel BEFORE forwarding the close to the
+        // engine, so the persisted slot carries the LIVE order — obtainable
+        // only pre-untrack (the engine's capturePlacement answers nullopt the
+        // moment it drops the window).
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        PhosphorTileEngine::AutotileEngine autotile(nullptr, wta->service(), nullptr,
+                                                    PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("DP-1");
+        autotile.setAutotileScreens({screen});
+        wta->setEngines(nullptr, &autotile, nullptr);
+
+        auto* tiling = new TilingAdaptor(&screenMgr, &parent);
+        tiling->setWindowTrackingAdaptor(wta);
+        tiling->setLifecycleEngines(QVector<PhosphorEngine::IPlacementEngine*>{&autotile});
+
+        autotile.windowOpened(QStringLiteral("aa|a1"), screen);
+        autotile.windowOpened(QStringLiteral("bb|b1"), screen);
+        QCoreApplication::processEvents();
+
+        tiling->windowClosed(QStringLiteral("bb|b1"));
+        // The engine no longer tracks it, and the record carries the LIVE
+        // order (1) the pre-untrack capture read.
+        QVERIFY(!autotile.isWindowTracked(QStringLiteral("bb|b1")));
+        const auto rec = wta->service()->placementStore().peekExact(QStringLiteral("bb|b1"));
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->slotFor(autotile.engineId()).state, QString(PhosphorEngine::WindowPlacement::stateTiled()));
+        QCOMPARE(rec->slotFor(autotile.engineId()).order, 1);
+
+        tiling->clearEngine();
+        wta->setEngines(nullptr, nullptr, nullptr);
+    }
+
+    void testMinimizedClosePreserveSynthesizesOwningEngineSlotForPureFloatRecord()
+    {
+        // The minimize-preserve's synthesized-slot branch, with a WIRED
+        // ModeEngineIdResolver and a PURE-FLOAT record (geometry, no engine
+        // slots): the preserved record must gain the owning engine's floating
+        // slot — under the old snap-hardcoded key (or the engines.isEmpty()
+        // gate with a foreign slot present) the reopening tiling engine saw
+        // no verdict and re-tiled a window that was floating pre-minimize.
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        PhosphorEngine::WindowRegistry registry;
+        std::unique_ptr<SnapEngine> snap;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        wta->setWindowRegistry(&registry);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), nullptr, nullptr);
+        wta->service()->setModeEngineIdResolver([](const QString&, const QString&) {
+            return QString(PhosphorEngine::WindowPlacement::scrollingEngineId());
+        });
+
+        const QString instanceId = QStringLiteral("min-purefloat-instance");
+        const QString windowId = QStringLiteral("app|min-purefloat-instance");
+        const QString screenId = QStringLiteral("DP-1");
+
+        PhosphorEngine::WindowMetadata metadata;
+        metadata.appId = QStringLiteral("app");
+        metadata.isMinimized = true;
+        registry.upsert(instanceId, metadata);
+
+        PhosphorEngine::WindowPlacement placement;
+        placement.windowId = windowId;
+        placement.appId = metadata.appId;
+        placement.screenId = screenId;
+        placement.freeGeometryByScreen.insert(screenId, QRect(140, 100, 1000, 720));
+        QVERIFY(wta->service()->placementStore().record(placement));
+
+        // CLOSE-form capture (authoritative screen supplied) while minimized:
+        // the preserve branch runs and must synthesize the scrolling slot.
+        wta->captureWindowPlacement(windowId, screenId);
+        const auto stored = wta->service()->placementStore().peekExact(windowId);
+        QVERIFY(stored.has_value());
+        QCOMPARE(stored->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QVERIFY(!stored->engines.contains(QString(PhosphorEngine::WindowPlacement::snapEngineId())));
+        QCOMPARE(stored->freeGeometryFor(screenId), QRect(140, 100, 1000, 720));
+
+        wta->service()->setModeEngineIdResolver({});
         wta->service()->setSnapState(nullptr);
         wta->service()->setSnapEngine(nullptr);
         snap.reset();

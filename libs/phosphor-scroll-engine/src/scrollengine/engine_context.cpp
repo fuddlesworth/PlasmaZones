@@ -43,6 +43,17 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
+    // The reopen rank anchors take the same aliveness sweep: entries survive
+    // paths that drop a window's tracking key without a close (handoffs, the
+    // dead loop below only sees keyed windows), and unlike the two maps above
+    // nothing else ever ages a dead window's anchor out.
+    for (auto it = m_reopenRestoredColumn.begin(); it != m_reopenRestoredColumn.end();) {
+        if (!aliveWindowIds.contains(it.key())) {
+            it = m_reopenRestoredColumn.erase(it);
+        } else {
+            ++it;
+        }
+    }
     QStringList dead;
     const auto& windowKeys = m_states.windowKeys();
     for (auto it = windowKeys.cbegin(); it != windowKeys.cend(); ++it) {
@@ -71,6 +82,9 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             state->strip().removeWindow(windowId, *paramsIt);
             state->removeFloating(windowId);
             affectedScreens.insert(key.screenId);
+            // A prune removal compacts columns without being a close — the
+            // ledger cannot model it, so the context's burst ends here.
+            endCloseBurstForKey(key);
         }
         m_states.removeWindow(windowId);
         m_lastAppliedRect.remove(windowId);
@@ -333,6 +347,12 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                             m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));
                         }
                     }
+                    // The close-burst ledger is keyed by context too, but a
+                    // migration is itself a structural change the ledger
+                    // cannot model — drop both keys' entries rather than
+                    // carrying a correction into a re-keyed strip.
+                    endCloseBurstForKey(oldKey);
+                    endCloseBurstForKey(newKey);
                     qCInfo(lcScrollEngine) << "Migrated screen" << screenId << "strip from desktop" << pinnedDesktop
                                            << "to" << newKey.desktop;
                 }
@@ -444,6 +464,17 @@ void ScrollEngine::sweepStatelessScreenBookkeeping(const QSet<QString>& screenId
     }
 }
 
+void ScrollEngine::sweepCloseCompaction(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale)
+{
+    for (auto it = m_closeCompaction.begin(); it != m_closeCompaction.end();) {
+        if (stale(it.key())) {
+            it = m_closeCompaction.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
 {
     // Unwind a preview stranded by the dying context while both its states
@@ -470,6 +501,9 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     m_context.pruneDesktop(removedDesktop);
     sweepStatelessScreenBookkeeping(touchedScreens);
     sweepStripStash([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
+        return key.desktop == removedDesktop;
+    });
+    sweepCloseCompaction([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
         return key.desktop == removedDesktop;
     });
 }
@@ -500,6 +534,9 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     });
     sweepStatelessScreenBookkeeping(touchedScreens);
     sweepStripStash([&stale](const PhosphorEngine::PlacementStateKey& key) {
+        return stale(key.activity);
+    });
+    sweepCloseCompaction([&stale](const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);
     });
 }
@@ -551,6 +588,9 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     sweepStripStash([&matches](const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId);
     });
+    sweepCloseCompaction([&matches](const PhosphorEngine::PlacementStateKey& key) {
+        return matches(key.screenId);
+    });
     // Standalone sweep for STATELESS sub-screens too: a virtual sub-screen
     // of the removed monitor can carry a seed or a rule override without
     // ever having built a state (the daemon applies overrides before
@@ -599,7 +639,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         it = matches(*it) ? m_scrollingScreens.erase(it) : std::next(it);
     }
     for (auto it = m_burstPendingApplies.begin(); it != m_burstPendingApplies.end();) {
-        it = matches(it.key()) ? m_burstPendingApplies.erase(it) : std::next(it);
+        it = matches(it.key().screenId) ? m_burstPendingApplies.erase(it) : std::next(it);
     }
     // A dead screen id must not keep feeding the hint-less shortcut paths
     // (autotile's twin clears the same way).

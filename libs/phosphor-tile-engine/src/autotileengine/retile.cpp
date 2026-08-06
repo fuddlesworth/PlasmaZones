@@ -421,10 +421,21 @@ void AutotileEngine::retileScreen(const QString& screenId)
             },
             [state](const QString& wid) {
                 return state->containsWindow(wid);
+            },
+            // Deterministic recovery: with more overflow candidates than
+            // freed slots, the ones nearest the FRONT of the window order
+            // return first — not whichever QSet hash order yields.
+            [state](const QString& wid) {
+                return state->windowIndex(wid);
             });
         for (const QString& wid : unfloated) {
             state->setFloating(wid, false);
-            m_windowMinSizes.remove(wid);
+            // The min-size entry is deliberately KEPT: the window is
+            // re-entering the tiled set on the same screen and no re-report
+            // path exists for a live window (windowOpened and
+            // windowMinSizeUpdated both stay silent here), so dropping the
+            // clamp laid the recovered window out unconstrained for the rest
+            // of the session.
         }
     }
 

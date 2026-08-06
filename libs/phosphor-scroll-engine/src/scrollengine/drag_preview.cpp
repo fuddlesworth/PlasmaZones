@@ -210,6 +210,15 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
         targetState->strip().takeWindow(windowId, params);
     }
 
+    // The detach removed the window (and possibly a column) from one or both
+    // strips outside any close, and the dragged window's rank anchor
+    // describes the pre-drag order it just left.
+    endCloseBurstForKey(targetKey);
+    if (preview.hadPriorState && !preview.priorSameKey) {
+        endCloseBurstForKey(preview.priorKey);
+    }
+    m_reopenRestoredColumn.remove(windowId);
+
     m_dragInsertPreview = preview;
     // Neighbours close up once; from here the strip is STABLE until drop.
     applyLayout(screenId, false);
@@ -267,6 +276,10 @@ void ScrollEngine::commitDragInsertPreview()
     const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
     ScrollStrip& strip = targetState->strip();
 
+    // A drop insert is a structural mutation outside any close: a close that
+    // landed DURING the hold may have started a fresh burst, and its ledger
+    // must not correct captures against the post-drop strip.
+    endCloseBurstForKey(p.targetKey);
     bool inserted = false;
     if (p.lastTarget.isValid()) {
         if (p.lastTarget.newSlot || strip.isEmpty()) {
@@ -372,6 +385,13 @@ void ScrollEngine::cancelDragInsertPreview()
     }
     const DragInsertPreview p = *m_dragInsertPreview;
     m_dragInsertPreview.reset();
+
+    // The restore re-inserts into one of the two contexts — a structural
+    // mutation outside any close, same rule as commit's.
+    endCloseBurstForKey(p.targetKey);
+    if (p.hadPriorState && !p.priorSameKey) {
+        endCloseBurstForKey(p.priorKey);
+    }
 
     if (!p.hadPriorState) {
         // Fresh adoption normally touched no state at begin, so there is

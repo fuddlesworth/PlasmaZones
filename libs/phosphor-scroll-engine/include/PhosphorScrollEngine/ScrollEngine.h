@@ -13,6 +13,8 @@
 #include <PhosphorScrollEngine/ScrollState.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
+#include <PhosphorScrollEngine/ScrollStashTypes.h>
+
 #include <QElapsedTimer>
 #include <QHash>
 #include <QJsonObject>
@@ -702,6 +704,10 @@ private:
     /// Drop stash entries whose key @p stale answers true for — called by
     /// the same prunes that reap context states.
     void sweepStripStash(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale);
+    /// Drop every close-burst ledger entry whose key matches @p stale — the
+    /// context prunes' twin of sweepStripStash (a ledger keyed at a dead
+    /// desktop/activity/output is unreachable and must not survive it).
+    void sweepCloseCompaction(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale);
     // engine_apply.cpp
     /// The smart-gaps arm is resolved INSIDE, not passed in: a single-column
     /// strip on the screen's current context zeroes the OUTER gaps for every
@@ -753,6 +759,17 @@ private:
     /// recorded absolute column, rank-corrected against other record-restored
     /// windows still present (see m_reopenRestoredColumn).
     int reopenInsertColumn(const ScrollState* state, int restoreColumn) const;
+    /// @p currentColumn's pre-burst value per the context's live close ledger;
+    /// identity when no burst is active (or @p currentColumn is -1).
+    int preCloseBurstColumn(const PhosphorEngine::PlacementStateKey& key, int currentColumn) const;
+    /// Drop the context's close-burst ledger — called by every structural
+    /// strip mutation that is not itself a close (see m_closeCompaction).
+    void endCloseBurstForKey(const PhosphorEngine::PlacementStateKey& key);
+    /// Drop the reopen rank anchors of every window in @p state's strip —
+    /// called by the column-REORDER verbs, whose permutation invalidates the
+    /// anchors' evidence (plain inserts/removals only shift and must NOT call
+    /// this; see the implementation comment).
+    void invalidateReopenAnchorsForState(const ScrollState* state);
     /// Consume the window's FLOATING placement record on an engine-decided
     /// float at open (oversized / rule / sticky) and apply the gated
     /// float-back position restore — the same record consumption and
@@ -814,12 +831,12 @@ private:
     QStringList m_pendingSelfActivations;
     /// Arrival-burst bracket depth (IPlacementEngine::beginArrivalBurst).
     /// While positive, windowOpened defers its per-arrival applyLayout into
-    /// m_burstPendingApplies (screen → whether any deferred arrival took
+    /// m_burstPendingApplies (context key → whether any deferred arrival took
     /// focus) and the outermost endArrivalBurst applies once per screen —
     /// a daemon-restart re-announce then resolves the restored strip in one
     /// geometry batch instead of N visible partial-strip intermediates.
     int m_arrivalBurstDepth = 0;
-    QHash<QString, bool> m_burstPendingApplies;
+    QHash<PhosphorEngine::PlacementStateKey, bool> m_burstPendingApplies;
     /// Armed by the context setters (desktop/activity switch), consumed by
     /// setActiveScreens so the identical-set re-emit only claims
     /// isDesktopSwitch=true for a REAL switch — same contract as
@@ -920,21 +937,28 @@ private:
     /// recorded orders of already-restored PRESENT windows makes the relative
     /// order come out right whatever the announce order; with no ranked
     /// neighbour present the absolute column stands (the single in-session
-    /// reopen, where it is exact). Lifetime mirrors m_floatRestore's removal
-    /// sites; entries for windows no longer in a strip are inert (the rank
-    /// only counts present windows).
+    /// reopen, where it is exact). Entries are dropped wherever the window's
+    /// strip life ends (close, prune, migration, handoff, float, release) and
+    /// invalidated strip-wide by the column-REORDER verbs via
+    /// invalidateReopenAnchorsForState; entries for windows no longer in a
+    /// strip are inert meanwhile (the rank only counts present windows).
     QHash<QString, int> m_reopenRestoredColumn;
     /// Close-burst compaction ledger, per placement context. A mass close
     /// (logout teardown) untracks windows one at a time, and each removal
     /// compacts the strip's column indices — so closes 2..N capture an
-    /// already-shifted order (a {0..5} strip persisted as {0,0,1,1,2,2}) and
-    /// the login restore rebuilds a collapsed strip with half the windows
-    /// parked off-viewport. Each entry remembers the ORIGINAL (pre-burst)
-    /// column a close vacated; preCloseBurstColumn reconstructs a window's
-    /// pre-burst column from its current index plus the ledger (the
-    /// deleted-positions correction). Burst-scoped: entries expire
-    /// CloseBurstWindowMs after the last close, and any open-insert clears
-    /// the context's ledger — a burst is closes and nothing else.
+    /// already-shifted order (six single-tile columns closed left to right
+    /// all capture column 0) and the login restore rebuilds a collapsed
+    /// strip with windows parked off-viewport. Each entry remembers the
+    /// ORIGINAL (pre-burst) column a close vacated, kept sorted;
+    /// preCloseBurstColumn reconstructs a window's pre-burst column from its
+    /// current index plus the ledger (the deleted-positions correction).
+    /// Burst-scoped: entries expire CloseBurstWindowMs after the last close,
+    /// and EVERY non-close structural strip mutation (opens, unfloats,
+    /// handoffs, drags, migrations, reorders) ends the context's burst via
+    /// endCloseBurstForKey — a burst is closes and nothing else. (The expiry
+    /// clock is monotonic and does not advance across a system suspend; a
+    /// ledger straddling a suspend lives marginally longer, which the
+    /// mutation-invalidation above bounds.)
     struct CloseCompaction
     {
         QList<int> removedColumns;
@@ -942,9 +966,6 @@ private:
     };
     QHash<PhosphorEngine::PlacementStateKey, CloseCompaction> m_closeCompaction;
     static constexpr int CloseBurstWindowMs = 2000;
-    /// @p currentColumn's pre-burst value per the context's live ledger;
-    /// identity when no burst is active (or @p currentColumn is -1).
-    int preCloseBurstColumn(const PhosphorEngine::PlacementStateKey& key, int currentColumn) const;
     /// Live drag-insert preview state (drag_preview.cpp). The structural
     /// edits a preview makes while it is LIVE are signal-silent, mirroring
     /// autotile's contract, so the daemon's float bookkeeping never sees the
@@ -1044,95 +1065,10 @@ private:
     /// while its screen sat in another mode. Entries staged from persistence
     /// are exempt from the aliveness sweep until their first claim; see
     /// StashedTile::stagedFromPersistence.
-    struct StashedTile
-    {
-        QString windowId;
-        WindowHeight height;
-        /// Carried for serialization fidelity only — the restore paths do
-        /// not re-apply it (the effect re-reports live minimize state).
-        ///
-        /// It reads false for every tile a production daemon ever stashes:
-        /// its source is Tile::minimized, and the only writer of that flag
-        /// is ScrollStrip::setWindowMinimized, which is a TEST SEAM (the
-        /// daemon models minimize as a float, so a minimized window is not
-        /// a strip tile at all). The field exists so the strip model's
-        /// minimized domain stays round-trippable if the daemon ever drives
-        /// it directly; see the seam note on setWindowMinimized.
-        bool minimized = false;
-        /// True while THIS tile was staged from the persisted blob and has
-        /// not been claimed. Per tile, not per entry: a key co-tenanted by a
-        /// returning app and a dead one must age the dead tile out while the
-        /// returning one keeps claiming, and a claim on one tile must not
-        /// expose an unclaimed co-tenant to the aliveness sweep.
-        ///
-        /// A staged tile names LAST session's window id, which by design
-        /// appears in no live alive-set: the cross-session claim in
-        /// restoreFromStripStash matches on the appId prefix precisely
-        /// because the per-instance half of the id is regenerated every
-        /// launch. pruneStaleWindows' sweep must therefore not read "absent
-        /// from the alive set" as "closed" while this holds, or the very
-        /// first prune after login (the effect fires one at bring-up, right
-        /// after the daemon stages the snapshot) would erase it and undo the
-        /// structure/focus/anchor restore. Cleared on claim, at which point
-        /// the tile is anchored in THIS session's id space and the sweep is
-        /// meaningful. A tile whose app never relaunches is aged out by the
-        /// unclaimedSessions lease below instead.
-        bool stagedFromPersistence = false;
-        /// Consecutive logins THIS tile was staged without ever being
-        /// claimed. Incremented at serialize while stagedFromPersistence
-        /// holds; a claim zeroes it; restoreStripState drops a tile that has
-        /// gone kMaxUnclaimedSessions logins unclaimed. The aging exists
-        /// because pruneStaleWindows fires exactly ONCE per session (at
-        /// bring-up, while the ENTRY is still sweep-exempt), so no sweep can
-        /// ever reach a persisted tile whose app never relaunches — without
-        /// the lease it would be re-staged forever and eventually hand an
-        /// unrelated same-app window a long-dead slot.
-        int unclaimedSessions = 0;
-    };
-    struct StashedColumn
-    {
-        QVector<StashedTile> tiles;
-        ColumnWidth width;
-        ColumnDisplay display = ColumnDisplay::Normal;
-        /// The column's ACTIVE tile, by window id — for a Tabbed column
-        /// that is the shown tab. Carried because every insert makes the
-        /// arriving tile its column's active one, so a restore without it
-        /// shows whichever sibling happened to announce last.
-        QString activeWindowId;
-    };
-    /// One stashed strip: the structural columns plus the focus/view pair
-    /// whose loss made every mode round trip re-anchor on an arbitrary
-    /// window (first arrival won the focus).
-    struct StashedStrip
-    {
-        QVector<StashedColumn> columns;
-        QString focusedWindowId;
-        int viewAnchor = 0;
-        /// Monotonic stamp of when this entry was staged (mode exit or
-        /// persistence load), from m_stashSequence. serializeStripState
-        /// resolves a window listed by two DIFFERENT stash keys in favour of
-        /// the higher stamp, because the reader's alphabetical first-wins
-        /// would otherwise let a window's older screen displace its newer
-        /// one. This orders the stash entries against each other only. A
-        /// stash and a LIVE strip CAN share a key (an entry still waiting on
-        /// a window that has not re-announced, beside the strip the others
-        /// rebuilt), which serializeStripState resolves by merging rather
-        /// than by stamp.
-        quint64 sequence = 0;
-
-        bool isEmpty() const
-        {
-            return columns.isEmpty();
-        }
-        int tileCount() const
-        {
-            int total = 0;
-            for (const StashedColumn& c : columns) {
-                total += c.tiles.size();
-            }
-            return total;
-        }
-    };
+    // StashedTile / StashedColumn / StashedStrip live in ScrollStashTypes.h
+    // (namespace-level; hoisted for the file-size ceiling). Their lifetime
+    // and consumption contracts stay documented on m_stripStash above and on
+    // the fields themselves.
     /// Snapshot @p state's strip as a stash entry (columns + focus + view
     /// anchor). Empty columns list when the state is null or empty.
     StashedStrip buildStashFromState(const ScrollState* state) const;

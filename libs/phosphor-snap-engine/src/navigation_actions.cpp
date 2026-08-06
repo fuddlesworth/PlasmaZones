@@ -722,7 +722,11 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
     }
     uncommitSnap(windowId);
     if (m_windowTracker) {
-        m_windowTracker->clearFreeGeometry(windowId);
+        // Screen-scoped: this restore consumes exactly one screen's
+        // float-back, and the all-screens form destroyed the position
+        // remembered for every OTHER monitor (the distinct-monitor memory
+        // the store's collapse deliberately preserves).
+        m_windowTracker->clearFreeGeometry(windowId, screenId);
     }
     // Snapping has only TWO states, so a window that just lost its snap must be
     // marked floating. Leaving it in neither made isWindowTracked answer false,

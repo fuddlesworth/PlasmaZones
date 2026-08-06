@@ -115,21 +115,32 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         // the effect's desktopsChanged/activitiesChanged pushes) — a window
         // moved to another desktop while minimized must reopen there, not on
         // the desktop frozen into a pre-minimize record.
+        // Managed slots recorded against a DIFFERENT screen must not be
+        // re-filed verbatim under the close screen — the shared downgrade
+        // (recordFloatingClose's rule) flips them to floating BEFORE the
+        // screen stamp below erases the evidence of the mismatch.
+        PhosphorPlacement::WindowTrackingService::downgradeMismatchedManagedSlots(*preserved, preserved->screenId,
+                                                                                  authoritativeScreen);
         preserved->screenId = authoritativeScreen;
         const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
         if (const auto context = m_windowRegistry->windowContext(instanceId)) {
             preserved->virtualDesktop = context->virtualDesktop;
             preserved->activity = context->activity;
         }
-        // A pure-float record carries no engine slot, and record()'s merge
-        // only adopts context alongside engine slots — synthesize a floating
-        // slot (recordFloatingClose's convention, including the owning-engine
-        // key: the tiling reopen accepts read strictly their own slot) so the
-        // close screen lands.
-        if (preserved->engines.isEmpty() && !preserved->freeGeometryByScreen.isEmpty()) {
+        // Synthesize the OWNING engine's floating slot whenever the record
+        // lacks one — not merely when the map is empty (recordFloatingClose's
+        // convention): the tiling engines' reopen accept path reads strictly their own
+        // slot, so a record carrying only FOREIGN slots would otherwise
+        // preserve nothing the reopening engine can see. Also what makes
+        // record()'s merge adopt the close screen for a pure-float record.
+        const QString owningEngine = m_service->owningModeEngineId(windowId, authoritativeScreen);
+        // Same gate shape as recordFloatingClose: absent owning slot → add.
+        // (An all-empty record is dropped by the hasRestorableContent gate
+        // below either way — a bare floating slot is contentless residue.)
+        if (!preserved->engines.contains(owningEngine)) {
             PhosphorEngine::EngineSlot slot;
             slot.state = PhosphorEngine::WindowPlacement::stateFloating();
-            preserved->engines.insert(m_service->owningModeEngineId(windowId, authoritativeScreen), slot);
+            preserved->engines.insert(owningEngine, slot);
         }
         // Contentless residue must never enter the appId FIFO (mirrors the
         // primary capture path's gate): it would starve and evict real
@@ -1013,6 +1024,22 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
         && !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(m_lastActiveWindowId))) {
         m_lastActiveWindowId.clear();
     }
+    // Capture each dead window's final engine slot BEFORE ANY prune drops
+    // state — pruneStaleAssignments wipes the SnapState the snap capture
+    // answers from, and the engine prunes below untrack the tiling engines,
+    // so this must run first or a silently-dead window's persisted record
+    // stays as stale as the last save-timer sweep. Screen-less form: the
+    // close-only branches (minimize preserve, orphan fallback, sibling
+    // collapse) need an authoritative screen nobody has for a silently-dead
+    // window. Keys are SNAPSHOTTED first — captureWindowPlacement fans out
+    // into engine code, and mutating a QHash mid-iteration is undefined
+    // (refreshOpenWindowPlacements documents the same discipline).
+    const QStringList shadowIds = m_frameGeometry.keys();
+    for (const QString& shadowId : shadowIds) {
+        if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(shadowId))) {
+            captureWindowPlacement(shadowId);
+        }
+    }
     int persistedPruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine || m_scrollEngine) {
         // The engines key every internal map (m_states reverse maps,
@@ -1055,6 +1082,13 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     // Same defensive sweep for the last-broadcast floating shadow: an entry
     // would otherwise leak if the window died without a windowClosed signal.
     // Not persisted, so it does not feed the save-scheduling decision below.
+    // Fan the prune out to sibling adaptors' per-window caches (see the
+    // signal doc). Consumers only erase from their OWN maps — nothing here
+    // depends on emit-vs-sweep ordering. The payload is the same instance-id
+    // view the local sweeps use, as a marshallable list: adaptor signals are
+    // auto-relayed onto the bus, and QSet has no D-Bus signature.
+    Q_EMIT stalePruned(QStringList(aliveInstances.cbegin(), aliveInstances.cend()));
+    // Same defensive sweep for the last-broadcast floating shadow.
     for (auto it = m_broadcastFloating.begin(); it != m_broadcastFloating.end();) {
         if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
             it = m_broadcastFloating.erase(it);

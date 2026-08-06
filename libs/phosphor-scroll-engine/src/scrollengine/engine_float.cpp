@@ -88,6 +88,11 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     m_floatRestore.insert(windowId, restore);
     m_scrollFloatedWindows.insert(windowId);
     m_lastAppliedRect.remove(windowId);
+    // A float removed the tile (possibly its whole column) outside any close,
+    // so the burst premise dies; the window's own rank anchor goes with the
+    // tile — FloatRestore.column owns the way back now.
+    m_reopenRestoredColumn.remove(windowId);
+    endCloseBurstForKey(key);
     // A float leaves the strip, so a remembered park edge is orphaned: the
     // aliveness prune never reclaims it (the window stays alive), and the
     // stale entry would anchor the arrival animation to the wrong side when
@@ -143,6 +148,9 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     // round-trips keep their place); fall back to next-to-focus.
     const bool hadSlot = m_floatRestore.contains(windowId);
     const FloatRestore restore = m_floatRestore.take(windowId);
+    // The unfloat is about to INSERT into the strip — a structural mutation
+    // outside any close, so the burst premise dies for this context.
+    endCloseBurstForKey(key);
     bool inserted = false;
     if (hadSlot && restore.tileIndex >= 0) {
         // The window left a SHARED column: return to the surviving stack.
@@ -257,6 +265,11 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
         // re-apply the adopted tile relayouts unclamped until the client
         // happens to re-report, which for a fixed-size window is never.
         const FloatRestore adopted = m_floatRestore.value(windowId);
+        // Adoption inserts into the target context — same non-close
+        // structural-mutation rule as every other insert site — and any rank
+        // anchor the window carried describes a strip from a previous life.
+        endCloseBurstForKey(currentKeyForScreen(targetScreen));
+        m_reopenRestoredColumn.remove(windowId);
         if (target->strip().insertWindow(windowId, effectiveDefaultColumnWidth(targetScreen),
                                          effectiveDefaultColumnDisplay(targetScreen), params, adopted.minWidth,
                                          adopted.minHeight)) {

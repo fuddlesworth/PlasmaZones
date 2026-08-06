@@ -78,7 +78,10 @@ public:
     /// Reopen resolve: the shared consumption pattern the TILING engines'
     /// open-time restores use (SnapEngine::resolveWindowRestore keeps its own
     /// take + re-bind: its snapped records restore cross-screen and its accept
-    /// depends on a mode-defer bypass, so rule 1 below does not fit it) —
+    /// depends on a mode-defer bypass, so rule 1 below does not fit it — and
+    /// note the snap path therefore also keeps take()'s oldest-first order
+    /// WITHOUT the live-instance exclusion below; that asymmetry is a
+    /// documented property of the snap flow, not an oversight) —
     /// take() wrapped in the accept predicate both tiling engines share and
     /// the two rules that make a close/reopen (fresh uuid, appId-FIFO match)
     /// behave correctly.
@@ -168,8 +171,13 @@ public:
     /// Called ONLY from close-capture paths: a window closing floating is the
     /// freshest authority for its app's float-back on that screen, so duplicate
     /// siblings (left by rapid open/close or overlapping short-lived instances)
-    /// are stale. Without this the oldest-first take() rotates a reopening window
-    /// between the duplicates — it "opens in a different spot each time."
+    /// are stale. Records bound to a still-OPEN window (per the live-instance
+    /// probe) are never pruned, and a pruned sibling's engine slots and
+    /// other-screen geometry are absorbed fill-gaps-only. Without the
+    /// collapse, a consuming reopen — take()'s oldest-first for snap, or a
+    /// probe-excluded tail for the tiling engines — can rotate a reopening
+    /// window between the duplicates: it "opens in a different spot each
+    /// time."
     ///
     /// Returns true if at least one sibling was removed, so the caller can mark
     /// its persistence dirty: the preceding record() may have been a
@@ -210,16 +218,21 @@ public:
     int size() const;
 
 private:
-    /// Capacity eviction preferring contentless residue over restorable
-    /// placements — see the implementation comment.
-    static void evictForCapacity(QList<WindowPlacement>& bucket);
+    /// Capacity eviction preferring contentless residue, then non-live
+    /// records, over restorable live placements — see the implementation
+    /// comment. Non-static: the middle tier consults m_liveInstanceProbe.
+    void evictForCapacity(QList<WindowPlacement>& bucket);
 
 public:
     /// Per-app record cap (public so tests can pin the eviction contract).
     static constexpr int MaxPerApp = 16;
 
 private:
-    /// appId → FIFO list of records (preserves multi-instance + close/reopen order).
+    /// appId → list of records in positional FIFO order. The POSITION order
+    /// governs take()'s oldest-first consumption (the snap paths) and the
+    /// eviction's last-resort tier; takeForReopen's fallback consumes by
+    /// SEQUENCE (newest first, live-excluded) instead, and multi-instance
+    /// distribution there rests on the live-instance probe, not on position.
     QHash<QString, QList<WindowPlacement>> m_byApp;
     quint64 m_sequence = 0;
     std::function<bool(const QString&)> m_liveInstanceProbe;

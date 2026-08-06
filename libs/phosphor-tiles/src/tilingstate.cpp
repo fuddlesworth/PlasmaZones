@@ -162,6 +162,7 @@ bool TilingState::moveWindow(int fromIndex, int toIndex)
     }
 
     Q_EMIT windowOrderChanged();
+    Q_EMIT windowOrderPermuted();
     notifyStateChanged();
     return true;
 }
@@ -183,6 +184,7 @@ bool TilingState::swapWindows(int index1, int index2)
     syncTreeSwap(id1, id2);
 
     Q_EMIT windowOrderChanged();
+    Q_EMIT windowOrderPermuted();
     notifyStateChanged();
     return true;
 }
@@ -294,6 +296,14 @@ bool TilingState::promoteToMaster(const QString& windowId)
 
 bool TilingState::moveToFront(const QString& windowId)
 {
+    // promoteToMaster deliberately does NOT emit windowOrderPermuted even
+    // though it reorders: its one production caller besides the reorder
+    // verbs is insertWindowByConfigOrder's AsMaster arm, which runs on every
+    // fresh insert — emitting there would wipe the engines' reopen rank
+    // anchors mid-restore-burst, exactly the over-clearing the permuted
+    // signal's shift-vs-permutation split exists to avoid. The user-facing
+    // reorder verbs all route through moveToTiledPosition / moveToPosition /
+    // swapWindowsById / rotateWindows, which do emit.
     return promoteToMaster(windowId);
 }
 
@@ -391,6 +401,7 @@ bool TilingState::rotateWindows(bool clockwise)
     rebuildSplitTree();
 
     Q_EMIT windowOrderChanged();
+    Q_EMIT windowOrderPermuted();
     notifyStateChanged();
     return true;
 }

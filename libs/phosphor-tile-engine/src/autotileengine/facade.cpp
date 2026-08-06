@@ -87,10 +87,9 @@ void AutotileEngine::setWindowRegistry(QObject* registry)
             algo->setAppIdResolver(resolver);
         }
     }
-    // Drop the previous invocation's hook first: setWindowRegistry is a public
-    // re-wireable seam, and stacking a second identical lambda would call
-    // setAppIdResolver N times per hot-reloaded algorithm.
-    disconnect(m_appIdResolverHook);
+    // The entry-point disconnect above is THE de-dup guard (nothing between
+    // it and here re-populates the handle), so this connect installs onto an
+    // always-clean slot.
     m_appIdResolverHook = connect(algoRegistry, &PhosphorTiles::ITileAlgorithmRegistry::algorithmRegistered, this,
                                   [this, resolver](const QString& id) {
                                       auto* reg = m_algorithmRegistry;
@@ -327,6 +326,53 @@ void AutotileEngine::reapplyManagedWindowAppearance()
     retile(QString());
 }
 
+void AutotileEngine::endCloseBurstForKey(const PhosphorEngine::TilingStateKey& key)
+{
+    // Any structural order mutation that is NOT a close ends the burst —
+    // scroll's endCloseBurstForKey, verbatim rationale.
+    m_closeCompaction.remove(key);
+}
+
+int AutotileEngine::reopenInsertOrder(const PhosphorTiles::TilingState* state, int savedPos) const
+{
+    // Scroll's reopenInsertColumn, term for term: rank against the
+    // record-restored windows still present — after the rightmost with a
+    // saved order <= this one, else before the leftmost with a greater one;
+    // with no ranked neighbour the absolute saved index stands (the single
+    // in-session reopen, where it is exact). A reopen BURST arrives in
+    // announce order, not saved order, and absolute indices then permute the
+    // layout. (<=, not <: same-order records rank adjacent.) The -1
+    // append-at-end fallback bypasses ranking entirely: no anchor satisfies
+    // `value <= -1`, so ranking would file the window BEFORE every anchor
+    // instead of appending, inverting the fallback's documented meaning.
+    if (savedPos < 0) {
+        return state->windowCount();
+    }
+    int rankedPos = -1;
+    int beforeGreater = -1;
+    const QStringList order = state->windowOrder();
+    for (auto rit = m_reopenRestoredOrder.constBegin(); rit != m_reopenRestoredOrder.constEnd(); ++rit) {
+        const int pos = order.indexOf(rit.key());
+        if (pos < 0) {
+            continue; // no longer tiled here — inert entry
+        }
+        if (rit.value() <= savedPos) {
+            rankedPos = qMax(rankedPos, pos + 1);
+        } else {
+            beforeGreater = beforeGreater < 0 ? pos : qMin(beforeGreater, pos);
+        }
+    }
+    if (rankedPos < 0 && beforeGreater >= 0) {
+        rankedPos = beforeGreater;
+    } else if (rankedPos >= 0 && beforeGreater >= 0) {
+        // The ranks can conflict if the user re-ordered between restores;
+        // the smaller bound wins so the insert never lands right of a
+        // tracked-greater window.
+        rankedPos = qMin(rankedPos, beforeGreater);
+    }
+    return rankedPos >= 0 ? qMin(rankedPos, state->windowCount()) : qMin(savedPos, state->windowCount());
+}
+
 int AutotileEngine::preCloseBurstOrder(const PhosphorEngine::TilingStateKey& key, int currentOrder) const
 {
     const auto it = m_closeCompaction.constFind(key);
@@ -334,11 +380,10 @@ int AutotileEngine::preCloseBurstOrder(const PhosphorEngine::TilingStateKey& key
         || !it->sinceLastClose.isValid() || it->sinceLastClose.elapsed() > CloseBurstWindowMs) {
         return currentOrder;
     }
-    // Deleted-positions correction — scroll's preCloseBurstColumn, verbatim.
-    QList<int> removed = it->removedOrders;
-    std::sort(removed.begin(), removed.end());
+    // Deleted-positions correction — scroll's preCloseBurstColumn, verbatim
+    // (removedOrders is kept sorted at insertion).
     int original = currentOrder;
-    for (const int vacated : removed) {
+    for (const int vacated : it->removedOrders) {
         if (vacated <= original) {
             ++original;
         }

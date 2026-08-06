@@ -47,17 +47,47 @@ int ScrollEngine::preCloseBurstColumn(const PhosphorEngine::PlacementStateKey& k
         return currentColumn;
     }
     // Deleted-positions correction: replay the burst's vacated ORIGINAL
-    // columns in ascending order; each one at or left of the running value
-    // means the current index is shifted one left of the pre-burst truth.
-    QList<int> removed = it->removedColumns;
-    std::sort(removed.begin(), removed.end());
+    // columns in ascending order (removedColumns is kept sorted at insertion
+    // — this runs per window per save sweep, the insert runs once per close);
+    // each one at or left of the running value means the current index is
+    // shifted one left of the pre-burst truth.
     int original = currentColumn;
-    for (const int vacated : removed) {
+    for (const int vacated : it->removedColumns) {
         if (vacated <= original) {
             ++original;
         }
     }
     return original;
+}
+
+void ScrollEngine::endCloseBurstForKey(const PhosphorEngine::PlacementStateKey& key)
+{
+    // Any structural strip mutation that is NOT a close ends the burst: the
+    // ledger models close-compactions only, and correcting captures against a
+    // strip that an insert, float, handoff, drag or migration also moved
+    // produces orders no pre-burst strip ever had. One-liner on purpose — the
+    // name at the call sites is the documentation.
+    m_closeCompaction.remove(key);
+}
+
+void ScrollEngine::invalidateReopenAnchorsForState(const ScrollState* state)
+{
+    if (!state) {
+        return;
+    }
+    // Column-reorder verbs PERMUTE the strip: the recorded orders and the
+    // live relative order stop agreeing, and a permuted anchor feeds
+    // reopenInsertColumn contradictory evidence. Plain inserts and removals
+    // only SHIFT — live positions are re-derived per arrival — so this runs
+    // only from the reorder verbs, never from the insert/remove paths
+    // (clearing there would throw away good anchors mid-restore-burst).
+    for (auto it = m_reopenRestoredColumn.begin(); it != m_reopenRestoredColumn.end();) {
+        if (state->strip().containsWindow(it.key())) {
+            it = m_reopenRestoredColumn.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 int ScrollEngine::reopenInsertColumn(const ScrollState* state, int restoreColumn) const
@@ -127,8 +157,10 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                                       int minWidth, int minHeight)
 {
     // An open ends any close burst for this context — a burst is closes and
-    // nothing else (see m_closeCompaction).
-    m_closeCompaction.remove(currentKeyForScreen(screenId));
+    // nothing else (see m_closeCompaction). Deliberately BEFORE the dispatch
+    // ladder, refused inserts included: a refusal means the strip already
+    // holds the window, and the burst premise is equally dead either way.
+    endCloseBurstForKey(currentKeyForScreen(screenId));
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
 
     // Fixed-size / oversized windows cannot honour a column slot: float them
@@ -263,7 +295,20 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // openColumnPlacement=consume while its config-driven twin (the
     // IntoActiveColumn arm below) applied it.
     bool inserted = false;
-    if (openParams.consume && *openParams.consume && !state->strip().isEmpty()) {
+    // Mode-round-trip structure restore FIRST — before the consume rule too:
+    // a strip stashed at the last reassignment away from Scrolling rebuilds
+    // exactly (stacks, widths, display, heights), which is strictly stronger
+    // than the order seed's position-only verdict AND than an
+    // openColumnPlacement=consume rule (letting the rule outrank the stash
+    // left the window's stash tile unconsumed forever: it re-walked on every
+    // later open, persisted across sessions, and could hand its slot to an
+    // unrelated same-app window through the cross-session claim). The seed
+    // entry is still consumed so it cannot linger past the adoption.
+    if (restoreFromStripStash(state, currentKeyForScreen(screenId), windowId, params, minWidth, minHeight)) {
+        inserted = true;
+        consumePendingInitialOrder(screenId, windowId);
+    }
+    if (!inserted && openParams.consume && *openParams.consume && !state->strip().isEmpty()) {
         const std::optional<ColumnDisplay> displayOverride =
             openParams.tabbed ? std::optional<ColumnDisplay>(display) : std::nullopt;
         if (state->strip().insertWindowIntoActiveColumn(windowId, width, displayOverride, params, minWidth,
@@ -274,17 +319,6 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             consumePendingInitialOrder(screenId, windowId);
             inserted = true;
         }
-    }
-
-    // Mode-round-trip structure restore FIRST: a strip stashed at the last
-    // reassignment away from Scrolling rebuilds exactly (stacks, widths,
-    // display, heights), which is strictly stronger than the order seed's
-    // position-only verdict. The seed entry is still consumed so it cannot
-    // linger past the adoption.
-    if (!inserted
-        && restoreFromStripStash(state, currentKeyForScreen(screenId), windowId, params, minWidth, minHeight)) {
-        inserted = true;
-        consumePendingInitialOrder(screenId, windowId);
     }
 
     // Deterministic mode-transition seeding: when the previous engine's
@@ -433,6 +467,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         oldState->removeFloating(windowId);
         m_floatRestore.remove(windowId);
         m_reopenRestoredColumn.remove(windowId);
+        endCloseBurstForKey(oldKey);
         // The mode-float marker goes with the old context too: the window
         // re-enters (usually tiled) on the new screen, and a stale marker
         // would re-float it at the next mode transition.
@@ -526,9 +561,13 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // already-placed window through N intermediate layouts the user can see
     // even when the restored strip resolves to exactly the pre-restart rects.
     if (m_arrivalBurstDepth > 0) {
-        auto it = m_burstPendingApplies.find(screenId);
+        // Keyed by CONTEXT, not bare screen: a desktop/activity switch landing
+        // mid-burst must not replay the deferred apply against the new
+        // context's strip (the drain below skips a key the screen no longer
+        // resolves to).
+        auto it = m_burstPendingApplies.find(key);
         if (it == m_burstPendingApplies.end()) {
-            m_burstPendingApplies.insert(screenId, arrivalTookFocus);
+            m_burstPendingApplies.insert(key, arrivalTookFocus);
         } else {
             it.value() = it.value() || arrivalTookFocus;
         }
@@ -548,16 +587,24 @@ void ScrollEngine::endArrivalBurst()
     if (m_arrivalBurstDepth == 0 || --m_arrivalBurstDepth > 0) {
         return;
     }
-    const QHash<QString, bool> pending = std::move(m_burstPendingApplies);
+    const QHash<PhosphorEngine::PlacementStateKey, bool> pending = std::move(m_burstPendingApplies);
     // Sorted, not hash order: with focus-taking arrivals on two screens the
     // LAST activation request wins the compositor's focus, and hash order
     // would make that winner vary run to run.
-    QStringList screens = pending.keys();
-    std::sort(screens.begin(), screens.end());
-    for (const QString& screenId : std::as_const(screens)) {
+    QList<PhosphorEngine::PlacementStateKey> keys = pending.keys();
+    std::sort(keys.begin(), keys.end(),
+              [](const PhosphorEngine::PlacementStateKey& a, const PhosphorEngine::PlacementStateKey& b) {
+                  return std::tie(a.screenId, a.desktop, a.activity) < std::tie(b.screenId, b.desktop, b.activity);
+              });
+    for (const PhosphorEngine::PlacementStateKey& key : std::as_const(keys)) {
         // The screen may have left the scrolling set mid-burst (mode flip
-        // races); applyLayout's own state/work-area guards make that a no-op.
-        applyLayout(screenId, pending.value(screenId));
+        // races — applyLayout's own guards no-op that), and a context switch
+        // mid-burst means the deferred apply's strip is no longer the one on
+        // screen: skip it, the switch-back retile covers the mutated strip.
+        if (key != currentKeyForScreen(key.screenId)) {
+            continue;
+        }
+        applyLayout(key.screenId, pending.value(key));
     }
 }
 
@@ -593,7 +640,11 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
         if (burst.sinceLastClose.isValid() && burst.sinceLastClose.elapsed() > CloseBurstWindowMs) {
             burst.removedColumns.clear();
         }
-        burst.removedColumns.append(preCloseBurstColumn(key, closedColumn));
+        // Sorted insertion keeps preCloseBurstColumn's replay a straight scan.
+        const int vacated = preCloseBurstColumn(key, closedColumn);
+        burst.removedColumns.insert(std::lower_bound(burst.removedColumns.begin(), burst.removedColumns.end(), vacated)
+                                        - burst.removedColumns.begin(),
+                                    vacated);
         burst.sinceLastClose.restart();
     }
     // Unconditional, not gated on the strip removal failing: the two sets are
@@ -828,6 +879,10 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     // windowClosed: a close/capture racing the handoff still needs the
     // poison-guard memory; pruneStaleWindows reclaims it).
     m_floatRestore.remove(windowId);
+    m_reopenRestoredColumn.remove(windowId);
+    // The release removed a column outside any close — the burst premise is
+    // dead for this context.
+    endCloseBurstForKey(key);
     // The mode-transition float marker must not outlive this engine's
     // tracking: the receiving engine owns the float bit from here, and a
     // stale entry would keep isModeSpecificFloated answering true.
@@ -871,7 +926,9 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
+        m_reopenRestoredColumn.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
+        endCloseBurstForKey(staleKey);
         if (staleWasFloating) {
             // Same announcement as windowOpened's migration: a silently
             // dropped float bit leaves signal-driven subscribers believing
@@ -897,6 +954,10 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         m_states.setKeyForWindow(windowId, key);
         return;
     }
+    // A handoff insert is a structural mutation outside any close — end the
+    // receiving context's burst (note: `key`, which may carry ctx.toDesktop,
+    // not the screen's current key).
+    endCloseBurstForKey(key);
     // Re-adoption starts from a blank rect memory: handoffRelease/windowClosed
     // only retain m_lastAppliedRect long enough to survive the close/capture
     // window, and a leftover entry would defeat applyLayout's emit-on-change

@@ -138,6 +138,10 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 // tabbed flags) instead of a default one-window-per-column
                 // strip. Captured BEFORE the release strips the state.
                 stashStripStructure(key, state);
+                // The context's strip is being torn down: a ledger keyed here
+                // must not survive to correct a rebuilt strip's captures if
+                // the screen cycles back to Scrolling within the expiry.
+                endCloseBurstForKey(key);
                 releaseScreenState(state, releasedWindows);
                 // Inside the callback so the payload names only screens that
                 // had a MATCHING STATE — the daemon's release handler uses
@@ -265,7 +269,7 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     state->deleteLater();
 }
 
-ScrollEngine::StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
+StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
 {
     StashedStrip out;
     if (!state || state->strip().isEmpty()) {
@@ -359,6 +363,14 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
         const QString appPrefix = appId.isEmpty() ? QString() : appId + QLatin1Char('|');
         if (!appPrefix.isEmpty()) {
+            // DELIBERATE: this appId claim is not gated on
+            // stagedFromPersistence, so it also fires against an IN-SESSION
+            // mode-exit stash — a new same-app window opened before a stashed
+            // sibling re-announces can claim (and rename) that sibling's
+            // tile, swapping their slots. Accepted as the cost of the case
+            // the fallback exists for: a same-session app RESTART while the
+            // screen sits in another mode regenerates the uuid, and a
+            // persistence gate would strand that window's tile forever.
             const QSet<QString> consumed = m_stripStashConsumed.value(key);
             for (int i = 0; i < stash.size() && colIdx < 0; ++i) {
                 for (int t = 0; t < stash.at(i).tiles.size(); ++t) {

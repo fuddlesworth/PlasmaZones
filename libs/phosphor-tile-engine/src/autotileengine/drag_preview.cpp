@@ -110,13 +110,20 @@ bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QS
         // and append to the target state's tiled list.
         if (preview.hadPriorState && priorState) {
             priorState->removeWindow(windowId);
+            // The detach compacted the PRIOR context's order outside any
+            // close, and the window's own rank anchor describes the layout
+            // it just left (scroll's begin twin ends both keys).
+            endCloseBurstForKey(preview.priorKey);
         }
+        m_reopenRestoredOrder.remove(windowId);
         if (targetState->containsWindow(windowId)) {
             // Defensive: a stale forward TilingState left the window in the target
             // state without a matching m_states reverse-map (windowKeys) entry.
             // Remove it first so addWindow() can place it cleanly at the end.
             targetState->removeWindow(windowId);
         }
+        // Adoption inserts bypass insertWindow's burst-end rule; carry it.
+        endCloseBurstForKey(targetKey);
         targetState->addWindow(windowId);
         m_states.setKeyForWindow(windowId, targetKey);
     }
@@ -331,6 +338,13 @@ void AutotileEngine::cancelDragInsertPreview()
         // restore — in that case leave the window in target rather than
         // orphaning it, and notify WTS so bookkeeping stays consistent.
         PhosphorTiles::TilingState* priorState = (p.hadPriorState) ? m_states.stateForKey(p.priorKey) : nullptr;
+        // The restore mutates one or both contexts outside any close — same
+        // burst-end rule as scroll's cancel. (The same-screen arm above
+        // self-heals via moveToPosition's windowOrderPermuted emit.)
+        endCloseBurstForKey(currentKeyForScreen(p.targetScreenId));
+        if (p.hadPriorState) {
+            endCloseBurstForKey(p.priorKey);
+        }
         if (p.hadPriorState && !priorState) {
             // m_states already points at target from begin(); leave
             // it there and let the window live in target state.

@@ -1282,14 +1282,29 @@ private:
     /// insertion-order setting (End / AfterFocused / AsMaster). Shared by
     /// insertWindow's new-window path and handoffReceive's cross-engine adopt.
     void insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId, const QString& screenId);
-    void removeWindow(const QString& windowId);
+    /// Why a window is leaving the engine's tracking. A genuine CLOSE feeds
+    /// the close-burst compaction ledger (the vacated index is what the
+    /// remaining captures of the burst correct against); every other removal
+    /// (prune of a dead-without-signal window, zone-clear untrack) is a
+    /// structural change the ledger cannot model and ENDS the context's burst
+    /// instead.
+    enum class RemovalOrigin {
+        Close,
+        Untrack
+    };
+    void removeWindow(const QString& windowId, RemovalOrigin origin);
 
     /// Algorithm lifecycle REMOVE hook + state removal for a tracked window,
     /// WITHOUT the per-window immediate retile that onWindowRemoved performs.
     /// Returns the affected screen id (empty if the window was untracked) so
     /// batch callers (pruneStaleWindows) can retile each affected screen once
     /// instead of N times. onWindowRemoved is this + an immediate retile.
-    QString removeTrackedWindowNoRetile(const QString& windowId);
+    QString removeTrackedWindowNoRetile(const QString& windowId, RemovalOrigin origin);
+    /// Untrack-and-retile for a still-LIVE window leaving management (the
+    /// zone-clear path): onWindowRemoved's shape with RemovalOrigin::Untrack,
+    /// kept separate because onWindowRemoved is the genuine-close entry and
+    /// feeds the close-burst ledger.
+    void untrackWindowAndRetile(const QString& windowId);
 
     /// If @p windowId is the active drag-insert preview's dragged window or
     /// evicted neighbour, drop it from the preview so a later commit/cancel
@@ -1708,6 +1723,14 @@ private:
     /// @p currentOrder's pre-burst value per the context's live ledger;
     /// identity when no burst is active (or @p currentOrder is -1).
     int preCloseBurstOrder(const PhosphorEngine::TilingStateKey& key, int currentOrder) const;
+    /// Drop the context's close-burst ledger — called by every structural
+    /// order mutation that is not itself a close (scroll's twin).
+    void endCloseBurstForKey(const PhosphorEngine::TilingStateKey& key);
+    /// The window-order index a record-branch restore should insert at: the
+    /// saved absolute index, rank-corrected against other record-restored
+    /// windows still present (scroll's reopenInsertColumn twin; the -1
+    /// append-at-end fallback bypasses ranking so it keeps its meaning).
+    int reopenInsertOrder(const PhosphorTiles::TilingState* state, int savedPos) const;
 
     // Canonical windowId → tile rect last emitted for it by applyTiling.
     // Backs lastManagedRect(): deliberately NOT cleared when the window

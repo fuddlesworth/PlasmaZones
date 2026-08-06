@@ -95,6 +95,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
+        <method name="releaseWindowTracking">
+            <annotation name="org.gtk.GDBus.DocString" value="Drop a LIVE window from engine tracking without a close (drag-bypass revert). Unlike windowClosed, no placement capture runs: the window is not dying and its current frame is transient drag state, not a placement."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
+            </arg>
+        </method>
+
         <!-- floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
              all float operations are now routed through the unified methods —
              org.plasmazones.Snap.toggleFloatForWindow for toggle,

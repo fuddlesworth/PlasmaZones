@@ -80,7 +80,10 @@ public:
     /// through IPlacementEngine only. A further engine joining the pipeline
     /// is one list entry here plus its outbound-signal connects at the
     /// composition root (wired to the relay entry points below).
-    /// Engines are borrowed; pass an empty list on teardown.
+    /// Engines are borrowed. Teardown goes through clearEngine(), which also
+    /// voids the announce generation and every per-session queue/dedup cache
+    /// — the empty-list form of THIS setter clears only the parked opens and
+    /// exists for symmetry, with no production caller.
     void setLifecycleEngines(const QVector<PhosphorEngine::IPlacementEngine*>& engines);
 
     // ── Engine relay entry points ────────────────────────────────────────
@@ -190,6 +193,18 @@ public Q_SLOTS:
      * @param windowId Window identifier from KWin
      */
     void windowClosed(const QString& windowId);
+
+    /**
+     * @brief Drop a LIVE window from engine tracking without a close
+     *
+     * The drag-bypass revert's tracking drop (the effect's drag_snap /
+     * lifecycle_wiring transitions). Unlike windowClosed, NO placement
+     * capture runs: the window is not dying, and its current frame is
+     * transient drag state that must never be recorded as a float-back.
+     *
+     * @param windowId Window identifier from KWin
+     */
+    void releaseWindowTracking(const QString& windowId);
 
     /**
      * @brief Notify the daemon that a window has been focused
@@ -394,6 +409,33 @@ public:
      * dangling pointer.
      */
     void clearEngine();
+
+    /**
+     * @brief Unconditional per-window teardown, driven by the in-process
+     * WindowTrackingAdaptor::windowClosedNotification signal.
+     *
+     * The D-Bus windowClosed relay is gated effect-side on the close screen
+     * still being engine-managed, so a window floated on a managed screen
+     * whose screen later left the managed set never reaches windowClosed here
+     * and its m_lastFloatBroadcast entry (and any parked open) leaked for the
+     * process — suppressing the first genuine float broadcast of a reused id.
+     * Plain method, NOT a slot: it must not become a D-Bus surface. It runs
+     * AFTER the WTS teardown (the signal's contract), so it uses only the raw
+     * id — shadowWindowId may no longer resolve a mutated-class canonical
+     * form, which the prune sweep below catches instead.
+     */
+    void onTrackedWindowDestroyed(const QString& windowId);
+
+    /**
+     * @brief Alive-set sweep of the float-broadcast dedup cache, called from
+     * WindowTrackingAdaptor::pruneStaleWindows via the daemon wiring.
+     *
+     * Swept in the INSTANCE-id key space: the map holds both raw and
+     * canonical composites (see windowClosed's dual removal), and only the
+     * instance component survives a class rename. Plain method, not a slot.
+     * List payload matching the stalePruned signal's marshallable shape.
+     */
+    void pruneStaleFloatBroadcasts(const QStringList& aliveInstances);
 };
 
 } // namespace PlasmaZones

@@ -11,10 +11,12 @@
 #include <PhosphorScrollEngine/ScrollState.h>
 
 #include "helpers/AutotileFakes.h"
+#include "helpers/WindowPlacementBuilders.h"
 
 using namespace PhosphorScrollEngine;
 using PhosphorEngine::WindowPlacement;
 using PlasmaZones::TestHelpers::FakeStickyWindowTracking;
+using PlasmaZones::TestHelpers::makePlacement;
 
 /**
  * @brief Close/reopen restore through the unified placement store, on the
@@ -93,6 +95,20 @@ private Q_SLOTS:
 
         captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300));
         QVERIFY(!state->containsWindow(QStringLiteral("term|t1")));
+
+        // Reproduce the production open sequence: the effect's pre-tile
+        // geometry capture writes a geometry-only, ENGINE-SLOT-LESS record
+        // under the fresh uuid BEFORE the engine's restore runs (the exact
+        // stub whose veto was the original bug — the fake's recordFreeGeometry
+        // is a no-op, so without this the gate never even fires here).
+        {
+            PhosphorEngine::WindowPlacement stub;
+            stub.windowId = QStringLiteral("term|t2");
+            stub.appId = QStringLiteral("term");
+            stub.screenId = screen;
+            stub.freeGeometryByScreen.insert(screen, QRect(0, 0, 800, 600));
+            QVERIFY(tracker.placementStore().record(stub));
+        }
 
         // Reopen: same app, FRESH uuid. The floating record must be consumed
         // via the appId FIFO and the window must arrive floating, not tiled.
@@ -215,15 +231,109 @@ private Q_SLOTS:
         QCOMPARE(orderOf(QStringLiteral("cc|c1")), 2);
         QCOMPARE(orderOf(QStringLiteral("dd|d1")), 3);
 
-        // Login: fresh uuids, shuffled announce order — original order back.
-        engine->windowOpened(QStringLiteral("cc|c2"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("aa|a2"), screen, 0, 0);
+        // Login: fresh uuids in strictly DESCENDING saved order — the one
+        // announce order a plain absolute-clamped insert gets wrong ([a,d,b,c]
+        // instead of [a,b,c,d]), so this half genuinely pins the rank logic.
         engine->windowOpened(QStringLiteral("dd|d2"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("cc|c2"), screen, 0, 0);
         engine->windowOpened(QStringLiteral("bb|b2"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("aa|a2"), screen, 0, 0);
         QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("aa|a2")), 0);
         QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("bb|b2")), 1);
         QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("cc|c2")), 2);
         QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("dd|d2")), 3);
+    }
+
+    void secondInstanceCannotStealLiveSiblingsReboundRecord()
+    {
+        // The live-instance probe at engine level: after t2 consumes t1's
+        // floating record (re-bound to the live t2), a THIRD instance must
+        // not steal it — t2 would be left recordless. Probe wired with
+        // production's extractInstanceId keying.
+        QObject owner;
+        FakeStickyWindowTracking tracker;
+        tracker.wireLiveInstanceProbe();
+        ScrollEngine* engine = makeEngine(&owner, &tracker);
+        const QString screen = QLatin1String(Screen);
+
+        tracker.liveInstances.insert(QStringLiteral("t1"));
+        engine->windowOpened(QStringLiteral("term|t1"), screen, 0, 0);
+        engine->setWindowFloat(QStringLiteral("term|t1"), true, screen);
+        captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300));
+        tracker.liveInstances.remove(QStringLiteral("t1"));
+
+        tracker.liveInstances.insert(QStringLiteral("t2"));
+        engine->windowOpened(QStringLiteral("term|t2"), screen, 0, 0);
+        ScrollState* state = stateFor(engine, screen);
+        QVERIFY(state);
+        QVERIFY(state->isFloating(QStringLiteral("term|t2"))); // consumed t1's record
+
+        tracker.liveInstances.insert(QStringLiteral("t3"));
+        engine->windowOpened(QStringLiteral("term|t3"), screen, 0, 0);
+        QVERIFY(!state->isFloating(QStringLiteral("term|t3"))); // nothing to steal — tiles
+        // t2's re-bound record survived.
+        QVERIFY(tracker.placementStore().peekExact(QStringLiteral("term|t2")).has_value());
+    }
+
+    void stackedTileCloseDoesNotFeedTheBurstLedger()
+    {
+        // Closing one tile of a STACKED column removes no column, so it must
+        // not append to the close-burst ledger — an appended entry would
+        // over-correct every later capture of the burst by one.
+        QObject owner;
+        FakeStickyWindowTracking tracker;
+        ScrollEngine* engine = makeEngine(&owner, &tracker);
+        const QString screen = QLatin1String(Screen);
+
+        engine->windowOpened(QStringLiteral("aa|a1"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("bb|b1"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("cc|c1"), screen, 0, 0);
+        ScrollState* state = stateFor(engine, screen);
+        QVERIFY(state);
+        // Stack b into a's column: focus a, then consume the next window.
+        engine->windowFocused(QStringLiteral("aa|a1"), screen);
+        engine->consumeWindowIntoColumn(screen);
+        QCOMPARE(state->strip().columnOfWindow(QStringLiteral("bb|b1")), 0); // stacked with a
+        QCOMPARE(state->strip().columnOfWindow(QStringLiteral("cc|c1")), 1);
+
+        // The consume itself ended any burst; now a burst of two closes.
+        // Closing b removes a TILE, not a column: no ledger entry, so c's
+        // capture must answer its true column 1 — with the bug (stacked
+        // closes appended), c would be corrected to 2.
+        captureClose(engine, &tracker, QStringLiteral("bb|b1"));
+        captureClose(engine, &tracker, QStringLiteral("cc|c1"));
+        const auto rec = tracker.placementStore().peekExact(QStringLiteral("cc|c1"));
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->slotFor(WindowPlacement::scrollingEngineId()).order, 1);
+    }
+
+    void reopenRanksStraddledArrivalBetweenRestoredNeighbours()
+    {
+        // Rank discrimination beyond the mass-close case: two record-restored
+        // windows whose saved columns straddle a later arrival must bracket
+        // it, whatever the announce order.
+        QObject owner;
+        FakeStickyWindowTracking tracker;
+        ScrollEngine* engine = makeEngine(&owner, &tracker);
+        const QString screen = QLatin1String(Screen);
+
+        const auto seed = [&](const QString& windowId, const QString& appId, int order) {
+            auto p = makePlacement(windowId, appId, WindowPlacement::stateTiled(), WindowPlacement::scrollingEngineId(),
+                                   screen, QRect(), order);
+            p.virtualDesktop = 1; // match the engine's current context
+            QVERIFY(tracker.placementStore().record(p));
+        };
+        seed(QStringLiteral("aa|a1"), QStringLiteral("aa"), 0);
+        seed(QStringLiteral("bb|b1"), QStringLiteral("bb"), 1);
+        seed(QStringLiteral("cc|c1"), QStringLiteral("cc"), 2);
+
+        // Announce the outer pair first, then the straddled middle.
+        engine->windowOpened(QStringLiteral("cc|c2"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("aa|a2"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("bb|b2"), screen, 0, 0);
+        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("aa|a2")), 0);
+        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("bb|b2")), 1);
+        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("cc|c2")), 2);
     }
 
     void geometrylessFloatingResidueNotConsumedByFreshSibling()

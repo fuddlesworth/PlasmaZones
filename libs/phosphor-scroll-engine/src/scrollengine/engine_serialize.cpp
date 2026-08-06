@@ -243,6 +243,15 @@ QJsonObject ScrollEngine::serializeStripState() const
                 liveWindowIds.insert(tile.windowId);
             }
         }
+        // FLOATING windows are live too, but buildStashFromState walks only
+        // strip columns: without this a window stashed on mode exit that came
+        // back FLOATING kept its stale stash tile alive across saves, and the
+        // cross-session claim could hand that dead slot to an unrelated
+        // same-app window at the next login.
+        const QStringList floating = it.value()->floatingWindows();
+        for (const QString& windowId : floating) {
+            liveWindowIds.insert(windowId);
+        }
     }
     // A drag-insert preview's dragged window is DETACHED — in no strip and
     // in no stash — but it is emphatically live, and without this a save
