@@ -405,6 +405,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 continue;
             }
             QRect rect = tile.rect;
+            // Where this tile really sits on the strip, kept before any park
+            // rewrites the rect. A parked column has to be SEEN travelling
+            // while the view slides — during a fast scroll the columns whizzing
+            // past are exactly the ones that have parked, and without this the
+            // screen goes empty instead of showing the strip move.
+            const QRect stripRect = rect;
             // Which screen edge this tile's motion is anchored to, decided
             // from the STRIP, before parking touches the rect. That ordering
             // is the fix: the departure side is a fact about the strip, and
@@ -612,6 +618,21 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // just outside the screen edge.
             if (!parkedNow && viewDelta != 0) {
                 obj[QLatin1String("viewDeltaX")] = viewDelta;
+            }
+            // A parked column keeps its strip position as a PAINT hint. The
+            // commit above stays the park, which is the only rect that cannot
+            // stray onto a neighbouring monitor, while the effect translates
+            // the drawing back to where the column actually is and adds the
+            // view offset — so it travels with the rest of the strip instead of
+            // vanishing the instant it leaves the viewport.
+            //
+            // Horizontal parks only. A vertical stack-overflow park is layout,
+            // not strip motion: there is no view slide to stay in step with,
+            // and painting it back would put a tile the layout deliberately
+            // pushed off the bottom right back on screen.
+            if (parkedNow && rect.top() > screenRect.bottom() && stripRect.top() <= screenRect.bottom()) {
+                obj[QLatin1String("visualX")] = stripRect.x();
+                obj[QLatin1String("visualY")] = stripRect.y();
             }
             arr.append(obj);
             const auto lastIt = m_lastAppliedRect.constFind(tile.windowId);

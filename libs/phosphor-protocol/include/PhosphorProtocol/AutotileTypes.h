@@ -12,7 +12,7 @@
 
 namespace PhosphorProtocol {
 
-/// D-Bus struct for autotile tile requests: (siiiissbbssi)
+/// D-Bus struct for autotile tile requests: (siiiissbbssiiib)
 struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 {
     QString windowId;
@@ -56,6 +56,27 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// translation puts it back on screen, and it keeps the edge-anchored
     /// slide-out built from `scrollEdge` instead.
     int viewDeltaX = 0;
+    /// Scrolling strip: where this window really sits on the strip, when that
+    /// differs from the rect committed above. Only a PARKED column sets it.
+    ///
+    /// A parked column is committed below the union of all outputs, because a
+    /// rect is the only clip every present path honours and an off-view column
+    /// must not land on a neighbouring monitor. But the park is not where the
+    /// column IS on the strip, and while the view slides the column has to be
+    /// SEEN travelling past — otherwise the columns whizzing by during a fast
+    /// scroll are exactly the ones that have parked, and the screen goes empty
+    /// instead of showing the strip move.
+    ///
+    /// So the two answers are separated: the rect above stays the safe commit,
+    /// and this is the position to paint at. The compositor translates by the
+    /// difference and then adds the view offset on top, which puts the column
+    /// back in lockstep with the rest of the strip.
+    ///
+    /// `hasVisualPos` rather than a zero sentinel: (0, 0) is a legal position
+    /// on a strip whose screen starts at the origin.
+    int visualX = 0;
+    int visualY = 0;
+    bool hasVisualPos = false;
 
     QRect toRect() const
     {

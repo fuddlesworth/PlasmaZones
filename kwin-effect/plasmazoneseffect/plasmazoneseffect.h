@@ -1855,6 +1855,14 @@ private:
     /// of its own (an edge column whose width changed in the same batch).
     /// Same clock and same profile source as the window animator.
     std::unique_ptr<StripViewAnimator> m_stripViewAnimator;
+    /// Where a PARKED scrolling column should be drawn, by window id. Its
+    /// committed rect is the park below the union of all outputs — the only
+    /// rect that cannot stray onto a neighbouring monitor — so the paint path
+    /// translates it back here and then adds the view offset, which keeps it
+    /// travelling with the rest of the strip instead of vanishing the moment
+    /// it leaves the viewport. Absent for every window whose committed rect
+    /// already IS its paint position, which is almost all of them.
+    QHash<QString, QPoint> m_scrollVisualPos;
 
     // Phase 6: per-window shader transitions via OffscreenEffect.
     // Shader/texture cache, LRU eviction, warm-up pipeline, profile tree,

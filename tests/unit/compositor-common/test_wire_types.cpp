@@ -129,12 +129,16 @@ private Q_SLOTS:
                                                  false,
                                                  QStringLiteral("lastOnTop"),
                                                  QStringLiteral("right"),
-                                                 -240};
+                                                 -240,
+                                                 4000,
+                                                 120,
+                                                 true};
 
-        // Verify D-Bus signature: (siiiissbbssi) = string + 4 ints + 2 strings
-        // + 2 bools + stacking + scrollEdge + viewDeltaX
+        // Verify D-Bus signature: (siiiissbbssiiib) = string + 4 ints + 2
+        // strings + 2 bools + stacking + scrollEdge + viewDeltaX + the visual
+        // position pair and its validity flag
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiissbbssi)"));
+        QCOMPARE(sig, QStringLiteral("(siiiissbbssiiib)"));
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
@@ -153,6 +157,9 @@ private Q_SLOTS:
         QCOMPARE(entry.stacking, QStringLiteral("lastOnTop"));
         QCOMPARE(entry.scrollEdge, QStringLiteral("right"));
         QCOMPARE(entry.viewDeltaX, -240);
+        QCOMPARE(entry.visualX, 4000);
+        QCOMPARE(entry.visualY, 120);
+        QCOMPARE(entry.hasVisualPos, true);
 
         // Verify default construction
         PhosphorProtocol::TileRequestEntry defaultEntry;
@@ -162,6 +169,7 @@ private Q_SLOTS:
         QVERIFY(defaultEntry.stacking.isEmpty());
         QVERIFY(defaultEntry.scrollEdge.isEmpty());
         QCOMPARE(defaultEntry.viewDeltaX, 0);
+        QCOMPARE(defaultEntry.hasVisualPos, false);
     }
 
     // A real bus round-trip so operator>> is exercised too — the signature
@@ -190,7 +198,10 @@ private Q_SLOTS:
                                                       false,
                                                       QStringLiteral("lastOnTop"),
                                                       QStringLiteral("left"),
-                                                      512};
+                                                      512,
+                                                      -900,
+                                                      64,
+                                                      true};
 
         QDBusMessage call =
             QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
@@ -213,6 +224,9 @@ private Q_SLOTS:
         QCOMPARE(got.stacking, sent.stacking);
         QCOMPARE(got.scrollEdge, sent.scrollEdge);
         QCOMPARE(got.viewDeltaX, sent.viewDeltaX);
+        QCOMPARE(got.visualX, sent.visualX);
+        QCOMPARE(got.visualY, sent.visualY);
+        QCOMPARE(got.hasVisualPos, sent.hasVisualPos);
     }
 
     // =================================================================

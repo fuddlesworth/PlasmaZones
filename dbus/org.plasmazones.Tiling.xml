@@ -137,9 +137,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
         <signal name="windowsTileRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows should be moved to new geometries (batch)."/>
-            <arg name="tileRequests" type="a(siiiissbbssi)">
+            <arg name="tileRequests" type="a(siiiissbbssiiib)">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::TileRequestList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, zoneId, screenId, monocle, floating, stacking, scrollEdge, viewDeltaX). viewDeltaX is how far a scrolling strip's view slid since the last batch, in logical pixels, for this entry's screen; zero for every other placement and for a window the view does not carry, such as a parked column."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, zoneId, screenId, monocle, floating, stacking, scrollEdge, viewDeltaX, visualX, visualY, hasVisualPos). viewDeltaX is how far a scrolling strip's view slid since the last batch, in logical pixels, for this entry's screen; zero for every other placement and for a window the view does not carry. visualX/visualY, valid only when hasVisualPos is true, are where a PARKED scrolling column really sits on the strip: the committed rect stays the safe off-monitor park while this is the position to paint at, so the column is seen travelling with the rest of the strip."/>
             </arg>
         </signal>
 

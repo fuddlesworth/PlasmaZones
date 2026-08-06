@@ -382,6 +382,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
                            /*reverse=*/true, /*holdCloseGrab=*/true);
     m_windowAnimator->removeAnimation(w);
+    m_scrollVisualPos.remove(getWindowId(w));
 
     // Same value as closingWindowId above: the windowId cache isn't dropped
     // until later in this slot (m_idCaches.windowIdCache.remove near the end), so a

@@ -130,6 +130,13 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // for a window the view does not carry — both mean zero, which is what
         // the default gives.
         entry.viewDeltaX = obj.value(QLatin1String("viewDeltaX")).toInt(0);
+        // Present only for a parked scrolling column; absent means the
+        // committed rect IS the paint position.
+        if (obj.contains(QLatin1String("visualX"))) {
+            entry.visualX = obj.value(QLatin1String("visualX")).toInt(0);
+            entry.visualY = obj.value(QLatin1String("visualY")).toInt(0);
+            entry.hasVisualPos = true;
+        }
         // The protocol type ships its own validator (empty windowId /
         // screenId, degenerate rect) — run it rather than re-deriving a
         // subset of its checks here.

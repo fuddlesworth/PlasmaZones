@@ -147,6 +147,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
         QString scrollEdge; ///< scrolling strip: screen edge to animate from ("left"/"right"), else empty
         int viewDeltaX = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
+        QPoint visualPos; ///< scrolling strip: where a PARKED column really sits, to paint at instead of the commit
+        bool hasVisualPos = false;
     };
     QVector<Entry> entries;
 
@@ -221,6 +223,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         entry.stacking = req.stacking;
         entry.scrollEdge = req.scrollEdge;
         entry.viewDeltaX = req.viewDeltaX;
+        entry.visualPos = req.hasVisualPos ? QPoint(req.visualX, req.visualY) : QPoint();
+        entry.hasVisualPos = req.hasVisualPos;
         if (candidates.size() > 1) {
             entry.candidates = candidates;
         }
@@ -282,6 +286,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString stacking;
         QString scrollEdge;
         int viewDeltaX = 0;
+        QPoint visualPos;
+        bool hasVisualPos = false;
     };
     QVector<TileSnap> toApply;
     for (Entry& e : entries) {
@@ -306,7 +312,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // and TileRequestEntry::validationError() rejects an empty screenId
         // before it ever reaches `entries`, so it is always present here.
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
-                        e.stacking, e.scrollEdge, e.viewDeltaX});
+                        e.stacking, e.scrollEdge, e.viewDeltaX, e.visualPos, e.hasVisualPos});
     }
 
     // Start this batch's view legs, ONCE per output. The delta is a property
@@ -891,7 +897,23 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     QRectF originOverride;
                     QRectF visualTargetOverride;
                     bool skipScrollAnimation = false;
-                    if (snap.viewDeltaX != 0) {
+                    // Remember (or forget) where a parked column should be
+                    // PAINTED. Set before the animation decision below, which
+                    // reads the same fact.
+                    if (snap.hasVisualPos) {
+                        m_effect->m_scrollVisualPos.insert(snap.windowId, snap.visualPos);
+                    } else {
+                        m_effect->m_scrollVisualPos.remove(snap.windowId);
+                    }
+
+                    if (snap.hasVisualPos) {
+                        // Parked, but drawn at its real strip position and
+                        // carried by the view like every other column. There is
+                        // no per-window motion left to describe, so the leg is
+                        // deliberately degenerate — the edge-anchored slide-out
+                        // below would fight the view offset for the same pixels.
+                        originOverride = QRectF(geo);
+                    } else if (snap.viewDeltaX != 0) {
                         // Carried by the view: the strip's own spring moves
                         // this window, so the per-window animation must cover
                         // only what the view does NOT explain — the residual.

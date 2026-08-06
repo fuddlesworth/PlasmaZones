@@ -175,8 +175,14 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       signature-matching failure mode as v6: a v6 effect's slot would never
 //       fire on the widened payload, killing all tiling until logout, so the
 //       handshake has to reject the pairing up front.
-inline constexpr int ApiVersion = 7;
-inline constexpr int MinPeerApiVersion = 7;
+//   v8: TileRequestEntry gained visualX / visualY / hasVisualPos, widening
+//       windowsTileRequested from a(siiiissbbssi) to a(siiiissbbssiiib). A
+//       parked scrolling column commits below the union of all outputs but has
+//       to be SEEN travelling while the view slides, so the safe commit and the
+//       paint position are now separate answers. Same signature-matched
+//       failure mode as v6 and v7.
+inline constexpr int ApiVersion = 8;
+inline constexpr int MinPeerApiVersion = 8;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

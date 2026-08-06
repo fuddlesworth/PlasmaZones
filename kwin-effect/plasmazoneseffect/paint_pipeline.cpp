@@ -774,6 +774,15 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         }
     }
 
+    // A parked scrolling column is drawn far from its committed rect (the paint
+    // path relocates it to its strip position), so KWin must not decide where
+    // it goes from that rect. Occlusion culling is forfeited for it, which
+    // costs nothing: the window is off the viewport by definition — that is
+    // why it parked.
+    if (w && !m_scrollVisualPos.isEmpty() && m_scrollVisualPos.contains(getWindowId(w))) {
+        data.setTransformed();
+    }
+
     OffscreenEffect::prePaintWindow(view, w, data);
 }
 
@@ -1083,6 +1092,19 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // double-count — unlike the animator transform above, which describes
         // the same motion the shader is already drawing.
         if (KWin::LogicalOutput* managed = scrollManagedOutputFor(w)) {
+            // A parked column is committed below the union of all outputs, so
+            // relocate the drawing to where it really sits on the strip BEFORE
+            // the view offset goes on. The two together put it exactly where a
+            // never-parked column would be, which is what lets it be seen
+            // travelling past during a scroll rather than blinking out the
+            // moment it leaves the viewport.
+            if (!m_scrollVisualPos.isEmpty()) {
+                const auto vit = m_scrollVisualPos.constFind(getWindowId(w));
+                if (vit != m_scrollVisualPos.constEnd()) {
+                    const KWin::RectF committed = w->frameGeometry();
+                    data += QPointF(vit->x() - committed.x(), vit->y() - committed.y());
+                }
+            }
             const qreal viewOffset = m_stripViewAnimator->offsetFor(managed);
             if (!qFuzzyIsNull(viewOffset)) {
                 data += QPointF(viewOffset, 0.0);
