@@ -469,7 +469,6 @@ void PlasmaZonesEffect::loadCachedSettings()
         const int d = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, raw,
                              PhosphorAnimation::Limits::MaxAnimationDurationMs);
         m_windowAnimator->setDuration(d);
-        m_stripViewAnimator->setDuration(d);
         m_cachedAnimationDuration = d;
     });
     loadSettingAsync(QStringLiteral("animationEasingCurve"), [this](const QVariant& v) {
@@ -483,8 +482,11 @@ void PlasmaZonesEffect::loadCachedSettings()
         if (spec.isEmpty()) {
             return;
         }
+        // The strip view is NOT set here: it resolves its profile per batch
+        // through the motion cascade, whose base IS this animator's profile, so
+        // the global curve reaches it either way and a scrolling.view override
+        // can still win.
         m_windowAnimator->setCurve(m_curveRegistry.create(spec));
-        m_stripViewAnimator->setCurve(m_curveRegistry.create(spec));
     });
     loadSettingAsync(QStringLiteral("animationMinDistance"), [this](const QVariant& v) {
         bool ok = false;

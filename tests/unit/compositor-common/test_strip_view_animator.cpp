@@ -119,9 +119,18 @@ private:
         linear->y1 = 0.0;
         linear->x2 = 1.0;
         linear->y2 = 1.0;
-        m_animator->setCurve(std::move(linear));
-        m_animator->setDuration(durationMs);
+        m_profile.curve = std::move(linear);
+        m_profile.duration = durationMs;
     }
+
+    /// The profile arrives per batch (the caller resolves the scrolling.view
+    /// motion node), so every call site hands it in.
+    void scroll(KWin::LogicalOutput* output, int deltaX)
+    {
+        m_animator->applyBatchDelta(output, deltaX, m_profile);
+    }
+
+    PhosphorAnimation::Profile m_profile;
 };
 
 void TestStripViewAnimator::init()
@@ -146,7 +155,7 @@ void TestStripViewAnimator::offsetStartsAtDeltaAndSettlesToZero()
     // its committed geometry.
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
 
-    m_animator->applyBatchDelta(fakeOutputA(), 600);
+    scroll(fakeOutputA(), 600);
     QVERIFY(m_animator->isAnimatingOn(fakeOutputA()));
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), 600.0);
     latch();
@@ -172,12 +181,12 @@ void TestStripViewAnimator::secondDeltaMidFlightAccumulatesWithoutJumping()
     // step. What must NOT happen is the offset resetting to 600 (the new delta
     // alone), which is what animating the offset directly would give, because
     // that would teleport the strip forward by 300px mid-slide.
-    m_animator->applyBatchDelta(fakeOutputA(), 600);
+    scroll(fakeOutputA(), 600);
     latch();
     tick(50);
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), 300.0);
 
-    m_animator->applyBatchDelta(fakeOutputA(), 600);
+    scroll(fakeOutputA(), 600);
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), 900.0);
 
     // And it still converges rather than accumulating forever.
@@ -191,12 +200,12 @@ void TestStripViewAnimator::outputsAreIndependent()
     // One spring PER OUTPUT: a scroll on one monitor must not offset the strip
     // on another. The paint path reads offsetFor with the window's own managed
     // output, so a shared value would drag every other strip sideways.
-    m_animator->applyBatchDelta(fakeOutputA(), 400);
+    scroll(fakeOutputA(), 400);
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), 400.0);
     QCOMPARE(m_animator->offsetFor(fakeOutputB()), 0.0);
     QVERIFY(!m_animator->isAnimatingOn(fakeOutputB()));
 
-    m_animator->applyBatchDelta(fakeOutputB(), -200);
+    scroll(fakeOutputB(), -200);
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), 400.0);
     QCOMPARE(m_animator->offsetFor(fakeOutputB()), -200.0);
 
@@ -212,13 +221,13 @@ void TestStripViewAnimator::disabledPlacesOutright()
     // an offset of zero — never a frozen non-zero offset, which would leave
     // the whole strip permanently displaced from its committed geometry.
     m_animator->setEnabled(false);
-    m_animator->applyBatchDelta(fakeOutputA(), 600);
+    scroll(fakeOutputA(), 600);
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
     QVERIFY(!m_animator->isAnimatingOn(fakeOutputA()));
 
     // Disabling MID-FLIGHT must also land at zero rather than freeze.
     m_animator->setEnabled(true);
-    m_animator->applyBatchDelta(fakeOutputA(), 600);
+    scroll(fakeOutputA(), 600);
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), 600.0);
     m_animator->setEnabled(false);
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
@@ -232,7 +241,7 @@ void TestStripViewAnimator::missingClockLeavesViewAtRest()
     m_animator->setOutputClockResolver([](KWin::LogicalOutput*) -> PhosphorAnimation::IMotionClock* {
         return nullptr;
     });
-    m_animator->applyBatchDelta(fakeOutputA(), 600);
+    scroll(fakeOutputA(), 600);
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
     QVERIFY(!m_animator->isAnimatingOn(fakeOutputA()));
 }
@@ -243,7 +252,7 @@ void TestStripViewAnimator::absurdDeltaIsClamped()
     // hint, and rejecting a tile request over it would drop a valid placement
     // — so this is the only thing standing between a garbled value and a
     // strip flung somewhere it takes seconds to spring back from.
-    m_animator->applyBatchDelta(fakeOutputA(), std::numeric_limits<int>::max());
+    scroll(fakeOutputA(), std::numeric_limits<int>::max());
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), static_cast<qreal>(StripViewAnimator::kMaxViewDeltaPx));
 }
 
@@ -252,7 +261,7 @@ void TestStripViewAnimator::repaintsAreRequestedWhileInFlight()
     // Nothing else damages the strip: the windows' committed geometry is
     // already final, so KWin sees no reason to repaint them while only a paint
     // offset changes.
-    m_animator->applyBatchDelta(fakeOutputA(), 600);
+    scroll(fakeOutputA(), 600);
     QVERIFY2(m_repaints > 0, "starting a leg must damage its output");
 
     latch();

@@ -37,17 +37,8 @@ void StripViewAnimator::setEnabled(bool enabled)
     }
 }
 
-void StripViewAnimator::setCurve(std::shared_ptr<const PhosphorAnimation::Curve> curve)
-{
-    m_profile.curve = std::move(curve);
-}
-
-void StripViewAnimator::setDuration(qreal ms)
-{
-    m_profile.duration = ms;
-}
-
-void StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX)
+void StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
+                                        const PhosphorAnimation::Profile& profile)
 {
     if (!output || deltaX == 0) {
         return;
@@ -88,7 +79,7 @@ void StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX)
         motion.animation.retarget(motion.committed, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
     } else {
         PhosphorAnimation::MotionSpec<qreal> spec;
-        spec.profile = m_profile;
+        spec.profile = profile;
         spec.clock = clock;
         spec.retargetPolicy = PhosphorAnimation::RetargetPolicy::PreserveVelocity;
         // Start where the strip was RENDERED, not where it now sits: the

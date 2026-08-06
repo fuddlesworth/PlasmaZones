@@ -326,6 +326,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // the paint path for every column, instead of N per-window springs that
     // each start a moment apart and integrate themselves apart.
     {
+        // Resolved once per batch, not per screen: the view's motion node is
+        // not screen-dependent, and this is the same cascade every other
+        // event's animation goes through (global animator profile → the
+        // scrolling.view motion-tree override). A windowless query skips the
+        // per-window rule tier, which is right — the view belongs to the strip,
+        // not to any window on it.
+        const PhosphorAnimation::Profile viewProfile = m_effect->resolveEventMotionProfile(
+            PhosphorAnimation::ProfilePaths::ScrollingView, PhosphorRules::WindowQuery{}, QString());
         QSet<QString> seededScreens;
         for (const TileSnap& s : toApply) {
             if (s.viewDeltaX == 0 || s.screenId.isEmpty() || seededScreens.contains(s.screenId)) {
@@ -333,7 +341,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
             seededScreens.insert(s.screenId);
             if (KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
-                m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDeltaX);
+                m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDeltaX, viewProfile);
             }
         }
     }

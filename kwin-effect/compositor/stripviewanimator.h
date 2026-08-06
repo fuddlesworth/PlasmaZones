@@ -78,8 +78,6 @@ public:
     {
         return m_enabled;
     }
-    void setCurve(std::shared_ptr<const PhosphorAnimation::Curve> curve);
-    void setDuration(qreal ms);
 
     /// Largest view delta honoured, in logical pixels. A batch cannot slide the
     /// strip further than this in one leg. The wire deliberately does not
@@ -92,7 +90,17 @@ public:
 
     /// Fold one batch's view delta into @p output's spring. A no-op for a zero
     /// delta, so callers need not pre-filter.
-    void applyBatchDelta(KWin::LogicalOutput* output, int deltaX);
+    ///
+    /// @p profile is resolved per batch by the caller rather than configured on
+    /// this object, so the `scrolling.view` motion node reaches the strip the
+    /// same way every other event's node reaches its animation. It already
+    /// carries the global curve and duration as its base, so there is nothing
+    /// left for this class to hold.
+    ///
+    /// A retarget deliberately keeps the IN-FLIGHT leg's profile: swapping
+    /// curves under a moving spring would discard its velocity, and a scroll
+    /// arriving mid-leg is the case that most needs the momentum kept.
+    void applyBatchDelta(KWin::LogicalOutput* output, int deltaX, const PhosphorAnimation::Profile& profile);
 
     /// Paint translation for a window carried by @p output's view, in logical
     /// pixels. Zero when nothing is in flight, which is the resting state and
@@ -123,7 +131,6 @@ private:
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
 
     std::unordered_map<KWin::LogicalOutput*, ViewMotion> m_motions;
-    PhosphorAnimation::Profile m_profile;
     OutputClockResolver m_outputClockResolver;
     RepaintRequest m_repaintRequest;
     bool m_enabled = true;
