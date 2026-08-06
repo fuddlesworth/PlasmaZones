@@ -46,6 +46,7 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 // NOTE: no `shaderAnchor` on this content root, unlike the PopupFrame
 // cards — a multi-indicator strip has no single card rect to anchor a surface
@@ -57,6 +58,45 @@ Item {
 
     /// Strip entries pushed by the daemon (see file doc).
     property var strips: []
+
+    /// How far the scrolling view slid in the batch that produced `strips`,
+    /// in window-local pixels, and a counter that changes on every push.
+    ///
+    /// The rects in `strips` are already at their FINAL positions, so an
+    /// indicator that simply drew them would jump to the end of the slide
+    /// while the windows underneath were still travelling. Instead the
+    /// indicators start `viewDeltaX` behind and settle to zero on the same
+    /// profile the compositor springs its own view offset with, which keeps
+    /// each indicator glued to the column it labels.
+    ///
+    /// This has to be mirrored rather than shared: the compositor's offset is
+    /// a paint-time translation on WINDOWS, and these indicators live in a
+    /// layer-shell surface the daemon draws, which that translation never
+    /// reaches.
+    ///
+    /// `viewDeltaSeq` exists because two identical scrolls in a row push an
+    /// identical `viewDeltaX`, and a value that does not change raises no
+    /// signal — the settle keys on the counter so the second scroll still
+    /// animates.
+    property int viewDeltaX: 0
+    property int viewDeltaSeq: 0
+
+    /// Live offset applied to every indicator. Zero at rest.
+    property real viewOffset: 0
+
+    onViewDeltaSeqChanged: {
+        viewOffset = viewDeltaX;
+        viewSettle.restart();
+    }
+
+    PhosphorMotionAnimation {
+        id: viewSettle
+
+        target: root
+        property: "viewOffset"
+        to: 0
+        profile: "scrolling.view"
+    }
 
     /// Shown for a tab whose window reports no title. Named once so a
     /// translator change lands on every one of the three places it appears.
@@ -165,7 +205,10 @@ Item {
             readonly property int longExtent: vertical ? slotHeight : slotWidth
             readonly property int tabCount: tabs ? tabs.length : 0
 
-            x: slotX
+            // Horizontal only: the view scrolls sideways, and a vertical
+            // component would mean the strip had changed shape rather than
+            // moved, which is a structural change the rects already describe.
+            x: slotX + root.viewOffset
             y: slotY
             width: slotWidth
             height: slotHeight

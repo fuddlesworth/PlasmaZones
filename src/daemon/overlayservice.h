@@ -829,6 +829,12 @@ private:
     /// everywhere else. Rebuilt from each strip update; cleared with the
     /// screen's strips.
     QHash<QString, QRegion> m_scrollTabInputRegions;
+    /// Monotonic per-screen counter stamped onto every view-slide push, so the
+    /// overlay restarts its settle even when two consecutive scrolls carry an
+    /// identical delta (a bare value write raises no change signal the second
+    /// time, and the indicator would sit at the wrong offset for a whole leg).
+    /// Wraps harmlessly: QML keys on the value CHANGING, not on its magnitude.
+    QHash<QString, int> m_scrollTabViewDeltaSeq;
 
     /// Per-screen generation guard for the drop indicator's animated hide,
     /// same contract as m_scrollTabsHideGuard: a hide completion that lost the

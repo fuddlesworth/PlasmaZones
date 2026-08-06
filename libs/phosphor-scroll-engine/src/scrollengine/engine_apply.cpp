@@ -698,6 +698,18 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         }
         strip[QLatin1String("activeIndex")] = activeIndex;
         strip[QLatin1String("tabs")] = tabs;
+        // The same view delta the tile batch carries. The indicator has to
+        // slide with the column it labels, and it cannot ride the compositor's
+        // spring: it is drawn by the daemon into a layer-shell surface, which
+        // the effect's paint offset never reaches. So the delta travels here
+        // too and the overlay springs it locally with the same profile.
+        //
+        // Repeated per strip rather than sent once per screen because the
+        // payload IS the array — the same shape the tile wire uses, and for
+        // the same reason it costs nothing to read the first one.
+        if (viewDelta != 0) {
+            strip[QLatin1String("viewDeltaX")] = viewDelta;
+        }
         strips.append(strip);
     }
     if (!strips.isEmpty()) {

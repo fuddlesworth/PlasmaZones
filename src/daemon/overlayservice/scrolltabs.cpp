@@ -212,6 +212,22 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
 
     writeQmlProperty(slot, QStringLiteral("strips"), shifted);
 
+    // View slide, mirrored from the tile batch. The rects above are already at
+    // their FINAL positions, so the overlay starts this many pixels behind and
+    // springs to zero — the same shape, profile and starting instant as the
+    // compositor's per-output spring, which is what keeps an indicator glued
+    // to the column it labels while the strip slides.
+    //
+    // The sequence number is what makes it re-trigger: two identical scrolls in
+    // a row push the same delta, and a bare property write would raise no
+    // change signal for the second, leaving the indicator behind. QML keys the
+    // restart on the sequence rather than the value.
+    const int viewDeltaX = shifted.isEmpty() ? 0 : shifted.first().toMap().value(QStringLiteral("viewDeltaX")).toInt();
+    if (viewDeltaX != 0) {
+        writeQmlProperty(slot, QStringLiteral("viewDeltaX"), viewDeltaX);
+        writeQmlProperty(slot, QStringLiteral("viewDeltaSeq"), ++m_scrollTabViewDeltaSeq[screenId]);
+    }
+
     // Paint settings, pushed on EVERY update rather than only on the show path
     // like the font block below. The settings hook replays the cached strips
     // through this function when any of them changes, and that replay lands on

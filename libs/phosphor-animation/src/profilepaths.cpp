@@ -58,6 +58,15 @@ const QString EditorSnapIn = QStringLiteral("editor.snapIn");
 const QString EditorSnapOut = QStringLiteral("editor.snapOut");
 const QString EditorSnapResize = QStringLiteral("editor.snapResize");
 
+// scrolling.* — the scrolling strip's VIEW, not any window on it. Its own
+// root rather than a window.movement.* leaf because the subject is the view:
+// one leg moves every column at once, and the compositor drives it with a
+// single per-output spring while the tab-indicator overlay mirrors the same
+// profile locally (the overlay is a layer-shell surface, which the
+// compositor's paint-time offset never reaches).
+const QString Scrolling = QStringLiteral("scrolling");
+const QString ScrollingView = QStringLiteral("scrolling.view");
+
 // osd.*
 const QString Osd = QStringLiteral("osd");
 const QString OsdShow = QStringLiteral("osd.show");
@@ -151,6 +160,8 @@ QStringList allBuiltInPaths()
         EditorSnapIn,
         EditorSnapOut,
         EditorSnapResize,
+        Scrolling,
+        ScrollingView,
         Osd,
         OsdShow,
         OsdPop,
