@@ -210,24 +210,22 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     auto* shellSurface = state->shell->shellSurface();
     auto* shellWindow = state->shell->shellWindow();
 
-    writeQmlProperty(slot, QStringLiteral("strips"), shifted);
-
-    // View slide, mirrored from the tile batch. The rects above are already at
-    // their FINAL positions, so the overlay starts this many pixels behind and
-    // springs to zero — the same shape, profile and starting instant as the
-    // compositor's per-output spring, which is what keeps an indicator glued
-    // to the column it labels while the strip slides.
+    // BEFORE the strips write, and that order is the whole point. A column
+    // scrolling back into view was absent from the previous payload, so writing
+    // strips first CREATES its delegate at a moment when the strip is not yet
+    // considered moving — it is born visible, paints, and only then fades out,
+    // which is exactly the flash of an indicator appearing the instant a scroll
+    // starts. Marking the motion first means the delegate evaluates its opacity
+    // as already hidden and never paints at all.
     //
     // The sequence number is what makes it re-trigger: two identical scrolls in
-    // a row push the same delta, and a bare property write would raise no
-    // change signal for the second, leaving the indicator behind. QML keys the
-    // restart on the sequence rather than the value.
+    // a row push the same value, and a property that does not change raises no
+    // signal for the second.
     //
     // Gated on carriesViewSlide: the delta describes the ONE relayout that
     // produced these rects, and the cached payload keeps carrying it, so every
     // replay through here (a retitle, an urgency change, a settings toggle)
-    // would otherwise re-run the settle and fling the indicators in from the
-    // last scroll's direction with no scroll having happened.
+    // would otherwise hide the indicators again with no scroll having happened.
     const int viewDeltaX = (!carriesViewSlide || shifted.isEmpty())
         ? 0
         : shifted.first().toMap().value(QStringLiteral("viewDeltaX")).toInt();
@@ -245,6 +243,9 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         writeQmlProperty(slot, QStringLiteral("viewSettleMs"), durationMs + kSettleMarginMs);
         writeQmlProperty(slot, QStringLiteral("viewDeltaSeq"), ++m_scrollTabViewDeltaSeq[screenId]);
     }
+
+    // Now the rects, with the motion state already established above.
+    writeQmlProperty(slot, QStringLiteral("strips"), shifted);
 
     // Paint settings, pushed on EVERY update rather than only on the show path
     // like the font block below. The settings hook replays the cached strips
