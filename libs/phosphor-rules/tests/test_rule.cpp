@@ -263,6 +263,10 @@ private Q_SLOTS:
         // SetSnappingLayout and SetTilingAlgorithm share the layout slot BY
         // DESIGN (the lossless mode-toggle pair; the active mode picks
         // between them) — different types on one slot must not be flagged.
+        // The scrollingTemplate action in the same list is quiet for a
+        // DIFFERENT reason: it holds its own slot rather than sharing the
+        // layout one, so it never collides here at all. Its duplicate case is
+        // testValidationIssues_duplicateSameTypeSlotActionsFlagged above.
         const Rule r = makeRule(QStringLiteral("lossless pair"), 300,
                                 MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
                                 {engineMode(QStringLiteral("autotile")), snappingLayout(QStringLiteral("{a}")),

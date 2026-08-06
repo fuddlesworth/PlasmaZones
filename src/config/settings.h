@@ -371,6 +371,9 @@ public:
                    setScrollingDefaultWindowHeightPresetIndex NOTIFY scrollingDefaultWindowHeightPresetIndexChanged)
     Q_PROPERTY(int scrollingInsertPosition READ scrollingInsertPosition WRITE setScrollingInsertPosition NOTIFY
                    scrollingInsertPositionChanged)
+    // The template an unassigned screen resolves to, empty for none.
+    Q_PROPERTY(QString defaultScrollingTemplate READ defaultScrollingTemplate WRITE setDefaultScrollingTemplate NOTIFY
+                   defaultScrollingTemplateChanged)
     // Scrolling.TabIndicator
     Q_PROPERTY(bool scrollingTabIndicatorEnabled READ scrollingTabIndicatorEnabled WRITE setScrollingTabIndicatorEnabled
                    NOTIFY scrollingTabIndicatorEnabledChanged)
@@ -411,8 +414,6 @@ public:
                    setScrollingDropIndicatorBorderWidth NOTIFY scrollingDropIndicatorBorderWidthChanged)
     Q_PROPERTY(int scrollingDropIndicatorBorderRadius READ scrollingDropIndicatorBorderRadius WRITE
                    setScrollingDropIndicatorBorderRadius NOTIFY scrollingDropIndicatorBorderRadiusChanged)
-    Q_PROPERTY(QString defaultScrollingTemplate READ defaultScrollingTemplate WRITE setDefaultScrollingTemplate NOTIFY
-                   defaultScrollingTemplateChanged)
     Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
                    NOTIFY scrollingWheelFocusEnabledChanged)
     Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted

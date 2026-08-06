@@ -91,7 +91,11 @@ private Q_SLOTS:
     {
         const QList<RuleAction> actions = CRB::makeAssignmentActions(
             QStringLiteral("snapping"), QStringLiteral("layout-a"), QStringLiteral("algo-b"), QString());
-        // Mode + layout + algorithm — both layout fields survive a mode flip.
+        // Mode + layout + algorithm: the snapping layout and the tiling
+        // algorithm both survive a mode flip. The scrolling-template leg of the
+        // same losslessness invariant is covered by
+        // testMakeAssignmentActions_scrollingTemplateAction below, which is why
+        // this case passes an empty template and expects three actions.
         QCOMPARE(actions.size(), 3);
         QCOMPARE(modeToken(actions), QStringLiteral("snapping"));
         QCOMPARE(actionCount(actions, ActionType::SetSnappingLayout), 1);
@@ -107,7 +111,7 @@ private Q_SLOTS:
 
     void testMakeAssignmentActions_emptyFieldsOmitted()
     {
-        // Mode-only entry — both layout fields empty → a single action.
+        // Mode-only entry — all three payload fields empty → a single action.
         const QList<RuleAction> modeOnly =
             CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QString(), QString());
         QCOMPARE(modeOnly.size(), 1);
@@ -137,7 +141,7 @@ private Q_SLOTS:
             }
         }
 
-        // Empty template (the default) emits no action — the pre-template
+        // An empty template emits no action — the pre-template
         // three-action shape is unchanged.
         const QList<RuleAction> withoutTemplate = CRB::makeAssignmentActions(
             QStringLiteral("scrolling"), QStringLiteral("layout-a"), QStringLiteral("algo-b"), QString());

@@ -210,6 +210,10 @@ void sortPreviews(QVector<LayoutPreview>& list, const QStringList& customOrder =
 
 } // namespace
 
+// Scrolling templates contribute nothing here on purpose: there is no
+// user-facing template order setting yet, so their ids miss the order map in
+// sortPreviews and resolve to INT_MAX, which parks them after the ordered
+// entries and leaves defaultPreviewLessThan to sort them among themselves.
 QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManual, bool includeAutotile)
 {
     QStringList order;

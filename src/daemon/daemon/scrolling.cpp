@@ -211,17 +211,17 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             }
             // Beyond-blueprint defaults ride the settings-channel trio
             // (template values mirror the wire enums by construction).
-            // Kind 3 is Preset and its index points into THIS template's
-            // preset list, which was not inserted above when empty — pushing
-            // the index then would resolve it against the settings
-            // vocabulary and pick an unrelated width. ScrollingTemplate::
-            // normalize() already demotes that shape to Proportion, so this
-            // only catches a template that reached us without normalizing.
-            constexpr int kDefaultWidthKindPreset = 3;
-            constexpr int kDefaultWidthKindProportion = 0;
+            // Preset's index points into THIS template's preset list, which
+            // was not inserted above when empty — pushing the index then
+            // would resolve it against the settings vocabulary and pick an
+            // unrelated width. ScrollingTemplate::normalize() already demotes
+            // that shape to Proportion, so this only catches a template that
+            // reached us without normalizing.
             const bool presetWidthsUsable = !templ.presetColumnWidths.isEmpty();
-            if (templ.defaultColumnWidthKind == kDefaultWidthKindPreset && !presetWidthsUsable) {
-                overrides.insert(SPK::defaultColumnWidthKind(), kDefaultWidthKindProportion);
+            if (templ.defaultColumnWidthKind == static_cast<int>(PhosphorScrollEngine::DefaultWidthKind::Preset)
+                && !presetWidthsUsable) {
+                overrides.insert(SPK::defaultColumnWidthKind(),
+                                 static_cast<int>(PhosphorScrollEngine::DefaultWidthKind::Proportion));
             } else {
                 overrides.insert(SPK::defaultColumnWidthKind(), templ.defaultColumnWidthKind);
             }

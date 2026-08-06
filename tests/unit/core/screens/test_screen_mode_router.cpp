@@ -201,17 +201,36 @@ private Q_SLOTS:
         m_autotileEngine->setAutotileScreens({QStringLiteral("DP-1"), QStringLiteral("phys/vs:0")});
         m_scrollEngine->setActiveScreens({QStringLiteral("DP-9")});
 
+        // Accumulated and asserted once: a per-screen QCOMPARE aborts the slot on
+        // the first bad screen, so the remaining screens (including the empty id,
+        // deliberately last) would never be checked at all.
+        QStringList failures;
+        const auto label = [](const QString& sid) {
+            return sid.isEmpty() ? QStringLiteral("(empty screen id)") : sid;
+        };
         for (const QString& sid : screens) {
             const bool isSnap = m_router->isSnapMode(sid);
             const bool isAuto = m_router->isAutotileMode(sid);
             const bool isScroll = m_router->isScrollingMode(sid);
             const int claims = int(isSnap) + int(isAuto) + int(isScroll);
-            QCOMPARE_EQ(claims, 1);
+            if (claims != 1) {
+                failures.append(
+                    QStringLiteral("%1: %2 predicates claim it, expected exactly 1").arg(label(sid)).arg(claims));
+            }
             // All THREE predicates must agree with modeFor's verdict.
-            QCOMPARE(isSnap, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Snapping);
-            QCOMPARE(isAuto, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Autotile);
-            QCOMPARE(isScroll, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Scrolling);
+            const auto mode = m_router->modeFor(sid);
+            if (isSnap != (mode == PhosphorZones::AssignmentEntry::Snapping)
+                || isAuto != (mode == PhosphorZones::AssignmentEntry::Autotile)
+                || isScroll != (mode == PhosphorZones::AssignmentEntry::Scrolling)) {
+                failures.append(QStringLiteral("%1: predicates (%2,%3,%4) disagree with modeFor=%5")
+                                    .arg(label(sid))
+                                    .arg(isSnap)
+                                    .arg(isAuto)
+                                    .arg(isScroll)
+                                    .arg(int(mode)));
+            }
         }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
     }
 
     // ─── partitionByMode ──────────────────────────────────────────────────

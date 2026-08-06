@@ -116,7 +116,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("snapping-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect"), PhosphorI18n::tr("glow")});
 
-    // Tiling
+    // Tiling & scrolling
     search->setPageKeywords(QStringLiteral("tiling-behavior"),
                             {PhosphorI18n::tr("tile"), PhosphorI18n::tr("tiling"), PhosphorI18n::tr("auto"),
                              PhosphorI18n::tr("gap"), PhosphorI18n::tr("spacing")});

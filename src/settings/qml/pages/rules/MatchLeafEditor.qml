@@ -522,7 +522,9 @@ RowLayout {
             model: _screens.map(function (s) {
                 var label = s.displayLabel || s.name || "";
                 if (s.isPrimary)
-                    label += " · " + i18n("Primary");
+                    // Composed inside one i18nc so translators control the
+                    // order and the separator survives RTL bidi runs.
+                    label = i18nc("monitor name, then the primary-monitor marker", "%1 · %2", label, i18n("Primary"));
                 return {
                     "label": label,
                     "name": s.name
@@ -639,7 +641,8 @@ RowLayout {
             // The field entry's `options` carry {value: token, wire: token,
             // label: localised} triples. Mode is a string field, so the value
             // persisted in the rule store IS the wire token ("snapping" /
-            // "tiling"; Floating was dropped from the Mode condition).
+            // "tiling" / "scrolling"; Floating was dropped from the Mode
+            // condition).
             readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
 
             model: _options
@@ -715,12 +718,13 @@ RowLayout {
         WideComboBox {
             id: layoutCombo
 
-            // Picker over `appSettings.activeLayoutMatchOptions` (snapping
-            // layouts, autotile entries, and one derived "scrolling:<uuid>"
-            // entry per native template row); the wire value stays the id
-            // the daemon's context resolvers stamp for the screen (snap UUID,
-            // "autotile:<algo>", bare "scrolling:", or the prefixed template
-            // form). Mirrors the activity picker.
+            // Picker over `appSettings.activeLayoutMatchOptions`: the layouts
+            // list with each native template row rewritten to its derived
+            // "scrolling:<uuid>" wire form, plus the bare "scrolling:"
+            // sentinel entry for a scrolling screen with no template. The
+            // wire value stays the id the daemon's context resolvers stamp
+            // for the screen (snap UUID, "autotile:<algo>", bare "scrolling:",
+            // or the prefixed template form). Mirrors the activity picker.
             readonly property var _layouts: leaf.appSettings ? leaf.appSettings.activeLayoutMatchOptions : []
 
             model: _layouts

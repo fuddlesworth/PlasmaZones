@@ -45,6 +45,12 @@ public:
     /// that opens the folder must use this rather than inlining the path.
     static QString templateSubdirectory();
 
+    /// Absolute path of the USER template directory (GenericDataLocation +
+    /// templateSubdirectory()). Static because it reads nothing off the store:
+    /// UI code that has to open or create the folder can call it without an
+    /// instance, and must, rather than re-joining the two parts itself.
+    static QString userTemplateDirectory();
+
     /// Rescan every data location (system first, user last). Emits
     /// templatesChanged when the loaded set differs.
     void loadTemplates();
@@ -69,16 +75,19 @@ public:
     /// still returns the stored id. Returns the stored id.
     QUuid saveTemplate(ScrollingTemplate templ);
 
-    /// Delete the USER file for @p id. A bundled (system) template shadowed
-    /// by the user file resurfaces on the rescan this triggers; a template
-    /// whose loaded entry came from a system location is refused (returns
-    /// false) — the UI disables delete for those. A user entry whose file is
-    /// already gone rescans and reports success, since the requested state
+    /// Delete the USER file for @p id. The target is the entry's own
+    /// sourcePath when that path lies inside the user directory (a
+    /// hand-placed user file need not be named after its id), otherwise the
+    /// id-derived path. A bundled (system) template shadowed by the user file
+    /// resurfaces on the rescan this triggers; a template whose loaded entry
+    /// came from a system location is refused (returns false) — the UI
+    /// disables delete for those. A user entry whose file is already gone on
+    /// both paths rescans and reports success, since the requested state
     /// already holds.
     bool removeTemplate(const QUuid& id);
 
     /// Store a copy of @p id under a fresh UUID with @p newName (or a
-    /// "name (copy)" derivative when empty). Returns the new id, null on
+    /// "name (Copy)" derivative when empty). Returns the new id, null on
     /// failure.
     QUuid duplicateTemplate(const QUuid& id, const QString& newName = QString());
 
@@ -87,7 +96,6 @@ Q_SIGNALS:
     void templatesChanged();
 
 private:
-    QString userTemplateDirectory() const;
     QString userTemplateFilePath(const QUuid& id) const;
     bool writeTemplateFile(const ScrollingTemplate& templ);
 

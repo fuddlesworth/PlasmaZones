@@ -129,9 +129,12 @@ class SettingsController : public QObject
     // PhosphorZones::Layout management
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
     // The rule editor's ActiveLayout value-picker model: every entry of
-    // `layouts` plus one derived "scrolling:<uuid>" template entry per manual
-    // layout, so a rule can target a specific scrolling template the way it
-    // targets a snap layout or an autotile algorithm.
+    // `layouts`, with each native scrolling-template row rewritten to its
+    // prefixed "scrolling:<uuid>" wire id and a "Template: …" label (nothing is
+    // derived from manual layouts), plus the bare "scrolling:" sentinel entry
+    // for "scrolling with no template". A rule can therefore target one
+    // specific template the way it targets a snap layout or an autotile
+    // algorithm.
     Q_PROPERTY(QVariantList activeLayoutMatchOptions READ activeLayoutMatchOptions NOTIFY layoutsChanged)
 
     // Screen management
@@ -375,29 +378,10 @@ public:
     Q_INVOKABLE QVariantMap scrollingConstants() const;
 
     // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
-    // Loads the on-disk layouts via an in-process LayoutRegistry +
-    // ZonesLayoutSource so QML preview paths render even when the daemon
-    // is down (early launch, crash). Paints directly at startup, before the
-    // first getLayoutList goes out; after that loadLayoutsAsync holds it back
-    // (m_withheldLocalLayouts) and publishes it only when the daemon cannot
-    // answer, because it lacks the enrichment described below.
-    //
-    // Returns the projection produced by PlasmaZones::toVariantMap. That is
-    // the SAME projection, key for key, that the D-Bus side emits via toJson
-    // — the two differ only in container type (QVariantMap vs QJsonObject).
-    // What differs is the daemon's LayoutAdaptor::getLayoutList, which adds an
-    // enrichment layer on top (hasSystemOrigin / hiddenFromSelector /
-    // defaultOrder / allow-lists) from Layout state that LayoutPreview does not
-    // carry. So the list this returns is a strict SUBSET of the D-Bus
-    // list: any consumer reading an enrichment-only key off these previews
-    // gets `undefined`, not `false`. See src/common/layoutpreviewserialize.h.
-    //
-    // @note Autotile preview-parameter drift: the local AlgorithmRegistry
-    // is independent of the daemon's (see m_localAlgorithmRegistry below),
-    // so daemon-side tuning (master count, split ratio, per-algorithm
-    // settings) does NOT propagate here — fallback previews render with
-    // built-in defaults. When the daemon is up, D-Bus carries the tuned
-    // previews; the fallback is only a "daemon is down" safety net.
+    // On-disk layouts read through an in-process registry so QML preview paths
+    // render with the daemon down. What the projection carries, what the D-Bus
+    // path adds on top, and the autotile parameter drift: see the definition in
+    // settingscontroller_layouts.cpp.
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
 
     // Screen accessors
@@ -549,22 +533,10 @@ public:
     }
 
     // ── Running window picker (async flow) ──────────────────────────────────
-    //
     // The QML picker dialog calls requestRunningWindows() and binds to
-    // runningWindowsAvailable(list) — no blocking D-Bus round-trip. The
-    // controller caches the most recent list in m_cachedRunningWindows so
-    // QML dialogs can read it directly between calls. The old synchronous
-    // getRunningWindows() was removed in Phase 6 of refactor/dbus-performance.
-    //
-    // requestRunningWindows() invalidates the cache before issuing the
-    // call, so QML readers binding to cachedRunningWindows() during a
-    // refresh see an empty list (intentional — distinguishes "loading"
-    // from "stale-but-cached").
-    //
-    // A client-side timeout guards against the KWin effect being unloaded:
-    // if no reply arrives within RunningWindowsTimeoutMs, we emit
-    // runningWindowsTimedOut() so the QML dialog can show a "no response"
-    // state instead of hanging on a spinner forever.
+    // runningWindowsAvailable(list) — no blocking D-Bus round-trip. Cache
+    // invalidation and the client-side timeout: see the definition in
+    // settingscontroller_session.cpp.
     Q_INVOKABLE void requestRunningWindows();
     Q_INVOKABLE QVariantList cachedRunningWindows() const
     {
@@ -926,14 +898,16 @@ private:
     /// tell "no activities" from "could not ask" must give this a bool return.
     void refreshActivities();
 
-    /// Stage an empty layout id for every quick-layout slot of @p snappingMode
+    /// Stage an empty layout id for every quick-layout slot of @p wireMode
     /// that currently holds one (a slot's default IS "no assignment"), setting
     /// @p stagedAny to whether anything was staged. False when the daemon's slot
     /// map could not be read, and then NOTHING is staged: an error map reads the
     /// same as "all slots already unassigned", so reporting success would show a
     /// clean page for a reset that never happened. Shared by per-page Reset and
     /// defaults() — quick slots are daemon-backed, so Settings::reset() cannot
-    /// clear them.
+    /// clear them. @p wireMode is an AssignmentEntry::Mode value on the wire:
+    /// 0 snapping, 1 tiling, 2 scrolling (see the QuickSlotMode* constants in
+    /// settingscontroller_pagekeys.h).
     bool stageQuickSlotClears(int wireMode, bool& stagedAny);
 
     /// Adopt whatever is on disk as the session's state: reload settings and the
@@ -1079,28 +1053,11 @@ private:
     QTimer m_layoutLoadTimer;
     QString m_pendingSelectLayoutId;
 
-    // Number of getLayoutList round-trips in flight. Non-zero holds back the
-    // local-path layout view, which is built from LayoutPreview and carries no
-    // daemon-side enrichment (hasSystemOrigin / hiddenFromSelector /
-    // defaultOrder / allow-lists). Publishing it mid-flight stripped that off
-    // every entry for the length of the round trip, so a hidden/auto-assign
-    // toggle visibly reverted on the card just toggled and every listing page
-    // rebuilt its whole model twice per mutation.
-    //
-    // loadLayoutsAsync() increments it BEFORE reloading the local registry, so
-    // the gate covers that reload's synchronous emit as well as any landing
-    // before the reply. A COUNT, not a flag: the debounce is 50 ms and a reply
-    // costs the daemon a full rescan, so a burst readily puts two calls in
-    // flight, and a flag would be cleared by the first reply while the second
-    // was still pending. Decremented at the reply lambda's entry, ahead of any
-    // early-return. Startup's direct loadLayouts() runs ungated.
+    // Number of getLayoutList round-trips in flight; non-zero withholds the
+    // unenriched local-path layout view into m_withheldLocalLayouts. Why it is
+    // a count and when each is written: see loadLayoutsAsync in
+    // settingscontroller_layouts.cpp.
     int m_pendingDaemonLayoutCalls = 0;
-    /// The local view withheld under that gate, adopted by the last reply when
-    /// the daemon turns out to be unreachable, so a failed round trip does not
-    /// leave the page painted from before the change. Engaged (not merely
-    /// non-empty) marks a withheld view, so a genuine wipe to zero layouts is
-    /// still adopted. Any SUCCESSFUL reply clears it: enriched data supersedes
-    /// it, and a later error must not downgrade the page back to it.
     std::optional<QVariantList> m_withheldLocalLayouts;
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.
@@ -1111,18 +1068,13 @@ private:
     //
     // ─── DECLARATION ORDER INVARIANT ─────────────────────────────────
     // m_localAlgorithmRegistry + m_localLayoutManager are borrowed by the
-    // bundle's sources AND by m_scriptLoader below. Reverse-order member
-    // destruction must tear down the loader and the bundle BEFORE the
-    // registries those consumers borrow. With the order below:
-    //   1. The registry/loader borrowers declared after them run first:
-    //      ~m_snappingShadersPage, ~m_tilingAlgorithmPage, ~m_algorithmService
-    //      (which disconnects its watchers — see ~AlgorithmService in
-    //      algorithmservice.cpp).
-    //   2. ~m_scriptLoader (unregisters scripted algorithms while the
-    //      registry is still alive — fixes a UAF the QObject-child-parent
-    //      pattern had, where ~QObject ran after unique_ptr reset).
-    //   3. ~m_localSources drops borrowed source pointers.
-    //   4. ~m_localLayoutManager, ~m_localTemplateStore, ~m_localAlgorithmRegistry.
+    // bundle's sources and by m_scriptLoader. Reverse-order member destruction
+    // runs, in order: the borrowers declared after them (~m_snappingShadersPage,
+    // ~m_tilingAlgorithmPage, ~m_algorithmService, which disconnects its
+    // registry watchers); ~m_scriptLoader, which unregisters scripted algorithms
+    // while the registry is still alive (a UAF the QObject-child pattern had,
+    // where ~QObject ran after the unique_ptr reset); ~m_localSources, dropping
+    // borrowed source pointers; then the three owners below.
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
     /// Local read view of the scrolling-template store (same files the

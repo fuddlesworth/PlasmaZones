@@ -34,7 +34,7 @@ OrderingPageKind orderingPageKind(const QString& page)
     return OrderingPageKind::None;
 }
 
-// The two Quick Shortcuts pages. Their editable state is the per-mode staged
+// The three Quick Shortcuts pages. Their editable state is the per-mode staged
 // quick-slot layout assignments in StagingService (daemon-backed).
 bool isShortcutsPage(const QString& page)
 {

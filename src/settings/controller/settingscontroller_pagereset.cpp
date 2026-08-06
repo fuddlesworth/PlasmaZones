@@ -170,9 +170,9 @@ bool SettingsController::stageQuickSlotClears(int wireMode, bool& stagedAny)
         // Staged value wins over the daemon's, matching the per-slot accessors'
         // precedence.
         QString current;
-        const bool haveStaged = wireMode == 0 ? m_staging.stagedSnappingQuickSlot(slot, current)
-            : wireMode == 2                   ? m_staging.stagedScrollingQuickSlot(slot, current)
-                                              : m_staging.stagedTilingQuickSlot(slot, current);
+        const bool haveStaged = wireMode == QuickSlotModeSnapping ? m_staging.stagedSnappingQuickSlot(slot, current)
+            : wireMode == QuickSlotModeScrolling                  ? m_staging.stagedScrollingQuickSlot(slot, current)
+                                                                  : m_staging.stagedTilingQuickSlot(slot, current);
         if (!haveStaged)
             current = allSlots.value(QString::number(slot)).toString();
         // An already-empty slot needs no change, so resetting an all-default
@@ -180,9 +180,9 @@ bool SettingsController::stageQuickSlotClears(int wireMode, bool& stagedAny)
         // clears.
         if (current.isEmpty())
             continue;
-        if (wireMode == 0)
+        if (wireMode == QuickSlotModeSnapping)
             m_staging.stageSnappingQuickSlot(slot, QString());
-        else if (wireMode == 2)
+        else if (wireMode == QuickSlotModeScrolling)
             m_staging.stageScrollingQuickSlot(slot, QString());
         else
             m_staging.stageTilingQuickSlot(slot, QString());
@@ -264,9 +264,9 @@ void SettingsController::resetPage(const QString& page)
     // clears. quickLayoutSlotsChanged refreshes the slot cards.
     if (isShortcutsPage(page)) {
         bool staged = false;
-        const int wireMode = page == QLatin1String("snapping-shortcuts") ? 0
-            : page == QLatin1String("scrolling-shortcuts")               ? 2
-                                                                         : 1;
+        const int wireMode = page == QLatin1String("snapping-shortcuts") ? QuickSlotModeSnapping
+            : page == QLatin1String("scrolling-shortcuts")               ? QuickSlotModeScrolling
+                                                                         : QuickSlotModeTiling;
         if (!stageQuickSlotClears(wireMode, staged)) {
             // Reconcile before leaving so a pre-existing stale dirty entry for
             // this page is cleaned on this exit too, matching every other path.

@@ -419,19 +419,42 @@ private Q_SLOTS:
         const QString uuid = QUuid::createUuid().toString();
         const QString path = ConfigDefaults::quickLayoutsFilePath();
         QDir().mkpath(QFileInfo(path).absolutePath());
+
+        const auto writeSidecar = [&path](const QJsonObject& document) {
+            QFile f(path);
+            if (!f.open(QIODevice::WriteOnly)) {
+                return false;
+            }
+            f.write(QJsonDocument(document).toJson());
+            return true;
+        };
+
+        // POSITIVE CONTROL first: the same hand-computed path, holding a
+        // document in the SUPPORTED nested shape, must load. Without this the
+        // emptiness below would also be the result of writing to a path the
+        // registry never reads, and the test would pass for the wrong reason.
+        QJsonObject nestedSlots;
+        nestedSlots.insert(QStringLiteral("1"), uuid);
+        QJsonObject nested;
+        nested.insert(PhosphorZones::LayoutRegistry::QuickSlotsSnappingKey, nestedSlots);
+        QVERIFY(writeSidecar(nested));
+        mgr->loadAssignments();
+        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).value(1), uuid);
+
+        // Now the flat document, over the same path the control just proved is
+        // live. The reader is nested-only, so every mode comes back empty.
         QJsonObject flat;
         flat.insert(QStringLiteral("1"), uuid);
         flat.insert(QStringLiteral("3"), uuid);
-        {
-            QFile f(path);
-            QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(QJsonDocument(flat).toJson());
-        }
+        QVERIFY(writeSidecar(flat));
 
         mgr->loadAssignments(); // re-reads the sidecar we just wrote
 
         QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).isEmpty());
         QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).isEmpty());
+        // Scrolling owns a third array read from the same document, so it has
+        // to be asserted too or a flat file could leak into it unnoticed.
+        QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Scrolling).isEmpty());
     }
 };
 

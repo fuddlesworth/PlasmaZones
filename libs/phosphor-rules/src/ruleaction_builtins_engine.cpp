@@ -56,7 +56,10 @@ void ActionRegistry::registerBuiltinsEngine()
         .tags = {QString(Tag::LayoutEngine)},
     });
 
-    // ── layout slot — both layout-shaping actions share it ──
+    // ── layout slot — SetSnappingLayout and SetTilingAlgorithm share it, so
+    // one context can pin at most one of the two. The scrolling template is
+    // NOT part of this pair: it carries its own slot, registered below, which
+    // is what lets a rule name a template alongside either of these.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetSnappingLayout),
         .slotFor = constantSlot(ActionSlot::Layout),

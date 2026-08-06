@@ -42,8 +42,9 @@ PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTempla
         // preset list is empty, and a non-empty list was consumed above.
         // Fixed pixels and ClientDecides have no fraction to draw, so they
         // preview at half width.
-        const qreal fallback =
-            templ.defaultColumnWidthKind == 0 ? qBound<qreal>(0.05, templ.defaultColumnWidthValue, 1.0) : 0.5;
+        const qreal fallback = templ.defaultColumnWidthKind == 0
+            ? qBound<qreal>(MinTemplateFraction, templ.defaultColumnWidthValue, 1.0)
+            : 0.5;
         widths = {fallback};
     }
     preview.zones.reserve(widths.size());
@@ -51,7 +52,8 @@ PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTempla
     qreal x = 0.0;
     int zoneNumber = 1;
     for (qreal width : widths) {
-        if (x >= 1.0) {
+        // Epsilon: a float-dust remainder is a sliver nobody can see.
+        if (x >= 1.0 - 0.001) {
             break;
         }
         preview.zones.append(QRectF(x, 0.0, qMin(width, 1.0 - x), 1.0));

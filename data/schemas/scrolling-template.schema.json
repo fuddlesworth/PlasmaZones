@@ -5,6 +5,8 @@
     "description": "A scrolling-mode template: identity metadata, the blueprint columns the first windows form, the shape later columns open at, and the width and height preset vocabularies the cycling shortcuts step through. Author-time contract only. ScrollingTemplate::fromJson tolerates missing and out-of-range values by normalizing them, so this schema exists to catch typos and wrong shapes in bundled data before they are silently repaired.",
     "type": "object",
     "required": ["id", "name"],
+    "$comment": "The key set is closed because the bundled templates and this schema ship together, so an unknown key is a typo rather than a newer file being read by an older build. The C++ parser stays version-free and additive, and it simply ignores keys it does not know.",
+    "additionalProperties": false,
     "properties": {
         "id": {
             "type": "string",
@@ -82,6 +84,19 @@
                     "type": "integer",
                     "minimum": 0,
                     "description": "Position in presetColumnWidths for kind 3. Clamped to the last entry when it points past the list."
+                }
+            },
+            "if": {
+                "properties": { "kind": { "const": 0 } },
+                "required": ["kind"]
+            },
+            "then": {
+                "properties": {
+                    "value": {
+                        "minimum": 0.05,
+                        "maximum": 1,
+                        "description": "Kind 0 reads value as a work-area fraction, so it obeys the same floor and ceiling as every other fraction. Kind 1 reads it as a pixel count and stays unbounded above."
+                    }
                 }
             }
         }

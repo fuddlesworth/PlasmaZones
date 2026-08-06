@@ -9,12 +9,12 @@
 #include <memory>
 
 #include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/RuleEvaluator.h>
-#include <PhosphorRules/WindowQuery.h>
-#include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleSet.h>
 #include <PhosphorRules/RuleStore.h>
+#include <PhosphorRules/WindowQuery.h>
 
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>

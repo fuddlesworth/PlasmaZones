@@ -13,6 +13,13 @@
 
 namespace PhosphorZones {
 
+/// Smallest fraction of the work area a template may express, mirroring the
+/// scroll engine's PhosphorScrollEngine::MinColumnWidthFraction (ScrollTypes.h).
+/// The dependency runs the other way, so the value is repeated here the same
+/// way ConfigDefaults and PhosphorRules repeat it. Every place this library
+/// clamps or floors a template fraction reads this constant.
+inline constexpr qreal MinTemplateFraction = 0.05;
+
 /**
  * @brief One column of a scrolling template's seed blueprint
  *
@@ -56,9 +63,12 @@ struct PHOSPHORZONES_EXPORT ScrollingTemplateColumn
  *   the preset shortcuts step through while this template is assigned; they
  *   replace the compiled defaults WHOLESALE (no merge).
  *
- * The schema is version-free additive (absent key = default), matching the
- * layout JSON policy. Room is deliberately left for later axes (per-column
- * scroll direction, overflow policies) — do not pre-declare them.
+ * Version-free additive is the PARSER's policy: an absent key reads as its
+ * default, so an older build loads a newer file, matching the layout JSON
+ * policy. The authoring schema (data/schemas/scrolling-template.schema.json)
+ * is deliberately CLOSED so a typo in a bundled file fails validation, and a
+ * later axis (per-column scroll direction, overflow policies) adds a field to
+ * the parser and the schema in the same change.
  *
  * Assignment rides the existing cascade: AssignmentEntry's
  * scrollingTemplateLayout field stores this object's id (QUuid-shaped, same

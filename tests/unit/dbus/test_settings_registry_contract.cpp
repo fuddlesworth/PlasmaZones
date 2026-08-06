@@ -303,7 +303,15 @@ private Q_SLOTS:
             const QString name = QString::fromLatin1(mo->property(i).name());
             // The *Shortcut properties are covered by the scan above; skipping
             // them here keeps a shortcut miss reported by exactly one test.
-            if (!name.startsWith(QLatin1String("scrolling")) || name.endsWith(QLatin1String("Shortcut"))) {
+            //
+            // The name-contains arm catches the scrolling keys that do NOT lead
+            // with the family prefix: defaultScrollingTemplate reads as a
+            // "default*" key and a prefix-only scan skips it, even though it is
+            // the setting that decides which template a screen resolves when
+            // nothing else names one.
+            const bool isScrollingKey =
+                name.startsWith(QLatin1String("scrolling")) || name.contains(QLatin1String("ScrollingTemplate"));
+            if (!isScrollingKey || name.endsWith(QLatin1String("Shortcut"))) {
                 continue;
             }
             ++checked;

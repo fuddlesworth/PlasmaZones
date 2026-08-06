@@ -108,7 +108,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="saveScrollingTemplate">
-            <annotation name="org.gtk.GDBus.DocString" value="Create or update a scrolling template from its JSON object. An empty or missing id creates a fresh template. Editing a bundled template writes a user copy that shadows it. Names longer than 40 characters are shortened to fit. Returns the stored template UUID, or empty when the template is invalid."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Create or update a scrolling template from its JSON object. An empty or missing id creates a fresh template. Editing a bundled template writes a user copy that shadows it. Names longer than 40 characters and descriptions longer than 500 characters are shortened to fit. A save whose stored result is identical to the existing entry rewrites nothing and does not emit scrollingTemplatesChanged. Returns the stored template UUID, or empty when the template is invalid."/>
             <arg name="templateJson" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object in the scrolling-template schema."/>
             </arg>
@@ -122,7 +122,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Template UUID to delete."/>
             </arg>
             <arg name="deleted" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Whether the user file was deleted."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True when the template's user file is gone after the call. False when the id is unknown, malformed, or names a pure bundled template."/>
             </arg>
         </method>
         <method name="duplicateScrollingTemplate">
@@ -644,7 +644,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="layoutChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted on structural layout mutations (editor save, updateLayout, createLayoutFromJson). Carries the full layout JSON payload. Scalar property mutations (hidden, autoAssign, aspectRatioClass) emit layoutPropertyChanged instead to avoid the full serialization."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted on structural layout mutations (editor save, updateLayout) and on every active-layout switch, alongside the cheaper activeLayoutChanged(id). Carries the full layout JSON payload. createLayoutFromJson does not emit this; a new layout announces itself with layoutCreated(id). Scalar property mutations (hidden, autoAssign, aspectRatioClass) emit layoutPropertyChanged instead to avoid the full serialization."/>
             <arg name="layoutJson" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
             </arg>

@@ -8,11 +8,13 @@
  * Split out from test_rule_cascade_fidelity.cpp. Where that suite pins the
  * engine-mode / layout assignment cascade, this one covers the non-assignment
  * context resolvers that share the same priority-wins, per-slot-composition
- * model: gaps, orientation / active-layout stamping, autotile tiling params,
- * scrolling context params, overlay shader / style / appearance overrides,
- * context locks, and the per-mode gap routing through the context `Mode`
- * field. The shared harness
- * lives in RuleCascadeFixture.h.
+ * model: gaps, orientation / active-layout stamping (including the scrolling
+ * template's prefixed ActiveLayout stamp), autotile tiling params, scrolling
+ * context params, overlay shader / style / appearance overrides, context
+ * locks, the per-mode gap routing through the context `Mode` field, the
+ * per-monitor-beats-per-mode specificity order, and the window-field
+ * negation-polarity guard that keeps `none{AppId == x}` rules off windowless
+ * context queries. The shared harness lives in RuleCascadeFixture.h.
  */
 
 #include <QColor>
@@ -66,8 +68,10 @@ private Q_SLOTS:
         // Higher-priority rule sets ONLY zone padding; lower-priority rule sets
         // ONLY the outer gap. Different slots → both must apply (no shadowing),
         // and neither carries an engine-mode action.
+        // A distinctive inner gap: 0 would be indistinguishable from a
+        // default-constructed int if the slot were ever filled by accident.
         const PWR::Rule pad = gapRule(QStringLiteral("pad"), 400, QStringLiteral("DP-1"),
-                                      {intGapAction(PWR::ActionType::SetInnerGap, 0)});
+                                      {intGapAction(PWR::ActionType::SetInnerGap, 7)});
         const PWR::Rule gap = gapRule(QStringLiteral("gap"), 300, QStringLiteral("DP-1"),
                                       {intGapAction(PWR::ActionType::SetOuterGap, 12)});
         QVERIFY(f.store->setAllRules({pad, gap}));
@@ -75,10 +79,21 @@ private Q_SLOTS:
         const PhosphorZones::ContextGapOverride resolved =
             f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
         QVERIFY(resolved.innerGap.has_value());
-        QCOMPARE(*resolved.innerGap, 0);
+        QCOMPARE(*resolved.innerGap, 7);
         QVERIFY(resolved.outerGap.has_value()); // separate slot — composes, not shadowed
         QCOMPARE(*resolved.outerGap, 12);
         QVERIFY(!resolved.usePerSideOuterGap.has_value());
+
+        // An explicit ZERO is a real override, not an absent one: the optional
+        // has to carry it through, or "no gaps on this screen" reads as unset
+        // and the global default comes back instead.
+        const PWR::Rule zeroPad = gapRule(QStringLiteral("zero-pad"), 400, QStringLiteral("DP-1"),
+                                          {intGapAction(PWR::ActionType::SetInnerGap, 0)});
+        QVERIFY(f.store->setAllRules({zeroPad, gap}));
+        const PhosphorZones::ContextGapOverride zeroed =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(zeroed.innerGap.has_value());
+        QCOMPARE(*zeroed.innerGap, 0);
 
         // A context the rules do not pin → no override (cascade falls through).
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
@@ -133,8 +148,10 @@ private Q_SLOTS:
     // The gap/lock/overlay resolvers stamp the screen's resolved active-layout id
     // (via assignmentIdForScreen). A rule matching Field::ActiveLayout must fire
     // only when that id matches — and the resolver must NOT recurse (reaching
-    // assignmentIdForScreen must never re-enter the gap resolver). The test
-    // completing at all proves the no-recursion contract.
+    // assignmentIdForScreen must never re-enter the gap resolver). Unbounded
+    // recursion here would hang or blow the stack, so the test completing is
+    // evidence against that specific failure. It says nothing about a bounded
+    // re-entry, which is not observable from here.
     void testContextActiveLayout_stampedAndGatesRule()
     {
         RegistryFixture f = makeRegistryFixture();
@@ -178,8 +195,12 @@ private Q_SLOTS:
     // template; the bare sentinel now means "scrolling with no template".
     void testContextActiveLayout_scrollingTemplateStamp()
     {
-        RegistryFixture f = makeRegistryFixture();
+        // The store is declared BEFORE the fixture so it outlives the registry
+        // that borrows it: locals are destroyed in reverse, and a registry torn
+        // down while still holding a pointer into a dead store is a dangling
+        // read in whatever the destructor touches.
         PhosphorZones::ScrollingTemplateStore store;
+        RegistryFixture f = makeRegistryFixture();
         f.registry->setScrollingTemplateStore(&store);
         PhosphorZones::ScrollingTemplate templ;
         templ.name = QStringLiteral("Template");
@@ -210,7 +231,9 @@ private Q_SLOTS:
                                      QString(PhosphorLayout::LayoutId::ScrollingId));
         const PWR::Rule bareRule = gapRuleForActiveLayout(QString(PhosphorLayout::LayoutId::ScrollingId));
         QVERIFY(f.store->addRule(bareRule));
-        QVERIFY(innerGapOn(QStringLiteral("DP-1")).innerGap.has_value());
+        const PhosphorZones::ContextGapOverride onBare = innerGapOn(QStringLiteral("DP-1"));
+        QVERIFY(onBare.innerGap.has_value());
+        QCOMPARE(*onBare.innerGap, 21);
 
         // Assign the template: the stamp becomes the PREFIXED form — the bare
         // rule stops matching, the prefixed rule fires. Every write here goes
@@ -239,7 +262,8 @@ private Q_SLOTS:
     // `ActiveLayout Equals X` leaf never matches the unstamped placeholder, but a
     // `None{ActiveLayout Equals X}` ("active layout is NOT X") would spuriously
     // match the empty placeholder and force a wrong assignment without the guard.
-    // The resolve also completing at all proves the no-recursion contract.
+    // The resolve completing is likewise evidence only against UNBOUNDED
+    // recursion (which would hang or blow the stack), not against re-entry.
     void testActiveLayoutRuleExcludedFromAssignment()
     {
         RegistryFixture f = makeRegistryFixture();
@@ -626,6 +650,30 @@ private Q_SLOTS:
         // EXCLUDED, so there is NO context override — the cascade falls through
         // to the global default tier (the baseline's value, surfaced elsewhere).
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+
+        // The exclusion is keyed on MANAGED-and-catch-all, not on catch-all
+        // alone: a user's own catch-all gap rule is an ordinary context override
+        // and must surface on every screen, DP-2 included. Without this arm a
+        // guard that dropped all catch-alls would look correct.
+        PWR::Rule userCatchAll;
+        userCatchAll.id = QUuid::createUuid();
+        userCatchAll.name = QStringLiteral("My gaps everywhere");
+        userCatchAll.enabled = true;
+        userCatchAll.managed = false;
+        // Below the per-monitor rule's 310, so the DP-1 arm below is about the
+        // per-monitor override winning and not about specificity ordering
+        // (which testPerScreenGapBeatsPerModeGap covers on its own).
+        userCatchAll.priority = 300;
+        userCatchAll.match = PWR::MatchExpression{}; // catch-all All{}
+        userCatchAll.actions = {intGapAction(PWR::ActionType::SetInnerGap, 9)};
+        QVERIFY(f.store->setAllRules({baseline, perScreen, userCatchAll}));
+
+        const PhosphorZones::ContextGapOverride dp2User =
+            f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString());
+        QVERIFY(dp2User.innerGap.has_value());
+        QCOMPARE(*dp2User.innerGap, 9);
+        // DP-1 still prefers its per-monitor rule over the user catch-all.
+        QCOMPARE(*f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).innerGap, 20);
     }
 
     // ─── Context overlay-property resolution (OverlayShader / OverlayStyle) ──
@@ -1065,9 +1113,7 @@ private Q_SLOTS:
         QCOMPARE(*tiledBoth.innerGap, 14);
     }
 
-    // ─── Per-monitor gap beats a global per-mode gap (specificity, not priority) ─
-    // A per-monitor (ScreenId-pinned) gap override and a global per-mode
-    // (Mode-pinned) gap rule can both match the same window/slot. A hand-authored
+    // ─── Window-field negation polarity on the context resolvers ─────────────
     // The window-field negation-polarity guard: a windowless context query
     // leaves every Window-sourced field ABSENT, which makes a positive leaf
     // evaluate false (inert, by design) but makes a leaf under `none{}` match
@@ -1112,6 +1158,21 @@ private Q_SLOTS:
         QVERIFY2(!f.registry->resolveContextLocked(QStringLiteral("DP-9"), 1, QString()),
                  "a rule negating a window field must not lock a windowless context");
 
+        // Lock-resolver positive control: a plain ScreenId lock rule DOES lock
+        // the same context, so the false above is the guard and not a resolver
+        // that never reports locked.
+        PWR::Rule plainLock;
+        plainLock.id = QUuid::createUuid();
+        plainLock.name = QStringLiteral("Lock DP-9");
+        plainLock.enabled = true;
+        plainLock.priority = 500;
+        plainLock.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-9"));
+        plainLock.actions = {lockAction};
+        QVERIFY(f.store->setAllRules({plainLock}));
+        QVERIFY2(f.registry->resolveContextLocked(QStringLiteral("DP-9"), 1, QString()),
+                 "a plain context lock rule must lock the context");
+
         // POSITIVE CONTROL 1: the guard is negation-scoped, not a blanket
         // window-field ban. An `any{ScreenId == DP-9, AppId == firefox}` gap
         // rule still fires through its context branch.
@@ -1148,6 +1209,9 @@ private Q_SLOTS:
         QCOMPARE(*control.innerGap, 44);
     }
 
+    // ─── Per-monitor gap beats a global per-mode gap (specificity, not priority) ─
+    // A per-monitor (ScreenId-pinned) gap override and a global per-mode
+    // (Mode-pinned) gap rule can both match the same window/slot. A hand-authored
     // per-mode gap rule can even carry a HIGHER raw priority (500) than a
     // per-screen rule (300). resolveContextGaps must therefore order the slot by
     // MATCH SPECIFICITY (ScreenId-pinned > Mode-pinned), so the per-monitor

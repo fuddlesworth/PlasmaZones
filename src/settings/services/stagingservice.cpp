@@ -3,6 +3,7 @@
 
 #include "stagingservice.h"
 
+#include "settings/controller/settingscontroller_pagekeys.h"
 #include "settings/utils/dbusutils.h"
 #include "settings/utils/virtualscreenutils.h"
 #include "config/settings.h"
@@ -443,12 +444,8 @@ bool StagingService::flushQuickSlotsToDaemon()
 {
     // Quick slots are mode-keyed in the daemon's LayoutRegistry: snapping
     // slots hold zone-layout UUIDs, tiling slots hold autotile algorithm
-    // IDs, and scrolling slots hold native template ids. The wire mode
-    // matches AssignmentEntry::Mode (Snapping = 0, Autotile = 1,
-    // Scrolling = 2).
-    constexpr int kSnappingMode = 0;
-    constexpr int kAutotileMode = 1;
-    constexpr int kScrollingMode = 2;
+    // IDs, and scrolling slots hold native template ids. The wire mode comes
+    // from the shared QuickSlotMode* aliases of AssignmentEntry::Mode.
     const auto flush = [](int mode, QHash<int, QString>& slots) {
         bool ok = true;
         for (auto it = slots.constBegin(); it != slots.constEnd(); ++it) {
@@ -471,9 +468,9 @@ bool StagingService::flushQuickSlotsToDaemon()
     // All three modes are attempted before the verdict — `&&` would
     // short-circuit the later flushes on a snapping failure and silently skip
     // them.
-    const bool snappingOk = flush(kSnappingMode, m_snappingQuickSlots);
-    const bool tilingOk = flush(kAutotileMode, m_tilingQuickSlots);
-    const bool scrollingOk = flush(kScrollingMode, m_scrollingQuickSlots);
+    const bool snappingOk = flush(QuickSlotModeSnapping, m_snappingQuickSlots);
+    const bool tilingOk = flush(QuickSlotModeTiling, m_tilingQuickSlots);
+    const bool scrollingOk = flush(QuickSlotModeScrolling, m_scrollingQuickSlots);
     return snappingOk && tilingOk && scrollingOk;
 }
 

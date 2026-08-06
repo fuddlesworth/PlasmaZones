@@ -129,6 +129,11 @@ void UnifiedLayoutController::ensureTemplateStoreSubscription() const
     }
     QObject::disconnect(m_templateStoreConnection);
     m_subscribedTemplateStore = store;
+    // Anything cached before the store was reachable was built without its
+    // template cards (or with the previous store's), so the rebind has to
+    // drop it. The templatesChanged subscription only covers mutations from
+    // here on.
+    m_cacheValid = false;
     m_templateStoreConnection =
         connect(store, &PhosphorZones::ScrollingTemplateStore::templatesChanged, this, [this]() {
             m_cacheValid = false;

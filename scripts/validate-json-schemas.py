@@ -8,10 +8,9 @@ with runtime validation: phosphor-fsloader's SchemaValidator (valijson)
 compiles the same schema files at load time. A few (surface-metadata,
 scrolling-template) are an author-time-only contract, because those
 document types validate their content directly in C++ rather than through
-a runtime schema. Either way
-this script is the author-time gate — run from lefthook on commit and from
-CI — so a malformed bundled data file fails review rather than shipping and
-being skipped at runtime.
+a runtime schema. Either way this script is the author-time gate — run from
+lefthook on commit and from CI — so a malformed bundled data file fails
+review rather than shipping and being skipped at runtime.
 
 The schema dialect is Draft 7 (what valijson supports), validated here
 with the `jsonschema` package's Draft7Validator so the two engines agree.

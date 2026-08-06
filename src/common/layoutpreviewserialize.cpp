@@ -6,6 +6,9 @@
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
+// LayoutCategory: the wire value of K::Category is that enum's numeric value,
+// so it is written through the enumerators rather than hand-copied literals.
+#include <PhosphorZones/Layout.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QJsonArray>
@@ -128,7 +131,10 @@ QJsonObject toJson(const PhosphorLayout::LayoutPreview& preview)
     json[K::ZoneCount] = preview.zoneCount;
     json[K::IsAutotile] = preview.isAutotile();
     json[K::IsScrollingTemplate] = preview.isScrollingTemplate;
-    json[K::Category] = preview.isScrollingTemplate ? 2 : (preview.isAutotile() ? 1 : 0);
+    json[K::Category] = preview.isScrollingTemplate
+        ? static_cast<int>(PhosphorZones::LayoutCategory::ScrollingTemplate)
+        : (preview.isAutotile() ? static_cast<int>(PhosphorZones::LayoutCategory::Autotile)
+                                : static_cast<int>(PhosphorZones::LayoutCategory::Manual));
     json[K::IsSystem] = preview.isSystem;
     json[K::Recommended] = preview.recommended;
     json[K::AutoAssign] = preview.autoAssign;
@@ -183,7 +189,10 @@ QVariantMap toVariantMap(const PhosphorLayout::LayoutPreview& preview)
     }
     map[K::ZoneCount] = preview.zoneCount;
     map[K::IsAutotile] = preview.isAutotile();
-    map[K::Category] = preview.isScrollingTemplate ? 2 : (preview.isAutotile() ? 1 : 0);
+    map[K::Category] = preview.isScrollingTemplate
+        ? static_cast<int>(PhosphorZones::LayoutCategory::ScrollingTemplate)
+        : (preview.isAutotile() ? static_cast<int>(PhosphorZones::LayoutCategory::Autotile)
+                                : static_cast<int>(PhosphorZones::LayoutCategory::Manual));
     map[K::IsSystem] = preview.isSystem;
     map[K::Recommended] = preview.recommended;
     map[K::AutoAssign] = preview.autoAssign;

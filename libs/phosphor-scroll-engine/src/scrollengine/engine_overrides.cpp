@@ -11,6 +11,13 @@
 
 #include "enginelimits.h"
 
+#include <QList>
+#include <QRect>
+#include <QString>
+#include <QVariantList>
+#include <QVariantMap>
+#include <QtGlobal>
+
 namespace PhosphorScrollEngine {
 namespace {
 // Sanity bounds for tab-indicator overrides arriving through the public

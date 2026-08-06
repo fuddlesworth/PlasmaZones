@@ -31,7 +31,8 @@ Item {
     property string layoutId: ""
     property string layoutName: ""
     property var zones: []
-    // Layout category: 0=Manual (matches LayoutCategory in C++)
+    // Layout category, matching LayoutCategory in C++ and the vocabulary
+    // CategoryBadge renders: 0=Manual, 1=Autotile, 2=ScrollingTemplate.
     property int category: 0
     // Per-layout autoAssign flag (raw, not yet OR'd with the global master
     // toggle). CategoryBadge folds in `globalAutoAssign` to display effective

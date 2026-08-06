@@ -296,7 +296,10 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 // as 0 forced every such column to Normal and silently
                 // discarded a Tabbed default (from the settings-channel
                 // default, or a SetScrollDefaultColumnDisplay rule) for
-                // exactly the first N columns.
+                // exactly the first N columns. The in-tree daemon always
+                // writes both keys on every entry, so this guard is a
+                // public-API belt for embedder-supplied maps rather than a
+                // fix for a shipped bug.
                 if (!openParams.tabbed && entry.contains(ScrollPerScreenKeys::templateColumnDisplay())) {
                     display = entry.value(ScrollPerScreenKeys::templateColumnDisplay()).toInt() == 1
                         ? ColumnDisplay::Tabbed

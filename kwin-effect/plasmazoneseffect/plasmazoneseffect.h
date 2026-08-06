@@ -2162,6 +2162,24 @@ private:
     // gate keeps the no-geometry-rules user at zero cost.
     bool m_hasGeometryScopedRules = false;
 
+    // True when the last completed loadRuleAnimationsFromDbus admission pass
+    // ran with the active-layout map UNSEEDED and dropped at least one rule
+    // that would otherwise have been bound to an effect rule set, purely
+    // because it references Field::ActiveLayout (see effectNeverStampedFields
+    // in shader_config_dbus.cpp).
+    //
+    // Read by exactly one consumer: the seeding edge in
+    // TilingHandler::setActiveLayouts, which re-drives the whole rule fetch so
+    // the held-out rules are admitted. Without this marker that re-drive is
+    // unconditional, and every session with no ActiveLayout rule at all — the
+    // overwhelming majority — pays a getAllRules round-trip, a full RuleSet
+    // parse and an updateAllDecorations sweep for rules that do not exist.
+    //
+    // Cleared on consumption by that edge, and wherever the seeded flag is
+    // cleared (the serviceUnregistered teardown and TilingHandler's bring-up
+    // clear), since the marker describes a pass over the dead session's store.
+    bool m_activeLayoutRulesWithheld = false;
+
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForTilingNotify() to prevent small utility
     // windows (emoji picker, color picker, etc.) from entering the tiling tree.

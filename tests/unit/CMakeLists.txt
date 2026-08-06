@@ -597,6 +597,11 @@ p_add_test(test_layout_zones core/layout/test_layout_zones.cpp)
 p_add_test(test_layoutmanager_persistence core/layout/test_layoutmanager_persistence.cpp)
 p_add_test(test_layoutmanager_cycling core/layout/test_layoutmanager_cycling.cpp)
 p_add_test(test_scrollingtemplate_store core/layout/test_scrollingtemplate_store.cpp)
+# The scrolling-template schema is author-time only (no loader compiles it), so
+# this target reads it straight out of the source tree and runs it through the
+# same validator engine the runtime-gated schemas use.
+target_link_libraries(test_scrollingtemplate_store PRIVATE PhosphorFsLoader::PhosphorFsLoader)
+target_compile_definitions(test_scrollingtemplate_store PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 p_add_test(test_layoutmanager_assignment core/layout/test_layoutmanager_assignment.cpp)
 p_add_test(test_layoutmanager_default_synthesis core/layout/test_layoutmanager_default_synthesis.cpp)

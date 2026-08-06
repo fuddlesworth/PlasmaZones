@@ -23,6 +23,9 @@ Kirigami.Dialog {
     property bool editingSystem: false
 
     readonly property var displayOptions: [i18n("Stacked"), i18n("Tabbed")]
+    // Largest storable preset index, read once through the controller like the
+    // Scrolling pages do (SettingsController::scrollingConstants).
+    readonly property int presetIndexMax: root.controller.scrollingConstants().presetIndexMax
 
     function openForNew() {
         root.templateId = "";
@@ -53,8 +56,12 @@ Kirigami.Dialog {
         columnsModel.clear();
         const columns = data.columns || [];
         for (let i = 0; i < columns.length; i++)
+            // Clamped to the width spin's own range on the way in. The spin
+            // would display-clamp a stored width outside it without touching
+            // the model, and commit() writes the model back, so an out-of-range
+            // width would silently survive a round trip through the form.
             columnsModel.append({
-                "widthPercent": Math.round((columns[i].width || 0.5) * 100),
+                "widthPercent": Math.max(5, Math.min(100, Math.round((columns[i].width || 0.5) * 100))),
                 "display": columns[i].display === 1 ? 1 : 0
             });
         const defaultWidth = data.defaultColumnWidth || {};
@@ -63,7 +70,13 @@ Kirigami.Dialog {
         // Fall back to the width-preset kind, the same default openForNew uses.
         const kindIndex = defaultWidthKindCombo.indexOfValue(defaultWidth.kind !== undefined ? defaultWidth.kind : 3);
         defaultWidthKindCombo.currentIndex = kindIndex >= 0 ? kindIndex : defaultWidthKindCombo.indexOfValue(3);
-        defaultWidthValueSpin.value = Math.round((defaultWidth.value !== undefined ? defaultWidth.value : 0.5) * 100);
+        // Kind 1 (Fixed) stores a PIXEL count, every other kind a fraction of
+        // the screen, so only the fraction kinds scale by 100 for the percent
+        // spin. Read the STORED kind rather than the combo: the combo's index
+        // is assigned on the line above and depending on that ordering is
+        // needlessly fragile.
+        const storedWidthValue = defaultWidth.value !== undefined ? defaultWidth.value : 0.5;
+        defaultWidthValueSpin.value = defaultWidth.kind === 1 ? Math.round(storedWidthValue) : Math.round(storedWidthValue * 100);
         defaultPresetIndexSpin.value = (defaultWidth.presetIndex !== undefined ? defaultWidth.presetIndex : 1) + 1;
         defaultDisplayCombo.currentIndex = data.defaultColumnDisplay === 1 ? 1 : 0;
         presetWidthsField.text = (data.presetColumnWidths || []).join(", ");
@@ -71,9 +84,10 @@ Kirigami.Dialog {
         root.open();
     }
 
-    // Entries outside (0, 1] are dropped rather than passed on, so the saved
-    // list matches what the field shows. The daemon clamps anything below 0.05
-    // to 0.05 regardless.
+    // Entries outside (0, 1] are dropped rather than passed on. commit() then
+    // writes the surviving list back into the field, so what stays on screen is
+    // what was sent. The daemon still drops anything below 0.05 and sorts and
+    // dedupes the rest, so the stored list can be shorter again.
     function parseFractionList(text) {
         return text.split(",").map(part => parseFloat(part.trim())).filter(value => !isNaN(value) && value > 0 && value <= 1);
     }
@@ -87,6 +101,10 @@ Kirigami.Dialog {
                 "display": row.display
             });
         }
+        const widths = root.parseFractionList(presetWidthsField.text);
+        const heights = root.parseFractionList(presetHeightsField.text);
+        presetWidthsField.text = widths.join(", ");
+        presetHeightsField.text = heights.join(", ");
         const data = {
             "id": root.templateId,
             "name": nameField.text.trim(),
@@ -94,12 +112,14 @@ Kirigami.Dialog {
             "columns": columns,
             "defaultColumnWidth": {
                 "kind": defaultWidthKindCombo.currentValue,
-                "value": defaultWidthValueSpin.value / 100.0,
+                // Fixed is a pixel count and goes over as typed. The other
+                // kinds are fractions the spin shows as a percentage.
+                "value": defaultWidthKindCombo.currentValue === 1 ? defaultWidthValueSpin.value : defaultWidthValueSpin.value / 100.0,
                 "presetIndex": defaultPresetIndexSpin.value - 1
             },
             "defaultColumnDisplay": defaultDisplayCombo.currentIndex,
-            "presetColumnWidths": root.parseFractionList(presetWidthsField.text),
-            "presetWindowHeights": root.parseFractionList(presetHeightsField.text)
+            "presetColumnWidths": widths,
+            "presetWindowHeights": heights
         };
         if (root.controller.saveScrollingTemplate(data))
             root.close();
@@ -210,13 +230,35 @@ Kirigami.Dialog {
             }
         }
 
-        Button {
-            text: i18n("Add Column")
-            icon.name: "list-add"
-            onClicked: columnsModel.append({
-                "widthPercent": 50,
-                "display": 0
-            })
+        RowLayout {
+            id: addColumnRow
+
+            // The store truncates a template's column list at 16 (kMaxColumns
+            // in libs/phosphor-zones/src/scrollingtemplate.cpp, mirroring the
+            // engine's blueprint cap), so rows past that would vanish on save.
+            readonly property int columnLimit: 16
+
+            spacing: Kirigami.Units.smallSpacing
+
+            Button {
+                text: i18n("Add Column")
+                icon.name: "list-add"
+                enabled: columnsModel.count < addColumnRow.columnLimit
+                onClicked: columnsModel.append({
+                    "widthPercent": 50,
+                    "display": 0
+                })
+            }
+
+            // A disabled Button takes no hover, so the ceiling is spelled out
+            // beside it rather than in a tooltip nobody could reach.
+            Label {
+                Layout.fillWidth: true
+                visible: columnsModel.count >= addColumnRow.columnLimit
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+                text: i18n("A template can start at most %1 columns.", addColumnRow.columnLimit)
+            }
         }
 
         Kirigami.Heading {
@@ -269,8 +311,12 @@ Kirigami.Dialog {
 
                 Kirigami.FormData.label: i18n("Preset number:")
                 visible: defaultWidthKindCombo.currentValue === 3
+                // Stored 0-based, shown 1-based, the same offset the Scrolling
+                // pages' preset spins use. The ceiling comes from the C++ side
+                // (ConfigDefaults::scrollingPresetIndexMax) rather than a
+                // literal, so it tracks the store's preset-list cap.
                 from: 1
-                to: 16
+                to: root.presetIndexMax + 1
             }
 
             ComboBox {

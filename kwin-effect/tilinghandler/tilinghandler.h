@@ -349,16 +349,27 @@ public:
     /// re-create rule-matched decorations one event-loop turn AFTER the
     /// handler's clearAllDecorations.
     ///
-    /// CALL-SITE CONTRACT: the ONE sanctioned caller is the effect's
-    /// serviceUnregistered teardown (lifecycle_wiring_daemon.cpp), which runs
-    /// invalidateAllRuleCaches immediately after. Deliberately no repaint and
-    /// no sweep here.
+    /// CALL-SITE CONTRACT: two sanctioned callers, both of which must supply
+    /// the invalidate this function deliberately omits (no repaint and no
+    /// sweep happen here).
+    ///  - the effect's serviceUnregistered teardown
+    ///    (lifecycle_wiring_daemon.cpp), which runs invalidateAllRuleCaches
+    ///    immediately after;
+    ///  - TilingHandler::onDaemonReady, whose own tail runs
+    ///    invalidateAllRuleCaches and scheduleBorderSweep. Bring-up needs the
+    ///    clear because a straight old→new owner handover emits no
+    ///    serviceUnregistered edge at all, so without it the seeded flag stays
+    ///    true over the dead daemon's map and the seeding edge can never fire
+    ///    again for the session.
     ///
     /// Clearing the seeded flag does NOT re-drive the rule admission: no
     /// getAllRules reply is coming with the daemon down, and the re-drive's
     /// updateAllDecorations would fight the teardown's clearAllDecorations.
     /// ActiveLayout rules therefore stay admitted against an empty map for
-    /// the daemon-down interval; the next bring-up's seed edge re-drives.
+    /// the daemon-down interval. On the teardown path the re-admission comes
+    /// from the next bring-up's seed edge; on the bring-up path the clear runs
+    /// before loadSettings re-queries the map, so that same seed edge fires
+    /// from the reply a moment later.
     void clearActiveLayoutsForTeardown()
     {
         ++m_activeLayoutsGeneration;

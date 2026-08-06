@@ -110,10 +110,10 @@ public Q_SLOTS:
      * context's resolved scrolling template supplies is that template's own
      * preset list, and a list it does not supply falls back to the configured
      * preset list, so a template that defines widths but no heights yields
-     * template widths beside the configured heights. This is the vocabulary the cycle-preset-width and
-     * cycle-preset-height shortcuts walk on that screen. Same silent
-     * ownership gate as focusColumn: an empty object when the screen is not
-     * scrolling.
+     * template widths beside the configured heights. This is the vocabulary
+     * the cycle-preset-width and cycle-preset-height shortcuts walk on that
+     * screen. Same silent ownership gate as focusColumn: an empty object when
+     * the screen is not scrolling.
      *
      * @param screenId Screen whose vocabulary to describe
      * @return JSON object string

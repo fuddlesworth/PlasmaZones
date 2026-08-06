@@ -132,7 +132,10 @@ inline QString presetWindowHeights()
 /// DOES carry a display outranks a screen-wide SetScrollDefaultColumnDisplay
 /// rule; past the blueprint (and for entries that omit the key) the rule
 /// decides. A per-column blueprint entry is the more specific statement, so
-/// it wins where it speaks and stays silent where it does not.
+/// it wins where it speaks and stays silent where it does not. The in-tree
+/// daemon always writes both keys on every entry, so the either-key tolerance
+/// is a public-API belt for embedder-supplied maps rather than a fix for a
+/// shipped bug.
 inline QString templateColumns()
 {
     return QStringLiteral("TemplateColumns");

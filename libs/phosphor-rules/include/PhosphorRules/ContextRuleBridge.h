@@ -247,9 +247,9 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  *     (same `layoutId` wire KEY as `SetSnappingLayout`, but a native
  *     scrolling-template uuid — the two id namespaces are disjoint).
  *
- * A mode-only entry (both layout fields empty — the KCM "autotile, default
- * algorithm" shape) yields a single `SetEngineMode` action; the mode token
- * alone preserves the user's intent.
+ * A mode-only entry (all three payload fields empty — the KCM "autotile,
+ * default algorithm" shape) yields a single `SetEngineMode` action; the mode
+ * token alone preserves the user's intent.
  *
  * Open-vocabulary by design: the `SetEngineMode` descriptor's validator
  * checks only that `modeToken` is non-empty — vocabulary validation lives
@@ -306,6 +306,11 @@ inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const Q
  * wire string for the assignment's mode (see `makeAssignmentActions` for
  * vocabulary contract). @p priority is the rule's precedence verbatim — the
  * caller owns it (highest priority wins per slot, ties by list order).
+ * @p scrollingTemplate defers entirely to @ref makeAssignmentActions, which
+ * emits the `SetScrollingTemplate` action only for a non-empty id. It sits
+ * after @p priority rather than beside the other two payload fields so the
+ * pre-scrolling parameter order stays put and every call site only appends an
+ * argument.
  */
 inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int virtualDesktop,
                                const QString& activity, const QString& modeToken, const QString& snappingLayout,

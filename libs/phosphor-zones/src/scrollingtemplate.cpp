@@ -11,19 +11,18 @@ namespace PhosphorZones {
 
 namespace {
 
-// Hand-mirrored floors: the authoritative constants live in the scroll
-// engine (PhosphorScrollEngine::MinColumnWidthFraction /
-// MinWindowHeightFraction, ScrollTypes.h) and the dependency runs the other
-// way, so this library repeats the values like ConfigDefaults and
-// PhosphorRules do. Keep all mirrors in sync.
-constexpr qreal kMinFraction = 0.05;
+// The fraction floor is MinTemplateFraction (ScrollingTemplate.h), which is
+// this library's hand-mirror of the engine's
+// PhosphorScrollEngine::MinColumnWidthFraction. The height mirror
+// (MinWindowHeightFraction) shares the same value, so the preset lists use
+// the one constant.
 
 // Dedupe tolerance for the preset lists, matching the settings parser's
 // treatment of editor float dust (thirds arrive as 0.333333/0.333334).
 constexpr qreal kEps = 0.01;
 
 // Blueprint cap, mirroring the scroll engine's kMaxTemplateEntries
-// (engine_core.cpp): the engine truncates the pushed blueprint at 16
+// (enginelimits.h): the engine truncates the pushed blueprint at 16
 // entries anyway, so a hand-written or bus-supplied file with thousands of
 // columns would only burn memory on entries nothing can ever seed from.
 constexpr int kMaxColumns = 16;
@@ -47,7 +46,7 @@ QList<qreal> fractionsFromJson(const QJsonArray& array)
     return out;
 }
 
-/// Clamp to [kMinFraction, 1.0] dropping sub-floor entries, sort ascending,
+/// Clamp to [MinTemplateFraction, 1.0] dropping sub-floor entries, sort ascending,
 /// dedupe within kEps — the same normalization the settings preset parser
 /// applies, so a template list and a settings list obey one contract.
 QList<qreal> normalizeFractionList(QList<qreal> values)
@@ -55,7 +54,7 @@ QList<qreal> normalizeFractionList(QList<qreal> values)
     QList<qreal> kept;
     kept.reserve(values.size());
     for (qreal v : values) {
-        if (!qIsFinite(v) || v < kMinFraction) {
+        if (!qIsFinite(v) || v < MinTemplateFraction) {
             continue;
         }
         kept.append(qMin(v, 1.0));
@@ -81,7 +80,7 @@ bool ScrollingTemplate::normalize()
         if (keptColumns.size() == kMaxColumns) {
             break;
         }
-        if (!qIsFinite(column.width) || column.width < kMinFraction) {
+        if (!qIsFinite(column.width) || column.width < MinTemplateFraction) {
             continue;
         }
         column.width = qMin(column.width, 1.0);
@@ -104,16 +103,22 @@ bool ScrollingTemplate::normalize()
 
     presetColumnWidths = normalizeFractionList(presetColumnWidths);
     presetWindowHeights = normalizeFractionList(presetWindowHeights);
-    if (defaultColumnWidthPresetIndex >= presetColumnWidths.size() && !presetColumnWidths.isEmpty()) {
+    if (presetColumnWidths.isEmpty()) {
+        // No vocabulary to index into, whatever the kind. Zero is the only
+        // defensible value: the trio is pushed as a unit and round-trips
+        // through JSON, so leaving a stale index on a non-Preset kind would
+        // hand the engine a dangling index the moment presets are added back.
+        defaultColumnWidthPresetIndex = 0;
+    } else if (defaultColumnWidthPresetIndex >= presetColumnWidths.size()) {
         defaultColumnWidthPresetIndex = presetColumnWidths.size() - 1;
     }
     // Kind Preset with no preset list points at nothing, and the daemon pushes
     // the width trio as a unit — the engine would read a preset index against
     // an empty vocabulary. This is the defaults shape (kind 3, no presets), so
     // demote to Proportion and let defaultColumnWidthValue answer instead.
+    // The index is already 0 by the clause above.
     if (defaultColumnWidthKind == 3 && presetColumnWidths.isEmpty()) {
         defaultColumnWidthKind = 0;
-        defaultColumnWidthPresetIndex = 0;
     }
 
     if (!qIsFinite(defaultColumnWidthValue) || defaultColumnWidthValue < 0.0) {
@@ -121,9 +126,12 @@ bool ScrollingTemplate::normalize()
     }
     // Kind-aware bound: a Proportion is a work-area fraction and obeys the same
     // floor/ceiling as every other fraction here. Fixed is a pixel count with
-    // no meaningful upper bound, so it keeps the lower-bound repair only.
+    // no meaningful upper bound, so it only gets a floor — one physical pixel,
+    // since a zero-width column is not a column.
     if (defaultColumnWidthKind == 0) {
-        defaultColumnWidthValue = qBound(kMinFraction, defaultColumnWidthValue, 1.0);
+        defaultColumnWidthValue = qBound<qreal>(MinTemplateFraction, defaultColumnWidthValue, 1.0);
+    } else if (defaultColumnWidthKind == 1) {
+        defaultColumnWidthValue = qMax<qreal>(defaultColumnWidthValue, 1.0);
     }
     return isValid();
 }

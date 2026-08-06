@@ -33,6 +33,7 @@ class ITileAlgorithmRegistry;
 
 namespace PhosphorZones {
 class LayoutRegistry;
+class ScrollingTemplateStore;
 }
 
 namespace PhosphorEngine {
@@ -230,7 +231,7 @@ public:
      * In manual mode: only manual layouts. In autotile mode: only dynamic layouts.
      * The autotile feature gate controls whether dynamic layouts are ever visible.
      */
-    void setLayoutFilter(bool includeManual, bool includeAutotile, bool includeScrollingTemplates = false);
+    void setLayoutFilter(bool includeManual, bool includeAutotile, bool includeScrollingTemplates);
 
     /**
      * @brief Inject the daemon's bundle-owned autotile layout source.
@@ -347,7 +348,10 @@ private:
     /// constructed, so the subscription is made on the first resolve that
     /// finds one (see ensureTemplateStoreSubscription) and re-made if the
     /// injected store is ever swapped. Borrowed, never dereferenced here.
-    mutable QObject* m_subscribedTemplateStore = nullptr;
+    /// QPointer so a destroyed store nulls the latch: a raw pointer could be
+    /// compared equal to a freshly allocated store landing at the same
+    /// address, and the subscription would never be re-made.
+    mutable QPointer<PhosphorZones::ScrollingTemplateStore> m_subscribedTemplateStore;
     mutable QMetaObject::Connection m_templateStoreConnection;
 };
 

@@ -164,6 +164,17 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
     // so ruleQueryFor derives "tiling" from the tiled bit; re-stamp from the
     // per-screen engine discriminator so a `Mode Equals "scrolling"` window
     // rule matches strip-managed windows.
+    //
+    // Bring-up hazard, accepted deliberately: m_scrollingScreens is empty until
+    // the daemon's scrollingScreens reply lands, so a scroll-managed window
+    // resolved in that window stamps "tiling". Mode gets no seeded twin like
+    // ActiveLayout's — holding every Mode rule out of the evaluator until the
+    // set arrives would also disarm them for genuinely floating and snapped
+    // windows, whose Mode is correct from the first frame, and the field is
+    // engaged either way so no negation hazard is opened. The self-correction
+    // is setScrollingScreens' invalidateAllRuleCaches plus its border sweep,
+    // which drop and rebuild every verdict memoised against the empty set once
+    // the reply lands.
     if (query.mode == QLatin1String("tiling") && m_tilingHandler->isScrollingScreen(screenId)) {
         query.mode = QStringLiteral("scrolling");
     }

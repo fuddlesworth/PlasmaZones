@@ -140,9 +140,9 @@ QString SettingsController::getQuickLayoutSlot(int slotNumber) const
     QString staged;
     if (m_staging.stagedSnappingQuickSlot(slotNumber, staged))
         return staged;
-    // Snapping quick slots use wire mode 0 (AssignmentEntry::Snapping).
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getQuickLayoutSlot"), {0, slotNumber});
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeSnapping, slotNumber});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
@@ -183,10 +183,11 @@ QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
     QString staged;
     if (m_staging.stagedTilingQuickSlot(slotNumber, staged))
         return staged;
-    // Tiling quick slots use wire mode 1 (AssignmentEntry::Autotile). They are
-    // daemon-backed (mode-keyed LayoutRegistry), same as snapping slots.
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getQuickLayoutSlot"), {1, slotNumber});
+    // Tiling quick slots are daemon-backed (mode-keyed LayoutRegistry), same as
+    // snapping slots.
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeTiling, slotNumber});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
@@ -211,10 +212,10 @@ QString SettingsController::getScrollingQuickLayoutSlot(int slotNumber) const
     QString staged;
     if (m_staging.stagedScrollingQuickSlot(slotNumber, staged))
         return staged;
-    // Scrolling quick slots use wire mode 2 (AssignmentEntry::Scrolling) and
-    // hold native template ids.
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getQuickLayoutSlot"), {2, slotNumber});
+    // Scrolling quick slots hold native template ids.
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeScrolling, slotNumber});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
@@ -520,6 +521,22 @@ QVariantList parseRunningWindowsJson(const QString& json)
 
 } // namespace
 
+// ── Running window picker (async flow) ──────────────────────────────────────
+//
+// The QML picker dialog calls this and binds to runningWindowsAvailable(list)
+// — no blocking D-Bus round-trip. The controller caches the most recent list in
+// m_cachedRunningWindows so QML dialogs can read it directly between calls. The
+// old synchronous getRunningWindows() was removed in Phase 6 of
+// refactor/dbus-performance.
+//
+// This invalidates the cache before issuing the call, so QML readers binding to
+// cachedRunningWindows() during a refresh see an empty list (intentional —
+// distinguishes "loading" from "stale-but-cached").
+//
+// A client-side timeout guards against the KWin effect being unloaded: if no
+// reply arrives within RunningWindowsTimeoutMs, we emit runningWindowsTimedOut()
+// so the QML dialog can show a "no response" state instead of hanging on a
+// spinner forever.
 void SettingsController::requestRunningWindows()
 {
     // Fire-and-forget: the daemon emits runningWindowsRequested to the

@@ -957,10 +957,10 @@ void Daemon::processPendingGeometryUpdates()
     // Re-derive the scrolling screens' per-screen overrides. Native
     // templates carry fractions, so no geometry feeds the push itself. What
     // this pass is for is the rest of the resolve: per-context rule params
-    // and the context gaps both re-resolve here, and gaps only reach the
-    // strip through a retile. updateScrollingScreens' identical-set branch
-    // supplies that retile, and the engine's equality guard no-ops an
-    // unchanged override map, so the pass is cheap and idempotent.
+    // and the context gaps both re-resolve here. The engine's equality guard
+    // no-ops an unchanged override map, so the pass is cheap and idempotent,
+    // and the tail of this function retiles every active scrolling screen so
+    // the re-resolved values land.
     if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {
         updateScrollingScreens(m_scrollEngine->activeScreens());
     }

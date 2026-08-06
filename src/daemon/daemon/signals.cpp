@@ -153,10 +153,18 @@ void Daemon::connectLayoutSignals()
     // with the mined-vocabulary model: a LAYOUT edit can no longer affect a
     // template. The recompute is cheap and store mutations are user-paced,
     // so no per-screen template-id matching is needed here.
+    //
+    // The per-screen active-assignment snapshot is re-diffed for the same
+    // reason: store CRUD can retarget or clear a context's template without
+    // touching its assignment id, and the KCM apply's template-only OSD gate
+    // reads the snapshot's templateId. Its changed-set return is ignored, as
+    // at the other refresh-only call sites.
     if (m_scrollingTemplateStore) {
         m_restartScopedConnections << connect(m_scrollingTemplateStore.get(),
                                               &PhosphorZones::ScrollingTemplateStore::templatesChanged, this, [this]() {
                                                   updateEngineScreens();
+                                                  // Refresh the snapshot's templateId — see above.
+                                                  diffActiveAssignments();
                                                   // Relay to the D-Bus surface so the settings app
                                                   // refreshes its template views on store CRUD.
                                                   if (m_layoutAdaptor) {

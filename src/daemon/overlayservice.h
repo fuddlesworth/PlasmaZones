@@ -230,8 +230,8 @@ public:
     /// downgrades a disabled or switched-off scrolling assignment to
     /// snapping — the raw assignmentId cannot see that downgrade.
     /// Consumers: resolvePerScreenLayoutInclude empties the layout list only
-    /// for None (a Templates screen keeps the manual list as its template
-    /// vocabulary); activeLayoutIdForScreen takes its template arm only when
+    /// for None (a Templates screen swaps the manual list for the native
+    /// template cards); activeLayoutIdForScreen takes its template arm only when
     /// the live answer is Templates; isSnappingContextInactive suppresses
     /// the snap overlay for a scrolling assignment only when the scroll
     /// engine actually owns the screen. Unset falls back to the

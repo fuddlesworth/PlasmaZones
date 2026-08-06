@@ -340,6 +340,19 @@ private Q_SLOTS:
         // First-listed rule wins the slot (first-action-per-slot, stable sort).
         QCOMPARE(resolvedLayoutId(evaluator, contextQuery(QStringLiteral("DP-1"), 1, QString())),
                  QStringLiteral("{first}"));
+
+        // Reversed insertion, same two rules: the winner follows LIST ORDER and
+        // nothing else. Without this arm an implementation that sorted by name,
+        // by layout id, or that simply always returned "{first}" would pass the
+        // arm above, since "{first}" is both first-listed and alphabetically first.
+        QList<PWR::Rule> reversed;
+        reversed.append(rules.at(1));
+        reversed.append(rules.at(0));
+        PWR::RuleSet reversedSet;
+        reversedSet.setRules(reversed);
+        PWR::RuleEvaluator reversedEvaluator(reversedSet);
+        QCOMPARE(resolvedLayoutId(reversedEvaluator, contextQuery(QStringLiteral("DP-1"), 1, QString())),
+                 QStringLiteral("{second}"));
     }
 
     // ─── LayoutRegistry boundary: mixed rules and the cascade ─────────────
@@ -417,6 +430,14 @@ private Q_SLOTS:
                                    /*tilingAlgorithm=*/QStringLiteral("{mixed-tile}"));
         QVERIFY(f.store->addRule(mixed));
 
+        // POSITIVE CONTROL on a second screen: a plain context rule, the shape
+        // these same three readers are supposed to surface. Without it, readers
+        // that always answered empty would satisfy every assertion below.
+        const PWR::Rule contextOnly = CRB::makeAssignmentRule(
+            QStringLiteral("DP-3"), QStringLiteral("DP-3"), 0, QString(), QStringLiteral("snapping"),
+            QStringLiteral("{context-snap}"), QStringLiteral("{context-tile}"), 301, QString());
+        QVERIFY(f.store->addRule(contextOnly));
+
         const QString screen = QStringLiteral("DP-2");
         // No projection of the mixed rule surfaces — the cascade misses and
         // every default-less reader returns the cascade-miss empty value.
@@ -424,6 +445,14 @@ private Q_SLOTS:
         QCOMPARE(f.registry->modeForScreen(screen, 1, QString()), PhosphorZones::AssignmentEntry::Snapping);
         QVERIFY(f.registry->snappingLayoutForScreen(screen, 1, QString()).isEmpty());
         QVERIFY(f.registry->tilingAlgorithmForScreen(screen, 1, QString()).isEmpty());
+
+        // ...while on DP-3 the very same readers do report the context rule's
+        // slots, so the emptiness above is the mixed rule failing to match and
+        // not the readers being blind.
+        const QString control = QStringLiteral("DP-3");
+        QCOMPARE(f.registry->modeForScreen(control, 1, QString()), PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(f.registry->snappingLayoutForScreen(control, 1, QString()), QStringLiteral("{context-snap}"));
+        QCOMPARE(f.registry->tilingAlgorithmForScreen(control, 1, QString()), QStringLiteral("{context-tile}"));
     }
 
     // ─── Case 3: context-only rule wins over a higher-priority mixed rule
@@ -594,9 +623,9 @@ private Q_SLOTS:
             // A layout-only catch-all: Columns(3), NO engine-mode action.
             PWR::Rule layoutOnly =
                 makeUserCatchAllRule(/*autotileMode=*/false, QStringLiteral("{columns-3}"), QString(), 1);
-            // Drop the engine-mode action makeUserCatchAllRule's helper does not
-            // add (it builds via makeAssignmentActions with a snapping mode, so
-            // strip the SetEngineMode to model the UI's layout-only rule).
+            // Strip the SetEngineMode action the helper DOES add: it builds via
+            // makeAssignmentActions with a snapping mode, and the UI's layout-only
+            // rule carries no engine-mode action at all.
             layoutOnly.actions.removeIf([](const PWR::RuleAction& a) {
                 return a.type == QString(PWR::ActionType::SetEngineMode);
             });

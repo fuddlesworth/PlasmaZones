@@ -224,14 +224,26 @@ private Q_SLOTS:
         }
         // The quick-layout family compresses into one row keyed by its first
         // member, so quick_layout_1 stands in for the whole digit family.
-        for (const QString& id : expectLayouts) {
-            QVERIFY2(modeById.contains(id), qPrintable(QStringLiteral("No cheatsheet row for %1").arg(id)));
-            QCOMPARE(modeById.value(id), QStringLiteral("layouts"));
-        }
-        for (const QString& id : expectAll) {
-            QVERIFY2(modeById.contains(id), qPrintable(QStringLiteral("No cheatsheet row for %1").arg(id)));
-            QCOMPARE(modeById.value(id), QStringLiteral("all"));
-        }
+        //
+        // Accumulated rather than asserted per row: QVERIFY / QCOMPARE abort the
+        // whole slot on the first failure, so one retagged shortcut would hide
+        // the state of every id after it and the next run would report a
+        // different single failure.
+        QStringList failures;
+        const auto checkTag = [&modeById, &failures](const QSet<QString>& ids, const QString& expected) {
+            for (const QString& id : ids) {
+                if (!modeById.contains(id)) {
+                    failures.append(QStringLiteral("no cheatsheet row for %1").arg(id));
+                    continue;
+                }
+                if (modeById.value(id) != expected) {
+                    failures.append(QStringLiteral("%1 tagged %2, expected %3").arg(id, modeById.value(id), expected));
+                }
+            }
+        };
+        checkTag(expectLayouts, QStringLiteral("layouts"));
+        checkTag(expectAll, QStringLiteral("all"));
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
     }
 };
 

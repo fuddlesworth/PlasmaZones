@@ -803,9 +803,9 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     // WindowDragAdaptor's dragMoved gate; here that is defence in depth.)
     // The daemon-injected resolver routes through
     // ScreenModeRouter::engineFor, so a disabled/gated scrolling assignment
-    // correctly downgrades to snapping and keeps its manual list — the raw
+    // correctly downgrades to snapping and keeps its manual list. The raw
     // assignmentId check below cannot see that downgrade, which is why the
-    // resolver answers before it.
+    // scrolling arm consults the resolver too rather than trusting the id.
     if (!resolvedId.isEmpty() && m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportNone) {
         flags.manual = false;
         flags.autotile = false;
@@ -821,10 +821,16 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
         flags.manual = false;
         flags.autotile = true;
         flags.templates = false;
-    } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+    } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)
+               && (!m_layoutSupportResolver || m_layoutSupportResolver(resolvedId) == LayoutSupportTemplates)) {
         // The live Templates arm: since the native-template pivot a
         // scrolling screen's picker offers TEMPLATE cards only (manual
-        // layouts are not templates, algorithms never were).
+        // layouts are not templates, algorithms never were). Gated on the
+        // LIVE resolver, not the raw assignment id: a downgraded scrolling
+        // screen (master switch off, Scrolling axis context-disabled)
+        // answers Placement and falls through to the manual arm below,
+        // which is the list its live snapping path actually uses. Same
+        // shape as isSnappingContextInactive / activeLayoutIdForScreen.
         flags.manual = false;
         flags.autotile = false;
         flags.templates = true;

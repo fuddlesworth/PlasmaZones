@@ -101,18 +101,29 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
         const QString value = predicate.value.toString();
         QString label = value;
         if (PhosphorLayout::LayoutId::isScrolling(value)) {
-            // The bare mode sentinel has no layout entity to look up.
-            label = PhosphorI18n::tr("Scrolling", "tiling mode name");
+            // The bare mode sentinel has no layout entity to look up. The
+            // wording matches the picker's sentinel entry
+            // (activeLayoutMatchOptions) so the collapsed summary and the
+            // editor agree.
+            label = PhosphorI18n::tr("Scrolling (no template)");
         } else if (PhosphorLayout::LayoutId::isScrollingFamily(value)) {
             // The prefixed "scrolling:<uuid>" template stamp: resolve the
             // template's name through the shared layouts model, which carries
             // native template rows keyed by their raw UUID. Raw-id fallback
             // mirrors the deleted-layout behavior below.
+            //
+            // The bare resolved NAME, not templateDisplayLabel's "Template: …"
+            // form. This label is already wrapped in the field label below, so
+            // the composed variant read "Active layout: Template: Fibonacci".
+            // The "Template: …" prefix stays in the PICKER (activeLayoutMatchOptions
+            // and the value renderers), where entries sit unlabelled beside
+            // manual layouts and need the family marker. A lookup MISS still
+            // falls through to the verbatim "scrolling:<uuid>" in `label`.
             if (layoutLookup) {
                 const QString templateId = PhosphorLayout::LayoutId::extractTemplateId(value);
                 const QString resolved = layoutLookup(templateId);
                 if (!resolved.isEmpty() && resolved != templateId) {
-                    label = RuleAuthoring::templateDisplayLabel(resolved);
+                    label = resolved;
                 }
             }
         } else if (PhosphorLayout::LayoutId::isAutotile(value)) {

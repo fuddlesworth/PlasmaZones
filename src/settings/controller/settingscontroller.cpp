@@ -824,10 +824,13 @@ SettingsController::SettingsController(QObject* parent)
         }
         return zoneId;
     });
-    // SettingsController::layouts() is the union of snapping layouts
-    // (UUID-keyed) and autotile entries (algorithm-token-keyed via the
-    // "autotile:<token>" or bare-token shape PhosphorTiles ships) — one
-    // resolver lambda is sufficient. The typed setters below are about
+    // SettingsController::layouts() is the union of three id families:
+    // snapping layouts (UUID-keyed), autotile entries (algorithm-token-keyed
+    // via the "autotile:<token>" or bare-token shape PhosphorTiles ships), and
+    // native scrolling templates (UUID-keyed in their own namespace, flagged
+    // isScrollingTemplate). All three are looked up by the same raw id key, so
+    // one resolver lambda is sufficient — the rules side strips the
+    // "scrolling:" prefix before calling in. The typed setters below are about
     // CONTRACT clarity at the RuleController API surface so a
     // future caller can wire a more restrictive snapping-only lookup
     // without also constraining the tiling resolver.

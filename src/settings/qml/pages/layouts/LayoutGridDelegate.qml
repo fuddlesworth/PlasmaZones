@@ -29,8 +29,11 @@ Item {
     property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile, 2 = Scrolling Templates
     // The full autotile default ID including prefix, for comparison
     readonly property string autotileDefaultId: "autotile:" + root.appSettings.defaultAutotileAlgorithm
-    // A template card's zoneCount carries its COLUMN count, so the footer and
-    // the accessible description count columns rather than zones.
+    // A template card's zoneCount carries the number of bands its preview
+    // draws: the starting columns, or the width presets when it has no
+    // starting columns, minus any that fall off the right edge. Either way
+    // they are columns, so the footer and the accessible description count
+    // columns rather than zones.
     readonly property bool isTemplateCard: root.viewMode === 2 || root.modelData.isScrollingTemplate === true
     // Global "Auto-assign for all layouts" master toggle (#370). Read once at
     // the root so child controls (auto-assign button, CategoryBadge) share a

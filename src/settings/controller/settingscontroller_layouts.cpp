@@ -54,6 +54,28 @@ void SettingsController::scheduleLayoutLoad()
     m_layoutLoadTimer.start();
 }
 
+// m_pendingDaemonLayoutCalls counts the getLayoutList round-trips in flight.
+// Non-zero holds back the local-path layout view, which is built from
+// LayoutPreview and carries no daemon-side enrichment (hasSystemOrigin /
+// hiddenFromSelector / defaultOrder / allow-lists). Publishing it mid-flight
+// stripped that off every entry for the length of the round trip, so a
+// hidden/auto-assign toggle visibly reverted on the card just toggled and every
+// listing page rebuilt its whole model twice per mutation.
+//
+// This function increments it BEFORE reloading the local registry, so the gate
+// covers that reload's synchronous emit as well as any landing before the reply.
+// A COUNT, not a flag: the debounce is 50 ms and a reply costs the daemon a full
+// rescan, so a burst readily puts two calls in flight, and a flag would be
+// cleared by the first reply while the second was still pending. Decremented at
+// the reply lambda's entry, ahead of any early-return. Startup's direct
+// loadLayouts() runs ungated.
+//
+// m_withheldLocalLayouts is the local view withheld under that gate, adopted by
+// the last reply when the daemon turns out to be unreachable, so a failed round
+// trip does not leave the page painted from before the change. Engaged (not
+// merely non-empty) marks a withheld view, so a genuine wipe to zero layouts is
+// still adopted. Any SUCCESSFUL reply clears it: enriched data supersedes it,
+// and a later error must not downgrade the page back to it.
 void SettingsController::loadLayoutsAsync()
 {
     // Force-reload the in-process PhosphorZones::LayoutRegistry from disk
@@ -187,10 +209,30 @@ void SettingsController::loadLayoutsAsync()
 }
 
 // ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
-// See header doc for why this exists. It routes through the shared
-// toVariantMap, so it emits the same projection the daemon's D-Bus side emits
-// via toJson — minus that path's getLayoutList enrichment layer.
-
+//
+// Loads the on-disk layouts via an in-process LayoutRegistry +
+// ZonesLayoutSource so QML preview paths render even when the daemon is down
+// (early launch, crash). Paints directly at startup, before the first
+// getLayoutList goes out; after that loadLayoutsAsync holds it back
+// (m_withheldLocalLayouts) and publishes it only when the daemon cannot
+// answer, because it lacks the enrichment described below.
+//
+// Returns the projection produced by PlasmaZones::toVariantMap. That is the
+// SAME projection, key for key, that the D-Bus side emits via toJson — the two
+// differ only in container type (QVariantMap vs QJsonObject). What differs is
+// the daemon's LayoutAdaptor::getLayoutList, which adds an enrichment layer on
+// top (hasSystemOrigin / hiddenFromSelector / defaultOrder / allow-lists) from
+// Layout state that LayoutPreview does not carry. So the list this returns is a
+// strict SUBSET of the D-Bus list: any consumer reading an enrichment-only key
+// off these previews gets `undefined`, not `false`. See
+// src/common/layoutpreviewserialize.h.
+//
+// @note Autotile preview-parameter drift: the local AlgorithmRegistry is
+// independent of the daemon's (see m_localAlgorithmRegistry), so daemon-side
+// tuning (master count, split ratio, per-algorithm settings) does NOT propagate
+// here — fallback previews render with built-in defaults. When the daemon is
+// up, D-Bus carries the tuned previews; the fallback is only a "daemon is down"
+// safety net.
 QVariantList SettingsController::localLayoutPreviews() const
 {
     QVariantList list;
@@ -405,8 +447,7 @@ void SettingsController::exportScrollingTemplate(const QString& templateId, cons
 
 void SettingsController::openScrollingTemplatesFolder()
 {
-    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
-        + PhosphorZones::ScrollingTemplateStore::templateSubdirectory();
+    const QString path = PhosphorZones::ScrollingTemplateStore::userTemplateDirectory();
     QDir dir(path);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));
@@ -775,14 +816,26 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
 
 QVariantList SettingsController::activeLayoutMatchOptions() const
 {
-    // Base entries first (manual layouts, autotile entries, the bare
-    // scrolling sentinel), with the NATIVE template rows transformed: a
-    // template entry's raw UUID is not an ActiveLayout value — the context
-    // resolvers stamp the PREFIXED "scrolling:<uuid>" form — so each
-    // template row is rewritten to that wire id with a "Template:" label,
-    // replacing the pre-pivot derivation from manual layouts.
+    // Every `layouts` entry (manual layouts and autotile entries pass through
+    // unchanged), with the NATIVE template rows transformed: a template
+    // entry's raw UUID is not an ActiveLayout value — the context resolvers
+    // stamp the PREFIXED "scrolling:<uuid>" form — so each template row is
+    // rewritten to that wire id with a "Template: …" label. Nothing here is
+    // derived from manual layouts.
+    //
+    // The bare "scrolling:" sentinel leads the list. It is the value a
+    // Scrolling context stamps when it resolves NO template, so without an
+    // entry for it the documented `ActiveLayout Equals "scrolling:"` rule shape
+    // is unauthorable in the picker. Head position rather than beside the
+    // template rows: those sort in among the manual layouts by name, so there
+    // is no contiguous template block to sit next to, and index 0 is the one
+    // slot that does not shift as templates are added and renamed.
     QVariantList out;
-    out.reserve(m_layouts.size());
+    out.reserve(m_layouts.size() + 1);
+    QVariantMap sentinel;
+    sentinel[QStringLiteral("id")] = QString(PhosphorLayout::LayoutId::ScrollingId);
+    sentinel[QStringLiteral("displayName")] = PhosphorI18n::tr("Scrolling (no template)");
+    out.append(sentinel);
     for (const QVariant& lv : m_layouts) {
         const QVariantMap m = lv.toMap();
         const QString id = m.value(QStringLiteral("id")).toString();

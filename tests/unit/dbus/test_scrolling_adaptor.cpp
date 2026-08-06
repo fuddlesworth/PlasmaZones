@@ -375,8 +375,7 @@ private Q_SLOTS:
     // shape: the two preset lists are overridden independently.
     void testPresetVocabularyJson_gatesAndShape()
     {
-        // Same silent ownership gates as focusColumn: foreign and empty
-        // screen ids answer the empty object.
+        // Foreign and empty screen ids answer the empty object.
         QCOMPARE(m_adaptor->presetVocabularyJson(QStringLiteral("HDMI-2")), QStringLiteral("{}"));
         QCOMPARE(m_adaptor->presetVocabularyJson(QString()), QStringLiteral("{}"));
 
@@ -542,5 +541,5 @@ private:
     ScrollingAdaptor* m_adaptor = nullptr;
 };
 
-QTEST_MAIN(TestScrollingAdaptor)
+QTEST_GUILESS_MAIN(TestScrollingAdaptor)
 #include "test_scrolling_adaptor.moc"

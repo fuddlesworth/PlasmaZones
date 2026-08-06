@@ -290,10 +290,26 @@ void Daemon::connectShortcutSignals()
         updateLayoutFilterForScreen(screenId);
         // An empty candidate list (allow-lists plus the aspect filter can
         // wipe it on a screen with no current selection) makes the picker's
-        // show bail silently — answer with the unavailable OSD instead of
-        // nothing.
+        // show bail silently — answer with an OSD instead of nothing. This
+        // count check runs BEFORE showLayoutPicker, so it is the only place
+        // the empty-list case can be reported; the picker's own empty-list
+        // leg is unreachable from here.
         if (m_overlayService->visibleLayoutCount(screenId) == 0) {
-            showLayoutsUnavailableOsd(screenId);
+            // A Templates screen with an empty list means the template store
+            // is empty (fresh install, or every template deleted), which is
+            // something the user can act on. The generic "engine provides no
+            // layouts" card would misdescribe it. Same showNavigationOsd gate
+            // the generic arm carries inside showLayoutsUnavailableOsd: this
+            // is the same kind of refusal feedback, only worded for the
+            // template vocabulary.
+            if (layoutSupportForScreen(screenId) == LayoutSupport::Templates) {
+                qCDebug(lcDaemon) << "Layout picker: no templates in the store for screen" << screenId;
+                if (m_settings && m_settings->showNavigationOsd()) {
+                    m_overlayService->showDisabledOsd(PhosphorI18n::tr("No column templates available"), screenId);
+                }
+            } else {
+                showLayoutsUnavailableOsd(screenId);
+            }
             return;
         }
         m_overlayService->showLayoutPicker(screenId);

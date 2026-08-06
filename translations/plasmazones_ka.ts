@@ -2,6 +2,14 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="ka">
 <context>
+    <name>PhosphorI18n</name>
+    <message>
+        <location filename="../src/daemon/daemon/shortcuts_wiring.cpp" line="308"/>
+        <source>No column templates available</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>plasmazones</name>
     <message>
         <location filename="../src/editor/controller/settings.cpp" line="52"/>
@@ -361,8 +369,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="89"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="115"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="126"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="105"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="172"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="183"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="862"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="921"/>
         <source>Scrolling</source>
@@ -562,13 +569,13 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="480"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="484"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
         <translation type="unfinished">განლაგების %1 გადატარება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="592"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="596"/>
         <source>Adjusts the height of the focused window by the configured step.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -633,73 +640,73 @@
         <translation>ისრები</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="489"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="493"/>
         <source>Move Window</source>
         <translation>ფანჯრის გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="496"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="500"/>
         <source>Move Focus</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="501"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="505"/>
         <source>Swap Window</source>
         <translation>ფანჯრის გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="506"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="510"/>
         <source>Span Window</source>
         <translation>ფანჯრის გადაფარვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="512"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="516"/>
         <source>Swap Screens</source>
         <translation>ეკრანების გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="520"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="528"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="524"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="532"/>
         <source>Rotate</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="524"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="528"/>
         <source>Cycle Focus</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="578"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="582"/>
         <source>Focus First / Last Column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="579"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="583"/>
         <source>Moves focus to the first or last column.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="582"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="586"/>
         <source>Move Column to Start / End</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="583"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="587"/>
         <source>Moves the focused column to the first or last position.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="586"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="590"/>
         <source>Consume or Expel Left / Right</source>
         <translation>მარცხნივ / მარჯვნივ ჩამატება ან გამოძევება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="587"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="591"/>
         <source>Splits the focused window out of a shared column to that side. A window alone in its column merges into the neighboring column instead.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="591"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="595"/>
         <source>Adjust Window Height</source>
         <translation>ფანჯრის სიმაღლის დარეგულირება</translation>
     </message>
@@ -902,21 +909,21 @@
     </message>
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="1001"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="568"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="609"/>
         <source>Failed to import layout: %1</source>
         <translation>განლაგების შემოტანა ჩავარდა: %1</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="1012"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="575"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="616"/>
         <source>That file is not a layout this app can read.</source>
         <translation>ეს ფაილი არაა განლაგება, რომლის წაკითხვაც ამ აპს შეუძლია.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="1055"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="396"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="402"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="620"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="438"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="444"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="661"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="184"/>
         <source>Could not write the export. Check that the folder is writable.</source>
         <translation>გატანის ჩაწერა ვერ მოხერხდა. გადაამოწმეთ, რომ საქაღალდე ჩაწერადია.</translation>
@@ -928,7 +935,7 @@
     </message>
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="1044"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="611"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="652"/>
         <source>Failed to export layout: %1</source>
         <translation>განლაგების გატანა ჩავარდა: %1</translation>
     </message>
@@ -1005,8 +1012,8 @@
     </message>
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="434"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="231"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="239"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="273"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="281"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="408"/>
         <source>New Layout</source>
         <translation>ახალი განლაგება</translation>
@@ -1128,7 +1135,7 @@
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="592"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="286"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="297"/>
         <source>Tiling: %1</source>
         <translation>ფილებად დაწყობა: %1</translation>
     </message>
@@ -1563,7 +1570,7 @@
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="337"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="62"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="67"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="170"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="181"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="823"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="349"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingSimplePage.qml.cpp" line="159"/>
@@ -1804,7 +1811,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="159"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="268"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="279"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="951"/>
         <source>Snapping layout</source>
         <translation>მიმაგრების განლაგება</translation>
@@ -1919,13 +1926,13 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="348"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="411"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="422"/>
         <source>Overlay shader</source>
         <translation>გადადების შეიდერი</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="351"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="417"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="428"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="248"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/OsdCard.qml.cpp" line="109"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/OsdCard.qml.cpp" line="114"/>
@@ -1934,8 +1941,8 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="379"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="800"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="546"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="811"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="548"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="34"/>
         <source>Monitor</source>
         <translation>მონიტორი</translation>
@@ -1944,7 +1951,7 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="367"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="255"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="382"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="802"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="813"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="501"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="40"/>
         <source>Desktop</source>
@@ -1981,7 +1988,7 @@
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="278"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="331"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="59"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="166"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="177"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="812"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="139"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="349"/>
@@ -2665,13 +2672,13 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="778"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="344"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="355"/>
         <source>Open on monitor</source>
         <translation>მონიტორზე გახსნა</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="781"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="349"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="360"/>
         <source>Open on desktop</source>
         <translation>სამუშაო მაგიდაზე გახსნა</translation>
     </message>
@@ -2783,7 +2790,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="253"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="808"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="819"/>
         <source>Notification</source>
         <translation>შეტყობინება</translation>
     </message>
@@ -3444,14 +3451,14 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="75"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="82"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="90"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="131"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="139"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="144"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="142"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="150"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="155"/>
         <source>%1: %2</source>
         <translation>%1: %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="140"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="151"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="250"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="168"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
@@ -3461,7 +3468,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="412"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="141"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="152"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="142"/>
@@ -3473,58 +3480,58 @@
         <translation>გამორთულია</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="264"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="275"/>
         <source>Engine: %1</source>
         <translation>ძრავი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="269"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="280"/>
         <source>Snapping: %1</source>
         <translation>მიმაგრება: %1</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="125"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="297"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="308"/>
         <source>Disabled</source>
         <translation>გამორთული</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="299"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="310"/>
         <source>Disable: %1</source>
         <translation>გამორთვა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="321"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="332"/>
         <source>Float</source>
         <translation>მოტივტივება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="331"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="342"/>
         <source>Snap to zone</source>
         <translation>ზონასთან მიმაგრება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="334"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="345"/>
         <source>Snap to zone %1</source>
         <translation>ზონასთან მიმაგრება %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="336"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="347"/>
         <source>Snap to zones %1</source>
         <translation>ზონებთან მიმაგრება %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="345"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="356"/>
         <source>Open on monitor: %1</source>
         <translation>მონიტორზე გახსნა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="349"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="360"/>
         <source>Open on desktop %1</source>
         <translation>სამუშაო მაგიდაზე გახსნა %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="358"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="369"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="362"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="433"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="400"/>
@@ -3534,54 +3541,54 @@
         <translation>გაუმჭვირვალობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="362"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="367"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="373"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="378"/>
         <source>Opacity (invalid)</source>
         <translation>გაუმჭვირვალობა (არასწორი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="369"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="380"/>
         <source>Opacity: %1%</source>
         <translation>გაუმჭვირვალობა: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="373"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="384"/>
         <source>Block animation shader</source>
         <translation>ანიმაციის შეიდერის დაბლოკვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="374"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="385"/>
         <source>Shader: %1</source>
         <translation>შეიდერი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="398"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="409"/>
         <source>Decoration: %1</source>
         <translation>მორთულობა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="402"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="413"/>
         <source>Duration: %1 ms</source>
         <translation>ხანგრძლივობა: %1 მწმ</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="402"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="413"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="455"/>
         <source>Animation duration</source>
         <translation>ანიმაციის ხანგრძლივობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="406"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="417"/>
         <source>Animation curve</source>
         <translation>ანიმაციის მრუდი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="407"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="418"/>
         <source>Curve: %1</source>
         <translation>მრუდი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="412"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="423"/>
         <source>Overlay shader: %1</source>
         <translation>გადადების შეიდერი: %1</translation>
     </message>
@@ -3616,40 +3623,40 @@
         <translation>საზღვრის დამალვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="446"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="457"/>
         <source>Border width: %1 px</source>
         <translation>საზღვრის სიგანე: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="449"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="460"/>
         <source>Corner radius: %1 px</source>
         <translation>კუთხის რადიუსი: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="456"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="484"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="467"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="495"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="242"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="238"/>
         <source>Accent</source>
         <translation>აქცენტი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="458"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="469"/>
         <source>Focused border: %1</source>
         <translation>ფოკუსირებული საზღვარი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="460"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="471"/>
         <source>Unfocused border: %1</source>
         <translation>არაფოკუსირებული საზღვარი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="730"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="741"/>
         <source>Gap: %1 px</source>
         <translation>დაშორება: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="733"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="744"/>
         <source>Outer gap: %1 px</source>
         <translation>გარე დაშორება: %1 px</translation>
     </message>
@@ -3666,59 +3673,59 @@
         <translation>ერთგვაროვანი გარე დაშორება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="277"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="288"/>
         <source>Scrolling template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="278"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="289"/>
         <source>Scrolling template: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="309"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="320"/>
         <source>Excluded from placement and decorations</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="312"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="323"/>
         <source>Excluded from placement</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="315"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="326"/>
         <source>Excluded from animations</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="318"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="329"/>
         <source>Excluded from decorations</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="383"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="396"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="394"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="407"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="167"/>
         <source>Decoration packs: none</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="422"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="433"/>
         <source>Overlay style: %1</source>
         <translation>გადადების სტილი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="429"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="440"/>
         <source>Algorithm parameter</source>
         <translation>ალგორითმის პარამეტრი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="430"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="441"/>
         <source>Algorithm: %1</source>
         <translation>ალგორითმი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="471"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="482"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="436"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="419"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="424"/>
@@ -3726,341 +3733,341 @@
         <translation>ტონირების სიძლიერე</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="477"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="488"/>
         <source>Tint strength (invalid)</source>
         <translation>ტონირების სიძლიერე (არასწორი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="479"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="490"/>
         <source>Tint strength: %1%</source>
         <translation>ტონირების სიძლიერე: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="485"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="496"/>
         <source>Tint color: %1</source>
         <translation>ტონირების ფერი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="489"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="500"/>
         <source>Max tiled windows: %1</source>
         <translation>მაქს. დაფილული ფანჯრები: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="492"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="503"/>
         <source>Master count: %1</source>
         <translation>მთავრების რაოდენობა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="496"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="507"/>
         <source>Split ratio: %1%</source>
         <translation>გაყოფის თანაფარდობა: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="499"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="510"/>
         <source>Insert: %1</source>
         <translation>ჩასმა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="503"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="514"/>
         <source>Overflow: %1</source>
         <translation>გადავსება: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="507"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="518"/>
         <source>Drag: %1</source>
         <translation>გადათრევა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="519"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="530"/>
         <source>Column width (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="520"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="531"/>
         <source>Column width: %1%</source>
         <translation>სვეტის სიგანე: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="524"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="535"/>
         <source>Open at width (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="525"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="536"/>
         <source>Open at width: %1%</source>
         <translation>გახსნა სიგანით: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="529"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="540"/>
         <source>Window height (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="530"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="541"/>
         <source>Window height: %1%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="534"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="545"/>
         <source>Open at height (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="535"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="546"/>
         <source>Open at height: %1%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="543"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="554"/>
         <source>Insert new windows (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="544"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="555"/>
         <source>Insert new windows: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="549"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="560"/>
         <source>Centering (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="550"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="561"/>
         <source>Centering: %1</source>
         <translation>ცენტრირება: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="555"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="566"/>
         <source>New columns (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="556"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="567"/>
         <source>New columns: %1</source>
         <translation>ახალი სვეტები: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="561"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="572"/>
         <source>Open (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="562"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="573"/>
         <source>Open: %1</source>
         <translation>გახსნა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="571"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="582"/>
         <source>Tab indicator style (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="572"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="583"/>
         <source>Tab indicator style: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="577"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="588"/>
         <source>Tab indicator position (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="578"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="589"/>
         <source>Tab indicator position: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="581"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="592"/>
         <source>Tab indicator gap: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="584"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="595"/>
         <source>Tab indicator thickness: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="588"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="599"/>
         <source>Tab indicator length (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="589"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="600"/>
         <source>Tab indicator length: %1%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="592"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="603"/>
         <source>Gap between tabs: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="598"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="609"/>
         <source>Tab corners: fully rounded</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="599"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="610"/>
         <source>Tab corner radius: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="614"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="651"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="693"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="698"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="703"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="625"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="662"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="704"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="709"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="714"/>
         <source>(invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="616"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="627"/>
         <source>Active tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="619"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="630"/>
         <source>Inactive tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="622"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="633"/>
         <source>Urgent tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="625"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="636"/>
         <source>This window&apos;s active tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="628"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="639"/>
         <source>This window&apos;s inactive tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="630"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="641"/>
         <source>This window&apos;s urgent tab: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="638"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="649"/>
         <source>Drop indicator fill opacity (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="639"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="650"/>
         <source>Drop indicator fill opacity: %1%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="642"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="653"/>
         <source>Drop indicator border width: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="646"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="657"/>
         <source>Drop indicator corner radius: %1 px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="653"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="664"/>
         <source>Drop indicator fill: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="656"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="667"/>
         <source>Drop indicator border: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="663"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="674"/>
         <source>Drop indicator fill when dragging this window: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="665"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="676"/>
         <source>Drop indicator border when dragging this window: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="671"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="682"/>
         <source>Window layer</source>
         <translation>ფანჯრის ფენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="679"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="690"/>
         <source>Window layer (invalid)</source>
         <translation>ფანჯრის ფენა (არასწორი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="681"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="692"/>
         <source>Layer: %1</source>
         <translation>ფენა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="692"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="703"/>
         <source>Highlight color: %1</source>
         <translation>მინიშნების ფერი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="697"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="708"/>
         <source>Inactive zone color: %1</source>
         <translation>არააქტიური ზონის ფერი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="702"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="713"/>
         <source>Overlay border color: %1</source>
         <translation>გადადების საზღვრის ფერი: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="716"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="727"/>
         <source>Active opacity (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="717"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="728"/>
         <source>Inactive opacity (invalid)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="719"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="730"/>
         <source>Active opacity: %1%</source>
         <translation>აქტიური გაუმჭვირვალობა: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="720"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="731"/>
         <source>Inactive opacity: %1%</source>
         <translation>არააქტიური გაუმჭვირვალობა: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="723"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="734"/>
         <source>Overlay border width: %1 px</source>
         <translation>გადადების საზღვრის სიგანე: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="726"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="737"/>
         <source>Overlay corner radius: %1 px</source>
         <translation>გადადების კუთხის რადიუსი: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="736"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="747"/>
         <source>Top gap: %1 px</source>
         <translation>ზედა დაშორება: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="739"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="750"/>
         <source>Bottom gap: %1 px</source>
         <translation>ქვედა დაშორება: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="742"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="753"/>
         <source>Left gap: %1 px</source>
         <translation>მარცხენა დაშორება: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="745"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="756"/>
         <source>Right gap: %1 px</source>
         <translation>მარჯვენა დაშორება: %1 px</translation>
     </message>
@@ -4071,195 +4078,195 @@
         <translation>ყველგან</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="757"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="768"/>
         <source>Monitor &amp; Layout</source>
         <translation>მონიტორი &amp; განლაგება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="759"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="770"/>
         <source>Applications</source>
         <translation>აპლიკაციები</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="761"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="772"/>
         <source>Activities</source>
         <translation>აქტივობები</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="142"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="331"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="763"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="774"/>
         <source>Animations</source>
         <translation>ანიმაციები</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="765"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="776"/>
         <source>Advanced / Custom</source>
         <translation>დამატებითი / მორგებული</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="767"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="778"/>
         <source>System</source>
         <translation>სისტემა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="776"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="787"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="52"/>
         <source>Application</source>
         <translation>აპლიკაცია</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="778"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="789"/>
         <source>Window class</source>
         <translation>ფანჯრის კლასი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="780"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="791"/>
         <source>Desktop file</source>
         <translation>Desktop-ფაილი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="782"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="793"/>
         <source>Window role</source>
         <translation>ფანჯრის როლი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="784"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="795"/>
         <source>Process ID</source>
         <translation>პროცესის ID</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="786"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="797"/>
         <source>Title</source>
         <translation>სათაური</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="788"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="627"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="799"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="629"/>
         <source>Window type</source>
         <translation>ფანჯრის ტიპი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="790"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="801"/>
         <source>Sticky</source>
         <translation>წებოვანი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="792"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="803"/>
         <source>Fullscreen</source>
         <translation>სრულ ეკრანზე</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="794"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="805"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="30"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowMotionPage.qml.cpp" line="34"/>
         <source>Maximized</source>
         <translation>გადიდებული</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="796"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="807"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="21"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowsPage.qml.cpp" line="36"/>
         <source>Minimized</source>
         <translation>ჩაკეცილი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="798"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="809"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="23"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWindowsPage.qml.cpp" line="41"/>
         <source>Focused</source>
         <translation>ფოკუსირებული</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="804"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="579"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="815"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="581"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="46"/>
         <source>Activity</source>
         <translation>აქტივობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="806"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="817"/>
         <source>Transient</source>
         <translation>გარდამავალი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="810"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="821"/>
         <source>Width</source>
         <translation>სიგანე</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="812"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="823"/>
         <source>Height</source>
         <translation>სიმაღლე</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="814"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="825"/>
         <source>Keep above</source>
         <translation>ზემოთ დატოვება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="816"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="827"/>
         <source>Keep below</source>
         <translation>ქვემოთ დატოვება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="818"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="829"/>
         <source>Skip taskbar</source>
         <translation>ამოცანების ზოლის გამოტოვება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="820"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="831"/>
         <source>Skip pager</source>
         <translation>პეიჯერის გამოტოვება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="822"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="833"/>
         <source>Skip switcher</source>
         <translation>გადამრთველის გამოტოვება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="824"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="835"/>
         <source>Modal</source>
         <translation>მოდალური</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="826"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="837"/>
         <source>Decorated</source>
         <translation>გაფორმებული</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="828"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="839"/>
         <source>Resizable</source>
         <translation>ზომაცვალებადი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="830"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="841"/>
         <source>Movable</source>
         <translation>გადაადგილებადი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="832"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="843"/>
         <source>Maximizable</source>
         <translation>გადიდებადი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="834"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="845"/>
         <source>Position X</source>
         <translation>პოზიცია X</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="836"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="847"/>
         <source>Position Y</source>
         <translation>პოზიცია Y</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="838"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="849"/>
         <source>Title (no suffix)</source>
         <translation>სათაური (სუფიქსის გარეშე)</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="46"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="840"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="851"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="39"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="394"/>
         <source>Floating</source>
@@ -4267,7 +4274,7 @@
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="44"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="842"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="853"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="33"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="353"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="386"/>
@@ -4277,7 +4284,7 @@
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="42"/>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="844"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="855"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="27"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="383"/>
         <source>Tiled</source>
@@ -4307,44 +4314,44 @@
         <translation>გლობალური ნაგულისხმევი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="846"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="857"/>
         <source>Zone</source>
         <translation>ზონა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="848"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="859"/>
         <source>Mode</source>
         <translation>რეჟიმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="850"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="861"/>
         <source>Tiled window count</source>
         <translation>დაფილული ფანჯრების რაოდენობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="852"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="704"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="863"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="707"/>
         <source>Screen orientation</source>
         <translation>ეკრანის ორიენტაცია</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="854"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="740"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="865"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="744"/>
         <source>Active layout</source>
         <translation>აქტიური განლაგება</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="862"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="873"/>
         <source>Any window</source>
         <translation>ნებისმიერი ფანჯარა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="876"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="887"/>
         <source>(condition group)</source>
         <translation>(პირობების ჯგუფი)</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="883"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="894"/>
         <source>%n condition(s)</source>
         <translation>
             <numerusform>%n პირობა</numerusform>
@@ -4352,7 +4359,7 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="889"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="900"/>
         <source>No action</source>
         <translation>ქმედების გარეშე</translation>
     </message>
@@ -5573,7 +5580,7 @@
         <translation>ჩატვირთვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="709"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="720"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="384"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="199"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="204"/>
@@ -5587,7 +5594,7 @@
         <translation>ალფა</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="709"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="720"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="386"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="217"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="222"/>
@@ -8242,7 +8249,7 @@
         <translation>მიმაგრებით ზომის შეცვლა (გადათრევის გადახედვა)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="485"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="489"/>
         <location filename="../src/settings/controller/settingscontroller.cpp" line="820"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="336"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="375"/>
@@ -8255,105 +8262,111 @@
         <translation>%1 — %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="263"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="305"/>
         <source>Layout created, but aspect-ratio class could not be applied: %1</source>
         <translation>განლაგება შეიქმნა, მაგრამ თანაფარდობის კლასის გადატარება ვერ მოხერხდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="277"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="319"/>
         <source>Could not create the layout. The daemon returned an empty layout ID.</source>
         <translation>განლაგების შექმნა ვერ მოხერხდა. დემონმა ცარიელი განლაგების ID დააბრუნა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="285"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="327"/>
         <source>Could not create the layout. The daemon may not be running.</source>
         <translation>განლაგების შექმნა ვერ მოხერხდა. შესაძლოა, დემონი გაშვებული არ არის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="304"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="346"/>
         <source>Could not delete layout: %1</source>
         <translation>განლაგების წაშლა ვერ მოხერხდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="320"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="362"/>
         <source>Could not duplicate layout: %1</source>
         <translation>განლაგების დუბლირება ვერ მოხერხდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="347"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="389"/>
         <source>Could not read the template file.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="356"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="362"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="398"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="404"/>
         <source>That file is not a scrolling template this app can read.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="388"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="430"/>
         <source>That template no longer exists.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="470"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="511"/>
         <source>The daemon refused the template. Check that it has a name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="472"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="513"/>
         <source>Could not save the template: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="485"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="526"/>
         <source>Could not delete the template: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="492"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="533"/>
         <source>Could not delete the template.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="504"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="545"/>
         <source>Could not duplicate the template: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="342"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="557"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="706"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="837"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="108"/>
+        <source>Scrolling (no template)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="384"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="598"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="747"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="204"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="597"/>
         <source>That file path is not allowed.</source>
         <translation>ეს ფაილის ბილიკი დაშვებული არ არის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="383"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="589"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="764"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="425"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="630"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="805"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="152"/>
         <source>That export path is not allowed.</source>
         <translation>ეს გატანის ბილიკი დაშვებული არ არის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="511"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="552"/>
         <source>Could not duplicate the template.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="634"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="675"/>
         <source>Failed to update layout visibility: %1</source>
         <translation>განლაგების ხილვადობის განახლება ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="647"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="688"/>
         <source>Failed to update auto-assign: %1</source>
         <translation>ავტომატური მინიჭების განახლება ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="661"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="702"/>
         <source>Failed to update aspect ratio: %1</source>
         <translation>თანაფარდობის განახლება ჩავარდა: %1</translation>
     </message>
@@ -12006,9 +12019,8 @@
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="327"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="611"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="613"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="425"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="615"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="428"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="269"/>
         <source>%n zone</source>
         <translation>
@@ -12372,7 +12384,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="167"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="466"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="802"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="119"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="139"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="470"/>
         <location filename=".qml-stubs/src/settings/qml/pages/wizard/WizardFooter.qml.cpp" line="85"/>
@@ -13413,7 +13425,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="457"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="113"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="133"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="221"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="123"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="181"/>
@@ -14045,7 +14057,7 @@
         <translation>ნაგულისხმევი კონფიგურირებული არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="611"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="618"/>
         <source>→ %1 (%2)</source>
         <translation>→ %1 (%2)</translation>
     </message>
@@ -14267,12 +14279,12 @@
         <translation>დამალული ალგორითმების ჩვენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="100"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="103"/>
         <source>Unnamed Layout</source>
         <translation>უსახელო განლაგება</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="101"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="104"/>
         <source>Layout with %n zone</source>
         <translation>
             <numerusform>განლაგება %n ზონით</numerusform>
@@ -14280,7 +14292,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="101"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="104"/>
         <source>Template with %n column</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -14288,83 +14300,84 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="275"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="278"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="403"/>
         <source>Default scrolling template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="278"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="281"/>
         <source>Default autotile algorithm</source>
         <translation>ნაგულისხმევი ავტოფილირების ალგორითმი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="280"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="283"/>
         <source>Default layout</source>
         <translation>ნაგულისხმევი განლაგება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="302"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="305"/>
         <source>Built-in template. Editing stores your own copy.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="305"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="308"/>
         <source>Bundled algorithm</source>
         <translation>თანდართული ალგორითმი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="308"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="311"/>
         <source>System layout (read-only)</source>
         <translation>სისტემური განლაგება (მხოლოდ წასაკითხი)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="310"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="313"/>
         <source>Modified system layout</source>
         <translation>შეცვლილი სისტემური განლაგება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="339"/>
         <source>This layout is restricted to specific screens, desktops, or activities</source>
         <translation>ეს განლაგება შეზღუდულია კონკრეტული ეკრანებით, სამუშაო მაგიდებით ან აქტივობებით</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="376"/>
         <source>Auto-assign is forced on for all layouts by the global setting (Snapping → Behavior → Window Handling). Turn that off to control this layout individually.</source>
         <translation>ავტომატური მინიჭება ყველა განლაგებისთვის იძულებით ჩართულია გლობალური პარამეტრით (მიმაგრება → ქცევა → ფანჯრების დამუშავება). გამორთეთ ეს ამ განლაგების ინდივიდუალურად სამართავად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="376"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="379"/>
         <source>Auto-assign is on, so new windows fill empty zones. Click to disable.</source>
         <translation>ავტომატური მინიჭება ჩართულია, ამიტომ ახალი ფანჯრები ავსებენ ცარიელ ზონებს. დააწკაპუნეთ გამოსართავად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="378"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="381"/>
         <source>Click to auto-assign new windows to empty zones</source>
         <translation>დააწკაპუნეთ ახალი ფანჯრების ცარიელ ზონებზე ავტომატურად მისანიჭებლად</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="394"/>
         <source>Auto-assign layout</source>
         <translation>განლაგების ავტომატური მინიჭება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="407"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="410"/>
         <source>Toggle layout visibility</source>
         <translation>განლაგების ხილვადობის გადართვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="409"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="412"/>
         <source>Hidden from zone selector. Click to show.</source>
         <translation>დამალულია ზონის ამომრჩევიდან. დააწკაპუნეთ საჩვენებლად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="409"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="412"/>
         <source>Visible in zone selector. Click to hide.</source>
         <translation>ხილულია ზონის ამომრჩევში. დააწკაპუნეთ დასამალად.</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="425"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="615"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="428"/>
         <source>%n column</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -15285,20 +15298,21 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="356"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="128"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="525"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="527"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="104"/>
         <source>Primary</source>
         <translation>ძირითადი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="356"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="527"/>
         <source>%1 · %2</source>
         <comment>monitor name, then the primary-monitor marker</comment>
         <translation>%1 · %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="372"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="545"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="547"/>
         <source>Choose a monitor…</source>
         <translation>აირჩიეთ მონიტორი…</translation>
     </message>
@@ -15521,33 +15535,33 @@
         <translation>მნიშვნელობა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="578"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="580"/>
         <source>Choose an activity…</source>
         <translation>აირჩიეთ აქტივობა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="624"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="626"/>
         <source>Choose a window type…</source>
         <translation>აირჩიეთ ფანჯრის ტიპი…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="665"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="668"/>
         <source>Choose a mode…</source>
         <translation>აირჩიეთ რეჟიმი…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="668"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="671"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="914"/>
         <source>Placement mode</source>
         <translation>განთავსების რეჟიმი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="701"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="704"/>
         <source>Choose an orientation…</source>
         <translation>აირჩიეთ ორიენტაცია…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="739"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="743"/>
         <source>Choose a layout…</source>
         <translation>აირჩიეთ განლაგება…</translation>
     </message>
@@ -15557,155 +15571,160 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="46"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="49"/>
         <source>That template is no longer available.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="108"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="128"/>
         <source>Edit Scrolling Template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="108"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="128"/>
         <source>New Scrolling Template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="132"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="152"/>
         <source>This is a built-in template. Saving stores your own copy, and deleting that copy brings the built-in one back.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="141"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="161"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorBody.qml.cpp" line="205"/>
         <source>Name:</source>
         <translation>სახელი:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="142"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="162"/>
         <source>Template name</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="148"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="168"/>
         <source>Description:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="149"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="169"/>
         <source>Optional description</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="155"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="175"/>
         <source>Starting columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="162"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="182"/>
         <source>The first windows you open form these columns, left to right. Later windows use the default width below. Leave the list empty for a template that only sets the width presets.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="185"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="205"/>
         <source>Column %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="192"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="263"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="212"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="305"/>
         <source>%1%</source>
         <translation type="unfinished">%1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="194"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="214"/>
         <source>Width of column %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="221"/>
         <source>Display mode of column %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="207"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="227"/>
         <source>Remove column %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="214"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="244"/>
         <source>Add Column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="224"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="260"/>
+        <source>A template can start at most %1 columns.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="266"/>
         <source>Later columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="233"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="275"/>
         <source>Default width:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="238"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="280"/>
         <source>Fraction of the screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="242"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="284"/>
         <source>Fixed pixels</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="246"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="288"/>
         <source>The window decides</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="250"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="292"/>
         <source>Width preset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="259"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="301"/>
         <source>Width in pixels:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="259"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="301"/>
         <source>Width:</source>
         <translation type="unfinished">სიგანე:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="270"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="312"/>
         <source>Preset number:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="279"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="325"/>
         <source>Show windows as:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="286"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="332"/>
         <source>Width presets:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="287"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="294"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="333"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="340"/>
         <source>For example 0.333, 0.5, 0.667</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="293"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="339"/>
         <source>Height presets:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="302"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="348"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through while this template is assigned.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -18245,23 +18264,23 @@
         <translation>მიუნიჭებელი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="120"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="121"/>
         <source>Layout indicator</source>
         <translation>განლაგების ინდიკატორი</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="536"/>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="269"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="270"/>
         <source>Column template: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="270"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="271"/>
         <source>%1 (Locked)</source>
         <translation>%1 (დაბლოკილია)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="291"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="292"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="574"/>
         <source>Dismiss notification</source>
         <translation>შეტყობინების დახურვა</translation>
@@ -18706,8 +18725,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="162"/>
-        <source>Which entry of the column width presets a new column opens at, counted from 1. The presets themselves are edited on the Columns page in advanced mode. On a screen with a layout template the number counts into the template&apos;s widths instead.</source>
-        <oldsource>Which entry of the column width presets a new column opens at, counted from 1. The presets themselves are edited on the Columns page in advanced mode.</oldsource>
+        <source>Which entry of the column width presets a new column opens at, counted from 1. On a screen with a layout template the number counts into the template&apos;s widths instead.</source>
+        <oldsource>Which entry of the column width presets a new column opens at, counted from 1. The presets themselves are edited on the Columns page in advanced mode. On a screen with a layout template the number counts into the template&apos;s widths instead.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -18790,6 +18809,11 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="368"/>
         <source>Used when a scrolling screen has no template assigned</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="402"/>
+        <source>Missing template (%1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -19046,11 +19070,6 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingQuickShortcutsPage.qml.cpp" line="33"/>
         <source>Assign scrolling templates to keyboard shortcuts for quick switching.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/overlayservice/snapassist.cpp" line="574"/>
-        <source>No column templates available</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

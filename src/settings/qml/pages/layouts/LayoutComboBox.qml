@@ -606,12 +606,18 @@ ComboBox {
                             return i18n("No layout assigned");
                         } else if (!hasLayout) {
                             return i18n("No default configured");
-                        } else if (isDefaultOption) {
-                            let layoutName = (modelData.layout && modelData.layout.displayName) || "";
-                            return i18n("→ %1 (%2)", layoutName, i18np("%n zone", "%n zones", (modelData.layout && modelData.layout.zoneCount) || 0));
-                        } else {
-                            return i18np("%n zone", "%n zones", (modelData.layout && modelData.layout.zoneCount) || 0);
                         }
+                        // A scrolling template's zoneCount carries its COLUMN
+                        // count, so it is counted as columns here. Read the
+                        // category off the resolved layout: the option's own
+                        // category follows layoutFilter when one is set.
+                        const count = (modelData.layout && modelData.layout.zoneCount) || 0;
+                        const countText = root.getCategory(modelData.layout, modelData.category) === 2 ? i18np("%n column", "%n columns", count) : i18np("%n zone", "%n zones", count);
+                        if (isDefaultOption) {
+                            let layoutName = (modelData.layout && modelData.layout.displayName) || "";
+                            return i18n("→ %1 (%2)", layoutName, countText);
+                        }
+                        return countText;
                     }
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.textColor

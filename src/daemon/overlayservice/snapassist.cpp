@@ -563,16 +563,12 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
     QVariantList layoutsList = buildLayoutsList(resolvedId, autotileCanvas);
     if (layoutsList.isEmpty()) {
-        qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
-        // A Templates screen with no templates is a state the user can act on
-        // (the store is empty, or every template was deleted), and it is
-        // reached by an explicit key press, so it earns the same card a
-        // LayoutSupport::None engine gets instead of a silent bail. Other
-        // empty lists keep the silent bail: they are transient startup states
+        // Silent bail by design: the only caller (Daemon's layoutPickerRequested
+        // handler) already checks visibleLayoutCount and shows the OSD for the
+        // empty case, including the Templates-specific "no column templates"
+        // card, so anything reaching here is a race against a store mutation
         // rather than something to tell the user about.
-        if (m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportTemplates) {
-            showDisabledOsd(PhosphorI18n::tr("No column templates available"), resolvedId);
-        }
+        qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
         return;
     }
 

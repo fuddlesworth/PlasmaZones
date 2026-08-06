@@ -261,6 +261,17 @@ void TilingHandler::loadSettings()
                     // unseeded, so every ActiveLayout rule stays out of the
                     // evaluator until a live signal lands — a rule the user
                     // authored silently does nothing, for the session.
+                    //
+                    // Diagnostic only, by decision: there is no re-fetch loop
+                    // here. The recovery paths are the daemon's next live
+                    // activeLayoutsChanged (which seeds through the same
+                    // chokepoint) and a daemon restart, whose onDaemonReady
+                    // re-runs this very query. Seeding on failure is
+                    // FORBIDDEN — it would admit ActiveLayout rules against a
+                    // map that was never received, and the field resolves to
+                    // an engaged empty string, so every negated ActiveLayout
+                    // leaf would fire for every window. Held-out rules are the
+                    // inert failure; that is the one this path keeps.
                     qCWarning(lcEffect) << "Active layouts: query failed, daemon may not be running:"
                                         << reply.error().message();
                 }

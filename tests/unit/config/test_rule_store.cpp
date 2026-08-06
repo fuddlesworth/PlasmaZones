@@ -312,6 +312,7 @@ private Q_SLOTS:
         // sneak past the spy. updateRule + setRulePriority + setAllRules
         // each emit a single rulesChanged(true) on success.
         QVERIFY(store.addRule(makeRule(QStringLiteral("DP-3"))));
+        QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.takeFirst().at(0).toBool(), true);
 
         PWR::Rule updated = store.ruleSet().rules().first();

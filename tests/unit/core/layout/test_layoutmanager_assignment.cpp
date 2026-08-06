@@ -141,8 +141,9 @@ private Q_SLOTS:
     //
     // setAllCombinedAssignments / combinedAssignments are the triple-axis
     // sibling of the Desktop / Activity batches. Pin the round-trip: a
-    // Combined rule survives, gets its enabled flag preserved, and its
-    // edit isolation from pure-Activity / pure-Desktop / Monitor rules.
+    // Combined rule survives, and stays isolated from pure-Activity,
+    // pure-Desktop and Monitor rules. (Enabled-flag preservation is not
+    // asserted here — see the NOTE below this test for why.)
     void testCombinedBatchRoundTrip()
     {
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
@@ -413,7 +414,7 @@ private Q_SLOTS:
         // lands in the snapping array and vice versa. The "scrolling:"
         // sentinel is not a bindable slot value (it names no template) and
         // its rejection must not disturb any array.
-        auto* store = attachTemplateStore(mgr.data());
+        auto* store = attachTemplateStore(mgr.get());
         const QUuid templId = createTestTemplate(store, QStringLiteral("SlotTemplate"));
         mgr->setQuickLayoutSlot(scrolling, 1, QStringLiteral("scrolling:"));
         QVERIFY(!mgr->quickLayoutSlots(scrolling).contains(1));
@@ -598,10 +599,16 @@ private Q_SLOTS:
         // delete verb drives) scrubs the SetScrollingTemplate reference; the
         // context stays Scrolling (mode is intent, the template was data).
         QVERIFY(store->removeTemplate(parsed));
-        mgr->purgeLayoutIdFromAssignments(templId);
+        // The purge reports whether it changed anything, and a reference to
+        // scrub exists here, so a false return means the scrub never ran and
+        // the assertions below would be passing for the wrong reason.
+        QVERIFY(mgr->purgeLayoutIdFromAssignments(templId));
         auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Scrolling);
         QVERIFY(entry.scrollingTemplateLayout.isEmpty());
+        // Degrade check: with the reference scrubbed the mode-gated resolver
+        // has nothing to answer with, so a Scrolling context reports invalid
+        // rather than a stale template.
         QVERIFY(!mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), 0, QString()).isValid());
     }
 
@@ -627,7 +634,7 @@ private Q_SLOTS:
         QCOMPARE(seeded.scrollingTemplateLayout, templUuid.toString());
 
         QVERIFY(store->removeTemplate(templUuid));
-        mgr->purgeLayoutIdFromAssignments(templUuid.toString());
+        QVERIFY(mgr->purgeLayoutIdFromAssignments(templUuid.toString()));
         auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QVERIFY(entry.scrollingTemplateLayout.isEmpty());
@@ -793,7 +800,6 @@ private Q_SLOTS:
         // activeLayoutId() returns the bare prefix — non-empty, so the
         // cascade visitor accepts it.
         QCOMPARE(modeOnly.activeLayoutId(), QStringLiteral("autotile:"));
-        QVERIFY(!modeOnly.activeLayoutId().isEmpty());
 
         // Both cascade paths must agree that this entry routes as Autotile.
         QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Autotile);
@@ -945,17 +951,20 @@ private Q_SLOTS:
         // Scrolling context projects the bare sentinel AND its template —
         // the D-Bus getters' {layoutId, scrollingTemplate} value shape.
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* templ = createTestLayout(QStringLiteral("Template"));
-        mgr->addLayout(templ);
+        // A real template out of the store, not a manual-layout uuid standing
+        // in for one: the production path only ever puts template ids in this
+        // slot, and the store is what makes the id resolvable.
+        auto* store = attachTemplateStore(mgr.get());
+        const QUuid templId = createTestTemplate(store, QStringLiteral("Template"));
 
         mgr->assignLayoutById(QStringLiteral("DP-1"), 2, QString(), QString(PhosphorLayout::LayoutId::ScrollingId));
-        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 2, QString(), templ->id().toString());
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 2, QString(), templId.toString());
 
         const auto projection = mgr->desktopAssignments();
         const auto entry = projection.value(qMakePair(QStringLiteral("DP-1"), 2));
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Scrolling);
         QCOMPARE(entry.activeLayoutId(), QString(PhosphorLayout::LayoutId::ScrollingId));
-        QCOMPARE(entry.scrollingTemplateLayout, templ->id().toString());
+        QCOMPARE(entry.scrollingTemplateLayout, templId.toString());
     }
 
     // A LAYOUT-ONLY exact-context rule (no SetEngineMode) is claimed by
@@ -1124,9 +1133,14 @@ private Q_SLOTS:
         QString idA = layoutA->id().toString();
         QString idB = layoutB->id().toString();
 
+        // The dormant template is a real store template, the only kind the
+        // production paths ever write into this slot.
+        auto* store = attachTemplateStore(mgr.get());
+        const QString templId = createTestTemplate(store, QStringLiteral("DormantTemplate")).toString();
+
         // Base screen: autotile with snapping AND a dormant template preserved
         mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
-        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), idB);
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), templId);
         mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:wide"));
 
         // Per-desktop: snapping with tiling preserved
@@ -1159,7 +1173,7 @@ private Q_SLOTS:
         QCOMPARE(base.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(base.snappingLayout, idA);
         QCOMPARE(base.tilingAlgorithm, QStringLiteral("wide"));
-        QCOMPARE(base.scrollingTemplateLayout, idB);
+        QCOMPARE(base.scrollingTemplateLayout, templId);
 
         // Verify per-desktop
         auto desk2 = mgr2->assignmentEntryForScreen(QStringLiteral("DP-1"), 2);

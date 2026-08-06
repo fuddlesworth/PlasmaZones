@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QRectF>
 #include <QString>
+#include <QTest>
 #include <QUuid>
 #include <memory>
 #include <vector>
@@ -70,7 +71,15 @@ protected:
         PhosphorZones::ScrollingTemplate templ;
         templ.name = name;
         templ.presetColumnWidths = {0.333, 0.5, 0.667};
-        return store->saveTemplate(templ);
+        const QUuid id = store->saveTemplate(templ);
+        // QVERIFY expands to a bare `return;`, which a QUuid-returning helper
+        // cannot use, so call the same reporting entry point the macro does. A
+        // refused save fails the test here rather than handing the caller a
+        // null id that goes on to fail as something unrelated.
+        if (!QTest::qVerify(!id.isNull(), "!id.isNull()", "template save was refused", __FILE__, __LINE__)) {
+            return {};
+        }
+        return id;
     }
 
     /// Author a per-context DefaultLayoutAssignment override rule into the

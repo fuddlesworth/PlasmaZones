@@ -8,6 +8,7 @@
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
+#include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "scrollstriptestutils.h"
 

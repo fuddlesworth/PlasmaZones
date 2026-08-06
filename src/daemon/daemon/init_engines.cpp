@@ -211,9 +211,9 @@ void Daemon::initEnginesAndWiring()
     m_overlayService->setLayoutSupportResolver([this](const QString& screenId) {
         // The LIVE capability as an int code (OverlayService::LayoutSupport*
         // constants): None empties the layout list, Placement keeps the
-        // classic entries, Templates keeps the manual list as template
-        // candidates and drives the overlay's template-aware arms
-        // (activeLayoutIdForScreen, isSnappingContextInactive).
+        // classic entries, Templates swaps in the native template cards and
+        // drives the overlay's template-aware arms (activeLayoutIdForScreen,
+        // isSnappingContextInactive).
         return static_cast<int>(layoutSupportForScreen(screenId));
     });
 

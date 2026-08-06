@@ -9,6 +9,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
@@ -114,16 +115,29 @@ QUuid ScrollingTemplateStore::saveTemplate(ScrollingTemplate templ)
     // A save always produces a USER file, whatever the source of the
     // in-memory entry was — editing a bundled template shadows it.
     templ.isSystem = false;
+    // A user template hand-placed under a name other than <id>.json would
+    // otherwise DUPLICATE on save (the id-named file appears beside the
+    // original, and the next rescan resolves the collision by name order).
+    // Capture the old user-owned path so it can be retired after the write.
+    QString stalePath;
+    const auto existing = m_templates.constFind(templ.id);
+    if (existing != m_templates.constEnd() && !existing->isSystem && !existing->sourcePath.isEmpty()
+        && existing->sourcePath != userTemplateFilePath(templ.id)
+        && QFileInfo(existing->sourcePath).canonicalPath() == QDir(userTemplateDirectory()).canonicalPath()) {
+        stalePath = existing->sourcePath;
+    }
     templ.sourcePath = userTemplateFilePath(templ.id);
     // Only emit when the value actually changed. The settings pages re-save on
     // every field commit, and an unchanged save otherwise rewrote the file and
     // fanned templatesChanged out to every picker and layout source.
-    const auto existing = m_templates.constFind(templ.id);
     if (existing != m_templates.constEnd() && *existing == templ) {
         return templ.id;
     }
     if (!writeTemplateFile(templ)) {
         return QUuid();
+    }
+    if (!stalePath.isEmpty()) {
+        QFile::remove(stalePath);
     }
     m_templates.insert(templ.id, templ);
     Q_EMIT templatesChanged();
@@ -146,19 +160,36 @@ bool ScrollingTemplateStore::removeTemplate(const QUuid& id)
         qCWarning(lcZonesLib) << "ScrollingTemplateStore: refusing to delete bundled template" << id;
         return false;
     }
-    const QString userFile = userTemplateFilePath(id);
-    if (!QFile::exists(userFile)) {
+    // Delete the file this entry was actually LOADED from when that file is
+    // the user's own. loadTemplates stamps sourcePath from the real filename,
+    // and a hand-placed user file need not be named <id>.json, so keying the
+    // delete on userTemplateFilePath alone would leave such a file on disk
+    // while reporting success. The canonical-directory compare keeps the
+    // delete inside the user directory: a sourcePath pointing anywhere else
+    // is never a target. An empty canonical user directory means the
+    // directory does not exist at all, so nothing there can be user-owned.
+    const QString userCanonical = QDir(userTemplateDirectory()).canonicalPath();
+    const QString idFile = userTemplateFilePath(id);
+    QString target;
+    if (!it->sourcePath.isEmpty() && !userCanonical.isEmpty() && QFile::exists(it->sourcePath)
+        && QFileInfo(it->sourcePath).canonicalPath() == userCanonical) {
+        target = it->sourcePath;
+    } else if (QFile::exists(idFile)) {
+        target = idFile;
+    }
+    if (target.isEmpty()) {
         // A user entry whose file is already gone (deleted out from under the
-        // process). The requested state already holds on disk, so rescan to
-        // drop the stale entry (or resurface a bundled original) and report
-        // success rather than refusing forever on a state we cannot repair by
+        // process), on both the recorded source path and the id-derived one.
+        // The requested state already holds on disk, so rescan to drop the
+        // stale entry (or resurface a bundled original) and report success
+        // rather than refusing forever on a state we cannot repair by
         // refusing.
         qCInfo(lcZonesLib) << "ScrollingTemplateStore: user file already gone for" << id << "— rescanning";
         loadTemplates();
         return true;
     }
-    if (!QFile::remove(userFile)) {
-        qCWarning(lcZonesLib) << "ScrollingTemplateStore: failed to delete" << userFile;
+    if (!QFile::remove(target)) {
+        qCWarning(lcZonesLib) << "ScrollingTemplateStore: failed to delete" << target;
         return false;
     }
     // Rescan rather than erase: deleting a user file that shadowed a
@@ -183,7 +214,7 @@ QUuid ScrollingTemplateStore::duplicateTemplate(const QUuid& id, const QString& 
     return saveTemplate(copy);
 }
 
-QString ScrollingTemplateStore::userTemplateDirectory() const
+QString ScrollingTemplateStore::userTemplateDirectory()
 {
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
         + templateSubdirectory();

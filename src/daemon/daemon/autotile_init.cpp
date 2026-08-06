@@ -216,8 +216,10 @@ void Daemon::handleTilingModeToggle()
     // Temporarily include both layout types so applyLayoutById can find the
     // target across the mode boundary.  The subsequent layoutApplied /
     // autotileApplied signal will call updateLayoutFilter() and restore the
-    // correct exclusive filter for the new mode.
-    m_unifiedLayoutController->setLayoutFilter(true, true);
+    // correct exclusive filter for the new mode.  Templates stay OUT: the
+    // scrolling arm below is a direct entry write (the mode IS the
+    // assignment), so no template card is ever looked up through this filter.
+    m_unifiedLayoutController->setLayoutFilter(true, true, /*includeScrollingTemplates=*/false);
 
     QString currentAssignment = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
 

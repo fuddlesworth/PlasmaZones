@@ -163,7 +163,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </signal>
 
         <signal name="windowsReleasedFromTiling">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows are released from engine management (e.g., screen left an engine-managed mode). KWin effect should restore these windows to pre-tile geometry."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows are released from engine management (e.g., screen left an engine-managed mode). External contract surface only: the PlasmaZones KWin effect does not subscribe, because the restore runs through the daemon-internal windowsReleased wiring and the resnap path."/>
             <arg name="windowIds" type="as">
                 <annotation name="org.gtk.GDBus.DocString" value="Window IDs no longer under engine control."/>
             </arg>

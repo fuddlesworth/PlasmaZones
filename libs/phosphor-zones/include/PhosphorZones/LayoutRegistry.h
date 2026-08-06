@@ -115,8 +115,10 @@ public:
      *                entry containing that subdirectory, so system copies
      *                (in @c /usr/share/<subdir>) provide built-ins while
      *                the user-writable copy overrides them. Required -
-     *                asserted non-empty. Quick-layout slots persist to a
-     *                @c quicklayouts.json sibling file in this directory.
+     *                asserted non-empty. Quick-layout slots do NOT live here:
+     *                they persist to a @c quicklayouts.json sibling of the
+     *                rule store's file, so their location survives a later
+     *                @ref setLayoutDirectory call.
      * @param parent Qt parent.
      *
      * @note Required post-construction call order. The constructor does NOT

@@ -808,6 +808,25 @@ void TilingHandler::onDaemonReady()
     // that m_tileStaggerGenByScreen.clear() then discards. loadSettings owns
     // the bring-up re-announce.
     setScrollingScreens({}, /*announceFlipped=*/false);
+    // The per-screen active-layout map is the same shape of dead-session
+    // ruleQuery input, and it needs the clear here for a reason the scrolling
+    // set does not have: a straight old→new owner handover produces no
+    // serviceUnregistered edge, so the teardown clear never runs and the
+    // effect arrives at bring-up with m_activeLayoutsSeeded still TRUE over
+    // the dead daemon's map. ActiveLayout rules would then be admitted and
+    // resolved against layouts the new daemon has not published, and the
+    // seeding edge that re-drives the admission filter could never fire again
+    // for this session. Idempotent on the teardown-first path.
+    //
+    // The teardown variant's pairing contract is satisfied by this function's
+    // own tail: invalidateAllRuleCaches (below, with the tiled-membership
+    // clear) drops every verdict memoised against the dead map, and
+    // scheduleBorderSweep rebuilds the decorations those verdicts baked in.
+    clearActiveLayoutsForTeardown();
+    // Paired with every unseeding: the withheld marker describes an admission
+    // pass run against the DEAD session's rule store, and the next
+    // loadRuleAnimationsFromDbus reply recomputes it from the new one.
+    m_effect->m_activeLayoutRulesWithheld = false;
     // Void the DEAD session's in-flight managedScreens property reply too:
     // loadSettings below re-queries, and a stale reply from the previous
     // daemon would otherwise pass its generation gate and reinstate a

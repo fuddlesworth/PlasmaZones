@@ -522,7 +522,8 @@ void TestScrollEnginePerScreen::templatePresetListReplacesSettingsListWholesale(
 
     const QVector<QRect> onTemplate = engine->visibleTileRects(kS1);
     QCOMPARE(onTemplate.size(), 1);
-    QCOMPARE(onTemplate.first().width(), qRound(0.4 * kScreenWidth)); // template idx 1
+    // 0.5 anchor snaps to 0.4, the nearer template entry.
+    QCOMPARE(onTemplate.first().width(), qRound(0.4 * kScreenWidth));
 
     const QVector<QRect> onSettings = engine->visibleTileRects(kS2);
     QCOMPARE(onSettings.size(), 1);
@@ -851,7 +852,9 @@ void TestScrollEnginePerScreen::templateBlueprintEntryWithoutDisplayKeepsTheDefa
     // EFFECTIVE default display rather than falling to Normal: reading the
     // absent key as 0 silently overrode a Tabbed default for exactly the
     // first N columns, which is the stretch a template is most likely to
-    // shape.
+    // shape. The in-tree daemon always writes both keys on every entry, so
+    // this covers the public-API belt for embedder-supplied maps rather than
+    // a shipped bug.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     ScrollEngine* engine = makeEngine(&owner, settings);

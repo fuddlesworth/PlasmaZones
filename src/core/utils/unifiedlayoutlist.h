@@ -54,7 +54,8 @@ namespace PhosphorZones::LayoutUtils {
 using ::PlasmaZones::IOrderingSettings;
 
 /**
- * @brief Build list of all available layouts (manual, and optionally autotile)
+ * @brief Build list of all available layouts (manual, optionally autotile,
+ *        and the native scrolling templates when a store is supplied)
  *
  * When @p includeAutotile is true the helper needs a way to enumerate
  * autotile previews. It picks the input as follows:

@@ -16,6 +16,7 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusVariant>
 #include <QLoggingCategory>
 #include <QMetaType>
 #include <QPointer>
@@ -462,12 +463,22 @@ void TilingHandler::slotActiveLayoutsChanged(const QVariantMap& activeLayouts)
             qCWarning(lcEffect) << "activeLayouts: dropping entry with empty screen id";
             continue;
         }
-        if (it.value().typeId() != QMetaType::QString) {
+        // a{sv} values can arrive either already demarshalled to their inner
+        // type (the property Get path, which qdbus_cast unwraps) or still
+        // wrapped in a QDBusVariant (a signal delivered without a registered
+        // argument type). Unwrap one level before the type test so the guard
+        // filters genuinely wrong types instead of silently discarding every
+        // entry the moment the transport shape changes.
+        QVariant value = it.value();
+        if (value.typeId() == QMetaType::fromType<QDBusVariant>().id()) {
+            value = qvariant_cast<QDBusVariant>(value).variant();
+        }
+        if (value.typeId() != QMetaType::QString) {
             qCWarning(lcEffect) << "activeLayouts: dropping non-string layout id for screen" << it.key() << "type"
-                                << it.value().typeName();
+                                << value.typeName();
             continue;
         }
-        next.insert(it.key(), it.value().toString());
+        next.insert(it.key(), value.toString());
     }
     setActiveLayouts(next);
 }
@@ -491,7 +502,19 @@ void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayout
         // re-runs with the field admitted. Above the change gate because an
         // all-empty first map is still the edge; async, so it lands after
         // everything below regardless of where it sits here.
-        m_effect->loadRuleAnimationsFromDbus();
+        //
+        // Gated on the effect's withheld marker: the re-drive costs a
+        // getAllRules round-trip, a full RuleSet parse and an
+        // updateAllDecorations sweep, and it can only change an outcome when
+        // the last admission pass actually dropped a rule for referencing
+        // ActiveLayout. A pass that ran with the map already seeded leaves the
+        // marker false, which is also the right answer: it admitted the field
+        // itself. The marker is consumed here so a later unseed→seed cycle
+        // re-drives only on its own evidence.
+        if (m_effect->m_activeLayoutRulesWithheld) {
+            m_effect->m_activeLayoutRulesWithheld = false;
+            m_effect->loadRuleAnimationsFromDbus();
+        }
     }
     if (activeLayouts == m_activeLayouts) {
         return;

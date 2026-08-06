@@ -393,13 +393,13 @@ SettingsFlickable {
                             // model (the combo-derived reset trap).
                             // A miss stays at -1 rather than snapping to the
                             // leading None: config still holds the stored id,
-                            // and displayText below surfaces it verbatim.
+                            // and displayText below names it as missing.
                             currentIndex = indexOfValue(appSettings.defaultScrollingTemplate);
                         }
 
                         textRole: "text"
                         valueRole: "value"
-                        displayText: currentIndex >= 0 ? currentText : appSettings.defaultScrollingTemplate
+                        displayText: currentIndex >= 0 ? currentText : i18n("Missing template (%1)", appSettings.defaultScrollingTemplate)
                         Accessible.name: i18n("Default scrolling template")
                         onActivated: appSettings.defaultScrollingTemplate = currentValue
                         Component.onCompleted: rebuild()

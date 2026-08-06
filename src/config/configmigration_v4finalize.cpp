@@ -849,6 +849,10 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             // Emit the mode-nested shape the reader expects (snapping slots
             // under the snapping key, autotile empty). There is exactly one
             // on-disk format — the reader does not accept a bare flat map.
+            // The scrolling key is deliberately absent: v3 had no scrolling
+            // engine, so there is nothing to relocate under it, and the reader
+            // treats a missing mode key as "no slots for that mode" rather than
+            // as a malformed file.
             QJsonObject nested;
             nested.insert(PhosphorZones::LayoutRegistry::QuickSlotsSnappingKey, quickLayoutsToRelocate);
             nested.insert(PhosphorZones::LayoutRegistry::QuickSlotsAutotileKey, QJsonObject{});

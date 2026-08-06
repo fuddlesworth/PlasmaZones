@@ -175,7 +175,7 @@ public:
     /// the KCM assignment apply, and the desktop-switch batch.
     static constexpr int kScrollingOsdAdoptSettleMs = 300;
 
-    // Shortcut cheatsheet overlay (impls in daemon/osd.cpp).
+    // Shortcut cheatsheet overlay (impls in daemon/cheatsheet.cpp).
     /// Toggle the cheatsheet on the cursor's screen. Show path resolves the
     /// screen's tiling mode, the two feature gates, the engine layouts
     /// capability and the shortcut catalog, and pushes them all into the

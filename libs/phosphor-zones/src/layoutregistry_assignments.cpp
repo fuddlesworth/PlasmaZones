@@ -328,11 +328,13 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
             continue;
         }
         // No bare-default drop here, deliberately. Shape 1 needs one; this
-        // branch cannot reach that state. A trimmed rule left holding a lone
-        // SetEngineMode would have carried nothing but slot actions before the
-        // trim, which makes it pure, and a pure context rule is claimed by
-        // Shape 1 above — so any rule reaching here still carries at least one
-        // non-slot action alongside its mode.
+        // branch keeps what it trims. Any rule reaching here either carries a
+        // non-slot action alongside its mode (which Shape 1 would have
+        // destroyed on rebuild, so it was routed here on purpose), or is a
+        // catch-all we deliberately keep — isContextAssignmentRule rejects
+        // catch-alls, so a pure global assignment rule lands in this branch,
+        // and a lone SetEngineMode on a catch-all is a real global default,
+        // not the no-op a per-context bare mode would be.
         kept.append(trimmed);
         qCDebug(lcZonesLib) << "purgeLayoutIdFromAssignments: trimmed rule" << rule.id.toString()
                             << "— removed the layout or template reference for the deleted id, kept all others";
@@ -367,6 +369,16 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
     }
     if (slotRemoved) {
         writeQuickLayouts();
+        // No slot-changed signal exists at this level: the registry has none,
+        // and the settings slot cards refresh on the daemon's D-Bus
+        // quickLayoutSlotsChanged, which only the adaptor's explicit slot
+        // verbs emit. A settings window already open across a layout or
+        // template delete therefore keeps showing the swept binding until
+        // something else bumps its slot revision. The disk state and the next
+        // shortcut press are both correct; only the open card is stale. The
+        // fix belongs in the adaptor's delete verbs (emit
+        // quickLayoutSlotsChanged when this returns true), not in new
+        // registry-side plumbing.
     }
 
     return changed || slotRemoved;

@@ -9,6 +9,10 @@
  * system-dir shadowing precedence (a user file sharing a bundled template's
  * id overrides it; deleting the user file resurfaces the bundled original),
  * and the delete refusal for pure system templates.
+ *
+ * Also the author-time schema contract. data/schemas/scrolling-template.schema.json
+ * is not compiled at runtime, so nothing but this file keeps it honest against
+ * the C++ that produces and normalizes the documents it describes.
  */
 
 #include <QTest>
@@ -17,12 +21,24 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLoggingCategory>
 #include <QScopeGuard>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QTemporaryDir>
 
+#include <PhosphorFsLoader/SchemaValidator.h>
 #include <PhosphorZones/ScrollingTemplate.h>
 #include <PhosphorZones/ScrollingTemplateStore.h>
+
+namespace {
+Q_LOGGING_CATEGORY(testSchema, "plasmazones.test.scrollingtemplate.schema")
+
+QString schemaPath()
+{
+    return QStringLiteral(P_SOURCE_DIR "/data/schemas/scrolling-template.schema.json");
+}
+} // namespace
 
 using PhosphorZones::ScrollingTemplate;
 using PhosphorZones::ScrollingTemplateColumn;
@@ -212,6 +228,87 @@ private Q_SLOTS:
         QVERIFY(store.contains(bundled.id));
         QCOMPARE(store.templateById(bundled.id).name, bundled.name);
         QVERIFY(store.templateById(bundled.id).isSystem);
+    }
+
+    void schemaMirrorsTheNormalizationConstants()
+    {
+        // The schema restates two constants that live in C++
+        // (scrollingtemplate.cpp: kMinFraction and kMaxColumns, itself a mirror
+        // of the scroll engine's kMaxTemplateEntries). Nothing links the two, so
+        // a floor or cap that moves in the code leaves the author-time gate
+        // quietly describing the old contract. This pins the restatement.
+        QFile file(schemaPath());
+        QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(schemaPath()));
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+        QCOMPARE(parseError.error, QJsonParseError::NoError);
+        QVERIFY(doc.isObject());
+        const QJsonObject schema = doc.object();
+
+        const QJsonObject fraction =
+            schema.value(QLatin1String("definitions")).toObject().value(QLatin1String("fraction")).toObject();
+        QCOMPARE(fraction.value(QLatin1String("minimum")).toDouble(), 0.05);
+        QCOMPARE(fraction.value(QLatin1String("maximum")).toDouble(), 1.0);
+
+        const QJsonObject columns =
+            schema.value(QLatin1String("properties")).toObject().value(QLatin1String("columns")).toObject();
+        QCOMPARE(columns.value(QLatin1String("maxItems")).toInt(), 16);
+    }
+
+    void toJsonAndBundledTemplatesSatisfySchema()
+    {
+        // The schema is author-time only: no loader compiles it, so without
+        // this leg the only thing checking it is the pre-commit python gate,
+        // and nothing at all checks that what toJson emits would pass it.
+        const auto validator = PhosphorFsLoader::SchemaValidator::fromResource(schemaPath(), testSchema());
+        QVERIFY2(validator.isValid(), qPrintable(schemaPath()));
+
+        const auto describe = [](const QList<PhosphorFsLoader::SchemaValidator::Error>& errors) {
+            QStringList parts;
+            for (const auto& error : errors) {
+                parts.append((error.path.isEmpty() ? QStringLiteral("(root)") : error.path) + QLatin1String(": ")
+                             + error.message);
+            }
+            return parts.join(QLatin1String("; "));
+        };
+
+        const auto serialized = makeTemplate().toJson();
+        const auto errors = validator.validate(serialized);
+        const QString serializedReport = errors.has_value() ? describe(errors.value()) : QStringLiteral("(no errors)");
+        QVERIFY2(!errors.has_value(), qPrintable(serializedReport));
+
+        const QDir bundledDir(QStringLiteral(P_SOURCE_DIR "/data/scrolling-templates"));
+        const QStringList bundled = bundledDir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+        // An empty directory would make every assertion below vacuous, and the
+        // starter set is what the picker shows on a fresh profile.
+        QVERIFY(!bundled.isEmpty());
+        QStringList failures;
+        for (const QString& name : bundled) {
+            QFile file(bundledDir.filePath(name));
+            if (!file.open(QIODevice::ReadOnly)) {
+                failures.append(name + QLatin1String(": cannot open"));
+                continue;
+            }
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+            if (parseError.error != QJsonParseError::NoError) {
+                failures.append(name + QLatin1String(": ") + parseError.errorString());
+                continue;
+            }
+            const auto fileErrors = validator.validate(doc.object());
+            if (fileErrors.has_value()) {
+                failures.append(name + QLatin1String(": ") + describe(fileErrors.value()));
+                continue;
+            }
+            // A file that satisfies the schema must also survive the parser it
+            // is a contract for, or the schema is describing the wrong shape.
+            if (!ScrollingTemplate::fromJson(doc.object()).isValid()) {
+                failures.append(name + QLatin1String(": passes the schema but fromJson rejects it"));
+            }
+        }
+        // Accumulated rather than asserted per file, so one bad starter does not
+        // hide the state of the rest.
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QLatin1String("\n"))));
     }
 
 private:

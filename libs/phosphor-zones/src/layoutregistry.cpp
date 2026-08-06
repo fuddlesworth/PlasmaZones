@@ -345,7 +345,14 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
         }
         const int newIdx = currentIdx < 0 ? (direction > 0 ? 0 : templates.size() - 1)
                                           : (currentIdx + direction + templates.size()) % templates.size();
-        assignScrollingTemplate(resolvedScreenId, desktop, m_currentActivity, templates.at(newIdx).id.toString());
+        // Commit through the same helper the quick-slot and picker presses
+        // use, so all three write the context key the same way (the screen's
+        // own desktop, empty activity, shadowing activity-keyed entry
+        // cleared). Writing an activity-keyed rule here instead would leave a
+        // cycled screen with an entry the picker paths then have to clear.
+        // The bool is not surfaced: the cycle reports no Layout* either way,
+        // and a refusal is logged inside the helper.
+        applyScrollingTemplateToScreen(resolvedScreenId, templates.at(newIdx).id.toString());
         return nullptr;
     }
 
@@ -409,9 +416,9 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // known) just updates the global active layout.
     // Report what was actually COMMITTED: applyLayoutToScreen refuses a
     // Scrolling-mode screen outright, and returning newLayout on a refusal
-    // would claim a switch that never happened. (The scrolling branch above
-    // returns before this point on the normal path; the refusal still covers
-    // a screen whose mode changed mid-call.)
+    // would claim a switch that never happened. The scrolling branch above
+    // already returns for such a screen, so the refusal is defence in depth
+    // against the two mode checks ever diverging.
     if (!applyLayoutToScreen(resolvedScreenId, newLayout)) {
         return nullptr;
     }
@@ -778,7 +785,11 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
             qCWarning(lcZonesLib) << "Cannot assign non-existent layout to quick slot:" << layoutId;
             return;
         }
-        slots[number] = layoutId;
+        // Canonical braced spelling, matching the scrolling arm: the
+        // id-keyed slot sweep in purgeLayoutIdFromAssignments compares exact
+        // strings, so a caller's unbraced or upper-case spelling would
+        // survive the delete of the layout it names.
+        slots[number] = parsed.toString();
         qCInfo(lcZonesLib) << "Assigned layout" << layoutId << "to quick slot" << number;
     }
 
@@ -808,6 +819,14 @@ void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QH
             continue;
         }
 
+        // Anything that parses as a UUID is stored in its canonical braced
+        // spelling, matching setQuickLayoutSlot: the id-keyed slot sweep in
+        // purgeLayoutIdFromAssignments compares exact strings, so a caller's
+        // unbraced or upper-case spelling would survive the delete of the
+        // layout or template it names. Autotile ids are opaque tokens with no
+        // canonical form and are stored verbatim.
+        QString stored = layoutId;
+
         if (mode == AssignmentEntry::Scrolling) {
             // Template-id validation, mirroring setQuickLayoutSlot's
             // scrolling arm.
@@ -820,6 +839,7 @@ void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QH
                 qCWarning(lcZonesLib) << "Skipping non-existent template for quick slot" << number << ":" << layoutId;
                 continue;
             }
+            stored = parsed.toString();
         } else if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             // See setQuickLayoutSlot for the two-step parse/lookup
             // rationale — catches malformed UUID strings separately
@@ -833,9 +853,10 @@ void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QH
                 qCWarning(lcZonesLib) << "Skipping non-existent layout for quick slot" << number << ":" << layoutId;
                 continue;
             }
+            stored = parsed.toString();
         }
 
-        target[number] = layoutId;
+        target[number] = stored;
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to quick slot" << number << "mode=" << mode;
     }
 

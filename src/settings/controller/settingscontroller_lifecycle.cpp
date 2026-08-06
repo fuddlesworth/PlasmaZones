@@ -371,16 +371,15 @@ void SettingsController::defaults()
     // Quick Shortcuts pages. The clears flush on the next Save, which is what
     // leaves those pages legitimately dirty below.
     //
-    // The loop runs over WIRE MODES, matching AssignmentEntry::Mode
-    // (0 = snapping, 1 = tiling, 2 = scrolling) — the same enumeration
-    // stageQuickSlotClears and flushQuickSlotsToDaemon key on.
+    // The loop runs over WIRE MODES, matching AssignmentEntry::Mode — the same
+    // enumeration stageQuickSlotClears and flushQuickSlotsToDaemon key on.
     bool quickSlotsStaged = false;
-    for (const int wireMode : {0, 1, 2}) {
+    for (const int wireMode : {QuickSlotModeSnapping, QuickSlotModeTiling, QuickSlotModeScrolling}) {
         bool staged = false;
         if (!stageQuickSlotClears(wireMode, staged)) {
-            const QString page = wireMode == 0 ? QStringLiteral("snapping-shortcuts")
-                : wireMode == 2                ? QStringLiteral("scrolling-shortcuts")
-                                               : QStringLiteral("tiling-shortcuts");
+            const QString page = wireMode == QuickSlotModeSnapping ? QStringLiteral("snapping-shortcuts")
+                : wireMode == QuickSlotModeScrolling               ? QStringLiteral("scrolling-shortcuts")
+                                                                   : QStringLiteral("tiling-shortcuts");
             Q_EMIT pageResetFailed(page, QString(ReasonDaemonUnreachable));
             continue;
         }

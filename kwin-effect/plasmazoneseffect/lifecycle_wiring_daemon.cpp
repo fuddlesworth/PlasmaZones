@@ -244,6 +244,11 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // verdict against a layout the daemon may no longer publish. Also the
         // TEARDOWN variant (no border sweep, no repaint) for the same reason.
         m_tilingHandler->clearActiveLayoutsForTeardown();
+        // Paired with that unseeding: the withheld marker describes an
+        // admission pass over the dead session's rule store, and the next
+        // loadRuleAnimationsFromDbus reply recomputes it. Leaving it set would
+        // spend a needless rule re-fetch on the next seeding edge.
+        m_activeLayoutRulesWithheld = false;
         m_snapHandler->clearSnapTracking();
         // Drop the zone / floating caches that feed the IsSnapped / Zone /
         // IsFloating rule-match fields. Unlike the exclusion / animation rule

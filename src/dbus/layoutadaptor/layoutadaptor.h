@@ -286,7 +286,11 @@ public Q_SLOTS:
     // the settings app never writes template JSON itself). The three mutating
     // verbs (save, delete, duplicate) emit scrollingTemplatesChanged through
     // the store's own change signal; getScrollingTemplates is a pure read.
-    // Impls in assignment.cpp beside the assignment pair above.
+    // The store's save is emit-on-change, so a save whose stored result equals
+    // the existing entry rewrites nothing and stays silent — the settings
+    // pages re-save on every field commit and would otherwise fan a change out
+    // to every picker each time. Impls in assignment.cpp beside the assignment
+    // pair above.
     QString getScrollingTemplates();
     QString saveScrollingTemplate(const QString& templateJson);
     bool deleteScrollingTemplate(const QString& id);

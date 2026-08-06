@@ -1051,6 +1051,7 @@ private:
     /// m_screensWithTabStrips instead). Swept with the screen's state.
     QHash<QString, QString> m_lastTabStripPayload;
 
+    // engine_overrides.cpp
     /// Effective per-screen values: the rule override when present, else the
     /// cached config default. Each accessor is a thin screenId wrapper over a
     /// map-taking overload, so a caller resolving several values for one
@@ -1064,7 +1065,7 @@ private:
     /// Vocabulary-taking overload, the same "resolve it ONCE" shape as the
     /// override map above: a Preset kind resolves its spin against the
     /// screen's effective width list, which layoutParamsForScreen has already
-    /// parsed for the params it hands the strip. The two-argument form is a
+    /// parsed for the params it hands the strip. The one-argument form is a
     /// wrapper that parses it again, for the call sites that need only this
     /// one value.
     ColumnWidth effectiveDefaultColumnWidth(const QVariantMap& overrides, const QList<qreal>& presetWidths) const;

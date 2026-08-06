@@ -466,9 +466,13 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // INVARIANT: a spec without a combinedDescription must only cover members
     // that carry no per-action explanation — the merged row keeps the FIRST
     // member's description, and a directional/digit member's single-direction
-    // wording would misdescribe the whole family. Every member below has an
-    // empty explanation today; give the spec a combinedDescription before
-    // adding one.
+    // wording would misdescribe the whole family. This covers the
+    // templatesDescription variant too: a combinedDescription overwrites
+    // BOTH tooltip roles, so a member's templatesExplanation is dropped by
+    // the merge and a family needing distinct templates wording must be left
+    // uncompressed rather than given one combined string.  Every member below
+    // has an empty explanation today; give the spec a combinedDescription
+    // before adding one.
     QVector<FamilySpec> families = {
         // Labels derive the digit range from kIndexedSlotCount, like the chip
         // token, so raising the constant cannot desynchronize the two.
@@ -721,9 +725,14 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
         QVariantMap& row = rows[firstIdx];
         row.insert(QStringLiteral("label"), family.combinedLabel);
         // The merged row otherwise keeps the first member's description,
-        // which for an opposed pair names only one direction.
+        // which for an opposed pair names only one direction. Both tooltip
+        // roles are rewritten: templatesDescription is what the sheet shows
+        // on a Templates (scrolling) screen, and leaving it behind would put
+        // the single-direction wording back on exactly the screens the
+        // scrolling pairs are for.
         if (!family.combinedDescription.isEmpty()) {
             row.insert(QStringLiteral("description"), family.combinedDescription);
+            row.insert(QStringLiteral("templatesDescription"), family.combinedDescription);
         }
         row.insert(QStringLiteral("triggers"), QStringList{sharedPrefix + QLatin1Char('+') + family.tailToken});
         consumedIndices.insert(firstIdx);

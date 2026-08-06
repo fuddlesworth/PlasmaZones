@@ -34,6 +34,13 @@ bool validDesktopArg(int virtualDesktop, const char* method)
     }
     return true;
 }
+
+/// Boundary cap for a scrolling template's free-text description, the sibling
+/// of MaxLayoutNameLength for the one template field that has no name-length
+/// counterpart. The editor's text area is advisory only; a direct D-Bus caller
+/// can hand us an unbounded string that then lands in the store's JSON file and
+/// in every picker tooltip.
+constexpr int MaxTemplateDescriptionLength = 500;
 } // namespace
 
 QJsonObject LayoutAdaptor::buildActivityInfoJson(const QString& activityId) const
@@ -909,6 +916,11 @@ QString LayoutAdaptor::saveScrollingTemplate(const QString& templateJson)
     // D-Bus boundary clamp, same as createLayout / updateLayout apply to
     // layout names: a caller can bypass the editor dialog's cap entirely.
     templ.name = clampName(templ.name);
+    // The description is free text with no name-length counterpart, so it needs
+    // its own cap at the same boundary. clampName is the right tool for it too:
+    // the surrogate-safe cut is what keeps a truncated emoji out of the stored
+    // JSON.
+    templ.description = clampName(templ.description, MaxTemplateDescriptionLength);
     // A missing/empty name is the one invalidity a fresh editor form can
     // produce; the store refuses it (returns a null id) and the caller
     // surfaces the refusal.
@@ -930,6 +942,9 @@ bool LayoutAdaptor::deleteScrollingTemplate(const QString& id)
         return false;
     }
     if (!store->removeTemplate(parsed)) {
+        // The store warns for the bundled-template refusal itself; the unknown
+        // id is the arm that would otherwise return false with no trace at all.
+        qCWarning(lcDbusLayout) << "deleteScrollingTemplate: store refused to delete" << id;
         return false;
     }
     // The id-keyed scrub the delete flow owes (same purge layout deletion
@@ -939,7 +954,13 @@ bool LayoutAdaptor::deleteScrollingTemplate(const QString& id)
     // the original under the SAME id, and scrubbing then would drop live
     // assignments to it.
     if (!store->contains(parsed)) {
-        m_layoutManager->purgeLayoutIdFromAssignments(parsed.toString());
+        // The purge answers true when it changed a rule OR swept a quick
+        // slot; either way subscribers holding slot state (the settings
+        // quick-shortcut cards) need a refresh hint, and this signal is
+        // their only revision bump.
+        if (m_layoutManager->purgeLayoutIdFromAssignments(parsed.toString())) {
+            Q_EMIT quickLayoutSlotsChanged();
+        }
     }
     qCInfo(lcDbusLayout) << "Deleted scrolling template" << id;
     return true;
@@ -953,18 +974,20 @@ QString LayoutAdaptor::duplicateScrollingTemplate(const QString& id)
         qCWarning(lcDbusLayout) << "duplicateScrollingTemplate: no template store wired, or malformed id" << id;
         return QString();
     }
+    const PhosphorZones::ScrollingTemplate source = store->templateById(parsed);
+    if (!source.isValid()) {
+        qCWarning(lcDbusLayout) << "duplicateScrollingTemplate: unknown template" << id;
+        return QString();
+    }
     // Name the copy HERE rather than letting duplicateTemplate append the
     // shared suffix itself: the store has no length cap, and once the suffix
     // is on the name there is nothing left to clamp without cutting it off
     // again. Trim the BASE to the reduced budget and re-append, the same shape
     // duplicateLayout uses, so a long name cannot swallow the suffix and leave
-    // the copy visually identical to its source. An unknown id leaves the name
-    // empty and the store refuses the copy below.
-    const PhosphorZones::ScrollingTemplate source = store->templateById(parsed);
+    // the copy visually identical to its source.
     const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
-    const QString copyName =
-        source.isValid() ? clampName(source.name, MaxLayoutNameLength - suffix.size()) + suffix : QString();
-    const QUuid copyId = store->duplicateTemplate(parsed, copyName);
+    const QUuid copyId =
+        store->duplicateTemplate(parsed, clampName(source.name, MaxLayoutNameLength - suffix.size()) + suffix);
     if (copyId.isNull()) {
         qCWarning(lcDbusLayout) << "duplicateScrollingTemplate: store refused to copy" << id;
         return QString();
