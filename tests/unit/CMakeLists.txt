@@ -48,6 +48,7 @@ p_add_test(test_virtual_desktop_per_screen core/screens/test_virtual_desktop_per
 p_add_test(test_window_tracking_snap core/windowtracking/test_window_tracking_snap.cpp)
 p_add_test(test_window_tracking_float core/windowtracking/test_window_tracking_float.cpp)
 p_add_test(test_window_placement_store core/windowtracking/test_window_placement_store.cpp)
+p_add_test(test_window_placement_store_collapse core/windowtracking/test_window_placement_store_collapse.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Session Persistence Tests
@@ -252,6 +253,7 @@ target_compile_definitions(test_autotile_engine_master PRIVATE "P_SOURCE_DIR=\"$
 # what makes AUTOMOC generate its metaobject (a merely #included header is not
 # scanned), and the IAutotileSettings qobject_cast needs it.
 target_sources(test_autotile_engine_master PRIVATE helpers/AutotileFakes.h)
+target_sources(test_autotile_engine_core PRIVATE helpers/AutotileFakes.h)
 p_add_test(test_autotile_engine_minsize autotile/engine/test_autotile_engine_minsize.cpp)
 p_add_test(test_autotile_engine_overflow autotile/engine/test_autotile_engine_overflow.cpp)
 p_add_test(test_autotile_engine_retry autotile/engine/test_autotile_engine_retry.cpp)

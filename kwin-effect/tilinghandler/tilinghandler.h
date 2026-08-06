@@ -105,6 +105,13 @@ public:
     /// regression the guard defended against is unreachable. Do not
     /// reintroduce it as "missing hardening".
     void onWindowClosed(const QString& windowId, const QString& screenId);
+
+    /// Drop a LIVE window from engine tracking without a close (the
+    /// drag-bypass revert). Same effect-side cleanup as onWindowClosed, but
+    /// the daemon relay is Tiling.releaseWindowTracking, which runs NO
+    /// placement capture — the window is mid-drag and its frame must never
+    /// be recorded as a float-back.
+    void releaseWindowTracking(const QString& windowId, const QString& screenId);
     /// Tear down all effect-side autotile tracking for @p windowId (shared +
     /// KWin-specific state, incl. the pending cross-screen-restore connection)
     /// WITHOUT notifying the daemon. Shared by onWindowClosed (which adds the

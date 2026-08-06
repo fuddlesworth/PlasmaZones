@@ -535,14 +535,16 @@ void Daemon::initEnginesAndWiring()
     // window's own context along with the reader — deliberate: all three
     // answer "which engine owns this window", and that has one answer.
     {
-        auto screenModeForWindow =
-            [this, autotilePtr = QPointer(autotileEngine),
-             scrollTrackPtr = QPointer(scrollEngine)](const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {
-            QString screenId;
+        auto modeForWindowOnScreen =
+            [this, autotilePtr = QPointer(autotileEngine), scrollTrackPtr = QPointer(scrollEngine)](
+                const QString& windowId, const QString& screenOverride) -> PhosphorZones::AssignmentEntry::Mode {
+            QString screenId = screenOverride;
             const PhosphorPlacement::WindowTrackingService* wts = nullptr;
             if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
                 wts = m_windowTrackingAdaptor->service();
-                screenId = wts->screenForWindow(windowId);
+                if (screenId.isEmpty()) {
+                    screenId = wts->screenForWindow(windowId);
+                }
             }
             if (!screenId.isEmpty() && m_layoutManager) {
                 const int screenCurrent = currentDesktopForScreen(screenId);
@@ -574,6 +576,28 @@ void Daemon::initEnginesAndWiring()
             }
             return PhosphorZones::AssignmentEntry::Snapping;
         };
+        auto screenModeForWindow =
+            [modeForWindowOnScreen](const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {
+            return modeForWindowOnScreen(windowId, QString());
+        };
+
+        // Owning-engine-id resolver for synthesized slots (recordFloatingClose,
+        // the minimize preserve): same screen→mode resolution as the float
+        // routing above, but keyed on an EXPLICIT screen — those call sites
+        // hold the authoritative close screen, and the window's tracked screen
+        // may already be stale or gone at that point.
+        m_windowTrackingAdaptor->service()->setModeEngineIdResolver(
+            [modeForWindowOnScreen](const QString& windowId, const QString& screenId) -> QString {
+                switch (modeForWindowOnScreen(windowId, screenId)) {
+                case PhosphorZones::AssignmentEntry::Autotile:
+                    return QString(PhosphorEngine::WindowPlacement::autotileEngineId());
+                case PhosphorZones::AssignmentEntry::Scrolling:
+                    return QString(PhosphorEngine::WindowPlacement::scrollingEngineId());
+                case PhosphorZones::AssignmentEntry::Snapping:
+                    break;
+                }
+                return QString(PhosphorEngine::WindowPlacement::snapEngineId());
+            });
 
         m_windowTrackingAdaptor->service()->setEngineFloatResolver(
             [screenModeForWindow, snapEnginePtr = QPointer(snapEngine), autotilePtr = QPointer(autotileEngine),
@@ -1041,103 +1065,9 @@ void Daemon::initEnginesAndWiring()
     connect(m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this, &Daemon::handleAssignmentChangesApplied);
 }
 
-void Daemon::applyScrollTabStrips(const QString& screenId, const QString& stripsJson)
-{
-    if (!m_overlayService) {
-        return;
-    }
-    QJsonParseError parseError;
-    const auto strips = StripZones::parseTabStripPayload(
-        stripsJson,
-        [this](const QString& windowId) -> QString {
-            if (!m_windowRegistry) {
-                return QString();
-            }
-            const auto meta = m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-            return meta ? meta->title : QString();
-        },
-        [this](const QString& windowId) -> bool {
-            if (!m_windowRegistry) {
-                return false;
-            }
-            const auto meta = m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-            // value_or(false): a disengaged optional means the compositor never
-            // reported urgency for this window, which must read as "not urgent"
-            // rather than lighting the tab up on an unknown.
-            return meta ? meta->isDemandingAttention.value_or(false) : false;
-        },
-        [this](const QString& windowId) -> QVariantMap {
-            // niri's top resolution tier: a window rule recolours that window's
-            // own tab, outranking the per-context colours and the config.
-            if (!m_windowTrackingAdaptor) {
-                return {};
-            }
-            return m_windowTrackingAdaptor->tabColorRuleParams(windowId);
-        },
-        &parseError);
-    // A parse failure means we know nothing about the strips, which is not the
-    // same as "there are none": clearing on it would wipe the live tab
-    // indicators and leave the columns looking untabbed until the next
-    // relayout. Warn and leave the overlay untouched.
-    if (!strips) {
-        qCWarning(lcDaemon) << "Tab strips JSON unparseable, keeping previous indicators screen=" << screenId
-                            << "error=" << parseError.errorString() << "offset=" << parseError.offset;
-        return;
-    }
-    // Retain the RAW payload. Enrichment (titles, urgency, per-window colours)
-    // is resolved from live state that the engine knows nothing about, so it
-    // can go stale while the structural payload is unchanged — and the engine's
-    // emit is change-gated on exactly that payload, so it will not re-fire.
-    // Keeping the JSON is what lets refreshScrollTabEnrichment re-run the
-    // enrichment without inventing a second producer.
-    //
-    // Keyed on the PARSED result, not on stripsJson.isEmpty(): the engine's
-    // clear paths emit the literal "[]", never an empty string, so testing the
-    // raw payload would never prune and every screen that ever carried a strip
-    // would keep a dead entry forever.
-    if (strips->isEmpty()) {
-        m_lastScrollTabStripsJson.remove(screenId);
-    } else {
-        m_lastScrollTabStripsJson.insert(screenId, stripsJson);
-    }
-    m_overlayService->updateScrollTabStrips(screenId, *strips);
-}
-
-void Daemon::scheduleScrollTabEnrichmentRefresh()
-{
-    // Coalesce. Retitling is a chatty signal (lifecycle.cpp carries a dedicated
-    // caption-only path for exactly that reason), and each refresh re-parses
-    // and re-resolves every cached screen, so a burst of title ticks must
-    // collapse into one pass rather than N.
-    if (m_scrollTabEnrichmentPending) {
-        return;
-    }
-    m_scrollTabEnrichmentPending = true;
-    QTimer::singleShot(0, this, [this]() {
-        m_scrollTabEnrichmentPending = false;
-        refreshScrollTabEnrichment();
-    });
-}
-
-void Daemon::refreshScrollTabEnrichment()
-{
-    // Re-enrich every screen holding a cached payload. Deliberately NOT
-    // filtered to the screens containing the changed window: the payload's ids
-    // would have to be re-parsed to test membership, which is the same work as
-    // re-enriching. Strips exist only on scrolling screens that have a tabbed
-    // column, so the set is small.
-    //
-    // Defensive snapshot. applyScrollTabStrips writes the very map being
-    // iterated, though only its INSERT branch is reachable from here (a
-    // refresh only ever replays non-empty cached payloads, and re-parsing the
-    // same JSON is deterministic), so the remove that would actually
-    // invalidate an iterator cannot fire today. Cheap to keep: QHash is
-    // implicitly shared, and when the member's insert detaches it from this
-    // copy, the copy's iteration stays valid — which is the point.
-    const QHash<QString, QString> cached = m_lastScrollTabStripsJson;
-    for (auto it = cached.constBegin(); it != cached.constEnd(); ++it) {
-        applyScrollTabStrips(it.key(), it.value());
-    }
-}
+// applyScrollTabStrips / scheduleScrollTabEnrichmentRefresh /
+// refreshScrollTabEnrichment live in scroll_tabs.cpp (split for the
+// file-size ceiling); their wiring stays above with the rest of the engine
+// wiring.
 
 } // namespace PlasmaZones

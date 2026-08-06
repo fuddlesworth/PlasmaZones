@@ -485,6 +485,19 @@ void Daemon::connectOverlaySignals()
         connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification, m_windowDragAdaptor,
                 &WindowDragAdaptor::handleWindowClosed, Qt::UniqueConnection);
     }
+    if (m_tilingAdaptor) {
+        // Same fan-out for TilingAdaptor's per-window caches: the effect
+        // gates its Tiling.windowClosed relay on the close screen still
+        // being engine-managed, so this in-process hook is the unconditional
+        // teardown for the dedup cache and any parked open. PMF +
+        // UniqueConnection for the same restart-stacking reason as above.
+        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification, m_tilingAdaptor,
+                &TilingAdaptor::onTrackedWindowDestroyed, Qt::UniqueConnection);
+        // And the prune-path backstop for windows that die without any close
+        // signal (instance-id key space; see the signal doc).
+        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::stalePruned, m_tilingAdaptor,
+                &TilingAdaptor::pruneStaleFloatBroadcasts, Qt::UniqueConnection);
+    }
 }
 
 void Daemon::finalizeStartup()

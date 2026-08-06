@@ -6,6 +6,7 @@
 
 #include <QJsonArray>
 #include <QLatin1Char>
+#include <QLoggingCategory>
 
 #include <algorithm>
 #include <limits>
@@ -14,6 +15,8 @@
 namespace PhosphorEngine {
 
 namespace {
+Q_LOGGING_CATEGORY(lcPlacementStore, "org.phosphor.engine.placementstore")
+
 // Instance-identity match for STORE keys. Contract note: ids without a '|'
 // separator only match EXACTLY here — unlike the registry's
 // extractInstanceId, which treats a bare string AS the instance id. The store
@@ -68,7 +71,14 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
             WindowPlacement merged = bucket.at(i);
             merged.windowId = incoming.windowId;
             if (!incoming.engines.isEmpty()) {
-                merged.screenId = incoming.screenId;
+                // Never blank a known managed screen: an engine capture with
+                // an EMPTY screenId (a floating window whose engine lost its
+                // screen assignment) must not make the record screen-agnostic
+                // forever — the reopen accept and the cross-screen downgrade
+                // both key off a real screen value.
+                if (!incoming.screenId.isEmpty()) {
+                    merged.screenId = incoming.screenId;
+                }
                 merged.virtualDesktop = incoming.virtualDesktop;
                 merged.activity = incoming.activity;
                 if (incoming.kind != WindowKind::Unknown) {
@@ -123,17 +133,29 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
 
 void WindowPlacementStore::evictForCapacity(QList<WindowPlacement>& bucket)
 {
-    // Evict contentless residue FIRST (oldest such entry), and only fall back
-    // to the positionally-oldest record when everything is restorable — a
-    // bare floating slot with no geometry must never push a real snapped or
+    // Evict contentless residue FIRST (oldest such entry), then the oldest
+    // record NOT bound to a still-open window, and only as the last resort
+    // the positionally-oldest record outright. The first tier exists because
+    // a bare floating slot with no geometry must never push a real snapped or
     // tiled placement out of the FIFO (WindowPlacement::hasRestorableContent
-    // documents this exact starvation hazard).
+    // documents this exact starvation hazard); the second because deleting a
+    // LIVE window's record leaves that window recordless — the same harm the
+    // live-instance probe guards takeForReopen's fallback against, reached by
+    // the eviction door instead.
     while (bucket.size() >= MaxPerApp) {
         int victim = -1;
         for (int i = 0; i < bucket.size(); ++i) {
             if (!bucket.at(i).hasRestorableContent()) {
                 victim = i;
                 break;
+            }
+        }
+        if (victim < 0 && m_liveInstanceProbe) {
+            for (int i = 0; i < bucket.size(); ++i) {
+                if (!m_liveInstanceProbe(bucket.at(i).windowId)) {
+                    victim = i;
+                    break;
+                }
             }
         }
         bucket.removeAt(victim >= 0 ? victim : 0);
@@ -219,6 +241,14 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
             if (!isPureFloatRecord(other)) {
                 continue; // never prune a managed placement
             }
+            if (m_liveInstanceProbe && m_liveInstanceProbe(other.windowId)) {
+                // A still-OPEN sibling's record is not a stale duplicate: it
+                // is that window's live float-back, and pruning it leaves the
+                // sibling recordless — the same harm the live-instance probe
+                // guards the reopen fallback against, reached via the close
+                // collapse instead.
+                continue;
+            }
             bool sharesScreen = false;
             for (auto git = other.freeGeometryByScreen.constBegin(); git != other.freeGeometryByScreen.constEnd();
                  ++git) {
@@ -230,13 +260,27 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
             if (!sharesScreen) {
                 continue; // wholly different-monitor record — distinct memory, kept
             }
-            // Copy the sibling's geometry out before mutating bucket[keepIdx]:
+            // Copy the sibling's data out before mutating bucket[keepIdx]:
             // operator[] may detach/reallocate the list and dangle `other`.
             const QHash<QString, QRect> otherFree = other.freeGeometryByScreen;
+            const QHash<QString, EngineSlot> otherEngines = other.engines;
             WindowPlacement& keep = bucket[keepIdx];
             for (auto git = otherFree.constBegin(); git != otherFree.constEnd(); ++git) {
                 if (!keep.freeGeometryByScreen.contains(git.key())) {
                     keep.freeGeometryByScreen.insert(git.key(), git.value()); // kept (newest) wins; fill gaps only
+                }
+            }
+            // Absorb the sibling's engine slots the same fill-gaps-only way.
+            // Since the synthesized close slot is keyed per OWNING engine, two
+            // pure-float siblings can carry float verdicts for DIFFERENT
+            // engines (a scrolling-mode close and an autotile-mode close of
+            // the same app); dropping the sibling without absorbing its slot
+            // silently lost the other mode's float verdict. Safe by
+            // construction: isPureFloatRecord guarantees the sibling carries
+            // no snapped/tiled slot, so this can only add floating slots.
+            for (auto eit = otherEngines.constBegin(); eit != otherEngines.constEnd(); ++eit) {
+                if (!keep.engines.contains(eit.key())) {
+                    keep.engines.insert(eit.key(), eit.value());
                 }
             }
             bucket.removeAt(i);
@@ -308,24 +352,93 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
     return std::nullopt;
 }
 
-std::optional<WindowPlacement>
-WindowPlacementStore::takeForReopen(const QString& windowId, const QString& appId,
-                                    const std::function<bool(const WindowPlacement&)>& accept,
-                                    const std::function<bool(const WindowPlacement&)>& preferred)
+namespace {
+/// The shared reopen accept — see the takeForReopen header doc. Hoisted into
+/// the store (rather than per-engine lambdas) so autotile and scroll cannot
+/// drift apart, and so the exact-final gate can reason about the SAME
+/// predicate it applies.
+bool acceptsReopen(const WindowPlacement& p, const QString& engineId, const QString& windowId, const QString& screenId)
 {
-    // Exact-record rejection is FINAL — see the header contract. Only
-    // meaningful when a predicate exists; without one every record is
-    // accepted and the gate cannot fire.
-    if (accept) {
-        if (const auto own = peekExact(windowId); own && !accept(*own)) {
-            return std::nullopt;
+    const EngineSlot s = p.slotFor(engineId);
+    if (s.state == WindowPlacement::stateFloating()) {
+        // A geometry-less floating record is meaningful for the SAME instance
+        // (restore floating in place), but consumed by a FIFO sibling it
+        // floats a fresh window at its spawn rect for no user-visible reason
+        // while burning a slot a real placement may need. sameWindowInstance,
+        // not a raw extractInstanceId compare: a bare id (no '|') must not
+        // fuzzy-match a composite's uuid component — the file's contract note
+        // on sameWindowInstance documents exactly that trap.
+        const bool sameInstance = sameWindowInstance(p.windowId, windowId);
+        if (!sameInstance && !p.anyFreeGeometry().isValid()) {
+            return false;
+        }
+        return p.screenId.isEmpty() || p.screenId == screenId;
+    }
+    // FLOATING slots only: a TILED record is never consumed — it stands as
+    // the exact-final verdict that the window closed tiled (see the header).
+    return false;
+}
+} // namespace
+
+std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString& engineId, const QString& windowId,
+                                                                   const QString& appId, const QString& screenId)
+{
+    const auto accept = [&](const WindowPlacement& p) {
+        return acceptsReopen(p, engineId, windowId, screenId);
+    };
+    // Exact-record rejection is FINAL — see the header contract — but only a
+    // record carrying a slot FOR THE ASKING ENGINE is a verdict. Every fresh
+    // open writes a geometry-only, slot-less record under the live uuid (the
+    // pre-tile free-geometry capture) before any engine's restore runs, so an
+    // exact hit alone proves nothing; gating on that stub vetoed the FIFO
+    // fallback and lost every close/reopen float and column restore.
+    if (const auto own = peekExact(windowId); own && own->engines.contains(engineId) && !accept(*own)) {
+        qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "exact record for" << windowId
+                                  << "rejected (slot state" << own->slotFor(engineId).state << "screen" << own->screenId
+                                  << ") — final, no FIFO fallback";
+        return std::nullopt;
+    }
+    // Same-instance match first (daemon restart, uuid stable) — take()'s
+    // branch 1, scoped by the empty appId.
+    std::optional<WindowPlacement> rec = take(windowId, QString(), accept);
+    if (!rec && !appId.isEmpty()) {
+        // appId fallback: the NEWEST accepted record not bound to a live
+        // window — see the header doc. (take()'s oldest-first FIFO stays as
+        // is for the snap paths that consume through it directly.)
+        const auto it = m_byApp.find(appId);
+        if (it != m_byApp.end()) {
+            QList<WindowPlacement>& bucket = it.value();
+            int best = -1;
+            for (int i = 0; i < bucket.size(); ++i) {
+                const WindowPlacement& p = bucket.at(i);
+                if (!accept(p)) {
+                    continue;
+                }
+                if (m_liveInstanceProbe && m_liveInstanceProbe(p.windowId)) {
+                    continue; // an open sibling's record is not up for grabs
+                }
+                if (best < 0 || p.sequence > bucket.at(best).sequence) {
+                    best = i;
+                }
+            }
+            if (best >= 0) {
+                rec = bucket.takeAt(best);
+                if (bucket.isEmpty()) {
+                    m_byApp.erase(it);
+                }
+            }
         }
     }
-    std::optional<WindowPlacement> rec = take(windowId, appId, accept, preferred);
     if (rec) {
+        qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "consumed" << rec->windowId << "for" << windowId
+                                  << "slot state" << rec->slotFor(engineId).state << "order"
+                                  << rec->slotFor(engineId).order << "screen" << rec->screenId;
         // Re-bind to the live windowId and re-record — header contract rule 2.
         rec->windowId = windowId;
         record(*rec);
+    } else {
+        qCDebug(lcPlacementStore) << "takeForReopen:" << engineId << "no restorable record for" << windowId << "appId"
+                                  << appId << "on" << screenId;
     }
     return rec;
 }

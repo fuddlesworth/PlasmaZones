@@ -7,6 +7,7 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorScreens/Manager.h>
 
@@ -535,6 +536,74 @@ void TilingAdaptor::windowClosed(const QString& windowId)
         return;
     }
     qCDebug(lcDbusTiling) << "windowClosed: windowId=" << windowId;
+    // Capture the window's final engine slot BEFORE the engine untracks it.
+    // The effect relays Tiling.windowClosed ahead of
+    // WindowTracking.windowClosed (in-order connection), so by the time the
+    // WindowTracking close capture runs, the owning engine has already
+    // dropped the window and its capturePlacement returns nullopt — the
+    // persisted slot (float verdict, column order) was then only as fresh as
+    // the last save-timer sweep. Capturing here runs the shared funnel while
+    // the engine still answers authoritatively; the screen-less form
+    // deliberately skips the close-only branches (minimize preserve, orphan
+    // float-back fallback, sibling collapse), which stay with the
+    // WindowTracking close where the authoritative screen is known. Hoisted
+    // ABOVE the ownership lookup on purpose: the funnel self-guards for
+    // untracked windows, and engineOwningWindow's first-engine fallback must
+    // stay free to change without silently disabling this capture. This
+    // method is a genuine close only — the drag-bypass tracking drop goes
+    // through releaseWindowTracking, which captures nothing.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->captureWindowPlacement(windowId);
+    }
+    if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
+        engine->windowClosed(windowId);
+    }
+}
+
+void TilingAdaptor::onTrackedWindowDestroyed(const QString& windowId)
+{
+    // Post-teardown raw id only (see the header doc) — the canonical-form
+    // residue of a class-mutating app is reclaimed by
+    // pruneStaleFloatBroadcasts.
+    m_lastFloatBroadcast.remove(windowId);
+    removeUnclaimedOpen(windowId);
+}
+
+void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
+{
+    if (aliveInstances.isEmpty()) {
+        // Same fail-closed stance as the WTA prune: an empty alive report
+        // must not wipe live dedup state.
+        return;
+    }
+    const QSet<QString> alive(aliveInstances.cbegin(), aliveInstances.cend());
+    for (auto it = m_lastFloatBroadcast.begin(); it != m_lastFloatBroadcast.end();) {
+        if (!alive.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
+            it = m_lastFloatBroadcast.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void TilingAdaptor::releaseWindowTracking(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        qCDebug(lcDbusTiling) << "releaseWindowTracking: empty window ID";
+        return;
+    }
+    // Same bookkeeping as windowClosed — both key forms of the float-relay
+    // dedup entry and any parked open go with the tracking — but NO capture:
+    // the window is live and mid-drag, and its frame is not a placement.
+    m_lastFloatBroadcast.remove(windowId);
+    if (m_windowTrackingAdaptor) {
+        m_lastFloatBroadcast.remove(m_windowTrackingAdaptor->shadowWindowId(windowId));
+    }
+    removeUnclaimedOpen(windowId);
+    if (!ensurePipeline("releaseWindowTracking")) {
+        return;
+    }
+    qCDebug(lcDbusTiling) << "releaseWindowTracking: windowId=" << windowId;
     if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
         engine->windowClosed(windowId);
     }
@@ -581,6 +650,9 @@ void TilingAdaptor::clearEngine()
     m_pendingOpens.clear();
     m_lastFloatBroadcast.clear();
     m_lastEnabledBroadcast.reset();
+    // The WTA borrow is NOT cleared here — Daemon::stop's teardown block is
+    // its canonical clear (setWindowTrackingAdaptor(nullptr)), and every
+    // deref in this file null-checks.
     // m_pendingOpensListenerInstalled deliberately survives: the underlying
     // connection object does too (sender and receiver both outlive a
     // session restart), so resetting the latch here would make the next

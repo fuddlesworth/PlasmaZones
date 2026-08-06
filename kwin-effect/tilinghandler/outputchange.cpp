@@ -253,8 +253,11 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // every cross-screen bounce).
     const int savedUnfloatBudget = unfloatRetryBudgetUsed(windowId);
 
-    // Remove from old screen's autotile state
-    onWindowClosed(windowId, oldScreenId);
+    // Remove from old screen's autotile state. releaseWindowTracking, NOT
+    // onWindowClosed: the window is alive and crossing outputs, so the close
+    // relay's placement capture would persist the OLD screen's slot as its
+    // final state.
+    releaseWindowTracking(windowId, oldScreenId);
 
     if (ownedMinimizeFloat && (w->isMinimized() || wasUnfloatInFlight)) {
         if (newIsAutotile) {

@@ -700,6 +700,7 @@ void Daemon::stop()
         wts->setEngineFloatLister({});
         wts->setAutotileModePredicate({});
         wts->setEngineTiledPredicate({});
+        wts->setModeEngineIdResolver({});
         // Deliberately NOT cleared here: the snap-state resolver (setSnapStateResolver)
         // and setSnapEngine both capture/store only QPointer(snapEngine), so they
         // self-null when the engine is destroyed — there is no `this`/raw-pointer

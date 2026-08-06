@@ -788,7 +788,10 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // died-mid-drag pointer must not skip the tracking cleanup for a
         // still-valid id.
         if (!windowId.isEmpty()) {
-            m_tilingHandler->onWindowClosed(windowId, m_dragBypassScreenId);
+            // releaseWindowTracking, NOT onWindowClosed: the window is live
+            // and mid-drag, and the close relay's capture would record the
+            // drag frame as its float-back.
+            m_tilingHandler->releaseWindowTracking(windowId, m_dragBypassScreenId);
         }
         m_dragBypassedForEngine = false;
         // Cleared with the flag, as the equivalent transition in

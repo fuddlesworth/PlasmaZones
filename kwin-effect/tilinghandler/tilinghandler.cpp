@@ -585,6 +585,18 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     }
 }
 
+void TilingHandler::releaseWindowTracking(const QString& windowId, const QString& screenId)
+{
+    cleanupAutotileTracking(windowId, screenId);
+
+    if (m_managedScreens.contains(screenId)) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Tiling,
+                                                       QStringLiteral("releaseWindowTracking"), {windowId},
+                                                       QStringLiteral("releaseWindowTracking"));
+        qCDebug(lcEffect) << "Notified tiling: releaseWindowTracking" << windowId << "on screen" << screenId;
+    }
+}
+
 void TilingHandler::deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore)
 {
     if (!window || window->isDeleted()) {

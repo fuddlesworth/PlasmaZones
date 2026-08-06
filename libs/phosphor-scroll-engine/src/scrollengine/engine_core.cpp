@@ -264,7 +264,7 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     state->deleteLater();
 }
 
-ScrollEngine::StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
+StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
 {
     StashedStrip out;
     if (!state || state->strip().isEmpty()) {
@@ -358,6 +358,14 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
         const QString appPrefix = appId.isEmpty() ? QString() : appId + QLatin1Char('|');
         if (!appPrefix.isEmpty()) {
+            // DELIBERATE: this appId claim is not gated on
+            // stagedFromPersistence, so it also fires against an IN-SESSION
+            // mode-exit stash — a new same-app window opened before a stashed
+            // sibling re-announces can claim (and rename) that sibling's
+            // tile, swapping their slots. Accepted as the cost of the case
+            // the fallback exists for: a same-session app RESTART while the
+            // screen sits in another mode regenerates the uuid, and a
+            // persistence gate would strand that window's tile forever.
             const QSet<QString> consumed = m_stripStashConsumed.value(key);
             for (int i = 0; i < stash.size() && colIdx < 0; ++i) {
                 for (int t = 0; t < stash.at(i).tiles.size(); ++t) {

@@ -27,6 +27,7 @@
 #include <QSignalSpy>
 #include <memory>
 
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -627,6 +628,10 @@ private Q_SLOTS:
 
         const auto rec = m_service->placementStore().peekExact(QStringLiteral("firefox|self-close"));
         QVERIFY(rec.has_value());
+        // NOTE: the snap key here pins the UNWIRED-resolver fallback only —
+        // owningModeEngineId defaults to snap without a daemon-wired
+        // ModeEngineIdResolver. The wired behaviour (the slot keyed on the
+        // close screen's owning engine) is pinned by the sibling test below.
         const PhosphorEngine::EngineSlot slot = rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
         QVERIFY2(slot.zoneIds.isEmpty(), "the sibling's snapped slot must not be grafted under this windowId");
@@ -635,6 +640,91 @@ private Q_SLOTS:
         QVERIFY(sibRec.has_value());
         QCOMPARE(sibRec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
                  QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+    }
+
+    void testLiveInstanceProbe_registryWiredReopenSkipsOpenSiblingsRecord()
+    {
+        // The PRODUCTION probe (wired in the WTS constructor, registry-backed
+        // via extractInstanceId): a reopen's appId fallback must consume the
+        // non-live record and never one whose instance the registry still
+        // holds — the exact no-steal exclusion the store's own unit tests
+        // exercise with a hand-rolled probe.
+        PhosphorEngine::WindowRegistry registry;
+        m_service->setWindowRegistry(&registry);
+        registry.upsert(QStringLiteral("live-uuid"), PhosphorEngine::WindowMetadata{});
+
+        PhosphorEngine::WindowPlacement liveRec;
+        liveRec.windowId = QStringLiteral("term|live-uuid");
+        liveRec.appId = QStringLiteral("term");
+        liveRec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot liveSlot;
+        liveSlot.state = QString(PhosphorEngine::WindowPlacement::stateFloating());
+        liveRec.engines.insert(PhosphorEngine::WindowPlacement::scrollingEngineId(), liveSlot);
+        liveRec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(50, 50, 400, 300));
+        QVERIFY(m_service->placementStore().record(liveRec));
+
+        PhosphorEngine::WindowPlacement deadRec = liveRec;
+        deadRec.windowId = QStringLiteral("term|dead-uuid");
+        deadRec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(10, 10, 400, 300));
+        QVERIFY(m_service->placementStore().record(deadRec));
+
+        // deadRec is NEWER by sequence, but even if it were older the live
+        // record must be skipped; assert the consumed record is the dead one.
+        const auto consumed = m_service->placementStore().takeForReopen(
+            PhosphorEngine::WindowPlacement::scrollingEngineId(), QStringLiteral("term|new-uuid"),
+            QStringLiteral("term"), QStringLiteral("DP-1"));
+        QVERIFY(consumed.has_value());
+        QCOMPARE(consumed->freeGeometryFor(QStringLiteral("DP-1")), QRect(10, 10, 400, 300));
+        // The live window's record is untouched.
+        QVERIFY(m_service->placementStore().peekExact(QStringLiteral("term|live-uuid")).has_value());
+        m_service->setWindowRegistry(nullptr);
+    }
+
+    void testRecordFloatingClose_synthSlotKeyedOnOwningModeEngine()
+    {
+        // The wired-resolver behaviour the daemon relies on: the synthesized
+        // float slot must land under the CLOSE SCREEN's owning engine, and a
+        // record carrying only FOREIGN slots must still gain it — the tiling
+        // reopen accepts read strictly their own slot, so a snap-keyed (or
+        // absent) verdict re-tiles a window that closed floating. Deleting
+        // either half of the fix fails this test.
+        m_service->setModeEngineIdResolver([](const QString&, const QString& screenId) -> QString {
+            return screenId == QStringLiteral("DP-1") ? QString(PhosphorEngine::WindowPlacement::scrollingEngineId())
+                                                      : QString(PhosphorEngine::WindowPlacement::snapEngineId());
+        });
+
+        // Case 1: record-less close — slot keyed on scrolling, not snap.
+        m_service->recordFloatingClose(QStringLiteral("octopi|scroll-close"), QStringLiteral("DP-1"),
+                                       QRect(30, 40, 600, 400));
+        auto rec = m_service->placementStore().peekExact(QStringLiteral("octopi|scroll-close"));
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QVERIFY(!rec->engines.contains(QString(PhosphorEngine::WindowPlacement::snapEngineId())));
+
+        // Case 2: an existing record with only a FOREIGN slot still gains the
+        // owning engine's float verdict (the old engines.isEmpty() gate
+        // skipped exactly this shape), and the foreign slot survives.
+        PhosphorEngine::WindowPlacement foreign;
+        foreign.windowId = QStringLiteral("octopi|foreign-slot");
+        foreign.appId = QStringLiteral("octopi");
+        foreign.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot autotileSlot;
+        autotileSlot.state = QString(PhosphorEngine::WindowPlacement::stateFloating());
+        foreign.engines.insert(PhosphorEngine::WindowPlacement::autotileEngineId(), autotileSlot);
+        foreign.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(1, 2, 300, 200));
+        QVERIFY(m_service->placementStore().record(foreign));
+
+        m_service->recordFloatingClose(QStringLiteral("octopi|foreign-slot"), QStringLiteral("DP-1"),
+                                       QRect(30, 40, 600, 400));
+        rec = m_service->placementStore().peekExact(QStringLiteral("octopi|foreign-slot"));
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::scrollingEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::autotileEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateFloating()));
+
+        m_service->setModeEngineIdResolver({});
     }
 
     void testRecordFloatingClose_prefixMutationKeepsOwnEngineSlots()

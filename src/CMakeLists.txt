@@ -492,6 +492,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/init_services.cpp
     daemon/daemon/init_adaptors.cpp
     daemon/daemon/init_engines.cpp
+    daemon/daemon/scroll_tabs.cpp
     daemon/daemon/init_assignment_apply.cpp
     daemon/daemon/init_dbus_service.cpp
     daemon/daemon/lifecycle.cpp

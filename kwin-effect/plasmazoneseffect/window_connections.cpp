@@ -73,9 +73,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // Title-bar state is rule-driven (no autotile decoration claim
                 // to release): KWin's off-desktop noBorder reset is corrected on
                 // desktop return by updateAllDecorations → resyncWindow for any
-                // rule-owned window. onWindowClosed below only clears effect-side
-                // tracking (shared with the genuine-close path).
-                m_tilingHandler->onWindowClosed(windowId, screenId);
+                // rule-owned window. releaseWindowTracking, NOT onWindowClosed:
+                // the window is alive and merely moving desktops, so the close
+                // relay's capture and its ledger append must not fire (the
+                // preserved pre-tile geometry above is the state that matters).
+                m_tilingHandler->releaseWindowTracking(windowId, screenId);
                 removeWindowDecoration(windowId);
                 qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
             }

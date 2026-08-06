@@ -426,7 +426,9 @@ void PlasmaZonesEffect::connectDragTracker()
                         // equivalent transition guards the same way, and this
                         // branch claims to run the same full transition.
                         if (!capturedWindowId.isEmpty()) {
-                            m_tilingHandler->onWindowClosed(capturedWindowId, m_dragBypassScreenId);
+                            // releaseWindowTracking, NOT onWindowClosed — same
+                            // no-capture rule as drag_snap's transition.
+                            m_tilingHandler->releaseWindowTracking(capturedWindowId, m_dragBypassScreenId);
                         }
                         m_dragBypassedForEngine = false;
                         m_dragBypassScreenId.clear();

@@ -266,7 +266,6 @@ void ScrollEngine::commitDragInsertPreview()
     }
     const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
     ScrollStrip& strip = targetState->strip();
-
     bool inserted = false;
     if (p.lastTarget.isValid()) {
         if (p.lastTarget.newSlot || strip.isEmpty()) {

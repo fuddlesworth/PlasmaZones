@@ -21,6 +21,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 
+#include "helpers/AutotileFakes.h"
 #include "helpers/ScriptedAlgoTestSetup.h"
 
 #include <QJsonObject>
@@ -536,6 +537,36 @@ private Q_SLOTS:
     // =========================================================================
     // Window lifecycle tests
     // =========================================================================
+
+    void testTiledRecordIsNotConsumedOnReopen()
+    {
+        // Order restore was removed deliberately: a TILED record must not be
+        // consumed on reopen (it stays as the exact-final evidence the window
+        // closed tiled) and the reopened window takes a config-order insert.
+        PlasmaZones::TestHelpers::FakeStickyWindowTracking tracker;
+        AutotileEngine engine(nullptr, &tracker, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screen});
+
+        engine.windowOpened(QStringLiteral("aa|a1"), screen);
+        engine.windowOpened(QStringLiteral("bb|b1"), screen);
+        QCoreApplication::processEvents();
+
+        const auto rec = engine.capturePlacement(QStringLiteral("bb|b1"));
+        QVERIFY(rec.has_value());
+        QVERIFY(tracker.placementStore().record(*rec));
+        engine.windowClosed(QStringLiteral("bb|b1"));
+
+        engine.windowOpened(QStringLiteral("bb|b2"), screen);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        QVERIFY(state->containsWindow(QStringLiteral("bb|b2")));
+        QVERIFY(!state->isFloating(QStringLiteral("bb|b2"))); // tiled reopen stays tiled
+        // The tiled record was not consumed by the reopen.
+        QVERIFY(tracker.placementStore().peekExact(QStringLiteral("bb|b1")).has_value());
+    }
 
     void testWindowLifecycle()
     {
