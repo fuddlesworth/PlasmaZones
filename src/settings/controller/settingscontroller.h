@@ -309,6 +309,10 @@ public:
     /// without a SettingsController instance.
     static const QHash<QString, Settings::ConfigKeyList>& pageOwnedConfigKeys();
 
+    /// The mode enable master switches: manifest-owned for dirty/save/discard
+    /// but excluded from per-page Reset (a page Reset must not flip its mode).
+    static const Settings::ConfigKeyList& resetExemptModeEnableKeys();
+
     /// Override the page that the next setNeedsSave(true) calls (and any
     /// property NOTIFY routed through onSettingsPropertyChanged) will mark
     /// dirty, instead of the currently active page. Use for changes made

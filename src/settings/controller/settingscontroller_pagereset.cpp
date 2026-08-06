@@ -217,11 +217,18 @@ void SettingsController::resetPage(const QString& page)
         const auto& manifest = pageOwnedConfigKeys();
         const auto ownedIt = manifest.constFind(page);
         if (ownedIt != manifest.constEnd()) {
+            // The mode enable switches are manifest-owned (for dirty/save/
+            // discard) but a page Reset must not flip the mode itself, so
+            // strip them before handing the list to resetKeys.
+            Settings::ConfigKeyList keys = *ownedIt;
+            for (const Settings::ConfigKey& exempt : resetExemptModeEnableKeys()) {
+                keys.removeAll(exempt);
+            }
             // Suppress onSettingsPropertyChanged for the reset's NOTIFY storm;
             // reconcile `page`'s dirty state explicitly below.
             {
                 const ScopedFlag loadingScope(m_loading);
-                m_settings.resetKeys(*ownedIt);
+                m_settings.resetKeys(keys);
             }
             reconcilePageDirty(page);
             return;

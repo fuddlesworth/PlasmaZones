@@ -256,6 +256,15 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
         {QStringLiteral("snapping-overlay-behavior"),
          {
+             // The mode's enable master switch. Owned HERE so the sidebar
+             // toggle's pending flip is visible to value-based dirtiness and
+             // survives an unrelated reconcile of this leaf (unowned, the
+             // toggle's dirty mark was erased by the next isPageDirty pass and
+             // the flip lost on exit). It is EXEMPT from per-page Reset via
+             // resetExemptModeEnableKeys() — Reset on a mode's page must not
+             // switch the mode itself off. Discard deliberately includes it:
+             // discarding pending changes includes a pending toggle.
+             {CD::snappingGroup(), CD::enabledKey()},
              {CD::snappingBehaviorGroup(), CD::toggleActivationKey()},
              // The trigger LIST belongs to whichever page shows its picker, which is the
              // page that owns the matching toggle. All four lists were missing from this
@@ -324,6 +333,9 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
         {QStringLiteral("tiling-behavior"),
          {
+             // Enable master switch: same ownership/exemption contract as the
+             // snapping-overlay-behavior entry documents.
+             {CD::tilingGroup(), CD::enabledKey()},
              {CD::tilingBehaviorGroup(), CD::toggleActivationKey()},
              {CD::tilingBehaviorGroup(), CD::triggersKey()},
              {CD::tilingBehaviorGroup(), CD::insertPositionKey()},
@@ -347,10 +359,9 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
         // The three advanced scrolling leaves split the former single page's
         // keys by concern; the one-owner invariant holds per (group, key).
-        // The master switch (Scrolling.enabled) is deliberately absent from
-        // all three: like snappingEnabled/autotileEnabled it is committed
-        // through the sidebar toggle's beginExternalEdit/endExternalEdit
-        // pair, not staged through per-page dirtiness.
+        // The master switch (Scrolling.enabled) is owned by scrolling-columns
+        // under the same ownership/exemption contract the
+        // snapping-overlay-behavior entry documents.
         //
         // Only the GLOBAL Scrolling.* keys are listed. The New columns card's
         // per-monitor overrides live in the per-screen scrolling store, not in
@@ -361,6 +372,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         // footer Save/Discard handles them via the per-screen save path.
         {QStringLiteral("scrolling-columns"),
          {
+             {CD::scrollingGroup(), CD::enabledKey()},
              {CD::scrollingGroup(), CD::defaultColumnWidthKindKey()},
              {CD::scrollingGroup(), CD::defaultColumnWidthValueKey()},
              {CD::scrollingGroup(), CD::defaultColumnWidthPresetIndexKey()},
@@ -494,6 +506,23 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
     };
     return manifest;
+}
+
+const Settings::ConfigKeyList& SettingsController::resetExemptModeEnableKeys()
+{
+    // The three placement enable master switches. Owned by their mode's main
+    // page (see the snapping-overlay-behavior manifest comment) so pending
+    // sidebar flips participate in dirty/save/discard, but EXEMPT from
+    // per-page Reset: "reset this page to defaults" must not switch the mode
+    // itself off or on. resetPage() filters these out of the manifest list it
+    // hands Settings::resetKeys.
+    using CD = ConfigDefaults;
+    static const Settings::ConfigKeyList keys = {
+        {CD::snappingGroup(), CD::enabledKey()},
+        {CD::tilingGroup(), CD::enabledKey()},
+        {CD::scrollingGroup(), CD::enabledKey()},
+    };
+    return keys;
 }
 
 const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()

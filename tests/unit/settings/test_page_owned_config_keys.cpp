@@ -52,12 +52,12 @@ QString qualify(const QString& group, const QString& key)
 const QSet<QString>& deliberatelyUnowned()
 {
     static const QSet<QString> kSet{
-        // The scrolling master switch, like snappingEnabled and
-        // autotileEnabled: it is committed through the sidebar toggle's
-        // beginExternalEdit/endExternalEdit pair rather than staged through
-        // per-page dirtiness, so owning it would make the sidebar toggle mark
-        // a page dirty and make that page's Reset turn scrolling back on.
-        qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::enabledKey()),
+        // The scrolling master switch is NOT here any more: it is owned by
+        // scrolling-columns (its pending sidebar flip has to participate in
+        // value-based dirtiness or it is silently lost on exit), and the
+        // page-Reset hazard that used to justify unowning it is closed by
+        // resetExemptModeEnableKeys() instead — pinned by the exemption slot
+        // below.
         // The two global preset lists. No page offers an EDITOR for them any
         // more — the Columns page's editor rows went away when templates became
         // the authoring surface — and the keys stay config-backed as the
@@ -216,6 +216,34 @@ private Q_SLOTS:
         }
         stale.sort();
         QVERIFY2(stale.isEmpty(), qPrintable(stale.join(QLatin1String("; "))));
+    }
+
+    /// The reset-exemption contract for the mode enable master switches:
+    /// every exempt key must be manifest-owned (a dangling exemption means the
+    /// dirty-tracking fix regressed back to unowned), and all three placement
+    /// switches must be exempt (an enable key missing here would let a page
+    /// Reset flip its mode off).
+    void resetExemptEnableKeysAreOwnedAndComplete()
+    {
+        QSet<QString> owned;
+        const auto& manifest = SettingsController::pageOwnedConfigKeys();
+        for (auto it = manifest.constBegin(); it != manifest.constEnd(); ++it) {
+            for (const auto& gk : it.value()) {
+                owned.insert(qualify(gk.first, gk.second));
+            }
+        }
+
+        const auto& exempt = SettingsController::resetExemptModeEnableKeys();
+        QCOMPARE(exempt.size(), 3);
+        QSet<QString> exemptQualified;
+        for (const auto& gk : exempt) {
+            const QString qualified = qualify(gk.first, gk.second);
+            exemptQualified.insert(qualified);
+            QVERIFY2(owned.contains(qualified), qPrintable(qualified));
+        }
+        QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::snappingGroup(), ConfigDefaults::enabledKey())));
+        QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::tilingGroup(), ConfigDefaults::enabledKey())));
+        QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::enabledKey())));
     }
 };
 
