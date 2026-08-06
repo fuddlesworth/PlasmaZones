@@ -954,12 +954,13 @@ void Daemon::processPendingGeometryUpdates()
 
     m_geometryUpdatePending = false;
 
-    // Re-derive the scrolling screens' per-screen overrides: the template
-    // vocabulary is extracted against live screen geometry (Fixed-geometry
-    // zones divide by it), so a resolution or panel change must re-push or
-    // the engine keeps pre-resize fractions until an unrelated re-derive.
-    // Relative-only templates are unaffected but the pass is cheap and
-    // idempotent (the engine's equality guard no-ops an identical map).
+    // Re-derive the scrolling screens' per-screen overrides. Native
+    // templates carry fractions, so no geometry feeds the push itself. What
+    // this pass is for is the rest of the resolve: per-context rule params
+    // and the context gaps both re-resolve here, and gaps only reach the
+    // strip through a retile. updateScrollingScreens' identical-set branch
+    // supplies that retile, and the engine's equality guard no-ops an
+    // unchanged override map, so the pass is cheap and idempotent.
     if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {
         updateScrollingScreens(m_scrollEngine->activeScreens());
     }

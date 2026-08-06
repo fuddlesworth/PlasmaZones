@@ -318,6 +318,11 @@ QString orientationLabel(const QString& orientationToken)
     return closedTokenLabel(orientationOptions(), orientationToken);
 }
 
+QString templateDisplayLabel(const QString& templateName)
+{
+    return PhosphorI18n::tr("Template: %1").arg(templateName);
+}
+
 QString enumOptionLabel(const QString& type, const QString& key, const QString& wireValue)
 {
     namespace ActionParam = PhosphorRules::ActionParam;

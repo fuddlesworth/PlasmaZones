@@ -598,7 +598,7 @@ private Q_SLOTS:
         // delete verb drives) scrubs the SetScrollingTemplate reference; the
         // context stays Scrolling (mode is intent, the template was data).
         QVERIFY(store->removeTemplate(parsed));
-        mgr->purgeSnappingLayoutFromAssignments(templId);
+        mgr->purgeLayoutIdFromAssignments(templId);
         auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Scrolling);
         QVERIFY(entry.scrollingTemplateLayout.isEmpty());
@@ -627,7 +627,7 @@ private Q_SLOTS:
         QCOMPARE(seeded.scrollingTemplateLayout, templUuid.toString());
 
         QVERIFY(store->removeTemplate(templUuid));
-        mgr->purgeSnappingLayoutFromAssignments(templUuid.toString());
+        mgr->purgeLayoutIdFromAssignments(templUuid.toString());
         auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QVERIFY(entry.scrollingTemplateLayout.isEmpty());

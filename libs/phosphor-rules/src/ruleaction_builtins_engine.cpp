@@ -89,9 +89,6 @@ void ActionRegistry::registerBuiltinsEngine()
     });
 
     // ── scrolling-template slot ──
-    // The manual layout a Scrolling context consumes as its column-width
-    // template. Value shape is a manual-layout UUID exactly like
-    // SetSnappingLayout — the param kind is reused so the settings UI's
     // The value is a NATIVE scrolling-template id (its own picker kind and
     // name resolution) filling its OWN slot: the lossless assignment set
     // stores it beside the snapping layout in one rule (see

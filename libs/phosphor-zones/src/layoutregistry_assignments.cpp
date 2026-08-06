@@ -180,7 +180,7 @@ bool LayoutRegistry::removeAssignmentRule(const QString& screenId, int virtualDe
     // extra actions when the user merely CLEARS the context's assignment on
     // the Monitors page. Strip the three assignment slots instead and keep the
     // rule alive for whatever else it carries; only delete it outright when
-    // nothing survives. Same shape purgeSnappingLayoutFromAssignments already
+    // nothing survives. Same shape purgeLayoutIdFromAssignments already
     // uses for its Shape-2 rules.
     PWR::Rule stripped;
     carryOverNonAssignmentActions(stripped, *rule);
@@ -192,7 +192,7 @@ bool LayoutRegistry::removeAssignmentRule(const QString& screenId, int virtualDe
     return m_ruleStore->updateRule(kept);
 }
 
-bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
+bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
 {
     // An id-keyed scrub serving BOTH deletion flows: a deleted manual
     // layout's id is scrubbed from SetSnappingLayout actions, and a deleted
@@ -278,7 +278,7 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
                 // that MATCHED the deleted id, so a rule whose template was
                 // deleted can still carry a live snapping assignment, and
                 // dropping it would destroy that assignment.
-                qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped context rule" << rule.id.toString()
+                qCDebug(lcZonesLib) << "purgeLayoutIdFromAssignments: dropped context rule" << rule.id.toString()
                                     << "— only a default Snapping mode remained after clearing the deleted layout";
                 continue;
             }
@@ -287,7 +287,7 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
                 PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(entry.mode), entry.snappingLayout,
                                                               entry.tilingAlgorithm, entry.scrollingTemplateLayout);
             kept.append(rebuilt);
-            qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: rebuilt context rule" << rule.id.toString()
+            qCDebug(lcZonesLib) << "purgeLayoutIdFromAssignments: rebuilt context rule" << rule.id.toString()
                                 << "— cleared the deleted layout's references, preserved the other slots";
             continue;
         }
@@ -321,26 +321,21 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
                            }),
             trimmed.actions.end());
         if (trimmed.actions.isEmpty()) {
-            // The rule's only action was the dead layout reference — nothing
+            // The rule's only action was the dead reference — nothing
             // meaningful remains, so drop it.
-            qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped rule" << rule.id.toString()
-                                << "— its only action referenced the deleted layout";
+            qCDebug(lcZonesLib) << "purgeLayoutIdFromAssignments: dropped rule" << rule.id.toString()
+                                << "— its only action referenced the deleted layout or template reference";
             continue;
         }
-        // Mirror Shape 1's bare-default drop: a context rule reduced to a
-        // lone default-Snapping SetEngineMode encodes no intent beyond the
-        // default and would otherwise survive here forever (template-carrying
-        // rules land in this branch whenever a non-assignment action rides
-        // along).
-        if (isContextAssignmentRule(trimmed) && trimmed.actions.size() == 1
-            && entryFromRuleMatchActions(trimmed).mode == AssignmentEntry::Snapping) {
-            qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped context rule" << rule.id.toString()
-                                << "— only a default Snapping mode remained after trimming the deleted layout";
-            continue;
-        }
+        // No bare-default drop here, deliberately. Shape 1 needs one; this
+        // branch cannot reach that state. A trimmed rule left holding a lone
+        // SetEngineMode would have carried nothing but slot actions before the
+        // trim, which makes it pure, and a pure context rule is claimed by
+        // Shape 1 above — so any rule reaching here still carries at least one
+        // non-slot action alongside its mode.
         kept.append(trimmed);
-        qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: trimmed rule" << rule.id.toString()
-                            << "— removed the SetSnappingLayout action for the deleted layout, kept all others";
+        qCDebug(lcZonesLib) << "purgeLayoutIdFromAssignments: trimmed rule" << rule.id.toString()
+                            << "— removed the layout or template reference for the deleted id, kept all others";
     }
     if (changed) {
         m_ruleStore->setAllRules(kept);
@@ -352,7 +347,29 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
             Q_EMIT layoutAssigned(sid, desk, nullptr);
         }
     }
-    return changed;
+
+    // Quick slots carry the same ids, so the scrub is not complete until they
+    // are swept too — a slot still holding a deleted id would resurrect it on
+    // the next shortcut press. Every mode's array is swept by id: the manual
+    // layout and native template id namespaces are disjoint UUID sets (the
+    // same property the rule walk above relies on), so an id-keyed sweep
+    // across all three arrays cannot touch a live binding of another kind.
+    bool slotRemoved = false;
+    for (auto& slots : m_quickLayoutSlots) {
+        for (auto it = slots.begin(); it != slots.end();) {
+            if (it.value() == layoutId) {
+                it = slots.erase(it);
+                slotRemoved = true;
+            } else {
+                ++it;
+            }
+        }
+    }
+    if (slotRemoved) {
+        writeQuickLayouts();
+    }
+
+    return changed || slotRemoved;
 }
 
 // ── Mutators ────────────────────────────────────────────────────────────────

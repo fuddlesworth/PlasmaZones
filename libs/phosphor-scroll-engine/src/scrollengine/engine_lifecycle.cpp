@@ -8,6 +8,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
+#include "enginelimits.h"
 #include "scrollenginelogging.h"
 
 #include <algorithm>
@@ -274,18 +275,33 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // exists. Precedence: per-window open rules above outrank the
         // blueprint; the blueprint outranks every default, including a
         // client-decides width already resolved into `width`.
-        const QVariantList blueprint = screenOverrides.value(ScrollPerScreenKeys::templateColumns()).toList();
+        const auto blueprintIt = screenOverrides.constFind(ScrollPerScreenKeys::templateColumns());
         const int columnCount = int(state->strip().columns().size());
-        if (columnCount < blueprint.size()) {
-            const QVariantMap entry = blueprint.at(columnCount).toMap();
-            const qreal fraction = entry.value(ScrollPerScreenKeys::templateColumnWidth()).toDouble();
-            if (!openParams.widthFraction && fraction >= MinColumnWidthFraction && fraction <= 1.0) {
-                width = ColumnWidth::makeProportion(fraction);
-            }
-            if (!openParams.tabbed) {
-                display = entry.value(ScrollPerScreenKeys::templateColumnDisplay()).toInt() == 1
-                    ? ColumnDisplay::Tabbed
-                    : ColumnDisplay::Normal;
+        // Bounded at kMaxTemplateEntries, the same library-boundary cap the
+        // preset vocabularies get: applyPerScreenConfig is exported LGPL
+        // surface and an embedder-supplied blueprint must not be read past
+        // it. Tested BEFORE the list conversion so a strip that is already
+        // longer than any consumable entry pays nothing on the open path.
+        if (blueprintIt != screenOverrides.constEnd() && columnCount < kMaxTemplateEntries) {
+            const QVariantList blueprint = blueprintIt->toList();
+            if (columnCount < blueprint.size()) {
+                const QVariantMap entry = blueprint.at(columnCount).toMap();
+                const qreal fraction = entry.value(ScrollPerScreenKeys::templateColumnWidth()).toDouble();
+                if (!openParams.widthFraction && fraction >= MinColumnWidthFraction && fraction <= 1.0) {
+                    width = ColumnWidth::makeProportion(fraction);
+                }
+                // Guarded on PRESENCE, mirroring the width arm's fall-through:
+                // an entry that carries a width only must leave `display` on
+                // the effective default resolved above. Reading an absent key
+                // as 0 forced every such column to Normal and silently
+                // discarded a Tabbed default (from the settings-channel
+                // default, or a SetScrollDefaultColumnDisplay rule) for
+                // exactly the first N columns.
+                if (!openParams.tabbed && entry.contains(ScrollPerScreenKeys::templateColumnDisplay())) {
+                    display = entry.value(ScrollPerScreenKeys::templateColumnDisplay()).toInt() == 1
+                        ? ColumnDisplay::Tabbed
+                        : ColumnDisplay::Normal;
+                }
             }
         }
         const ScrollInsertPosition insertPos = effectiveInsertPosition(screenId);

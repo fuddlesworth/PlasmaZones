@@ -1006,9 +1006,9 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // (a 1-based ordinal) before the user picks a desktop.
             payload[key] = 1;
         } else {
-            // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,
-            // shaderEffect, curveEditor, screenId) and plain strings all start
-            // empty (zoneOrdinals and virtualDesktop are seeded above because their
+            // Picker kinds (snappingLayout, scrollingTemplate, tilingAlgorithm,
+            // animationEvent, shaderEffect, curveEditor, screenId) and plain
+            // strings all start empty (zoneOrdinals and virtualDesktop are seeded above because their
             // validators reject an empty value). The user has to choose a value
             // before the rule is savable, and `canSave` surfaces the gap explicitly.
             // Seeding a placeholder here would mask the "user has to pick" state.

@@ -87,9 +87,11 @@ struct PerScreenOverlayState
 };
 
 /// Per-screen layout-family filter used for the zone selector. `manual`
-/// enables PhosphorZones layout entries; `autotile` enables algorithm
-/// previews. Both default-true is "show everything"; the resolver narrows
-/// to a single family when the screen has an explicit assignment.
+/// enables PhosphorZones layout entries, `autotile` enables algorithm
+/// previews, and `templates` enables native scrolling-template cards. The
+/// first two default true and the third false, so the unnarrowed answer is
+/// "every non-template family". The resolver narrows to a single family
+/// when the screen has an explicit assignment.
 struct LayoutIncludeFlags
 {
     bool manual = true;

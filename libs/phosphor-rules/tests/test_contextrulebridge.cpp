@@ -149,9 +149,8 @@ private Q_SLOTS:
 
     void testMakeAssignmentRule_carriesScrollingTemplate()
     {
-        // The trailing defaulted template parameter forwards into a
-        // SetScrollingTemplate action — this leg guards the silent-omission
-        // shape a call site that forgets the fourth argument produces.
+        // The explicit trailing template argument forwards into a
+        // SetScrollingTemplate action.
         const Rule rule = CRB::makeAssignmentRule(
             QStringLiteral("Scrolling rule"), QStringLiteral("DP-1"), 2, QStringLiteral("act-x"),
             QStringLiteral("scrolling"), QStringLiteral("layout-a"), QString(), 350, QStringLiteral("template-c"));

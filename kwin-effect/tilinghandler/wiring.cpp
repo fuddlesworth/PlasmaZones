@@ -187,9 +187,17 @@ void TilingHandler::loadSettings()
         QDBusConnection::sessionBus().asyncCall(scrollMsg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* scrollWatcher = new QDBusPendingCallWatcher(scrollCall, this);
     const quint64 scrollGenerationAtDispatch = m_scrollingScreensGeneration;
+    // Per-dispatch guard, the managedScreens fetch's pattern: two loadSettings
+    // runs across a daemon restart put two Gets in flight with no authoritative
+    // write between them, so the write-generation check alone lets whichever
+    // reply lands FIRST win and then discards the newer one.
+    const quint64 scrollQueryGeneration = ++m_scrollingScreensQueryGeneration;
     connect(scrollWatcher, &QDBusPendingCallWatcher::finished, this,
-            [this, scrollGenerationAtDispatch](QDBusPendingCallWatcher* w) {
+            [this, scrollGenerationAtDispatch, scrollQueryGeneration](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
+                if (scrollQueryGeneration != m_scrollingScreensQueryGeneration) {
+                    return; // a newer query superseded this one
+                }
                 if (m_scrollingScreensGeneration != scrollGenerationAtDispatch) {
                     return; // a live signal carried a newer set
                 }
@@ -230,9 +238,14 @@ void TilingHandler::loadSettings()
         QDBusConnection::sessionBus().asyncCall(layoutsMsg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* layoutsWatcher = new QDBusPendingCallWatcher(layoutsCall, this);
     const quint64 layoutsGenerationAtDispatch = m_activeLayoutsGeneration;
+    // Same per-dispatch guard as the scrolling fetch above.
+    const quint64 layoutsQueryGeneration = ++m_activeLayoutsQueryGeneration;
     connect(layoutsWatcher, &QDBusPendingCallWatcher::finished, this,
-            [this, layoutsGenerationAtDispatch](QDBusPendingCallWatcher* w) {
+            [this, layoutsGenerationAtDispatch, layoutsQueryGeneration](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
+                if (layoutsQueryGeneration != m_activeLayoutsQueryGeneration) {
+                    return; // a newer query superseded this one
+                }
                 if (m_activeLayoutsGeneration != layoutsGenerationAtDispatch) {
                     return; // a live signal carried a newer map
                 }
@@ -244,7 +257,12 @@ void TilingHandler::loadSettings()
                     slotActiveLayoutsChanged(map);
                     qCInfo(lcEffect) << "Loaded active layouts for" << map.size() << "screens";
                 } else {
-                    qCDebug(lcEffect) << "Active layouts: query failed, daemon may not be running";
+                    // Not a debug-level trail: a failed fetch leaves the map
+                    // unseeded, so every ActiveLayout rule stays out of the
+                    // evaluator until a live signal lands — a rule the user
+                    // authored silently does nothing, for the session.
+                    qCWarning(lcEffect) << "Active layouts: query failed, daemon may not be running:"
+                                        << reply.error().message();
                 }
             });
 }

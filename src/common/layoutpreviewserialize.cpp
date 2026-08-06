@@ -27,11 +27,12 @@ constexpr QLatin1String ZoneCount{"zoneCount"};
 constexpr QLatin1String Zones{"zones"};
 constexpr QLatin1String IsAutotile{"isAutotile"};
 constexpr QLatin1String IsScrollingTemplate{"isScrollingTemplate"};
-// PhosphorZones::LayoutCategory mirror — `isAutotile` is the canonical
-// boolean, but QML consumers (LayoutCard, CategoryBadge) read a numeric
-// `category` field (0 = Manual, 1 = Autotile) to match the
+// PhosphorZones::LayoutCategory mirror — `isAutotile` and
+// `isScrollingTemplate` are the canonical booleans, but QML consumers
+// (LayoutCard, CategoryBadge) read a numeric `category` field
+// (0 = Manual, 1 = Autotile, 2 = ScrollingTemplate) to match the
 // LayoutCategory enum used elsewhere. Emit both so QML doesn't need to
-// translate, and the C++ `isAutotile` consumer keeps its name.
+// translate, and the C++ boolean consumers keep their names.
 constexpr QLatin1String Category{"category"};
 constexpr QLatin1String IsSystem{"isSystem"};
 constexpr QLatin1String Recommended{"recommended"};

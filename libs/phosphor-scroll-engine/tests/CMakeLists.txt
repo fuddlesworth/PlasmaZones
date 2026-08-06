@@ -46,8 +46,8 @@ pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp)
 pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp)
 
 # Shared fixture header, listed so IDE/target file listings see it (every
-# strip and engine test includes it — the pure extractor test does not; it
-# carries no Q_OBJECT, so automoc scans it and produces nothing).
+# strip and engine test includes it; it carries no Q_OBJECT, so automoc scans
+# it and produces nothing).
 target_sources(test_scrollstrip_core PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollstrip_ops PRIVATE scrollstriptestutils.h)
 target_sources(test_scrollengine_smoke PRIVATE scrollstriptestutils.h)

@@ -409,6 +409,9 @@ target_link_libraries(test_settings_perscreen_scrolling PRIVATE Qt6::Test Qt6::C
 add_test(NAME test_settings_perscreen_scrolling COMMAND test_settings_perscreen_scrolling)
 
 # Ownership invariants for SettingsController's per-page config manifest.
+# Source lives under settings/ rather than config/, because it compiles the
+# settings app's page-topology TU. It is grouped under this banner because
+# what it asserts is config-key ownership, and there is no settings/ banner.
 # Compiles the topology TU directly (SettingsController lives in the settings
 # executable, not a library) and only ever calls its static accessors, so no
 # moc/vtable for the class itself is needed.
@@ -1001,10 +1004,6 @@ add_executable(test_compositor_bridge dbus/test_compositor_bridge.cpp)
 target_link_libraries(test_compositor_bridge PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)
 
-# XML ↔ adaptor contract tripwire: the dbus/*.xml files are the installed
-# public contract while the adaptors are handwritten — this compares each
-# adaptor's staticMetaObject (bus-exposed slots/invokables, signals,
-# properties) against its XML so drift fails CI instead of shipping.
 # A blanket disconnect(sender, &Signal, this, nullptr) removes EVERY connection
 # on that triple, so it is only correct above every connect it re-establishes.
 # A second one placed next to a later connect silently severs its siblings.
@@ -1015,6 +1014,10 @@ target_compile_definitions(test_connect_sweep_ordering
 target_link_libraries(test_connect_sweep_ordering PRIVATE Qt6::Test Qt6::Core)
 add_test(NAME test_connect_sweep_ordering COMMAND test_connect_sweep_ordering)
 
+# XML ↔ adaptor contract tripwire: the dbus/*.xml files are the installed
+# public contract while the adaptors are handwritten — this compares each
+# adaptor's staticMetaObject (bus-exposed slots/invokables, signals,
+# properties) against its XML so drift fails CI instead of shipping.
 add_executable(test_dbus_contract_sync dbus/test_dbus_contract_sync.cpp)
 target_compile_definitions(test_dbus_contract_sync
                            PRIVATE PLASMAZONES_DBUS_XML_DIR="${CMAKE_SOURCE_DIR}/dbus")

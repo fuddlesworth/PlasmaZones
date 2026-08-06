@@ -294,7 +294,7 @@ void Daemon::connectLayoutSignals()
     // ScreenModeRouter + AssignmentEntry::Mode, and the router is a plain
     // query class with no change signal — a mode switch normally lands as an
     // applied layout (the toggle-autotile handler routes through
-    // applyLayoutById), so these two are the mode-change edge the sheet can
+    // applyLayoutById), so these three are the mode-change edge the sheet can
     // observe. The one exception, the bare suppressed-default autotile entry
     // written directly, calls refreshCheatsheetIfVisible itself at its write
     // site. refreshCheatsheetIfVisible re-resolves the mode for the
@@ -308,24 +308,8 @@ void Daemon::connectLayoutSignals()
                 refreshCheatsheetIfVisible();
             });
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::scrollingTemplateApplied, this,
-            [this](const QString& templateId, const QString& screenId) {
-                if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
-                    m_overlayService->hideSnapAssist();
-                }
-                // Startup gate + deferred show: same rationale as the
-                // layoutApplied handler above.
-                if (!m_running || !m_scrollingTemplateStore) {
-                    return;
-                }
-                if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-                    QTimer::singleShot(0, this, [this, templateId, screenId]() {
-                        if (!m_scrollingTemplateStore) {
-                            return;
-                        }
-                        showScrollingTemplateOsd(m_scrollingTemplateStore->templateById(QUuid::fromString(templateId)),
-                                                 screenId);
-                    });
-                }
+            [this](const QString&, const QString&) {
+                refreshCheatsheetIfVisible();
             });
 
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied, this,

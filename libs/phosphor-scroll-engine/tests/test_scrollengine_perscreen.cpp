@@ -217,6 +217,7 @@ private Q_SLOTS:
     void templateBlueprintSeedsFirstColumns();
     void openRuleOutranksTemplateBlueprint();
     void templateBlueprintNeverResizesExistingColumns();
+    void templateBlueprintEntryWithoutDisplayKeepsTheDefault();
     void tabIndicatorOverridesArePerProperty();
     void tabIndicatorRejectsGarbageNumericOverrides();
     void tabIndicatorRejectsAGarbagePositionOverride();
@@ -504,8 +505,8 @@ void TestScrollEnginePerScreen::templatePresetListReplacesSettingsListWholesale(
 {
     // TEMPLATE channel: a pushed preset list replaces the settings list for
     // that screen only. Observable through a Preset-kind default width: the
-    // same stored index resolves against the template list on S1 and the
-    // settings list on S2.
+    // stored spin resolves to a value anchor out of the template vocabulary
+    // on S1 and out of the settings vocabulary on S2.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->widthKind = static_cast<int>(DefaultWidthKind::Preset);
@@ -570,9 +571,8 @@ void TestScrollEnginePerScreen::templatePresetHeightsReplaceSettingsHeights()
 
 void TestScrollEnginePerScreen::templateListShrinkClampsResolvedPresetWidth()
 {
-    // A template swap that shrinks the list must reflow an out-of-range
-    // stored Preset index to the last entry (presetAt's clamp), never crash
-    // or zero out.
+    // A template swap that shrinks the vocabulary must reflow the column's
+    // value anchor onto the nearest surviving entry, never crash or zero out.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->widthKind = static_cast<int>(DefaultWidthKind::Preset);
@@ -584,8 +584,8 @@ void TestScrollEnginePerScreen::templateListShrinkClampsResolvedPresetWidth()
     QCOMPARE(rects.size(), 1);
     QCOMPARE(rects.first().width(), qRound(0.75 * kScreenWidth));
 
-    // Now the template arrives with a single entry: the stored index 2
-    // clamps to the lone 0.6 preset at the next resolve.
+    // Now the template arrives with a single entry: the column's anchor
+    // snaps to the lone 0.6 preset at the next resolve.
     QVariantMap templ;
     templ.insert(ScrollPerScreenKeys::presetColumnWidths(), QVariantList{0.6});
     engine->applyPerScreenConfig(kS1, templ);
@@ -620,7 +620,7 @@ void TestScrollEnginePerScreen::invalidTemplateEntriesFallBackToSettingsList()
     QCOMPARE(rects.first().width(), qRound(0.5 * kScreenWidth));
 
     // A mixed list keeps its valid entries: 0.01 drops, 0.3 survives, and
-    // index 1 clamps to the lone remaining entry.
+    // the anchor snaps to the lone remaining entry.
     QVariantMap mixed;
     mixed.insert(ScrollPerScreenKeys::presetColumnWidths(), QVariantList{0.01, 0.3});
     engine->applyPerScreenConfig(kS1, mixed);
@@ -833,12 +833,67 @@ void TestScrollEnginePerScreen::templateBlueprintNeverResizesExistingColumns()
     }
     templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
     engine->applyPerScreenConfig(kS1, templ);
+    // Drain the retile the apply scheduled: without it this leg would assert
+    // against a strip the relayout has not touched yet, so a regression that
+    // reshaped existing columns AT RELAYOUT would still read green here.
+    QCoreApplication::processEvents();
 
     // The existing column is untouched.
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.5);
     // The next column materializes at index 1 and takes blueprint[1].
     engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|b")).proportion, 0.2);
+}
+
+void TestScrollEnginePerScreen::templateBlueprintEntryWithoutDisplayKeepsTheDefault()
+{
+    // A blueprint entry may carry a width only. Its column must then keep the
+    // EFFECTIVE default display rather than falling to Normal: reading the
+    // absent key as 0 silently overrode a Tabbed default for exactly the
+    // first N columns, which is the stretch a template is most likely to
+    // shape.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVariantMap templ;
+    templ.insert(ScrollPerScreenKeys::defaultColumnDisplay(), static_cast<int>(ColumnDisplay::Tabbed));
+    QVariantList blueprint;
+    QVariantMap widthOnly;
+    widthOnly.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.6);
+    blueprint.append(widthOnly);
+    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
+    engine->applyPerScreenConfig(kS1, templ);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    QCOMPARE(state->strip().columns().size(), 1);
+    // The entry's width still lands, so the blueprint really was consumed.
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.6);
+    QCOMPARE(state->strip().columns().first().display, ColumnDisplay::Tabbed);
+
+    // An entry that DOES carry a display still wins over the same default.
+    QVariantMap explicitNormal;
+    explicitNormal.insert(ScrollPerScreenKeys::defaultColumnDisplay(), static_cast<int>(ColumnDisplay::Tabbed));
+    QVariantList twoEntries;
+    twoEntries.append(widthOnly);
+    QVariantMap normalEntry;
+    normalEntry.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.4);
+    normalEntry.insert(ScrollPerScreenKeys::templateColumnDisplay(), static_cast<int>(ColumnDisplay::Normal));
+    twoEntries.append(normalEntry);
+    explicitNormal.insert(ScrollPerScreenKeys::templateColumns(), twoEntries);
+    engine->applyPerScreenConfig(kS2, explicitNormal);
+
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), kS2, 0, 0);
+
+    auto* other = static_cast<ScrollState*>(engine->stateForScreen(kS2));
+    QVERIFY(other);
+    QCOMPARE(other->strip().columns().size(), 2);
+    QCOMPARE(other->strip().columns().at(0).display, ColumnDisplay::Tabbed);
+    QCOMPARE(other->strip().columns().at(1).display, ColumnDisplay::Normal);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePerScreen)

@@ -7,6 +7,7 @@
 #include "window_query.h"
 
 #include "compositor/windowanimator.h"
+#include "tilinghandler/tilinghandler.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -61,24 +62,39 @@ namespace {
 /// leaf failed, and the rule fires for EVERY window. Dropping rules that
 /// reference an unstamped field closes both polarities.
 ///
-/// ActiveLayout and ScreenOrientation are deliberately NOT in this set:
-/// ruleQuery (window_filtering.cpp) stamps both. TiledWindowCount is the
-/// one context-cascade field with no effect-side source.
-const QSet<PhosphorRules::Field>& effectNeverStampedFields()
+/// ScreenOrientation is deliberately NOT in this set: ruleQuery
+/// (window_filtering.cpp) always stamps it. TiledWindowCount is the one
+/// context-cascade field with no effect-side source at all.
+///
+/// ActiveLayout is CONDITIONAL, which is what @p activeLayoutsSeeded selects.
+/// ruleQuery stamps it from the daemon's per-screen map, but that map does
+/// not exist until the daemon's first push lands, and an unstamped
+/// ActiveLayout reads as an engaged empty string for EVERY window — exactly
+/// the negation hazard above. So while the map is unseeded the field joins
+/// the never-stamped set and its rules are held out of the evaluator; the
+/// seeding edge in TilingHandler::setActiveLayouts re-drives
+/// loadRuleAnimationsFromDbus, which re-runs this filter with the field
+/// admitted again.
+const QSet<PhosphorRules::Field>& effectNeverStampedFields(bool activeLayoutsSeeded)
 {
-    static const QSet<PhosphorRules::Field> fields = {
+    static const QSet<PhosphorRules::Field> seeded = {
         PhosphorRules::Field::TiledWindowCount,
     };
-    return fields;
+    static const QSet<PhosphorRules::Field> unseeded = {
+        PhosphorRules::Field::TiledWindowCount,
+        PhosphorRules::Field::ActiveLayout,
+    };
+    return activeLayoutsSeeded ? seeded : unseeded;
 }
 
 /// Drop the rules referencing a never-stamped field from an exclusion
 /// slice before it reaches an effect-bound rule set (see
 /// effectNeverStampedFields for why).
-QList<PhosphorRules::Rule> withoutNeverStampedRules(QList<PhosphorRules::Rule> rules)
+QList<PhosphorRules::Rule> withoutNeverStampedRules(QList<PhosphorRules::Rule> rules, bool activeLayoutsSeeded)
 {
-    rules.removeIf([](const PhosphorRules::Rule& rule) {
-        return rule.match.referencesAnyField(effectNeverStampedFields());
+    const QSet<PhosphorRules::Field>& fields = effectNeverStampedFields(activeLayoutsSeeded);
+    rules.removeIf([&fields](const PhosphorRules::Rule& rule) {
+        return rule.match.referencesAnyField(fields);
     });
     return rules;
 }
@@ -501,6 +517,10 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
             }
         }
 
+        // Sampled once for the whole admission pass so every slice below
+        // agrees on the same polarity story (see effectNeverStampedFields).
+        const bool layoutsSeeded = m_tilingHandler->activeLayoutsSeeded();
+
         QList<PhosphorRules::Rule> animationRules;
         for (const PhosphorRules::Rule& rule : setOpt->rules()) {
             if (!rule.enabled) {
@@ -510,7 +530,7 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
                 // rule-set size minimal and the priority-order index smaller.)
                 continue;
             }
-            if (rule.match.referencesAnyField(effectNeverStampedFields())) {
+            if (rule.match.referencesAnyField(effectNeverStampedFields(layoutsSeeded))) {
                 // No effect resolver can stamp the referenced field — admit
                 // neither polarity (see effectNeverStampedFields).
                 continue;
@@ -560,16 +580,16 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
         // are therefore covered by the revision bump alone; PLACEMENT
         // changes are not, which is why rule_invalidation.cpp clears that
         // cache explicitly.
-        m_snappingExclusionRuleSet.setRules(
-            withoutNeverStampedRules(PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*setOpt).rules()));
+        m_snappingExclusionRuleSet.setRules(withoutNeverStampedRules(
+            PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*setOpt).rules(), layoutsSeeded));
 
         // Same refresh for the decoration-exclusion rule set (Exclude ∪
         // ExcludeDecorations), which shouldDecorateWindow gates on. Must land
         // BEFORE the updateAllDecorations() sweep below so an added or
         // removed exclusion applies to every window on this very edit, not on
         // the next incidental sweep.
-        m_decorationExclusionRuleSet.setRules(
-            withoutNeverStampedRules(PhosphorRules::ExclusionRules::excludeDecorationsRulesFrom(*setOpt).rules()));
+        m_decorationExclusionRuleSet.setRules(withoutNeverStampedRules(
+            PhosphorRules::ExclusionRules::excludeDecorationsRulesFrom(*setOpt).rules(), layoutsSeeded));
 
         // Recompute the geometry-scoped-rules gate for the frame-geometry
         // flush (see the member doc). Walked over the full parsed set, once
@@ -599,8 +619,8 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
         // for `ExcludeAnimations`-action rules. The two slices stay
         // independent so a user can have a window excluded from animations
         // but NOT from snap (or vice versa).
-        m_animationExclusionRuleSet.setRules(
-            withoutNeverStampedRules(PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom(*setOpt).rules()));
+        m_animationExclusionRuleSet.setRules(withoutNeverStampedRules(
+            PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom(*setOpt).rules(), layoutsSeeded));
         // Force a full repaint on EITHER bookend so a user-authored rule
         // applies to static (un-damaged) windows immediately AND so a
         // removed rule reverts previously-dimmed windows immediately, not

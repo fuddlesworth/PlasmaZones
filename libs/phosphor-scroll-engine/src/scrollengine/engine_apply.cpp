@@ -132,12 +132,16 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // the accessors' screenId wrappers would otherwise re-fetch it per call
     // on this per-relayout path.
     const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    params.defaultWindowHeight = effectiveDefaultWindowHeight(overrides, params.workArea);
+    // Each template preset VOCABULARY is likewise parsed once and threaded
+    // through: the two default resolvers below resolve a Preset kind against
+    // the same list the params already carry, so the plain map-taking
+    // overloads would validate the override list a second time per relayout.
     params.presetColumnWidths = effectivePresetColumnWidths(overrides);
     params.presetWindowHeights = effectivePresetWindowHeights(overrides);
+    params.defaultWindowHeight = effectiveDefaultWindowHeight(overrides, params.workArea, params.presetWindowHeights);
     params.centerFocusedColumn = effectiveCenterFocusedColumn(overrides);
     params.alwaysCenterSingleColumn = m_alwaysCenterSingleColumn;
-    params.defaultColumnWidth = effectiveDefaultColumnWidth(overrides);
+    params.defaultColumnWidth = effectiveDefaultColumnWidth(overrides, params.presetColumnWidths);
     params.tabIndicator = effectiveTabIndicator(overrides);
     return params;
 }

@@ -6,7 +6,7 @@
         { "width": 0.5, "display": 1 },
         { "width": 0.5, "display": 1 }
     ],
-    "defaultColumnWidth": { "kind": 0, "value": 0.5, "presetIndex": 1 },
+    "defaultColumnWidth": { "kind": 3, "value": 0.5, "presetIndex": 1 },
     "defaultColumnDisplay": 1,
     "presetColumnWidths": [0.33333, 0.5, 0.66667],
     "presetWindowHeights": [0.33333, 0.5, 0.66667]

@@ -48,6 +48,7 @@ private Q_SLOTS:
         QVERIFY(reg.isRegistered(QString(ActionType::SetEngineMode)));
         QVERIFY(reg.isRegistered(QString(ActionType::SetSnappingLayout)));
         QVERIFY(reg.isRegistered(QString(ActionType::SetTilingAlgorithm)));
+        QVERIFY(reg.isRegistered(QString(ActionType::SetScrollingTemplate)));
         QVERIFY(reg.isRegistered(QString(ActionType::DisableEngine)));
         QVERIFY(reg.isRegistered(QString(ActionType::Exclude)));
         QVERIFY(reg.isRegistered(QString(ActionType::ExcludePlacement)));

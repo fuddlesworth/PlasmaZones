@@ -293,13 +293,16 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     if (!activities.isEmpty()) {
         query.activity = activities.first();
     }
+    // activeLayout is left at the empty string HERE and re-stamped by the
+    // caller: ruleQuery (window_filtering.cpp) resolves it from the daemon's
+    // per-screen map, which this window-only builder has no handle on. It is
+    // not an inert default — the field is a plain QString, so an empty value
+    // still resolves ENGAGED and a negated leaf would match every window —
+    // which is why the map's bring-up window is covered by holding
+    // ActiveLayout rules out of the evaluator entirely (see
+    // TilingHandler::activeLayoutsSeeded).
+    //
     // DELIBERATELY NOT STAMPED effect-side:
-    //  - activeLayout: a context-resolution field, stamped only by the
-    //    daemon's LayoutRegistry context resolvers. Effect-side it stays the
-    //    empty string, so an `ActiveLayout Equals X` leaf never matches here
-    //    (fine) and a NEGATED ActiveLayout leaf matches every window (the
-    //    dangerous direction — it silently widens an exclusion or appearance
-    //    rule). Author ActiveLayout predicates on context rules only.
     //  - tiledWindowCount: optional and left disengaged, so a positive count
     //    leaf is inert here by design; the context resolvers exclude negated
     //    references structurally for the same absence-polarity reason.

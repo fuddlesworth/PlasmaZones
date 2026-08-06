@@ -22,6 +22,12 @@ constexpr qreal kMinFraction = 0.05;
 // treatment of editor float dust (thirds arrive as 0.333333/0.333334).
 constexpr qreal kEps = 0.01;
 
+// Blueprint cap, mirroring the scroll engine's kMaxTemplateEntries
+// (engine_core.cpp): the engine truncates the pushed blueprint at 16
+// entries anyway, so a hand-written or bus-supplied file with thousands of
+// columns would only burn memory on entries nothing can ever seed from.
+constexpr int kMaxColumns = 16;
+
 QJsonArray fractionsToJson(const QList<qreal>& values)
 {
     QJsonArray out;
@@ -70,8 +76,11 @@ QList<qreal> normalizeFractionList(QList<qreal> values)
 bool ScrollingTemplate::normalize()
 {
     QList<ScrollingTemplateColumn> keptColumns;
-    keptColumns.reserve(columns.size());
+    keptColumns.reserve(qMin(int(columns.size()), kMaxColumns));
     for (ScrollingTemplateColumn column : columns) {
+        if (keptColumns.size() == kMaxColumns) {
+            break;
+        }
         if (!qIsFinite(column.width) || column.width < kMinFraction) {
             continue;
         }
@@ -86,9 +95,6 @@ bool ScrollingTemplate::normalize()
     if (defaultColumnWidthKind < 0 || defaultColumnWidthKind > 3) {
         defaultColumnWidthKind = 3;
     }
-    if (!qIsFinite(defaultColumnWidthValue) || defaultColumnWidthValue < 0.0) {
-        defaultColumnWidthValue = 0.5;
-    }
     if (defaultColumnWidthPresetIndex < 0) {
         defaultColumnWidthPresetIndex = 0;
     }
@@ -100,6 +106,24 @@ bool ScrollingTemplate::normalize()
     presetWindowHeights = normalizeFractionList(presetWindowHeights);
     if (defaultColumnWidthPresetIndex >= presetColumnWidths.size() && !presetColumnWidths.isEmpty()) {
         defaultColumnWidthPresetIndex = presetColumnWidths.size() - 1;
+    }
+    // Kind Preset with no preset list points at nothing, and the daemon pushes
+    // the width trio as a unit — the engine would read a preset index against
+    // an empty vocabulary. This is the defaults shape (kind 3, no presets), so
+    // demote to Proportion and let defaultColumnWidthValue answer instead.
+    if (defaultColumnWidthKind == 3 && presetColumnWidths.isEmpty()) {
+        defaultColumnWidthKind = 0;
+        defaultColumnWidthPresetIndex = 0;
+    }
+
+    if (!qIsFinite(defaultColumnWidthValue) || defaultColumnWidthValue < 0.0) {
+        defaultColumnWidthValue = 0.5;
+    }
+    // Kind-aware bound: a Proportion is a work-area fraction and obeys the same
+    // floor/ceiling as every other fraction here. Fixed is a pixel count with
+    // no meaningful upper bound, so it keeps the lower-bound repair only.
+    if (defaultColumnWidthKind == 0) {
+        defaultColumnWidthValue = qBound(kMinFraction, defaultColumnWidthValue, 1.0);
     }
     return isValid();
 }

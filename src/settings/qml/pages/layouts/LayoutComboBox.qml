@@ -15,7 +15,7 @@ import org.plasmazones.common as PZCommon
  * This component eliminates duplication of the layout model building logic
  * across MonitorAssignments, ActivityAssignments, and QuickLayoutSlots.
  *
- * Category: 0 = Manual
+ * Category: 0 = Manual, 1 = Autotile, 2 = Scrolling template
  *
  * The "Default" option resolves to the actual default layout for preview.
  */
@@ -35,14 +35,17 @@ ComboBox {
     property bool showPreview: false
     // Whether to show the "Default"/"None" entry at the top of the list
     property bool showNoneOption: true
-    // Filter layouts by category: -1 = show all, 0 = manual/zone only, 1 = autotile only
+    // Filter layouts by category: -1 = show all, 0 = manual/zone only,
+    // 1 = autotile only, 2 = scrolling templates only
     property int layoutFilter: -1
     // The layout ID that "Default" actually resolves to at runtime.
     // Set by parent based on context:
     // - Monitor dropdown: appSettings.defaultLayoutId (global default)
     // - Per-desktop dropdown: monitor's layout (or global if none)
     // - Activity dropdown: monitor's layout (or global if none)
-    // When layoutFilter === 1 (autotile only), falls back to the global default algorithm.
+    // When layoutFilter === 1 (autotile only), falls back to the global default
+    // algorithm; when it is 2 (scrolling templates only), to the global default
+    // scrolling template.
     property string resolvedDefaultId: {
         if (!appSettings)
             return "";
@@ -138,8 +141,10 @@ ComboBox {
                     "isDefaultOption": false
                 });
             }
-            // Sort: manual (category 0) before dynamic (category 1),
-            // alphabetical within each group.
+            // Sort by category ascending — manual (0), then dynamic (1), then
+            // scrolling templates (2) — and alphabetically within each group.
+            // A filtered combo holds one category, so the category term only
+            // matters on the unfiltered (-1) view.
             layoutItems.sort(function (a, b) {
                 if (a.category !== b.category)
                     return a.category - b.category;

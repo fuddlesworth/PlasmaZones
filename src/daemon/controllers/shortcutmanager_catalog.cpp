@@ -142,19 +142,15 @@ CatalogMeta catalogMetaForId(const QString& id)
         // Templates); the rows hide only on a LayoutSupport::None engine.
         add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Switches this screen to the previous layout in the list."),
-            QT_TRANSLATE_NOOP("plasmazones",
-                              "Switches this screen's column template to the previous layout. The "
-                              "template's zone widths become the preset widths columns cycle through."));
+            QT_TRANSLATE_NOOP("plasmazones", "Switches this screen to the previous column template."));
         add(kIdNextLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Switches this screen to the next layout in the list."),
-            QT_TRANSLATE_NOOP("plasmazones",
-                              "Switches this screen's column template to the next layout. The "
-                              "template's zone widths become the preset widths columns cycle through."));
+            QT_TRANSLATE_NOOP("plasmazones", "Switches this screen to the next column template."));
         add(kIdLayoutPicker, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Opens a picker to choose this screen's layout."),
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Opens a picker to choose this screen's column template. The template's "
-                              "zone widths become the preset widths columns cycle through."));
+                              "Opens a picker to choose this screen's column template. Its column widths "
+                              "become the widths columns cycle through."));
         add(kIdToggleLayoutLock, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Locks this screen's layout so nothing switches it until unlocked."),
             QT_TRANSLATE_NOOP("plasmazones",

@@ -16,6 +16,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 namespace PlasmaZones {
 
@@ -119,8 +120,27 @@ void UnifiedLayoutController::setAutotileLayoutSource(PhosphorLayout::ILayoutSou
     m_cacheValid = false;
 }
 
+void UnifiedLayoutController::ensureTemplateStoreSubscription() const
+{
+    PhosphorZones::ScrollingTemplateStore* store =
+        m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr;
+    if (!store || store == m_subscribedTemplateStore) {
+        return;
+    }
+    QObject::disconnect(m_templateStoreConnection);
+    m_subscribedTemplateStore = store;
+    m_templateStoreConnection =
+        connect(store, &PhosphorZones::ScrollingTemplateStore::templatesChanged, this, [this]() {
+            m_cacheValid = false;
+        });
+}
+
 QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
 {
+    // Template cards come from the registry's store, which has its own
+    // change signal — without this the cached list keeps a deleted or
+    // renamed template until some other invalidator happened to fire.
+    ensureTemplateStoreSubscription();
     if (!m_cacheValid) {
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
         // and mode-based filtering (manual-only vs autotile-only).
@@ -187,7 +207,8 @@ void UnifiedLayoutController::cycle(bool forward)
     const auto list = layouts();
     if (list.isEmpty()) {
         qCWarning(lcDaemon) << "cycle: layout list is empty (manual=" << m_includeManualLayouts
-                            << "autotile=" << m_includeAutotileLayouts << ")";
+                            << "autotile=" << m_includeAutotileLayouts << "templates=" << m_includeScrollingTemplates
+                            << ")";
         return;
     }
 
@@ -315,7 +336,8 @@ void UnifiedLayoutController::setCurrentActivity(const QString& activity)
 
 void UnifiedLayoutController::setLayoutFilter(bool includeManual, bool includeAutotile, bool includeScrollingTemplates)
 {
-    if (m_includeManualLayouts == includeManual && m_includeAutotileLayouts == includeAutotile) {
+    if (m_includeManualLayouts == includeManual && m_includeAutotileLayouts == includeAutotile
+        && m_includeScrollingTemplates == includeScrollingTemplates) {
         return;
     }
     m_includeManualLayouts = includeManual;

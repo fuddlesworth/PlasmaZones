@@ -35,16 +35,19 @@ class TestScrollingTemplateStore : public QObject
 private Q_SLOTS:
     void initTestCase()
     {
-        // Redirect every QStandardPaths location into the test sandbox so
-        // the store's user-directory writes never touch a real profile.
+        // Redirect every QStandardPaths location into Qt's OWN test sandbox
+        // ($HOME/.qttest/...), so the store's user-directory writes never
+        // touch a real profile. This is Qt's sandbox, not the ctest harness's
+        // XDG one: it moves the writable locations only, and it does so
+        // regardless of how XDG_* is set in the environment.
         QStandardPaths::setTestModeEnabled(true);
     }
 
     void init()
     {
         // Fresh user template directory per test: test mode pins the
-        // writable GenericDataLocation, so wiping the subdirectory is
-        // enough for isolation.
+        // writable GenericDataLocation under $HOME/.qttest, so wiping the
+        // subdirectory is enough for isolation.
         QDir(userTemplateDir()).removeRecursively();
     }
 
@@ -64,9 +67,14 @@ private Q_SLOTS:
             {0.4, 9}, // bad display: reset to 0
         };
         templ.presetColumnWidths = {0.9, 0.5, 0.501, 0.01, 2.0};
+        // Unsorted, a near-duplicate inside the dedupe epsilon, one below the
+        // floor and one above the ceiling — the height list obeys the same
+        // normalization as the width list.
+        templ.presetWindowHeights = {0.8, 0.2, 0.805, 0.02, 1.4};
         templ.defaultColumnWidthKind = 42;
         templ.defaultColumnDisplay = -1;
         templ.defaultColumnWidthPresetIndex = 99;
+        templ.defaultColumnWidthValue = -3.0;
         QVERIFY(templ.normalize());
 
         QCOMPARE(templ.columns.size(), 2);
@@ -77,9 +85,35 @@ private Q_SLOTS:
         // Sorted ascending, 0.501 deduped into 0.5, 0.01 dropped, 2.0
         // clamped to 1.0.
         QCOMPARE(templ.presetColumnWidths, (QList<qreal>{0.5, 0.9, 1.0}));
+        // Same treatment on the height list: 0.02 dropped, 1.4 clamped to
+        // 1.0, 0.805 deduped into 0.8, the rest sorted ascending.
+        QCOMPARE(templ.presetWindowHeights, (QList<qreal>{0.2, 0.8, 1.0}));
         QCOMPARE(templ.defaultColumnWidthKind, 3);
         QCOMPARE(templ.defaultColumnDisplay, 0);
         QCOMPARE(templ.defaultColumnWidthPresetIndex, templ.presetColumnWidths.size() - 1);
+        // A negative default width is not a value any kind can mean, so it is
+        // repaired to 0.5 rather than clamped. The Proportion-only bound that
+        // follows the repair does not apply here, because the kind landed on
+        // Preset (3) with a non-empty preset list.
+        QCOMPARE(templ.defaultColumnWidthValue, 0.5);
+    }
+
+    void normalizeDemotesPresetKindWithoutVocabulary()
+    {
+        // The bare-defaults shape: kind Preset with no preset list. The trio
+        // the daemon pushes must stay self-consistent, so normalize() demotes
+        // to Proportion, zeroes the index, and the Proportion clamp then
+        // bounds the value.
+        ScrollingTemplate templ = makeTemplate();
+        templ.presetColumnWidths.clear();
+        templ.defaultColumnWidthKind = 3;
+        templ.defaultColumnWidthPresetIndex = 1;
+        templ.defaultColumnWidthValue = 5.0; // out of range for Proportion
+        QVERIFY(templ.normalize());
+
+        QCOMPARE(templ.defaultColumnWidthKind, 0);
+        QCOMPARE(templ.defaultColumnWidthPresetIndex, 0);
+        QCOMPARE(templ.defaultColumnWidthValue, 1.0);
     }
 
     void malformedJsonYieldsInvalid()
@@ -143,10 +177,19 @@ private Q_SLOTS:
         systemFile.write(QJsonDocument(bundled.toJson()).toJson());
         systemFile.close();
 
+        // Restore by UNSETTING when the variable was not set to begin with:
+        // qputenv with the empty byte array leaves an empty XDG_DATA_DIRS
+        // behind, which is a different state from absent (an absent one falls
+        // back to the spec's /usr/local/share:/usr/share).
+        const bool hadDataDirs = qEnvironmentVariableIsSet("XDG_DATA_DIRS");
         const QByteArray oldDataDirs = qgetenv("XDG_DATA_DIRS");
         qputenv("XDG_DATA_DIRS", systemRoot.path().toUtf8());
         const auto restoreEnv = qScopeGuard([&]() {
-            qputenv("XDG_DATA_DIRS", oldDataDirs);
+            if (hadDataDirs) {
+                qputenv("XDG_DATA_DIRS", oldDataDirs);
+            } else {
+                qunsetenv("XDG_DATA_DIRS");
+            }
         });
 
         ScrollingTemplateStore store;

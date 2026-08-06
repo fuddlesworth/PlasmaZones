@@ -717,7 +717,7 @@ RowLayout {
 
             // Picker over `appSettings.activeLayoutMatchOptions` (snapping
             // layouts, autotile entries, and one derived "scrolling:<uuid>"
-            // template entry per manual layout); the wire value stays the id
+            // entry per native template row); the wire value stays the id
             // the daemon's context resolvers stamp for the screen (snap UUID,
             // "autotile:<algo>", bare "scrolling:", or the prefixed template
             // form). Mirrors the activity picker.

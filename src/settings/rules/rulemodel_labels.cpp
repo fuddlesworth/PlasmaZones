@@ -105,13 +105,14 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
             label = PhosphorI18n::tr("Scrolling", "tiling mode name");
         } else if (PhosphorLayout::LayoutId::isScrollingFamily(value)) {
             // The prefixed "scrolling:<uuid>" template stamp: resolve the
-            // template layout's name through the same manual-layout lookup
-            // (templates ARE manual layouts). Raw-id fallback mirrors the
-            // deleted-layout behavior below.
+            // template's name through the shared layouts model, which carries
+            // native template rows keyed by their raw UUID. Raw-id fallback
+            // mirrors the deleted-layout behavior below.
             if (layoutLookup) {
-                const QString resolved = layoutLookup(PhosphorLayout::LayoutId::extractTemplateId(value));
-                if (!resolved.isEmpty() && resolved != PhosphorLayout::LayoutId::extractTemplateId(value)) {
-                    label = PhosphorI18n::tr("Template: %1").arg(resolved);
+                const QString templateId = PhosphorLayout::LayoutId::extractTemplateId(value);
+                const QString resolved = layoutLookup(templateId);
+                if (!resolved.isEmpty() && resolved != templateId) {
+                    label = RuleAuthoring::templateDisplayLabel(resolved);
                 }
             }
         } else if (PhosphorLayout::LayoutId::isAutotile(value)) {
@@ -237,10 +238,12 @@ bool isUnresolvedEnumToken(const QString& token, const QString& label)
 
 /// Human label for one action ("Snapping", "Float", "Excluded"). @p
 /// snappingLayoutLookup resolves SetSnappingLayout's AND
-/// SetScrollingTemplate's layoutId UUIDs (templates are ordinary manual
-/// layouts); @p tilingAlgorithmLookup resolves SetTilingAlgorithm's wire
-/// tokens ("bsp", …) — split so a stray cross-resolve can't surface an
-/// algorithm name in a layout action's label or vice versa.
+/// SetScrollingTemplate's layoutId UUIDs — it goes through the shared layouts
+/// model, which carries native template rows keyed by their raw UUID
+/// alongside the manual layouts; @p tilingAlgorithmLookup resolves
+/// SetTilingAlgorithm's wire tokens ("bsp", …) — split so a stray
+/// cross-resolve can't surface an algorithm name in a layout action's label or
+/// vice versa.
 QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snappingLayoutLookup,
                     const RuleModel::LabelLookup& tilingAlgorithmLookup,
                     const RuleModel::LabelLookup& shaderEffectLookup, const RuleModel::LabelLookup& overlayShaderLookup,
@@ -266,8 +269,9 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                                   : PhosphorI18n::tr("Snapping: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
     if (action.type == ActionType::SetScrollingTemplate) {
-        // Same UUID value shape as SetSnappingLayout, so the same lookup
-        // resolves the layout name.
+        // Same raw-UUID value shape as SetSnappingLayout, and the shared
+        // layouts model behind the lookup carries the native template rows
+        // under that same id, so one lookup resolves both.
         const QString layoutId = action.params.value(PhosphorRules::ActionParam::LayoutId).toString();
         return layoutId.isEmpty()
             ? PhosphorI18n::tr("Scrolling template")

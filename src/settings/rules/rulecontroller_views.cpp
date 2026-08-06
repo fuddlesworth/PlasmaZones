@@ -315,8 +315,9 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
                 layoutLabel = summary.tilingAlgorithm;
                 labelLookup = &m_tilingAlgorithmLookup;
             } else if (mode == PhosphorZones::AssignmentEntry::Scrolling) {
-                // Templates are ordinary manual layouts, so the snapping
-                // lookup resolves the UUID to its display name.
+                // The snapping lookup reads the shared layouts model, which
+                // carries the native template rows keyed by their raw UUID, so
+                // it resolves a template id to its display name too.
                 layoutLabel = summary.scrollingTemplate;
                 labelLookup = &m_snappingLayoutLookup;
             }

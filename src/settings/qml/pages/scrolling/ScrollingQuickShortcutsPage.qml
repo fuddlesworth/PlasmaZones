@@ -6,6 +6,13 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
+/**
+ * @brief Scrolling → Quick Shortcuts: the nine Meta+Alt+digit slots as they
+ * apply to scrolling monitors, each holding a scrolling template.
+ *
+ * The rows themselves are the shared QuickLayoutSlotsCard in its scrolling
+ * view mode, so the snapping and tiling pages stay row-for-row identical.
+ */
 SettingsFlickable {
     id: root
 
@@ -24,6 +31,7 @@ SettingsFlickable {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
             text: i18n("Assign scrolling templates to keyboard shortcuts for quick switching.")
+            // Kirigami.InlineMessage defaults to visible: false.
             visible: true
         }
 

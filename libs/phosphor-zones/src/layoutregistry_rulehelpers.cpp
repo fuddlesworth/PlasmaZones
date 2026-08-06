@@ -120,7 +120,7 @@ bool isPureAssignmentRule(const PWR::Rule& rule)
     // now uses hasAnyAssignmentSlotAction, because the rebuild paths carry
     // non-assignment actions across (carryOverNonAssignmentActions) and so no
     // longer strip a mixed rule. The remaining users are the ones that need
-    // "pure" specifically: purgeSnappingLayoutFromAssignments' Shape-1 gate,
+    // "pure" specifically: purgeLayoutIdFromAssignments' Shape-1 gate,
     // and the two batch family DROPS, which spare a mixed rule so the rebuild
     // can merge onto it rather than shadow it.
     if (rule.actions.isEmpty()) {

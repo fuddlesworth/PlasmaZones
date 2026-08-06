@@ -244,7 +244,8 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  *   - `SetTilingAlgorithm` — only when @p tilingAlgorithm is non-empty (the
  *     descriptor rejects an empty `algorithm`).
  *   - `SetScrollingTemplate` — only when @p scrollingTemplate is non-empty
- *     (same `layoutId` shape as `SetSnappingLayout`).
+ *     (same `layoutId` wire KEY as `SetSnappingLayout`, but a native
+ *     scrolling-template uuid — the two id namespaces are disjoint).
  *
  * A mode-only entry (both layout fields empty — the KCM "autotile, default
  * algorithm" shape) yields a single `SetEngineMode` action; the mode token

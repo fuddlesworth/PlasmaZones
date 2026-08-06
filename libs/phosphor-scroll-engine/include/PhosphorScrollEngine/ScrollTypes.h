@@ -125,6 +125,14 @@ inline QString presetWindowHeights()
 /// blueprint takes the next entry's width and display (per-window open
 /// rules still outrank it). Never resizes existing columns. Only the
 /// daemon writes it.
+///
+/// An entry may carry either key alone: a missing width or display falls
+/// through to the effective default rather than reading as zero. That makes
+/// the precedence asymmetric on purpose. Within the blueprint, an entry that
+/// DOES carry a display outranks a screen-wide SetScrollDefaultColumnDisplay
+/// rule; past the blueprint (and for entries that omit the key) the rule
+/// decides. A per-column blueprint entry is the more specific statement, so
+/// it wins where it speaks and stays silent where it does not.
 inline QString templateColumns()
 {
     return QStringLiteral("TemplateColumns");
@@ -360,8 +368,10 @@ enum class DefaultWidthKind : int {
     Proportion = 0,
     Fixed = 1,
     ClientDecides = 2,
-    /// New columns open at a preset-list index (ColumnWidth::makePreset), so
-    /// they reflow with preset-list changes. Appended as 3 — 2 is taken by
+    /// New columns open on a preset VALUE anchor (ColumnWidth::makePreset
+    /// takes a fraction), so they reflow with preset-list changes by snapping
+    /// to the nearest entry. The config spin stays index-based; the engine
+    /// resolves it to the anchor at read time. Appended as 3 — 2 is taken by
     /// ClientDecides and stored configs rely on it.
     Preset = 3,
 };
@@ -522,10 +532,18 @@ struct WindowHeight
 
 /// Shared nearest-entry resolution for the fraction anchors above — the ONE
 /// implementation behind preset resolution, cycling, and height-fraction
-/// probes (it replaced three per-site variants). Empty list returns
-/// @p fallback, matching the old presetAt clamp's 0.5 answer.
+/// probes (it replaced three per-site variants).
+///
+/// An EMPTY list answers -1, not 0: every other answer is a valid index into
+/// @p presets, and handing back an out-of-range 0 made the empty case look
+/// like a hit that a caller would then use to subscript. Every in-tree caller
+/// bails on an empty list before reaching here, so the guard is the belt for
+/// the one that does not.
 inline int nearestPresetIndex(const QList<qreal>& presets, qreal fraction)
 {
+    if (presets.isEmpty()) {
+        return -1;
+    }
     int best = 0;
     for (int i = 1; i < presets.size(); ++i) {
         if (qAbs(presets.at(i) - fraction) < qAbs(presets.at(best) - fraction)) {
@@ -535,6 +553,8 @@ inline int nearestPresetIndex(const QList<qreal>& presets, qreal fraction)
     return best;
 }
 
+/// The nearest entry's VALUE. An empty list returns @p fallback, matching the
+/// old presetAt clamp's 0.5 answer.
 inline qreal nearestPresetValue(const QList<qreal>& presets, qreal fraction, qreal fallback = 0.5)
 {
     return presets.isEmpty() ? fallback : presets.at(nearestPresetIndex(presets, fraction));
@@ -596,7 +616,7 @@ struct ScrollLayoutParams
     QRect workArea;
     int gap = 0;
     /// Preset proportion lists (niri defaults: 1/3, 1/2, 2/3). Never empty —
-    /// resolvers clamp preset indices into range.
+    /// resolvers snap a Preset fraction anchor to the nearest entry.
     /// KEEP IN SYNC with THREE other copies, not one:
     ///   1. ScrollEngine::m_presetColumnWidths / m_presetWindowHeights, the
     ///      member seeds these mirror (ScrollEngine.h);

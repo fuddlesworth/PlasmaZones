@@ -121,6 +121,7 @@ private Q_SLOTS:
     void cleanup()
     {
         m_guards.clear();
+        m_stores.clear();
     }
 };
 

@@ -45,11 +45,11 @@ namespace {
 
 // Map the D-Bus quick-slot mode wire value (0 = Snapping, 1 = Autotile,
 // 2 = Scrolling) to the registry's AssignmentEntry::Mode, or nullopt for
-// anything else. Scrolling deliberately SHARES the Snapping slot array
-// (LayoutRegistry::slotIndexFor is the one authority): its slots hold
-// manual-layout UUIDs, which is the template vocabulary a scrolling screen
-// consumes, so a mode-2 request reads/writes the same bindings the keyboard
-// path already resolves. Out-of-range values are still rejected rather than
+// anything else. Every mode owns a SEPARATE slot array
+// (LayoutRegistry::slotIndexFor is the one authority; Scrolling is index 2):
+// the scrolling slots hold native ScrollingTemplate UUIDs, validated against
+// the template store on write, and applying one swaps the context's template
+// rather than its layout. Out-of-range values are still rejected rather than
 // clamped (input validation at the system boundary).
 std::optional<PhosphorZones::AssignmentEntry::Mode> quickSlotMode(int mode)
 {

@@ -4,6 +4,7 @@
 #include "internal.h"
 #include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
+#include "phosphor_i18n.h"
 #include "phosphor_slot_keys.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
@@ -563,6 +564,15 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     QVariantList layoutsList = buildLayoutsList(resolvedId, autotileCanvas);
     if (layoutsList.isEmpty()) {
         qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
+        // A Templates screen with no templates is a state the user can act on
+        // (the store is empty, or every template was deleted), and it is
+        // reached by an explicit key press, so it earns the same card a
+        // LayoutSupport::None engine gets instead of a silent bail. Other
+        // empty lists keep the silent bail: they are transient startup states
+        // rather than something to tell the user about.
+        if (m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportTemplates) {
+            showDisabledOsd(PhosphorI18n::tr("No column templates available"), resolvedId);
+        }
         return;
     }
 

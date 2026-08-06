@@ -84,8 +84,9 @@ struct PHOSPHORRULES_EXPORT RuleAction
  * input widget without the UI layer hand-maintaining a parallel per-type
  * switch. `kind` is a UI-side hint string (the canonical kinds are
  * `string`, `number`, `percent`, `enum`, `bool`, `color`, plus the
- * picker-aware kinds `snappingLayout`, `tilingAlgorithm`, `animationEvent`,
- * `shaderEffect`, `overlayShader`, `zoneOrdinals`, `curveEditor`, `screenId`,
+ * picker-aware kinds `snappingLayout`, `tilingAlgorithm`, `scrollingTemplate`,
+ * `animationEvent`, `shaderEffect`, `overlayShader`, `zoneOrdinals`,
+ * `curveEditor`, `screenId`,
  * `virtualDesktop`, `decorationChain`); QML loaders dispatch on it. Labels stay in
  * the GPL settings layer because they need translation through PhosphorI18n::tr —
  * the lib only owns the structural part of the schema.
@@ -305,13 +306,13 @@ namespace ActionType {
 inline constexpr QLatin1StringView SetEngineMode{"setEngineMode"};
 inline constexpr QLatin1StringView SetSnappingLayout{"setSnappingLayout"};
 inline constexpr QLatin1StringView SetTilingAlgorithm{"setTilingAlgorithm"};
-/// Scrolling-mode template layout for the matched context: the manual layout
-/// whose zones become the strip's preset column-width vocabulary (and its
-/// height vocabulary, where the layout has stacked zones). Carries a
-/// LayoutId param like SetSnappingLayout (same value shape, so the settings
-/// UI reuses the layout-picker editor), but fills its own cascade slot — the
-/// lossless mode-toggle contract stores it BESIDE the snapping layout in one
-/// rule, and sharing the layout slot would shadow one of the pair.
+/// Scrolling-mode template for the matched context: a NATIVE
+/// ScrollingTemplate id (its own picker kind, `scrollingTemplate`, with its
+/// own name resolution — not a manual layout). It shares the LayoutId wire
+/// KEY with SetSnappingLayout but the two id namespaces are disjoint, and it
+/// fills its own cascade slot — the lossless mode-toggle contract stores it
+/// BESIDE the snapping layout in one rule, and sharing the layout slot would
+/// shadow one of the pair.
 inline constexpr QLatin1StringView SetScrollingTemplate{"setScrollingTemplate"};
 inline constexpr QLatin1StringView DisableEngine{"disableEngine"};
 /// Lock the active layout for the matched screen/desktop/activity context so
@@ -728,7 +729,9 @@ inline constexpr QLatin1StringView Value{"value"};
 // is `PhosphorZones::modeToWireString(Mode)` (snapping / autotile / scrolling).
 inline constexpr QLatin1StringView Mode{"mode"};
 // SetSnappingLayout / SetScrollingTemplate layout-id key — wire is a
-// `{uuid-with-braces}` string.
+// `{uuid-with-braces}` string. The two id namespaces are disjoint:
+// SetSnappingLayout carries a manual-layout uuid, SetScrollingTemplate a
+// native scrolling-template uuid.
 inline constexpr QLatin1StringView LayoutId{"layoutId"};
 // SetTilingAlgorithm algorithm-token key — wire is the algorithm registry id.
 inline constexpr QLatin1StringView Algorithm{"algorithm"};

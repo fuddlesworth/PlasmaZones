@@ -809,7 +809,7 @@ private Q_SLOTS:
         // vocabulary. One of each SHAPE covers it: the stray-key path is the
         // descriptor's, not the validator's, so a bool, a signed-range number,
         // a fraction, a zero-floored number, a token and a colour exercise
-        // every distinct descriptor form the sixteen are built from.
+        // every distinct descriptor form the thirteen are built from.
         rejectsStray(ActionType::SetTabIndicatorEnabled, QJsonValue(true));
         rejectsStray(ActionType::SetTabIndicatorGap, QJsonValue(-4));
         rejectsStray(ActionType::SetTabIndicatorLength, QJsonValue(0.5));

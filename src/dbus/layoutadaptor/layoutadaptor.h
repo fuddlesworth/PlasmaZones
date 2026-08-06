@@ -201,9 +201,9 @@ public Q_SLOTS:
     QVariantMap getAllCombinedAssignments();
 
     // Quick layout slots (1-9), keyed by tiling mode (0 = Snapping,
-    // 1 = Autotile, 2 = Scrolling). Scrolling shares the Snapping slot array
-    // (manual-layout UUIDs are its template vocabulary — see
-    // LayoutRegistry::slotIndexFor); other values are rejected.
+    // 1 = Autotile, 2 = Scrolling). Each mode has its OWN slot array (see
+    // LayoutRegistry::slotIndexFor); Scrolling's array (index 2) holds native
+    // ScrollingTemplate UUIDs, not layout ids. Other mode values are rejected.
     QString getQuickLayoutSlot(int mode, int slotNumber);
     void setQuickLayoutSlot(int mode, int slotNumber, const QString& layoutId);
     void setAllQuickLayoutSlots(int mode, const QVariantMap& slots); // Batch set - saves once
@@ -274,15 +274,18 @@ public Q_SLOTS:
     // Scrolling template ASSIGNMENT (the native ScrollingTemplate whose
     // vocabularies and blueprint the strip consumes). The setter flips the
     // context to Scrolling, refuses ids the store does not know, and accepts
-    // an empty id as "clear the template"; the getter answers empty for
-    // non-Scrolling contexts and for deleted or unset templates.
+    // an empty id as "clear the template". The getter resolves through the
+    // cascade and then through the configured default-template provider, so
+    // it answers empty for non-Scrolling contexts and when neither the
+    // context nor the configured default names a template the store holds.
     void setScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId,
                                     const QString& layoutId);
     QString getScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId);
 
     // Scrolling template STORE CRUD (daemon-first, like the layout verbs:
-    // the settings app never writes template JSON itself). All four emit
-    // scrollingTemplatesChanged through the store's own change signal.
+    // the settings app never writes template JSON itself). The three mutating
+    // verbs (save, delete, duplicate) emit scrollingTemplatesChanged through
+    // the store's own change signal; getScrollingTemplates is a pure read.
     // Impls in assignment.cpp beside the assignment pair above.
     QString getScrollingTemplates();
     QString saveScrollingTemplate(const QString& templateJson);

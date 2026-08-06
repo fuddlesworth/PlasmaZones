@@ -119,7 +119,7 @@ struct PHOSPHORRULES_EXPORT Rule
      * action's @ref ActionDomain against the match expression's domain and
      * surfaces combinations that compile and load but silently never fire.
      *
-     * Produces two codes:
+     * Produces three codes:
      *  - @ref ValidationIssue::Code::ContextActionWithWindowMatch — a
      *    context-domain action paired with a match that references any
      *    window-property field. Detected via

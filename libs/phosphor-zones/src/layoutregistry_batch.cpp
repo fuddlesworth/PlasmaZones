@@ -70,8 +70,8 @@ void LayoutRegistry::clearAutotileAssignments()
     }
 
     // Drop autotile quick-layout slots — clearing autotile everywhere
-    // includes the per-mode autotile bindings. Snapping slots (shared with
-    // Scrolling as the template vocabulary) are untouched.
+    // includes the per-mode autotile bindings. The Snapping and Scrolling
+    // slots are untouched: each mode owns a separate array.
     auto& autotileSlots = m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)];
     if (!autotileSlots.isEmpty()) {
         autotileSlots.clear();
@@ -225,7 +225,7 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         // rebuilt it through makeAssignmentRule — which emits only the
         // assignment slot actions — when it did, silently stripping the user's other
         // actions. Both sibling paths (findExactContextRule's shape fallback
-        // and purgeSnappingLayoutFromAssignments) guard the same way.
+        // and purgeLayoutIdFromAssignments) guard the same way.
         if (hasEngineModeAction(rule) && familyMatches(rule.match) && isPureAssignmentRule(rule)) {
             const ContextDims dims = decodeDims(rule.match);
             droppedContexts.insert(dims);

@@ -113,9 +113,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("snapping-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
-    search->setPageKeywords(QStringLiteral("scrolling-shortcuts"),
-                            {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
-                             PhosphorI18n::tr("template"), PhosphorI18n::tr("key")});
     search->setPageKeywords(QStringLiteral("snapping-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect"), PhosphorI18n::tr("glow")});
 
@@ -151,7 +148,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
     search->setPageKeywords(QStringLiteral("tiling-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
-                             PhosphorI18n::tr("key")});
+                             PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
+    search->setPageKeywords(QStringLiteral("scrolling-shortcuts"),
+                            {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
+                             PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key"), PhosphorI18n::tr("template")});
 
     // Animations
     search->setPageKeywords(QStringLiteral("animations-general"),

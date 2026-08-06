@@ -95,7 +95,7 @@ ColumnLayout {
             }
             return rawStr;
         }
-        if (kind === "snappingLayout" || kind === "tilingAlgorithm") {
+        if (kind === "snappingLayout" || kind === "tilingAlgorithm" || kind === "scrollingTemplate") {
             // Layouts are serialised via `toVariantMap(LayoutPreview)` which
             // stamps the friendly title under `displayName`. The previous
             // `.name` read returned undefined, leaving the read-only rule
@@ -105,8 +105,10 @@ ColumnLayout {
             // layout, etc.) so the user can SEE what the rule contains
             // rather than an empty pill.
             var layouts = root.appSettings && root.appSettings.layouts ? root.appSettings.layouts : [];
-            // Snapping layouts are stored by UUID, which keys the layouts list
-            // directly. Tiling-algorithm actions store the BARE registry token
+            // Snapping layouts and scrolling templates are stored by raw
+            // braced UUID, which keys the layouts list directly (template
+            // rows ride the same list flagged isScrollingTemplate).
+            // Tiling-algorithm actions store the BARE registry token
             // ("bsp"), while the layouts list keys autotile entries as
             // "autotile:<token>" — so prefix before matching, mirroring the C++
             // summary resolver (SettingsController::resolveTilingAlgorithmLookup)

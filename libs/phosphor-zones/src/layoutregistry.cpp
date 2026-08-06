@@ -335,10 +335,12 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
         }
         const ScrollingTemplate current = scrollingTemplateForContext(resolvedScreenId, desktop, m_currentActivity);
         int currentIdx = -1;
-        for (int i = 0; i < templates.size(); ++i) {
-            if (current.isValid() && templates.at(i).id == current.id) {
-                currentIdx = i;
-                break;
+        if (current.isValid()) {
+            for (int i = 0; i < templates.size(); ++i) {
+                if (templates.at(i).id == current.id) {
+                    currentIdx = i;
+                    break;
+                }
             }
         }
         const int newIdx = currentIdx < 0 ? (direction > 0 ? 0 : templates.size() - 1)
@@ -405,10 +407,11 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // shared with applyQuickLayout. Cycling with an empty screenId
     // (uncommon but not invalid — happens when no focused screen is
     // known) just updates the global active layout.
-    // Report what was actually COMMITTED: applyLayoutToScreen routes a
-    // Scrolling-mode screen to a template assignment (and can still refuse a
-    // null layout there); returning newLayout on a refusal would claim a
-    // switch that never happened.
+    // Report what was actually COMMITTED: applyLayoutToScreen refuses a
+    // Scrolling-mode screen outright, and returning newLayout on a refusal
+    // would claim a switch that never happened. (The scrolling branch above
+    // returns before this point on the normal path; the refusal still covers
+    // a screen whose mode changed mid-call.)
     if (!applyLayoutToScreen(resolvedScreenId, newLayout)) {
         return nullptr;
     }
@@ -602,28 +605,12 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
         // rule is NOT blanket-deleted: an Autotile-mode context rule can carry
         // a stale SetSnappingLayout (the mode-toggle losslessness invariant),
         // so dropping the whole rule would lose its SetEngineMode +
-        // SetTilingAlgorithm autotile intent. purgeSnappingLayoutFromAssignments
+        // SetTilingAlgorithm autotile intent. purgeLayoutIdFromAssignments
         // rebuilds each affected rule with only the referencing layout slots
-        // cleared, dropping a rule only when nothing meaningful remains.
-        purgeSnappingLayoutFromAssignments(layoutIdStr);
-
-        // A deleted manual layout's UUID only ever lives in the Snapping
-        // slots, but prune both modes defensively so a stale binding can
-        // never resurrect a deleted layout.
-        bool shortcutRemoved = false;
-        for (auto& slots : m_quickLayoutSlots) {
-            for (auto it = slots.begin(); it != slots.end();) {
-                if (it.value() == layoutIdStr) {
-                    it = slots.erase(it);
-                    shortcutRemoved = true;
-                } else {
-                    ++it;
-                }
-            }
-        }
-        if (shortcutRemoved) {
-            writeQuickLayouts();
-        }
+        // cleared, dropping a rule only when nothing meaningful remains. It
+        // also sweeps the quick-slot arrays for the same id, so a stale
+        // binding can never resurrect the deleted layout on a shortcut press.
+        purgeLayoutIdFromAssignments(layoutIdStr);
 
         if (wasActive) {
             setActiveLayout(defaultLayout());
@@ -757,9 +744,11 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
         qCInfo(lcZonesLib) << "Cleared quick layout slot" << number << "mode=" << mode;
     } else if (mode == AssignmentEntry::Scrolling) {
         // Scrolling slots hold native TEMPLATE ids, validated against the
-        // template store (parity with the layoutById check below). Without
-        // a wired store the id is stored as-is; applyQuickLayout's
-        // existence check refuses at press time.
+        // template store (parity with the layoutById check below). Without a
+        // wired store the id is neither validated nor refused (a test-only
+        // configuration): it is stored as-is here, and
+        // applyScrollingTemplateToScreen likewise accepts it at press time,
+        // since its existence check is store-gated too.
         const QUuid parsed = QUuid::fromString(layoutId);
         if (parsed.isNull()) {
             qCWarning(lcZonesLib) << "Rejecting malformed template id for quick slot:" << layoutId;

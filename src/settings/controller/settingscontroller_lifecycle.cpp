@@ -367,16 +367,21 @@ void SettingsController::defaults()
     // m_settings.reset() above did not touch them and clearAll() only dropped
     // whatever was staged. Stage the clears the same way per-page Reset does —
     // through the same helper — so "Restore Defaults" actually unassigns the
-    // slots instead of leaving the user's assignments behind on two pages.
-    // The clears flush on the next Save, which is what leaves those two pages
-    // legitimately dirty below.
+    // slots instead of leaving the user's assignments behind on the three
+    // Quick Shortcuts pages. The clears flush on the next Save, which is what
+    // leaves those pages legitimately dirty below.
+    //
+    // The loop runs over WIRE MODES, matching AssignmentEntry::Mode
+    // (0 = snapping, 1 = tiling, 2 = scrolling) — the same enumeration
+    // stageQuickSlotClears and flushQuickSlotsToDaemon key on.
     bool quickSlotsStaged = false;
-    for (const bool snappingMode : {true, false}) {
+    for (const int wireMode : {0, 1, 2}) {
         bool staged = false;
-        if (!stageQuickSlotClears(snappingMode, staged)) {
-            Q_EMIT pageResetFailed(snappingMode ? QStringLiteral("snapping-shortcuts")
-                                                : QStringLiteral("tiling-shortcuts"),
-                                   QString(ReasonDaemonUnreachable));
+        if (!stageQuickSlotClears(wireMode, staged)) {
+            const QString page = wireMode == 0 ? QStringLiteral("snapping-shortcuts")
+                : wireMode == 2                ? QStringLiteral("scrolling-shortcuts")
+                                               : QStringLiteral("tiling-shortcuts");
+            Q_EMIT pageResetFailed(page, QString(ReasonDaemonUnreachable));
             continue;
         }
         quickSlotsStaged = quickSlotsStaged || staged;
@@ -424,7 +429,7 @@ void SettingsController::defaults()
     //
     // What IS genuinely unsaved after this is the staged quick-slot clears
     // above: they are daemon-backed and only reach the daemon on the next Save.
-    // Those two pages therefore compute dirty on their own, through the same
+    // Those pages therefore compute dirty on their own, through the same
     // isPageDirty the rest of the app uses — no special-casing needed here, and
     // no exclusion list to keep in step with the page tree either (the old
     // "rules" carve-out existed only because the blanket mark would have badged

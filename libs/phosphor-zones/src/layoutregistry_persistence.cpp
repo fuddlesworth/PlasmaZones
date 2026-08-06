@@ -514,11 +514,12 @@ void LayoutRegistry::readQuickLayouts()
         }
     };
 
-    // Slots are nested by mode ({ "snapping": {...}, "autotile": {...} }). This
-    // is the single on-disk format: the writer below and the v3→v4 migration
-    // both emit it. A pre-mode (flat) file has neither key, so both modes stay
-    // empty — no ad-hoc legacy read, matching the config policy that a
-    // restructured store drops old values rather than carrying a second format.
+    // Slots are nested by mode ({ "snapping": {...}, "autotile": {...},
+    // "scrolling": {...} }). This is the single on-disk format: the writer
+    // below and the v3→v4 migration both emit it. A pre-mode (flat) file has
+    // none of the three keys, so all three modes stay empty — no ad-hoc legacy
+    // read, matching the config policy that a restructured store drops old
+    // values rather than carrying a second format.
     readModeSlots(root.value(QuickSlotsSnappingKey).toObject(), snappingSlots);
     readModeSlots(root.value(QuickSlotsAutotileKey).toObject(), autotileSlots);
     readModeSlots(root.value(QuickSlotsScrollingKey).toObject(), scrollingSlots);

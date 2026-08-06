@@ -17,8 +17,10 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
+#include <QMetaType>
 #include <QPointer>
 #include <QScopeGuard>
+#include <QVariant>
 
 namespace PlasmaZones {
 
@@ -397,6 +399,13 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     m_scrollingScreens = newSet;
     m_effect->invalidateAllRuleCaches();
     m_effect->scheduleBorderSweep();
+    // Mode is a ruleQuery input too, so the same static-window problem the
+    // active-layout write documents applies here: a `Mode Equals "scrolling"`
+    // SetOpacity rule flips verdict on an engine swap, and an undamaged
+    // window would keep its last-painted alpha until incidental damage.
+    if (m_effect->m_shaderManager.hasOpacityRules() && KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
 
     // Engine-flip re-announce. A screen that changes tiling ENGINE while
     // staying in the union (autotile↔scrolling) never transits
@@ -441,9 +450,23 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
 
 void TilingHandler::slotActiveLayoutsChanged(const QVariantMap& activeLayouts)
 {
+    // Boundary validation: this map crosses D-Bus from another process and
+    // lands directly in a rule-match input. An empty key would be a screen id
+    // no window can ever resolve to (dead weight that still defeats the
+    // change gate), and a non-string value would silently stringify to
+    // something no authored rule can match.
     QHash<QString, QString> next;
     next.reserve(activeLayouts.size());
     for (auto it = activeLayouts.cbegin(); it != activeLayouts.cend(); ++it) {
+        if (it.key().isEmpty()) {
+            qCWarning(lcEffect) << "activeLayouts: dropping entry with empty screen id";
+            continue;
+        }
+        if (it.value().typeId() != QMetaType::QString) {
+            qCWarning(lcEffect) << "activeLayouts: dropping non-string layout id for screen" << it.key() << "type"
+                                << it.value().typeName();
+            continue;
+        }
         next.insert(it.key(), it.value().toString());
     }
     setActiveLayouts(next);
@@ -455,6 +478,21 @@ void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayout
     // map or not — the writer is always newer than a reply dispatched
     // earlier (see the m_activeLayoutsGeneration doc).
     ++m_activeLayoutsGeneration;
+    // Seed BEFORE the change gate: an identical map is still a real map, and
+    // the daemon's very first push is legitimately empty on a session with no
+    // engine-managed screen. Gating the flag would leave the effect
+    // permanently unseeded there, holding every ActiveLayout rule out of the
+    // evaluator for the whole session.
+    if (!m_activeLayoutsSeeded) {
+        m_activeLayoutsSeeded = true;
+        // Seeding edge: ActiveLayout-referencing rules were held out of every
+        // effect-bound rule set while the map was unknown (see
+        // activeLayoutsSeeded). Re-fetch the store so the admission filter
+        // re-runs with the field admitted. Above the change gate because an
+        // all-empty first map is still the edge; async, so it lands after
+        // everything below regardless of where it sits here.
+        m_effect->loadRuleAnimationsFromDbus();
+    }
     if (activeLayouts == m_activeLayouts) {
         return;
     }
@@ -466,6 +504,14 @@ void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayout
     // sweep repaints borders that changed.
     m_effect->invalidateAllRuleCaches();
     m_effect->scheduleBorderSweep();
+    // The sweep re-folds decorations, but a SetOpacity rule scoped on
+    // ActiveLayout alters paint output for windows that are otherwise static
+    // and undamaged — those never reach a paint pass to pick the new alpha
+    // up. Same bookend loadRuleAnimationsFromDbus takes on a rule edit,
+    // gated on rule PRESENCE so a session with no opacity rule pays nothing.
+    if (m_effect->m_shaderManager.hasOpacityRules() && KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
 }
 
 void TilingHandler::updateScrollWheelShortcuts()

@@ -40,6 +40,11 @@ class PHOSPHORZONES_EXPORT ScrollingTemplateStore : public QObject
 public:
     explicit ScrollingTemplateStore(QObject* parent = nullptr);
 
+    /// The data-location subdirectory templates live in, relative to
+    /// GenericDataLocation. The single authority for the spelling; UI code
+    /// that opens the folder must use this rather than inlining the path.
+    static QString templateSubdirectory();
+
     /// Rescan every data location (system first, user last). Emits
     /// templatesChanged when the loaded set differs.
     void loadTemplates();
@@ -59,14 +64,17 @@ public:
 
     /// Persist @p templ (create or update). A null id is assigned a fresh
     /// UUID. Normalizes first; refuses (returns null id) when the template
-    /// is invalid after normalization or the write fails. Returns the
-    /// stored id.
+    /// is invalid after normalization or the write fails. A save that would
+    /// store a byte-identical entry writes nothing and emits nothing, and
+    /// still returns the stored id. Returns the stored id.
     QUuid saveTemplate(ScrollingTemplate templ);
 
     /// Delete the USER file for @p id. A bundled (system) template shadowed
-    /// by the user file resurfaces on the rescan this triggers; a pure
-    /// system template is refused (returns false) — the UI disables delete
-    /// for those.
+    /// by the user file resurfaces on the rescan this triggers; a template
+    /// whose loaded entry came from a system location is refused (returns
+    /// false) — the UI disables delete for those. A user entry whose file is
+    /// already gone rescans and reports success, since the requested state
+    /// already holds.
     bool removeTemplate(const QUuid& id);
 
     /// Store a copy of @p id under a fresh UUID with @p newName (or a

@@ -5,10 +5,10 @@
 
 // Picker-composition helpers for the unified layout list.
 //
-// A "unified layout" is one row in the layout-picker UI - it can back either
-// a manual zone-based layout OR an autotile algorithm, and the composition
-// functions stitch both sources into a single sorted list for the overlay /
-// zone selector / D-Bus layout list.
+// A "unified layout" is one row in the layout-picker UI. It can back a manual
+// zone-based layout, an autotile algorithm, or a native scrolling template,
+// and the composition functions stitch all three sources into a single sorted
+// list for the overlay / zone selector / D-Bus layout list.
 //
 // The canonical entry type is @c PhosphorLayout::LayoutPreview (from
 // phosphor-layout-api). All helpers in this header operate on it directly -
@@ -68,6 +68,11 @@ using ::PlasmaZones::IOrderingSettings;
  *      registry for this one call. Cache is discarded between calls.
  * Either must be non-null when @p includeAutotile is true; the registry
  * is acceptable for code paths that don't yet hold a bundle reference.
+ *
+ * Scrolling templates have no bool gate on this overload, unlike the
+ * context-filtered one below: they are included exactly when @p templateStore
+ * is non-null. This overload answers "everything that exists", so a caller
+ * that does not want template rows passes no store.
  */
 PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
 buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,

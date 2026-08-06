@@ -753,18 +753,19 @@ public:
 
     // ─── Quick-layout slots (1..9) ────────────────────────────────────────
     //
-    // Quick slots are keyed by tiling mode: Snapping slots hold manual-layout
-    // UUIDs, Autotile slots hold autotile algorithm IDs. The two sets are
-    // independent so the same Meta+Alt+N can map to a zone layout in snapping
-    // mode and an autotile algorithm in autotile mode. SCROLLING shares the
-    // Snapping array: its slots hold manual-layout UUIDs too (the template
-    // vocabulary), and applyLayoutToScreen routes a scrolling-screen apply to
-    // assignScrollingTemplate — the slot press changes the screen's template,
-    // never the engine.
+    // Quick slots are keyed by tiling mode, one INDEPENDENT array per mode
+    // (see @ref slotIndexFor: Snapping 0, Autotile 1, Scrolling 2). Snapping
+    // slots hold manual-layout UUIDs, Autotile slots hold autotile algorithm
+    // IDs, and Scrolling slots hold native ScrollingTemplate UUIDs. The three
+    // sets are independent so the same Meta+Alt+N can map to a zone layout in
+    // snapping mode, an algorithm in autotile mode, and a template in
+    // scrolling mode. applyQuickLayout's scrolling arm routes its slot id to
+    // applyScrollingTemplateToScreen — the press changes the screen's
+    // template, never the engine.
 
     /// quicklayouts.json top-level keys: one nested slot object per slot
-    /// ARRAY ("snapping", shared by Scrolling, and "autotile"). This is the
-    /// ONLY on-disk shape — there is no flat legacy variant.
+    /// ARRAY ("snapping", "autotile", "scrolling"). This is the ONLY on-disk
+    /// shape — there is no flat legacy variant.
     /// Shared with a consumer's v3→v4 schema migration, which writes the same
     /// nested format, so reader and migration cannot drift.
     static constexpr QLatin1String QuickSlotsSnappingKey{"snapping"};
@@ -793,17 +794,20 @@ public:
     bool applyScrollingTemplateToScreen(const QString& screenId, const QString& templateId);
 
     /// Drop @p id from every assignment rule's @c SetSnappingLayout and
-    /// @c SetScrollingTemplate actions — the id-keyed scrub BOTH deletion
-    /// flows drive: layout deletion (removeLayout calls it) and native
-    /// template deletion (the D-Bus delete verb calls it; the two id
-    /// namespaces are disjoint UUID sets, so one walk is exact for both).
+    /// @c SetScrollingTemplate actions, and from every quick-slot array —
+    /// the id-keyed scrub BOTH deletion flows drive: layout deletion
+    /// (removeLayout calls it) and native template deletion (the D-Bus delete
+    /// verb calls it; the two id namespaces are disjoint UUID sets, so one
+    /// walk is exact for both).
     /// A rule that still carries meaningful intent (an Autotile engine-mode,
     /// a preserved tilingAlgorithm, or the other surviving layout slot) is
     /// rebuilt with only the referencing slots cleared — the mode + remaining
     /// intent survives, preserving mode-toggle losslessness. A rule left with
     /// nothing but a default (Snapping) engine-mode and no payload is dropped
-    /// entirely. Returns true if the rule set changed.
-    bool purgeSnappingLayoutFromAssignments(const QString& layoutId);
+    /// entirely. The quick-slot sweep spans all three mode arrays (disjoint id
+    /// namespaces again) and rewrites quicklayouts.json when it removes
+    /// anything. Returns true if the rule set or any quick slot changed.
+    bool purgeLayoutIdFromAssignments(const QString& layoutId);
 
     // ─── Built-in layouts ─────────────────────────────────────────────────
 
@@ -933,11 +937,11 @@ private:
      * extraction.
      */
     /// @return true when the assignment was applied. A Scrolling-mode screen
-    /// is not refused: the apply is ROUTED to assignScrollingTemplate (the
-    /// layout becomes the screen's template vocabulary, the engine mode never
-    /// flips) and reports true; false only when a Scrolling-mode screen is
-    /// handed a null layout (a null layout elsewhere is the clear path and
-    /// reports true).
+    /// is REFUSED outright (returns false without writing anything): since the
+    /// native-template pivot a manual Layout* is neither a placement nor a
+    /// template on such a screen, so applying one would either flip the screen
+    /// off the scrolling engine or clear its template. Templates are committed
+    /// through @ref applyScrollingTemplateToScreen instead.
     bool applyLayoutToScreen(const QString& screenId, Layout* layout);
     /// One-time idempotent fold of the retired autotile-overrides.json into the
     /// unified layout-settings.json sidecar; deletes the legacy file when done.
@@ -1275,10 +1279,10 @@ private:
     Layout* m_activeLayout = nullptr;
     Layout* m_previousLayout = nullptr; ///< Active layout before last setActiveLayout (for resnap)
     /// Quick-layout slots keyed by mode: index 0 = Snapping (zone-layout
-    /// UUIDs, shared by Scrolling as its template vocabulary), index 1 =
-    /// Autotile (autotile algorithm IDs) — see @ref slotIndexFor, the one
-    /// authority for this mapping. Each maps slot number (1..9) →
-    /// layout/algorithm ID.
+    /// UUIDs), index 1 = Autotile (autotile algorithm IDs), index 2 =
+    /// Scrolling (native ScrollingTemplate UUIDs) — see @ref slotIndexFor,
+    /// the one authority for this mapping. Each maps slot number (1..9) →
+    /// layout / algorithm / template ID.
     QHash<int, QString> m_quickLayoutSlots[3];
     /// Per-layout settings sidecar (layout-settings.json), keyed by layout UUID.
     /// Settings are split out of the structural layout file on save and merged

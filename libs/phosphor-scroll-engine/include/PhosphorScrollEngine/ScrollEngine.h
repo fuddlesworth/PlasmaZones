@@ -1061,6 +1061,13 @@ private:
     CenterFocusedColumn effectiveCenterFocusedColumn(const QVariantMap& overrides) const;
     ColumnWidth effectiveDefaultColumnWidth(const QString& screenId) const;
     ColumnWidth effectiveDefaultColumnWidth(const QVariantMap& overrides) const;
+    /// Vocabulary-taking overload, the same "resolve it ONCE" shape as the
+    /// override map above: a Preset kind resolves its spin against the
+    /// screen's effective width list, which layoutParamsForScreen has already
+    /// parsed for the params it hands the strip. The two-argument form is a
+    /// wrapper that parses it again, for the call sites that need only this
+    /// one value.
+    ColumnWidth effectiveDefaultColumnWidth(const QVariantMap& overrides, const QList<qreal>& presetWidths) const;
     /// Whether "the client decides" is the EFFECTIVE default-width verdict
     /// for @p screenId: a per-screen kind override answers for itself (true
     /// only when it IS ClientDecides), and only an absent override defers to
@@ -1074,6 +1081,9 @@ private:
     /// committed as Fixed pixels against the live work area.
     WindowHeight effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const;
     WindowHeight effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea) const;
+    /// Vocabulary-taking overload — the height twin of the width one above.
+    WindowHeight effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea,
+                                              const QList<qreal>& presetHeights) const;
     ScrollInsertPosition effectiveInsertPosition(const QString& screenId) const;
     ScrollInsertPosition effectiveInsertPosition(const QVariantMap& overrides) const;
     /// Per-property override, so a rule that sets only the position leaves the

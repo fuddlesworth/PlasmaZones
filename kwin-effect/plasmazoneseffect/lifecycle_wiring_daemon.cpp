@@ -238,6 +238,12 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // re-create rule-matched decorations right after
         // clearAllDecorations below.
         m_tilingHandler->clearScrollingScreensForTeardown();
+        // Same reasoning for the per-screen active-layout map: it is a pure
+        // ruleQuery input owned by the dead session, and the
+        // invalidateAllRuleCaches below would otherwise re-resolve every
+        // verdict against a layout the daemon may no longer publish. Also the
+        // TEARDOWN variant (no border sweep, no repaint) for the same reason.
+        m_tilingHandler->clearActiveLayoutsForTeardown();
         m_snapHandler->clearSnapTracking();
         // Drop the zone / floating caches that feed the IsSnapped / Zone /
         // IsFloating rule-match fields. Unlike the exclusion / animation rule

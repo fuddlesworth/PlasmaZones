@@ -16,6 +16,7 @@
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include "phosphor_i18n.h"
+#include "settings/rules/ruleauthoring.h"
 #include "settings/utils/dbusutils.h"
 
 // Most of the dependency graph (Settings, PhosphorZones layouts, daemon
@@ -37,6 +38,12 @@
 #include <QUrl>
 
 namespace PlasmaZones {
+
+namespace {
+/// Upper bound on a scrolling-template file this app will read into memory.
+/// Matches the profile-tree bound in the settings D-Bus adaptor.
+constexpr qint64 kMaxTemplateFileBytes = 64 * 1024;
+} // namespace
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PhosphorZones::Layout management (D-Bus to daemon, no KCM PhosphorZones::LayoutRegistry class needed)
@@ -340,6 +347,15 @@ void SettingsController::importScrollingTemplate(const QString& filePath)
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not read the template file."));
         return;
     }
+    // Bound the read before readAll() pulls the whole file into memory: this
+    // path takes an arbitrary user-picked file, and a template is a small JSON
+    // document (the same 64 KiB bound the settings adaptor puts on a profile
+    // tree). Anything larger is not a template, so it fails as a bad file.
+    if (file.size() > kMaxTemplateFileBytes) {
+        qCWarning(lcCore) << "importScrollingTemplate: refusing oversized file" << safe << file.size();
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That file is not a scrolling template this app can read."));
+        return;
+    }
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
@@ -389,8 +405,8 @@ void SettingsController::exportScrollingTemplate(const QString& templateId, cons
 
 void SettingsController::openScrollingTemplatesFolder()
 {
-    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/scrolling-templates");
+    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+        + PhosphorZones::ScrollingTemplateStore::templateSubdirectory();
     QDir dir(path);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));
@@ -401,10 +417,16 @@ void SettingsController::openScrollingTemplatesFolder()
 void SettingsController::openScrollingTemplateFile(const QString& templateId)
 {
     if (!m_localTemplateStore) {
+        qCWarning(lcCore) << "openScrollingTemplateFile: no local template store";
         return;
     }
     const PhosphorZones::ScrollingTemplate templ = m_localTemplateStore->templateById(QUuid::fromString(templateId));
     if (!templ.isValid() || templ.sourcePath.isEmpty()) {
+        // Both misses are silent no-ops in the UI, so log them: an unknown id
+        // means the local read view is behind the daemon's store, and an empty
+        // sourcePath means the entry was never loaded from a file.
+        qCWarning(lcCore) << "openScrollingTemplateFile: no file for" << templateId << "(valid:" << templ.isValid()
+                          << "path:" << templ.sourcePath << ")";
         return;
     }
     QDesktopServices::openUrl(QUrl::fromLocalFile(templ.sourcePath));
@@ -416,10 +438,15 @@ QVariantMap SettingsController::scrollingTemplateForEditing(const QString& templ
     // reads); the editor form needs the columns/defaults the flat layouts
     // model doesn't carry. Empty map for an unknown id.
     if (!m_localTemplateStore) {
+        qCWarning(lcCore) << "scrollingTemplateForEditing: no local template store";
         return {};
     }
     const PhosphorZones::ScrollingTemplate templ = m_localTemplateStore->templateById(QUuid::fromString(templateId));
     if (!templ.isValid()) {
+        // The editor form opens empty on this path, which looks like a blank
+        // template rather than a miss — log the id so a support bundle shows
+        // the local read view was behind the daemon's store.
+        qCWarning(lcCore) << "scrollingTemplateForEditing: unknown template" << templateId;
         return {};
     }
     QVariantMap map = templ.toJson().toVariantMap();
@@ -456,6 +483,13 @@ void SettingsController::deleteScrollingTemplate(const QString& templateId)
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "deleteScrollingTemplate failed:" << reply.errorMessage();
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not delete the template: %1").arg(reply.errorMessage()));
+    } else if (reply.arguments().isEmpty() || !reply.arguments().first().toBool()) {
+        // The daemon answers false for a refusal it can name (a bundled
+        // template, an unwritable user directory). That is a ReplyMessage, not
+        // an ErrorMessage, so it needs its own branch or it reads as success —
+        // the same shape exportLayout uses below.
+        qCWarning(lcCore) << "deleteScrollingTemplate: daemon refused" << templateId;
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not delete the template."));
     }
     scheduleLayoutLoad();
 }
@@ -468,6 +502,13 @@ void SettingsController::duplicateScrollingTemplate(const QString& templateId)
         qCWarning(lcCore) << "duplicateScrollingTemplate failed:" << reply.errorMessage();
         Q_EMIT layoutOperationFailed(
             PhosphorI18n::tr("Could not duplicate the template: %1").arg(reply.errorMessage()));
+    } else if (reply.arguments().isEmpty() || reply.arguments().first().toString().isEmpty()) {
+        // An empty id is how the daemon reports a refusal it can name (an id
+        // that no longer resolves, an unwritable user directory) — same
+        // ReplyMessage-carrying-a-rejection shape saveScrollingTemplate checks
+        // for above.
+        qCWarning(lcCore) << "duplicateScrollingTemplate: daemon refused" << templateId;
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not duplicate the template."));
     }
     scheduleLayoutLoad();
 }
@@ -749,7 +790,7 @@ QVariantList SettingsController::activeLayoutMatchOptions() const
             QVariantMap derived;
             derived[QStringLiteral("id")] = PhosphorLayout::LayoutId::makeScrollingId(id);
             derived[QStringLiteral("displayName")] =
-                PhosphorI18n::tr("Template: %1").arg(m.value(QStringLiteral("displayName")).toString());
+                RuleAuthoring::templateDisplayLabel(m.value(QStringLiteral("displayName")).toString());
             out.append(derived);
             continue;
         }

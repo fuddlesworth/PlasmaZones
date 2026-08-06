@@ -14,6 +14,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QVariantMap>
 #include <QtTest>
 
 using namespace PhosphorScrollEngine;
@@ -169,6 +170,17 @@ void TestScrollEnginePersistence::legacyPresetIndexBlobResolvesAgainstEffectiveL
 
     ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    // A template vocabulary that is nothing like the settings one, installed
+    // BEFORE the restore: the fixup must resolve index 2 against THIS list.
+    // Asserting the literal rather than re-reading the engine's own effective
+    // list is the point — the old form compared the implementation against
+    // itself and passed for any vocabulary the fixup happened to pick.
+    // applyPerScreenConfig stores the map synchronously (only the retile it
+    // schedules is queued), so no event drain is needed for the restore below
+    // to see it.
+    QVariantMap templ;
+    templ.insert(ScrollPerScreenKeys::presetColumnWidths(), QVariantList{0.2, 0.4, 0.9});
+    engine2->applyPerScreenConfig(QStringLiteral("S1"), templ);
     engine2->restoreStripState(blob);
     engine2->windowOpened(QStringLiteral("app|n1"), QStringLiteral("S1"), 0, 0);
 
@@ -177,8 +189,7 @@ void TestScrollEnginePersistence::legacyPresetIndexBlobResolvesAgainstEffectiveL
     QCOMPARE(state->strip().columns().size(), 1);
     const ColumnWidth width = state->strip().columns().first().width;
     QCOMPARE(width.kind, ColumnWidth::Preset);
-    // Default vocabulary entry 2 is 2/3.
-    QCOMPARE(width.presetFraction, engine2->effectivePresetColumnWidths(QStringLiteral("S1")).at(2));
+    QCOMPARE(width.presetFraction, 0.9);
 }
 
 void TestScrollEnginePersistence::outOfRangePresetFractionIsClampedAtTheBoundary()

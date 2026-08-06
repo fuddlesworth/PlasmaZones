@@ -265,12 +265,12 @@ public:
      * @brief Seed which layout types appear in the zone picker
      *
      * A global SEED only: the per-screen truth is
-     * resolvePerScreenLayoutInclude, which narrows these flags per screen —
-     * autotile screens keep only the algorithm cards, snapping and Templates
-     * (scrolling) screens keep only the manual list (a Templates screen
-     * browses it as template candidates), and a LayoutSupport::None engine
-     * empties both. The autotile feature gate (KCM setting) controls whether
-     * dynamic layouts are ever visible.
+     * resolvePerScreenLayoutInclude, which narrows these flags per screen.
+     * Autotile screens keep only the algorithm cards, snapping screens keep
+     * only the manual list, a Templates (scrolling) screen gets native
+     * scrolling-template cards and neither of the other two families, and a
+     * LayoutSupport::None engine gets nothing at all. The autotile feature
+     * gate (KCM setting) controls whether dynamic layouts are ever visible.
      */
     void setLayoutFilter(bool includeManual, bool includeAutotile);
 

@@ -4,7 +4,6 @@
 #include "daemon/daemon.h"
 #include "daemon/overlayservice.h"
 #include "daemon/controllers/unifiedlayoutcontroller.h"
-#include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "core/resolve/screenmoderouter.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -26,6 +25,7 @@
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorZones/ScrollingTemplateSource.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
@@ -33,7 +33,6 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
-#include <QKeySequence>
 #include <QRegularExpression>
 #include <QScreen>
 #include <QTimer>
@@ -297,8 +296,8 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
         const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
         const QString id = resolvedId.isEmpty() ? screenId : resolvedId;
         if (currentModeFor(id) == PhosphorZones::AssignmentEntry::Scrolling) {
-            const PhosphorZones::ScrollingTemplate templ = m_layoutManager->scrollingTemplateForContext(
-                id, m_layoutManager->currentVirtualDesktopForScreen(id), currentActivity());
+            const PhosphorZones::ScrollingTemplate templ =
+                m_layoutManager->scrollingTemplateForContext(id, currentDesktopForScreen(id), currentActivity());
             if (templ.isValid()) {
                 showScrollingTemplateOsd(templ, id, /*locked=*/true);
                 return;
@@ -523,7 +522,7 @@ void Daemon::stopScrollingOsdSettleTimer(const QString& screenId)
 void Daemon::showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& templ, const QString& screenId,
                                       bool locked)
 {
-    if (shouldSuppressOsd() || !templ.isValid() || !m_overlayService) {
+    if (shouldSuppressOsd() || !templ.isValid()) {
         return;
     }
     const OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
@@ -531,54 +530,39 @@ void Daemon::showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& te
         return;
     }
     if (style == OsdStyle::Text) {
+        // The text card is a bare D-Bus call to plasmashell's OSD service, so
+        // it works without an overlay service. Only the preview arm below
+        // needs one, which is why the null check sits there and not above.
         showKdeTextOsd(QStringLiteral("plasmazones"), PhosphorI18n::tr("Column template: %1").arg(templ.name));
         return;
     }
+    if (!m_overlayService) {
+        return;
+    }
 
-    // Project the template into preview zones: the blueprint columns laid
-    // left to right at their widths, or, for a vocabulary-only template
-    // (empty blueprint), a strip snapshot of its preset widths. Either way
-    // the last column may run past the right edge — clamped half-in rather
-    // than dropped, the same honest overhang the strip itself shows.
-    QList<qreal> widths;
-    for (const PhosphorZones::ScrollingTemplateColumn& column : templ.columns) {
-        widths.append(column.width);
-    }
-    if (widths.isEmpty()) {
-        widths = templ.presetColumnWidths;
-    }
+    // ONE projection for every surface that draws a template:
+    // previewFromScrollingTemplate lays the blueprint columns (or, for a
+    // vocabulary-only template, its preset widths, or, for a defaults-only
+    // template, a single column) left to right as full-height bands and
+    // truncates the last band at the right edge. Re-deriving the walk here
+    // is how the OSD and the picker card end up disagreeing about the same
+    // template, so this only reshapes the result into the QML payload.
+    const PhosphorLayout::LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ);
     QVariantList zones;
-    qreal x = 0.0;
-    for (int i = 0; i < widths.size() && x < 1.0; ++i) {
-        const qreal width = qMin(widths.at(i), 1.0 - x);
+    zones.reserve(preview.zones.size());
+    for (int i = 0; i < preview.zones.size(); ++i) {
+        const QRectF& rel = preview.zones.at(i);
         QVariantMap relGeo;
-        relGeo[QLatin1String("x")] = x;
-        relGeo[QLatin1String("y")] = 0.0;
-        relGeo[QLatin1String("width")] = width;
-        relGeo[QLatin1String("height")] = 1.0;
+        relGeo[QLatin1String("x")] = rel.x();
+        relGeo[QLatin1String("y")] = rel.y();
+        relGeo[QLatin1String("width")] = rel.width();
+        relGeo[QLatin1String("height")] = rel.height();
         QVariantMap zoneMap;
-        zoneMap[QLatin1String("zoneNumber")] = i + 1;
+        zoneMap[QLatin1String("zoneNumber")] = (i < preview.zoneNumbers.size()) ? preview.zoneNumbers.at(i) : (i + 1);
         zoneMap[QLatin1String("relativeGeometry")] = relGeo;
         // Namespaced synthetic id, never a bare index (see the autotile
         // preview projection above for the rationale).
         zoneMap[QLatin1String("id")] = QStringLiteral("scrolling-template:%1:%2").arg(templ.id.toString()).arg(i);
-        zoneMap[QLatin1String("name")] = QString();
-        zoneMap[QLatin1String("useCustomColors")] = false;
-        zones.append(zoneMap);
-        x += widths.at(i);
-    }
-    if (zones.isEmpty()) {
-        // Defaults-only template (no blueprint, no width vocabulary): a
-        // single default-width column is the honest preview.
-        QVariantMap relGeo;
-        relGeo[QLatin1String("x")] = 0.0;
-        relGeo[QLatin1String("y")] = 0.0;
-        relGeo[QLatin1String("width")] = 0.5;
-        relGeo[QLatin1String("height")] = 1.0;
-        QVariantMap zoneMap;
-        zoneMap[QLatin1String("zoneNumber")] = 1;
-        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
-        zoneMap[QLatin1String("id")] = QStringLiteral("scrolling-template:%1:0").arg(templ.id.toString());
         zoneMap[QLatin1String("name")] = QString();
         zoneMap[QLatin1String("useCustomColors")] = false;
         zones.append(zoneMap);
@@ -1029,142 +1013,6 @@ bool Daemon::isCurrentContextLockedForMode(const QString& screenId, PhosphorZone
     return m_contextResolver->isLocked(m_contextResolver->handleForMode(screenId, mode));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Shortcut cheatsheet overlay
-// ═══════════════════════════════════════════════════════════════════════════════
-
-namespace {
-
-// Dedicated Escape ad-hoc grab id — deliberately NOT the shared
-// kCancelOverlayId: reusing that would drag the cheatsheet into the
-// cancelSnap precedence chain and its cross-consumer release guard.
-// KGlobalAccel routes one action per key, so the daemon keeps at most one
-// Escape consumer active by dismissing sibling modals around show.
-const QLatin1String kCheatsheetDismissId("cheatsheet_dismiss");
-
-// String form of the per-screen tiling mode as CheatsheetContent consumes
-// it. All three engines are live; the sheet filters each mode's group plus
-// the mode-independent ones.
-QString cheatsheetModeString(PhosphorZones::AssignmentEntry::Mode mode)
-{
-    switch (mode) {
-    case PhosphorZones::AssignmentEntry::Autotile:
-        return QStringLiteral("autotile");
-    case PhosphorZones::AssignmentEntry::Scrolling:
-        return QStringLiteral("scrolling");
-    case PhosphorZones::AssignmentEntry::Snapping:
-        break;
-    }
-    return QStringLiteral("snapping");
-}
-
-} // namespace
-
-void Daemon::toggleCheatsheet()
-{
-    if (!m_overlayService || !m_shortcutManager) {
-        return;
-    }
-    if (m_overlayService->isCheatsheetVisible()) {
-        m_overlayService->hideCheatsheet();
-        return;
-    }
-    showCheatsheetOnCursorScreen();
-}
-
-void Daemon::showCheatsheetOnCursorScreen()
-{
-    if (!m_overlayService || !m_shortcutManager) {
-        return;
-    }
-    // No cheatsheet during an interactive drag: the kwin-effect holds a
-    // keyboard grab for the drag's lifetime and routes Escape to cancelSnap
-    // itself (grabbedKeyboardEvent, kwin-effect/plasmazoneseffect.cpp), so
-    // the dismiss grab bound
-    // below would never fire, and the sheet would also overlap the live
-    // drag surfaces. The user can re-press after dropping the window.
-    if (m_windowDragAdaptor && m_windowDragAdaptor->isDragInFlight()) {
-        qCDebug(lcDaemon) << "Cheatsheet: suppressed during interactive drag";
-        return;
-    }
-
-    // Screen-targeted like the picker and the mode toggle: the user's
-    // intent is "the screen I am looking at", so resolve cursor-first.
-    const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-    if (screenId.isEmpty()) {
-        qCDebug(lcDaemon) << "Cheatsheet: no screen info";
-        return;
-    }
-
-    // At most one Escape-consuming modal at a time (see kCheatsheetDismissId
-    // note): dismiss the picker / snap assist first. Their dismissed signals
-    // release the shared cancel-overlay Escape grab synchronously, so the
-    // cheatsheet's own Escape registration below cannot be silently no-op'd
-    // by a key-level conflict.
-    if (m_overlayService->isLayoutPickerVisible()) {
-        m_overlayService->hideLayoutPicker();
-    }
-    if (m_overlayService->isSnapAssistVisible()) {
-        m_overlayService->hideSnapAssist();
-    }
-
-    const CheatsheetPushState push = cheatsheetPushStateFor(screenId);
-    m_overlayService->showCheatsheet(screenId, m_shortcutManager->cheatsheetModel(), push.modeString,
-                                     push.autotileAvailable, push.scrollingAvailable, push.layoutsAvailable,
-                                     push.layoutsAreTemplates);
-
-    // Bind Escape only on a successful show — showCheatsheet bails on
-    // missing screen/shell/catalog, and the sheet's own dismiss path is the
-    // intended releaser. (A grab bound on a failed show would in practice
-    // still be released by the next picker or snap-assist open, whose
-    // unconditional hideCheatsheet emits cheatsheetDismissed even for a
-    // hidden sheet; the guard just avoids a grab with no sheet in the
-    // meantime.)
-    if (m_overlayService->isCheatsheetVisible()) {
-        m_shortcutManager->registerAdhocShortcut(kCheatsheetDismissId, QKeySequence(Qt::Key_Escape),
-                                                 PhosphorI18n::tr("Dismiss Shortcut Cheatsheet"), [this] {
-                                                     if (m_overlayService) {
-                                                         m_overlayService->hideCheatsheet();
-                                                     }
-                                                 });
-    }
-}
-
-void Daemon::refreshCheatsheetIfVisible()
-{
-    if (!m_overlayService || !m_shortcutManager || !m_overlayService->isCheatsheetVisible()) {
-        return;
-    }
-    // Re-resolve for the screen the sheet is BOUND to — never retarget to
-    // the cursor's current screen; only mode changes on the bound screen
-    // refilter (the sheet stays put like the picker does).
-    const QString screenId = m_overlayService->cheatsheetScreenId();
-    if (screenId.isEmpty()) {
-        return;
-    }
-    const CheatsheetPushState push = cheatsheetPushStateFor(screenId);
-    m_overlayService->refreshCheatsheet(m_shortcutManager->cheatsheetModel(), push.modeString, push.autotileAvailable,
-                                        push.scrollingAvailable, push.layoutsAvailable, push.layoutsAreTemplates);
-}
-
-Daemon::CheatsheetPushState Daemon::cheatsheetPushStateFor(const QString& screenId) const
-{
-    // Single resolver for everything both cheatsheet push sites hand the
-    // overlay: show and refresh MUST agree (a divergence shows up as a sheet
-    // whose filter changes on refresh), so neither site open-codes the set.
-    const LayoutSupport support = layoutSupportForScreen(screenId);
-    return {cheatsheetModeString(currentModeFor(screenId)), m_settings && m_settings->autotileEnabled(),
-            m_settings && m_settings->scrollingEnabled(), support != LayoutSupport::None,
-            support == LayoutSupport::Templates};
-}
-
-void Daemon::onCheatsheetDismissed()
-{
-    // Fires on EVERY dismissal path (toggle re-press, Escape, backdrop,
-    // teardown) — the right place to release the Escape grab.
-    if (m_shortcutManager) {
-        m_shortcutManager->unregisterAdhocShortcut(kCheatsheetDismissId);
-    }
-}
+// The shortcut cheatsheet overlay lives in daemon/cheatsheet.cpp.
 
 } // namespace PlasmaZones

@@ -296,6 +296,18 @@ private:
      */
     int findCurrentIndex() const;
 
+    /**
+     * @brief Subscribe cache invalidation to the registry's template store
+     *
+     * Called from layouts() because the store is late-bound: it is injected
+     * into the registry after this controller exists, so a constructor-time
+     * connect would find nothing. Re-subscribes if the store is swapped, and
+     * does nothing while there is none. Duplicate connects are prevented by
+     * the stored bound-store pointer and connection handle, not by
+     * Qt::UniqueConnection, which asserts on a lambda slot.
+     */
+    void ensureTemplateStoreSubscription() const;
+
     QPointer<PhosphorZones::LayoutRegistry> m_layoutManager;
     QPointer<Settings> m_settings;
     QPointer<PhosphorScreens::ScreenManager> m_screenManager;
@@ -330,6 +342,13 @@ private:
     /// guard keys on the same thing layouts() does. Mutable for the same reason
     /// the cache itself is: layouts() is const and fills it lazily.
     mutable int m_cachedScreenDesktop = -1;
+    /// The template store the cache-invalidation subscription below is bound
+    /// to. The store is injected into the registry after this controller is
+    /// constructed, so the subscription is made on the first resolve that
+    /// finds one (see ensureTemplateStoreSubscription) and re-made if the
+    /// injected store is ever swapped. Borrowed, never dereferenced here.
+    mutable QObject* m_subscribedTemplateStore = nullptr;
+    mutable QMetaObject::Connection m_templateStoreConnection;
 };
 
 } // namespace PlasmaZones

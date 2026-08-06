@@ -492,7 +492,7 @@ void Daemon::connectShortcutSignals()
         if (wasLocked) {
             if (mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
                 const PhosphorZones::ScrollingTemplate templ = m_layoutManager->scrollingTemplateForContext(
-                    screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), currentActivity());
+                    screenId, currentDesktopForScreen(screenId), currentActivity());
                 if (templ.isValid()) {
                     showScrollingTemplateOsd(templ, screenId);
                 }

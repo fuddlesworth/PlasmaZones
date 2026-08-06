@@ -182,7 +182,9 @@ Menu {
     }
 
     signal deleteRequested(var layout)
-    signal exportRequested(string layoutId)
+    /// Carries the card kind so the page routes to the template export
+    /// dialog without having to infer it from its own view mode.
+    signal exportRequested(string layoutId, bool isTemplateExport)
     /// A template card's Edit — the page routes it to the form editor
     /// dialog (templates have no canvas editor process).
     signal editTemplateRequested(string templateId)
@@ -285,7 +287,9 @@ Menu {
     }
 
     MenuSeparator {
-        visible: layoutContextMenu._cachedScreens.length > 0
+        // The per-screen block above is emptied for templates, so the
+        // separator would otherwise sit against nothing.
+        visible: layoutContextMenu._cachedScreens.length > 0 && !layoutContextMenu.isTemplate
     }
 
     MenuItem {
@@ -382,7 +386,7 @@ Menu {
         text: i18n("Export")
         icon.name: "document-export"
         visible: !layoutContextMenu.isAutotile
-        onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
+        onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId, layoutContextMenu.isTemplate)
     }
 
     MenuSeparator {
@@ -411,7 +415,7 @@ Menu {
         text: i18n("Export")
         icon.name: "document-export"
         visible: layoutContextMenu.isAutotile
-        onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
+        onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId, false)
     }
 
     MenuSeparator {

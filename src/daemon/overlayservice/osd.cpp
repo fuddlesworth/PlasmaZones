@@ -232,7 +232,10 @@ void OverlayService::showScrollingTemplateOsd(const QString& id, const QString& 
     p.id = id;
     p.name = name;
     p.zones = zones;
-    p.category = static_cast<int>(PhosphorZones::LayoutCategory::Manual);
+    // Category 2, matching what the wire serializer stamps for a template
+    // card: the QML badge arm keys on this, and Manual(0) made the OSD
+    // announce a native template as a zone layout.
+    p.category = static_cast<int>(PhosphorZones::LayoutCategory::ScrollingTemplate);
     p.autoAssign = false;
     p.globalAutoAssign = false;
     p.isTemplate = true;

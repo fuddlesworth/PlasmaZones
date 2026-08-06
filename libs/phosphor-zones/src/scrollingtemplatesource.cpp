@@ -23,10 +23,14 @@ PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTempla
     preview.isScrollingTemplate = true;
 
     // Strip snapshot: blueprint columns (else the preset width vocabulary)
-    // laid left to right as full-height bands, the last one clamped half-in
-    // at the right edge — the same honest overhang the strip itself shows.
-    // A defaults-only template previews as one half-width column.
+    // laid left to right as full-height bands. The preview is a fixed-size
+    // card, so a strip wider than the screen is clamped to fit rather than
+    // drawn overhanging: the band that crosses the right edge ends at 1.0,
+    // and any column that would start at or past the edge is dropped.
+    // A defaults-only template previews as one column at its own default
+    // width.
     QList<qreal> widths;
+    widths.reserve(templ.columns.size());
     for (const ScrollingTemplateColumn& column : templ.columns) {
         widths.append(column.width);
     }
@@ -34,8 +38,16 @@ PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTempla
         widths = templ.presetColumnWidths;
     }
     if (widths.isEmpty()) {
-        widths = {0.5};
+        // Kind Preset cannot reach here: normalize() demotes it when the
+        // preset list is empty, and a non-empty list was consumed above.
+        // Fixed pixels and ClientDecides have no fraction to draw, so they
+        // preview at half width.
+        const qreal fallback =
+            templ.defaultColumnWidthKind == 0 ? qBound<qreal>(0.05, templ.defaultColumnWidthValue, 1.0) : 0.5;
+        widths = {fallback};
     }
+    preview.zones.reserve(widths.size());
+    preview.zoneNumbers.reserve(widths.size());
     qreal x = 0.0;
     int zoneNumber = 1;
     for (qreal width : widths) {

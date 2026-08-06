@@ -780,17 +780,24 @@ private:
     // member (stable address) so the bound RuleEvaluator's per-revision cache
     // stays valid across back-to-back resolves.
     PhosphorRules::RuleSet m_excludeRuleSet;
-    std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
-    /// Native scrolling-template store (created in initServices, injected
-    /// into m_layoutManager; the injection is cleared in stop() before this
-    /// unique_ptr resets).
+    /// Native scrolling-template store. Created in the Daemon constructor,
+    /// deliberately before the layout-source bundle is built so the template
+    /// provider has a store to register against. initServices then injects it
+    /// into m_layoutManager for the template-backed assignment cascade, and
+    /// stop() clears that injection before this unique_ptr resets.
+    ///
+    /// Declared BEFORE m_layoutManager for the same reason m_ruleStore is:
+    /// the registry borrows it, so reverse-order destruction must tear the
+    /// registry down first or the borrow dangles.
     std::unique_ptr<PhosphorZones::ScrollingTemplateStore> m_scrollingTemplateStore;
+    std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry, replacing the old
     // AlgorithmRegistry::instance() singleton: plugins can't share
     // process-global state safely, so the composition root owns it.
     // DECLARATION ORDER INVARIANT: every FactoryContext service the bundle
     // borrows (m_layoutManager → IZoneLayoutRegistry, m_algorithmRegistry
-    // → ITileAlgorithmRegistry) MUST precede m_layoutSources, so
+    // → ITileAlgorithmRegistry, m_scrollingTemplateStore →
+    // ScrollingTemplateSource) MUST precede m_layoutSources, so
     // reverse-order destruction tears the bundle and its ZonesLayoutSource
     // / AutotileLayoutSource children down before the registries they
     // borrow. See the LayoutSourceBundle contract

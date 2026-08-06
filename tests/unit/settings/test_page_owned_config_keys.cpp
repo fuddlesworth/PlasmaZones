@@ -57,6 +57,13 @@ const QSet<QString>& deliberatelyUnowned()
         // per-page dirtiness, so owning it would make the sidebar toggle mark
         // a page dirty and make that page's Reset turn scrolling back on.
         qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::enabledKey()),
+        // The two global preset lists. The Columns page's editor rows for them
+        // were removed when templates became the authoring surface, so no page
+        // SHOWS them any more; the keys stay config-backed as the engine's
+        // fallback vocabulary. Owning them would make that page's Reset rewrite
+        // values it does not display.
+        qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::presetColumnWidthsKey()),
+        qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::presetWindowHeightsKey()),
     };
     return kSet;
 }

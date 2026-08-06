@@ -779,11 +779,12 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     // Both buildLayoutsList (populates the popup) and visibleLayoutCount
     // (used by isNearTriggerEdge to size the keep-visible bar) go through
     // here so the trigger geometry matches the rendered popup row count.
-    // The brace-init seeds BOTH fields from the settings-backed member
-    // toggles (so the struct's in-class defaults never apply here); the
-    // per-screen arms below then ASSIGN both fields outright — the seed is
-    // the answer only for a screen no arm claims.
-    LayoutIncludeFlags flags{m_includeManualLayouts, m_includeAutotileLayouts};
+    // The brace-init seeds the manual and autotile fields from the
+    // settings-backed member toggles (so the struct's in-class defaults never
+    // apply to those two) and leaves templates off, since no member toggle
+    // governs it. Every per-screen arm below assigns all three fields
+    // outright, so the seed is the answer only for a screen no arm claims.
+    LayoutIncludeFlags flags{m_includeManualLayouts, m_includeAutotileLayouts, /*templates=*/false};
     const QString resolvedId = PhosphorScreens::ScreenIdentity::isConnectorName(screenId)
         ? PhosphorScreens::ScreenIdentity::idForName(screenId)
         : screenId;
@@ -796,8 +797,8 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     // Engine capability gate FIRST — ahead of the layout-manager guard,
     // which the resolver does not need: only an engine reporting
     // LayoutSupport::None gets no layout list at all (the picker's show
-    // bails on the empty list); a Templates screen keeps the manual list as
-    // its template vocabulary via the isScrolling arm below. (The drag-time
+    // bails on the empty list); a Templates screen gets the native template
+    // cards via the isScrolling arm below. (The drag-time
     // popup is already suppressed on engine-owned screens by
     // WindowDragAdaptor's dragMoved gate; here that is defence in depth.)
     // The daemon-injected resolver routes through
@@ -808,6 +809,7 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     if (!resolvedId.isEmpty() && m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportNone) {
         flags.manual = false;
         flags.autotile = false;
+        flags.templates = false;
         return flags;
     }
     if (!m_layoutManager || resolvedId.isEmpty()) {
@@ -818,6 +820,7 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         flags.manual = false;
         flags.autotile = true;
+        flags.templates = false;
     } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
         // The live Templates arm: since the native-template pivot a
         // scrolling screen's picker offers TEMPLATE cards only (manual
@@ -828,6 +831,7 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     } else {
         flags.manual = true;
         flags.autotile = false;
+        flags.templates = false;
     }
     return flags;
 }

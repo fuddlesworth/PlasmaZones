@@ -109,6 +109,19 @@ private Q_SLOTS:
                  QString(PhosphorLayout::LayoutId::ScrollingId));
         QCOMPARE(desktopValue.value(QStringLiteral("scrollingTemplate")).toString(), m_templateId);
 
+        // Activity projection: desktop 0 with an activity is the pure-Activity
+        // context (the strict classifier keeps desktop-pinned rules out), and
+        // its key is screen|activity.
+        m_layoutManager->assignLayoutById(QStringLiteral("DP-1"), 0, QStringLiteral("act-y"),
+                                          QString(PhosphorLayout::LayoutId::ScrollingId));
+        m_adaptor->setScrollingTemplateLayout(QStringLiteral("DP-1"), 0, QStringLiteral("act-y"), m_templateId);
+
+        const QVariantMap activities = m_adaptor->getAllActivityAssignments();
+        const QVariantMap activityValue = activities.value(QStringLiteral("DP-1|act-y")).toMap();
+        QCOMPARE(activityValue.value(QStringLiteral("layoutId")).toString(),
+                 QString(PhosphorLayout::LayoutId::ScrollingId));
+        QCOMPARE(activityValue.value(QStringLiteral("scrollingTemplate")).toString(), m_templateId);
+
         // Combined projection: same shape at the triple-pinned tuple.
         m_adaptor->setScrollingTemplateLayout(QStringLiteral("DP-1"), 3, QStringLiteral("act-x"), m_templateId);
         const QVariantMap combined = m_adaptor->getAllCombinedAssignments();

@@ -395,10 +395,11 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
 //
 // These 21 chords are bindable via the system Shortcuts KCM, because
 // ShortcutManager registers them like every other action. The settings app has
-// no page of its own for them, and the Snapping / Tiling quick-shortcut pages
-// are not a counter-example: those assign layouts and algorithms to the
-// numbered quick slots rather than editing chords, and scrolling has no
-// numbered-slot family to assign.
+// no page for editing the chords themselves. Scrolling does have a Quick
+// Shortcuts page (ScrollingQuickShortcutsPage), but like its Snapping and
+// Tiling siblings that page assigns templates to the numbered quick slots
+// (wire mode 2, staged through the scrolling quick-slot map) rather than
+// editing any of the chords declared below.
 
 void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
 {

@@ -41,8 +41,11 @@ Kirigami.Dialog {
 
     function openForEdit(id) {
         const data = root.controller.scrollingTemplateForEditing(id);
-        if (!data || !data.id)
+        if (!data || !data.id) {
+            if (typeof window !== "undefined" && window && window.showToast)
+                window.showToast(i18n("That template is no longer available."));
             return;
+        }
         root.templateId = data.id;
         root.editingSystem = data.isSystem === true;
         nameField.text = data.name || "";
@@ -55,7 +58,11 @@ Kirigami.Dialog {
                 "display": columns[i].display === 1 ? 1 : 0
             });
         const defaultWidth = data.defaultColumnWidth || {};
-        defaultWidthKindCombo.currentIndex = defaultWidthKindCombo.indexOfValue(defaultWidth.kind !== undefined ? defaultWidth.kind : 3);
+        // A stored kind outside the combo's vocabulary makes indexOfValue
+        // return -1, and commit() would then write an undefined kind back.
+        // Fall back to the width-preset kind, the same default openForNew uses.
+        const kindIndex = defaultWidthKindCombo.indexOfValue(defaultWidth.kind !== undefined ? defaultWidth.kind : 3);
+        defaultWidthKindCombo.currentIndex = kindIndex >= 0 ? kindIndex : defaultWidthKindCombo.indexOfValue(3);
         defaultWidthValueSpin.value = Math.round((defaultWidth.value !== undefined ? defaultWidth.value : 0.5) * 100);
         defaultPresetIndexSpin.value = (defaultWidth.presetIndex !== undefined ? defaultWidth.presetIndex : 1) + 1;
         defaultDisplayCombo.currentIndex = data.defaultColumnDisplay === 1 ? 1 : 0;
@@ -64,8 +71,11 @@ Kirigami.Dialog {
         root.open();
     }
 
+    // Entries outside (0, 1] are dropped rather than passed on, so the saved
+    // list matches what the field shows. The daemon clamps anything below 0.05
+    // to 0.05 regardless.
     function parseFractionList(text) {
-        return text.split(",").map(part => parseFloat(part.trim())).filter(value => !isNaN(value));
+        return text.split(",").map(part => parseFloat(part.trim())).filter(value => !isNaN(value) && value > 0 && value <= 1);
     }
 
     function commit() {
@@ -160,8 +170,14 @@ Kirigami.Dialog {
             model: columnsModel
 
             delegate: RowLayout {
+                id: columnRow
+
                 required property int index
                 required property var model
+                // Lifted to the delegate root because inside the ComboBox below
+                // `model` resolves to the ComboBox's OWN model (the display
+                // options array), not the row.
+                readonly property int columnDisplay: model.display
 
                 spacing: Kirigami.Units.smallSpacing
 
@@ -175,13 +191,15 @@ Kirigami.Dialog {
                     value: model.widthPercent
                     textFromValue: (value, locale) => i18n("%1%", value)
                     valueFromText: (text, locale) => parseInt(text)
+                    Accessible.name: i18n("Width of column %1", index + 1)
                     onValueModified: columnsModel.setProperty(index, "widthPercent", value)
                 }
 
                 ComboBox {
                     model: root.displayOptions
-                    currentIndex: model.display
-                    onActivated: idx => columnsModel.setProperty(index, "display", idx)
+                    currentIndex: columnRow.columnDisplay
+                    Accessible.name: i18n("Display mode of column %1", columnRow.index + 1)
+                    onActivated: idx => columnsModel.setProperty(columnRow.index, "display", idx)
                 }
 
                 ToolButton {

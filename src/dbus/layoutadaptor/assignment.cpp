@@ -410,6 +410,12 @@ QString LayoutAdaptor::getScreenStates()
         // mode toggle (the lossless contract) is exactly the state the
         // Monitors page needs to show, and the resolver deliberately answers
         // nullptr for non-Scrolling contexts.
+        //
+        // Deliberate divergence from getScrollingTemplateLayout: the raw field
+        // also skips the resolver's configured DEFAULT-template fallback, so a
+        // context that pins no template of its own reports empty here while the
+        // strip runs the default. The page needs "what this context stores" to
+        // drive its explicit/inherited affordances, not the resolved value.
         obj[QLatin1String("scrollingTemplateId")] = entry.scrollingTemplateLayout;
         if (!entry.scrollingTemplateLayout.isEmpty()) {
             // Name from the native template STORE (templates are no longer
@@ -900,6 +906,9 @@ QString LayoutAdaptor::saveScrollingTemplate(const QString& templateJson)
         return QString();
     }
     PhosphorZones::ScrollingTemplate templ = PhosphorZones::ScrollingTemplate::fromJson(doc.object());
+    // D-Bus boundary clamp, same as createLayout / updateLayout apply to
+    // layout names: a caller can bypass the editor dialog's cap entirely.
+    templ.name = clampName(templ.name);
     // A missing/empty name is the one invalidity a fresh editor form can
     // produce; the store refuses it (returns a null id) and the caller
     // surfaces the refusal.
@@ -917,18 +926,20 @@ bool LayoutAdaptor::deleteScrollingTemplate(const QString& id)
     PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
     const QUuid parsed = QUuid::fromString(id);
     if (!store || parsed.isNull()) {
+        qCWarning(lcDbusLayout) << "deleteScrollingTemplate: no template store wired, or malformed id" << id;
         return false;
     }
     if (!store->removeTemplate(parsed)) {
         return false;
     }
-    // The id-keyed assignment scrub the delete flow owes (same purge layout
-    // deletion drives): every rule referencing the deleted template loses
-    // that reference; only when the id no longer resolves at all — a user
-    // file shadowing a bundled template resurfaces the original under the
-    // SAME id, and scrubbing then would drop live assignments to it.
+    // The id-keyed scrub the delete flow owes (same purge layout deletion
+    // drives): every assignment rule AND every quick slot referencing the
+    // deleted template loses that reference; only when the id no longer
+    // resolves at all — a user file shadowing a bundled template resurfaces
+    // the original under the SAME id, and scrubbing then would drop live
+    // assignments to it.
     if (!store->contains(parsed)) {
-        m_layoutManager->purgeSnappingLayoutFromAssignments(parsed.toString());
+        m_layoutManager->purgeLayoutIdFromAssignments(parsed.toString());
     }
     qCInfo(lcDbusLayout) << "Deleted scrolling template" << id;
     return true;
@@ -939,10 +950,27 @@ QString LayoutAdaptor::duplicateScrollingTemplate(const QString& id)
     PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
     const QUuid parsed = QUuid::fromString(id);
     if (!store || parsed.isNull()) {
+        qCWarning(lcDbusLayout) << "duplicateScrollingTemplate: no template store wired, or malformed id" << id;
         return QString();
     }
-    const QUuid copyId = store->duplicateTemplate(parsed);
-    return copyId.isNull() ? QString() : copyId.toString();
+    // Name the copy HERE rather than letting duplicateTemplate append the
+    // shared suffix itself: the store has no length cap, and once the suffix
+    // is on the name there is nothing left to clamp without cutting it off
+    // again. Trim the BASE to the reduced budget and re-append, the same shape
+    // duplicateLayout uses, so a long name cannot swallow the suffix and leave
+    // the copy visually identical to its source. An unknown id leaves the name
+    // empty and the store refuses the copy below.
+    const PhosphorZones::ScrollingTemplate source = store->templateById(parsed);
+    const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
+    const QString copyName =
+        source.isValid() ? clampName(source.name, MaxLayoutNameLength - suffix.size()) + suffix : QString();
+    const QUuid copyId = store->duplicateTemplate(parsed, copyName);
+    if (copyId.isNull()) {
+        qCWarning(lcDbusLayout) << "duplicateScrollingTemplate: store refused to copy" << id;
+        return QString();
+    }
+    qCInfo(lcDbusLayout) << "Duplicated scrolling template" << id << "to" << copyId;
+    return copyId.toString();
 }
 
 void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDesktop, const QString& activity, int mode,

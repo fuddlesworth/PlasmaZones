@@ -27,9 +27,9 @@ SettingsCard {
     // the badge never lit. Same pattern as MonitorStatePage's _layoutBridge.
     // The `layouts` binding auto-generates the layoutsChanged signal the
     // combo's Connections target listens for. defaultLayoutId /
-    // defaultAutotileAlgorithm are deliberately absent: every combo below
-    // pins resolvedDefaultId to "" (a slot has no default layout), so the
-    // combo never reads them.
+    // defaultAutotileAlgorithm / defaultScrollingTemplate are deliberately
+    // absent: every combo below pins resolvedDefaultId to "" (a slot has no
+    // default layout), so the combo never reads them.
     readonly property QtObject _comboBridge: QtObject {
         readonly property var layouts: root.appSettings.layouts
         readonly property bool autoAssignAllLayouts: root.appSettings.settings ? root.appSettings.settings.autoAssignAllLayouts : false
@@ -153,11 +153,12 @@ SettingsCard {
                         }
 
                         Label {
-                            // One key per slot for BOTH modes: pressing it
-                            // applies the snapping slot on a snapping monitor
-                            // and the tiling slot on a tiling one, so the
-                            // caption says which monitors this page's slot
-                            // answers for rather than implying a second key.
+                            // One key per slot across every mode: pressing it
+                            // applies the snapping slot on a snapping monitor,
+                            // the tiling slot on a tiling one, and the
+                            // scrolling slot on a scrolling one, so the caption
+                            // says which monitors this page's slot answers for
+                            // rather than implying a second key.
                             text: slotDelegate.shortcutText !== "" ? i18nc("%1 is a keyboard shortcut such as Meta+Alt+1", "Shortcut %1, used on monitors in this mode", slotDelegate.shortcutText) : i18n("No shortcut assigned")
                             Layout.fillWidth: true
                             elide: Text.ElideRight

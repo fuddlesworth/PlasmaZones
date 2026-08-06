@@ -314,14 +314,56 @@ public:
     /// The RULES-VISIBLE active layout id the daemon pushed for @p screenId
     /// (snapping UUID / "autotile:<algo>" / "scrolling:<templateUuid>" /
     /// bare sentinel), stamped onto Field::ActiveLayout in ruleQuery.
-    /// Empty when no push has landed yet (bring-up window before the
-    /// Properties.Get reply) or the screen is unknown — the admission filter
-    /// in shader_config_dbus.cpp does NOT drop ActiveLayout rules for that
-    /// window because setActiveLayouts self-corrects the memoised verdicts
-    /// when the first real map arrives.
+    /// Empty for a screen the daemon did not name. Callers must gate on
+    /// activeLayoutsSeeded(): before the first map lands, EVERY screen reads
+    /// empty here, and an empty answer is not inert (see the seeded flag).
     QString activeLayoutForScreen(const QString& screenId) const
     {
         return m_activeLayouts.value(screenId);
+    }
+
+    /// True once the daemon's first activeLayouts map has landed (live signal
+    /// or the bring-up Properties.Get reply), false again after the
+    /// daemon-loss teardown clear.
+    ///
+    /// Read by the effect's rule-admission filter
+    /// (effectNeverStampedFields in shader_config_dbus.cpp), which is the ONE
+    /// consumer: while this is false, ActiveLayout-referencing rules are not
+    /// admitted to any effect-bound rule set at all. That is the only shape
+    /// that is inert in BOTH polarities. Not stamping the field would not be:
+    /// WindowQuery::activeLayout is a plain QString context field, so
+    /// valueForField returns an ENGAGED empty string either way, and a
+    /// `None{ActiveLayout Equals X}` leaf then matches every window.
+    ///
+    /// The false→true edge re-drives loadRuleAnimationsFromDbus so the rules
+    /// held out during bring-up are admitted as soon as the map is real.
+    bool activeLayoutsSeeded() const
+    {
+        return m_activeLayoutsSeeded;
+    }
+
+    /// Daemon-loss teardown: drop the dead session's active-layout map. Same
+    /// shape and the same reasoning as clearScrollingScreensForTeardown — a
+    /// stale map would otherwise keep baking into rule verdicts resolved
+    /// while the daemon is down, and the live chokepoint's border sweep would
+    /// re-create rule-matched decorations one event-loop turn AFTER the
+    /// handler's clearAllDecorations.
+    ///
+    /// CALL-SITE CONTRACT: the ONE sanctioned caller is the effect's
+    /// serviceUnregistered teardown (lifecycle_wiring_daemon.cpp), which runs
+    /// invalidateAllRuleCaches immediately after. Deliberately no repaint and
+    /// no sweep here.
+    ///
+    /// Clearing the seeded flag does NOT re-drive the rule admission: no
+    /// getAllRules reply is coming with the daemon down, and the re-drive's
+    /// updateAllDecorations would fight the teardown's clearAllDecorations.
+    /// ActiveLayout rules therefore stay admitted against an empty map for
+    /// the daemon-down interval; the next bring-up's seed edge re-drives.
+    void clearActiveLayoutsForTeardown()
+    {
+        ++m_activeLayoutsGeneration;
+        m_activeLayouts.clear();
+        m_activeLayoutsSeeded = false;
     }
 
     /// The set this discriminator actually answers over.
@@ -681,9 +723,24 @@ private:
     /// in-flight property replies), change gate, then rule-cache invalidate
     /// + border sweep on a genuine change — the setScrollingScreens pattern.
     void setActiveLayouts(const QHash<QString, QString>& activeLayouts);
+    /// Set by setActiveLayouts BEFORE its change gate (an identical map is
+    /// still a real map, and the gate would otherwise leave the effect
+    /// permanently unseeded whenever the daemon's first push is empty),
+    /// cleared by clearActiveLayoutsForTeardown. See activeLayoutsSeeded()
+    /// for what reads it and why an unstamped field is not inert.
+    bool m_activeLayoutsSeeded = false;
     /// Stale-reply guard for the activeLayouts property fetch, same contract
     /// as m_scrollingScreensGeneration.
     quint64 m_activeLayoutsGeneration = 0;
+    /// Per-DISPATCH guard for the activeLayouts property fetch, the twin of
+    /// m_screenQueryGeneration. The generation guard above only voids a reply
+    /// an authoritative WRITE overtook; two Gets in flight across a daemon
+    /// restart carry no write between them, so without this the first reply
+    /// to arrive wins and the second (newer) one is discarded by its own
+    /// generation check. Bumped at dispatch so only the newest query applies.
+    quint64 m_activeLayoutsQueryGeneration = 0;
+    /// Same per-dispatch guard for the scrolling-screens property fetch.
+    quint64 m_scrollingScreensQueryGeneration = 0;
     /// Same stale-reply guard for the scrolling-screens property fetch.
     /// Bumped by setScrollingScreens on EVERY authoritative write (live
     /// signal, property reply, daemon-restart clear) — even an identical

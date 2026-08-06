@@ -95,7 +95,7 @@ void appendScrollingTemplatePreviews(QVector<LayoutPreview>& list, PhosphorZones
     for (const PhosphorZones::ScrollingTemplate& templ : templates) {
         LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ);
         preview.sectionKey = QStringLiteral("scrolling-templates");
-        preview.sectionLabel = PhosphorI18n::tr("Scrolling templates");
+        preview.sectionLabel = PhosphorI18n::tr("Scrolling Templates");
         preview.sectionOrder = 10;
         list.append(preview);
     }
@@ -171,6 +171,11 @@ void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAl
     }
 }
 
+// Manual before autotile, recommended first, then by name. There is
+// deliberately no template arm: grouping templates away from the other two
+// families is a QML concern driven by sectionKey/sectionLabel/sectionOrder,
+// which only the QML side reads, so adding a sort arm here would duplicate
+// that decision in a second place.
 bool defaultPreviewLessThan(const LayoutPreview& a, const LayoutPreview& b)
 {
     if (a.recommended != b.recommended) {
@@ -290,8 +295,10 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
     // count (a past divergence pinned the popup open). The pre-pivot
     // scrolling-template exemption is gone with the mined model: native
     // templates are not manual layouts, so no Layout* in this walk can be
-    // the context's template. Native template entries (with their own
-    // active-exemption) join the list when the template card family lands.
+    // the context's template. Template entries are appended unconditionally
+    // further down (appendScrollingTemplatePreviews), which satisfies their
+    // own active-selection exemption trivially: nothing filters them, so the
+    // context's assigned template is always present.
     PhosphorZones::Layout* activeLayout = layoutManager->activeLayout();
 
     if (includeManual) {

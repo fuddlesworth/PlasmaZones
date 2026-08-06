@@ -118,18 +118,20 @@ struct AssignmentEntry
         /// form columns on an endless horizontal strip per context.
         /// `ScreenModeRouter::engineFor` hands Scrolling screens to the
         /// live ScrollEngine; the (Mode, Family) settings table here still
-        /// drives all downstream config routing. Scrolling consumes manual
-        /// layouts only as sizing TEMPLATES (scrollingTemplateLayout below);
-        /// its activeLayoutId() stays the bare "scrolling:" sentinel and the
-        /// mode lookup is the discriminator.
+        /// drives all downstream config routing. Scrolling consumes no manual
+        /// layout at all: its sizing comes from a native ScrollingTemplate
+        /// (scrollingTemplateLayout below), its activeLayoutId() stays the
+        /// bare "scrolling:" sentinel, and the mode lookup is the
+        /// discriminator.
         Scrolling = 2
     };
     Mode mode = Snapping;
     QString snappingLayout; // UUID string of manual layout
     QString tilingAlgorithm; // e.g. "dwindle", "wide", "tall"
-    /// UUID of the manual layout a Scrolling context consumes as its
-    /// column-width TEMPLATE (zone extents become the strip's preset
-    /// vocabulary). Deliberately its own field, never a reuse of
+    /// Id of the native scrolling template (ScrollingTemplate) a Scrolling
+    /// context uses for its seed blueprint, default column width and preset
+    /// vocabularies. Its own UUID namespace, disjoint from manual layout ids.
+    /// Deliberately its own field, never a reuse of
     /// snappingLayout: the lossless mode-toggle contract preserves the
     /// snapping choice across mode flips, and the "scrolling:" sentinel in
     /// activeLayoutId() stays payload-free (rules match on the bare

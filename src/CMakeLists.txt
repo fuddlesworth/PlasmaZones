@@ -503,6 +503,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/seedorderfilter.cpp
     daemon/daemon/seedorderfilter.h
     daemon/daemon/osd.cpp
+    daemon/daemon/cheatsheet.cpp
     daemon/daemon/stripzones.h
     daemon/daemon.h
     daemon/daemon_fwd.h

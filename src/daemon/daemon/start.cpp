@@ -913,9 +913,10 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     // (unlike autotile's virtualScreenRegionsChanged handler), so its
     // affected strips must be retiled here or their columns keep stale
     // widths/offsets until an unrelated retile. The retile relays out of
-    // the STORED override map, so the template vocabulary (extracted
-    // against live VS geometry for Fixed-geometry zones) is re-derived
-    // first — updateScrollingScreens' per-pass push plus its identical-set
+    // the STORED override map, and the per-context rule params and gaps that
+    // feed it re-resolve on the push, not on the retile. Native templates
+    // hold fractions, so the template half of the push does not depend on
+    // geometry. updateScrollingScreens' per-pass push plus its identical-set
     // retile covers both needs in one call, keeping this handler's
     // single-retile property.
     if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {

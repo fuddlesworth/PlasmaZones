@@ -23,11 +23,14 @@
  *     different strips produce different payloads.
  *  5. Off-screen columns are excluded at the wire boundary — the payload
  *     describes what is visible, not what is managed.
- *  6. scrollingScreens answers sorted, across several screens.
- *  7. scrollingScreensChanged is gated on an actual change: the engine
+ *  6. presetVocabularyJson carries the same ownership gates, and its payload
+ *     mixes the two vocabularies independently: a widths-only template
+ *     override replaces the widths and leaves the heights on the fallback.
+ *  7. scrollingScreens answers sorted, across several screens.
+ *  8. scrollingScreensChanged is gated on an actual change: the engine
  *     re-announces an identical set on every desktop switch, and a wire
  *     consumer comparing successive payloads must not see a phantom one.
- *  8. clearEngine leaves every slot answering safely AND stops relaying.
+ *  9. clearEngine leaves every slot answering safely AND stops relaying.
  */
 
 #include <QTest>
@@ -343,6 +346,33 @@ private Q_SLOTS:
         QCOMPARE(activateSpy.count(), 1);
     }
 
+    // Which WAY each delta goes, not just that something moved: -1 is left
+    // and +1 is right, per the XML's DocString.
+    void testFocusColumn_mapsDeltaToDirection()
+    {
+        QSignalSpy activateSpy(m_engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+
+        // An empty strip has nothing to activate, so a well-formed call is
+        // still silent — the counts below start from a real zero.
+        m_adaptor->focusColumn(QStringLiteral("DP-1"), -1);
+        QCOMPARE(activateSpy.count(), 0);
+
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+        activateSpy.clear();
+
+        // app|b opened last and holds focus, so left lands on app|a.
+        m_adaptor->focusColumn(QStringLiteral("DP-1"), -1);
+        QCOMPARE(activateSpy.count(), 1);
+        QCOMPARE(activateSpy.at(0).at(0).toString(), QStringLiteral("app|a"));
+
+        m_adaptor->focusColumn(QStringLiteral("DP-1"), 1);
+        QCOMPARE(activateSpy.count(), 2);
+        QCOMPARE(activateSpy.at(1).at(0).toString(), QStringLiteral("app|b"));
+    }
+
+    // Same ownership gates as focusColumn, plus the payload's mixed-vocabulary
+    // shape: the two preset lists are overridden independently.
     void testPresetVocabularyJson_gatesAndShape()
     {
         // Same silent ownership gates as focusColumn: foreign and empty
@@ -372,31 +402,6 @@ private Q_SLOTS:
         QCOMPARE(widths.at(0).toDouble(), 0.2);
         QCOMPARE(widths.at(1).toDouble(), 0.8);
         QCOMPARE(obj.value(QLatin1String("windowHeights")).toArray(), fallbackHeights);
-    }
-
-    // Which WAY each delta goes, not just that something moved: -1 is left
-    // and +1 is right, per the XML's DocString.
-    void testFocusColumn_mapsDeltaToDirection()
-    {
-        QSignalSpy activateSpy(m_engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
-
-        // An empty strip has nothing to activate, so a well-formed call is
-        // still silent — the counts below start from a real zero.
-        m_adaptor->focusColumn(QStringLiteral("DP-1"), -1);
-        QCOMPARE(activateSpy.count(), 0);
-
-        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
-        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
-        activateSpy.clear();
-
-        // app|b opened last and holds focus, so left lands on app|a.
-        m_adaptor->focusColumn(QStringLiteral("DP-1"), -1);
-        QCOMPARE(activateSpy.count(), 1);
-        QCOMPARE(activateSpy.at(0).at(0).toString(), QStringLiteral("app|a"));
-
-        m_adaptor->focusColumn(QStringLiteral("DP-1"), 1);
-        QCOMPARE(activateSpy.count(), 2);
-        QCOMPARE(activateSpy.at(1).at(0).toString(), QStringLiteral("app|b"));
     }
 
     // The property is documented as sorted so a consumer can compare it with

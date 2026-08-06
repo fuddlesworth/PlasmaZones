@@ -23,9 +23,10 @@ class Settings;
 ///   2. **Virtual-screen configurations** — staged virtual screen layouts
 ///      per physical screen, flushed to Settings (for persistence) BEFORE
 ///      `Settings::save()` and to the daemon (via D-Bus) AFTER.
-///   3. **Quick-layout slots** — both snapping and tiling slot writes go
-///      to the daemon's mode-keyed LayoutRegistry via D-Bus (after
-///      `notifyReload`), flushed together by `flushQuickSlotsToDaemon()`.
+///   3. **Quick-layout slots** — the snapping, tiling and scrolling slot
+///      writes all go to the daemon's mode-keyed LayoutRegistry via D-Bus
+///      (after `notifyReload`), flushed together by
+///      `flushQuickSlotsToDaemon()`.
 ///
 /// Orchestrated by SettingsController's save lifecycle — callers are
 /// expected to invoke the flush methods in the right order (persistence
@@ -188,13 +189,14 @@ public:
     void clearTilingQuickSlots();
     void clearScrollingQuickSlots();
 
-    /// Push staged quick-layout slots (both snapping and tiling modes) to the
-    /// daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER `notifyReload`
-    /// so the daemon has the fresh config.
+    /// Push staged quick-layout slots (snapping, tiling and scrolling modes)
+    /// to the daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER
+    /// `notifyReload` so the daemon has the fresh config.
     ///
     /// Same failure contract as `flushAssignmentsToDaemon`: false when any
     /// per-slot call errored, and the staging map for the failing mode is
-    /// retained. Both modes are attempted regardless of the other's outcome.
+    /// retained. All three modes are attempted regardless of the others'
+    /// outcome.
     [[nodiscard]] bool flushQuickSlotsToDaemon();
 
 private:

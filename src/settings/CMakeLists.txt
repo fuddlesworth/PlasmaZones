@@ -325,10 +325,10 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/tiling/TilingWindowHandlingCard.qml
         qml/pages/tiling/TilingFocusCard.qml
         # Scrolling: the condensed simple page, the three advanced leaves
-        # (Columns / Tabs / Window), the cards both surfaces share, the
-        # preset-list editor the Columns page hosts twice, and the
-        # theme-fallback colour row, hosted three times by the Tabs page and
-        # twice by the drop-indicator card.
+        # (Columns / Tabs / Window), the quick-shortcuts page binding
+        # templates to the quick digits, the cards both surfaces share, and
+        # the theme-fallback colour row, hosted three times by the Tabs page
+        # and twice by the drop-indicator card.
         qml/pages/scrolling/ScrollingSimplePage.qml
         qml/pages/scrolling/ScrollingColumnsPage.qml
         qml/pages/scrolling/ScrollingTabsPage.qml
@@ -338,7 +338,6 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/scrolling/ScrollingDragInsertCard.qml
         qml/pages/scrolling/ScrollingDropIndicatorCard.qml
         qml/pages/scrolling/ScrollingFocusCard.qml
-        qml/pages/scrolling/PresetListEditor.qml
         qml/pages/scrolling/ThemeFallbackColorRow.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which
         # also hosts the unified inner/outer gap controls.

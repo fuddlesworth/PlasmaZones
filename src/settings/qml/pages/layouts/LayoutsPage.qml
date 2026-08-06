@@ -435,7 +435,7 @@ SettingsFlickable {
             icon.name: "view-grid-symbolic"
             text: {
                 if (root.viewMode === 2)
-                    return filterBar.filterText.length > 0 ? i18n("No matching templates") : i18n("No scrolling templates available");
+                    return filterBar.hasActiveFilters ? i18n("No matching templates") : i18n("No scrolling templates available");
                 if (filterBar.hasActiveFilters)
                     return root.viewMode === 1 ? i18n("No matching algorithms") : i18n("No matching layouts");
 
@@ -453,8 +453,16 @@ SettingsFlickable {
                     if (root.viewMode === 1 && !filterBar.showBuiltInAlgorithms && !filterBar.showUserAlgorithms)
                         hints.push(i18n("Both Built-in and User algorithm sources are hidden"));
 
+                    if (root.viewMode === 2 && !filterBar.showBuiltInTemplates && !filterBar.showUserTemplates)
+                        hints.push(i18n("Both Built-in and Your Templates sources are hidden"));
+
                     return hints.length > 0 ? hints.join("\n") : i18n("Try adjusting your filters or search terms");
                 }
+                // Templates live in the settings app's own store, so an empty
+                // list is a matter of creating or importing one rather than of
+                // the daemon not running.
+                if (root.viewMode === 2)
+                    return i18n("Create a new template or import one");
                 // The tiling view is only reachable while autotiling is on (the
                 // switch is gated on it, and turning it off forces viewMode back
                 // to 0), so an empty list here means the same thing it means for
@@ -657,13 +665,13 @@ SettingsFlickable {
             deleteConfirmDialog.open();
         }
 
-        function onExportRequested(layoutId) {
+        function onExportRequested(layoutId, isTemplateExport) {
             if (layoutId.startsWith("autotile:")) {
                 algorithmExportDialog.algorithmId = settingsController.algorithmIdFromLayoutId(layoutId);
                 algorithmExportDialog.open();
-            } else if (root.viewMode === 2) {
-                // Template ids are UUID-shaped like layouts; the menu only
-                // shows the current view's cards, so the view discriminates.
+            } else if (isTemplateExport) {
+                // Template ids are UUID-shaped like layouts, so the menu
+                // carries the kind rather than this page inferring it.
                 templateExportDialog.templateId = layoutId;
                 templateExportDialog.open();
             } else {

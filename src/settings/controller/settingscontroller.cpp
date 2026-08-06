@@ -292,6 +292,15 @@ SettingsController::~SettingsController()
         if (m_rulesPage->model())
             m_rulesPage->model()->refreshLabels();
     }
+
+    // Drop the registry's borrow of the template store, the same posture the
+    // lookups above take: the injection is a raw pointer with no owner-side
+    // notification, so anything reaching the registry during the remainder of
+    // teardown must find it unwired rather than pointing at a store that is
+    // about to go. The declaration order in the header already outlives the
+    // registry; this makes the contract explicit at the one injection site.
+    if (m_localLayoutManager)
+        m_localLayoutManager->setScrollingTemplateStore(nullptr);
 }
 
 SettingsController::SettingsController(QObject* parent)

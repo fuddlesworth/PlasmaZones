@@ -3,6 +3,8 @@
 
 #include <PhosphorZones/ScrollingTemplateStore.h>
 
+#include <PhosphorZones/LayoutRegistry.h>
+
 #include "zoneslogging.h"
 
 #include <QDir>
@@ -16,16 +18,14 @@
 
 namespace PhosphorZones {
 
-namespace {
-QLatin1String templateSubdirectory()
-{
-    return QLatin1String("plasmazones/scrolling-templates");
-}
-} // namespace
-
 ScrollingTemplateStore::ScrollingTemplateStore(QObject* parent)
     : QObject(parent)
 {
+}
+
+QString ScrollingTemplateStore::templateSubdirectory()
+{
+    return QStringLiteral("plasmazones/scrolling-templates");
 }
 
 void ScrollingTemplateStore::loadTemplates()
@@ -37,11 +37,15 @@ void ScrollingTemplateStore::loadTemplates()
                                                     QStandardPaths::LocateDirectory);
     std::reverse(allDirs.begin(), allDirs.end());
 
-    const QString userDir = userTemplateDirectory();
+    // Canonicalize the user directory ONCE, outside the loop. An empty
+    // canonical path means the directory does not exist yet (no user template
+    // has ever been saved); comparing against it would make every system
+    // directory whose canonicalPath is also empty look like the user one.
+    const QString userCanonical = QDir(userTemplateDirectory()).canonicalPath();
     QHash<QUuid, ScrollingTemplate> loaded;
     for (const QString& dirPath : allDirs) {
         const QDir dir(dirPath);
-        const bool isUserDir = (QDir(dirPath).canonicalPath() == QDir(userDir).canonicalPath());
+        const bool isUserDir = !userCanonical.isEmpty() && dir.canonicalPath() == userCanonical;
         const QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
         for (const QString& fileName : files) {
             QFile file(dir.absoluteFilePath(fileName));
@@ -111,6 +115,13 @@ QUuid ScrollingTemplateStore::saveTemplate(ScrollingTemplate templ)
     // in-memory entry was — editing a bundled template shadows it.
     templ.isSystem = false;
     templ.sourcePath = userTemplateFilePath(templ.id);
+    // Only emit when the value actually changed. The settings pages re-save on
+    // every field commit, and an unchanged save otherwise rewrote the file and
+    // fanned templatesChanged out to every picker and layout source.
+    const auto existing = m_templates.constFind(templ.id);
+    if (existing != m_templates.constEnd() && *existing == templ) {
+        return templ.id;
+    }
     if (!writeTemplateFile(templ)) {
         return QUuid();
     }
@@ -125,13 +136,26 @@ bool ScrollingTemplateStore::removeTemplate(const QUuid& id)
     if (it == m_templates.constEnd()) {
         return false;
     }
-    const QString userFile = userTemplateFilePath(id);
-    if (!QFile::exists(userFile)) {
-        // Pure system template: nothing user-owned to delete. The UI
-        // disables delete for these; refusing here keeps the contract even
-        // for direct D-Bus callers.
+    if (it->isSystem) {
+        // Pure system template: nothing user-owned to delete. The UI disables
+        // delete for these; refusing here keeps the contract even for direct
+        // D-Bus callers. Branching on the entry's own origin flag rather than
+        // the user file's existence keeps the refusal aimed at bundled
+        // templates only — a user template whose file vanished underneath us
+        // is a missing file, not a bundled one.
         qCWarning(lcZonesLib) << "ScrollingTemplateStore: refusing to delete bundled template" << id;
         return false;
+    }
+    const QString userFile = userTemplateFilePath(id);
+    if (!QFile::exists(userFile)) {
+        // A user entry whose file is already gone (deleted out from under the
+        // process). The requested state already holds on disk, so rescan to
+        // drop the stale entry (or resurface a bundled original) and report
+        // success rather than refusing forever on a state we cannot repair by
+        // refusing.
+        qCInfo(lcZonesLib) << "ScrollingTemplateStore: user file already gone for" << id << "— rescanning";
+        loadTemplates();
+        return true;
     }
     if (!QFile::remove(userFile)) {
         qCWarning(lcZonesLib) << "ScrollingTemplateStore: failed to delete" << userFile;
@@ -153,9 +177,9 @@ QUuid ScrollingTemplateStore::duplicateTemplate(const QUuid& id, const QString& 
         return QUuid();
     }
     copy.id = QUuid::createUuid();
-    // Same literal suffix as LayoutRegistry::duplicateNameSuffix so the two
-    // duplicate flows read identically in the UI.
-    copy.name = newName.isEmpty() ? copy.name + QStringLiteral(" (Copy)") : newName;
+    // The layout duplicate flow's suffix, taken from its one authority so the
+    // two flows cannot drift in the UI.
+    copy.name = newName.isEmpty() ? copy.name + LayoutRegistry::duplicateNameSuffix() : newName;
     return saveTemplate(copy);
 }
 

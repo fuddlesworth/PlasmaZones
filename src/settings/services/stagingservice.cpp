@@ -107,6 +107,7 @@ void StagingService::clearAll()
     m_virtualScreenConfigs.clear();
     m_snappingQuickSlots.clear();
     m_tilingQuickSlots.clear();
+    m_scrollingQuickSlots.clear();
 }
 
 // Snapping and tiling slots are mutually exclusive in the unified Rule
@@ -467,8 +468,9 @@ bool StagingService::flushQuickSlotsToDaemon()
         }
         return ok;
     };
-    // Both modes are attempted before the verdict — `&&` would short-circuit
-    // the second flush on a snapping failure and silently skip it.
+    // All three modes are attempted before the verdict — `&&` would
+    // short-circuit the later flushes on a snapping failure and silently skip
+    // them.
     const bool snappingOk = flush(kSnappingMode, m_snappingQuickSlots);
     const bool tilingOk = flush(kAutotileMode, m_tilingQuickSlots);
     const bool scrollingOk = flush(kScrollingMode, m_scrollingQuickSlots);

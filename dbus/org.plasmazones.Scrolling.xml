@@ -33,7 +33,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="presetVocabularyJson">
-            <annotation name="org.gtk.GDBus.DocString" value="The screen's effective preset vocabulary as a JSON object {&quot;columnWidths&quot;: [...], &quot;windowHeights&quot;: [...]} of 0.0 to 1.0 fractions. Each list resolves independently: a list the context's resolved template layout supplies comes from the template, and a list it does not supply falls back to the configured preset list, so a template with no stacked zones yields template widths beside the configured heights. This is the vocabulary the cycle-preset-width and cycle-preset-height shortcuts walk on that screen. Same silent ownership gate as focusColumn: an empty object when the screen is not scrolling."/>
+            <annotation name="org.gtk.GDBus.DocString" value="The screen's effective preset vocabulary as a JSON object {&quot;columnWidths&quot;: [...], &quot;windowHeights&quot;: [...]} of 0.0 to 1.0 fractions. Each list resolves independently: a list the context's resolved scrolling template supplies comes from that template's own preset list, and a list it does not supply falls back to the configured preset list, so a template that defines widths but no heights yields template widths beside the configured heights. This is the vocabulary the cycle-preset-width and cycle-preset-height shortcuts walk on that screen. Same silent ownership gate as focusColumn: an empty object when the screen is not scrolling."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose vocabulary to describe."/>
             </arg>

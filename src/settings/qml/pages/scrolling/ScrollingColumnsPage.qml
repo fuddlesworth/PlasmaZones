@@ -9,14 +9,15 @@ import "../../js/PresetList.js" as PresetList
 
 /**
  * @brief Scrolling → Columns: what a fresh column and a fresh tile look like
- * (default width and height, display mode) and the preset lists the cycle
- * shortcuts step through. One of the three advanced scrolling leaves
- * (Columns / Tabs / Window).
+ * (default width and height, display mode), plus the template a scrolling
+ * screen falls back to when it has none assigned. One of the three advanced
+ * scrolling leaves (Columns / Tabs / Window).
  *
  * The New columns card is per-monitor overridable through its scope chip
- * (the Columns sub-domain of the per-screen scrolling map). The preset lists
- * are app-wide, so they sit in their own unscoped card rather than under the
- * scope chip.
+ * (the Columns sub-domain of the per-screen scrolling map). The preset
+ * vocabularies the cycling shortcuts step through live on templates now, so
+ * this page only picks the default template and leaves editing them to the
+ * Layouts page.
  *
  * This page decides WHICH columns open tabbed (the display row on the New
  * columns card). How a tabbed column's indicator is drawn is the Tabs leaf.
@@ -34,7 +35,7 @@ SettingsFlickable {
     readonly property int heightKindFixed: _scrollConsts.heightKindFixed
     readonly property int heightKindPreset: _scrollConsts.heightKindPreset
 
-    // Live preset counts, through the shared parse PresetListEditor also uses
+    // Live preset counts, through the shared PresetList.js parse
     // so the page has exactly one implementation of "how many presets".
     readonly property int widthPresetCount: PresetList.count(appSettings.scrollingPresetColumnWidths)
     readonly property int heightPresetCount: PresetList.count(appSettings.scrollingPresetWindowHeights)
@@ -340,7 +341,7 @@ SettingsFlickable {
         }
 
         // =================================================================
-        // Presets Card
+        // Layout Template Card
         // =================================================================
         SettingsCard {
             Layout.fillWidth: true
@@ -390,11 +391,16 @@ SettingsFlickable {
                             // Re-resolve AFTER the model swap: indexOfValue
                             // inside a binding evaluates against the OLD
                             // model (the combo-derived reset trap).
-                            currentIndex = Math.max(0, indexOfValue(appSettings.defaultScrollingTemplate));
+                            // A miss stays at -1 rather than snapping to the
+                            // leading None: config still holds the stored id,
+                            // and displayText below surfaces it verbatim.
+                            currentIndex = indexOfValue(appSettings.defaultScrollingTemplate);
                         }
 
                         textRole: "text"
                         valueRole: "value"
+                        displayText: currentIndex >= 0 ? currentText : appSettings.defaultScrollingTemplate
+                        Accessible.name: i18n("Default scrolling template")
                         onActivated: appSettings.defaultScrollingTemplate = currentValue
                         Component.onCompleted: rebuild()
 
@@ -408,7 +414,7 @@ SettingsFlickable {
 
                         Connections {
                             function onDefaultScrollingTemplateChanged() {
-                                defaultTemplateCombo.currentIndex = Math.max(0, defaultTemplateCombo.indexOfValue(appSettings.defaultScrollingTemplate));
+                                defaultTemplateCombo.currentIndex = defaultTemplateCombo.indexOfValue(appSettings.defaultScrollingTemplate);
                             }
 
                             target: appSettings

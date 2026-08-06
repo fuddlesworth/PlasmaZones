@@ -1122,16 +1122,18 @@ private:
     //      registry is still alive — fixes a UAF the QObject-child-parent
     //      pattern had, where ~QObject ran after unique_ptr reset).
     //   3. ~m_localSources drops borrowed source pointers.
-    //   4. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
+    //   4. ~m_localLayoutManager, ~m_localTemplateStore, ~m_localAlgorithmRegistry.
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
-    std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
     /// Local read view of the scrolling-template store (same files the
-    /// daemon's authoritative store reads); borrowed by the bundle's
-    /// template source, so declared before m_localSources like its
-    /// registry siblings. Refreshed on the daemon's
+    /// daemon's authoritative store reads); borrowed by the bundle's template
+    /// source AND by m_localLayoutManager (setScrollingTemplateStore in the
+    /// ctor body), so it is declared BEFORE both of them: reverse-order member
+    /// destruction has to tear the two borrowers down while the store they
+    /// point at is still alive. Refreshed on the daemon's
     /// scrollingTemplatesChanged D-Bus signal.
     std::unique_ptr<PhosphorZones::ScrollingTemplateStore> m_localTemplateStore;
+    std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
     PhosphorLayout::LayoutSourceBundle m_localSources;
     /// Owned here (not parented to `this`) so destruction runs via the
     /// unique_ptr reset in reverse declaration order — BEFORE the

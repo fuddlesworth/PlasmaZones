@@ -173,6 +173,9 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // shared display key, which is therefore only written when no rule
         // filled it. Fail-soft: no resolved template inserts nothing and
         // the settings/compiled defaults stand.
+        // diffActiveAssignments resolves the same context again on a switch.
+        // The duplicate resolve is accepted: it is bounded by the scrolling
+        // screen count and only runs for screens already in scrolling mode.
         const PhosphorZones::ScrollingTemplate templ =
             m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity);
         if (templ.isValid()) {
@@ -208,9 +211,24 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             }
             // Beyond-blueprint defaults ride the settings-channel trio
             // (template values mirror the wire enums by construction).
-            overrides.insert(SPK::defaultColumnWidthKind(), templ.defaultColumnWidthKind);
+            // Kind 3 is Preset and its index points into THIS template's
+            // preset list, which was not inserted above when empty — pushing
+            // the index then would resolve it against the settings
+            // vocabulary and pick an unrelated width. ScrollingTemplate::
+            // normalize() already demotes that shape to Proportion, so this
+            // only catches a template that reached us without normalizing.
+            constexpr int kDefaultWidthKindPreset = 3;
+            constexpr int kDefaultWidthKindProportion = 0;
+            const bool presetWidthsUsable = !templ.presetColumnWidths.isEmpty();
+            if (templ.defaultColumnWidthKind == kDefaultWidthKindPreset && !presetWidthsUsable) {
+                overrides.insert(SPK::defaultColumnWidthKind(), kDefaultWidthKindProportion);
+            } else {
+                overrides.insert(SPK::defaultColumnWidthKind(), templ.defaultColumnWidthKind);
+            }
             overrides.insert(SPK::defaultColumnWidthValue(), templ.defaultColumnWidthValue);
-            overrides.insert(SPK::defaultColumnWidthPresetIndex(), templ.defaultColumnWidthPresetIndex);
+            if (presetWidthsUsable) {
+                overrides.insert(SPK::defaultColumnWidthPresetIndex(), templ.defaultColumnWidthPresetIndex);
+            }
             if (!params.defaultColumnDisplay) {
                 overrides.insert(SPK::defaultColumnDisplay(), templ.defaultColumnDisplay);
             }

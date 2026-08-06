@@ -105,8 +105,12 @@ public:
     }
 
     /// Clamp every fraction into legal range, drop degenerate entries, sort
-    /// and dedupe the preset lists. Returns false when the template is
-    /// unusable even after normalization (invalid id / empty name).
+    /// and dedupe the preset lists, and cap the blueprint at the engine's
+    /// entry limit. A Preset default width with an empty preset vocabulary
+    /// (the bare-defaults shape) demotes to Proportion, so the width trio the
+    /// daemon pushes as a unit is always self-consistent. Returns false when
+    /// the template is unusable even after normalization (invalid id / empty
+    /// name).
     bool normalize();
 
     QJsonObject toJson() const;

@@ -862,6 +862,7 @@ void SettingsAdaptor::initializeRegistry()
     // Scrolling settings (concrete Settings only)
     if (concrete) {
         REGISTER_CONCRETE_BOOL("scrollingEnabled", scrollingEnabled, setScrollingEnabled)
+        REGISTER_CONCRETE_STRING("defaultScrollingTemplate", defaultScrollingTemplate, setDefaultScrollingTemplate)
         // scrollingCenterFocusedColumn: enum (0=Never, 1=Always, 2=OnOverflow) — needs range validation
         m_getters[QStringLiteral("scrollingCenterFocusedColumn")] = [concrete]() {
             return concrete->scrollingCenterFocusedColumn();

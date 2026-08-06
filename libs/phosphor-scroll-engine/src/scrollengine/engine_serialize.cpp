@@ -390,9 +390,20 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
             continue;
         }
         const QJsonObject obj = it.value().toObject();
-        // Effective vocabularies for the LEGACY presetIdx fixup in the two
-        // fromJson calls below — resolved once per key; the screen is in
-        // scope here, which is why the fixup lives at this claim site.
+        // Vocabularies for the LEGACY presetIdx fixup in the two fromJson
+        // calls below — resolved once per key; the screen is in scope here,
+        // which is why the fixup lives at this claim site.
+        //
+        // "Effective" means effective AT RESTORE TIME, which on the login
+        // path is the settings list: the daemon hands this blob over from
+        // initEnginesAndWiring, and a screen's template overrides are not
+        // pushed until updateScrollingScreens runs later, out of start().
+        // A legacy index therefore usually resolves against the settings
+        // vocabulary even for a screen that ends up on a template. The
+        // result is a value anchor either way, and relayout snaps it into
+        // whatever vocabulary the screen finally has, so the reload path
+        // (which does see the overrides) differs only in which entry the
+        // anchor starts from.
         const QList<qreal> widthVocab = effectivePresetColumnWidths(key.screenId);
         const QList<qreal> heightVocab = effectivePresetWindowHeights(key.screenId);
         StashedStrip stash;

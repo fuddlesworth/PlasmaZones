@@ -272,12 +272,14 @@ QtObject {
         }
     }
 
-    // Both action editors use the rich `LayoutComboBox` — preview tile +
-    // category / aspect badges, same component the assignment pages use.
-    // `layoutFilter` separates the two streams: 0 = manual / snapping
-    // layouts, 1 = autotile algorithms. `showNoneOption: false` because
-    // the action either targets a layout or has no value (no implicit
-    // "Default" fallback inside a rule).
+    // The snapping-layout and tiling-algorithm action editors use the rich
+    // `LayoutComboBox` — preview tile + category / aspect badges, same
+    // component the assignment pages use. `layoutFilter` separates the two
+    // streams: 0 = manual / snapping layouts, 1 = autotile algorithms.
+    // `showNoneOption: false` because the action either targets a layout or
+    // has no value (no implicit "Default" fallback inside a rule). The
+    // scrolling-template editor below uses a plain combo instead, for the
+    // reason its own comment gives.
     property Component _snappingLayoutEditor: Component {
         LayoutComboBox {
             readonly property var _param: parent.modelData

@@ -173,6 +173,10 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
     // match Field::ActiveLayout with the same vocabulary as the daemon's
     // context rules. Replaces the engaged-empty stamp ruleQueryFor left,
     // which made every negated ActiveLayout rule fire for every window.
+    // Unconditional by design: the bring-up window where the map is not yet
+    // seeded is covered one layer up, by holding ActiveLayout-referencing
+    // rules out of the evaluator entirely (TilingHandler::activeLayoutsSeeded).
+    // A gate here could not help — the field resolves engaged either way.
     query.activeLayout = m_tilingHandler->activeLayoutForScreen(screenId);
     // Stamp the screen orientation from the resolved screen id. ruleQueryFor
     // leaves the field to us whenever it is handed an id: its own derivation
