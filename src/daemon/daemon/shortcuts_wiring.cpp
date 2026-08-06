@@ -483,17 +483,19 @@ void Daemon::connectShortcutSignals()
             Q_EMIT m_settingsAdaptor->settingsChanged();
         }
 
-        // Templates screens resolve their TEMPLATE for the unlock card:
-        // resolveLayoutForScreen is the snap-only chain and would announce an
-        // unrelated fallback snap layout there. The lock branch needs no
-        // split — showLockedPreviewOsd is itself template-aware and falls
-        // back to the text card when the context has no template.
+        // Templates screens resolve their native TEMPLATE for the unlock
+        // card: resolveLayoutForScreen is the snap-only chain and would
+        // announce an unrelated fallback snap layout there. The lock branch
+        // needs no split — showLockedPreviewOsd is itself template-aware and
+        // falls back to the text card when the context has no template.
         if (wasLocked) {
-            PhosphorZones::Layout* layout = (mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling))
-                ? m_layoutManager->scrollingTemplateForContext(
-                      screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), currentActivity())
-                : m_layoutManager->resolveLayoutForScreen(screenId);
-            if (layout) {
+            if (mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
+                const PhosphorZones::ScrollingTemplate templ = m_layoutManager->scrollingTemplateForContext(
+                    screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), currentActivity());
+                if (templ.isValid()) {
+                    showScrollingTemplateOsd(templ, screenId);
+                }
+            } else if (PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId)) {
                 showLayoutOsd(layout, screenId);
             }
         } else {

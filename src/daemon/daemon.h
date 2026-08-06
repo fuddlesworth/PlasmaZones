@@ -134,6 +134,12 @@ public:
 
     // OSD notifications
     void showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
+    /// Announce a native scrolling template (picker/slot/cycle/KCM apply,
+    /// or @p locked for the lock-toggle preview): projects the blueprint
+    /// into preview zones and hands the payload to the overlay's
+    /// template OSD. Impl in daemon/osd.cpp.
+    void showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& templ, const QString& screenId,
+                                  bool locked = false);
     void showLockedOsd(const QString& screenId);
     void showLockedPreviewOsd(const QString& screenId);
     void showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity, DisabledReason reason);
@@ -775,6 +781,10 @@ private:
     // stays valid across back-to-back resolves.
     PhosphorRules::RuleSet m_excludeRuleSet;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
+    /// Native scrolling-template store (created in initServices, injected
+    /// into m_layoutManager; the injection is cleared in stop() before this
+    /// unique_ptr resets).
+    std::unique_ptr<PhosphorZones::ScrollingTemplateStore> m_scrollingTemplateStore;
     // Daemon-owned tile-algorithm registry, replacing the old
     // AlgorithmRegistry::instance() singleton: plugins can't share
     // process-global state safely, so the composition root owns it.

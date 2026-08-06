@@ -25,6 +25,8 @@
 
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/Zone.h>
 
 #include "RuleCascadeFixture.h"
@@ -177,12 +179,12 @@ private Q_SLOTS:
     void testContextActiveLayout_scrollingTemplateStamp()
     {
         RegistryFixture f = makeRegistryFixture();
-        auto* templ = new PhosphorZones::Layout(QStringLiteral("Template"));
-        auto* zone = new PhosphorZones::Zone();
-        zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
-        templ->addZone(zone);
-        f.registry->addLayout(templ);
-        const QString templId = templ->id().toString();
+        PhosphorZones::ScrollingTemplateStore store;
+        f.registry->setScrollingTemplateStore(&store);
+        PhosphorZones::ScrollingTemplate templ;
+        templ.name = QStringLiteral("Template");
+        templ.presetColumnWidths = {0.5};
+        const QString templId = store.saveTemplate(templ).toString();
 
         const auto gapRuleForActiveLayout = [](const QString& id) {
             PWR::RuleAction gapAction;

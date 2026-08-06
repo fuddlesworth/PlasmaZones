@@ -232,6 +232,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(0, CD::scrollingPresetIndexMax())},
+        {CD::defaultTemplateKey(), CD::scrollingDefaultTemplate(), QMetaType::QString},
         {CD::wheelFocusEnabledKey(), CD::scrollingWheelFocusEnabled(), QMetaType::Bool},
         {CD::wheelFocusInvertedKey(), CD::scrollingWheelFocusInverted(), QMetaType::Bool},
     };

@@ -4,6 +4,7 @@
 #include "layoutadaptor.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include "core/platform/logging.h"
@@ -411,9 +412,12 @@ QString LayoutAdaptor::getScreenStates()
         // nullptr for non-Scrolling contexts.
         obj[QLatin1String("scrollingTemplateId")] = entry.scrollingTemplateLayout;
         if (!entry.scrollingTemplateLayout.isEmpty()) {
-            PhosphorZones::Layout* templ =
-                m_layoutManager->layoutById(QUuid::fromString(entry.scrollingTemplateLayout));
-            obj[QLatin1String("scrollingTemplateName")] = templ ? templ->name() : QString();
+            // Name from the native template STORE (templates are no longer
+            // layouts); a deleted template answers an empty name and the
+            // page shows the raw id.
+            const PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+            obj[QLatin1String("scrollingTemplateName")] =
+                store ? store->templateById(QUuid::fromString(entry.scrollingTemplateLayout)).name : QString();
         } else {
             obj[QLatin1String("scrollingTemplateName")] = QString();
         }
@@ -828,12 +832,16 @@ void LayoutAdaptor::setScrollingTemplateLayout(const QString& screenId, int virt
     // and clearAssignmentForScreenDesktopActivity would wipe the whole
     // entry, which is the wrong tool for "just drop the template".
     if (!layoutId.isEmpty()) {
-        // A non-empty template must name an existing MANUAL layout: unlike
-        // the mode-only assignment setters there is no sentinel form to
-        // accept, and an unknown UUID stored now would just resolve as "no
-        // template" later.
-        auto* layout = getValidatedLayout(layoutId, QStringLiteral("set scrolling template"));
-        if (!layout) {
+        // A non-empty id must name an existing native ScrollingTemplate:
+        // unlike the mode-only assignment setters there is no sentinel form
+        // to accept, and an unknown UUID passed through to the registry
+        // would be stored as "no template" (the store-validated clear),
+        // silently dropping the context's existing choice. Refusing HERE
+        // keeps the prior template.
+        const QUuid parsed = QUuid::fromString(layoutId);
+        const PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+        if (parsed.isNull() || (store && !store->contains(parsed))) {
+            qCWarning(lcDbusLayout) << "setScrollingTemplateLayout: unknown template" << layoutId << "— refusing";
             return;
         }
     }
@@ -854,8 +862,9 @@ QString LayoutAdaptor::getScrollingTemplateLayout(const QString& screenId, int v
     if (!validDesktopArg(virtualDesktop, "getScrollingTemplateLayout")) {
         return QString();
     }
-    PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(resolvedId, virtualDesktop, activityId);
-    return templ ? templ->id().toString() : QString();
+    const PhosphorZones::ScrollingTemplate templ =
+        m_layoutManager->scrollingTemplateForContext(resolvedId, virtualDesktop, activityId);
+    return templ.isValid() ? templ.id.toString() : QString();
 }
 
 void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDesktop, const QString& activity, int mode,

@@ -258,17 +258,14 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
 
     // Track the active layout so we can guarantee it appears in the list
     // (prevents empty selector / broken cycling when the active layout is
-    // hidden from the filter). The context's scrolling TEMPLATE gets the
-    // same exemption — it is the "current selection" on a Templates screen,
-    // and filtering it out (hidden, screen-restricted, aspect-mismatched)
-    // would blank the picker highlight and misaim the next cycle exactly
-    // the way a filtered active layout used to. Widened HERE rather than at
-    // a call site so buildLayoutsList and visibleLayoutCount can never
-    // disagree on the row count (a past divergence pinned the popup open).
+    // hidden from the filter). Widened HERE rather than at a call site so
+    // buildLayoutsList and visibleLayoutCount can never disagree on the row
+    // count (a past divergence pinned the popup open). The pre-pivot
+    // scrolling-template exemption is gone with the mined model: native
+    // templates are not manual layouts, so no Layout* in this walk can be
+    // the context's template. Native template entries (with their own
+    // active-exemption) join the list when the template card family lands.
     PhosphorZones::Layout* activeLayout = layoutManager->activeLayout();
-    PhosphorZones::Layout* contextTemplate = resolvedScreenId.isEmpty()
-        ? nullptr
-        : layoutManager->scrollingTemplateForContext(resolvedScreenId, virtualDesktop, activity);
 
     if (includeManual) {
         const auto layouts = layoutManager->layouts();
@@ -277,7 +274,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
                 continue;
             }
 
-            const bool isActive = (layout == activeLayout) || (layout == contextTemplate);
+            const bool isActive = (layout == activeLayout);
 
             if (layout->hiddenFromSelector() && !isActive) {
                 continue;

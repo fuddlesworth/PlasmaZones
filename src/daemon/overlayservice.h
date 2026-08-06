@@ -332,6 +332,14 @@ public:
                        bool producesOverlappingZones = false, const QString& zoneNumberDisplay = QStringLiteral("all"),
                        int masterCount = 1);
     void showLockedLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
+    /// The native scrolling-template OSD: no Layout* backs a
+    /// ScrollingTemplate, so the caller supplies the template id, name and
+    /// blueprint-derived preview zones (the daemon's
+    /// scrollingTemplatePreviewZones projection). Always captioned as a
+    /// template; @p locked renders the lock badge (the locked-preview twin
+    /// of showLockedLayoutOsd).
+    void showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones,
+                                  const QString& screenId = QString(), bool locked = false);
     /// The card always wears the failure glyph "dialog-cancel". Both callers
     /// (showContextDisabledOsd and showNotAssignedOsd) explain why a
     /// requested change had no effect, which is what the glyph says. A

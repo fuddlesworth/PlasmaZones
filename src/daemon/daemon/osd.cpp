@@ -289,21 +289,21 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
     }
 
     // Show the visual preview OSD with lock overlay showing the current
-    // layout. A Templates (scrolling) context resolves its TEMPLATE:
+    // layout. A Templates (scrolling) context resolves its native TEMPLATE:
     // resolveLayoutForScreen is the snap-only chain and would preview an
     // unrelated fallback snap layout's zones under the lock badge. A
     // template-less scrolling context falls through to the text card.
     if (style == OsdStyle::Preview && m_overlayService && m_layoutManager) {
         const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
         const QString id = resolvedId.isEmpty() ? screenId : resolvedId;
-        PhosphorZones::Layout* layout = nullptr;
         if (currentModeFor(id) == PhosphorZones::AssignmentEntry::Scrolling) {
-            layout = m_layoutManager->scrollingTemplateForContext(
+            const PhosphorZones::ScrollingTemplate templ = m_layoutManager->scrollingTemplateForContext(
                 id, m_layoutManager->currentVirtualDesktopForScreen(id), currentActivity());
-        } else {
-            layout = m_layoutManager->resolveLayoutForScreen(id);
-        }
-        if (layout) {
+            if (templ.isValid()) {
+                showScrollingTemplateOsd(templ, id, /*locked=*/true);
+                return;
+            }
+        } else if (PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(id)) {
             m_overlayService->showLockedLayoutOsd(layout, id);
             return;
         }
@@ -518,6 +518,72 @@ void Daemon::stopScrollingOsdSettleTimer(const QString& screenId)
     if (auto* settle = findChild<QTimer*>(scrollingSettleTimerName(screenId), Qt::FindDirectChildrenOnly)) {
         settle->stop();
     }
+}
+
+void Daemon::showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& templ, const QString& screenId,
+                                      bool locked)
+{
+    if (shouldSuppressOsd() || !templ.isValid() || !m_overlayService) {
+        return;
+    }
+    const OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+    if (style == OsdStyle::None) {
+        return;
+    }
+    if (style == OsdStyle::Text) {
+        showKdeTextOsd(QStringLiteral("plasmazones"), PhosphorI18n::tr("Column template: %1").arg(templ.name));
+        return;
+    }
+
+    // Project the template into preview zones: the blueprint columns laid
+    // left to right at their widths, or, for a vocabulary-only template
+    // (empty blueprint), a strip snapshot of its preset widths. Either way
+    // the last column may run past the right edge — clamped half-in rather
+    // than dropped, the same honest overhang the strip itself shows.
+    QList<qreal> widths;
+    for (const PhosphorZones::ScrollingTemplateColumn& column : templ.columns) {
+        widths.append(column.width);
+    }
+    if (widths.isEmpty()) {
+        widths = templ.presetColumnWidths;
+    }
+    QVariantList zones;
+    qreal x = 0.0;
+    for (int i = 0; i < widths.size() && x < 1.0; ++i) {
+        const qreal width = qMin(widths.at(i), 1.0 - x);
+        QVariantMap relGeo;
+        relGeo[QLatin1String("x")] = x;
+        relGeo[QLatin1String("y")] = 0.0;
+        relGeo[QLatin1String("width")] = width;
+        relGeo[QLatin1String("height")] = 1.0;
+        QVariantMap zoneMap;
+        zoneMap[QLatin1String("zoneNumber")] = i + 1;
+        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
+        // Namespaced synthetic id, never a bare index (see the autotile
+        // preview projection above for the rationale).
+        zoneMap[QLatin1String("id")] = QStringLiteral("scrolling-template:%1:%2").arg(templ.id.toString()).arg(i);
+        zoneMap[QLatin1String("name")] = QString();
+        zoneMap[QLatin1String("useCustomColors")] = false;
+        zones.append(zoneMap);
+        x += widths.at(i);
+    }
+    if (zones.isEmpty()) {
+        // Defaults-only template (no blueprint, no width vocabulary): a
+        // single default-width column is the honest preview.
+        QVariantMap relGeo;
+        relGeo[QLatin1String("x")] = 0.0;
+        relGeo[QLatin1String("y")] = 0.0;
+        relGeo[QLatin1String("width")] = 0.5;
+        relGeo[QLatin1String("height")] = 1.0;
+        QVariantMap zoneMap;
+        zoneMap[QLatin1String("zoneNumber")] = 1;
+        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
+        zoneMap[QLatin1String("id")] = QStringLiteral("scrolling-template:%1:0").arg(templ.id.toString());
+        zoneMap[QLatin1String("name")] = QString();
+        zoneMap[QLatin1String("useCustomColors")] = false;
+        zones.append(zoneMap);
+    }
+    m_overlayService->showScrollingTemplateOsd(templ.id.toString(), templ.name, zones, screenId, locked);
 }
 
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)

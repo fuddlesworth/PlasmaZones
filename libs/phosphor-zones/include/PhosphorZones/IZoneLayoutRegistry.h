@@ -26,6 +26,7 @@
 #include <PhosphorLayoutApi/ILayoutSourceRegistry.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ScrollingTemplate.h>
 
 #include <QJsonObject>
 #include <QString>
@@ -115,18 +116,19 @@ public:
     virtual QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                           const QString& activity = QString()) const = 0;
 
-    /// The resolved scrolling TEMPLATE layout for a context (the layout
-    /// whose zones are the strip's preset vocabulary), or nullptr when the
-    /// context is not Scrolling, names no template, or the named layout no
-    /// longer exists. Default nullptr so lightweight test stubs need not
-    /// implement the template feature.
-    virtual Layout* scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
-                                                const QString& activity) const
+    /// The resolved scrolling TEMPLATE for a context (the native
+    /// ScrollingTemplate whose vocabularies and blueprint the engine push
+    /// consumes), by value — isValid() is false when the context is not
+    /// Scrolling, names no template and no default template answers, or the
+    /// named template no longer exists in the store. Default invalid so
+    /// lightweight test stubs need not implement the template feature.
+    virtual ScrollingTemplate scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
+                                                          const QString& activity) const
     {
         Q_UNUSED(screenId)
         Q_UNUSED(virtualDesktop)
         Q_UNUSED(activity)
-        return nullptr;
+        return {};
     }
 
     /// The id the layout PICKER highlights for a scrolling context: the
@@ -139,8 +141,9 @@ public:
     /// purpose: a pure convenience over the virtual resolver above.
     QString scrollingDisplayIdForContext(const QString& screenId, int virtualDesktop, const QString& activity) const
     {
-        if (Layout* templ = scrollingTemplateForContext(screenId, virtualDesktop, activity)) {
-            return templ->id().toString();
+        const ScrollingTemplate templ = scrollingTemplateForContext(screenId, virtualDesktop, activity);
+        if (templ.isValid()) {
+            return templ.id.toString();
         }
         return QString(PhosphorLayout::LayoutId::ScrollingId);
     }

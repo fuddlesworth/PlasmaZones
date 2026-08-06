@@ -411,6 +411,8 @@ public:
                    setScrollingDropIndicatorBorderWidth NOTIFY scrollingDropIndicatorBorderWidthChanged)
     Q_PROPERTY(int scrollingDropIndicatorBorderRadius READ scrollingDropIndicatorBorderRadius WRITE
                    setScrollingDropIndicatorBorderRadius NOTIFY scrollingDropIndicatorBorderRadiusChanged)
+    Q_PROPERTY(QString defaultScrollingTemplate READ defaultScrollingTemplate WRITE setDefaultScrollingTemplate NOTIFY
+                   defaultScrollingTemplateChanged)
     Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
                    NOTIFY scrollingWheelFocusEnabledChanged)
     Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
@@ -1218,6 +1220,8 @@ public:
     void setScrollingDropIndicatorBorderWidth(int px) override;
     int scrollingDropIndicatorBorderRadius() const override;
     void setScrollingDropIndicatorBorderRadius(int px) override;
+    QString defaultScrollingTemplate() const;
+    void setDefaultScrollingTemplate(const QString& templateId);
     bool scrollingWheelFocusEnabled() const;
     void setScrollingWheelFocusEnabled(bool enabled);
     bool scrollingWheelFocusInverted() const;

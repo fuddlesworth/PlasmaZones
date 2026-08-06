@@ -226,6 +226,13 @@ public:
     {
         return QStringLiteral("0.333,0.5,0.667");
     }
+    /// DEFAULT scrolling template id (braced uuid string), consulted when a
+    /// Scrolling context's cascade entry names no template. Empty = none:
+    /// the engine then runs on its compiled defaults.
+    static QString scrollingDefaultTemplate()
+    {
+        return QString();
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Tab indicator (Scrolling.TabIndicator)

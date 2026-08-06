@@ -462,6 +462,8 @@ void Daemon::stop()
         m_layoutManager->setCurrentVirtualDesktopProvider({});
         m_layoutManager->setSnappingPreferredProvider({});
         m_layoutManager->setDefaultAssignmentSuppressedProvider({});
+        m_layoutManager->setDefaultScrollingTemplateProvider({});
+        m_layoutManager->setScrollingTemplateStore(nullptr);
     }
 
     // Null the QML static registry / manager pointers BEFORE the m_running

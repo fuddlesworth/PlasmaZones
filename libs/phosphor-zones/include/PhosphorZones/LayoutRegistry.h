@@ -30,6 +30,8 @@
 
 namespace PhosphorZones {
 
+class ScrollingTemplateStore;
+
 /**
  * @brief Triple-axis key for the Combined-context batch API.
  *
@@ -405,18 +407,44 @@ public:
     void setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
                                   const AssignmentEntry& entry);
 
-    /// Assign @p layoutId as the context's scrolling TEMPLATE (the layout
-    /// whose zones become the strip's preset vocabulary) and flip the mode to
-    /// Scrolling. The sibling fields survive per the lossless-toggle
-    /// contract, and activeLayoutId() stays the bare "scrolling:" sentinel.
-    /// Impl in layoutregistry_assignments.cpp.
+    /// Assign @p templateId as the context's scrolling TEMPLATE (the native
+    /// ScrollingTemplate whose vocabularies and blueprint the engine
+    /// consumes) and flip the mode to Scrolling. The sibling fields survive
+    /// per the lossless-toggle contract, and activeLayoutId() stays the bare
+    /// "scrolling:" sentinel. An id unknown to the wired store is stored as
+    /// "no template" (empty), matching the resolver's deleted-template
+    /// degrade. Impl in layoutregistry_assignments.cpp.
     void assignScrollingTemplate(const QString& screenId, int virtualDesktop, const QString& activity,
-                                 const QString& layoutId);
-    /// The resolved template Layout* for a scrolling context, or nullptr when
-    /// the cascade has no entry, the entry names no template, or the named
-    /// layout no longer exists (deleted-template fallback: "no template").
-    Layout* scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
-                                        const QString& activity) const override;
+                                 const QString& templateId);
+    /// The resolved ScrollingTemplate for a scrolling context, by value —
+    /// invalid when the cascade has no Scrolling entry, the entry names no
+    /// template and the default-template provider answers nothing, or the
+    /// named template no longer exists in the store (deleted-template
+    /// fallback: "no template").
+    ScrollingTemplate scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
+                                                  const QString& activity) const override;
+
+    /// Wire the native template store (borrowed, post-construction like the
+    /// other injected collaborators; pass nullptr on teardown). Without a
+    /// store every template resolve answers "no template".
+    void setScrollingTemplateStore(ScrollingTemplateStore* store)
+    {
+        m_scrollingTemplateStore = store;
+    }
+    ScrollingTemplateStore* scrollingTemplateStore() const
+    {
+        return m_scrollingTemplateStore;
+    }
+
+    /// Provider for the DEFAULT scrolling template id (a config setting the
+    /// daemon owns): consulted when a Scrolling context's cascade entry
+    /// names no template. Same injected-provider pattern as the screen
+    /// orientation provider; registries without one (settings/KCM local
+    /// views) simply resolve no default.
+    void setDefaultScrollingTemplateProvider(std::function<QString()> provider)
+    {
+        m_defaultScrollingTemplateProvider = std::move(provider);
+    }
 
     /// The RULES-VISIBLE ActiveLayout value the context resolvers stamp onto
     /// their windowless queries: the assignment id, except that a Scrolling
@@ -741,6 +769,7 @@ public:
     /// nested format, so reader and migration cannot drift.
     static constexpr QLatin1String QuickSlotsSnappingKey{"snapping"};
     static constexpr QLatin1String QuickSlotsAutotileKey{"autotile"};
+    static constexpr QLatin1String QuickSlotsScrollingKey{"scrolling"};
 
     Q_INVOKABLE Layout* layoutForShortcut(AssignmentEntry::Mode mode, int number) const;
     Q_INVOKABLE void applyQuickLayout(AssignmentEntry::Mode mode, int number, const QString& screenId);
@@ -755,6 +784,26 @@ public:
 
     Q_INVOKABLE void cycleToPreviousLayout(const QString& screenId);
     Q_INVOKABLE void cycleToNextLayout(const QString& screenId);
+
+    /// Commit @p templateId as @p screenId's scrolling template on the
+    /// screen's OWN desktop (the template twin of applyLayoutToScreen's
+    /// per-screen commit; quick slots and the picker route here). Refuses
+    /// an empty screen, a malformed id, or an id the wired store does not
+    /// know. Impl beside applyLayoutToScreen.
+    bool applyScrollingTemplateToScreen(const QString& screenId, const QString& templateId);
+
+    /// Drop @p id from every assignment rule's @c SetSnappingLayout and
+    /// @c SetScrollingTemplate actions — the id-keyed scrub BOTH deletion
+    /// flows drive: layout deletion (removeLayout calls it) and native
+    /// template deletion (the D-Bus delete verb calls it; the two id
+    /// namespaces are disjoint UUID sets, so one walk is exact for both).
+    /// A rule that still carries meaningful intent (an Autotile engine-mode,
+    /// a preserved tilingAlgorithm, or the other surviving layout slot) is
+    /// rebuilt with only the referencing slots cleared — the mode + remaining
+    /// intent survives, preserving mode-toggle losslessness. A rule left with
+    /// nothing but a default (Snapping) engine-mode and no payload is dropped
+    /// entirely. Returns true if the rule set changed.
+    bool purgeSnappingLayoutFromAssignments(const QString& layoutId);
 
     // ─── Built-in layouts ─────────────────────────────────────────────────
 
@@ -852,16 +901,19 @@ private:
     void writeQuickLayouts();
     /// Map a tiling mode to its @ref m_quickLayoutSlots array index — the
     /// ONE authority every quick-slot entry point (read, apply, shortcut
-    /// lookup, both writers) consults. Scrolling shares the SNAPPING array
-    /// (index 0): slots hold manual-layout UUIDs, which is exactly the
-    /// template vocabulary a scrolling screen consumes, and
-    /// applyLayoutToScreen routes the apply to assignScrollingTemplate
-    /// there — a slot press changes the template, never the engine.
-    /// Total function: every mode maps to an array index (Autotile → 1,
-    /// everything else → 0), so callers index unconditionally.
+    /// lookup, both writers) consults. Scrolling owns its OWN array since
+    /// the native-template pivot: its slots hold ScrollingTemplate ids (a
+    /// distinct UUID namespace from manual layouts), so sharing the
+    /// snapping array would make one slot number mean two different objects
+    /// depending on the pressed screen's mode. A slot press changes the
+    /// template, never the engine. Total function: every mode maps to an
+    /// array index, so callers index unconditionally.
     static constexpr int slotIndexFor(AssignmentEntry::Mode mode)
     {
-        return mode == AssignmentEntry::Autotile ? 1 : 0;
+        if (mode == AssignmentEntry::Autotile) {
+            return 1;
+        }
+        return mode == AssignmentEntry::Scrolling ? 2 : 0;
     }
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
@@ -1021,16 +1073,6 @@ private:
     template<typename KeyT, typename DecodeFn, typename ValidFn, typename FamilyFn>
     void applyBatchAssignments(const QHash<KeyT, QString>& assignments, DecodeFn decode, ValidFn valid,
                                FamilyFn familyMatches, int emitDesktop, const char* label);
-
-    /// Drop @p layoutId from every assignment rule's @c SetSnappingLayout
-    /// and @c SetScrollingTemplate actions when a manual layout is deleted.
-    /// A rule that still carries meaningful intent (an Autotile engine-mode,
-    /// a preserved tilingAlgorithm, or the other surviving layout slot) is
-    /// rebuilt with only the referencing slots cleared — the mode + remaining
-    /// intent survives, preserving mode-toggle losslessness. A rule left with
-    /// nothing but a default (Snapping) engine-mode and no payload is dropped
-    /// entirely. Returns true if the rule set changed.
-    bool purgeSnappingLayoutFromAssignments(const QString& layoutId);
 
     /// Synthesize the level-1 global default into an AssignmentEntry,
     /// IGNORING the global suppress setting. Three-tier precedence:
@@ -1203,6 +1245,14 @@ private:
     /// onto every windowless context query so a Field::ScreenOrientation predicate
     /// can match. See @ref setScreenOrientationProvider.
     std::function<std::optional<QString>(const QString& screenId)> m_screenOrientationProvider;
+    /// Borrowed native scrolling-template store (see setScrollingTemplateStore);
+    /// null in registries that never wire one (some tests) — every template
+    /// resolve then answers "no template".
+    ScrollingTemplateStore* m_scrollingTemplateStore = nullptr;
+    /// Empty = provider unset. The DEFAULT scrolling template id consulted
+    /// when a Scrolling cascade entry names no template (see
+    /// setDefaultScrollingTemplateProvider).
+    std::function<QString()> m_defaultScrollingTemplateProvider;
     /// Empty = provider unset (legacy behaviour). Returns true when
     /// the user has snapping mode enabled in settings, regardless of
     /// whether a global default snap layout id is configured. See
@@ -1229,7 +1279,7 @@ private:
     /// Autotile (autotile algorithm IDs) — see @ref slotIndexFor, the one
     /// authority for this mapping. Each maps slot number (1..9) →
     /// layout/algorithm ID.
-    QHash<int, QString> m_quickLayoutSlots[2];
+    QHash<int, QString> m_quickLayoutSlots[3];
     /// Per-layout settings sidecar (layout-settings.json), keyed by layout UUID.
     /// Settings are split out of the structural layout file on save and merged
     /// back in on load — see layoutregistry_persistence.cpp.

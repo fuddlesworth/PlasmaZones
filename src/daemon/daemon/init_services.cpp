@@ -30,6 +30,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 #include <PhosphorZones/LayoutComputeService.h>
@@ -194,6 +195,20 @@ void Daemon::initLayoutAndSettingsWiring()
     // per-context DefaultLayoutAssignment rule overrides this either way.
     m_layoutManager->setDefaultAssignmentSuppressedProvider([this]() {
         return m_settings && m_settings->suppressDefaultLayoutAssignment();
+    });
+    // Native scrolling-template store: created here (post-construction like
+    // every other injected collaborator), loaded once, and wired into the
+    // registry so the assignment/resolver choke points validate template ids
+    // and resolve template objects. The templatesChanged → engine-recompute
+    // connection is restart-scoped and lives in wireSignals (signals.cpp).
+    m_scrollingTemplateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
+    m_scrollingTemplateStore->loadTemplates();
+    m_layoutManager->setScrollingTemplateStore(m_scrollingTemplateStore.get());
+    // Default-template provider: the setting-backed fallback for a Scrolling
+    // context whose cascade entry names no template (parity with snapping's
+    // default layout).
+    m_layoutManager->setDefaultScrollingTemplateProvider([this]() {
+        return m_settings ? m_settings->defaultScrollingTemplate() : QString();
     });
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).

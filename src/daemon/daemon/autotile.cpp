@@ -516,8 +516,10 @@ QSet<QString> Daemon::diffActiveAssignments()
         // a template swap moves no windows, so it must not trigger the
         // resnap/OSD apply below (the engine re-derives its vocabulary via
         // the unconditional updateEngineScreens either way).
-        if (PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity)) {
-            snapshot.templateId = templ->id().toString();
+        const PhosphorZones::ScrollingTemplate templ =
+            m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity);
+        if (templ.isValid()) {
+            snapshot.templateId = templ.id.toString();
         }
         next.insert(screenId, snapshot);
         if (m_activeAssignmentByScreen.value(screenId).assignmentId != snapshot.assignmentId) {

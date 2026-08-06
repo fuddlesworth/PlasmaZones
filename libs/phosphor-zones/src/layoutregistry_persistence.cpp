@@ -487,8 +487,10 @@ void LayoutRegistry::readQuickLayouts()
     // indices, so a slot-array change cannot leave persistence behind.
     auto& snappingSlots = m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Snapping)];
     auto& autotileSlots = m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)];
+    auto& scrollingSlots = m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Scrolling)];
     snappingSlots.clear();
     autotileSlots.clear();
+    scrollingSlots.clear();
     QFile file(quickLayoutsFilePath());
     if (!file.open(QIODevice::ReadOnly)) {
         return; // a missing file is not an error
@@ -519,6 +521,7 @@ void LayoutRegistry::readQuickLayouts()
     // restructured store drops old values rather than carrying a second format.
     readModeSlots(root.value(QuickSlotsSnappingKey).toObject(), snappingSlots);
     readModeSlots(root.value(QuickSlotsAutotileKey).toObject(), autotileSlots);
+    readModeSlots(root.value(QuickSlotsScrollingKey).toObject(), scrollingSlots);
 }
 
 void LayoutRegistry::writeQuickLayouts()
@@ -534,6 +537,7 @@ void LayoutRegistry::writeQuickLayouts()
     QJsonObject obj;
     obj.insert(QuickSlotsSnappingKey, modeSlotsToJson(m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Snapping)]));
     obj.insert(QuickSlotsAutotileKey, modeSlotsToJson(m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)]));
+    obj.insert(QuickSlotsScrollingKey, modeSlotsToJson(m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Scrolling)]));
     // QSaveFile gives atomic temp-write + rename — a crash mid-write never
     // leaves a truncated quicklayouts.json behind.
     QSaveFile file(quickLayoutsFilePath());
@@ -553,7 +557,8 @@ void LayoutRegistry::writeQuickLayouts()
     }
     qCInfo(lcZonesLib) << "Saved quickShortcuts: snapping="
                        << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Snapping)].size()
-                       << "autotile=" << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)].size();
+                       << "autotile=" << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)].size()
+                       << "scrolling=" << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Scrolling)].size();
 }
 
 void LayoutRegistry::loadAssignments()
@@ -565,7 +570,8 @@ void LayoutRegistry::loadAssignments()
 
     qCInfo(lcZonesLib) << "Loaded rules=" << m_ruleStore->count() << "quickShortcuts: snapping="
                        << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Snapping)].size()
-                       << "autotile=" << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)].size();
+                       << "autotile=" << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)].size()
+                       << "scrolling=" << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Scrolling)].size();
 }
 
 void LayoutRegistry::saveAssignments()

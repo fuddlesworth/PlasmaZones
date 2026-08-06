@@ -304,8 +304,9 @@ QString LayoutRegistry::rulesVisibleActiveLayoutId(const QString& screenId, int 
     // screen" is a Mode leaf.
     QString id = assignmentIdForScreen(screenId, virtualDesktop, activity);
     if (PhosphorLayout::LayoutId::isScrolling(id)) {
-        if (Layout* templ = scrollingTemplateForContext(screenId, virtualDesktop, activity)) {
-            id = PhosphorLayout::LayoutId::makeScrollingId(templ->id().toString());
+        const ScrollingTemplate templ = scrollingTemplateForContext(screenId, virtualDesktop, activity);
+        if (templ.isValid()) {
+            id = PhosphorLayout::LayoutId::makeScrollingId(templ.id.toString());
         }
     }
     return id;

@@ -12,9 +12,10 @@
  *    template card and the cycle anchors on it); a template-less context and
  *    every non-sentinel id pass through unchanged.
  *  - applyEntry's manual-layout branch: with the LIVE capability pushed as
- *    Templates AND the cascade in Scrolling mode, a manual pick lands in
- *    assignScrollingTemplate (mode unchanged, snapping choice preserved);
- *    with the capability downgraded to Placement the same pick applies as an
+ *    Templates AND the cascade in Scrolling mode, a manual pick is REFUSED
+ *    (since the native-template pivot a layout is not a template, and a
+ *    store-validated template write would silently clear the slot); with
+ *    the capability downgraded to Placement the same pick applies as an
  *    ordinary snapping assignment, matching what the router says the screen
  *    actually runs.
  *
@@ -29,6 +30,8 @@
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include "config/settings.h"
 #include "daemon/controllers/unifiedlayoutcontroller.h"
@@ -50,6 +53,22 @@ class TestUnifiedLayoutControllerScrolling : public QObject
 
 private:
     std::vector<std::unique_ptr<TestHelpers::IsolatedConfigGuard>> m_guards;
+    std::vector<std::unique_ptr<PhosphorZones::ScrollingTemplateStore>> m_stores;
+
+    PhosphorZones::ScrollingTemplateStore* attachTemplateStore(PhosphorZones::LayoutRegistry* mgr)
+    {
+        m_stores.emplace_back(std::make_unique<PhosphorZones::ScrollingTemplateStore>());
+        mgr->setScrollingTemplateStore(m_stores.back().get());
+        return m_stores.back().get();
+    }
+
+    QUuid createTestTemplate(PhosphorZones::ScrollingTemplateStore* store, const QString& name)
+    {
+        PhosphorZones::ScrollingTemplate templ;
+        templ.name = name;
+        templ.presetColumnWidths = {0.333, 0.5, 0.667};
+        return store->saveTemplate(templ);
+    }
 
     PhosphorZones::Layout* createTestLayout(const QString& name)
     {
@@ -74,14 +93,15 @@ private Q_SLOTS:
     void cleanup()
     {
         m_guards.clear();
+        m_stores.clear();
     }
 
     void displayIdForAssignment_substitutesTemplateForSentinel()
     {
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
         Settings settings(nullptr);
-        auto* templ = createTestLayout(QStringLiteral("Template"));
-        mgr->addLayout(templ);
+        auto* store = attachTemplateStore(mgr.data());
+        const QUuid templId = createTestTemplate(store, QStringLiteral("Template"));
 
         UnifiedLayoutController controller(mgr.data(), &settings, nullptr, nullptr);
 
@@ -93,24 +113,26 @@ private Q_SLOTS:
         QCOMPARE(controller.displayIdForAssignment(QStringLiteral("DP-1"), sentinel), sentinel);
 
         // With a template assigned, the sentinel resolves to its UUID.
-        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), desktop, QString(), templ->id().toString());
-        QCOMPARE(controller.displayIdForAssignment(QStringLiteral("DP-1"), sentinel), templ->id().toString());
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), desktop, QString(), templId.toString());
+        QCOMPARE(controller.displayIdForAssignment(QStringLiteral("DP-1"), sentinel), templId.toString());
 
         // Every non-sentinel id is identity, template or not.
         QCOMPARE(controller.displayIdForAssignment(QStringLiteral("DP-1"), QStringLiteral("autotile:bsp")),
                  QStringLiteral("autotile:bsp"));
-        const QString uuid = templ->id().toString();
+        const QString uuid = templId.toString();
         QCOMPARE(controller.displayIdForAssignment(QStringLiteral("DP-1"), uuid), uuid);
         // An empty screen id cannot resolve a context; sentinel passes through.
         QCOMPARE(controller.displayIdForAssignment(QString(), sentinel), sentinel);
     }
 
-    void applyEntry_templatesScreen_routesManualPickToTemplate()
+    void applyEntry_templatesScreen_refusesManualPick()
     {
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
         Settings settings(nullptr);
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
+        auto* store = attachTemplateStore(mgr.data());
+        const QUuid templId = createTestTemplate(store, QStringLiteral("Template"));
 
         UnifiedLayoutController controller(mgr.data(), &settings, nullptr, nullptr);
         controller.setCurrentScreenName(QStringLiteral("DP-1"));
@@ -119,14 +141,14 @@ private Q_SLOTS:
         const int desktop = mgr->currentVirtualDesktopForScreen(QStringLiteral("DP-1"));
         mgr->assignLayoutById(QStringLiteral("DP-1"), desktop, QString(),
                               QString(PhosphorLayout::LayoutId::ScrollingId));
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), desktop, QString(), templId.toString());
 
-        QVERIFY(controller.applyLayoutById(layout->id().toString()));
-
-        // The pick became the context's template; the engine mode never
-        // flipped and the picker highlight follows the template UUID.
+        // A manual-layout pick is refused on a live-Templates screen: since
+        // the native-template pivot a layout is not a template, and the
+        // context's ASSIGNED template must survive the refused press.
+        QVERIFY(!controller.applyLayoutById(layout->id().toString()));
         QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), desktop), PhosphorZones::AssignmentEntry::Scrolling);
-        QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()), layout);
-        QCOMPARE(controller.currentLayoutId(), layout->id().toString());
+        QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()).id, templId);
     }
 
     void applyEntry_downgradedScrollingScreen_appliesAsSnapping()
@@ -152,7 +174,7 @@ private Q_SLOTS:
 
         QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), desktop), PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), desktop, QString()), layout);
-        QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()), nullptr);
+        QVERIFY(!mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()).isValid());
     }
 };
 

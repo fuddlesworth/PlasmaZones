@@ -376,28 +376,20 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
                 const int desktop = m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName);
                 // Double check, resolver-first-then-cascade (the
                 // resolvePerScreenLayoutInclude pattern): the LIVE capability
-                // must be Templates AND the cascade mode Scrolling. The router
-                // downgrades a disabled or switched-off scrolling assignment
-                // to live snapping — on such a screen the pick applies as an
-                // ordinary snapping assignment below, matching what the user
-                // actually sees, instead of writing a dead template.
+                // must be Templates AND the cascade mode Scrolling. Since the
+                // native-template pivot a manual layout is NOT an input on
+                // such a screen (templates are their own ScrollingTemplate
+                // objects), so refuse rather than write a dangling layout
+                // uuid into the template slot — the store-validated
+                // assignment would silently clear it. The router-downgraded
+                // case (live snapping under a scrolling assignment) still
+                // applies as an ordinary snapping assignment below.
                 if (m_currentLayoutSupport == PhosphorEngine::IPlacementEngine::LayoutSupport::Templates
                     && m_layoutManager->modeForScreen(m_currentScreenName, desktop, m_currentActivity)
                         == PhosphorZones::AssignmentEntry::Scrolling) {
-                    // Templates semantics: on a scrolling screen a manual
-                    // layout is the screen's sizing TEMPLATE, never a
-                    // placement assignment — assignLayout would classify the
-                    // UUID as Snapping and flip the screen off the engine.
-                    // The template write keeps the mode, preserves the
-                    // snapping choice (lossless toggle) and re-derives the
-                    // engine's vocabulary push via layoutAssigned.
-                    m_layoutManager->assignScrollingTemplate(m_currentScreenName, desktop, m_currentActivity,
-                                                             preview.id);
-                    setCurrentLayoutId(preview.id);
-                    qCInfo(lcDaemon) << "Applied scrolling template=" << preview.displayName
-                                     << "screen=" << m_currentScreenName;
-                    Q_EMIT layoutApplied(layout);
-                    return true;
+                    qCWarning(lcDaemon) << "applyEntry: refusing manual layout" << preview.id
+                                        << "on a Templates screen — layouts are not scrolling templates";
+                    return false;
                 }
                 // Write to the current context (screen, desktop, activity).
                 // Only the per-context assignment is stored — the global

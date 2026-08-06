@@ -369,6 +369,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingGroup(), CD::defaultWindowHeightPresetIndexKey()},
              {CD::scrollingGroup(), CD::presetColumnWidthsKey()},
              {CD::scrollingGroup(), CD::presetWindowHeightsKey()},
+             {CD::scrollingGroup(), CD::defaultTemplateKey()},
          }},
         // The Tabs leaf owns the whole Scrolling.TabIndicator subtree and
         // nothing else, so its per-page Reset covers the indicator's

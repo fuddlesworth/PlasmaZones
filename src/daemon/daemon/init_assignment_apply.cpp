@@ -129,9 +129,10 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
             const auto previousIt = previousAssignments.constFind(screenId);
             if (previousIt != previousAssignments.constEnd() && previousIt->assignmentId == assignmentId) {
                 QString currentTemplateId;
-                if (PhosphorZones::Layout* templ =
-                        m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity)) {
-                    currentTemplateId = templ->id().toString();
+                const PhosphorZones::ScrollingTemplate templ =
+                    m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity);
+                if (templ.isValid()) {
+                    currentTemplateId = templ.id.toString();
                 }
                 templateOnly = previousIt->templateId != currentTemplateId;
             }
@@ -229,12 +230,13 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
             if (osd.templateOnly) {
                 // Template-only apply: the engine did not switch, only the
                 // strip's sizing vocabulary did. Announce the template (the
-                // overlay captions it "Column template" on a live-Templates
-                // screen), or stay silent on a clear — a mode-switch card
-                // for either would announce a switch that did not happen.
-                if (PhosphorZones::Layout* templ =
-                        m_layoutManager->scrollingTemplateForContext(osd.screenId, osd.desktop, activity)) {
-                    showLayoutOsd(templ, osd.screenId);
+                // overlay captions it "Column template"), or stay silent on
+                // a clear — a mode-switch card for either would announce a
+                // switch that did not happen.
+                const PhosphorZones::ScrollingTemplate templ =
+                    m_layoutManager->scrollingTemplateForContext(osd.screenId, osd.desktop, activity);
+                if (templ.isValid()) {
+                    showScrollingTemplateOsd(templ, osd.screenId);
                 }
             } else {
                 // The mode switch itself is the OSD content (mirrors

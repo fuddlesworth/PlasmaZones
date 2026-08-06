@@ -17,6 +17,8 @@
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/Zone.h>
 
 #include "helpers/IsolatedConfigGuard.h"
@@ -50,6 +52,25 @@ protected:
         QDir().mkpath(layoutDir);
         mgr->setLayoutDirectory(layoutDir);
         return mgr;
+    }
+
+    /// Wire a fresh native template store into @p mgr (kept alive by the
+    /// fixture). Tests that exercise template assignment call this once and
+    /// register templates through createTestTemplate.
+    PhosphorZones::ScrollingTemplateStore* attachTemplateStore(PhosphorZones::LayoutRegistry* mgr)
+    {
+        m_stores.emplace_back(std::make_unique<PhosphorZones::ScrollingTemplateStore>());
+        mgr->setScrollingTemplateStore(m_stores.back().get());
+        return m_stores.back().get();
+    }
+
+    /// Create-and-save a minimal named template; returns its store id.
+    QUuid createTestTemplate(PhosphorZones::ScrollingTemplateStore* store, const QString& name)
+    {
+        PhosphorZones::ScrollingTemplate templ;
+        templ.name = name;
+        templ.presetColumnWidths = {0.333, 0.5, 0.667};
+        return store->saveTemplate(templ);
     }
 
     /// Author a per-context DefaultLayoutAssignment override rule into the
@@ -93,6 +114,7 @@ protected:
     }
 
     std::vector<std::unique_ptr<TestHelpers::IsolatedConfigGuard>> m_guards;
+    std::vector<std::unique_ptr<PhosphorZones::ScrollingTemplateStore>> m_stores;
 
 private Q_SLOTS:
 

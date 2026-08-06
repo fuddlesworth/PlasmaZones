@@ -19,6 +19,8 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/Zone.h>
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
@@ -38,12 +40,12 @@ private Q_SLOTS:
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_parent = new QObject(nullptr);
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), m_parent);
-        auto* templ = new PhosphorZones::Layout(QStringLiteral("TemplateLayout"));
-        auto* zone = new PhosphorZones::Zone(QRectF(0.0, 0.0, 1.0, 1.0));
-        zone->setZoneNumber(1);
-        templ->addZone(zone);
-        m_layoutManager->addLayout(templ);
-        m_templateId = templ->id().toString();
+        m_store = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
+        m_layoutManager->setScrollingTemplateStore(m_store.get());
+        PhosphorZones::ScrollingTemplate templ;
+        templ.name = QStringLiteral("Template");
+        templ.presetColumnWidths = {0.5};
+        m_templateId = m_store->saveTemplate(templ).toString();
         m_adaptor = new LayoutAdaptor(m_layoutManager, m_parent);
     }
 
@@ -53,6 +55,7 @@ private Q_SLOTS:
         m_parent = nullptr;
         m_layoutManager = nullptr;
         m_adaptor = nullptr;
+        m_store.reset();
         m_guard.reset();
     }
 
@@ -117,6 +120,7 @@ private Q_SLOTS:
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
+    std::unique_ptr<PhosphorZones::ScrollingTemplateStore> m_store;
     QObject* m_parent = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     LayoutAdaptor* m_adaptor = nullptr;

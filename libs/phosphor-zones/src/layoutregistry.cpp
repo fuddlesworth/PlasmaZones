@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include "zoneslogging.h"
 
@@ -297,9 +298,9 @@ PhosphorZones::Layout* LayoutRegistry::defaultLayout() const
 // tests; keep its scrolling routing in step with the controller's.
 PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, int direction)
 {
-    if (m_layouts.isEmpty()) {
-        return nullptr;
-    }
+    // No layout-list early-out here: the scrolling branch below cycles the
+    // TEMPLATE store and must work with zero manual layouts loaded. The
+    // layout walk guards itself (visible.isEmpty()).
 
     // Translate connector name to screen ID for allowedScreens matching
     QString resolvedScreenId;
@@ -316,6 +317,35 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // known (empty screenId) or no per-output value is on record.
     const int desktop =
         resolvedScreenId.isEmpty() ? m_currentVirtualDesktop : currentVirtualDesktopForScreen(resolvedScreenId);
+
+    // On a scrolling screen the cycle walks the native TEMPLATE store, not
+    // the layout list — layouts are not templates since the native-template
+    // pivot. Reports no Layout* by construction (there is none); the
+    // assignment write is the observable effect, and the daemon's richer
+    // controller cycle owns the OSD. No-current starts at the direction's
+    // first entry.
+    if (!resolvedScreenId.isEmpty()
+        && modeForScreen(resolvedScreenId, desktop, m_currentActivity) == AssignmentEntry::Scrolling) {
+        if (!m_scrollingTemplateStore) {
+            return nullptr;
+        }
+        const QList<ScrollingTemplate> templates = m_scrollingTemplateStore->templates();
+        if (templates.isEmpty()) {
+            return nullptr;
+        }
+        const ScrollingTemplate current = scrollingTemplateForContext(resolvedScreenId, desktop, m_currentActivity);
+        int currentIdx = -1;
+        for (int i = 0; i < templates.size(); ++i) {
+            if (current.isValid() && templates.at(i).id == current.id) {
+                currentIdx = i;
+                break;
+            }
+        }
+        const int newIdx = currentIdx < 0 ? (direction > 0 ? 0 : templates.size() - 1)
+                                          : (currentIdx + direction + templates.size()) % templates.size();
+        assignScrollingTemplate(resolvedScreenId, desktop, m_currentActivity, templates.at(newIdx).id.toString());
+        return nullptr;
+    }
 
     // Build filtered list of visible layouts for current context
     QVector<PhosphorZones::Layout*> visible;
@@ -345,18 +375,12 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
         return nullptr;
     }
 
-    // Use per-screen layout as reference for cycling so each screen cycles independently
+    // Use per-screen layout as reference for cycling so each screen cycles
+    // independently. (Scrolling screens never reach here — the template
+    // branch above returns.)
     PhosphorZones::Layout* currentLayout = nullptr;
     if (!resolvedScreenId.isEmpty()) {
-        // On a scrolling screen the cycle walks TEMPLATES, so the reference
-        // is the assigned template (layoutForScreen yields nullptr there —
-        // its cascade settles on a non-Snapping entry). Without this, every
-        // cycle press restarted from the default layout instead of stepping.
-        if (modeForScreen(resolvedScreenId, desktop, m_currentActivity) == AssignmentEntry::Scrolling) {
-            currentLayout = scrollingTemplateForContext(resolvedScreenId, desktop, m_currentActivity);
-        } else {
-            currentLayout = layoutForScreen(resolvedScreenId, desktop, m_currentActivity);
-        }
+        currentLayout = layoutForScreen(resolvedScreenId, desktop, m_currentActivity);
     }
     if (!currentLayout) {
         currentLayout = defaultLayout();
@@ -391,6 +415,30 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     return newLayout;
 }
 
+bool LayoutRegistry::applyScrollingTemplateToScreen(const QString& screenId, const QString& templateId)
+{
+    // The template twin of applyLayoutToScreen's per-screen commit: write
+    // the screen's OWN desktop, clear a shadowing activity-keyed entry, and
+    // leave the global active-layout pointer alone (it feeds snap overlay /
+    // zone-detector queries a template choice must not repoint). Refuses an
+    // id the store does not know so a mis-wired press reads as "nothing
+    // happened" instead of clearing the context's template.
+    if (screenId.isEmpty() || templateId.isEmpty()) {
+        return false;
+    }
+    const QUuid parsed = QUuid::fromString(templateId);
+    if (parsed.isNull() || (m_scrollingTemplateStore && !m_scrollingTemplateStore->contains(parsed))) {
+        qCInfo(lcZonesLib) << "applyScrollingTemplateToScreen: unknown template" << templateId << "— refusing";
+        return false;
+    }
+    const int desktop = currentVirtualDesktopForScreen(screenId);
+    if (!m_currentActivity.isEmpty()) {
+        clearAssignment(screenId, desktop, m_currentActivity);
+    }
+    assignScrollingTemplate(screenId, desktop, QString(), parsed.toString());
+    return true;
+}
+
 bool LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones::Layout* layout)
 {
     // Per-screen assignment: write per-desktop assignment first so the
@@ -401,26 +449,17 @@ bool LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones:
         // applyQuickLayout via LayoutAdaptor) pass an already idForName-resolved
         // screenId, matching the per-output map's key.
         const int desktop = currentVirtualDesktopForScreen(screenId);
-        // Scrolling routing. A manual Layout* is not a PLACEMENT input on a
-        // scrolling screen — assignLayout below would classify its UUID as
-        // Snapping and flip the screen off the scrolling engine, and a layout
-        // cycle or quick-slot press must never change which engine owns a
-        // screen. Instead the layout becomes the context's sizing TEMPLATE
-        // (zone extents = the strip's preset vocabulary): the engine stays
-        // Scrolling, the mode-toggle contract keeps the snapping choice, and
-        // assignScrollingTemplate's layoutAssigned emit re-derives the
-        // engine's per-screen push. The global active-layout pointer below is
-        // deliberately NOT updated: it feeds the snap overlay / zone-detector
-        // queries, which a template choice must not repoint.
+        // Scrolling refusal. A manual Layout* is not an input on a scrolling
+        // screen at all: it is not a placement (assignLayout below would
+        // classify its UUID as Snapping and flip the screen off the
+        // scrolling engine), and since the native-template pivot it is not a
+        // template either — templates are their own ScrollingTemplate
+        // objects with their own id namespace, assigned through
+        // assignScrollingTemplate / applyScrollingTemplateToScreen. Refuse
+        // so a mis-routed layout press reads as "nothing happened" instead
+        // of silently clearing the context's template.
         if (modeForScreen(screenId, desktop, m_currentActivity) == AssignmentEntry::Scrolling) {
-            if (!layout) {
-                return false;
-            }
-            if (!m_currentActivity.isEmpty()) {
-                clearAssignment(screenId, desktop, m_currentActivity);
-            }
-            assignScrollingTemplate(screenId, desktop, QString(), layout->id().toString());
-            return true;
+            return false;
         }
         // Write per-desktop assignment with empty activity so it applies
         // regardless of which activity is active. Activity-specific
@@ -648,6 +687,12 @@ void LayoutRegistry::setActiveLayoutById(const QUuid& id)
 
 PhosphorZones::Layout* LayoutRegistry::layoutForShortcut(AssignmentEntry::Mode mode, int number) const
 {
+    // Scrolling slots hold ScrollingTemplate ids — a distinct namespace
+    // with no Layout* behind it; applyQuickLayout's scrolling arm reads the
+    // slot id directly.
+    if (mode == AssignmentEntry::Scrolling) {
+        return nullptr;
+    }
     const auto& slots = m_quickLayoutSlots[slotIndexFor(mode)];
     if (slots.contains(number)) {
         const QString& id = slots[number];
@@ -666,14 +711,27 @@ void LayoutRegistry::applyQuickLayout(AssignmentEntry::Mode mode, int number, co
     // slot (setQuickLayoutSlot(mode, n, "")), pressing the shortcut must be a
     // no-op — falling back to m_layouts.at(number-1) silently resurrects
     // a layout the user deliberately unbound.
-    //
+
+    // Scrolling slots hold native TEMPLATE ids: the press swaps the
+    // context's template, never the engine. Same desktop/activity handling
+    // as applyLayoutToScreen (write the screen's own desktop, clear a
+    // shadowing activity-keyed entry). An unset slot is a no-op like the
+    // other modes'.
+    if (mode == AssignmentEntry::Scrolling) {
+        const QString templateId = m_quickLayoutSlots[slotIndexFor(mode)].value(number);
+        if (templateId.isEmpty()) {
+            qCInfo(lcZonesLib) << "Quick slot" << number << "is unset for scrolling — no-op";
+            return;
+        }
+        applyScrollingTemplateToScreen(screenId, templateId);
+        return;
+    }
+
     // Only manual-layout slots can be applied here: an autotile slot
     // resolves to an algorithm ID with no Layout*, and switching algorithms
     // needs the autotile engine, which lives in the daemon. The daemon's
     // shortcut handler applies autotile slots directly; see
-    // daemon/shortcuts_wiring.cpp. A SCROLLING screen also lands here (it
-    // shares the Snapping slot array): applyLayoutToScreen routes the manual
-    // layout to assignScrollingTemplate, so the press swaps the template.
+    // daemon/shortcuts_wiring.cpp.
     auto layout = layoutForShortcut(mode, number);
     if (!layout) {
         qCInfo(lcZonesLib) << "Quick slot" << number << "is unset or not directly applicable — no-op";
@@ -697,6 +755,22 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
         // Clear the slot
         slots.remove(number);
         qCInfo(lcZonesLib) << "Cleared quick layout slot" << number << "mode=" << mode;
+    } else if (mode == AssignmentEntry::Scrolling) {
+        // Scrolling slots hold native TEMPLATE ids, validated against the
+        // template store (parity with the layoutById check below). Without
+        // a wired store the id is stored as-is; applyQuickLayout's
+        // existence check refuses at press time.
+        const QUuid parsed = QUuid::fromString(layoutId);
+        if (parsed.isNull()) {
+            qCWarning(lcZonesLib) << "Rejecting malformed template id for quick slot:" << layoutId;
+            return;
+        }
+        if (m_scrollingTemplateStore && !m_scrollingTemplateStore->contains(parsed)) {
+            qCWarning(lcZonesLib) << "Cannot assign non-existent template to quick slot:" << layoutId;
+            return;
+        }
+        slots[number] = parsed.toString();
+        qCInfo(lcZonesLib) << "Assigned template" << layoutId << "to quick slot" << number;
     } else if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         // Autotile IDs have no corresponding Layout* — accept as-is.
         slots[number] = layoutId;
@@ -745,7 +819,19 @@ void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QH
             continue;
         }
 
-        if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        if (mode == AssignmentEntry::Scrolling) {
+            // Template-id validation, mirroring setQuickLayoutSlot's
+            // scrolling arm.
+            const QUuid parsed = QUuid::fromString(layoutId);
+            if (parsed.isNull()) {
+                qCWarning(lcZonesLib) << "Skipping malformed template id for quick slot" << number << ":" << layoutId;
+                continue;
+            }
+            if (m_scrollingTemplateStore && !m_scrollingTemplateStore->contains(parsed)) {
+                qCWarning(lcZonesLib) << "Skipping non-existent template for quick slot" << number << ":" << layoutId;
+                continue;
+            }
+        } else if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             // See setQuickLayoutSlot for the two-step parse/lookup
             // rationale — catches malformed UUID strings separately
             // from lookup-miss for clearer diagnostics.

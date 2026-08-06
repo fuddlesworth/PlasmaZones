@@ -26,6 +26,8 @@
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/Zone.h>
 #include "helpers/StubSettings.h"
 #include "helpers/IsolatedConfigGuard.h"
@@ -377,9 +379,16 @@ private Q_SLOTS:
 
         mgr->setQuickLayoutSlot(snapping, 1, uuid); // each set writes the sidecar
         mgr->setQuickLayoutSlot(autotile, 2, QStringLiteral("autotile:bsp"));
-        // Scrolling shares the snapping array — a scrolling-mode write must
-        // persist into the "snapping" key, not invent a third on-disk object.
-        mgr->setQuickLayoutSlot(scrolling, 3, uuid);
+        // Scrolling owns its OWN array and on-disk key since the
+        // native-template pivot; its slot values are template ids.
+        PhosphorZones::ScrollingTemplateStore store;
+        mgr->setScrollingTemplateStore(&store);
+        PhosphorZones::ScrollingTemplate slotTemplate;
+        slotTemplate.name = QStringLiteral("SlotTemplate");
+        slotTemplate.presetColumnWidths = {0.5};
+        const QString templId = store.saveTemplate(slotTemplate).toString();
+        mgr->setQuickLayoutSlot(scrolling, 3, templId);
+        mgr->setScrollingTemplateStore(nullptr);
 
         // A fresh registry on the SAME guard-isolated dirs reloads the sidecar
         // (quicklayouts.json lives next to rules.json, not in the layout
@@ -393,10 +402,10 @@ private Q_SLOTS:
         // Modes stay independent across the round trip.
         QVERIFY(!mgr2->quickLayoutSlots(snapping).contains(2));
         QVERIFY(!mgr2->quickLayoutSlots(autotile).contains(1));
-        // The scrolling-mode write round-trips through the shared snapping
-        // array and reads back through both mode arguments.
-        QCOMPARE(mgr2->quickLayoutSlots(scrolling).value(3), uuid);
-        QCOMPARE(mgr2->quickLayoutSlots(snapping).value(3), uuid);
+        // The scrolling-mode write round-trips through its OWN on-disk key
+        // and never leaks into the snapping array.
+        QCOMPARE(mgr2->quickLayoutSlots(scrolling).value(3), templId);
+        QVERIFY(!mgr2->quickLayoutSlots(snapping).contains(3));
         QVERIFY(!mgr2->quickLayoutSlots(autotile).contains(3));
     }
 

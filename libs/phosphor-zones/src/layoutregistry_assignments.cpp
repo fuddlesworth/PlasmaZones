@@ -15,6 +15,7 @@
 // layoutForScreen() / the shared resolve helper.
 
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include "layoutregistry_rulehelpers_p.h"
 #include "zoneslogging.h"
@@ -193,10 +194,12 @@ bool LayoutRegistry::removeAssignmentRule(const QString& screenId, int virtualDe
 
 bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
 {
-    // A manual layout was deleted. Every rule referencing it — as a snapping
-    // layout (SetSnappingLayout) or as a scrolling template
-    // (SetScrollingTemplate, same UUID value shape) — must lose that
-    // reference, but NOT the whole rule, and NOT its other actions.
+    // An id-keyed scrub serving BOTH deletion flows: a deleted manual
+    // layout's id is scrubbed from SetSnappingLayout actions, and a deleted
+    // native scrolling template's id from SetScrollingTemplate actions (the
+    // two id namespaces are disjoint UUID sets, so one walk matching either
+    // action type against the id is exact for both). The rule must lose the
+    // dead reference, but NOT the whole rule, and NOT its other actions.
     //
     // Two rule shapes can carry such an action for the deleted id:
     //
@@ -423,7 +426,7 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
 }
 
 void LayoutRegistry::assignScrollingTemplate(const QString& screenId, int virtualDesktop, const QString& activity,
-                                             const QString& layoutId)
+                                             const QString& templateId)
 {
     // Seed from the exact-shape rule so the sibling mode's stored fields
     // survive (the lossless-toggle contract), exactly like assignLayoutById's
@@ -439,9 +442,18 @@ void LayoutRegistry::assignScrollingTemplate(const QString& screenId, int virtua
     // Normalize to the canonical braced form at the library choke point so
     // every caller (adaptor, controller, registry) stores one spelling. A
     // braceless bus-supplied uuid stored verbatim would defeat the purge's
-    // exact string compare on layout delete and the upsert no-op guard's
+    // exact string compare on template delete and the upsert no-op guard's
     // byte-wise action compare. Empty stays empty (clears the template).
-    const QUuid parsed = QUuid::fromString(layoutId);
+    QUuid parsed = QUuid::fromString(templateId);
+    // Existence validation against the native template store: an unknown id
+    // stores as "no template", matching the resolver's deleted-template
+    // degrade rather than persisting a dangling reference. Without a wired
+    // store (some tests) the id is stored as-is — the resolver degrades the
+    // same way at read time.
+    if (!parsed.isNull() && m_scrollingTemplateStore && !m_scrollingTemplateStore->contains(parsed)) {
+        qCDebug(lcZonesLib) << "assignScrollingTemplate: unknown template" << parsed << "— storing no template";
+        parsed = QUuid();
+    }
     entry.scrollingTemplateLayout = parsed.isNull() ? QString() : parsed.toString();
     upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
     // Emit unconditionally — see assignLayout: the write suppression is real,
@@ -450,8 +462,8 @@ void LayoutRegistry::assignScrollingTemplate(const QString& screenId, int virtua
     Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
 }
 
-PhosphorZones::Layout* LayoutRegistry::scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
-                                                                   const QString& activity) const
+PhosphorZones::ScrollingTemplate
+LayoutRegistry::scrollingTemplateForContext(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
     // Mode-gated BY DESIGN: a template preserved on a non-Scrolling context
     // (the lossless-toggle contract) must not resolve — the engine push and
@@ -459,13 +471,25 @@ PhosphorZones::Layout* LayoutRegistry::scrollingTemplateForContext(const QString
     // twin is scrollingTemplateLayoutForScreen, which reads the stored field
     // regardless of mode (parity with snappingLayoutForScreen).
     const auto entry = resolveAssignmentEntry(screenId, virtualDesktop, activity);
-    if (!entry || entry->mode != AssignmentEntry::Scrolling || entry->scrollingTemplateLayout.isEmpty()) {
-        return nullptr;
+    if (!entry || entry->mode != AssignmentEntry::Scrolling) {
+        return {};
+    }
+    QUuid id = QUuid::fromString(entry->scrollingTemplateLayout);
+    // A cascade entry naming no template falls back to the configured
+    // DEFAULT template (parity with snapping's default layout). The
+    // provider is daemon-injected; local settings/KCM registries without
+    // one resolve no default.
+    if (id.isNull() && m_defaultScrollingTemplateProvider) {
+        id = QUuid::fromString(m_defaultScrollingTemplateProvider());
+    }
+    if (id.isNull() || !m_scrollingTemplateStore) {
+        return {};
     }
     // A deleted or unknown template id degrades to "no template" — the
-    // caller falls back to the settings preset lists. layoutById returns
-    // nullptr for unknown ids, so no extra validation is needed.
-    return layoutById(QUuid::fromString(entry->scrollingTemplateLayout));
+    // caller falls back to the engine's compiled defaults. templateById
+    // answers an invalid template for unknown ids, so no extra validation
+    // is needed.
+    return m_scrollingTemplateStore->templateById(id);
 }
 
 void LayoutRegistry::setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,

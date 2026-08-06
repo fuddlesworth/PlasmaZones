@@ -26,6 +26,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -144,50 +145,19 @@ void Daemon::connectLayoutSignals()
         disconnect(c);
     }
     m_restartScopedConnections.clear();
-    // Layout CONTENT edits (an editor save via the D-Bus updateLayout path)
+    // Native template edits (store CRUD: save, delete, duplicate, rescan)
     // re-derive the engine screens so a scrolling screen whose assigned
-    // TEMPLATE layout changed gets its preset vocabulary re-extracted and
-    // re-pushed (updateScrollingScreens runs per pass; the identical-set
-    // retile makes the push take effect). Assignment writes are covered by
-    // layoutAssigned below; this covers zone-geometry edits that change no
-    // assignment. NARROWED to the template case: layoutChanged also fires
-    // on every active-layout switch and on autotile-overrides saves, and an
-    // unconditional handler ran a full engine recompute per emit — so the
-    // payload's layout id is matched against the live scrolling screens'
-    // resolved templates first. m_layoutAdaptor is created in
-    // initCoreAdaptors (init()) and only re-newed there, so the handle is
-    // valid whenever start() runs.
-    if (m_layoutAdaptor) {
-        m_restartScopedConnections << connect(
-            m_layoutAdaptor, &LayoutAdaptor::layoutChanged, this, [this](const QString& layoutJson) {
-                if (!m_scrollEngine || !m_layoutManager) {
-                    return;
-                }
-                const QSet<QString> scrollingScreens = m_scrollEngine->activeScreens();
-                if (scrollingScreens.isEmpty()) {
-                    return;
-                }
-                const QString changedId =
-                    QJsonDocument::fromJson(layoutJson.toUtf8()).object().value(QLatin1String("id")).toString();
-                if (changedId.isEmpty()) {
-                    return; // malformed payload — nothing to match
-                }
-                if (PhosphorLayout::LayoutId::isAutotile(changedId)) {
-                    // Autotile-overrides saves re-emit the incoming payload
-                    // whose id is the "autotile:<algo>" string; no template
-                    // can match it, so skip the per-screen resolve loop.
-                    return;
-                }
-                const QString activity = currentActivity();
-                for (const QString& screenId : scrollingScreens) {
-                    PhosphorZones::Layout* templ = m_layoutManager->scrollingTemplateForContext(
-                        screenId, currentDesktopForScreen(screenId), activity);
-                    if (templ && templ->id().toString() == changedId) {
-                        updateEngineScreens();
-                        return;
-                    }
-                }
-            });
+    // template changed gets its vocabulary and blueprint re-pushed
+    // (updateScrollingScreens runs per pass; the identical-set retile makes
+    // the push take effect). The pre-pivot zone-layout-edit watcher is gone
+    // with the mined-vocabulary model: a LAYOUT edit can no longer affect a
+    // template. The recompute is cheap and store mutations are user-paced,
+    // so no per-screen template-id matching is needed here.
+    if (m_scrollingTemplateStore) {
+        m_restartScopedConnections << connect(m_scrollingTemplateStore.get(),
+                                              &PhosphorZones::ScrollingTemplateStore::templatesChanged, this, [this]() {
+                                                  updateEngineScreens();
+                                              });
     }
     m_restartScopedConnections << connect(
         m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,

@@ -207,6 +207,57 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
 }
 
+void OverlayService::showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones,
+                                              const QString& screenId, bool locked)
+{
+    // The native-template twin of showLayoutOsdImpl: no Layout* backs a
+    // ScrollingTemplate, so the caller supplies the id, name and the
+    // blueprint-derived preview zones. Always captioned as a template; the
+    // Auto badge never applies (snap-to-empty-zone cannot happen on a
+    // Templates screen).
+    QQuickWindow* window = nullptr;
+    PhosphorLayer::Surface* surface = nullptr;
+    QQuickItem* osdSlot = nullptr;
+    QScreen* physScreen = nullptr;
+    QRect screenGeom;
+    qreal aspectRatio = 0;
+    QString effectiveScreenId;
+    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
+                                screenId)) {
+        return;
+    }
+
+    LayoutOsdContentParams p;
+    p.screenId = effectiveScreenId;
+    p.id = id;
+    p.name = name;
+    p.zones = zones;
+    p.category = static_cast<int>(PhosphorZones::LayoutCategory::Manual);
+    p.autoAssign = false;
+    p.globalAutoAssign = false;
+    p.isTemplate = true;
+    p.locked = locked;
+    p.screenAspectRatio = aspectRatio;
+    // A template has no authored aspect class; classify the live screen so
+    // the preview renders at the same canonical ratio the sibling OSD paths
+    // use (see the autotile rationale in the string overload below).
+    p.aspectRatioClass =
+        PhosphorLayout::ScreenClassification::toString(PhosphorLayout::ScreenClassification::classify(aspectRatio));
+    pushLayoutOsdContent(osdSlot, p);
+    writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
+
+    sizeOsdToScreen(window, screenGeom);
+    cancelSurfacePrime(surface);
+    if (!surface->isLogicallyShown()) {
+        surface->show();
+    }
+    osdSlot->setVisible(true);
+    m_surfaceAnimator->beginShow(surface, osdSlot, PhosphorRoles::Osd, []() { });
+    syncPassiveShellSurfaceStateForSurface(surface);
+    QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
+    qCInfo(lcOverlay) << (locked ? "Locked template" : "Template") << "OSD: template=" << name << "screen=" << screenId;
+}
+
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
                                    bool autoAssign, const QString& screenId, bool showMasterDot,
                                    bool producesOverlappingZones, const QString& zoneNumberDisplay, int masterCount)
