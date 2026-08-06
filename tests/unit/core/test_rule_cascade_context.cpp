@@ -673,7 +673,10 @@ private Q_SLOTS:
         QVERIFY(dp2User.innerGap.has_value());
         QCOMPARE(*dp2User.innerGap, 9);
         // DP-1 still prefers its per-monitor rule over the user catch-all.
-        QCOMPARE(*f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).innerGap, 20);
+        const PhosphorZones::ContextGapOverride dp1User =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(dp1User.innerGap.has_value());
+        QCOMPARE(*dp1User.innerGap, 20);
     }
 
     // ─── Context overlay-property resolution (OverlayShader / OverlayStyle) ──

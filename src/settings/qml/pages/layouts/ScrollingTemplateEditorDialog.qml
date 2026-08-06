@@ -23,9 +23,23 @@ Kirigami.Dialog {
     property bool editingSystem: false
 
     readonly property var displayOptions: [i18n("Stacked"), i18n("Tabbed")]
-    // Largest storable preset index, read once through the controller like the
-    // Scrolling pages do (SettingsController::scrollingConstants).
-    readonly property int presetIndexMax: root.controller.scrollingConstants().presetIndexMax
+    // Width kind vocabulary and value bounds, read once through the controller
+    // like the Scrolling pages do (SettingsController::scrollingConstants) so
+    // the form never restates a number ConfigDefaults owns.
+    readonly property var scrollingConstants: root.controller.scrollingConstants()
+    // Largest storable preset index.
+    readonly property int presetIndexMax: root.scrollingConstants.presetIndexMax
+    // Proportion bounds arrive as fractions and the width spins show percent.
+    readonly property int proportionMinPercent: Math.round(root.scrollingConstants.proportionMin * 100)
+    readonly property int proportionMaxPercent: Math.round(root.scrollingConstants.proportionMax * 100)
+    // How many width presets the field currently parses to. Bound through the
+    // field's text so it re-evaluates on every edit, which is what keeps the
+    // preset-number spin and the Save gate below honest while the user types.
+    readonly property int presetWidthCount: root.parseFractionList(presetWidthsField.text).length
+    // The Preset width kind resolves an index into the width presets, so a
+    // template that picks it while offering no presets would silently save as a
+    // proportion. Gates Save and raises the message beneath the preset fields.
+    readonly property bool presetDefaultNeedsWidths: defaultWidthKindCombo.currentValue === root.scrollingConstants.kindPreset && root.presetWidthCount === 0
 
     function openForNew() {
         root.templateId = "";
@@ -33,12 +47,15 @@ Kirigami.Dialog {
         nameField.text = "";
         descriptionField.text = "";
         columnsModel.clear();
-        defaultWidthKindCombo.currentIndex = defaultWidthKindCombo.indexOfValue(3);
+        defaultWidthKindCombo.currentIndex = defaultWidthKindCombo.indexOfValue(root.scrollingConstants.kindPreset);
         defaultWidthValueSpin.value = 50;
-        defaultPresetIndexSpin.value = 2;
-        defaultDisplayCombo.currentIndex = 0;
+        // The preset fields go in before the preset-number spin: that spin's
+        // ceiling counts the widths this field holds, and a SpinBox clamps an
+        // assigned value against the ceiling it has at that moment.
         presetWidthsField.text = "0.333, 0.5, 0.667";
         presetHeightsField.text = "0.333, 0.5, 0.667";
+        defaultPresetIndexSpin.value = 2;
+        defaultDisplayCombo.currentIndex = 0;
         root.open();
     }
 
@@ -61,26 +78,31 @@ Kirigami.Dialog {
             // the model, and commit() writes the model back, so an out-of-range
             // width would silently survive a round trip through the form.
             columnsModel.append({
-                "widthPercent": Math.max(5, Math.min(100, Math.round((columns[i].width || 0.5) * 100))),
+                "widthPercent": Math.max(root.proportionMinPercent, Math.min(root.proportionMaxPercent, Math.round((columns[i].width || 0.5) * 100))),
                 "display": columns[i].display === 1 ? 1 : 0
             });
         const defaultWidth = data.defaultColumnWidth || {};
         // A stored kind outside the combo's vocabulary makes indexOfValue
         // return -1, and commit() would then write an undefined kind back.
         // Fall back to the width-preset kind, the same default openForNew uses.
-        const kindIndex = defaultWidthKindCombo.indexOfValue(defaultWidth.kind !== undefined ? defaultWidth.kind : 3);
-        defaultWidthKindCombo.currentIndex = kindIndex >= 0 ? kindIndex : defaultWidthKindCombo.indexOfValue(3);
-        // Kind 1 (Fixed) stores a PIXEL count, every other kind a fraction of
+        const kindIndex = defaultWidthKindCombo.indexOfValue(defaultWidth.kind !== undefined ? defaultWidth.kind : root.scrollingConstants.kindPreset);
+        defaultWidthKindCombo.currentIndex = kindIndex >= 0 ? kindIndex : defaultWidthKindCombo.indexOfValue(root.scrollingConstants.kindPreset);
+        // The Fixed kind stores a PIXEL count, every other kind a fraction of
         // the screen, so only the fraction kinds scale by 100 for the percent
         // spin. Read the STORED kind rather than the combo: the combo's index
         // is assigned on the line above and depending on that ordering is
         // needlessly fragile.
         const storedWidthValue = defaultWidth.value !== undefined ? defaultWidth.value : 0.5;
-        defaultWidthValueSpin.value = defaultWidth.kind === 1 ? Math.round(storedWidthValue) : Math.round(storedWidthValue * 100);
-        defaultPresetIndexSpin.value = (defaultWidth.presetIndex !== undefined ? defaultWidth.presetIndex : 1) + 1;
-        defaultDisplayCombo.currentIndex = data.defaultColumnDisplay === 1 ? 1 : 0;
+        defaultWidthValueSpin.value = defaultWidth.kind === root.scrollingConstants.kindFixed ? Math.round(storedWidthValue) : Math.round(storedWidthValue * 100);
+        // The preset fields go in before the preset-number spin: that spin's
+        // ceiling counts the widths this field holds, and a SpinBox clamps an
+        // assigned value against the ceiling it has at that moment, so filling
+        // them afterwards would strand the stored index at the previous
+        // template's count.
         presetWidthsField.text = (data.presetColumnWidths || []).join(", ");
         presetHeightsField.text = (data.presetWindowHeights || []).join(", ");
+        defaultPresetIndexSpin.value = (defaultWidth.presetIndex !== undefined ? defaultWidth.presetIndex : 1) + 1;
+        defaultDisplayCombo.currentIndex = data.defaultColumnDisplay === 1 ? 1 : 0;
         root.open();
     }
 
@@ -114,7 +136,7 @@ Kirigami.Dialog {
                 "kind": defaultWidthKindCombo.currentValue,
                 // Fixed is a pixel count and goes over as typed. The other
                 // kinds are fractions the spin shows as a percentage.
-                "value": defaultWidthKindCombo.currentValue === 1 ? defaultWidthValueSpin.value : defaultWidthValueSpin.value / 100.0,
+                "value": defaultWidthKindCombo.currentValue === root.scrollingConstants.kindFixed ? defaultWidthValueSpin.value : defaultWidthValueSpin.value / 100.0,
                 "presetIndex": defaultPresetIndexSpin.value - 1
             },
             "defaultColumnDisplay": defaultDisplayCombo.currentIndex,
@@ -132,7 +154,7 @@ Kirigami.Dialog {
         Kirigami.Action {
             text: i18n("Save")
             icon.name: "document-save"
-            enabled: nameField.text.trim().length > 0
+            enabled: nameField.text.trim().length > 0 && !root.presetDefaultNeedsWidths
             onTriggered: root.commit()
         },
         Kirigami.Action {
@@ -160,6 +182,10 @@ Kirigami.Dialog {
 
                 Kirigami.FormData.label: i18n("Name:")
                 placeholderText: i18n("Template name")
+                // Mirrors the D-Bus boundary clamp in the layout adaptor's
+                // saveScrollingTemplate (clampName with MaxLayoutNameLength),
+                // so typing stops where the store would have cut silently.
+                maximumLength: 40
             }
 
             TextField {
@@ -167,6 +193,8 @@ Kirigami.Dialog {
 
                 Kirigami.FormData.label: i18n("Description:")
                 placeholderText: i18n("Optional description")
+                // Same boundary clamp, description arm (MaxTemplateDescriptionLength).
+                maximumLength: 500
             }
         }
 
@@ -206,8 +234,8 @@ Kirigami.Dialog {
                 }
 
                 SpinBox {
-                    from: 5
-                    to: 100
+                    from: root.proportionMinPercent
+                    to: root.proportionMaxPercent
                     value: model.widthPercent
                     textFromValue: (value, locale) => i18n("%1%", value)
                     valueFromText: (text, locale) => parseInt(text)
@@ -236,6 +264,8 @@ Kirigami.Dialog {
             // The store truncates a template's column list at 16 (kMaxColumns
             // in libs/phosphor-zones/src/scrollingtemplate.cpp, mirroring the
             // engine's blueprint cap), so rows past that would vanish on save.
+            // scrollingConstants() carries no entry for it, so the number is
+            // restated here and tied by name to PhosphorZones::MaxTemplateColumns.
             readonly property int columnLimit: 16
 
             spacing: Kirigami.Units.smallSpacing
@@ -278,19 +308,19 @@ Kirigami.Dialog {
                 model: [
                     {
                         "text": i18n("Fraction of the screen"),
-                        "value": 0
+                        "value": root.scrollingConstants.kindProportion
                     },
                     {
                         "text": i18n("Fixed pixels"),
-                        "value": 1
+                        "value": root.scrollingConstants.kindFixed
                     },
                     {
                         "text": i18n("The window decides"),
-                        "value": 2
+                        "value": root.scrollingConstants.kindClientDecides
                     },
                     {
                         "text": i18n("Width preset"),
-                        "value": 3
+                        "value": root.scrollingConstants.kindPreset
                     }
                 ]
             }
@@ -298,11 +328,17 @@ Kirigami.Dialog {
             SpinBox {
                 id: defaultWidthValueSpin
 
-                Kirigami.FormData.label: defaultWidthKindCombo.currentValue === 1 ? i18n("Width in pixels:") : i18n("Width:")
-                visible: defaultWidthKindCombo.currentValue === 0 || defaultWidthKindCombo.currentValue === 1
-                from: defaultWidthKindCombo.currentValue === 1 ? 100 : 5
-                to: defaultWidthKindCombo.currentValue === 1 ? 10000 : 100
-                textFromValue: (value, locale) => defaultWidthKindCombo.currentValue === 1 ? String(value) : i18n("%1%", value)
+                readonly property bool isFixed: defaultWidthKindCombo.currentValue === root.scrollingConstants.kindFixed
+
+                Kirigami.FormData.label: defaultWidthValueSpin.isFixed ? i18n("Width in pixels:") : i18n("Width:")
+                visible: defaultWidthKindCombo.currentValue === root.scrollingConstants.kindProportion || defaultWidthValueSpin.isFixed
+                // The Fixed floor is deliberate UI policy rather than a hard
+                // limit: ConfigDefaults sets it at 100px, well above the
+                // engine's own 1px floor, because a column narrower than that
+                // has nowhere to draw a window.
+                from: defaultWidthValueSpin.isFixed ? Math.round(root.scrollingConstants.fixedMin) : root.proportionMinPercent
+                to: defaultWidthValueSpin.isFixed ? Math.round(root.scrollingConstants.fixedMax) : root.proportionMaxPercent
+                textFromValue: (value, locale) => defaultWidthValueSpin.isFixed ? String(value) : i18n("%1%", value)
                 valueFromText: (text, locale) => parseInt(text)
             }
 
@@ -310,13 +346,15 @@ Kirigami.Dialog {
                 id: defaultPresetIndexSpin
 
                 Kirigami.FormData.label: i18n("Preset number:")
-                visible: defaultWidthKindCombo.currentValue === 3
+                visible: defaultWidthKindCombo.currentValue === root.scrollingConstants.kindPreset
                 // Stored 0-based, shown 1-based, the same offset the Scrolling
-                // pages' preset spins use. The ceiling comes from the C++ side
-                // (ConfigDefaults::scrollingPresetIndexMax) rather than a
-                // literal, so it tracks the store's preset-list cap.
+                // pages' preset spins use. The ceiling is the smaller of the
+                // schema cap (ConfigDefaults::scrollingPresetIndexMax) and the
+                // presets this template itself declares, so the spin can never
+                // offer a number the width-presets field has no entry for. The
+                // floor of 1 keeps the spin valid while that field is empty.
                 from: 1
-                to: root.presetIndexMax + 1
+                to: Math.max(1, Math.min(root.presetWidthCount, root.presetIndexMax + 1))
             }
 
             ComboBox {
@@ -339,6 +377,13 @@ Kirigami.Dialog {
                 Kirigami.FormData.label: i18n("Height presets:")
                 placeholderText: i18n("For example 0.333, 0.5, 0.667")
             }
+        }
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: root.presetDefaultNeedsWidths
+            type: Kirigami.MessageType.Warning
+            text: i18n("The default width is set to a width preset, so this template needs at least one width preset before it can be saved.")
         }
 
         Label {

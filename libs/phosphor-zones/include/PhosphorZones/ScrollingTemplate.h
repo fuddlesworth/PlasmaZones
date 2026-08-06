@@ -20,6 +20,14 @@ namespace PhosphorZones {
 /// clamps or floors a template fraction reads this constant.
 inline constexpr qreal MinTemplateFraction = 0.05;
 
+/// Most blueprint columns a template may carry, mirroring the scroll engine's
+/// kMaxTemplateEntries (enginelimits.h) the same hand-written way
+/// MinTemplateFraction mirrors its floor. The engine truncates a pushed
+/// blueprint at this many entries, so columns beyond it could never seed
+/// anything. Normalization drops the excess, and the settings UI reads this
+/// constant for its own column limit.
+inline constexpr int MaxTemplateColumns = 16;
+
 /**
  * @brief One column of a scrolling template's seed blueprint
  *

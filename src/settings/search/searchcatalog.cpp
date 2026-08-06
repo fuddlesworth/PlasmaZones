@@ -69,7 +69,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("bsp"), PhosphorI18n::tr("grid"), PhosphorI18n::tr("autotile")});
     search->setPageKeywords(QStringLiteral("scrolling-simple"),
                             {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("column"),
-                             PhosphorI18n::tr("strip"), PhosphorI18n::tr("template"),
+                             PhosphorI18n::tr("strip"),
                              // Proper noun, deliberately untranslated (see the
                              // scrolling-window keywords).
                              QStringLiteral("niri")});
@@ -91,8 +91,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("layout"), PhosphorI18n::tr("zone"), PhosphorI18n::tr("grid"),
                              PhosphorI18n::tr("preset"), PhosphorI18n::tr("template"),
                              PhosphorI18n::tr("aspect ratio")});
-    // The LayoutManageCard (import / open folder) carries this anchor on both
-    // the layouts and the algorithms view of the page.
+    // The LayoutManageCard (import / open folder) carries this anchor on all
+    // three rotating views of the page: layouts, algorithms and templates.
     addSection(search, QStringLiteral("layouts"), QStringLiteral("manageLayouts"), PhosphorI18n::tr("User layouts"));
 
     // Snapping

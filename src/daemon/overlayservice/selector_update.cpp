@@ -272,6 +272,9 @@ void OverlayService::refreshContextLockState()
         }
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
         const int curDesktop = currentVirtualDesktopForScreen(it.key());
+        // Both-mode lens (-1) by design: the zone selector shows the SNAP
+        // zone overlay, so a snapping lock is exactly the lock it must
+        // reflect. Only the picker below takes the Templates lens.
         const bool locked = isAnyModeLocked(m_settings, m_layoutManager, it.key(), curDesktop, curActivity);
         writeQmlProperty(window, QStringLiteral("locked"), locked);
     }
@@ -282,8 +285,13 @@ void OverlayService::refreshContextLockState()
         if (auto* slot = m_screenStates.value(m_layoutPickerScreenId).layoutPickerSlot()) {
             // Per-output virtual desktops (#648): each screen resolves its own desktop.
             const int curDesktop = currentVirtualDesktopForScreen(m_layoutPickerScreenId);
-            const bool locked =
-                isAnyModeLocked(m_settings, m_layoutManager, m_layoutPickerScreenId, curDesktop, curActivity);
+            // Same Templates lens the picker's show path uses
+            // (pickerLockModeFor). With the -1 default here, a Templates
+            // screen's picker opened correctly against its scrolling lock
+            // and then flipped to the snapping verdict on the first rule
+            // edit that re-pushed this property.
+            const bool locked = isAnyModeLocked(m_settings, m_layoutManager, m_layoutPickerScreenId, curDesktop,
+                                                curActivity, pickerLockModeFor(m_layoutPickerScreenId));
             writeQmlProperty(slot, QStringLiteral("locked"), locked);
         }
     }

@@ -56,10 +56,14 @@ void ActionRegistry::registerBuiltinsEngine()
         .tags = {QString(Tag::LayoutEngine)},
     });
 
-    // ── layout slot — SetSnappingLayout and SetTilingAlgorithm share it, so
-    // one context can pin at most one of the two. The scrolling template is
-    // NOT part of this pair: it carries its own slot, registered below, which
-    // is what lets a rule name a template alongside either of these.
+    // ── layout slot — SetSnappingLayout and SetTilingAlgorithm SHARE it, which
+    // is the lossless mode-toggle pair: one rule may carry both, and the
+    // context's active mode picks which one answers. Sharing costs nothing
+    // because duplicate detection keys on (slot, type), not slot alone, and the
+    // decoder walks the action list by type rather than reading a single winner
+    // out of the slot. The scrolling template is NOT part of the pair: it
+    // carries its own slot, registered below, which is what lets a rule name a
+    // template alongside either of these.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetSnappingLayout),
         .slotFor = constantSlot(ActionSlot::Layout),

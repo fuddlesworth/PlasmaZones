@@ -122,7 +122,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Template UUID to delete."/>
             </arg>
             <arg name="deleted" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True when the template's user file is gone after the call. False when the id is unknown, malformed, or names a pure bundled template."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True when the template's user file is gone after the call. False when the id is unknown, malformed, names a pure bundled template, or the file could not be removed."/>
             </arg>
         </method>
         <method name="duplicateScrollingTemplate">
@@ -620,7 +620,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="quickLayoutSlotsChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when quick layout slots are modified, so the settings panel can refresh its slot assignments."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Refresh hint for subscribers holding quick layout slot state, such as the settings panel's slot cards. Emitted when the slots are modified directly, and also when a layout or scrolling template is deleted and the id-scrub pass ran, whether or not that pass actually swept a slot. Re-read the slots rather than assuming a specific slot changed."/>
         </signal>
         <signal name="assignmentChangesApplied">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted after applyAssignmentChanges finishes a KCM save batch, listing the screens whose assignments changed."/>
@@ -644,7 +644,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
         <signal name="layoutChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted on structural layout mutations (editor save, updateLayout) and on every active-layout switch, alongside the cheaper activeLayoutChanged(id). Carries the full layout JSON payload. createLayoutFromJson does not emit this; a new layout announces itself with layoutCreated(id). Scalar property mutations (hidden, autoAssign, aspectRatioClass) emit layoutPropertyChanged instead to avoid the full serialization."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted on structural layout mutations (updateLayout, the editor's save path) and on every active-layout switch, alongside the cheaper activeLayoutChanged(id). Carries the full layout JSON payload. createLayoutFromJson does not emit this; a new layout announces itself with layoutCreated(id). Scalar property mutations (hidden, autoAssign, aspectRatioClass) emit layoutPropertyChanged instead to avoid the full serialization."/>
             <arg name="layoutJson" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
             </arg>

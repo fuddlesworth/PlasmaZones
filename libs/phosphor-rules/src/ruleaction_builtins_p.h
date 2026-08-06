@@ -174,7 +174,9 @@ inline constexpr double kMaxTabIndicatorLengthRatio = MaxTabIndicatorLengthRatio
 // tab indicator's signed bounds need.
 inline constexpr double kMinDropIndicatorOpacity = MinDropIndicatorOpacity;
 inline constexpr double kMaxDropIndicatorOpacity = MaxDropIndicatorOpacity;
+inline constexpr double kMinDropIndicatorBorderWidth = MinDropIndicatorBorderWidth;
 inline constexpr double kMaxDropIndicatorBorderWidth = MaxDropIndicatorBorderWidth;
+inline constexpr double kMinDropIndicatorBorderRadius = MinDropIndicatorBorderRadius;
 inline constexpr double kMaxDropIndicatorBorderRadius = MaxDropIndicatorBorderRadius;
 
 /// Helper to keep the registerBuiltins body legible — every built-in shares

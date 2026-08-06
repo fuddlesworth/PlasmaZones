@@ -124,7 +124,24 @@ void UnifiedLayoutController::ensureTemplateStoreSubscription() const
 {
     PhosphorZones::ScrollingTemplateStore* store =
         m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr;
-    if (!store || store == m_subscribedTemplateStore) {
+    if (!store) {
+        // The store became unreachable (registry teardown or swap). Drop the
+        // subscription AND the latch: a cached list built with the old
+        // store's cards is stale the moment the store goes, and leaving the
+        // latch set means a later re-install of the SAME pointer would hit
+        // the `store == m_subscribedTemplateStore` early return below and
+        // keep running on a connection whose sender may already be gone.
+        // Guarded on having latched something so the ordinary no-store case
+        // (scrolling never used) stays a pure no-op and does not invalidate
+        // a valid cache on every layouts() call.
+        if (m_subscribedTemplateStore) {
+            QObject::disconnect(m_templateStoreConnection);
+            m_subscribedTemplateStore = nullptr;
+            m_cacheValid = false;
+        }
+        return;
+    }
+    if (store == m_subscribedTemplateStore) {
         return;
     }
     QObject::disconnect(m_templateStoreConnection);

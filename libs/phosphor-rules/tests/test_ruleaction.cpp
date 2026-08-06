@@ -820,11 +820,14 @@ private Q_SLOTS:
         rejectsStray(ActionType::TabColorUrgent, QJsonValue(QStringLiteral("#ff884422")));
         // The drop-indicator family, one per distinct descriptor shape for the
         // tab indicator's reason: a bool, a colour, a [0,1] fraction and a
-        // zero-floored pixel number are the four forms the six are built from.
+        // zero-floored pixel number are the four forms the six context-domain
+        // actions are built from.
         rejectsStray(ActionType::SetDropIndicatorEnabled, QJsonValue(true));
         rejectsStray(ActionType::SetDropIndicatorColor, QJsonValue(QStringLiteral("#ff224466")));
         rejectsStray(ActionType::SetDropIndicatorOpacity, QJsonValue(0.25));
         rejectsStray(ActionType::SetDropIndicatorBorderWidth, QJsonValue(2));
+        // …and the window-domain half, which is a separate registration path.
+        rejectsStray(ActionType::DropIndicatorColor, QJsonValue(QStringLiteral("#ff884422")));
     }
 
     void testOverrideOverlay_fromJson()

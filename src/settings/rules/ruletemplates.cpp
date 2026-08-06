@@ -194,8 +194,11 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         rule.name = PhosphorI18n::tr("Scrolling mode on monitor");
         rule.priority = kContextBandBase;
         rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
-        // Assignment flow like the algorithm template, but scrolling has no
-        // per-layout payload: the SetEngineMode action alone carries it.
+        // Assignment flow like the algorithm template, but mode-only on
+        // purpose. SetScrollingTemplate exists and is deliberately not seeded
+        // here: a scrolling screen with no template is a legitimate end state,
+        // and leaving the action out keeps the quick-start immediately savable.
+        // The user adds the template action from the action picker when wanted.
         RuleAction engineMode;
         engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
         engineMode.params.insert(ActionParam::Mode,

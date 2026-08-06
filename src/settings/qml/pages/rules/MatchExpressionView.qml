@@ -142,9 +142,12 @@ ColumnLayout {
             }
         }
         if (kind === "layout" && root.appSettings) {
-            // activeLayoutMatchOptions carries every layouts entry PLUS the
-            // derived "scrolling:<uuid>" template entries, so both id shapes
-            // resolve to the same friendly names the editor picker offered.
+            // activeLayoutMatchOptions carries every layouts entry, with the
+            // template rows rewritten in place to their "scrolling:<uuid>" wire
+            // id (the raw UUID is never an ActiveLayout value, so it is not
+            // offered). The bare "scrolling:" sentinel leads the list. Between
+            // them these resolve to the same friendly names the editor picker
+            // offered.
             var layouts = root.appSettings.activeLayoutMatchOptions;
             if (layouts) {
                 for (var L = 0; L < layouts.length; ++L) {

@@ -230,6 +230,13 @@ public:
      *
      * In manual mode: only manual layouts. In autotile mode: only dynamic layouts.
      * The autotile feature gate controls whether dynamic layouts are ever visible.
+     *
+     * @p includeScrollingTemplates is the third, exclusive arm: a Templates
+     * screen (scrolling) browses native template cards, so the caller passes
+     * it true together with both other flags false. It is not a union member
+     * with the other two — the daemon-side filter (Daemon::
+     * updateLayoutFilterForScreen) forces manual and autotile off whenever
+     * this is set, so cycling and the quick slots see templates alone.
      */
     void setLayoutFilter(bool includeManual, bool includeAutotile, bool includeScrollingTemplates);
 

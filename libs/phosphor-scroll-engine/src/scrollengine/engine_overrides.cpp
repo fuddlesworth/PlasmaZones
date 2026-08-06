@@ -37,7 +37,10 @@ constexpr int kMaxTabIndicatorWidth = 64;
 /// preset vocabulary, which would break cycling (the cycle verbs step
 /// through this list).
 /// Length is capped at kMaxTemplateEntries like the other public-API override
-/// ingresses; see that constant for why.
+/// ingresses, and the raw scan is bounded by kMaxTemplateScan before that: the
+/// keep cap alone bounds what survives, not the work, so an embedder-supplied
+/// list of ten thousand rejects would be converted in full on every relayout.
+/// See those constants for why.
 QList<qreal> presetListFromOverride(const QVariantMap& overrides, const QString& key, qreal minFraction,
                                     const QList<qreal>& fallback)
 {
@@ -48,14 +51,15 @@ QList<qreal> presetListFromOverride(const QVariantMap& overrides, const QString&
     QList<qreal> out;
     const QVariantList raw = it->toList();
     out.reserve(qMin(int(raw.size()), kMaxTemplateEntries));
-    for (const QVariant& entry : raw) {
+    const int scanned = qMin(int(raw.size()), kMaxTemplateScan);
+    for (int i = 0; i < scanned; ++i) {
+        if (out.size() == kMaxTemplateEntries) {
+            break;
+        }
         bool ok = false;
-        const qreal v = entry.toDouble(&ok);
+        const qreal v = raw.at(i).toDouble(&ok);
         if (ok && v >= minFraction && v <= 1.0) {
             out.append(v);
-            if (out.size() == kMaxTemplateEntries) {
-                break;
-            }
         }
     }
     return out.isEmpty() ? fallback : out;

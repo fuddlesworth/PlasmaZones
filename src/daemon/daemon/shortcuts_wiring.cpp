@@ -298,14 +298,17 @@ void Daemon::connectShortcutSignals()
             // A Templates screen with an empty list means the template store
             // is empty (fresh install, or every template deleted), which is
             // something the user can act on. The generic "engine provides no
-            // layouts" card would misdescribe it. Same showNavigationOsd gate
-            // the generic arm carries inside showLayoutsUnavailableOsd: this
-            // is the same kind of refusal feedback, only worded for the
-            // template vocabulary.
+            // layouts" card would misdescribe it, so this goes out as the
+            // same navigation-OSD family showLayoutsUnavailableOsd uses
+            // (same action, different reason) rather than a disabled-context
+            // card — showDisabledOsd is the MonitorDisabled/DesktopDisabled
+            // family and follows osdStyle, not the showNavigationOsd toggle
+            // this refusal is gated on.
             if (layoutSupportForScreen(screenId) == LayoutSupport::Templates) {
                 qCDebug(lcDaemon) << "Layout picker: no templates in the store for screen" << screenId;
                 if (m_settings && m_settings->showNavigationOsd()) {
-                    m_overlayService->showDisabledOsd(PhosphorI18n::tr("No column templates available"), screenId);
+                    m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
+                                                        QString(), QString(), screenId);
                 }
             } else {
                 showLayoutsUnavailableOsd(screenId);

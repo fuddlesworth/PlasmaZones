@@ -958,9 +958,15 @@ void Daemon::processPendingGeometryUpdates()
     // templates carry fractions, so no geometry feeds the push itself. What
     // this pass is for is the rest of the resolve: per-context rule params
     // and the context gaps both re-resolve here. The engine's equality guard
-    // no-ops an unchanged override map, so the pass is cheap and idempotent,
-    // and the tail of this function retiles every active scrolling screen so
-    // the re-resolved values land.
+    // no-ops an unchanged override map, so the pass is cheap and idempotent.
+    // What makes the re-resolved values LAND is updateScrollingScreens'
+    // own push: the set it hands setActiveScreens is identical to the
+    // engine's current one, and that branch retiles every screen
+    // unconditionally (engine_core.cpp, `screens == m_scrollingScreens`) —
+    // the same guarantee scrolling.cpp's LOAD-BEARING gate leans on. The
+    // retile loop at the tail of this function is an extra pass that only
+    // runs when the compute barrier below is non-empty (an empty barrier
+    // returns early), so it cannot be the mechanism relied on here.
     if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {
         updateScrollingScreens(m_scrollEngine->activeScreens());
     }

@@ -95,6 +95,8 @@ bool isShortcutsPage(const QString& page);
 /// and the Save-time flush all spell the same mode the same way instead of
 /// carrying bare 0/1/2 literals with a comment each. The enum's numbering is
 /// frozen (see the AssignmentEntry::Mode doc), so these are stable on the wire.
+/// PascalCase rather than UPPER_SNAKE on purpose, matching the other named
+/// constants in this header and the repo's wider precedent (ReasonDaemonUnreachable).
 constexpr int QuickSlotModeSnapping = static_cast<int>(PhosphorZones::AssignmentEntry::Snapping);
 constexpr int QuickSlotModeTiling = static_cast<int>(PhosphorZones::AssignmentEntry::Autotile);
 constexpr int QuickSlotModeScrolling = static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling);

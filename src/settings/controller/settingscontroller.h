@@ -20,6 +20,10 @@
 // Q_INVOKABLE, a property that moved to a child controller). It does NOT
 // license a comment block — those belong on the definition in the matching
 // settingscontroller_*.cpp when they will not fit here.
+//
+// The 1215 above supersedes the general 1150 hard ceiling in CLAUDE.md for this
+// file, the same way the repo's other sanctioned file-size exceptions do, so
+// sitting between the two figures is not a review finding here.
 
 #pragma once
 
@@ -905,9 +909,8 @@ private:
     /// same as "all slots already unassigned", so reporting success would show a
     /// clean page for a reset that never happened. Shared by per-page Reset and
     /// defaults() — quick slots are daemon-backed, so Settings::reset() cannot
-    /// clear them. @p wireMode is an AssignmentEntry::Mode value on the wire:
-    /// 0 snapping, 1 tiling, 2 scrolling (see the QuickSlotMode* constants in
-    /// settingscontroller_pagekeys.h).
+    /// clear them. @p wireMode is an AssignmentEntry::Mode value on the wire (see
+    /// the QuickSlotMode* constants in settingscontroller_pagekeys.h).
     bool stageQuickSlotClears(int wireMode, bool& stagedAny);
 
     /// Adopt whatever is on disk as the session's state: reload settings and the

@@ -652,6 +652,19 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
         return;
     }
     updateLayoutFilterForScreen(screenId);
+    // Same empty-vocabulary answer the picker gives (shortcuts_wiring.cpp):
+    // on a Templates screen an empty candidate list means the template store
+    // is empty, and cycling would silently do nothing. The generic "engine
+    // provides no layouts" card would misdescribe it.
+    if (m_overlayService && layoutSupportForScreen(screenId) == LayoutSupport::Templates
+        && m_overlayService->visibleLayoutCount(screenId) == 0) {
+        qCDebug(lcDaemon) << "Layout cycle: no templates in the store for screen" << screenId;
+        if (m_settings && m_settings->showNavigationOsd()) {
+            m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
+                                                QString(), QString(), screenId);
+        }
+        return;
+    }
     if (forward) {
         m_unifiedLayoutController->cycleNext();
     } else {

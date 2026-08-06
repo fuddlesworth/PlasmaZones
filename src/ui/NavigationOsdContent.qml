@@ -285,9 +285,15 @@ Item {
         } else if (action === "layout") {
             // Daemon-level gate: a layout-selection shortcut (picker, cycle,
             // quick slot, layout lock) fired on a screen whose engine has no
-            // layout concept (IPlacementEngine::layoutSupport is None).
-            // Sole reason today is not_supported; the fallthrough keeps any
-            // future reason from rendering the generic "Failed".
+            // layout concept (IPlacementEngine::layoutSupport is None), or
+            // one whose engine browses templates and has none to offer.
+            // no_templates means the template store is empty, which the user
+            // can act on; not_supported is the capability-less engine. The
+            // fallthrough keeps any future reason from rendering the generic
+            // "Failed".
+            if (reason === "no_templates")
+                return i18n("No column templates available");
+
             return i18n("Layouts are not available in this mode");
         } else if (action === "resize") {
             // Scrolling width/height verbs. no_target for the preset cycle

@@ -374,6 +374,12 @@ public:
     // The template an unassigned screen resolves to, empty for none.
     Q_PROPERTY(QString defaultScrollingTemplate READ defaultScrollingTemplate WRITE setDefaultScrollingTemplate NOTIFY
                    defaultScrollingTemplateChanged)
+    // View knobs on the plain Scrolling group beside the sizing defaults above,
+    // not on Scrolling.Behavior: they describe how the strip is drawn.
+    Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
+                   NOTIFY scrollingWheelFocusEnabledChanged)
+    Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
+                   NOTIFY scrollingWheelFocusInvertedChanged)
     // Scrolling.TabIndicator
     Q_PROPERTY(bool scrollingTabIndicatorEnabled READ scrollingTabIndicatorEnabled WRITE setScrollingTabIndicatorEnabled
                    NOTIFY scrollingTabIndicatorEnabledChanged)
@@ -414,10 +420,6 @@ public:
                    setScrollingDropIndicatorBorderWidth NOTIFY scrollingDropIndicatorBorderWidthChanged)
     Q_PROPERTY(int scrollingDropIndicatorBorderRadius READ scrollingDropIndicatorBorderRadius WRITE
                    setScrollingDropIndicatorBorderRadius NOTIFY scrollingDropIndicatorBorderRadiusChanged)
-    Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
-                   NOTIFY scrollingWheelFocusEnabledChanged)
-    Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
-                   NOTIFY scrollingWheelFocusInvertedChanged)
     // QML-facing STRING facade: the Q_PROPERTY shares its name with the
     // C++ QStringList accessor (the IScrollSettings surface the engine
     // consumes). Deliberate — QML edits the raw comma-joined text while the

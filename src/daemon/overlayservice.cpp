@@ -831,6 +831,15 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
         // answers Placement and falls through to the manual arm below,
         // which is the list its live snapping path actually uses. Same
         // shape as isSnappingContextInactive / activeLayoutIdForScreen.
+        //
+        // Null-resolver polarity here is the OPPOSITE of the templatesScreen
+        // checks in buildLayoutsList / visibleLayoutCount, deliberately: an
+        // unwired resolver here trusts the scrolling assignment id and still
+        // yields template cards (the pre-injection default must not blank a
+        // scrolling picker), while there it reads as NOT-templates and keeps
+        // the aspect filter on. The two cannot diverge row-for-row because
+        // that filter only ever removes MANUAL rows, and this arm has
+        // already turned the manual family off.
         flags.manual = false;
         flags.autotile = false;
         flags.templates = true;

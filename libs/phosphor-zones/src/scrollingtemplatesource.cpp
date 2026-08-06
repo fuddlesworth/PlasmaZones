@@ -10,6 +10,12 @@
 
 namespace PhosphorZones {
 
+namespace {
+// Remaining strip width below which the preview stops laying bands: a
+// float-dust remainder is a sliver nobody can see.
+constexpr qreal kPreviewEdgeEps = 0.001;
+} // namespace
+
 PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTemplate& templ)
 {
     PhosphorLayout::LayoutPreview preview;
@@ -52,8 +58,7 @@ PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTempla
     qreal x = 0.0;
     int zoneNumber = 1;
     for (qreal width : widths) {
-        // Epsilon: a float-dust remainder is a sliver nobody can see.
-        if (x >= 1.0 - 0.001) {
+        if (x >= 1.0 - kPreviewEdgeEps) {
             break;
         }
         preview.zones.append(QRectF(x, 0.0, qMin(width, 1.0 - x), 1.0));

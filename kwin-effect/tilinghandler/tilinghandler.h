@@ -336,7 +336,18 @@ public:
     /// `None{ActiveLayout Equals X}` leaf then matches every window.
     ///
     /// The false→true edge re-drives loadRuleAnimationsFromDbus so the rules
-    /// held out during bring-up are admitted as soon as the map is real.
+    /// held out during bring-up are admitted as soon as the map is real. The
+    /// re-drive is GATED on the effect's m_activeLayoutRulesWithheld marker,
+    /// which records whether the last admission pass actually dropped a rule
+    /// for referencing ActiveLayout: a seeded pass withholds nothing and needs
+    /// no re-fetch. The edge consumes the marker, so a later unseed→seed cycle
+    /// re-drives only on its own evidence.
+    ///
+    /// The marker is NOT cleared by either unseeding path. It indexes rule
+    /// sets that deliberately survive daemon loss, and every successful
+    /// getAllRules reply recomputes it. Clearing it on teardown or bring-up
+    /// would disarm this edge for the session if the following getAllRules
+    /// never lands; a stale-TRUE marker only costs one redundant re-drive.
     bool activeLayoutsSeeded() const
     {
         return m_activeLayoutsSeeded;
@@ -370,6 +381,13 @@ public:
     /// from the next bring-up's seed edge; on the bring-up path the clear runs
     /// before loadSettings re-queries the map, so that same seed edge fires
     /// from the reply a moment later.
+    ///
+    /// Neither caller clears the effect's m_activeLayoutRulesWithheld marker
+    /// that gates that seed edge, and neither should: the withheld rules live
+    /// in rule sets the teardown preserves, so the marker stays true across
+    /// the daemon-down interval and is recomputed by the next successful
+    /// getAllRules pass. Clearing it would strand those rules disarmed for the
+    /// session whenever the following getAllRules errors or times out.
     void clearActiveLayoutsForTeardown()
     {
         ++m_activeLayoutsGeneration;

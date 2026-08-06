@@ -350,8 +350,11 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
         // own desktop, empty activity, shadowing activity-keyed entry
         // cleared). Writing an activity-keyed rule here instead would leave a
         // cycled screen with an entry the picker paths then have to clear.
-        // The bool is not surfaced: the cycle reports no Layout* either way,
-        // and a refusal is logged inside the helper.
+        // The bool is not surfaced: the cycle reports no Layout* either way.
+        // The only refusal reachable from here is the unknown-template arm
+        // (the id comes from the store's own list, so it resolves), and the
+        // helper logs that one itself; the empty-argument arms cannot arise
+        // with a resolved screen id and a non-null template id.
         applyScrollingTemplateToScreen(resolvedScreenId, templates.at(newIdx).id.toString());
         return nullptr;
     }

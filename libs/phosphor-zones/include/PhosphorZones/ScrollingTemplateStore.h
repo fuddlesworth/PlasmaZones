@@ -75,15 +75,17 @@ public:
     /// still returns the stored id. Returns the stored id.
     QUuid saveTemplate(ScrollingTemplate templ);
 
-    /// Delete the USER file for @p id. The target is the entry's own
-    /// sourcePath when that path lies inside the user directory (a
-    /// hand-placed user file need not be named after its id), otherwise the
-    /// id-derived path. A bundled (system) template shadowed by the user file
-    /// resurfaces on the rescan this triggers; a template whose loaded entry
-    /// came from a system location is refused (returns false) — the UI
-    /// disables delete for those. A user entry whose file is already gone on
-    /// both paths rescans and reports success, since the requested state
-    /// already holds.
+    /// Delete the USER files for @p id. Both candidates are removed: the
+    /// entry's own sourcePath when that path lies inside the user directory (a
+    /// hand-placed user file need not be named after its id) and the id-derived
+    /// path, since those can be two different files carrying the same id.
+    /// A bundled (system) template shadowed by a user file resurfaces on the
+    /// rescan this triggers; a template whose loaded entry came from a system
+    /// location is refused (returns false) — the UI disables delete for those.
+    /// Returns true when no user file for @p id remains afterwards, which
+    /// includes the case where the files were already gone: the requested
+    /// state holds either way. Returns false when a file survives (a remove
+    /// that failed, which is logged).
     bool removeTemplate(const QUuid& id);
 
     /// Store a copy of @p id under a fresh UUID with @p newName (or a

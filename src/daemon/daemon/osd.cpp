@@ -707,26 +707,36 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
     bool manualActive = false;
     bool scrollingActive = false;
 
-    if (m_settings->autotileEnabled() && m_layoutManager && m_screenManager) {
+    if (m_layoutManager && m_screenManager) {
         const QString activity = currentActivity();
+        // Only the AUTOTILE arm depends on the master autotile switch. The
+        // templates arm must be resolved regardless: with autotile off and
+        // scrolling on, gating the whole resolution on autotileEnabled left
+        // scrollingActive false and handed a scrolling screen the manual list.
+        const bool autotileEnabled = m_settings->autotileEnabled();
 
-        if (!focusedScreenId.isEmpty()) {
-            // Per-screen filter: only check the focused screen's mode
-            const QString assignmentId = m_layoutManager->assignmentIdForScreen(
-                focusedScreenId, currentDesktopForScreen(focusedScreenId), activity);
-            if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+        // Templates is decided by the LIVE engine capability, not by
+        // LayoutId::isScrolling(assignmentId): a scrolling assignment the
+        // router downgraded (master switch off, Scrolling axis
+        // context-disabled) answers Placement and must keep the manual list.
+        // Same gate as resolvePerScreenLayoutInclude in overlayservice.cpp,
+        // which owns the authoritative per-screen decision; this
+        // controller-level filter only has to avoid contradicting it.
+        const auto classify = [&](const QString& screenId) {
+            const QString assignmentId =
+                m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
+            if (autotileEnabled && PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
-            } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-                // Since the native-template pivot a scrolling screen's
-                // picker browses TEMPLATE cards, not the manual list. The
-                // authoritative per-screen decision lives in
-                // resolvePerScreenLayoutInclude in overlayservice.cpp; this
-                // controller-level filter only has to avoid contradicting
-                // it.
+            } else if (layoutSupportForScreen(screenId) == LayoutSupport::Templates) {
                 scrollingActive = true;
             } else {
                 manualActive = true;
             }
+        };
+
+        if (!focusedScreenId.isEmpty()) {
+            // Per-screen filter: only check the focused screen's mode
+            classify(focusedScreenId);
         } else {
             // Global filter: union of all effective screens (includes virtual
             // screens). Each screen resolves its OWN desktop (#648 per-output
@@ -735,13 +745,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
             // screens showing a different one.
             const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
             for (const QString& screenId : effectiveIds) {
-                const QString assignmentId =
-                    m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
-                if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
-                    autotileActive = true;
-                } else if (!PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-                    manualActive = true;
-                }
+                classify(screenId);
             }
         }
     } else {

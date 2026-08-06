@@ -619,12 +619,6 @@ void LayoutAdaptor::deleteLayout(const QString& id)
     QUuid uuid = layout->id();
     const QString deletedId = uuid.toString();
     m_layoutManager->removeLayoutById(uuid);
-    // removeLayoutById's purge also sweeps quick slots bound to the deleted
-    // layout; subscribers holding slot state (the settings quick-shortcut
-    // cards) refresh only on this signal, so bump their revision. The
-    // registry API returns void here, so the hint fires unconditionally — a
-    // spare refresh is harmless.
-    Q_EMIT quickLayoutSlotsChanged();
 
     m_cachedLayoutJson.remove(uuid);
     if (m_cachedActiveLayoutId == uuid) {
@@ -632,6 +626,12 @@ void LayoutAdaptor::deleteLayout(const QString& id)
         m_cachedActiveLayoutJson.clear();
     }
     qCInfo(lcDbusLayout) << "Deleted layout" << id;
+    // removeLayoutById's purge also sweeps quick slots bound to the deleted
+    // layout; subscribers holding slot state (the settings quick-shortcut
+    // cards) refresh only on this signal, so bump their revision. The
+    // registry API returns void here, so the hint fires unconditionally — a
+    // spare refresh is harmless.
+    Q_EMIT quickLayoutSlotsChanged();
     // Deletion-specific companion to layoutListChanged — lets subscribers
     // evict per-layout state keyed by UUID before the list refresh lands.
     Q_EMIT layoutDeleted(deletedId);

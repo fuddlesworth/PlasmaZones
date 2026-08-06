@@ -11,21 +11,17 @@ namespace PhosphorZones {
 
 namespace {
 
-// The fraction floor is MinTemplateFraction (ScrollingTemplate.h), which is
-// this library's hand-mirror of the engine's
-// PhosphorScrollEngine::MinColumnWidthFraction. The height mirror
-// (MinWindowHeightFraction) shares the same value, so the preset lists use
-// the one constant.
-
 // Dedupe tolerance for the preset lists, matching the settings parser's
 // treatment of editor float dust (thirds arrive as 0.333333/0.333334).
 constexpr qreal kEps = 0.01;
 
-// Blueprint cap, mirroring the scroll engine's kMaxTemplateEntries
-// (enginelimits.h): the engine truncates the pushed blueprint at 16
-// entries anyway, so a hand-written or bus-supplied file with thousands of
-// columns would only burn memory on entries nothing can ever seed from.
-constexpr int kMaxColumns = 16;
+// Default width kinds, mirroring the engine's DefaultWidthKind wire values.
+// Spelled out here rather than included: this library deliberately does not
+// depend on phosphor-scroll-engine, so the mirror is by documented value
+// (see the ScrollingTemplate class doc for the full vocabulary).
+constexpr int kKindProportion = 0;
+constexpr int kKindFixed = 1;
+constexpr int kKindPreset = 3;
 
 QJsonArray fractionsToJson(const QList<qreal>& values)
 {
@@ -75,9 +71,9 @@ QList<qreal> normalizeFractionList(QList<qreal> values)
 bool ScrollingTemplate::normalize()
 {
     QList<ScrollingTemplateColumn> keptColumns;
-    keptColumns.reserve(qMin(int(columns.size()), kMaxColumns));
+    keptColumns.reserve(qMin(int(columns.size()), MaxTemplateColumns));
     for (ScrollingTemplateColumn column : columns) {
-        if (keptColumns.size() == kMaxColumns) {
+        if (keptColumns.size() == MaxTemplateColumns) {
             break;
         }
         if (!qIsFinite(column.width) || column.width < MinTemplateFraction) {
@@ -91,8 +87,8 @@ bool ScrollingTemplate::normalize()
     }
     columns = keptColumns;
 
-    if (defaultColumnWidthKind < 0 || defaultColumnWidthKind > 3) {
-        defaultColumnWidthKind = 3;
+    if (defaultColumnWidthKind < 0 || defaultColumnWidthKind > kKindPreset) {
+        defaultColumnWidthKind = kKindPreset;
     }
     if (defaultColumnWidthPresetIndex < 0) {
         defaultColumnWidthPresetIndex = 0;
@@ -117,8 +113,8 @@ bool ScrollingTemplate::normalize()
     // an empty vocabulary. This is the defaults shape (kind 3, no presets), so
     // demote to Proportion and let defaultColumnWidthValue answer instead.
     // The index is already 0 by the clause above.
-    if (defaultColumnWidthKind == 3 && presetColumnWidths.isEmpty()) {
-        defaultColumnWidthKind = 0;
+    if (defaultColumnWidthKind == kKindPreset && presetColumnWidths.isEmpty()) {
+        defaultColumnWidthKind = kKindProportion;
     }
 
     if (!qIsFinite(defaultColumnWidthValue) || defaultColumnWidthValue < 0.0) {
@@ -128,9 +124,9 @@ bool ScrollingTemplate::normalize()
     // floor/ceiling as every other fraction here. Fixed is a pixel count with
     // no meaningful upper bound, so it only gets a floor — one physical pixel,
     // since a zero-width column is not a column.
-    if (defaultColumnWidthKind == 0) {
+    if (defaultColumnWidthKind == kKindProportion) {
         defaultColumnWidthValue = qBound<qreal>(MinTemplateFraction, defaultColumnWidthValue, 1.0);
-    } else if (defaultColumnWidthKind == 1) {
+    } else if (defaultColumnWidthKind == kKindFixed) {
         defaultColumnWidthValue = qMax<qreal>(defaultColumnWidthValue, 1.0);
     }
     return isValid();

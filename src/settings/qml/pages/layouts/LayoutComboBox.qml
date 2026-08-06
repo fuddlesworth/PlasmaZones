@@ -607,12 +607,14 @@ ComboBox {
                         } else if (!hasLayout) {
                             return i18n("No default configured");
                         }
-                        // A scrolling template's zoneCount carries its COLUMN
-                        // count, so it is counted as columns here. Read the
-                        // category off the resolved layout: the option's own
-                        // category follows layoutFilter when one is set.
+                        // A scrolling template's zoneCount carries the number of
+                        // bands its preview draws, which is its starting columns
+                        // or its width presets or a synthetic even split, so the
+                        // honest wording here is widths rather than columns.
+                        // Read the category off the resolved layout: the option's
+                        // own category follows layoutFilter when one is set.
                         const count = (modelData.layout && modelData.layout.zoneCount) || 0;
-                        const countText = root.getCategory(modelData.layout, modelData.category) === 2 ? i18np("%n column", "%n columns", count) : i18np("%n zone", "%n zones", count);
+                        const countText = root.getCategory(modelData.layout, modelData.category) === 2 ? i18np("%n width", "%n widths", count) : i18np("%n zone", "%n zones", count);
                         if (isDefaultOption) {
                             let layoutName = (modelData.layout && modelData.layout.displayName) || "";
                             return i18n("→ %1 (%2)", layoutName, countText);

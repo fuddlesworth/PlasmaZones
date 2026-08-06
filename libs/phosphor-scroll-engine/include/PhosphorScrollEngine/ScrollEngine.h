@@ -1065,9 +1065,9 @@ private:
     /// Vocabulary-taking overload, the same "resolve it ONCE" shape as the
     /// override map above: a Preset kind resolves its spin against the
     /// screen's effective width list, which layoutParamsForScreen has already
-    /// parsed for the params it hands the strip. The one-argument form is a
-    /// wrapper that parses it again, for the call sites that need only this
-    /// one value.
+    /// parsed for the params it hands the strip. The one-argument map-taking
+    /// form (above) is a wrapper that parses it again, for the call sites that
+    /// need only this one value.
     ColumnWidth effectiveDefaultColumnWidth(const QVariantMap& overrides, const QList<qreal>& presetWidths) const;
     /// Whether "the client decides" is the EFFECTIVE default-width verdict
     /// for @p screenId: a per-screen kind override answers for itself (true

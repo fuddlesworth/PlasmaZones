@@ -369,16 +369,14 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
     }
     if (slotRemoved) {
         writeQuickLayouts();
-        // No slot-changed signal exists at this level: the registry has none,
-        // and the settings slot cards refresh on the daemon's D-Bus
-        // quickLayoutSlotsChanged, which only the adaptor's explicit slot
-        // verbs emit. A settings window already open across a layout or
-        // template delete therefore keeps showing the swept binding until
-        // something else bumps its slot revision. The disk state and the next
-        // shortcut press are both correct; only the open card is stale. The
-        // fix belongs in the adaptor's delete verbs (emit
-        // quickLayoutSlotsChanged when this returns true), not in new
-        // registry-side plumbing.
+        // No slot-changed signal exists at this level, deliberately: the
+        // refresh hint is the daemon's D-Bus quickLayoutSlotsChanged, and both
+        // adaptor delete verbs already emit it after a purge. The template
+        // verb gates the emit on this function's bool return
+        // (LayoutAdaptor::deleteScrollingTemplate); the layout verb
+        // (LayoutAdaptor::deleteLayout) emits unconditionally, since the
+        // registry call it drives the purge through returns void and a spare
+        // refresh is harmless. So the registry stays signal-free.
     }
 
     return changed || slotRemoved;

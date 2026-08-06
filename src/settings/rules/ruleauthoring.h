@@ -76,9 +76,11 @@ QString modeLabel(const QString& modeToken);
 QString orientationLabel(const QString& orientationToken);
 
 /// The display form of a scrolling template's name, marking it as a template
-/// rather than a plain layout. Shared by the rule-list summary and the
-/// ActiveLayout match options SettingsController builds, so the two read the
-/// same and there is one string to translate.
+/// rather than a plain layout. The one consumer is the ActiveLayout match
+/// options SettingsController builds (activeLayoutMatchOptions). The collapsed
+/// rule-list summary deliberately does NOT use it: there the value already sits
+/// behind the field label, so wrapping it reads doubled ("Active layout:
+/// Template: X").
 QString templateDisplayLabel(const QString& templateName);
 
 /// A complete, default-seeded action payload for @p typeWire — a JSON map of

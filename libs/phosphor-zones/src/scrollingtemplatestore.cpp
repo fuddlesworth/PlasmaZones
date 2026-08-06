@@ -16,6 +16,7 @@
 #include <QStandardPaths>
 
 #include <algorithm>
+#include <utility>
 
 namespace PhosphorZones {
 
@@ -119,11 +120,16 @@ QUuid ScrollingTemplateStore::saveTemplate(ScrollingTemplate templ)
     // otherwise DUPLICATE on save (the id-named file appears beside the
     // original, and the next rescan resolves the collision by name order).
     // Capture the old user-owned path so it can be retired after the write.
+    // Canonicalize the user directory ONCE and require it to be non-empty, the
+    // same guard removeTemplate uses: an empty canonical path means the user
+    // directory does not exist yet, and comparing against it would match any
+    // path whose own canonicalPath is also empty.
+    const QString userCanonical = QDir(userTemplateDirectory()).canonicalPath();
     QString stalePath;
     const auto existing = m_templates.constFind(templ.id);
     if (existing != m_templates.constEnd() && !existing->isSystem && !existing->sourcePath.isEmpty()
-        && existing->sourcePath != userTemplateFilePath(templ.id)
-        && QFileInfo(existing->sourcePath).canonicalPath() == QDir(userTemplateDirectory()).canonicalPath()) {
+        && !userCanonical.isEmpty() && existing->sourcePath != userTemplateFilePath(templ.id)
+        && QFileInfo(existing->sourcePath).canonicalPath() == userCanonical) {
         stalePath = existing->sourcePath;
     }
     templ.sourcePath = userTemplateFilePath(templ.id);
@@ -137,7 +143,16 @@ QUuid ScrollingTemplateStore::saveTemplate(ScrollingTemplate templ)
         return QUuid();
     }
     if (!stalePath.isEmpty()) {
-        QFile::remove(stalePath);
+        // The pre-write compare was raw string inequality, which a symlink or a
+        // non-normalized spelling can make wrong in the dangerous direction:
+        // removing the file just written. Both paths exist now that the write
+        // committed, so canonicalFilePath is well defined for each — retire the
+        // old file only when it really is a different file.
+        const QString staleCanonical = QFileInfo(stalePath).canonicalFilePath();
+        const QString writtenCanonical = QFileInfo(templ.sourcePath).canonicalFilePath();
+        if (!staleCanonical.isEmpty() && staleCanonical != writtenCanonical && !QFile::remove(stalePath)) {
+            qCWarning(lcZonesLib) << "ScrollingTemplateStore: failed to retire stale file" << stalePath;
+        }
     }
     m_templates.insert(templ.id, templ);
     Q_EMIT templatesChanged();
@@ -160,44 +175,44 @@ bool ScrollingTemplateStore::removeTemplate(const QUuid& id)
         qCWarning(lcZonesLib) << "ScrollingTemplateStore: refusing to delete bundled template" << id;
         return false;
     }
-    // Delete the file this entry was actually LOADED from when that file is
-    // the user's own. loadTemplates stamps sourcePath from the real filename,
-    // and a hand-placed user file need not be named <id>.json, so keying the
-    // delete on userTemplateFilePath alone would leave such a file on disk
-    // while reporting success. The canonical-directory compare keeps the
-    // delete inside the user directory: a sourcePath pointing anywhere else
-    // is never a target. An empty canonical user directory means the
-    // directory does not exist at all, so nothing there can be user-owned.
+    // Delete EVERY user file that can carry this id, not just one of them.
+    // loadTemplates stamps sourcePath from the real filename and a hand-placed
+    // user file need not be named <id>.json, so the entry's own path and the
+    // id-derived path can be two different files both holding this id (the
+    // name-sorted load order picks one; the other would survive the delete and
+    // resurface on the next rescan). The canonical-directory compare keeps the
+    // delete inside the user directory: a sourcePath pointing anywhere else is
+    // never a target. An empty canonical user directory means the directory
+    // does not exist at all, so nothing there can be user-owned.
     const QString userCanonical = QDir(userTemplateDirectory()).canonicalPath();
     const QString idFile = userTemplateFilePath(id);
-    QString target;
-    if (!it->sourcePath.isEmpty() && !userCanonical.isEmpty() && QFile::exists(it->sourcePath)
+    QStringList candidates;
+    if (!it->sourcePath.isEmpty() && !userCanonical.isEmpty()
         && QFileInfo(it->sourcePath).canonicalPath() == userCanonical) {
-        target = it->sourcePath;
-    } else if (QFile::exists(idFile)) {
-        target = idFile;
+        candidates.append(it->sourcePath);
     }
-    if (target.isEmpty()) {
-        // A user entry whose file is already gone (deleted out from under the
-        // process), on both the recorded source path and the id-derived one.
-        // The requested state already holds on disk, so rescan to drop the
-        // stale entry (or resurface a bundled original) and report success
-        // rather than refusing forever on a state we cannot repair by
-        // refusing.
-        qCInfo(lcZonesLib) << "ScrollingTemplateStore: user file already gone for" << id << "— rescanning";
-        loadTemplates();
-        return true;
+    if (!candidates.contains(idFile)) {
+        candidates.append(idFile);
     }
-    if (!QFile::remove(target)) {
-        qCWarning(lcZonesLib) << "ScrollingTemplateStore: failed to delete" << target;
-        return false;
+    for (const QString& path : std::as_const(candidates)) {
+        if (QFile::exists(path) && !QFile::remove(path)) {
+            qCWarning(lcZonesLib) << "ScrollingTemplateStore: failed to delete" << path;
+        }
     }
     // Rescan rather than erase: deleting a user file that shadowed a
     // bundled template must resurface the bundled original, and only the
-    // directories know. loadTemplates emits templatesChanged (the set
-    // necessarily differs — either the entry vanished or its isSystem
-    // origin flipped back).
+    // directories know.
     loadTemplates();
+    // Success is measured on disk, not on the remove calls: a file that was
+    // already gone before the call (deleted out from under the process) leaves
+    // the requested state holding, and refusing there would refuse forever on
+    // a state refusing cannot repair. A file that survives a failed remove is
+    // a real failure, and the warning above names it.
+    for (const QString& path : std::as_const(candidates)) {
+        if (QFile::exists(path)) {
+            return false;
+        }
+    }
     return true;
 }
 

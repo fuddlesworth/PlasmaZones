@@ -369,6 +369,28 @@ public:
 
 private:
     /**
+     * @brief The isAnyModeLocked mode lens the LAYOUT PICKER reads a lock
+     * through, for @p screenId.
+     *
+     * Answers 2 (scrolling) on a Templates screen, else -1 (both modes).
+     * On a Templates screen the lock that matters is the scrolling one: the
+     * -1 both-mode default would let an unrelated snapping lock block
+     * template picks while the actual scrolling lock went unread. Every
+     * picker site must use this — the show path and the live lock re-push
+     * disagreeing means a picker opens unlocked and then latches locked (or
+     * the reverse) on the next rule edit. The ZONE SELECTOR is deliberately
+     * NOT a caller: it stays on -1 because it shows the snap zone overlay,
+     * whose lock is the snapping one.
+     */
+    int pickerLockModeFor(const QString& screenId) const
+    {
+        if (m_layoutSupportResolver && m_layoutSupportResolver(screenId) == LayoutSupportTemplates) {
+            return 2;
+        }
+        return -1;
+    }
+
+    /**
      * @brief Install the QGuiApplication::screenAdded hook for the
      * notification overlay so hot-plugged monitors get a per-screen window
      * after the initial warm-up. Idempotent via m_screenAddedConnected

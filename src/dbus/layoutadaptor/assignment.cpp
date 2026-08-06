@@ -34,13 +34,6 @@ bool validDesktopArg(int virtualDesktop, const char* method)
     }
     return true;
 }
-
-/// Boundary cap for a scrolling template's free-text description, the sibling
-/// of MaxLayoutNameLength for the one template field that has no name-length
-/// counterpart. The editor's text area is advisory only; a direct D-Bus caller
-/// can hand us an unbounded string that then lands in the store's JSON file and
-/// in every picker tooltip.
-constexpr int MaxTemplateDescriptionLength = 500;
 } // namespace
 
 QJsonObject LayoutAdaptor::buildActivityInfoJson(const QString& activityId) const
@@ -914,7 +907,10 @@ QString LayoutAdaptor::saveScrollingTemplate(const QString& templateJson)
     }
     PhosphorZones::ScrollingTemplate templ = PhosphorZones::ScrollingTemplate::fromJson(doc.object());
     // D-Bus boundary clamp, same as createLayout / updateLayout apply to
-    // layout names: a caller can bypass the editor dialog's cap entirely.
+    // layout names. The editor dialog mirrors these caps client-side via
+    // maximumLength; this boundary clamp is the enforcement, since a direct
+    // D-Bus caller never goes through the dialog and maximumLength truncates by
+    // UTF-16 code units anyway.
     templ.name = clampName(templ.name);
     // The description is free text with no name-length counterpart, so it needs
     // its own cap at the same boundary. clampName is the right tool for it too:

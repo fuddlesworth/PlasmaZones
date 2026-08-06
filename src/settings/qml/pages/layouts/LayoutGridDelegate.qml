@@ -30,10 +30,12 @@ Item {
     // The full autotile default ID including prefix, for comparison
     readonly property string autotileDefaultId: "autotile:" + root.appSettings.defaultAutotileAlgorithm
     // A template card's zoneCount carries the number of bands its preview
-    // draws: the starting columns, or the width presets when it has no
-    // starting columns, minus any that fall off the right edge. Either way
-    // they are columns, so the footer and the accessible description count
-    // columns rather than zones.
+    // draws, and that comes from one of three sources: the template's starting
+    // columns, the width presets when it has no starting columns, or the
+    // synthetic even split a template with neither falls back to. Bands off the
+    // right edge are dropped either way. Only the first source is literally a
+    // column count, so the footer and the accessible description say "widths",
+    // which is true of all three.
     readonly property bool isTemplateCard: root.viewMode === 2 || root.modelData.isScrollingTemplate === true
     // Global "Auto-assign for all layouts" master toggle (#370). Read once at
     // the root so child controls (auto-assign button, CategoryBadge) share a
@@ -101,7 +103,7 @@ Item {
     }
 
     Accessible.name: modelData.displayName || i18n("Unnamed Layout")
-    Accessible.description: root.isTemplateCard ? i18np("Template with %n column", "Template with %n columns", modelData.zoneCount || 0) : i18np("Layout with %n zone", "Layout with %n zones", modelData.zoneCount || 0)
+    Accessible.description: root.isTemplateCard ? i18np("Template with %n width", "Template with %n widths", modelData.zoneCount || 0) : i18np("Layout with %n zone", "Layout with %n zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
     Accessible.focusable: true
     // Keyboard reachability for the Keys handlers below (matches
@@ -425,7 +427,7 @@ Item {
                     elide: Text.ElideRight
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
-                    text: root.isTemplateCard ? i18np("%n column", "%n columns", root.modelData.zoneCount || 0) : i18np("%n zone", "%n zones", root.modelData.zoneCount || 0)
+                    text: root.isTemplateCard ? i18np("%n width", "%n widths", root.modelData.zoneCount || 0) : i18np("%n zone", "%n zones", root.modelData.zoneCount || 0)
                 }
             }
         }

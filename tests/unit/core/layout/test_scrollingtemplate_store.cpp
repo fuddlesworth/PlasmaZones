@@ -233,9 +233,10 @@ private Q_SLOTS:
     void schemaMirrorsTheNormalizationConstants()
     {
         // The schema restates two constants that live in C++
-        // (scrollingtemplate.cpp: kMinFraction and kMaxColumns, itself a mirror
-        // of the scroll engine's kMaxTemplateEntries). Nothing links the two, so
-        // a floor or cap that moves in the code leaves the author-time gate
+        // (PhosphorZones::MinTemplateFraction and MaxTemplateColumns in
+        // ScrollingTemplate.h, the latter itself a mirror of the scroll
+        // engine's kMaxTemplateEntries). Nothing links the two, so a
+        // floor or cap that moves in the code leaves the author-time gate
         // quietly describing the old contract. This pins the restatement.
         QFile file(schemaPath());
         QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(schemaPath()));
@@ -247,12 +248,12 @@ private Q_SLOTS:
 
         const QJsonObject fraction =
             schema.value(QLatin1String("definitions")).toObject().value(QLatin1String("fraction")).toObject();
-        QCOMPARE(fraction.value(QLatin1String("minimum")).toDouble(), 0.05);
+        QCOMPARE(fraction.value(QLatin1String("minimum")).toDouble(), PhosphorZones::MinTemplateFraction);
         QCOMPARE(fraction.value(QLatin1String("maximum")).toDouble(), 1.0);
 
         const QJsonObject columns =
             schema.value(QLatin1String("properties")).toObject().value(QLatin1String("columns")).toObject();
-        QCOMPARE(columns.value(QLatin1String("maxItems")).toInt(), 16);
+        QCOMPARE(columns.value(QLatin1String("maxItems")).toInt(), PhosphorZones::MaxTemplateColumns);
     }
 
     void toJsonAndBundledTemplatesSatisfySchema()
@@ -309,6 +310,36 @@ private Q_SLOTS:
         // Accumulated rather than asserted per file, so one bad starter does not
         // hide the state of the rest.
         QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QLatin1String("\n"))));
+    }
+
+    void schemaBoundsKindZeroDefaultWidth()
+    {
+        // The defaultColumnWidth if/then branch is the one part of the schema no
+        // bundled starter and no toJson output exercises: they all serialize a
+        // fraction that is in range anyway, so a broken conditional would still
+        // let every document above pass. These arms drive it directly.
+        const auto validator = PhosphorFsLoader::SchemaValidator::fromResource(schemaPath(), testSchema());
+        QVERIFY2(validator.isValid(), qPrintable(schemaPath()));
+
+        const auto documentWithWidth = [](int kind, double value) {
+            QJsonObject width;
+            width.insert(QLatin1String("kind"), kind);
+            width.insert(QLatin1String("value"), value);
+            QJsonObject doc;
+            doc.insert(QLatin1String("id"), QUuid::createUuid().toString());
+            doc.insert(QLatin1String("name"), QStringLiteral("Conditional arm"));
+            doc.insert(QLatin1String("defaultColumnWidth"), width);
+            return doc;
+        };
+
+        // Kind 0 reads value as a work-area fraction, so an in-range fraction
+        // passes and one past the ceiling does not.
+        QVERIFY(!validator.validate(documentWithWidth(0, 0.5)).has_value());
+        QVERIFY(validator.validate(documentWithWidth(0, 2.0)).has_value());
+        // The same 2.0 under kind 1 is a pixel count, which the conditional
+        // leaves unbounded above. Without this arm a plain unconditional maximum
+        // on value would satisfy the two arms above.
+        QVERIFY(!validator.validate(documentWithWidth(1, 2.0)).has_value());
     }
 
 private:

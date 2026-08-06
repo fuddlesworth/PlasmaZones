@@ -620,18 +620,11 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     if (m_settings && m_layoutManager) {
         int curDesktop = currentVirtualDesktopForScreen(resolvedId);
         QString curActivity = m_layoutManager->currentActivity();
-        // Pass the LIVE mode when the resolver is wired: on a Templates
-        // screen the lock that matters is the scrolling one (mode 2), and
-        // the -1 both-mode default would let an unrelated snapping lock
-        // block template picks while the actual scrolling lock went unread.
-        int lockMode = -1;
-        if (m_layoutSupportResolver) {
-            const int support = m_layoutSupportResolver(resolvedId);
-            if (support == LayoutSupportTemplates) {
-                lockMode = 2;
-            }
-        }
-        locked = isAnyModeLocked(m_settings, m_layoutManager, resolvedId, curDesktop, curActivity, lockMode);
+        // Pass the LIVE mode lens (see pickerLockModeFor) — shared with the
+        // live lock re-push in refreshContextLockState so the two cannot
+        // disagree about which mode's lock the picker is showing.
+        locked = isAnyModeLocked(m_settings, m_layoutManager, resolvedId, curDesktop, curActivity,
+                                 pickerLockModeFor(resolvedId));
     }
     writeQmlProperty(slot, QStringLiteral("locked"), locked);
     const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, resolvedId);

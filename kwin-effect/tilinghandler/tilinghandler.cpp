@@ -823,10 +823,17 @@ void TilingHandler::onDaemonReady()
     // clear) drops every verdict memoised against the dead map, and
     // scheduleBorderSweep rebuilds the decorations those verdicts baked in.
     clearActiveLayoutsForTeardown();
-    // Paired with every unseeding: the withheld marker describes an admission
-    // pass run against the DEAD session's rule store, and the next
-    // loadRuleAnimationsFromDbus reply recomputes it from the new one.
-    m_effect->m_activeLayoutRulesWithheld = false;
+    // m_activeLayoutRulesWithheld is deliberately NOT cleared alongside the
+    // unseeding. It indexes rule sets that SURVIVE the teardown (the effect
+    // keeps its admitted rule sets across daemon loss), so it stays meaningful
+    // across the gap, and every successful loadRuleAnimationsFromDbus reply
+    // recomputes it outright (shader_config_dbus.cpp assigns, never ORs).
+    // Clearing it here would be unsafe in the one case that matters: if this
+    // bring-up's getAllRules errors or times out, no reply recomputes the
+    // marker, and a cleared marker leaves the withheld ActiveLayout rules
+    // disarmed for the rest of the session because the seed edge in state.cpp
+    // is gated on it. A stale-TRUE marker costs exactly one redundant re-drive,
+    // which is the safe direction. The seed edge consumes and clears it.
     // Void the DEAD session's in-flight managedScreens property reply too:
     // loadSettings below re-queries, and a stale reply from the previous
     // daemon would otherwise pass its generation gate and reinstate a

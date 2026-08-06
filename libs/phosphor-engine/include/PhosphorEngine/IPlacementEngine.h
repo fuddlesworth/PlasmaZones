@@ -732,8 +732,9 @@ public:
         /// column-width vocabulary, plus a height vocabulary when the layout
         /// has stacked zones): the picker applies a layout as the screen's
         /// template rather than as window placement. The daemon routes such
-        /// applies to the assignment's template slot and keeps the manual
-        /// layout list (no autotile cards) as the candidate set.
+        /// applies to the assignment's template slot and swaps in the native
+        /// scrolling-template cards as the candidate set (no zone layouts, no
+        /// autotile cards).
         Templates
     };
 

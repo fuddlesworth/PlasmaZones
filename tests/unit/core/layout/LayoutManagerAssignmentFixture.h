@@ -73,9 +73,11 @@ protected:
         templ.presetColumnWidths = {0.333, 0.5, 0.667};
         const QUuid id = store->saveTemplate(templ);
         // QVERIFY expands to a bare `return;`, which a QUuid-returning helper
-        // cannot use, so call the same reporting entry point the macro does. A
-        // refused save fails the test here rather than handing the caller a
-        // null id that goes on to fail as something unrelated.
+        // cannot use, so call the same reporting entry point the macro does.
+        // This records the refused save as the FIRST reported failure, so the
+        // test log names the real cause instead of whatever the null id goes on
+        // to break. It does not abort the caller: the caller still receives a
+        // null id and keeps running.
         if (!QTest::qVerify(!id.isNull(), "!id.isNull()", "template save was refused", __FILE__, __LINE__)) {
             return {};
         }

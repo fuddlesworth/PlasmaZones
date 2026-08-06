@@ -121,22 +121,22 @@ private Q_SLOTS:
         QVERIFY(!engine.capturePlacement(QStringLiteral("win")).has_value());
         QVERIFY(!engine.restorePlacement(WindowPlacement{}, QStringLiteral("DP-1")));
         // No drag-insert preview: nothing is live, begin refuses to start one,
-        // the screen id and the indicator rect stay empty, and hit-testing a
+        // both screen ids and the indicator rect stay empty, and hit-testing a
         // cursor position answers an invalid target (primary < 0). An embedder
         // that paints a drop indicator off these must see the refusal, not a
         // rect at the origin.
         QVERIFY(!engine.hasDragInsertPreview());
         QVERIFY(!engine.beginDragInsertPreview(QStringLiteral("win"), QStringLiteral("DP-1")));
         QVERIFY(engine.dragInsertPreviewScreenId().isEmpty());
+        QVERIFY(engine.dragInsertPreviewPriorScreenId().isEmpty());
         QVERIFY(!engine.computeDragInsertTargetAtPoint(QStringLiteral("DP-1"), QPoint(100, 100)).isValid());
         QVERIFY(engine.dragInsertIndicatorRect(QStringLiteral("DP-1")).isEmpty());
         // Unlimited-window sentinel, not a real cap: callers must never divide
         // by it.
         QCOMPARE(engine.runtimeMaxWindows(), -1);
-        // No identity and not enabled.
+        // No identity of any kind, and not enabled.
         QVERIFY(engine.engineId().isEmpty());
         QVERIFY(!engine.isEnabled());
-        // No algorithm identity.
         QVERIFY(engine.algorithmId().isEmpty());
     }
 };

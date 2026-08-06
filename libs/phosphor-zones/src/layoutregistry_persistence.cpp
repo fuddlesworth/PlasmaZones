@@ -57,6 +57,13 @@ bool stageJson(QSaveFile& file, const QJsonDocument& doc, const QString& path)
     return true;
 }
 
+/// How many quick-layout slots one mode carries. Mirrors
+/// PhosphorProtocol::Service::QuickLayoutSlotCount by hand: this library does
+/// not depend on phosphor-protocol, so the value is repeated here the same way
+/// MinTemplateFraction repeats the engine's floor. Raising one side without the
+/// other makes the extra slots unreadable, not corrupt.
+constexpr int kQuickSlotCount = 9;
+
 } // namespace
 
 bool LayoutRegistry::isLayoutJsonValid(const QJsonObject& json, const QString& context)
@@ -503,14 +510,23 @@ void LayoutRegistry::readQuickLayouts()
 
     // Reader for one mode's nested slot object ({ "1": id, ... }).
     const auto readModeSlots = [](const QJsonObject& obj, QHash<int, QString>& out) {
-        for (int i = 1; i <= 9; ++i) {
+        for (int i = 1; i <= kQuickSlotCount; ++i) {
             const QString key = QString::number(i);
-            if (obj.contains(key)) {
-                const QString layoutId = obj.value(key).toString();
-                if (!layoutId.isEmpty()) {
-                    out[i] = layoutId;
-                }
+            if (!obj.contains(key)) {
+                continue;
             }
+            const QString stored = obj.value(key).toString();
+            if (stored.isEmpty()) {
+                continue;
+            }
+            // Canonicalize a UUID-shaped value to the braced spelling this
+            // library compares and writes everywhere. A hand-edited sidecar can
+            // hold the unbraced form, and the id-keyed sweeps (purge on delete,
+            // the picker's current-slot match) compare strings, so an unbraced
+            // entry would silently never match. A value that is not a UUID is a
+            // tiling-algorithm token and is stored verbatim.
+            const QUuid parsed = QUuid::fromString(stored);
+            out[i] = parsed.isNull() ? stored : parsed.toString();
         }
     };
 

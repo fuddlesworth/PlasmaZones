@@ -9,11 +9,21 @@
  * the setScrollingTemplateLayout / getScrollingTemplateLayout pair with its
  * validation and clear forms, the mode gate on the getter, and the widened
  * {layoutId, scrollingTemplate} value shape of the three flat batch getters.
+ * Also covers the two boundary behaviors the template CRUD verbs owe: the
+ * description clamp saveScrollingTemplate applies (the editor dialog's
+ * maximumLength is advisory, a D-Bus caller skips it entirely) and the
+ * quickLayoutSlotsChanged refresh hint deleteScrollingTemplate emits after the
+ * id-scrub sweeps a bound quick slot.
  * Fixture cribbed from test_layout_adaptor_signals.cpp.
  */
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSignalSpy>
 #include <QTest>
 
+#include "core/types/constants.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -129,6 +139,46 @@ private Q_SLOTS:
         QCOMPARE(combinedValue.value(QStringLiteral("layoutId")).toString(),
                  QString(PhosphorLayout::LayoutId::ScrollingId));
         QCOMPARE(combinedValue.value(QStringLiteral("scrollingTemplate")).toString(), m_templateId);
+    }
+
+    void testSave_clampsOverlongDescription()
+    {
+        PhosphorZones::ScrollingTemplate templ;
+        templ.name = QStringLiteral("Described");
+        templ.presetColumnWidths = {0.5};
+        templ.description = QString(600, QLatin1Char('a'));
+        const QString saved = m_adaptor->saveScrollingTemplate(
+            QString::fromUtf8(QJsonDocument(templ.toJson()).toJson(QJsonDocument::Compact)));
+        QVERIFY(!saved.isEmpty());
+
+        // Read the description back over the same wire the pickers use, so the
+        // clamp is asserted on what a client actually receives.
+        const QJsonArray listed = QJsonDocument::fromJson(m_adaptor->getScrollingTemplates().toUtf8()).array();
+        QString stored;
+        bool found = false;
+        for (const QJsonValue& value : listed) {
+            const QJsonObject json = value.toObject();
+            if (json.value(QLatin1String("id")).toString() == saved) {
+                stored = json.value(QLatin1String("description")).toString();
+                found = true;
+                break;
+            }
+        }
+        QVERIFY(found);
+        QCOMPARE(stored.size(), PlasmaZones::MaxTemplateDescriptionLength);
+    }
+
+    void testDelete_sweepsQuickSlotAndBumpsRevision()
+    {
+        // Bind the template to a scrolling quick slot BEFORE the spy: the
+        // setter emits the same signal, and the leg under test is the delete.
+        m_adaptor->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Scrolling, 1, m_templateId);
+        QCOMPARE(m_adaptor->getQuickLayoutSlot(PhosphorZones::AssignmentEntry::Scrolling, 1), m_templateId);
+
+        QSignalSpy spy(m_adaptor, &LayoutAdaptor::quickLayoutSlotsChanged);
+        QVERIFY(m_adaptor->deleteScrollingTemplate(m_templateId));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(m_adaptor->getQuickLayoutSlot(PhosphorZones::AssignmentEntry::Scrolling, 1), QString());
     }
 
 private:
