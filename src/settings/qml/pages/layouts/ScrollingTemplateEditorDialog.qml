@@ -120,7 +120,7 @@ Kirigami.Dialog {
     // entries the store will keep. The daemon remains the authority and
     // normalizes again on the way in.
     function parseFractionList(text) {
-        const parsed = text.split(",").map(part => Math.min(parseFloat(part.trim()), 1)).filter(value => !isNaN(value) && value >= root.scrollingConstants.proportionMin).sort((a, b) => a - b);
+        const parsed = text.split(",").map(part => parseFloat(part.trim())).filter(value => isFinite(value) && value >= root.scrollingConstants.proportionMin).map(value => Math.min(value, 1)).sort((a, b) => a - b);
         let kept = [];
         for (let i = 0; i < parsed.length && kept.length < root.scrollingConstants.maxTemplateColumns; i++) {
             if (kept.length === 0 || Math.abs(kept[kept.length - 1] - parsed[i]) >= root.scrollingConstants.fractionDedupeEpsilon)
