@@ -1568,6 +1568,17 @@ target_link_libraries(test_tiling_state PRIVATE Qt6::Test PhosphorCompositor::Ph
                                                   PhosphorIdentity::PhosphorIdentity)
 add_test(NAME test_tiling_state COMMAND test_tiling_state)
 
+# StripViewAnimator never dereferences a KWin::LogicalOutput* (it is a map key
+# only), so the implementation compiles straight into the test and the suite
+# drives it with fake handles and a hand-driven clock — no compositor, no KWin
+# headers, and the include path is the effect tree so its own "compositor/..."
+# include resolves.
+add_executable(test_strip_view_animator compositor-common/test_strip_view_animator.cpp
+               ${CMAKE_SOURCE_DIR}/kwin-effect/compositor/stripviewanimator.cpp)
+target_include_directories(test_strip_view_animator PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+target_link_libraries(test_strip_view_animator PRIVATE Qt6::Test PhosphorAnimation::PhosphorAnimation)
+add_test(NAME test_strip_view_animator COMMAND test_strip_view_animator)
+
 add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
 target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_decoration_manager COMMAND test_decoration_manager)

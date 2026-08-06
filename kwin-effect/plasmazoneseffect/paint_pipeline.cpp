@@ -34,6 +34,7 @@
 #include <chrono>
 #include <type_traits>
 
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 #include "paint_internal.h"
 
@@ -115,6 +116,9 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // Cost is O(#animations) per prePaintScreen — typical paths see
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
+    // Same tick, same clocks. One spring per scrolling output rather than one
+    // per window, so the cost here is bounded by the monitor count.
+    m_stripViewAnimator->advanceAnimations();
 
     // Vertex snapping tracks the animation state (see the initRenderingAndRegistries
     // note): None while a REDIRECTED window animates so its smooth translates keep
@@ -149,7 +153,8 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // the whole transition. Narrowing that term to a per-window test without
     // also fixing this half would silently stop relaxing snapping for
     // transition-owned windows.
-    const bool animationsInFlight = m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty();
+    const bool animationsInFlight = m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
+        || m_stripViewAnimator->hasActiveAnimations();
     // The decoration probe can only return true when decorations exist — skip
     // the per-animation id derivation entirely on an undecorated desktop.
     const bool redirectedAnimating = !m_shaderManager.empty()
@@ -203,6 +208,14 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
         if (data.screen) {
             const QRectF outputGeo = QRect(data.screen->geometry());
             touchesThisOutput = m_windowAnimator->hasAnimationsIntersecting(outputGeo);
+            // The strip-wide analogue of the swept-bounds test above. A view
+            // leg has no per-window bounds to sweep — it moves every column on
+            // its output at once — so the output it belongs to IS its region,
+            // and identity answers what an intersection would have to
+            // approximate.
+            if (!touchesThisOutput && m_stripViewAnimator->isAnimatingOn(data.screen)) {
+                touchesThisOutput = true;
+            }
             if (!touchesThisOutput) {
                 for (const auto& [tw, transition] : m_shaderManager.shaderTransitions()) {
                     if (!tw) {
@@ -1056,6 +1069,24 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         const bool shaderOwnsGeometry = morphSt && morphSt->cached && morphSt->cached->iFromRectLoc >= 0;
         if (!shaderOwnsGeometry) {
             m_windowAnimator->applyTransform(w, data);
+        }
+        // Scrolling-strip view offset, ADDED to whatever the window animator
+        // just applied rather than replacing it. The two describe different
+        // things and compose: the view says where the whole strip is, the
+        // per-window animation says how this one column differs from riding it
+        // (an edge column whose width changed in the same batch has both). A
+        // pure scroll has no per-window animation at all, which is the point.
+        //
+        // Applied even when a shader owns the geometry. A morph shader
+        // interpolates between two COMMITTED rects and knows nothing about the
+        // view, so the strip sliding underneath it is not something it can
+        // double-count — unlike the animator transform above, which describes
+        // the same motion the shader is already drawing.
+        if (KWin::LogicalOutput* managed = scrollManagedOutputFor(w)) {
+            const qreal viewOffset = m_stripViewAnimator->offsetFor(managed);
+            if (!qFuzzyIsNull(viewOffset)) {
+                data += QPointF(viewOffset, 0.0);
+            }
         }
     }
 

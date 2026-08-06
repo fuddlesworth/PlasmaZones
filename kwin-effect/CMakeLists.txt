@@ -123,6 +123,8 @@ set(plasmazones_effect_SRCS
     compositor/snapassistthumbnailcapture.h
     compositor/windowanimator.cpp
     compositor/windowanimator.h
+    compositor/stripviewanimator.cpp
+    compositor/stripviewanimator.h
     compositor/compositorclock.cpp
     compositor/compositorclock.h
     compositor/deferredwindowcommits.h

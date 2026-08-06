@@ -7,6 +7,7 @@
 #include "tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -145,6 +146,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString screenId; ///< daemon's TARGET screen for this window (req.screenId)
         QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
         QString scrollEdge; ///< scrolling strip: screen edge to animate from ("left"/"right"), else empty
+        int viewDeltaX = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
     };
     QVector<Entry> entries;
 
@@ -218,6 +220,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         entry.screenId = req.screenId;
         entry.stacking = req.stacking;
         entry.scrollEdge = req.scrollEdge;
+        entry.viewDeltaX = req.viewDeltaX;
         if (candidates.size() > 1) {
             entry.candidates = candidates;
         }
@@ -278,6 +281,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         bool isMonocle = false;
         QString stacking;
         QString scrollEdge;
+        int viewDeltaX = 0;
     };
     QVector<TileSnap> toApply;
     for (Entry& e : entries) {
@@ -302,7 +306,30 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // and TileRequestEntry::validationError() rejects an empty screenId
         // before it ever reaches `entries`, so it is always present here.
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
-                        e.stacking, e.scrollEdge});
+                        e.stacking, e.scrollEdge, e.viewDeltaX});
+    }
+
+    // Start this batch's view legs, ONCE per output. The delta is a property
+    // of the batch that every carried entry repeats, so folding it in per
+    // window would spring the strip N times as far. First non-zero wins per
+    // screen; a well-formed batch agrees across its entries, and disagreement
+    // would mean the engine resolved one screen twice in one pass, where the
+    // first answer is as good as any.
+    //
+    // This is what makes the strip rigid: one spring per output, read back by
+    // the paint path for every column, instead of N per-window springs that
+    // each start a moment apart and integrate themselves apart.
+    {
+        QSet<QString> seededScreens;
+        for (const TileSnap& s : toApply) {
+            if (s.viewDeltaX == 0 || s.screenId.isEmpty() || seededScreens.contains(s.screenId)) {
+                continue;
+            }
+            seededScreens.insert(s.screenId);
+            if (KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
+                m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDeltaX);
+            }
+        }
     }
 
     // Cascade order follows the direction of travel for a scrolling strip.
@@ -864,7 +891,36 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     QRectF originOverride;
                     QRectF visualTargetOverride;
                     bool skipScrollAnimation = false;
-                    if (!snap.scrollEdge.isEmpty()) {
+                    if (snap.viewDeltaX != 0) {
+                        // Carried by the view: the strip's own spring moves
+                        // this window, so the per-window animation must cover
+                        // only what the view does NOT explain — the residual.
+                        //
+                        // The paint position is `animatedRect + viewOffset`,
+                        // and the offset starts at exactly viewDeltaX. So for
+                        // the first frame to land where the window is now, the
+                        // animation has to start a delta BEHIND its current
+                        // rect. Everything that then differs from the target is
+                        // the residual, and it animates on its own.
+                        //
+                        // The pure-scroll case falls out rather than being
+                        // special-cased: when the window's whole movement is
+                        // the view's, this origin IS the target, startAnimation
+                        // reports the leg degenerate, and no second spring
+                        // exists to desync from the first. An edge column whose
+                        // width changed in the same batch keeps a real leg, so
+                        // its width interpolates while its position rides the
+                        // strip — which is why the clamp needs no special
+                        // handling of its own.
+                        //
+                        // Outranks the scrollEdge branch below on purpose: an
+                        // ARRIVING column carries both, and its true pre-scroll
+                        // strip position beats a point synthesized just outside
+                        // the screen edge, because that is where it actually
+                        // was.
+                        const KWin::RectF cur = snap.window->frameGeometry();
+                        originOverride = QRectF(cur.x() - snap.viewDeltaX, cur.y(), cur.width(), cur.height());
+                    } else if (!snap.scrollEdge.isEmpty()) {
                         const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
                         const QRect screenRect = out ? QRect(out->geometry()) : QRect();
                         if (screenRect.isValid()) {

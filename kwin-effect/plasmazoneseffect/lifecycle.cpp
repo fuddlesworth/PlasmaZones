@@ -38,6 +38,7 @@
 #include "handlers/screenchangehandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
@@ -64,6 +65,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // mid-migration, (c) test paths that don't drive KWin::effects.
     , m_motionClockFallback(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
+    , m_stripViewAnimator(std::make_unique<StripViewAnimator>())
     , m_shaderManager(this)
     , m_desktopTransition(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))

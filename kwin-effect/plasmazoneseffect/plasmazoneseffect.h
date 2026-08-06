@@ -130,6 +130,7 @@ class ScreenChangeHandler;
 class SnapAssistHandler;
 class CompositorClock;
 class WindowAnimator;
+class StripViewAnimator;
 class DragTracker;
 
 /**
@@ -1846,6 +1847,14 @@ private:
     /// time) outlives the animator on shutdown.
     PhosphorAnimation::CurveRegistry m_curveRegistry;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
+    /// Scrolling-strip view motion, one spring per output. Separate from
+    /// m_windowAnimator by GRANULARITY, not by kind: a scroll moves the whole
+    /// strip by one amount, and folding that into per-window targets would
+    /// make N springs that desync into a shear. The two compose additively at
+    /// paint time — a window can be riding the view AND animating a residual
+    /// of its own (an edge column whose width changed in the same batch).
+    /// Same clock and same profile source as the window animator.
+    std::unique_ptr<StripViewAnimator> m_stripViewAnimator;
 
     // Phase 6: per-window shader transitions via OffscreenEffect.
     // Shader/texture cache, LRU eviction, warm-up pipeline, profile tree,
