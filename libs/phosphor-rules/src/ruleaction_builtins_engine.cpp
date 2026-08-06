@@ -56,7 +56,14 @@ void ActionRegistry::registerBuiltinsEngine()
         .tags = {QString(Tag::LayoutEngine)},
     });
 
-    // ── layout slot — both layout-shaping actions share it ──
+    // ── layout slot — SetSnappingLayout and SetTilingAlgorithm SHARE it, which
+    // is the lossless mode-toggle pair: one rule may carry both, and the
+    // context's active mode picks which one answers. Sharing costs nothing
+    // because duplicate detection keys on (slot, type), not slot alone, and the
+    // decoder walks the action list by type rather than reading a single winner
+    // out of the slot. The scrolling template is NOT part of the pair: it
+    // carries its own slot, registered below, which is what lets a rule name a
+    // template alongside either of these.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetSnappingLayout),
         .slotFor = constantSlot(ActionSlot::Layout),
@@ -88,6 +95,27 @@ void ActionRegistry::registerBuiltinsEngine()
         .tags = {QString(Tag::LayoutEngine)},
     });
 
+    // ── scrolling-template slot ──
+    // The value is a NATIVE scrolling-template id (its own picker kind and
+    // name resolution) filling its OWN slot: the lossless assignment set
+    // stores it beside the snapping layout in one rule (see
+    // ActionSlot::ScrollingTemplate).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollingTemplate),
+        .slotFor = constantSlot(ActionSlot::ScrollingTemplate),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, ActionParam::LayoutId);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::LayoutId)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::LayoutId), .kind = QStringLiteral("scrollingTemplate")}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 3,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+
     // ── engine-enable slot ──
     // `mode` records which engine the rule disables. The recognised tokens
     // are the wire vocabulary `PhosphorZones::modeFromWireString` accepts —
@@ -111,7 +139,7 @@ void ActionRegistry::registerBuiltinsEngine()
                      .kind = QStringLiteral("enum"),
                      .enumWireValues = engineModeOptions()}},
         .category = QStringLiteral("layoutEngine"),
-        .displayOrder = 3,
+        .displayOrder = 4,
         .tags = {QString(Tag::LayoutEngine)},
     });
 
@@ -139,7 +167,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
         .category = QStringLiteral("layoutEngine"),
-        .displayOrder = 4,
+        .displayOrder = 5,
         .tags = {QString(Tag::LayoutEngine)},
     });
 
@@ -168,7 +196,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
         .category = QStringLiteral("layoutEngine"),
-        .displayOrder = 5,
+        .displayOrder = 6,
         .tags = {QString(Tag::LayoutEngine)},
     });
 

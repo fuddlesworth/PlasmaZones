@@ -51,7 +51,7 @@ namespace ContextRuleBridge {
 /// precedence value: callers seed new context rules in this band and the
 /// Settings list-order renormalizer / runtime upsert derive concrete values
 /// from it. Kept numerically in sync with `RuleTemplates::kContextBandBase`
-/// (src/settings/ruletemplates.h), which the settings tree defines separately.
+/// (src/settings/rules/ruletemplates.h), which the settings tree defines separately.
 inline constexpr int kContextBandBase = 300;
 
 /**
@@ -232,9 +232,10 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
 /**
  * @brief Build the lossless action list for a migrated zone Assignment.
  *
- * The `AssignmentEntry` invariant is mode-toggle losslessness: it stores both
- * `snappingLayout` and `tilingAlgorithm` so flipping mode never drops the
- * other field. The migrated rule therefore carries up to **three** actions:
+ * The `AssignmentEntry` invariant is mode-toggle losslessness: it stores
+ * `snappingLayout`, `tilingAlgorithm` and `scrollingTemplateLayout` so
+ * flipping mode never drops the other fields. The migrated rule therefore
+ * carries up to **four** actions:
  *
  *   - `SetEngineMode` — always (the mode token, e.g. "snapping" / "autotile"
  *     / "scrolling").
@@ -242,10 +243,13 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  *     action descriptor rejects an empty `layoutId`).
  *   - `SetTilingAlgorithm` — only when @p tilingAlgorithm is non-empty (the
  *     descriptor rejects an empty `algorithm`).
+ *   - `SetScrollingTemplate` — only when @p scrollingTemplate is non-empty
+ *     (same `layoutId` wire KEY as `SetSnappingLayout`, but a native
+ *     scrolling-template uuid — the two id namespaces are disjoint).
  *
- * A mode-only entry (both layout fields empty — the KCM "autotile, default
- * algorithm" shape) yields a single `SetEngineMode` action; the mode token
- * alone preserves the user's intent.
+ * A mode-only entry (all three payload fields empty — the KCM "autotile,
+ * default algorithm" shape) yields a single `SetEngineMode` action; the mode
+ * token alone preserves the user's intent.
  *
  * Open-vocabulary by design: the `SetEngineMode` descriptor's validator
  * checks only that `modeToken` is non-empty — vocabulary validation lives
@@ -263,7 +267,7 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  * `ruleaction_builtins_p.h` — round-trips end-to-end through the consumer.
  */
 inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const QString& snappingLayout,
-                                               const QString& tilingAlgorithm)
+                                               const QString& tilingAlgorithm, const QString& scrollingTemplate)
 {
     QList<RuleAction> actions;
 
@@ -284,21 +288,33 @@ inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const Q
         tilingAction.params.insert(ActionParam::Algorithm, tilingAlgorithm);
         actions.append(tilingAction);
     }
+    if (!scrollingTemplate.isEmpty()) {
+        RuleAction templateAction;
+        templateAction.type = QString(ActionType::SetScrollingTemplate);
+        templateAction.params.insert(ActionParam::LayoutId, scrollingTemplate);
+        actions.append(templateAction);
+    }
     return actions;
 }
 
 /**
  * @brief Build a complete migrated zone-Assignment `Rule`.
  *
- * The match is context-only; the actions are the lossless three-action set.
+ * The match is context-only; the actions are the lossless assignment set
+ * from @ref makeAssignmentActions.
  * @p name is a human-readable label for the settings UI. @p modeToken is the
  * wire string for the assignment's mode (see `makeAssignmentActions` for
  * vocabulary contract). @p priority is the rule's precedence verbatim — the
  * caller owns it (highest priority wins per slot, ties by list order).
+ * @p scrollingTemplate defers entirely to @ref makeAssignmentActions, which
+ * emits the `SetScrollingTemplate` action only for a non-empty id. It sits
+ * after @p priority rather than beside the other two payload fields so the
+ * pre-scrolling parameter order stays put and every call site only appends an
+ * argument.
  */
 inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int virtualDesktop,
                                const QString& activity, const QString& modeToken, const QString& snappingLayout,
-                               const QString& tilingAlgorithm, int priority)
+                               const QString& tilingAlgorithm, int priority, const QString& scrollingTemplate)
 {
     Rule rule;
     // Deterministic id derived from the source context identity — identical
@@ -308,7 +324,7 @@ inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int
     rule.enabled = true;
     rule.priority = priority;
     rule.match = makeContextMatch(screenId, virtualDesktop, activity);
-    rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm);
+    rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm, scrollingTemplate);
     return rule;
 }
 

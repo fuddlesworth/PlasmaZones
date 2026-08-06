@@ -216,6 +216,19 @@ void TilingAdaptor::relayEnabledChanged()
     Q_EMIT enabledChanged(now);
 }
 
+void TilingAdaptor::setActiveLayouts(const QVariantMap& activeLayouts)
+{
+    // Change gate: the daemon pushes unconditionally from every
+    // updateEngineScreens pass (see the header doc); only an actual map
+    // change reaches the wire, so the effect's cache invalidation cost is
+    // bounded by real layout changes.
+    if (m_activeLayouts == activeLayouts) {
+        return;
+    }
+    m_activeLayouts = activeLayouts;
+    Q_EMIT activeLayoutsChanged(activeLayouts);
+}
+
 QStringList TilingAdaptor::combinedManagedScreens() const
 {
     QSet<QString> all;

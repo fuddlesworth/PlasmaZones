@@ -6,6 +6,9 @@
 #include <optional>
 
 #include "core/utils/unifiedlayoutlist.h"
+// Complete type needed for the nested IPlacementEngine::LayoutSupport enum
+// consumed by setCurrentLayoutSupport below.
+#include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 // Layout must be COMPLETE here, not forward-declared: the layoutApplied signal
 // below carries a PhosphorZones::Layout*, and moc's metatype registration asks
@@ -30,6 +33,7 @@ class ITileAlgorithmRegistry;
 
 namespace PhosphorZones {
 class LayoutRegistry;
+class ScrollingTemplateStore;
 }
 
 namespace PhosphorEngine {
@@ -168,6 +172,37 @@ public:
     void syncFromExternalState(std::optional<QString> overrideId = std::nullopt);
 
     /**
+     * @brief The LIVE engine capability of the current screen, pushed by the
+     * daemon alongside setCurrentScreenName at every layout-selection entry
+     * point (quick slot, picker open, cycle). applyEntry requires BOTH this
+     * to be Templates AND the cascade mode to be Scrolling before taking the
+     * template branch: the router downgrades a disabled or switched-off
+     * scrolling assignment to live snapping, and routing on the cascade
+     * alone would write a dead template while the visible snap screen moved
+     * nothing (the resolver-first-then-cascade double check
+     * resolvePerScreenLayoutInclude already uses). Defaults to Placement,
+     * the fail-safe: an un-pushed value can only under-route to the classic
+     * placement assignment, never mis-route a pick into template state.
+     */
+    void setCurrentLayoutSupport(PhosphorEngine::IPlacementEngine::LayoutSupport support)
+    {
+        m_currentLayoutSupport = support;
+    }
+
+    /**
+     * @brief The id the picker/cycling machinery should treat as @p screenId's
+     * current selection for a stored @p assignmentId.
+     *
+     * Identity for every id except the bare "scrolling:" sentinel, which
+     * substitutes the context's assigned TEMPLATE layout UUID when one exists
+     * — the sentinel matches no picker card, and without the substitution a
+     * Templates screen's cycle always restarted from the first entry and its
+     * picker showed no active card. A template-less scrolling context keeps
+     * the sentinel (correctly matches nothing).
+     */
+    QString displayIdForAssignment(const QString& screenId, const QString& assignmentId) const;
+
+    /**
      * @brief Get current screen name
      */
     QString currentScreenName() const
@@ -195,8 +230,15 @@ public:
      *
      * In manual mode: only manual layouts. In autotile mode: only dynamic layouts.
      * The autotile feature gate controls whether dynamic layouts are ever visible.
+     *
+     * @p includeScrollingTemplates is the third, exclusive arm: a Templates
+     * screen (scrolling) browses native template cards, so the caller passes
+     * it true together with both other flags false. It is not a union member
+     * with the other two — the daemon-side filter (Daemon::
+     * updateLayoutFilterForScreen) forces manual and autotile off whenever
+     * this is set, so cycling and the quick slots see templates alone.
      */
-    void setLayoutFilter(bool includeManual, bool includeAutotile);
+    void setLayoutFilter(bool includeManual, bool includeAutotile, bool includeScrollingTemplates);
 
     /**
      * @brief Inject the daemon's bundle-owned autotile layout source.
@@ -228,6 +270,11 @@ Q_SIGNALS:
      */
     void autotileApplied(const QString& algorithmName, int windowCount);
 
+    /// Emitted when a native scrolling template was applied through the
+    /// picker (for the template OSD; parity with layoutApplied /
+    /// autotileApplied above).
+    void scrollingTemplateApplied(const QString& templateId, const QString& screenId);
+
     /**
      * @brief Emitted when the current layout ID changes.
      *
@@ -257,6 +304,18 @@ private:
      */
     int findCurrentIndex() const;
 
+    /**
+     * @brief Subscribe cache invalidation to the registry's template store
+     *
+     * Called from layouts() because the store is late-bound: it is injected
+     * into the registry after this controller exists, so a constructor-time
+     * connect would find nothing. Re-subscribes if the store is swapped, and
+     * does nothing while there is none. Duplicate connects are prevented by
+     * the stored bound-store pointer and connection handle, not by
+     * Qt::UniqueConnection, which asserts on a lambda slot.
+     */
+    void ensureTemplateStoreSubscription() const;
+
     QPointer<PhosphorZones::LayoutRegistry> m_layoutManager;
     QPointer<Settings> m_settings;
     QPointer<PhosphorScreens::ScreenManager> m_screenManager;
@@ -267,6 +326,10 @@ private:
 
     QString m_currentLayoutId;
     QString m_currentScreenName;
+    /// LIVE engine capability of the current screen, daemon-pushed at the
+    /// layout-selection entry points — see setCurrentLayoutSupport.
+    PhosphorEngine::IPlacementEngine::LayoutSupport m_currentLayoutSupport =
+        PhosphorEngine::IPlacementEngine::LayoutSupport::Placement;
     // Change-guard only: layouts() resolves the desktop per-screen from the
     // layout manager, so this value never reaches the list builder. It exists
     // so setCurrentVirtualDesktop can invalidate the cache on a real change
@@ -279,6 +342,7 @@ private:
 
     QString m_currentActivity;
     bool m_includeManualLayouts = true;
+    bool m_includeScrollingTemplates = false;
     bool m_includeAutotileLayouts = false;
     mutable QVector<PhosphorLayout::LayoutPreview> m_cachedLayouts;
     mutable bool m_cacheValid = false;
@@ -286,6 +350,16 @@ private:
     /// guard keys on the same thing layouts() does. Mutable for the same reason
     /// the cache itself is: layouts() is const and fills it lazily.
     mutable int m_cachedScreenDesktop = -1;
+    /// The template store the cache-invalidation subscription below is bound
+    /// to. The store is injected into the registry after this controller is
+    /// constructed, so the subscription is made on the first resolve that
+    /// finds one (see ensureTemplateStoreSubscription) and re-made if the
+    /// injected store is ever swapped. Borrowed, never dereferenced here.
+    /// QPointer so a destroyed store nulls the latch: a raw pointer could be
+    /// compared equal to a freshly allocated store landing at the same
+    /// address, and the subscription would never be re-made.
+    mutable QPointer<PhosphorZones::ScrollingTemplateStore> m_subscribedTemplateStore;
+    mutable QMetaObject::Connection m_templateStoreConnection;
 };
 
 } // namespace PlasmaZones

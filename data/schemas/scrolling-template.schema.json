@@ -1,0 +1,125 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "urn:plasmazones:schema:scrolling-template",
+    "title": "PlasmaZones Scrolling Template",
+    "description": "A scrolling-mode template: identity metadata, the blueprint columns the first windows form, the shape later columns open at, and the width and height preset vocabularies the cycling shortcuts step through. Author-time contract only. ScrollingTemplate::fromJson tolerates missing and out-of-range values by normalizing them, so this schema exists to catch typos and wrong shapes in bundled data before they are silently repaired.",
+    "type": "object",
+    "required": ["id", "name"],
+    "$comment": "The key set is closed because the bundled templates and this schema ship together, so an unknown key is a typo rather than a newer file being read by an older build. The C++ parser stays version-free and additive, and it simply ignores keys it does not know.",
+    "additionalProperties": false,
+    "properties": {
+        "id": {
+            "type": "string",
+            "pattern": "^\\{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\}$",
+            "description": "Stable template identity. QUuid::fromString parses it, and the repo convention is a brace-wrapped UUID."
+        },
+        "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Display name. A template with an empty name is not valid."
+        },
+        "description": { "type": "string" },
+        "columns": {
+            "type": "array",
+            "maxItems": 16,
+            "description": "Blueprint columns seeded as the first windows open, in strip order. An empty array means the template only shapes the columns that open afterwards. The engine truncates the pushed blueprint at 16 entries, so longer lists carry entries nothing can seed from.",
+            "items": { "$ref": "#/definitions/column" }
+        },
+        "defaultColumnWidth": { "$ref": "#/definitions/columnWidth" },
+        "defaultColumnDisplay": {
+            "$ref": "#/definitions/display",
+            "description": "Display mode a column opens in when the blueprint has run out."
+        },
+        "presetColumnWidths": {
+            "$ref": "#/definitions/fractionList",
+            "description": "Widths the column-width cycling shortcut steps through, as work-area fractions."
+        },
+        "presetWindowHeights": {
+            "$ref": "#/definitions/fractionList",
+            "description": "Heights the window-height cycling shortcut steps through, as column-height fractions."
+        }
+    },
+    "definitions": {
+        "display": {
+            "type": "integer",
+            "enum": [0, 1],
+            "description": "0 stacks the column's windows, 1 shows one at a time as tabs."
+        },
+        "fraction": {
+            "type": "number",
+            "minimum": 0.05,
+            "maximum": 1,
+            "description": "Work-area fraction. Values below the 0.05 floor are dropped during normalization."
+        },
+        "fractionList": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/fraction" },
+            "maxItems": 16,
+            "description": "Normalization sorts the entries ascending, drops any entry within 0.01 of the one before it, then keeps the smallest 16 that survive. A longer authored list loses its widest entries silently, so the same 16-entry cap as columns is asserted here to make that visible up front."
+        },
+        "column": {
+            "type": "object",
+            "required": ["width"],
+            "additionalProperties": false,
+            "properties": {
+                "width": { "$ref": "#/definitions/fraction" },
+                "display": { "$ref": "#/definitions/display" }
+            }
+        },
+        "columnWidth": {
+            "type": "object",
+            "required": ["kind"],
+            "additionalProperties": false,
+            "description": "Shape a column opens at once the blueprint is exhausted. The trio is pushed to the engine as a unit, so kind selects which of value and presetIndex answers. kind is required because fromJson defaults a missing one to 3 Preset, which makes an authored value silently unread.",
+            "properties": {
+                "kind": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3,
+                    "description": "DefaultWidthKind vocabulary: 0 Proportion (value is a work-area fraction), 1 Fixed (value is a pixel count), 2 ClientDecides, 3 Preset (presetIndex points into presetColumnWidths). Kind 3 with an empty preset list is demoted to Proportion during normalization."
+                },
+                "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Fraction for kind 0, pixel count for kind 1. Ignored by the other kinds, which still round-trip it."
+                },
+                "presetIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Position in presetColumnWidths for kind 3. Clamped to the last entry when it points past the list."
+                }
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": { "kind": { "const": 0 } },
+                        "required": ["kind"]
+                    },
+                    "then": {
+                        "properties": {
+                            "value": {
+                                "minimum": 0.05,
+                                "maximum": 1,
+                                "description": "Kind 0 reads value as a work-area fraction, so it obeys the same floor and ceiling as every other fraction."
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": { "kind": { "const": 1 } },
+                        "required": ["kind"]
+                    },
+                    "then": {
+                        "properties": {
+                            "value": {
+                                "minimum": 1,
+                                "description": "Kind 1 reads value as a pixel count. It stays unbounded above, and normalize() raises anything under one physical pixel to 1, so a sub-pixel width is a typo rather than a request."
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+    }
+}

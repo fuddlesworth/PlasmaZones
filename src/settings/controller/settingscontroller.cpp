@@ -27,6 +27,8 @@
 #include "core/types/constants.h"
 #include "core/utils/geometryutils.h"
 #include <PhosphorZones/LayoutComputeService.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include "phosphor_i18n.h"
@@ -96,6 +98,15 @@ namespace PlasmaZones {
 // which would otherwise duplicate the kind ints, the slider and spin ranges,
 // and the preset ceiling across the C++/QML boundary.
 //
+// ConfigDefaults is not the only home the map draws from. The last four
+// entries are the template-authoring caps the scrolling template editor has
+// to obey to stay honest about what the store will keep: the column and
+// preset-list ceiling from PhosphorZones::MaxTemplateColumns, the fraction
+// dedupe epsilon the store's normalize uses to collapse near-equal preset
+// fractions, and the two text-field caps the D-Bus boundary re-applies through
+// clampName. They ride along here because that dialog already binds this one
+// map.
+//
 // The map covers both dimensions, not just widths: width kinds and their
 // value bounds, the height kinds and their fixed-pixel range, the editing
 // steps for each, the preset-index ceiling, the shortcut adjust-step percent
@@ -161,6 +172,14 @@ QVariantMap SettingsController::scrollingConstants() const
         {QStringLiteral("dropBorderWidthMax"), ConfigDefaults::scrollingDropIndicatorBorderWidthMax()},
         {QStringLiteral("dropBorderRadiusMin"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMin()},
         {QStringLiteral("dropBorderRadiusMax"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMax()},
+        // Scrolling template authoring caps. The store truncates a template's
+        // column list and each preset list at MaxTemplateColumns, and the
+        // layout adaptor clamps the two text fields on the way in, so the
+        // editor dialog binds these to stop the user short of a silent cut.
+        {QStringLiteral("maxTemplateColumns"), PhosphorZones::MaxTemplateColumns},
+        {QStringLiteral("fractionDedupeEpsilon"), PhosphorZones::FractionDedupeEpsilon},
+        {QStringLiteral("nameMaxLength"), MaxLayoutNameLength},
+        {QStringLiteral("descriptionMaxLength"), MaxTemplateDescriptionLength},
     };
 }
 
@@ -291,6 +310,15 @@ SettingsController::~SettingsController()
         if (m_rulesPage->model())
             m_rulesPage->model()->refreshLabels();
     }
+
+    // Drop the registry's borrow of the template store, the same posture the
+    // lookups above take: the injection is a raw pointer with no owner-side
+    // notification, so anything reaching the registry during the remainder of
+    // teardown must find it unwired rather than pointing at a store that is
+    // about to go. The declaration order in the header already outlives the
+    // registry; this makes the contract explicit at the one injection site.
+    if (m_localLayoutManager)
+        m_localLayoutManager->setScrollingTemplateStore(nullptr);
 }
 
 SettingsController::SettingsController(QObject* parent)
@@ -324,7 +352,11 @@ SettingsController::SettingsController(QObject* parent)
     // same across daemon/editor/settings. Adding a new engine library
     // doesn't require editing this file unless the engine demands a
     // service the KCM doesn't already publish.
-    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
+    m_localTemplateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
+    m_localTemplateStore->loadTemplates();
+    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get(),
+                                    m_localTemplateStore.get());
+    m_localLayoutManager->setScrollingTemplateStore(m_localTemplateStore.get());
 
     // Begin watching rules.json for external writes. Complements the
     // daemon's rulesChanged D-Bus signal (reloadLocalRuleStore) so the
@@ -810,10 +842,13 @@ SettingsController::SettingsController(QObject* parent)
         }
         return zoneId;
     });
-    // SettingsController::layouts() is the union of snapping layouts
-    // (UUID-keyed) and autotile entries (algorithm-token-keyed via the
-    // "autotile:<token>" or bare-token shape PhosphorTiles ships) — one
-    // resolver lambda is sufficient. The typed setters below are about
+    // SettingsController::layouts() is the union of three id families:
+    // snapping layouts (UUID-keyed), autotile entries (algorithm-token-keyed
+    // via the "autotile:<token>" or bare-token shape PhosphorTiles ships), and
+    // native scrolling templates (UUID-keyed in their own namespace, flagged
+    // isScrollingTemplate). All three are looked up by the same raw id key, so
+    // one resolver lambda is sufficient — the rules side strips the
+    // "scrolling:" prefix before calling in. The typed setters below are about
     // CONTRACT clarity at the RuleController API surface so a
     // future caller can wire a more restrictive snapping-only lookup
     // without also constraining the tiling resolver.

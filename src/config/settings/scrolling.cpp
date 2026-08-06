@@ -253,6 +253,10 @@ P_STORE_GET(QString, scrollingPresetWindowHeightsString, scrollingGroup, presetW
 P_STORE_SET_STRING(setScrollingPresetWindowHeights, scrollingGroup, presetWindowHeightsKey,
                    scrollingPresetWindowHeightsChanged)
 
+// The template an unassigned screen resolves to, empty for none.
+P_STORE_GET(QString, defaultScrollingTemplate, scrollingGroup, defaultTemplateKey, QString)
+P_STORE_SET_STRING(setDefaultScrollingTemplate, scrollingGroup, defaultTemplateKey, defaultScrollingTemplateChanged)
+
 // View knobs, on the Scrolling group with the sizing defaults above rather
 // than on Scrolling.Behavior: they describe how the strip is drawn, not how
 // windows are handled.

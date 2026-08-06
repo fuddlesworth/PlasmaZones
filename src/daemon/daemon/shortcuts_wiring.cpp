@@ -90,11 +90,12 @@ void Daemon::connectShortcutSignals()
             m_layoutAdaptor->openEditor();
         }
     });
-    // Quick layout shortcuts (Meta+Alt+1-9). Quick slots are per mode: in
-    // snapping mode the slot holds a zone-layout UUID, in autotile mode an
-    // autotile algorithm ID. Resolve the cursor screen's current mode, look up
-    // that mode's slot, and apply the explicitly-bound layout — NOT the Nth
-    // layout in priority order.
+    // Quick layout shortcuts (Meta+Alt+1-9). Quick slots are per slot ARRAY:
+    // in snapping mode the slot holds a zone-layout UUID, in autotile mode an
+    // autotile algorithm ID, and scrolling its own array of native template
+    // ids. Resolve the cursor screen's current mode, look up that mode's
+    // slot, and apply the explicitly-bound entry — NOT the Nth entry in
+    // priority order.
     connect(m_shortcutManager.get(), &ShortcutManager::quickLayoutRequested, this, [this](int number) {
         if (!m_unifiedLayoutController || !m_layoutManager) {
             return;
@@ -106,9 +107,12 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "QuickLayout shortcut: no screen info";
             return;
         }
-        // Quick slots only exist for layout-consuming engines; a scrolling
-        // screen answers with feedback instead of resolving a snap slot.
-        if (!engineProvidesLayouts(screenId)) {
+        // Quick slots need an engine with a layout concept. On a Templates
+        // screen (scrolling) the slot names a native template and applies
+        // through applyEntry's template branch; only a capability-less
+        // engine answers with feedback.
+        const LayoutSupport support = layoutSupportForScreen(screenId);
+        if (support == LayoutSupport::None) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }
@@ -121,6 +125,9 @@ void Daemon::connectShortcutSignals()
             return;
         }
         m_unifiedLayoutController->setCurrentScreenName(screenId);
+        // Push the LIVE capability so applyEntry's template branch routes on
+        // the engine that actually owns the screen, not the cascade alone.
+        m_unifiedLayoutController->setCurrentLayoutSupport(support);
         if (isScreenLockedForLayoutChange(screenId)) {
             return;
         }
@@ -136,7 +143,8 @@ void Daemon::connectShortcutSignals()
         // applyLayoutById routes through applyEntry, which handles both manual
         // assignment and autotile algorithm switching.
         const bool autotile = (mode == PhosphorZones::AssignmentEntry::Autotile);
-        m_unifiedLayoutController->setLayoutFilter(!autotile, autotile);
+        const bool scrolling = (mode == PhosphorZones::AssignmentEntry::Scrolling);
+        m_unifiedLayoutController->setLayoutFilter(!autotile && !scrolling, autotile, scrolling);
         if (!m_unifiedLayoutController->applyLayoutById(slotId)) {
             return;
         }
@@ -262,10 +270,12 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
             return;
         }
-        // The picker browses layouts, which this screen's engine does not
-        // consume (IPlacementEngine::providesLayouts) — feedback instead of
-        // offering the manual list as an exit door out of scrolling mode.
-        if (!engineProvidesLayouts(screenId)) {
+        // The picker opens for any engine with a layout concept: Placement
+        // screens pick a placement layout, Templates screens (scrolling)
+        // pick the sizing template — the apply path routes per mode, so the
+        // picker is no longer an exit door out of scrolling. Only a
+        // capability-less engine gets feedback.
+        if (layoutSupportForScreen(screenId) == LayoutSupport::None) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }
@@ -275,7 +285,37 @@ void Daemon::connectShortcutSignals()
         // Dismissing first releases the cheatsheet grab synchronously.
         m_overlayService->hideCheatsheet();
         m_unifiedLayoutController->setCurrentScreenName(screenId);
+        // Live capability for applyEntry's template routing — see the
+        // quick-slot handler above.
+        m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
         updateLayoutFilterForScreen(screenId);
+        // An empty candidate list (allow-lists plus the aspect filter can
+        // wipe it on a screen with no current selection) makes the picker's
+        // show bail silently — answer with an OSD instead of nothing. This
+        // count check runs BEFORE showLayoutPicker, so it is the only place
+        // the empty-list case can be reported; the picker's own empty-list
+        // leg is unreachable from here.
+        if (m_overlayService->visibleLayoutCount(screenId) == 0) {
+            // A Templates screen with an empty list means the template store
+            // is empty (fresh install, or every template deleted), which is
+            // something the user can act on. The generic "engine provides no
+            // layouts" card would misdescribe it, so this goes out as the
+            // same navigation-OSD family showLayoutsUnavailableOsd uses
+            // (same action, different reason) rather than a disabled-context
+            // card — showDisabledOsd is the MonitorDisabled/DesktopDisabled
+            // family and follows osdStyle, not the showNavigationOsd toggle
+            // this refusal is gated on.
+            if (layoutSupportForScreen(screenId) == LayoutSupport::Templates) {
+                qCDebug(lcDaemon) << "Layout picker: no templates in the store for screen" << screenId;
+                if (m_settings && m_settings->showNavigationOsd()) {
+                    m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
+                                                        QString(), QString(), screenId);
+                }
+            } else {
+                showLayoutsUnavailableOsd(screenId);
+            }
+            return;
+        }
         m_overlayService->showLayoutPicker(screenId);
         // Bind the picker's KGlobalAccel grabs only if the picker actually
         // became visible. showLayoutPicker() bails without setting
@@ -374,38 +414,63 @@ void Daemon::connectShortcutSignals()
             m_windowDragAdaptor->releaseLayoutPickerNavShortcuts();
         }
     });
-    connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
-        if (!m_unifiedLayoutController) {
-            return;
-        }
-        // Check if screen is locked for its current mode. Route through
-        // the resolver's `handleFor(screenId)` — it composes the live
-        // (mode, desktop, activity) tuple via the bound IModeProvider /
-        // IWorkspaceState adapters, so this site stops re-stitching the
-        // 3-step cascade the resolver was introduced to collapse.
-        QString screenId = m_unifiedLayoutController->currentScreenName();
-        if (!screenId.isEmpty() && m_contextResolver) {
-            if (m_contextResolver->isLocked(m_contextResolver->handleFor(screenId))) {
-                showLockedPreviewOsd(screenId);
-                return;
-            }
-        }
-        // Capability re-check at APPLY time: the picker cannot open on a
-        // non-layout screen (gated at request time, and an empty list bails
-        // the show), but a KCM apply, rule reconcile or per-screen desktop
-        // switch can flip the bound screen into Scrolling while the picker
-        // sits open — this pick would then install a snap layout on a live
-        // scrolling screen, the exact state the request-time gate prevents.
-        if (!screenId.isEmpty() && !engineProvidesLayouts(screenId)) {
-            showLayoutsUnavailableOsd(screenId);
-            return;
-        }
-        // Screen name was already set when the picker opened.
-        if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
-            return;
-        }
-        resnapIfManualMode();
-    });
+    connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this,
+            [this](const QString& layoutId, const QString& pickerScreenId) {
+                if (!m_unifiedLayoutController) {
+                    return;
+                }
+                // Re-bind the controller to the screen the picker was BOUND to when
+                // the pick was made: currentScreenName is a single mutable slot that
+                // syncModeFromAssignments retargets on every desktop or activity
+                // switch, so without the re-bind a mid-pick switch applied the pick
+                // to whatever screen last grabbed the slot.
+                if (!pickerScreenId.isEmpty() && pickerScreenId != m_unifiedLayoutController->currentScreenName()) {
+                    m_unifiedLayoutController->setCurrentScreenName(pickerScreenId);
+                }
+                // Check if screen is locked for its current mode. Route through
+                // the resolver's `handleFor(screenId)` — it composes the live
+                // (mode, desktop, activity) tuple via the bound IModeProvider /
+                // IWorkspaceState adapters, so this site stops re-stitching the
+                // 3-step cascade the resolver was introduced to collapse.
+                QString screenId =
+                    pickerScreenId.isEmpty() ? m_unifiedLayoutController->currentScreenName() : pickerScreenId;
+                if (!screenId.isEmpty() && m_contextResolver) {
+                    if (m_contextResolver->isLocked(m_contextResolver->handleFor(screenId))) {
+                        showLockedPreviewOsd(screenId);
+                        return;
+                    }
+                }
+                // Capability re-check at APPLY time: the picker cannot open on a
+                // capability-less screen (gated at request time, and an empty list
+                // bails the show), but a KCM apply, rule reconcile or per-screen
+                // desktop switch can strip the bound screen's capability while the
+                // picker sits open. A Placement↔Templates flip mid-pick is fine —
+                // applyEntry re-resolves the mode and routes accordingly.
+                if (!screenId.isEmpty() && layoutSupportForScreen(screenId) == LayoutSupport::None) {
+                    showLayoutsUnavailableOsd(screenId);
+                    return;
+                }
+                // Screen name was re-bound above from the picker's own bound screen;
+                // RE-push the live capability at apply time too — a KCM apply or
+                // rule reconcile can flip the screen's engine while the picker sits
+                // open.
+                if (!screenId.isEmpty()) {
+                    m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
+                    // The list filter has to be re-pushed with the capability,
+                    // not just alongside it: applyLayoutById resolves the id
+                    // against the FILTERED list, and any global refresh while
+                    // the picker sat open (a KCM apply on another screen seeds
+                    // the union, which a single Templates screen collapses to
+                    // templates-only) leaves this screen's own list excluded.
+                    // The pick then resolves to nothing and the click on a
+                    // visible card is a silent no-op.
+                    updateLayoutFilterForScreen(screenId);
+                }
+                if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
+                    return;
+                }
+                resnapIfManualMode();
+            });
 
     // Toggle layout lock shortcut — locks/unlocks current screen at screen-level for current mode
     connect(m_shortcutManager.get(), &ShortcutManager::toggleLayoutLockRequested, this, [this]() {
@@ -415,9 +480,10 @@ void Daemon::connectShortcutSignals()
         if (screenId.isEmpty() || !m_settings || !m_contextResolver) {
             return;
         }
-        // Layout lock pins a screen's layout choice — nothing to pin on a
-        // screen whose engine has no layout concept.
-        if (!engineProvidesLayouts(screenId)) {
+        // Layout lock pins a screen's layout choice (its template, on a
+        // Templates screen) — nothing to pin only when the engine has no
+        // layout concept at all.
+        if (layoutSupportForScreen(screenId) == LayoutSupport::None) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }
@@ -447,9 +513,19 @@ void Daemon::connectShortcutSignals()
             Q_EMIT m_settingsAdaptor->settingsChanged();
         }
 
+        // Templates screens resolve their native TEMPLATE for the unlock
+        // card: resolveLayoutForScreen is the snap-only chain and would
+        // announce an unrelated fallback snap layout there. The lock branch
+        // needs no split — showLockedPreviewOsd is itself template-aware and
+        // falls back to the text card when the context has no template.
         if (wasLocked) {
-            PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-            if (layout) {
+            if (mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
+                const PhosphorZones::ScrollingTemplate templ = m_layoutManager->scrollingTemplateForContext(
+                    screenId, currentDesktopForScreen(screenId), currentActivity());
+                if (templ.isValid()) {
+                    showScrollingTemplateOsd(templ, screenId);
+                }
+            } else if (PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId)) {
                 showLayoutOsd(layout, screenId);
             }
         } else {

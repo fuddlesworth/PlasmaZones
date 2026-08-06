@@ -55,7 +55,7 @@ using namespace ShortcutIds;
 //    display), hard no-ops off scrolling
 //  - "layouts" is a CAPABILITY tag, not a mode name: rows shown whenever
 //    the bound screen's engine consumes user-selectable layouts
-//    (IPlacementEngine::providesLayouts, pushed to the sheet as
+//    (IPlacementEngine::layoutSupport, pushed to the sheet as
 //    layoutsAvailable). Covers the layout cycle pair, the picker, the
 //    layout lock, and the quick-layout digits — on a non-layout screen
 //    those keys answer with a "not available" OSD, so the sheet hides them.
@@ -73,7 +73,7 @@ struct CatalogMeta
     int categoryOrder;
     // "all" | "snapping" | "autotile" | "scrolling" | "layouts" — string form
     // matches what the QML filter consumes; no enum round-trip needed. The
-    // last value is a capability tag (engine providesLayouts), not a mode;
+    // last value is a capability tag (engine layoutSupport), not a mode;
     // see the contract block above.
     const char* mode;
     // Optional tr() disambiguation for the category word (e.g. the mode
@@ -92,8 +92,14 @@ struct CatalogMeta
     // it (KGlobalAccel carries only the action name), so the registration
     // description still has to stand alone without this. nullptr = no
     // tooltip; reserved for actions whose name alone does not tell a reader
-    // what will happen (today that is the scrolling column vocabulary).
+    // what will happen (the scrolling column vocabulary, and the layouts
+    // rows whose meaning shifts per capability).
     const char* explanation = nullptr;
+    // Optional Templates-capability variant of `explanation`: shown instead
+    // of it when the bound screen's engine consumes layouts as sizing
+    // templates (a scrolling screen), where the same key picks a TEMPLATE
+    // rather than a placement layout. nullptr = `explanation` serves both.
+    const char* templatesExplanation = nullptr;
 };
 
 CatalogMeta catalogMetaForId(const QString& id)
@@ -102,8 +108,9 @@ CatalogMeta catalogMetaForId(const QString& id)
         QHash<QString, CatalogMeta> m;
         const auto add = [&m](const char* id, const char* category, int order, const char* mode,
                               const char* categoryDisambiguation = nullptr, const char* shortLabel = nullptr,
-                              const char* explanation = nullptr) {
-            m.insert(QLatin1String(id), {category, order, mode, categoryDisambiguation, shortLabel, explanation});
+                              const char* explanation = nullptr, const char* templatesExplanation = nullptr) {
+            m.insert(QLatin1String(id),
+                     {category, order, mode, categoryDisambiguation, shortLabel, explanation, templatesExplanation});
         };
         // The scrolling category word needs the "tiling mode name"
         // disambiguation or it inherits the scrollbar-sense translation.
@@ -129,13 +136,25 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdToggleAutotile, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         // "layouts" is a capability tag, not a mode name: the rows show
         // whenever the bound screen's engine consumes user-selectable
-        // layouts (IPlacementEngine::providesLayouts, pushed to the sheet
-        // as layoutsAvailable). On a scrolling screen these keys answer
-        // with a "not available" OSD, so the sheet hides them there.
-        add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
-        add(kIdNextLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
-        add(kIdLayoutPicker, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
-        add(kIdToggleLayoutLock, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts");
+        // layouts (IPlacementEngine::layoutSupport, pushed to the sheet
+        // as layoutsAvailable). That now includes scrolling screens, where
+        // the same keys pick/cycle the TEMPLATE layout (LayoutSupport::
+        // Templates); the rows hide only on a LayoutSupport::None engine.
+        add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Switches this screen to the previous layout in the list."),
+            QT_TRANSLATE_NOOP("plasmazones", "Switches this screen to the previous column template."));
+        add(kIdNextLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Switches this screen to the next layout in the list."),
+            QT_TRANSLATE_NOOP("plasmazones", "Switches this screen to the next column template."));
+        add(kIdLayoutPicker, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Opens a picker to choose this screen's layout."),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Opens a picker to choose this screen's column template. Its column widths "
+                              "become the widths columns cycle through."));
+        add(kIdToggleLayoutLock, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts", nullptr, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Locks this screen's layout so nothing switches it until unlocked."),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Locks this screen's column template so nothing switches it until unlocked."));
         // Resnap stays "all": it routes through the engine's reapplyLayout
         // intent, which every engine implements (scrolling re-lays the strip).
         add(kIdResnapToNewLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
@@ -255,10 +274,11 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones", "Switches the focused column between stacked windows and tabs."));
         add(kIdScrollCycleColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"),
-            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the preset widths."));
+            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the screen's width presets."));
         add(kIdScrollCycleColumnWidthBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width Back"),
-            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the preset widths in reverse."));
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Steps the focused column through the screen's width presets in reverse."));
         add(kIdScrollIncreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Widens the focused column by the configured step."));
         add(kIdScrollDecreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
@@ -278,10 +298,11 @@ CatalogMeta catalogMetaForId(const QString& id)
                               "Other columns keep their size."));
         add(kIdScrollCycleWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height"),
-            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused window through the preset heights."));
+            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused window through the screen's height presets."));
         add(kIdScrollCycleWindowHeightBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height Back"),
-            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused window through the preset heights in reverse."));
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Steps the focused window through the screen's height presets in reverse."));
         add(kIdScrollIncreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Makes the focused window taller by the configured step."));
         add(kIdScrollDecreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
@@ -381,6 +402,11 @@ QVariantList ShortcutManager::cheatsheetModel() const
         // Always present (possibly empty) so the QML tooltip binding never
         // reads an undefined role.
         row.insert(QStringLiteral("description"), meta.explanation ? PhosphorI18n::tr(meta.explanation) : QString());
+        // Templates-capability tooltip variant; falls back to the plain
+        // explanation so QML can bind one expression per row.
+        row.insert(QStringLiteral("templatesDescription"),
+                   meta.templatesExplanation ? PhosphorI18n::tr(meta.templatesExplanation)
+                                             : (meta.explanation ? PhosphorI18n::tr(meta.explanation) : QString()));
         row.insert(QStringLiteral("category"), PhosphorI18n::tr(meta.category, meta.categoryDisambiguation));
         row.insert(QStringLiteral("categoryOrder"), meta.categoryOrder);
         row.insert(QStringLiteral("triggers"), triggers);
@@ -440,9 +466,13 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // INVARIANT: a spec without a combinedDescription must only cover members
     // that carry no per-action explanation — the merged row keeps the FIRST
     // member's description, and a directional/digit member's single-direction
-    // wording would misdescribe the whole family. Every member below has an
-    // empty explanation today; give the spec a combinedDescription before
-    // adding one.
+    // wording would misdescribe the whole family. This covers the
+    // templatesDescription variant too: a combinedDescription overwrites
+    // BOTH tooltip roles, so a member's templatesExplanation is dropped by
+    // the merge and a family needing distinct templates wording must be left
+    // uncompressed rather than given one combined string.  Every member below
+    // has an empty explanation today; give the spec a combinedDescription
+    // before adding one.
     QVector<FamilySpec> families = {
         // Labels derive the digit range from kIndexedSlotCount, like the chip
         // token, so raising the constant cannot desynchronize the two.
@@ -695,9 +725,14 @@ QVector<QVariantMap> ShortcutManager::compressCheatsheetFamilies(QVector<QVarian
         QVariantMap& row = rows[firstIdx];
         row.insert(QStringLiteral("label"), family.combinedLabel);
         // The merged row otherwise keeps the first member's description,
-        // which for an opposed pair names only one direction.
+        // which for an opposed pair names only one direction. Both tooltip
+        // roles are rewritten: templatesDescription is what the sheet shows
+        // on a Templates (scrolling) screen, and leaving it behind would put
+        // the single-direction wording back on exactly the screens the
+        // scrolling pairs are for.
         if (!family.combinedDescription.isEmpty()) {
             row.insert(QStringLiteral("description"), family.combinedDescription);
+            row.insert(QStringLiteral("templatesDescription"), family.combinedDescription);
         }
         row.insert(QStringLiteral("triggers"), QStringList{sharedPrefix + QLatin1Char('+') + family.tailToken});
         consumedIndices.insert(firstIdx);

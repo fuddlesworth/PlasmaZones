@@ -194,9 +194,10 @@ SettingsFlickable {
         var siblingAlgo = root._carrySibling(stateView.localAlgorithmCleared, stateView.localAlgorithmTouched, stateView.localAlgorithmId, state.algorithmIdExplicit, state.algorithmId);
         var siblingTiling = siblingAlgo ? root._autotilePrefix + siblingAlgo : "";
         if (stateView.isScrolling) {
-            // Scrolling has neither a zone layout nor a tiling algorithm of
-            // its own: the entry carries the mode plus both preserved
-            // sibling fields.
+            // Scrolling's activeLayoutId is the bare sentinel (its TEMPLATE
+            // layout rides a separate assignment slot this page neither
+            // shows nor edits; setAssignmentEntry preserves it): the entry
+            // carries the mode plus both preserved sibling fields.
             settingsController.stageAssignmentEntry(target, desktop, activity, stateView.localMode, siblingSnapping, siblingTiling);
             return;
         }

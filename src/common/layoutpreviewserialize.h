@@ -27,16 +27,19 @@
 // preview from any other producer gets `undefined`, not `false`.
 //
 // Canonical shape (all keys always present unless marked optional):
-//   id, displayName, description?, zoneCount, zones[], isAutotile, category,
-//   isSystem, recommended, autoAssign, aspectRatioClass (string tag: "any" /
-//   "standard" / "ultrawide" / "super-ultrawide" / "portrait"),
-//   referenceAspectRatio?, sectionKey?, sectionLabel?, sectionOrder?
+//   id, displayName, description?, zoneCount, zones[], isAutotile,
+//   isScrollingTemplate, category, isSystem, recommended, autoAssign,
+//   aspectRatioClass (string tag: "any" / "standard" / "ultrawide" /
+//   "super-ultrawide" / "portrait"), referenceAspectRatio?, sectionKey?,
+//   sectionLabel?, sectionOrder?
 //
-// `category` is the numeric PhosphorZones::LayoutCategory mirror of the
-// `isAutotile` boolean (0 = Manual, 1 = Autotile). Both are emitted
+// `category` is the numeric PhosphorZones::LayoutCategory mirror of the two
+// booleans (0 = Manual, 1 = Autotile, 2 = ScrollingTemplate), with
+// isScrollingTemplate winning over isAutotile. All three are emitted
 // unconditionally because QML consumers are split: LayoutCard / CategoryBadge
-// read the enum, LayoutComboBox reads `category` first and only falls back to
-// `isAutotile` for objects from other producers.
+// read the enum, while LayoutComboBox's getCategory checks
+// `isScrollingTemplate` first, then `category`, and falls back to `isAutotile`
+// only for objects from other producers.
 //
 // When the preview backs an autotile algorithm (@c isAutotile == true)
 // the algorithm metadata fields are flattened into the SAME top-level

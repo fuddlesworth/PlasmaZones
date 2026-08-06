@@ -13,18 +13,6 @@
 #include <QMetaObject>
 
 namespace PhosphorScrollEngine {
-namespace {
-// Sanity bounds for tab-indicator overrides arriving through the public
-// per-screen map. Deliberately NOT the rules layer's constants — this library
-// does not depend on phosphor-rules — but the same numbers, because both
-// ultimately mirror the config schema's clamps. They exist to reject a
-// grossly malformed embedder-supplied override, not to re-implement the
-// cascade's validation, so they are wide.
-constexpr int kMinTabIndicatorGap = -64;
-constexpr int kMaxTabIndicatorGap = 64;
-constexpr int kMinTabIndicatorWidth = 1;
-constexpr int kMaxTabIndicatorWidth = 64;
-} // namespace
 
 ScrollEngine::ScrollEngine(PhosphorEngine::IWindowTrackingService* windowTracker,
                            PhosphorScreens::ScreenManager* screenManager, QObject* parent)
@@ -238,8 +226,8 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // broadcast is DEFERRED: this function runs from inside
     // PerScreenStates::removeStatesIf's iteration over m_states, and a
     // consumer slot that touched the engine's state map synchronously would
-    // invalidate the live iterator. The other seven clearTabStripsForScreen
-    // call sites are outside any iteration and emit directly.
+    // invalidate the live iterator. All eight clearTabStripsForScreen call
+    // sites are outside the state map's own iteration and emit directly.
     m_lastTabStripPayload.remove(screenId);
     if (m_screensWithTabStrips.remove(screenId)) {
         QMetaObject::invokeMethod(
@@ -678,15 +666,18 @@ void ScrollEngine::refreshConfigFromSettings()
                                      "keeping the cached configuration";
         return;
     }
-    const auto parsePresets = [](const QStringList& raw, const QList<qreal>& fallback) {
+    const auto parsePresets = [](const QStringList& raw, qreal minFraction, const QList<qreal>& fallback) {
         QList<qreal> out;
         for (const QString& entry : raw) {
             bool ok = false;
             const qreal v = entry.trimmed().toDouble(&ok);
-            // Same floor as every other proportion producer: a preset below it
-            // resolves to a sliver no window can honour, and the preset cycle
-            // would silently offer a width the width setter refuses.
-            if (ok && v >= MinColumnWidthFraction && v <= 1.0) {
+            // Same floor as every other proportion producer on the same
+            // axis: a preset below it resolves to a sliver no window can
+            // honour, and the preset cycle would silently offer a value the
+            // setter refuses. Each axis passes ITS OWN floor — the height
+            // constant exists precisely so a height caller cannot silently
+            // follow a later width-only change (ScrollTypes.h's note).
+            if (ok && v >= minFraction && v <= 1.0) {
                 out.append(v);
             }
         }
@@ -694,8 +685,8 @@ void ScrollEngine::refreshConfigFromSettings()
     };
     // KEEP IN SYNC with ScrollLayoutParams' member defaults (ScrollTypes.h).
     const QList<qreal> defaults{1.0 / 3.0, 0.5, 2.0 / 3.0};
-    m_presetColumnWidths = parsePresets(settings->scrollingPresetColumnWidths(), defaults);
-    m_presetWindowHeights = parsePresets(settings->scrollingPresetWindowHeights(), defaults);
+    m_presetColumnWidths = parsePresets(settings->scrollingPresetColumnWidths(), MinColumnWidthFraction, defaults);
+    m_presetWindowHeights = parsePresets(settings->scrollingPresetWindowHeights(), MinWindowHeightFraction, defaults);
 
     const int center = settings->scrollingCenterFocusedColumn();
     m_centerFocusedColumn =
@@ -709,10 +700,12 @@ void ScrollEngine::refreshConfigFromSettings()
     if (widthKind == DefaultWidthKind::Fixed) {
         m_defaultColumnWidth = ColumnWidth::makeFixed(qMax(1, qRound(widthValue)));
     } else if (widthKind == DefaultWidthKind::Preset) {
-        // Preset list is parsed above, so the clamp is against the live
-        // list; makePreset re-clamps at relayout if the list later shrinks.
-        m_defaultColumnWidth = ColumnWidth::makePreset(
-            qBound(0, settings->scrollingDefaultColumnWidthPresetIndex(), int(m_presetColumnWidths.size()) - 1));
+        // Config stays index-based (the spin names a slot in the list the
+        // user edits on the same page); the VALUE anchor is resolved here,
+        // against the freshly parsed list (guaranteed non-empty), and
+        // relayout snaps it into whatever vocabulary a screen ends up with.
+        m_defaultColumnWidth = ColumnWidth::makePreset(m_presetColumnWidths.at(
+            qBound(0, settings->scrollingDefaultColumnWidthPresetIndex(), int(m_presetColumnWidths.size()) - 1)));
     } else {
         m_defaultColumnWidth = ColumnWidth::makeProportion(qBound<qreal>(MinColumnWidthFraction, widthValue, 1.0));
     }
@@ -725,8 +718,9 @@ void ScrollEngine::refreshConfigFromSettings()
     if (heightKind == static_cast<int>(DefaultHeightKind::Fixed)) {
         m_defaultWindowHeight = WindowHeight::makeFixed(qMax(1, qRound(settings->scrollingDefaultWindowHeightValue())));
     } else if (heightKind == static_cast<int>(DefaultHeightKind::Preset)) {
-        m_defaultWindowHeight = WindowHeight::makePreset(
-            qBound(0, settings->scrollingDefaultWindowHeightPresetIndex(), int(m_presetWindowHeights.size()) - 1));
+        // Same idx-to-value resolution as the width twin above.
+        m_defaultWindowHeight = WindowHeight::makePreset(m_presetWindowHeights.at(
+            qBound(0, settings->scrollingDefaultWindowHeightPresetIndex(), int(m_presetWindowHeights.size()) - 1)));
     } else {
         m_defaultWindowHeight = WindowHeight{};
     }
@@ -770,6 +764,8 @@ void ScrollEngine::refreshConfigFromSettings()
 }
 
 // ── Per-context rule overrides ──────────────────────────────────────────────
+// The map's WRITERS live here; the effective* readers that layer it over the
+// cached config defaults live in engine_overrides.cpp.
 
 void ScrollEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
 {
@@ -785,239 +781,6 @@ void ScrollEngine::clearPerScreenConfig(const QString& screenId)
     if (m_perScreenOverrides.remove(screenId) > 0) {
         scheduleRetileForScreen(screenId);
     }
-}
-
-CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QString& screenId) const
-{
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    const auto it = overrides.constFind(ScrollPerScreenKeys::centerFocusedColumn());
-    if (it != overrides.constEnd()) {
-        const int mode = it->toInt();
-        if (mode >= 0 && mode <= 2) {
-            return static_cast<CenterFocusedColumn>(mode);
-        }
-    }
-    return m_centerFocusedColumn;
-}
-
-ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const
-{
-    // Validate-then-fall-back, like its two siblings: an out-of-range rule
-    // value is not silently reshaped into a legal one, because a rule author
-    // who wrote 0.001 asked for something this engine cannot do and should
-    // get the configured default rather than an arbitrary clamp result. (The
-    // per-WINDOW open rule qBounds instead — that value reaches a single
-    // column the user is watching open, so nudging it into range is the less
-    // surprising answer there.)
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    // Rule channel first (rule > per-screen setting > global): the bare
-    // fraction key is written only by the rule cascade.
-    const auto it = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidth());
-    if (it != overrides.constEnd()) {
-        const qreal fraction = it->toDouble();
-        if (fraction >= MinColumnWidthFraction && fraction <= 1.0) {
-            return ColumnWidth::makeProportion(fraction);
-        }
-    }
-    // Settings channel: the kind-aware trio from the per-screen override map.
-    // Every layer writes the trio's keys INDEPENDENTLY, so a per-screen kind
-    // beside an untouched value or preset spin is the ordinary case, not a
-    // malformed pair. Each slot therefore falls back on its own to the cached
-    // GLOBAL's matching slot; the per-screen KIND still decides. Falling back
-    // to the whole global instead discarded the per-screen kind, and reading
-    // an absent preset spin as 0 pinned the monitor to the first preset while
-    // the UI showed the inherited index.
-    const auto kindIt = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidthKind());
-    if (kindIt != overrides.constEnd()) {
-        const int kind = kindIt->toInt();
-        const auto valueIt = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidthValue());
-        const auto presetIt = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidthPresetIndex());
-        if (kind == static_cast<int>(DefaultWidthKind::Fixed)) {
-            const qreal value = valueIt != overrides.constEnd()
-                ? valueIt->toDouble()
-                : (m_defaultColumnWidth.kind == ColumnWidth::Fixed ? qreal(m_defaultColumnWidth.fixedPx) : 0.0);
-            if (value >= 1.0) {
-                return ColumnWidth::makeFixed(qRound(value));
-            }
-        }
-        if (kind == static_cast<int>(DefaultWidthKind::Preset)) {
-            const int presetIdx = presetIt != overrides.constEnd()
-                ? presetIt->toInt()
-                : (m_defaultColumnWidth.kind == ColumnWidth::Preset ? m_defaultColumnWidth.presetIdx : 0);
-            // Deliberate exception to the validate-then-fall-back contract
-            // above: the preset LIST can legitimately shrink under a stored
-            // index, so clamping is the correct read of a stale-but-honest
-            // value (refreshConfigFromSettings clamps the global the same
-            // way). Fixed and Proportion keep the strict fall-back because
-            // an out-of-range value there is malformed, not stale.
-            return ColumnWidth::makePreset(qBound(0, presetIdx, int(m_presetColumnWidths.size()) - 1));
-        }
-        if (kind == static_cast<int>(DefaultWidthKind::Proportion)) {
-            const qreal value = valueIt != overrides.constEnd()
-                ? valueIt->toDouble()
-                : (m_defaultColumnWidth.kind == ColumnWidth::Proportion ? m_defaultColumnWidth.proportion : 0.0);
-            if (value >= MinColumnWidthFraction && value <= 1.0) {
-                return ColumnWidth::makeProportion(value);
-            }
-        }
-        // ClientDecides (and a kind whose resolved value is still out of
-        // range) falls through to the global — the open path decides the
-        // client-sized case via effectiveWidthClientDecides, and this
-        // function only ever supplies the fallback width for it.
-    }
-    return m_defaultColumnWidth;
-}
-
-bool ScrollEngine::effectiveWidthClientDecides(const QString& screenId) const
-{
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    const auto kindIt = overrides.constFind(ScrollPerScreenKeys::defaultColumnWidthKind());
-    if (kindIt != overrides.constEnd()) {
-        return kindIt->toInt() == static_cast<int>(DefaultWidthKind::ClientDecides);
-    }
-    return m_defaultWidthClientDecides;
-}
-
-WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const
-{
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    // Rule channel: a bare work-area fraction, committed as Fixed pixels
-    // against the CURRENT work area (same resolution the adjust verbs use).
-    const auto it = overrides.constFind(ScrollPerScreenKeys::defaultWindowHeight());
-    if (it != overrides.constEnd() && workArea.height() > 0) {
-        const qreal fraction = it->toDouble();
-        if (fraction > 0.0 && fraction <= 1.0) {
-            return WindowHeight::makeFixed(qMax(1, qRound(fraction * workArea.height())));
-        }
-    }
-    // Settings channel: the kind trio, resolved per SLOT against the cached
-    // global — see effectiveDefaultColumnWidth for why a partial trio is the
-    // ordinary case rather than a malformed pair.
-    const auto kindIt = overrides.constFind(ScrollPerScreenKeys::defaultWindowHeightKind());
-    if (kindIt != overrides.constEnd()) {
-        const int kind = kindIt->toInt();
-        const auto valueIt = overrides.constFind(ScrollPerScreenKeys::defaultWindowHeightValue());
-        const auto presetIt = overrides.constFind(ScrollPerScreenKeys::defaultWindowHeightPresetIndex());
-        if (kind == static_cast<int>(DefaultHeightKind::Fixed)) {
-            const qreal value = valueIt != overrides.constEnd()
-                ? valueIt->toDouble()
-                : (m_defaultWindowHeight.kind == WindowHeight::Fixed ? qreal(m_defaultWindowHeight.fixedPx) : 0.0);
-            if (value >= 1.0) {
-                return WindowHeight::makeFixed(qRound(value));
-            }
-        } else if (kind == static_cast<int>(DefaultHeightKind::Preset)) {
-            const int presetIdx = presetIt != overrides.constEnd()
-                ? presetIt->toInt()
-                : (m_defaultWindowHeight.kind == WindowHeight::Preset ? m_defaultWindowHeight.presetIdx : 0);
-            return WindowHeight::makePreset(qBound(0, presetIdx, int(m_presetWindowHeights.size()) - 1));
-        } else if (kind == static_cast<int>(DefaultHeightKind::Auto)) {
-            return WindowHeight{};
-        }
-    }
-    return m_defaultWindowHeight;
-}
-
-ScrollInsertPosition ScrollEngine::effectiveInsertPosition(const QString& screenId) const
-{
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    const auto it = overrides.constFind(ScrollPerScreenKeys::insertPosition());
-    if (it != overrides.constEnd()) {
-        const int pos = it->toInt();
-        if (pos >= static_cast<int>(ScrollInsertPosition::RightOfActive)
-            && pos <= static_cast<int>(ScrollInsertPosition::IntoActiveColumn)) {
-            return static_cast<ScrollInsertPosition>(pos);
-        }
-    }
-    return m_insertPosition;
-}
-
-ColumnDisplay ScrollEngine::effectiveDefaultColumnDisplay(const QString& screenId) const
-{
-    // Validate-then-fall-back, same terms as the two siblings. Reading "any
-    // value that is not 1" as Normal meant a garbage override (or a future
-    // display kind this build does not know) silently overrode the user's
-    // configured default with Normal instead of leaving it alone.
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    const auto it = overrides.constFind(ScrollPerScreenKeys::defaultColumnDisplay());
-    if (it != overrides.constEnd()) {
-        const int display = it->toInt();
-        if (display == static_cast<int>(ColumnDisplay::Normal) || display == static_cast<int>(ColumnDisplay::Tabbed)) {
-            return static_cast<ColumnDisplay>(display);
-        }
-    }
-    return m_defaultColumnDisplay;
-}
-
-TabIndicatorParams ScrollEngine::tabIndicatorParamsForScreen(const QString& screenId) const
-{
-    return effectiveTabIndicator(screenId);
-}
-
-TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QString& screenId) const
-{
-    TabIndicatorParams params = m_tabIndicator;
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
-    if (overrides.isEmpty()) {
-        return params;
-    }
-    namespace K = ScrollPerScreenKeys;
-    // Per-property: an override map carrying only one key must leave the other
-    // six on their configured values, the same contract the width trio has.
-    // Each read is guarded by constFind rather than value(), because a default
-    // -constructed QVariant would otherwise read as false / 0 and silently
-    // override the configured value with a zero.
-    const auto readBool = [&overrides](const QString& key, bool& out) {
-        const auto it = overrides.constFind(key);
-        if (it != overrides.constEnd()) {
-            out = it->toBool();
-        }
-    };
-    // Bounded, for the same public-API reason the length belt below states: an
-    // embedder can hand this library an override map directly, and an
-    // unbounded width or gap feeds the reservation arithmetic that decides how
-    // much of the column the window gets. Validate-then-fall-back, so a
-    // garbage override leaves the configured value alone.
-    const auto readInt = [&overrides](const QString& key, int& out, int lo, int hi) {
-        const auto it = overrides.constFind(key);
-        if (it != overrides.constEnd()) {
-            bool ok = false;
-            const int v = it->toInt(&ok);
-            if (ok && v >= lo && v <= hi) {
-                out = v;
-            }
-        }
-    };
-    readBool(K::tabIndicatorEnabled(), params.enabled);
-    readBool(K::tabIndicatorHideWhenSingleTab(), params.hideWhenSingleTab);
-    readBool(K::tabIndicatorPlaceWithinColumn(), params.placeWithinColumn);
-    readInt(K::tabIndicatorGap(), params.gap, kMinTabIndicatorGap, kMaxTabIndicatorGap);
-    readInt(K::tabIndicatorWidth(), params.width, kMinTabIndicatorWidth, kMaxTabIndicatorWidth);
-    const auto lengthIt = overrides.constFind(K::tabIndicatorLengthProportion());
-    if (lengthIt != overrides.constEnd()) {
-        bool ok = false;
-        const qreal v = lengthIt->toDouble(&ok);
-        // A belt at the library boundary. The rule cascade DOES range-check
-        // this upstream (layoutregistry_contextresolve.cpp checks it against
-        // the same Min/MaxTabIndicatorLengthRatio the descriptor validates),
-        // but this library is public API and an embedder can hand it an
-        // override map directly, where a zero or negative proportion would
-        // resolve the indicator to a sliver while every setting reports it on.
-        if (ok && v > 0.0) {
-            params.lengthProportion = qMin(v, qreal(1.0));
-        }
-    }
-    // Validate-then-fall-back, the terms effectiveDefaultColumnDisplay uses:
-    // a garbage override must leave the configured position alone rather than
-    // silently snapping the indicator to Left.
-    const auto posIt = overrides.constFind(K::tabIndicatorPosition());
-    if (posIt != overrides.constEnd()) {
-        const int pos = posIt->toInt();
-        if (pos >= static_cast<int>(TabIndicatorPosition::Left)
-            && pos <= static_cast<int>(TabIndicatorPosition::Bottom)) {
-            params.position = static_cast<TabIndicatorPosition>(pos);
-        }
-    }
-    return params;
 }
 
 void ScrollEngine::retile(const QString& screenId)

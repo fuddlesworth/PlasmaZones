@@ -49,23 +49,23 @@ PhosphorZones::AssignmentEntry::Mode Daemon::currentModeFor(const QString& scree
     return PhosphorZones::AssignmentEntry::Snapping;
 }
 
-bool Daemon::engineProvidesLayouts(const QString& screenId) const
+PhosphorEngine::IPlacementEngine::LayoutSupport Daemon::layoutSupportForScreen(const QString& screenId) const
 {
     if (m_screenModeRouter) {
         if (const auto* engine = m_screenModeRouter->engineFor(screenId)) {
-            return engine->providesLayouts();
+            return engine->layoutSupport();
         }
     }
     // Only the null-ROUTER case (the shutdown window) reaches this line:
     // engineFor's mode switch is exhaustive over ctor-checked engine
     // pointers and never returns nullptr for a routed screen (the inner
-    // check above is cheap defence, not a contract). Fall back to true —
-    // same Snapping fallback as currentModeFor, and snap provides layouts.
-    // Note the three null-router fallbacks in this file deliberately
-    // differ: isAutotileScreen probes the live engine, currentModeFor
-    // answers Snapping, this answers true — each is the safe default for
-    // its own consumers.
-    return true;
+    // check above is cheap defence, not a contract). Fall back to
+    // Placement — same Snapping fallback as currentModeFor, and snap's
+    // layouts are placement layouts. Note the three null-router fallbacks
+    // in this file deliberately differ: isAutotileScreen probes the live
+    // engine, currentModeFor answers Snapping, this answers Placement —
+    // each is the safe default for its own consumers.
+    return PhosphorEngine::IPlacementEngine::LayoutSupport::Placement;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -455,16 +455,23 @@ void Daemon::resnapIfManualMode()
     if (!m_snapEngine) {
         return;
     }
-    // Only skip resnap when the current screen is in autotile mode.
-    // Per-desktop assignments mean some screens can be autotile while
+    // Only skip resnap when the current screen is engine-managed.
+    // Per-desktop assignments mean some screens can be engine-managed while
     // others are manual — a global check would block manual resnaps.
-    if (m_autotileEngine && m_unifiedLayoutController) {
+    if (m_unifiedLayoutController) {
         const QString screenId = m_unifiedLayoutController->currentScreenName();
         if (screenId.isEmpty()) {
             return; // No screen context — can't determine mode, skip resnap
         }
-        if (isAutotileScreen(screenId)) {
+        if (m_autotileEngine && isAutotileScreen(screenId)) {
             return; // This screen is autotile — engine handles retile
+        }
+        if (currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Scrolling) {
+            // A template apply changes only the strip's preset vocabulary;
+            // no window placement moved, so buffering every OTHER snapping
+            // screen and running resnapToNewLayout would reposition windows
+            // for a no-op and burn an OSD-suppression count.
+            return;
         }
     }
     // Populate the resnap buffer before resnapping. UnifiedLayoutController::applyEntry()

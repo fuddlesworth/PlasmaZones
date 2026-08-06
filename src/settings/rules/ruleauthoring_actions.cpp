@@ -24,10 +24,10 @@ using PhosphorRules::RuleAction;
 
 /// Group an action type into a picker category. Most categories derive
 /// straight from the descriptor's `category` field, so a new action in an
-/// existing category needs no change here. Two categories are exceptions and
-/// carry hand-written per-type dispatch: `tabIndicator` (whose per-window tab
-/// colours must leave the Scrolling bucket so it stays single-domain) and
-/// `layoutEngine`,
+/// existing category needs no change here. Three categories are exceptions and
+/// carry hand-written per-type dispatch: `tabIndicator` and `dropIndicator`
+/// (whose per-window colours must leave the Scrolling bucket so it stays
+/// single-domain) and `layoutEngine`,
 /// which is split by action type into Engine, Snapping, Tiling (the last
 /// with Algorithm and Behavior submenus via a `/` in the label), a
 /// top-level Scrolling (the context-domain scroll knobs), and a
@@ -55,7 +55,7 @@ PickerCategory actionCategory(const QString& type)
         // (snapping and tiling) each get their own category, and tiling is
         // further split into Algorithm and Behavior submenus (a `/` in the
         // label, which CategoryMenuButton renders as a nested submenu).
-        if (type == ActionType::SetSnappingLayout || type == ActionType::DefaultLayoutAssignment) {
+        if (type == ActionType::SetSnappingLayout) {
             return {PhosphorI18n::tr("Snapping"), 2};
         }
         if (type == ActionType::SetTilingAlgorithm || type == ActionType::SetAlgorithmParam) {
@@ -68,7 +68,7 @@ PickerCategory actionCategory(const QString& type)
         }
         if (type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::SetCenterFocusedColumn
             || type == ActionType::SetScrollDefaultColumnDisplay || type == ActionType::SetScrollInsertPosition
-            || type == ActionType::SetScrollDefaultWindowHeight) {
+            || type == ActionType::SetScrollDefaultWindowHeight || type == ActionType::SetScrollingTemplate) {
             return {PhosphorI18n::tr("Scrolling", "tiling mode name"), 4};
         }
         // The per-app open actions are WINDOW-domain: they must sit in the
@@ -89,7 +89,10 @@ PickerCategory actionCategory(const QString& type)
                         + PhosphorI18n::tr("Scrolling", "tiling mode name"),
                     8};
         }
-        // Cross-cutting engine controls: SetEngineMode / DisableEngine / LockContext.
+        // Cross-cutting engine controls: SetEngineMode / DisableEngine /
+        // LockContext / DefaultLayoutAssignment. The last two are
+        // mode-agnostic — they act on whichever engine owns the context — so
+        // they belong here rather than in one engine's bucket.
         return {PhosphorI18n::tr("Engine"), 1};
     }
     if (cat == QLatin1String("tabIndicator")) {
@@ -103,8 +106,8 @@ PickerCategory actionCategory(const QString& type)
         // locale-dependent.
         //
         // Co-locating all sixteen under Scrolling reads better as one idea,
-        // but it is not worth silently corrupting the divider for the five
-        // pre-existing context scroll knobs that share the bucket.
+        // but it is not worth silently corrupting the divider for the six
+        // context scroll knobs that share the bucket.
         if (type == ActionType::TabColorActive || type == ActionType::TabColorInactive
             || type == ActionType::TabColorUrgent) {
             return {PhosphorI18n::tr("Window") + QStringLiteral("/") + PhosphorI18n::tr("Tab indicator"), 8};
@@ -160,6 +163,9 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::SetTilingAlgorithm && key == ActionParam::Algorithm) {
         return PhosphorI18n::tr("Tiling algorithm");
+    }
+    if (type == ActionType::SetScrollingTemplate && key == ActionParam::LayoutId) {
+        return PhosphorI18n::tr("Template layout");
     }
     if (type == ActionType::SetAlgorithmParam && key == ActionParam::Algorithm) {
         return PhosphorI18n::tr("Algorithm");
@@ -246,6 +252,25 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::SetTabIndicatorCornerRadius && key == ActionParam::Value) {
         return PhosphorI18n::tr("Corner radius (px, -1 is fully rounded)");
+    }
+    // Drop indicator. The two colour pairs share one label for the same reason
+    // the tab colours do: the action label already names which colour it is.
+    if ((type == ActionType::SetDropIndicatorColor || type == ActionType::SetDropIndicatorBorderColor
+         || type == ActionType::DropIndicatorColor || type == ActionType::DropIndicatorBorderColor)
+        && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Color");
+    }
+    if (type == ActionType::SetDropIndicatorEnabled && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Show the indicator while dragging");
+    }
+    if (type == ActionType::SetDropIndicatorOpacity && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Fill opacity (%)");
+    }
+    if (type == ActionType::SetDropIndicatorBorderWidth && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Border width (px)");
+    }
+    if (type == ActionType::SetDropIndicatorBorderRadius && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Corner radius (px)");
     }
     if (type == ActionType::DisableEngine && key == ActionParam::Mode) {
         return PhosphorI18n::tr("Engine to disable");
@@ -490,6 +515,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetTilingAlgorithm) {
         return PhosphorI18n::tr("Set tiling algorithm");
+    }
+    if (type == ActionType::SetScrollingTemplate) {
+        return PhosphorI18n::tr("Set scrolling template");
     }
     if (type == ActionType::SetMaxWindows) {
         return PhosphorI18n::tr("Set max tiled windows");
@@ -1000,12 +1028,14 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // (a 1-based ordinal) before the user picks a desktop.
             payload[key] = 1;
         } else {
-            // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,
-            // shaderEffect, curveEditor, screenId) and plain strings all start
-            // empty (zoneOrdinals and virtualDesktop are seeded above because their
-            // validators reject an empty value). The user has to choose a value
-            // before the rule is savable, and `canSave` surfaces the gap explicitly.
-            // Seeding a placeholder here would mask the "user has to pick" state.
+            // Picker kinds (snappingLayout, scrollingTemplate, tilingAlgorithm,
+            // animationEvent, shaderEffect, overlayShader, curveEditor,
+            // screenId) and plain
+            // strings all start empty (zoneOrdinals and virtualDesktop are
+            // seeded above because their validators reject an empty value). The
+            // user has to choose a value before the rule is savable, and
+            // `canSave` surfaces the gap explicitly. Seeding a placeholder here
+            // would mask the "user has to pick" state.
             payload[key] = QString();
         }
     }

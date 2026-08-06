@@ -515,10 +515,10 @@ public:
     // Cross-engine handoff (see PhosphorEngine/IPlacementEngine.h for contract)
     // Layout capability (see IPlacementEngine's Layout capability section)
     /// Autotile algorithms appear as cards in the layout picker / quick
-    /// slots, so this engine is a layout consumer too.
-    bool providesLayouts() const override
+    /// slots, so this engine is a placement-layout consumer too.
+    LayoutSupport layoutSupport() const override
     {
-        return true;
+        return LayoutSupport::Placement;
     }
 
     QString engineId() const override

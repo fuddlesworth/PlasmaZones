@@ -137,6 +137,9 @@ set(plasmazones_core_SRCS
     dbus/settingsadaptor/settingsadaptor.cpp
     dbus/settingsadaptor/settingsadaptor_batch.cpp
     dbus/settingsadaptor/settingsadaptor_registry.cpp
+    dbus/settingsadaptor/settingsadaptor_registry_snapping.cpp
+    dbus/settingsadaptor/settingsadaptor_registry_autotile.cpp
+    dbus/settingsadaptor/settingsadaptor_registry_scrolling.cpp
     dbus/settingsadaptor/settingsadaptor.h
     dbus/shaderadaptor.cpp
     dbus/shaderadaptor.h
@@ -503,6 +506,7 @@ set(plasmazones_daemon_SRCS
     daemon/daemon/seedorderfilter.cpp
     daemon/daemon/seedorderfilter.h
     daemon/daemon/osd.cpp
+    daemon/daemon/cheatsheet.cpp
     daemon/daemon/stripzones.h
     daemon/daemon.h
     daemon/daemon_fwd.h

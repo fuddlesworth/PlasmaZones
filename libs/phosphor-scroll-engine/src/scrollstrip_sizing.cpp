@@ -7,53 +7,12 @@
 
 namespace PhosphorScrollEngine {
 
-int ScrollStrip::nearestPresetWidthIdx(const Column& c, const ScrollLayoutParams& params) const
-{
-    if (params.presetColumnWidths.isEmpty()) {
-        return 0;
-    }
-    const int current = resolveColumnWidthPx(c.width, params);
-    int best = 0;
-    int bestDist = -1;
-    for (int i = 0; i < params.presetColumnWidths.size(); ++i) {
-        const int px = resolveColumnWidthPx(ColumnWidth::makePreset(i), params);
-        const int dist = qAbs(px - current);
-        if (bestDist < 0 || dist < bestDist) {
-            best = i;
-            bestDist = dist;
-        }
-    }
-    return best;
-}
-
-int ScrollStrip::nearestPresetHeightIdx(const Tile& t, const ScrollLayoutParams& params) const
-{
-    if (params.presetWindowHeights.isEmpty()) {
-        return 0;
-    }
-    const qreal current = currentHeightFraction(t, params);
-    if (current < 0) {
-        return 0; // Auto height: no determinate fraction — enter at the first preset
-    }
-    int best = 0;
-    qreal bestDist = -1;
-    for (int i = 0; i < params.presetWindowHeights.size(); ++i) {
-        const qreal dist = qAbs(params.presetWindowHeights.at(i) - current);
-        if (bestDist < 0 || dist < bestDist) {
-            best = i;
-            bestDist = dist;
-        }
-    }
-    return best;
-}
-
 qreal ScrollStrip::currentHeightFraction(const Tile& t, const ScrollLayoutParams& params) const
 {
     switch (t.height.kind) {
-    case WindowHeight::Preset: {
-        const int count = params.presetWindowHeights.size();
-        return count > 0 ? params.presetWindowHeights.at(qBound(0, t.height.presetIdx, count - 1)) : -1;
-    }
+    case WindowHeight::Preset:
+        // Snapped, matching relayout's resolution of the same anchor.
+        return nearestPresetValue(params.presetWindowHeights, t.height.presetFraction, -1);
     case WindowHeight::Fixed:
         return params.workArea.height() > 0 ? static_cast<qreal>(t.height.fixedPx) / params.workArea.height() : -1;
     case WindowHeight::Auto:
@@ -81,21 +40,29 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
     if (!col || params.presetColumnWidths.isEmpty() || (delta != -1 && delta != 1)) {
         return false;
     }
+    // ONE path for every current kind — the F30 fix: there is no index to
+    // read back, so a short template vocabulary can never rewrite the
+    // anchor's original intent. Enter the cycle at the vocabulary entry
+    // nearest the CURRENT on-screen size (a Preset anchor RESOLVES to that
+    // entry, so the equality test below is true for it and the press steps,
+    // same stepping the index cycle had); a non-preset width steps only when
+    // the nearest entry already matches, so the first press always lands on
+    // a visible change. proportionalPx is monotone in the fraction, so the
+    // exact-inverse fraction below selects the same nearest entry the old
+    // pixel-space probe did.
     const int count = params.presetColumnWidths.size();
-    int idx;
-    if (col->width.kind == ColumnWidth::Preset) {
-        idx = (qBound(0, col->width.presetIdx, count - 1) + delta + count) % count;
-    } else {
-        // Enter the cycle from the nearest preset; step only if that preset
-        // is already (near) the current size, so the first press lands on a
-        // visible change.
-        idx = nearestPresetWidthIdx(*col, params);
-        const int nearPx = resolveColumnWidthPx(ColumnWidth::makePreset(idx), params);
-        if (qAbs(nearPx - resolveColumnWidthPx(col->width, params)) <= 1) {
-            idx = (idx + delta + count) % count;
-        }
+    const int workW = params.workArea.width();
+    if (workW <= 0) {
+        return false;
     }
-    const ColumnWidth result = ColumnWidth::makePreset(idx);
+    const int currentPx = resolveColumnWidthPx(col->width, params);
+    const qreal currentFraction = qreal(currentPx + params.gap) / (workW + params.gap);
+    int idx = nearestPresetIndex(params.presetColumnWidths, currentFraction);
+    const int nearPx = resolveColumnWidthPx(ColumnWidth::makePreset(params.presetColumnWidths.at(idx)), params);
+    if (qAbs(nearPx - currentPx) <= 1) {
+        idx = (idx + delta + count) % count;
+    }
+    const ColumnWidth result = ColumnWidth::makePreset(params.presetColumnWidths.at(idx));
     if (col->width == result) {
         // Single-entry preset list (or a step that landed where we already
         // are): report no change so the engine skips a pointless relayout.
@@ -216,22 +183,18 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     if (!tile || params.presetWindowHeights.isEmpty() || (delta != -1 && delta != 1)) {
         return false;
     }
+    // ONE path, mirroring the width cycle's value-anchored shape (see its
+    // comment): enter at the nearest vocabulary entry to the current height
+    // fraction, step when it already matches (a Preset anchor resolves to
+    // it, so a press on a preset tile always steps; Auto has no determinate
+    // fraction and enters at the first entry without stepping).
     const int count = params.presetWindowHeights.size();
-    int idx;
-    if (tile->height.kind == WindowHeight::Preset) {
-        idx = (qBound(0, tile->height.presetIdx, count - 1) + delta + count) % count;
-    } else {
-        // Mirror the width cycle: enter from the nearest preset, stepping
-        // once when that preset already matches the current height so the
-        // first press always lands on a visible change.
-        idx = nearestPresetHeightIdx(*tile, params);
-        const qreal nearFrac = params.presetWindowHeights.at(qBound(0, idx, count - 1));
-        const qreal curFrac = currentHeightFraction(*tile, params);
-        if (curFrac >= 0 && qAbs(nearFrac - curFrac) < 0.01) {
-            idx = (idx + delta + count) % count;
-        }
+    const qreal curFrac = currentHeightFraction(*tile, params);
+    int idx = curFrac < 0 ? 0 : nearestPresetIndex(params.presetWindowHeights, curFrac);
+    if (curFrac >= 0 && qAbs(params.presetWindowHeights.at(idx) - curFrac) < 0.01) {
+        idx = (idx + delta + count) % count;
     }
-    const WindowHeight result = WindowHeight::makePreset(idx);
+    const WindowHeight result = WindowHeight::makePreset(params.presetWindowHeights.at(idx));
     if (tile->height == result) {
         return false;
     }

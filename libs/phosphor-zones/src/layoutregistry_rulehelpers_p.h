@@ -45,9 +45,12 @@ struct ContextDims
     bool operator==(const ContextDims& other) const = default;
 };
 
-/// QSet/QHash key support — the batch driver dedupes emit contexts by the FULL
-/// triple, so two rules differing only in activity each get their own
-/// layoutAssigned resolved under their own activity.
+/// QSet/QHash key support. The batch driver collects its affected/emit contexts
+/// at the FULL triple so an erased context is not conflated with a rebuilt one
+/// on the same screen and desktop, and so the debug log can name the activity.
+/// The emit loops then dedupe down to (screen, desktop): layoutAssigned carries
+/// no activity and the payload resolves under the current activity, so two
+/// rules differing only in activity would fan out byte-identical signals.
 inline size_t qHash(const ContextDims& dims, size_t seed = 0) noexcept
 {
     return qHashMulti(seed, dims.screenId, dims.virtualDesktop, dims.activity);
@@ -98,16 +101,19 @@ bool matchIsExactContext(const PWR::MatchExpression& match, const QString& scree
 // user-authored catch-all engine rule is handled by priority alone.
 bool hasEngineModeAction(const PWR::Rule& rule);
 
-// True if @p rule carries a SetSnappingLayout / SetTilingAlgorithm action. The
+// True if @p rule carries a SetSnappingLayout / SetTilingAlgorithm /
+// SetScrollingTemplate action. The
 // per-slot assignment resolver reads each layout slot independently of the
 // engine-mode slot, so a layout-only rule (no SetEngineMode) sets the layout
 // for its engine in a context without forcing the engine mode.
 bool hasSnappingLayoutAction(const PWR::Rule& rule);
 bool hasTilingAlgorithmAction(const PWR::Rule& rule);
+bool hasScrollingTemplateAction(const PWR::Rule& rule);
 
-// True when every action on @p rule is one of the three assignment slots
-// (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). False on an
-// empty action list. Used by the shape-based fallback in
+// True when every action on @p rule is one of the four assignment slots
+// (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm /
+// SetScrollingTemplate). False on an empty action list. Used by the
+// shape-based fallback in
 // findExactContextRule to refuse to claim a user-authored rule that
 // carries non-assignment actions (SetOpacity, OverrideAnimation*, Float,
 // Exclude, ...) — admitting it would silently strip those actions
@@ -120,7 +126,7 @@ bool isPureAssignmentRule(const PWR::Rule& rule);
 // context, and the rebuild paths preserve its other actions.
 bool hasAnyAssignmentSlotAction(const PWR::Rule& rule);
 
-// Append every action of @p existing that is NOT one of the three assignment
+// Append every action of @p existing that is NOT one of the four assignment
 // slots onto @p rebuilt. Every path that rebuilds an assignment rule through
 // makeAssignmentRule must call this: the rebuild carries the deterministic
 // context id, so it overwrites the stored rule whether or not a purity gate
@@ -150,7 +156,7 @@ bool matchIsExactContextActivity(const PWR::MatchExpression& match);
 // NOT a purity check, despite the family name: this says nothing about the
 // rule's OTHER actions. Any caller that REBUILDS rule.actions must therefore
 // either gate on isPureAssignmentRule OR call carryOverNonAssignmentActions,
-// because rebuilding force-injects the three slot actions and drops
+// because rebuilding force-injects the four slot actions and drops
 // everything else — so a context rule carrying SetEngineMode alongside
 // SetOpacity or LockContext would lose the extra action. Every rebuild path
 // now takes the second option, which is why clearAutotileAssignments can flip

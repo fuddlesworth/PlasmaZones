@@ -17,14 +17,6 @@ int proportionalPx(qreal proportion, int workExtent, int gap)
     return qMax(1, qRound(proportion * (workExtent + gap)) - gap);
 }
 
-qreal presetAt(const QList<qreal>& presets, int idx)
-{
-    if (presets.isEmpty()) {
-        return 0.5;
-    }
-    return presets.at(qBound(0, idx, presets.size() - 1));
-}
-
 } // namespace
 
 int ScrollStrip::resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayoutParams& params)
@@ -44,7 +36,12 @@ int ScrollStrip::resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayo
     case ColumnWidth::Fixed:
         return qBound(1, width.fixedPx, workW);
     case ColumnWidth::Preset:
-        return qMin(workW, proportionalPx(presetAt(params.presetColumnWidths, width.presetIdx), workW, params.gap));
+        // Snap-at-resolve: the fraction anchor lands on the nearest entry of
+        // the CURRENT vocabulary, so a template swap reflows preset columns
+        // and clearing the template restores the anchor's original entry.
+        return qMin(
+            workW,
+            proportionalPx(nearestPresetValue(params.presetColumnWidths, width.presetFraction), workW, params.gap));
     }
     return qMin(workW, proportionalPx(0.5, workW, params.gap));
 }
@@ -291,9 +288,10 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                     fixedTotal += heights[vi];
                     break;
                 case WindowHeight::Preset:
-                    heights[vi] = qMin(
-                        availH,
-                        proportionalPx(presetAt(params.presetWindowHeights, t.height.presetIdx), area.height(), gap));
+                    heights[vi] =
+                        qMin(availH,
+                             proportionalPx(nearestPresetValue(params.presetWindowHeights, t.height.presetFraction),
+                                            area.height(), gap));
                     fixedTotal += heights[vi];
                     break;
                 case WindowHeight::Auto:

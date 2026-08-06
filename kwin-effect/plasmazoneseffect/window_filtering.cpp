@@ -157,16 +157,40 @@ void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
 PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);
-    const QString screenId = getWindowScreenId(w);
+    // Id-taking overload: the scroll override resolves off the window id, and
+    // this funnel already holds it.
+    const QString screenId = getWindowScreenId(w, windowId);
     PhosphorRules::WindowQuery query = ruleQueryFor(w, screenId, isWindowFloating(windowId), isWindowSnapped(windowId),
                                                     m_tilingHandler->isTiledWindow(windowId), zoneForWindow(windowId));
     // Scroll-managed windows ride the same tile-request pipeline as autotile,
     // so ruleQueryFor derives "tiling" from the tiled bit; re-stamp from the
     // per-screen engine discriminator so a `Mode Equals "scrolling"` window
     // rule matches strip-managed windows.
+    //
+    // Bring-up hazard, accepted deliberately: m_scrollingScreens is empty until
+    // the daemon's scrollingScreens reply lands, so a scroll-managed window
+    // resolved in that window stamps "tiling". Mode gets no seeded twin like
+    // ActiveLayout's — holding every Mode rule out of the evaluator until the
+    // set arrives would also disarm them for genuinely floating and snapped
+    // windows, whose Mode is correct from the first frame, and the field is
+    // engaged either way so no negation hazard is opened. The self-correction
+    // is setScrollingScreens' invalidateAllRuleCaches plus its border sweep,
+    // which drop and rebuild every verdict memoised against the empty set once
+    // the reply lands.
     if (query.mode == QLatin1String("tiling") && m_tilingHandler->isScrollingScreen(screenId)) {
         query.mode = QStringLiteral("scrolling");
     }
+    // Stamp the rules-visible active layout the daemon pushed for this
+    // window's screen (snapping UUID / "autotile:<algo>" /
+    // "scrolling:<templateUuid>" / bare sentinel) so window-domain rules can
+    // match Field::ActiveLayout with the same vocabulary as the daemon's
+    // context rules. Replaces the engaged-empty stamp ruleQueryFor left,
+    // which made every negated ActiveLayout rule fire for every window.
+    // Unconditional by design: the bring-up window where the map is not yet
+    // seeded is covered one layer up, by holding ActiveLayout-referencing
+    // rules out of the evaluator entirely (TilingHandler::activeLayoutsSeeded).
+    // A gate here could not help — the field resolves engaged either way.
+    query.activeLayout = m_tilingHandler->activeLayoutForScreen(screenId);
     // Stamp the screen orientation from the resolved screen id. ruleQueryFor
     // leaves the field to us whenever it is handed an id: its own derivation
     // is centre-based, which answers for the wrong monitor (or not at all) for
@@ -180,7 +204,11 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
             orientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
         }
     }
-    if (orientation.isEmpty()) {
+    // The centre-derived fallback is skipped when ruleQueryFor already stamped
+    // one: it takes that branch for exactly the empty-screenId case, from the
+    // same helper on the same frame, so re-running it would recompute a value
+    // that is already in the query (a screenAt walk per rule query).
+    if (orientation.isEmpty() && query.screenOrientation.isEmpty()) {
         orientation = centreScreenOrientation(w);
     }
     if (!orientation.isEmpty()) {

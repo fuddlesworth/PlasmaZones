@@ -459,8 +459,11 @@ void Daemon::stop()
         m_layoutManager->setDefaultAutotileAlgorithmProvider({});
         m_layoutManager->setTiledWindowCountProvider({});
         m_layoutManager->setScreenOrientationProvider({});
+        m_layoutManager->setCurrentVirtualDesktopProvider({});
         m_layoutManager->setSnappingPreferredProvider({});
         m_layoutManager->setDefaultAssignmentSuppressedProvider({});
+        m_layoutManager->setDefaultScrollingTemplateProvider({});
+        m_layoutManager->setScrollingTemplateStore(nullptr);
     }
 
     // Null the QML static registry / manager pointers BEFORE the m_running
@@ -717,7 +720,7 @@ void Daemon::stop()
         m_overlayService->setScrollZonesProvider({});
         // Same contract: the layouts-provided resolver captures `this` and
         // reads the router, which is reset before the engines below.
-        m_overlayService->setLayoutsProvidedResolver({});
+        m_overlayService->setLayoutSupportResolver({});
     }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.
@@ -875,6 +878,12 @@ void Daemon::stop()
     // them out was an asymmetry in a block whose whole purpose is that reset.
     m_derivedAutotileScreens.clear();
     m_derivedScrollingScreens.clear();
+    // Same shape again: the assignment snapshot is replaced wholesale by the
+    // next diffActiveAssignments, but the announce map beside it is advanced
+    // only when a card is shown, so a template announced before the stop would
+    // otherwise still count as "already seen" a session later.
+    m_activeAssignmentByScreen.clear();
+    m_lastAnnouncedTemplateByScreen.clear();
     // Per-session OSD gates. A resnap armed just before the stop leaves its
     // outstanding count behind, and the screen-removal cooldown deadline can
     // still be in the future — either one carried into the next start()

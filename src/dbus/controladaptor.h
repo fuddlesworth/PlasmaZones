@@ -85,6 +85,14 @@ public Q_SLOTS:
      * @brief Toggle autotile mode for a screen
      * @param screenId Screen to toggle
      * @note Switches between snapping mode and autotile mode
+     * @note Mode-only verb by contract: it writes an EMPTY snapping layout
+     *       and an EMPTY tiling algorithm into the screen's current-context
+     *       entry, so any layout or algorithm that context had pinned is
+     *       cleared and the toggled mode falls back to the cascade / global
+     *       default. Only the scrolling template survives, because
+     *       setAssignmentEntry seeds it from the stored entry. Callers that
+     *       need the stored slots preserved must read them first and pass
+     *       them back through setAssignmentEntry themselves.
      */
     void toggleAutotileForScreen(const QString& screenId);
 

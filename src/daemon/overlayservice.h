@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION: this header is over 1200 lines, past the 1150 hard
+// FILE-SIZE EXCEPTION: this header is over 1400 lines, past the 1150 hard
 // ceiling.
 // The exception was granted in the same pull request that carried the file
 // past the ceiling (the scroll tab strip), so it is a live decision rather
@@ -190,7 +190,7 @@ public:
 
     /// Inject the daemon-owned tile-algorithm registry. Required when
     /// autotile entries should appear in @ref visibleLayoutCount /
-    /// @ref layoutListForScreen output. Borrowed - caller owns it and
+    /// @ref buildLayoutsList output. Borrowed - caller owns it and
     /// must keep it alive for the service's lifetime.
     void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
 
@@ -223,20 +223,31 @@ public:
         m_scrollZonesProvider = std::move(provider);
     }
 
-    /// Whether the engine owning a screen consumes user-selectable layouts
-    /// (IPlacementEngine::providesLayouts). Daemon-injected so the overlay
-    /// stays engine-agnostic; resolvePerScreenLayoutInclude answers "no
-    /// layouts at all" for a screen whose engine returns false (scrolling),
-    /// which empties the layout picker's list so its show bails. (The
-    /// drag-time popup is separately suppressed on engine-owned screens by
-    /// WindowDragAdaptor's dragMoved gate; for it this is defence in
-    /// depth.) Unset falls back to the assignment-based resolution. Same
-    /// clear-before-destroy contract as the other injected closures.
-    using LayoutsProvidedResolver = std::function<bool(const QString& screenId)>;
-    void setLayoutsProvidedResolver(LayoutsProvidedResolver resolver)
+    /// The LIVE layout capability of the engine owning a screen, as the int
+    /// value of IPlacementEngine::LayoutSupport (0 = None, 1 = Placement,
+    /// 2 = Templates). Daemon-injected so the overlay stays engine-agnostic
+    /// and routes through the router's live-engine answer, which correctly
+    /// downgrades a disabled or switched-off scrolling assignment to
+    /// snapping — the raw assignmentId cannot see that downgrade.
+    /// Consumers: resolvePerScreenLayoutInclude empties the layout list only
+    /// for None (a Templates screen swaps the manual list for the native
+    /// template cards); activeLayoutIdForScreen takes its template arm only when
+    /// the live answer is Templates; isSnappingContextInactive suppresses
+    /// the snap overlay for a scrolling assignment only when the scroll
+    /// engine actually owns the screen. Unset falls back to the
+    /// assignment-based resolution. Same clear-before-destroy contract as
+    /// the other injected closures.
+    using LayoutSupportResolver = std::function<int(const QString& screenId)>;
+    void setLayoutSupportResolver(LayoutSupportResolver resolver)
     {
-        m_layoutsProvidedResolver = std::move(resolver);
+        m_layoutSupportResolver = std::move(resolver);
     }
+    /// Int codes of the resolver's answer — hand-mirrored values of
+    /// IPlacementEngine::LayoutSupport (this header does not include the
+    /// engine interface).
+    static constexpr int LayoutSupportNone = 0;
+    static constexpr int LayoutSupportPlacement = 1;
+    static constexpr int LayoutSupportTemplates = 2;
     PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager;
@@ -251,12 +262,15 @@ public:
     void setCurrentActivity(const QString& activityId);
 
     /**
-     * @brief Set which layout types appear in the zone picker
+     * @brief Seed which layout types appear in the zone picker
      *
-     * When autotile mode is active, show only dynamic layouts.
-     * When manual mode is active, show only manual layouts.
-     * The autotile feature gate (KCM setting) controls whether dynamic layouts
-     * are ever visible.
+     * A global SEED only: the per-screen truth is
+     * resolvePerScreenLayoutInclude, which narrows these flags per screen.
+     * Autotile screens keep only the algorithm cards, snapping screens keep
+     * only the manual list, a Templates (scrolling) screen gets native
+     * scrolling-template cards and neither of the other two families, and a
+     * LayoutSupport::None engine gets nothing at all. The autotile feature
+     * gate (KCM setting) controls whether dynamic layouts are ever visible.
      */
     void setLayoutFilter(bool includeManual, bool includeAutotile);
 
@@ -318,6 +332,14 @@ public:
                        bool producesOverlappingZones = false, const QString& zoneNumberDisplay = QStringLiteral("all"),
                        int masterCount = 1);
     void showLockedLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
+    /// The native scrolling-template OSD: no Layout* backs a
+    /// ScrollingTemplate, so the caller supplies the template id, name and
+    /// blueprint-derived preview zones (the daemon's
+    /// scrollingTemplatePreviewZones projection). Always captioned as a
+    /// template; @p locked renders the lock badge (the locked-preview twin
+    /// of showLockedLayoutOsd).
+    void showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones,
+                                  const QString& screenId = QString(), bool locked = false);
     /// The card always wears the failure glyph "dialog-cancel". Both callers
     /// (showContextDisabledOsd and showNotAssignedOsd) explain why a
     /// requested change had no effect, which is what the glyph says. A
@@ -346,6 +368,28 @@ public:
     void warmUpNotifications();
 
 private:
+    /**
+     * @brief The isAnyModeLocked mode lens the LAYOUT PICKER reads a lock
+     * through, for @p screenId.
+     *
+     * Answers 2 (scrolling) on a Templates screen, else -1 (both modes).
+     * On a Templates screen the lock that matters is the scrolling one: the
+     * -1 both-mode default would let an unrelated snapping lock block
+     * template picks while the actual scrolling lock went unread. Every
+     * picker site must use this — the show path and the live lock re-push
+     * disagreeing means a picker opens unlocked and then latches locked (or
+     * the reverse) on the next rule edit. The ZONE SELECTOR is deliberately
+     * NOT a caller: it stays on -1 because it shows the snap zone overlay,
+     * whose lock is the snapping one.
+     */
+    int pickerLockModeFor(const QString& screenId) const
+    {
+        if (m_layoutSupportResolver && m_layoutSupportResolver(screenId) == LayoutSupportTemplates) {
+            return 2;
+        }
+        return -1;
+    }
+
     /**
      * @brief Install the QGuiApplication::screenAdded hook for the
      * notification overlay so hot-plugged monitors get a per-screen window
@@ -429,20 +473,31 @@ public:
     // gates (when false the matching group hides regardless of mode — the
     // mode string alone lags the engine teardown on a disable).
     // `layoutsAvailable` is the bound screen's engine capability
-    // (IPlacementEngine::providesLayouts): when false the catalog rows
+    // (IPlacementEngine::layoutSupport): when false the catalog rows
     // tagged "layouts" hide, because those shortcuts answer with a
     // "not available" OSD on that screen.
     void showCheatsheet(const QString& screenId, const QVariantList& model, const QString& currentMode,
-                        bool autotileAvailable, bool scrollingAvailable, bool layoutsAvailable);
+                        bool autotileAvailable, bool scrollingAvailable, bool layoutsAvailable,
+                        bool layoutsAreTemplates);
     void hideCheatsheet() override;
     bool isCheatsheetVisible() const override;
     /// Re-push model/mode into an already-visible cheatsheet (live refilter
     /// on mode switch or rebind). No-op when hidden — the next show
     /// re-resolves everything anyway.
     void refreshCheatsheet(const QVariantList& model, const QString& currentMode, bool autotileAvailable,
-                           bool scrollingAvailable, bool layoutsAvailable);
+                           bool scrollingAvailable, bool layoutsAvailable, bool layoutsAreTemplates);
     /// Screen the visible cheatsheet is bound to; empty when hidden.
     QString cheatsheetScreenId() const;
+
+    /// Screen the visible layout picker is bound to; empty when hidden.
+    /// The picker-apply handler re-binds the controller to THIS screen
+    /// before applying — the controller's currentScreenName is a single
+    /// mutable slot that desktop switches and cycle presses on other
+    /// screens retarget while the picker sits open.
+    QString layoutPickerScreenId() const
+    {
+        return m_layoutPickerScreenId;
+    }
 
     /// Tab indicators for tabbed scrolling columns on @p screenId (per
     /// screen, NOT a singleton). @p strips is a list of maps with x / y /
@@ -699,6 +754,16 @@ private:
     ///   the same split axis the live tiler will render. Empty (default)
     ///   keeps the legacy square-canvas behaviour for screen-agnostic
     ///   consumers.
+    ///
+    /// PRECONDITION shared with @ref visibleLayoutCount: the algorithm registry
+    /// must be wired before either is called. The two enumerate autotile rows
+    /// through DIFFERENT paths — a non-empty canvas walks the registry
+    /// directly, an empty one (which visibleLayoutCount always passes) walks
+    /// the layout source — so with a null registry and a wired source this one
+    /// contributes no autotile rows while the count still does, and the
+    /// keep-visible bar gets sized for a row set the popup does not render. The
+    /// daemon wires it in initServices (setAlgorithmRegistry), before any popup
+    /// can open, so this holds for every live caller.
     QVariantList buildLayoutsList(const QString& screenId = QString(), QSize autotilePreviewCanvas = {}) const;
     /// Defined in overlayservice_types.h (hoisted with the other value
     /// types); aliased so existing OverlayService::LayoutIncludeFlags
@@ -729,7 +794,11 @@ private:
     /// The id the layout picker / zone selector highlights as active on @p
     /// screenId. In autotile mode this is the resolved "autotile:<algorithm>"
     /// assignment id (matching the autotile cards); in snapping mode it is the
-    /// resolved Layout's UUID (matching the manual cards). Snapping resolves
+    /// resolved Layout's UUID (matching the manual cards); on a LIVE Templates
+    /// (scrolling) screen it is the context's resolved TEMPLATE layout UUID, so
+    /// the picker highlights the template card, or the bare "scrolling:"
+    /// sentinel when no template is assigned, which matches no card.
+    /// Snapping resolves
     /// through resolveScreenLayout() so its fallback chain is preserved, while
     /// autotile uses the assignment id directly because no Layout object backs
     /// an algorithm.
@@ -741,9 +810,12 @@ private:
     /// suppressed (the global "don't assign by default" setting, or a
     /// per-context rule) with nothing explicitly assigned; or the context
     /// resolves to an ENGINE mode. The third catches a bare or suppressed
-    /// autotile context and a context-disabled scrolling one, neither of
+    /// autotile context and a LIVE Templates (scrolling) one, neither of
     /// which is in the excluded-screens set, so without it the snap overlay
     /// surfaced on a screen the user had just switched away from snapping.
+    /// The scrolling half consults the live capability resolver: a scrolling
+    /// ASSIGNMENT downgraded to snapping by the router really does snap
+    /// windows into zones, so it keeps its overlay (#724 class).
     /// Consumed by the OVERLAY activation sites; the zone SELECTOR is
     /// deliberately disabled-list-only (isSnappingContextDisabled) — a
     /// suppressed-default context still allows an explicit drag to pick a
@@ -853,7 +925,7 @@ private:
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
     ScrollZonesProvider m_scrollZonesProvider;
-    LayoutsProvidedResolver m_layoutsProvidedResolver;
+    LayoutSupportResolver m_layoutSupportResolver;
     /// Borrowed from Daemon. stop() detaches this even when init never reached start().
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutManager =

@@ -23,11 +23,17 @@
  *     different strips produce different payloads.
  *  5. Off-screen columns are excluded at the wire boundary — the payload
  *     describes what is visible, not what is managed.
- *  6. scrollingScreens answers sorted, across several screens.
- *  7. scrollingScreensChanged is gated on an actual change: the engine
+ *  6. A context outer-gap override reaches the wire: the payload's rects
+ *     track the engine's own gap-inset tiles rather than an ungapped
+ *     recomputation.
+ *  7. presetVocabularyJson carries the same ownership gates, and its payload
+ *     mixes the two vocabularies independently: a widths-only template
+ *     override replaces the widths and leaves the heights on the fallback.
+ *  8. scrollingScreens answers sorted, across several screens.
+ *  9. scrollingScreensChanged is gated on an actual change: the engine
  *     re-announces an identical set on every desktop switch, and a wire
  *     consumer comparing successive payloads must not see a phantom one.
- *  8. clearEngine leaves every slot answering safely AND stops relaying.
+ * 10. clearEngine leaves every slot answering safely AND stops relaying.
  */
 
 #include <QTest>
@@ -63,11 +69,13 @@ private Q_SLOTS:
         //
         // Neither provider is at the origin: a (0,0) work area would let a
         // dropped origin-subtraction term pass unnoticed (x/1920 lands well
-        // outside 0..1). The two rects also differ so a reader can see which
-        // basis the payload normalizes against — the FULL screen geometry,
-        // with tiles clipped to the available one — though no assertion here
-        // distinguishes them (a swap normalizes against 760 instead of 800
-        // and stays inside 0..1).
+        // outside 0..1). The two rects also differ, but which basis the
+        // payload normalizes against is NOT pinned here: every assertion in
+        // this file cross-checks the wire payload against the engine's own
+        // relative rects, so a swap to the available geometry would normalize
+        // against 760 instead of 800, stay inside 0..1, and agree with the
+        // engine either way. Known coverage gap, kept because an absolute
+        // expected value would have to be derived from a live run.
         const auto available = [](const QString&) {
             return QRect(1920, 40, 1200, 760);
         };
@@ -368,6 +376,38 @@ private Q_SLOTS:
         QCOMPARE(activateSpy.at(1).at(0).toString(), QStringLiteral("app|b"));
     }
 
+    // Same ownership gates as focusColumn, plus the payload's mixed-vocabulary
+    // shape: the two preset lists are overridden independently.
+    void testPresetVocabularyJson_gatesAndShape()
+    {
+        // Foreign and empty screen ids answer the empty object.
+        QCOMPARE(m_adaptor->presetVocabularyJson(QStringLiteral("HDMI-2")), QStringLiteral("{}"));
+        QCOMPARE(m_adaptor->presetVocabularyJson(QString()), QStringLiteral("{}"));
+
+        // Capture the fallback heights BEFORE the template push, so the
+        // mixed-vocabulary assertion below can pin that the heights are
+        // byte-identical to the fallback rather than merely non-empty.
+        const QJsonObject before =
+            QJsonDocument::fromJson(m_adaptor->presetVocabularyJson(QStringLiteral("DP-1")).toUtf8()).object();
+        const QJsonArray fallbackHeights = before.value(QLatin1String("windowHeights")).toArray();
+        QVERIFY(!fallbackHeights.isEmpty());
+
+        // The owned screen answers both lists. With a widths-only template
+        // override pushed, the widths are the template's and the heights
+        // stay on the fallback (mixed vocabulary).
+        QVariantMap templ;
+        templ.insert(PhosphorScrollEngine::ScrollPerScreenKeys::presetColumnWidths(), QVariantList{0.2, 0.8});
+        m_engine->applyPerScreenConfig(QStringLiteral("DP-1"), templ);
+
+        const QString payload = m_adaptor->presetVocabularyJson(QStringLiteral("DP-1"));
+        const QJsonObject obj = QJsonDocument::fromJson(payload.toUtf8()).object();
+        const QJsonArray widths = obj.value(QLatin1String("columnWidths")).toArray();
+        QCOMPARE(widths.size(), 2);
+        QCOMPARE(widths.at(0).toDouble(), 0.2);
+        QCOMPARE(widths.at(1).toDouble(), 0.8);
+        QCOMPARE(obj.value(QLatin1String("windowHeights")).toArray(), fallbackHeights);
+    }
+
     // The property is documented as sorted so a consumer can compare it with
     // a signal payload for the same set. The argument is a QSet, so the
     // braces below carry no order; the property must IMPOSE one. Five ids
@@ -506,5 +546,5 @@ private:
     ScrollingAdaptor* m_adaptor = nullptr;
 };
 
-QTEST_MAIN(TestScrollingAdaptor)
+QTEST_GUILESS_MAIN(TestScrollingAdaptor)
 #include "test_scrolling_adaptor.moc"

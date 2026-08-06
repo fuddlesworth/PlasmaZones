@@ -267,9 +267,15 @@ Item {
         property bool autotileAvailable: true
         property bool scrollingAvailable: true
         // Engine capability of the bound screen (IPlacementEngine::
-        // providesLayouts), pushed per show and re-pushed on refresh; gates
+        // layoutSupport), pushed per show and re-pushed on refresh; gates
         // the rows the catalog tags mode === "layouts".
         property bool layoutsAvailable: true
+        // True when the bound screen's layouts are native scrolling templates,
+        // which the catalog's layout rows word differently. Same
+        // declare-and-forward contract as the decoration properties: C++ writes
+        // it with setProperty, so an undeclared name would silently become a
+        // dead dynamic property and the rows would keep the layout wording.
+        property bool layoutsAreTemplates: false
         // Card corner radius the surface decoration rounds to (see osdSlot
         // in PassiveOverlayShell.qml).
         property real cardCornerRadius: Kirigami.Units.largeSpacing * 2
@@ -324,6 +330,7 @@ Item {
                 autotileAvailable: cheatsheetSlot.autotileAvailable
                 scrollingAvailable: cheatsheetSlot.scrollingAvailable
                 layoutsAvailable: cheatsheetSlot.layoutsAvailable
+                layoutsAreTemplates: cheatsheetSlot.layoutsAreTemplates
                 fontFamily: cheatsheetSlot.fontFamily
                 fontSizeScale: cheatsheetSlot.fontSizeScale
             }

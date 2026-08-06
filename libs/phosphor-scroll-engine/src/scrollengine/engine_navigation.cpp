@@ -307,6 +307,9 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     // preserves the user's width/display/height choices and the client's
     // clamp (the float round-trip does the same through FloatRestore).
     const QSize windowMinSize = state->strip().windowMinimumSize(windowId);
+    // Value-anchored intent is screen-independent: the target's relayout
+    // snaps the fraction into ITS vocabulary, so no cross-screen remap is
+    // needed (the old index-based intent required one here).
     const WindowHeight windowHeight = heightIntentOf(state->strip(), windowId);
     const int sourceColIdx = state->strip().columnOfWindow(windowId);
     ColumnWidth windowWidth = effectiveDefaultColumnWidth(target);

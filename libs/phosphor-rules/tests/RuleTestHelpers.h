@@ -29,6 +29,22 @@ inline RuleAction snappingLayout(const QString& layoutId)
     return a;
 }
 
+inline RuleAction tilingAlgorithm(const QString& algorithm)
+{
+    RuleAction a;
+    a.type = QString(ActionType::SetTilingAlgorithm);
+    a.params.insert(ActionParam::Algorithm, algorithm);
+    return a;
+}
+
+inline RuleAction scrollingTemplate(const QString& layoutId)
+{
+    RuleAction a;
+    a.type = QString(ActionType::SetScrollingTemplate);
+    a.params.insert(ActionParam::LayoutId, layoutId);
+    return a;
+}
+
 inline RuleAction excludeAction()
 {
     RuleAction a;

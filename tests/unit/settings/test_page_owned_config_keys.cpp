@@ -20,9 +20,10 @@
  * to link the whole SettingsController topology TU. This file is that guard.
  * It is scoped to what can be checked cheaply and exactly: the one-owner rule
  * across the WHOLE manifest, and complete coverage of a swept subset of
- * schema groups — Scrolling and Scrolling.Behavior (whose four page manifests
- * are the newest and least exercised) plus Rendering (whose Gpu key once
- * shipped with no manifest owner).
+ * schema groups. The swept set is the four scrolling groups (Scrolling,
+ * Scrolling.Behavior, Scrolling.TabIndicator and Scrolling.DropIndicator,
+ * whose page manifests are the newest and least exercised) plus Rendering,
+ * whose Gpu key once shipped with no manifest owner.
  */
 
 #include <QSet>
@@ -51,12 +52,20 @@ QString qualify(const QString& group, const QString& key)
 const QSet<QString>& deliberatelyUnowned()
 {
     static const QSet<QString> kSet{
-        // The scrolling master switch, like snappingEnabled and
-        // autotileEnabled: it is committed through the sidebar toggle's
-        // beginExternalEdit/endExternalEdit pair rather than staged through
-        // per-page dirtiness, so owning it would make the sidebar toggle mark
-        // a page dirty and make that page's Reset turn scrolling back on.
-        qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::enabledKey()),
+        // The scrolling master switch is NOT here any more: it is owned by
+        // scrolling-columns (its pending sidebar flip has to participate in
+        // value-based dirtiness or it is silently lost on exit), and the
+        // page-Reset hazard that used to justify unowning it is closed by
+        // resetExemptModeEnableKeys() instead — pinned by the exemption slot
+        // below.
+        // The two global preset lists. No page offers an EDITOR for them any
+        // more — the Columns page's editor rows went away when templates became
+        // the authoring surface — and the keys stay config-backed as the
+        // engine's fallback vocabulary. Two scrolling pages still READ them, to
+        // bound their preset-index spin boxes, so owning them would make those
+        // pages' Reset rewrite values the pages do not edit.
+        qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::presetColumnWidthsKey()),
+        qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::presetWindowHeightsKey()),
     };
     return kSet;
 }
@@ -129,9 +138,9 @@ private Q_SLOTS:
     }
 
     /// The other direction, over the swept groups: every key the schema
-    /// declares under Scrolling, Scrolling.Behavior, or Rendering must be
-    /// owned by exactly one page, except the master switch listed in
-    /// deliberatelyUnowned().
+    /// declares under Scrolling, Scrolling.Behavior, Scrolling.TabIndicator,
+    /// Scrolling.DropIndicator or Rendering must be owned by exactly one
+    /// page, except the entries listed in deliberatelyUnowned().
     ///
     /// The scrolling pages also SHOW two settings they deliberately do not
     /// own — Tiling.Gaps/SmartGaps, forwarded from the shared gaps group and
@@ -163,10 +172,9 @@ private Q_SLOTS:
         // same reason: its Gpu key shipped without a manifest owner (no
         // dirty mark, per-page Reset and Discard silently skipped it)
         // precisely because this sweep did not cover the group.
-        for (const QString& group :
-             {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
-              ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup(),
-              ConfigDefaults::renderingGroup()}) {
+        for (const QString& group : {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
+                                     ConfigDefaults::scrollingTabIndicatorGroup(),
+                                     ConfigDefaults::scrollingDropIndicatorGroup(), ConfigDefaults::renderingGroup()}) {
             const auto it = schema.groups.constFind(group);
             QVERIFY2(it != schema.groups.constEnd(), qPrintable(group));
             for (const PhosphorConfig::KeyDef& def : *it) {
@@ -208,6 +216,34 @@ private Q_SLOTS:
         }
         stale.sort();
         QVERIFY2(stale.isEmpty(), qPrintable(stale.join(QLatin1String("; "))));
+    }
+
+    /// The reset-exemption contract for the mode enable master switches:
+    /// every exempt key must be manifest-owned (a dangling exemption means the
+    /// dirty-tracking fix regressed back to unowned), and all three placement
+    /// switches must be exempt (an enable key missing here would let a page
+    /// Reset flip its mode off).
+    void resetExemptEnableKeysAreOwnedAndComplete()
+    {
+        QSet<QString> owned;
+        const auto& manifest = SettingsController::pageOwnedConfigKeys();
+        for (auto it = manifest.constBegin(); it != manifest.constEnd(); ++it) {
+            for (const auto& gk : it.value()) {
+                owned.insert(qualify(gk.first, gk.second));
+            }
+        }
+
+        const auto& exempt = SettingsController::resetExemptModeEnableKeys();
+        QCOMPARE(exempt.size(), 3);
+        QSet<QString> exemptQualified;
+        for (const auto& gk : exempt) {
+            const QString qualified = qualify(gk.first, gk.second);
+            exemptQualified.insert(qualified);
+            QVERIFY2(owned.contains(qualified), qPrintable(qualified));
+        }
+        QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::snappingGroup(), ConfigDefaults::enabledKey())));
+        QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::tilingGroup(), ConfigDefaults::enabledKey())));
+        QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::enabledKey())));
     }
 };
 

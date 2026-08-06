@@ -5,8 +5,13 @@
 #
 # Passive data + geometry layer: Zone, Layout, ZoneDetector, ZoneHighlighter,
 # layout JSON serialization, and the IZoneDetector / IZoneLayoutRegistry abstract
-# contracts. Implements PhosphorLayout::ILayoutSource so editor / settings
-# code can render layout previews without depending on the daemon.
+# contracts. It also owns the native scrolling template trio — ScrollingTemplate
+# (the object plus its JSON round trip and normalization), ScrollingTemplateStore
+# (the per-user/system file store) and ScrollingTemplateSource (its
+# ILayoutSource projection) — so scrolling templates are a first-class layout
+# family beside manual layouts. Implements PhosphorLayout::ILayoutSource so
+# editor / settings code can render layout previews without depending on the
+# daemon.
 #
 # This library does NOT include the runtime engine that snaps windows to
 # zones (that's phosphor-snap, future work). It also does NOT include
@@ -98,6 +103,9 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/ZonesLayoutSource.h
     include/PhosphorZones/ZonesLayoutSourceFactory.h
     include/PhosphorZones/AssignmentEntry.h
+    include/PhosphorZones/ScrollingTemplate.h
+    include/PhosphorZones/ScrollingTemplateStore.h
+    include/PhosphorZones/ScrollingTemplateSource.h
     include/PhosphorZones/ContextResolveKey.h
     include/PhosphorZones/LayoutRegistry.h
     include/PhosphorZones/LayoutFactory.h
@@ -119,6 +127,9 @@ set(phosphorzones_SRCS
     src/zoneslayoutsourcefactory.cpp
     src/zoneslogging.h
     src/zoneslogging.cpp
+    src/scrollingtemplate.cpp
+    src/scrollingtemplatestore.cpp
+    src/scrollingtemplatesource.cpp
     src/interfaces.cpp
     src/layoutregistry.cpp
     src/layoutregistry_assignments.cpp

@@ -212,6 +212,10 @@ Window {
         property bool fontUnderline: false
         property bool fontStrikeout: false
         property bool locked: false
+        // Captions the card as a native scrolling template rather than a zone
+        // layout. Same declare-and-forward contract as the colors above:
+        // pushLayoutOsdContent writes it on every layout-osd show.
+        property bool isTemplate: false
         property bool disabled: false
         property string disabledReason: ""
         // Overlay glyph for the disabled-style card; the daemon overwrites
@@ -345,6 +349,7 @@ Window {
                 fontUnderline: osdSlot.fontUnderline
                 fontStrikeout: osdSlot.fontStrikeout
                 locked: osdSlot.locked
+                isTemplate: osdSlot.isTemplate
                 disabled: osdSlot.disabled
                 disabledReason: osdSlot.disabledReason
                 disabledIcon: osdSlot.disabledIcon

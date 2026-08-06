@@ -821,6 +821,7 @@ Q_SIGNALS:
     void scrollingPresetColumnWidthsChanged();
     void scrollingPresetWindowHeightsChanged();
 
+    void defaultScrollingTemplateChanged();
     void scrollingWheelFocusEnabledChanged();
     void scrollingWheelFocusInvertedChanged();
 

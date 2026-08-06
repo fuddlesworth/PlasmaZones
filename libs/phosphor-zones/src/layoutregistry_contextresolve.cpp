@@ -19,6 +19,7 @@
 #include "layoutregistry_rulehelpers_p.h"
 #include "zoneslogging.h"
 
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
 
@@ -113,12 +114,13 @@ bool matchPinsFieldPositively(const PWR::MatchExpression& match, PWR::Field fiel
 std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
                                                                       const QString& activity) const
 {
-    // Resolution is per-slot. There are three independent slots — engine mode,
-    // snapping layout, tiling algorithm — each resolved separately, so a
-    // layout-only rule (a SetSnappingLayout or SetTilingAlgorithm with NO
-    // SetEngineMode) sets the layout for its engine in this context WITHOUT
-    // forcing the engine mode. The engine mode is the global default's (or
-    // another rule's); the layout slot is just filled.
+    // Resolution is per-slot. There are four independent slots — engine mode,
+    // snapping layout, tiling algorithm, scrolling template — each resolved
+    // separately, so a payload-only rule (a SetSnappingLayout,
+    // SetTilingAlgorithm or SetScrollingTemplate with NO SetEngineMode) sets
+    // the payload for its engine in this context WITHOUT forcing the engine
+    // mode. The engine mode is the global default's (or another rule's); the
+    // payload slot is just filled.
     //
     // The winner per slot is simply the HIGHEST-PRIORITY matching rule carrying
     // that slot's action, ties broken by list order. There is no specificity
@@ -131,12 +133,13 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     //
     // If no slot matched at all it's a genuine miss (nullopt) and the caller
     // routes to the global default. If at least one slot matched, the entry's
-    // base is the engine-mode rule (mode + the layout tokens that rule itself
-    // carries, preserving mode-toggle losslessness); the per-slot layout
-    // winners then override the snapping-layout / tiling-algorithm fields. When
-    // only a layout rule matched (no engine-mode rule), the base is the global
-    // default for this context, so the resolved mode is the default's and the
-    // layout rule merely fills its slot.
+    // base is the engine-mode rule (mode + the payload tokens that rule itself
+    // carries, preserving mode-toggle losslessness); the per-slot payload
+    // winners then override the snapping-layout / tiling-algorithm /
+    // scrolling-template fields. When only a payload rule matched (no
+    // engine-mode rule), the base is the global default for this context, so
+    // the resolved mode is the default's and the payload rule merely fills its
+    // slot.
     //
     // Hot-path cache via the shared revision-invalidated memoizer. The linear
     // walk is O(N rules × M predicates per match); overlay/OSD callers issue it
@@ -238,16 +241,18 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             const PWR::Rule* modeRule = slotMatch(hasEngineModeAction);
             const PWR::Rule* snapRule = slotMatch(hasSnappingLayoutAction);
             const PWR::Rule* algoRule = slotMatch(hasTilingAlgorithmAction);
+            const PWR::Rule* templateRule = slotMatch(hasScrollingTemplateAction);
 
-            if (modeRule == nullptr && snapRule == nullptr && algoRule == nullptr) {
+            if (modeRule == nullptr && snapRule == nullptr && algoRule == nullptr && templateRule == nullptr) {
                 return std::nullopt; // genuine miss — the caller routes to the default
             }
 
-            // The engine-mode rule decides the mode (and carries its own layout
-            // tokens, preserving mode-toggle losslessness); the per-slot layout
-            // winners fill their own field. Each slot independently took the
-            // highest-priority matching rule, so the layout slots track their
-            // own winner regardless of the engine-mode rule.
+            // The engine-mode rule decides the mode (and carries its own
+            // payload tokens, preserving mode-toggle losslessness); the
+            // per-slot payload winners fill their own field. Each slot
+            // independently took the highest-priority matching rule, so the
+            // payload slots track their own winner regardless of the
+            // engine-mode rule.
             RuleSlotResolution resolved;
             if (modeRule != nullptr) {
                 resolved.modeEntry = entryFromRuleMatchActions(*modeRule);
@@ -257,6 +262,9 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             }
             if (algoRule != nullptr) {
                 resolved.tilingAlgorithm = entryFromRuleMatchActions(*algoRule).tilingAlgorithm;
+            }
+            if (templateRule != nullptr) {
+                resolved.scrollingTemplate = entryFromRuleMatchActions(*templateRule).scrollingTemplateLayout;
             }
             return resolved;
         });
@@ -279,7 +287,32 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     if (rules->tilingAlgorithm) {
         entry.tilingAlgorithm = *rules->tilingAlgorithm;
     }
+    if (rules->scrollingTemplate) {
+        entry.scrollingTemplateLayout = *rules->scrollingTemplate;
+    }
     return entry;
+}
+
+QString LayoutRegistry::rulesVisibleActiveLayoutId(const QString& screenId, int virtualDesktop,
+                                                   const QString& activity) const
+{
+    // The assignment id, except that a Scrolling context with a resolved
+    // template substitutes the PREFIXED "scrolling:<templateUuid>" — parity
+    // with autotile's "autotile:<algorithmId>" stamp, so a rule can target
+    // one specific template. Recursion-safe: scrollingTemplateForContext
+    // re-enters the same memoized resolveAssignmentEntry that
+    // assignmentIdForScreen just consulted, and the cascade root never calls
+    // back into the gap/lock/overlay resolvers. The bare sentinel therefore
+    // now means "scrolling with no template" to rules; "any scrolling
+    // screen" is a Mode leaf.
+    QString id = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    if (PhosphorLayout::LayoutId::isScrolling(id)) {
+        const ScrollingTemplate templ = scrollingTemplateForContext(screenId, virtualDesktop, activity);
+        if (templ.isValid()) {
+            id = PhosphorLayout::LayoutId::makeScrollingId(templ.id.toString());
+        }
+    }
+    return id;
 }
 
 ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, int virtualDesktop,
@@ -309,9 +342,9 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
     // The active layout AND the screen orientation are folded into the cache key
     // (see contextCacheKeyToken) so a Field::ActiveLayout / Field::ScreenOrientation
     // gap rule refreshes when either changes; both are stamped onto the query below.
-    // Safe from recursion: assignmentIdForScreen routes through resolveAssignmentEntry,
+    // Safe from recursion: rulesVisibleActiveLayoutId routes through resolveAssignmentEntry,
     // which never calls back into the gap resolver.
-    const QString activeLayoutId = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
     const QString orientationToken = screenOrientationToken(screenId);
 
     // Hot-path cache via the shared revision-invalidated memoizer: the geometry
@@ -475,7 +508,7 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
     // Active layout + orientation folded into the cache key + stamped onto the
     // query, so a Field::ActiveLayout / ScreenOrientation lock rule works and
     // refreshes when either changes.
-    const QString activeLayoutId = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
     const QString orientationToken = screenOrientationToken(screenId);
 
     // Hot-path cache via the shared revision-invalidated memoizer: the lock
@@ -612,7 +645,7 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
     // Active layout + orientation folded into the cache key + stamped onto the
     // query, so a Field::ActiveLayout / ScreenOrientation overlay rule works and
     // refreshes when either changes.
-    const QString activeLayoutId = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
     const QString orientationToken = screenOrientationToken(screenId);
 
     return resolveCachedContext(
@@ -726,7 +759,7 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     // screen / layout changes via the daemon's updateEngineScreens, not the hot
     // per-cursor path. Being uncached lets us stamp the active layout AND the
     // screen orientation onto the query without folding either into a cache key
-    // (no cached entry to go stale). Safe from recursion: assignmentIdForScreen
+    // (no cached entry to go stale). Safe from recursion: rulesVisibleActiveLayoutId
     // routes through resolveAssignmentEntry, which never calls this resolver.
     // Mode IS stamped (same rationale as resolveContextScrollingParams): the
     // resolver only runs for autotile screens, and a user rule pinning
@@ -734,7 +767,7 @@ ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& sc
     // never fire against an unstamped query.
     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QStringLiteral("tiling"));
     stampScreenOrientation(query, screenId);
-    query.activeLayout = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
     // Filtered resolve, but with NO managed catch-all exclusion (unlike
     // resolveContextGaps'): the baseline rule carries only gap/default slots,
     // never tiling params, so there is no catch-all to exclude here. The
@@ -818,7 +851,7 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     // never fire against an unstamped query.
     PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QStringLiteral("scrolling"));
     stampScreenOrientation(query, screenId);
-    query.activeLayout = assignmentIdForScreen(screenId, virtualDesktop, activity);
+    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
     // Filtered resolve with no managed catch-all exclusion: same baseline-slot
     // rationale as the tiling-param resolver above.
     const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [](const PWR::Rule& r) {
@@ -1061,7 +1094,7 @@ const PhosphorRules::Rule* LayoutRegistry::findExactContextRule(const QString& s
     // LockContext alongside the assignment slots — is still the rule that
     // assigns this context, so it is claimed like any other. The gate used
     // to sit on the shape fallback because the rebuild paths emit only the
-    // three slot actions and would strip the rest; they now carry
+    // assignment slot actions and would strip the rest; they now carry
     // non-assignment actions across (carryOverNonAssignmentActions), so the
     // rebuild is lossless and refusing to claim buys nothing. It also cost
     // something: an unclaimed mixed rule sent upsertAssignmentRule down the

@@ -18,6 +18,7 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorScreens/Manager.h>
@@ -25,6 +26,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -48,9 +50,11 @@ void Daemon::initializeUnifiedController()
     // Registry injected explicitly (not reached via engine->algorithmRegistry()):
     // keeps DI contract visible at the call site and lets unit tests stub the
     // engine without losing algorithm enumeration.
+    // No Qt parent: unique_ptr owns the lifetime, per the convention the
+    // constructor's init list states (daemon.cpp).
     m_unifiedLayoutController =
         std::make_unique<UnifiedLayoutController>(m_layoutManager.get(), m_settings.get(), m_screenManager.get(),
-                                                  m_algorithmRegistry.get(), m_autotileEngine.get(), this);
+                                                  m_algorithmRegistry.get(), m_autotileEngine.get(), nullptr);
 
     // Share the daemon's bundle-owned autotile source with the controller
     // so its internal layout cache's autotile half is populated from the
@@ -131,7 +135,7 @@ void Daemon::connectLayoutSignals()
     // start() calls this one FIRST (lifecycle.cpp), so the clear lives here
     // and connectOverlaySignals() only appends.
     //
-    // Scope note: this list covers the four connections below.
+    // Scope note: this list covers every connection appended below.
     // initializeAutotile()'s eight shortcut lambdas get the same treatment
     // from their own list, because start() calls it BEFORE this function
     // clears here, so a shared list would drop them right after install.
@@ -143,6 +147,33 @@ void Daemon::connectLayoutSignals()
         disconnect(c);
     }
     m_restartScopedConnections.clear();
+    // Native template edits (store CRUD: save, delete, duplicate, rescan)
+    // re-derive the engine screens so a scrolling screen whose assigned
+    // template changed gets its vocabulary and blueprint re-pushed
+    // (updateScrollingScreens runs per pass; the identical-set retile makes
+    // the push take effect). The pre-pivot zone-layout-edit watcher is gone
+    // with the mined-vocabulary model: a LAYOUT edit can no longer affect a
+    // template. The recompute is cheap and store mutations are user-paced,
+    // so no per-screen template-id matching is needed here.
+    //
+    // The per-screen active-assignment snapshot is re-diffed for the same
+    // reason: store CRUD can retarget or clear a context's template without
+    // touching its assignment id, and the KCM apply's template-only OSD gate
+    // reads the snapshot's templateId. Its changed-set return is ignored, as
+    // at the other refresh-only call sites.
+    if (m_scrollingTemplateStore) {
+        m_restartScopedConnections << connect(m_scrollingTemplateStore.get(),
+                                              &PhosphorZones::ScrollingTemplateStore::templatesChanged, this, [this]() {
+                                                  updateEngineScreens();
+                                                  // Refresh the snapshot's templateId — see above.
+                                                  diffActiveAssignments();
+                                                  // Relay to the D-Bus surface so the settings app
+                                                  // refreshes its template views on store CRUD.
+                                                  if (m_layoutAdaptor) {
+                                                      Q_EMIT m_layoutAdaptor->scrollingTemplatesChanged();
+                                                  }
+                                              });
+    }
     m_restartScopedConnections << connect(
         m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
         [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
@@ -171,7 +202,10 @@ void Daemon::connectLayoutSignals()
             }
             const QString assignmentId =
                 m_layoutManager->assignmentIdForScreen(focusedScreenId, curDesktop, currentActivity());
-            m_unifiedLayoutController->syncFromExternalState(assignmentId);
+            // Template substitution for the "scrolling:" sentinel — see
+            // displayIdForAssignment.
+            m_unifiedLayoutController->syncFromExternalState(
+                m_unifiedLayoutController->displayIdForAssignment(focusedScreenId, assignmentId));
         });
 
     // Connect unified layout controller signals for OSD display
@@ -212,6 +246,27 @@ void Daemon::connectLayoutSignals()
                 }
             });
 
+    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::scrollingTemplateApplied, this,
+            [this](const QString& templateId, const QString& screenId) {
+                if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
+                    m_overlayService->hideSnapAssist();
+                }
+                // Startup gate + deferred show: same rationale as the
+                // layoutApplied handler above.
+                if (!m_running || !m_scrollingTemplateStore) {
+                    return;
+                }
+                if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+                    QTimer::singleShot(0, this, [this, templateId, screenId]() {
+                        if (!m_scrollingTemplateStore) {
+                            return;
+                        }
+                        showScrollingTemplateOsd(m_scrollingTemplateStore->templateById(QUuid::fromString(templateId)),
+                                                 screenId);
+                    });
+                }
+            });
+
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied, this,
             [this](const QString& algorithmName, int windowCount) {
                 Q_UNUSED(windowCount)
@@ -249,7 +304,7 @@ void Daemon::connectLayoutSignals()
     // ScreenModeRouter + AssignmentEntry::Mode, and the router is a plain
     // query class with no change signal — a mode switch normally lands as an
     // applied layout (the toggle-autotile handler routes through
-    // applyLayoutById), so these two are the mode-change edge the sheet can
+    // applyLayoutById), so these three are the mode-change edge the sheet can
     // observe. The one exception, the bare suppressed-default autotile entry
     // written directly, calls refreshCheatsheetIfVisible itself at its write
     // site. refreshCheatsheetIfVisible re-resolves the mode for the
@@ -262,6 +317,11 @@ void Daemon::connectLayoutSignals()
             [this](PhosphorZones::Layout*) {
                 refreshCheatsheetIfVisible();
             });
+    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::scrollingTemplateApplied, this,
+            [this](const QString&, const QString&) {
+                refreshCheatsheetIfVisible();
+            });
+
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied, this,
             [this](const QString&, int) {
                 refreshCheatsheetIfVisible();

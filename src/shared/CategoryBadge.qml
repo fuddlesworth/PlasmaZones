@@ -6,14 +6,15 @@ import QtQuick.Controls
 import org.kde.kirigami as Kirigami
 
 /**
- * Category badge for layout type (Manual/Auto/Dynamic layouts).
+ * Category badge for layout type (Manual/Auto/Dynamic layouts, templates).
  * - category 0 (Manual): shows "Auto" or "Manual" based on autoAssign flag
  * - category 1 (Dynamic): shows "Dynamic" for autotile algorithm entries
+ * - category 2 (Template): shows "Template" for scrolling template entries
  */
 Rectangle {
     id: root
 
-    property int category: 0 // 0=Manual, 1=Autotile (matches LayoutCategory in C++)
+    property int category: 0 // 0=Manual, 1=Autotile, 2=ScrollingTemplate (matches LayoutCategory in C++)
     property bool autoAssign: false
     // Forces the badge into the "Auto" appearance regardless of the per-layout
     // autoAssign flag, used when the "Auto-assign for all layouts" master toggle
@@ -22,6 +23,8 @@ Rectangle {
     readonly property bool effectiveAutoAssign: autoAssign || globalAutoAssign
     // Convenience: true when this entry is a dynamic tiling algorithm
     readonly property bool isDynamic: category === 1
+    // Convenience: true when this entry is a native scrolling template
+    readonly property bool isTemplate: category === 2
     readonly property real heightScale: 0.9
     readonly property real backgroundOpacity: 0.15
     // 0.7 matches the sibling badge recipe (AspectRatioBadge) and keeps the
@@ -33,7 +36,7 @@ Rectangle {
     implicitHeight: Kirigami.Units.gridUnit * heightScale
     radius: Kirigami.Units.smallSpacing / 2
     color: {
-        if (root.isDynamic || root.effectiveAutoAssign)
+        if (root.isDynamic || root.isTemplate || root.effectiveAutoAssign)
             return Qt.alpha(Kirigami.Theme.highlightColor, backgroundOpacity);
 
         return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, backgroundOpacity);
@@ -47,12 +50,15 @@ Rectangle {
             if (root.isDynamic)
                 return i18nc("@label:badge", "Dynamic");
 
+            if (root.isTemplate)
+                return i18nc("@label:badge", "Template");
+
             return root.effectiveAutoAssign ? i18nc("@label:badge", "Auto") : i18nc("@label:badge", "Manual");
         }
         font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
         font.weight: Font.Medium
         // Per-category label hues were deliberately retired — all states use the plain text color.
         color: Kirigami.Theme.textColor
-        opacity: (root.isDynamic || root.effectiveAutoAssign) ? 0.8 : root.textOpacity
+        opacity: (root.isDynamic || root.isTemplate || root.effectiveAutoAssign) ? 0.8 : root.textOpacity
     }
 }

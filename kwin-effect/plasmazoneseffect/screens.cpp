@@ -159,6 +159,18 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
     if (!w) {
         return QString();
     }
+    // The id is built ONLY when the override below can actually consult it,
+    // preserving the no-scrolling session's pure positional path (no id-cache
+    // probe per call). An empty id reaching the overload means "no id
+    // available" and skips the override exactly as this short-circuit does.
+    return getWindowScreenId(w, m_tilingHandler->hasScrollingScreens() ? getWindowId(w) : QString());
+}
+
+QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w, const QString& windowId) const
+{
+    if (!w) {
+        return QString();
+    }
     // Engine-authoritative override for scroll-managed windows: the strip
     // parks off-viewport columns and hidden tabs ENTIRELY outside their
     // screen rect, so a parked frame's centre lands inside a NEIGHBOUR
@@ -172,8 +184,8 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
     // scrollTrackedScreenFor itself. m_tilingHandler is constructed first
     // and lives for the effect's lifetime (the VS re-resolve loop below
     // derefs it unguarded for the same reason).
-    if (m_tilingHandler->hasScrollingScreens()) {
-        const QString tracked = m_tilingHandler->scrollTrackedScreenFor(getWindowId(w));
+    if (!windowId.isEmpty() && m_tilingHandler->hasScrollingScreens()) {
+        const QString tracked = m_tilingHandler->scrollTrackedScreenFor(windowId);
         if (!tracked.isEmpty()) {
             return tracked;
         }

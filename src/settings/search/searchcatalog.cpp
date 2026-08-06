@@ -91,8 +91,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("layout"), PhosphorI18n::tr("zone"), PhosphorI18n::tr("grid"),
                              PhosphorI18n::tr("preset"), PhosphorI18n::tr("template"),
                              PhosphorI18n::tr("aspect ratio")});
-    // The LayoutManageCard (import / open folder) carries this anchor on both
-    // the layouts and the algorithms view of the page.
+    // The LayoutManageCard (import / open folder) carries this anchor on all
+    // three rotating views of the page: layouts, algorithms and templates.
     addSection(search, QStringLiteral("layouts"), QStringLiteral("manageLayouts"), PhosphorI18n::tr("User layouts"));
 
     // Snapping
@@ -116,7 +116,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("snapping-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect"), PhosphorI18n::tr("glow")});
 
-    // Tiling
+    // Tiling & scrolling
     search->setPageKeywords(QStringLiteral("tiling-behavior"),
                             {PhosphorI18n::tr("tile"), PhosphorI18n::tr("tiling"), PhosphorI18n::tr("auto"),
                              PhosphorI18n::tr("gap"), PhosphorI18n::tr("spacing")});
@@ -125,7 +125,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("spiral"), PhosphorI18n::tr("master"), PhosphorI18n::tr("stack")});
     search->setPageKeywords(QStringLiteral("scrolling-columns"),
                             {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("column"),
-                             PhosphorI18n::tr("width"), PhosphorI18n::tr("preset"), PhosphorI18n::tr("tab")});
+                             PhosphorI18n::tr("width"), PhosphorI18n::tr("preset"), PhosphorI18n::tr("tab"),
+                             PhosphorI18n::tr("template")});
     // "tab" is deliberately on BOTH scrolling pages: the Columns page decides
     // which columns open tabbed, this one decides how a tabbed column is
     // marked, and a user searching "tab" wants to be offered both.
@@ -147,7 +148,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
     search->setPageKeywords(QStringLiteral("tiling-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
-                             PhosphorI18n::tr("key")});
+                             PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
+    search->setPageKeywords(QStringLiteral("scrolling-shortcuts"),
+                            {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
+                             PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key"), PhosphorI18n::tr("template")});
 
     // Animations
     search->setPageKeywords(QStringLiteral("animations-general"),
@@ -598,7 +602,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Fixed width"), {PhosphorI18n::tr("width"), PhosphorI18n::tr("pixels")});
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultColumnWidthPresetIndex"),
                PhosphorI18n::tr("Preset width"),
-               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("width"), PhosphorI18n::tr("index")});
+               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("width"), PhosphorI18n::tr("index"),
+                PhosphorI18n::tr("template")});
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultColumnDisplay"),
                PhosphorI18n::tr("Open new columns as"),
                {PhosphorI18n::tr("tabbed"), PhosphorI18n::tr("tabs"), PhosphorI18n::tr("column")});
@@ -609,15 +614,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Fixed height"), {PhosphorI18n::tr("height"), PhosphorI18n::tr("pixels")});
     addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultWindowHeightPresetIndex"),
                PhosphorI18n::tr("Preset height"),
-               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("height"), PhosphorI18n::tr("index")});
-    addSection(search, QStringLiteral("scrolling-columns"), QStringLiteral("scrollingPresets"),
-               PhosphorI18n::tr("Width and height presets"));
-    addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("presetColumnWidths"),
-               PhosphorI18n::tr("Column widths"),
-               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("width"), PhosphorI18n::tr("cycle")});
-    addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("presetWindowHeights"),
-               PhosphorI18n::tr("Window heights"),
-               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("height"), PhosphorI18n::tr("cycle")});
+               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("height"), PhosphorI18n::tr("index"),
+                PhosphorI18n::tr("template")});
+    addSection(search, QStringLiteral("scrolling-columns"), QStringLiteral("scrollingDefaultTemplate"),
+               PhosphorI18n::tr("Layout template"));
+    addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultScrollingTemplate"),
+               PhosphorI18n::tr("Default template"),
+               {PhosphorI18n::tr("template"), PhosphorI18n::tr("preset"), PhosphorI18n::tr("columns"),
+                PhosphorI18n::tr("scrolling")});
 
     // ── Scrolling → Tabs ──
     // Three sections mirroring the page's three cards, so a search hit lands
@@ -846,7 +850,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Fixed width"), {PhosphorI18n::tr("width"), PhosphorI18n::tr("pixels")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("simpleDefaultColumnWidthPresetIndex"),
                PhosphorI18n::tr("Preset width"),
-               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("width"), PhosphorI18n::tr("index")});
+               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("width"), PhosphorI18n::tr("index"),
+                PhosphorI18n::tr("template")});
     // The simple page's Tabs card — the three tab-indicator rows it surfaces.
     // Their own anchors (simple*) because the row ids must be unique per page
     // and the advanced Tabs leaf owns the unprefixed ones.
@@ -1062,6 +1067,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Snapping Quick Shortcuts"));
     addSection(search, QStringLiteral("tiling-shortcuts"), QStringLiteral("quickShortcuts"),
                PhosphorI18n::tr("Tiling Quick Shortcuts"));
+    addSection(search, QStringLiteral("scrolling-shortcuts"), QStringLiteral("quickShortcuts"),
+               PhosphorI18n::tr("Scrolling Quick Shortcuts"));
 
     // Shaders (shared ShaderBrowserPage) + animation presets / motion sets /
     // decoration sets. Every page that hosts a ShaderBrowserPage carries its

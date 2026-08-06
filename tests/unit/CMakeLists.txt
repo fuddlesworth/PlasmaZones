@@ -409,6 +409,9 @@ target_link_libraries(test_settings_perscreen_scrolling PRIVATE Qt6::Test Qt6::C
 add_test(NAME test_settings_perscreen_scrolling COMMAND test_settings_perscreen_scrolling)
 
 # Ownership invariants for SettingsController's per-page config manifest.
+# Source lives under settings/ rather than config/, because it compiles the
+# settings app's page-topology TU. It is grouped under this banner because
+# what it asserts is config-key ownership, and there is no settings/ banner.
 # Compiles the topology TU directly (SettingsController lives in the settings
 # executable, not a library) and only ever calls its static accessors, so no
 # moc/vtable for the class itself is needed.
@@ -555,6 +558,21 @@ target_link_libraries(test_scrolling_shortcut_parity
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
 add_test(NAME test_scrolling_shortcut_parity COMMAND test_scrolling_shortcut_parity)
 
+# UnifiedLayoutController Templates (scrolling) semantics: the sentinel →
+# template display-id substitution and applyEntry's capability-gated routing.
+# Compiles the daemon controller source directly because it lives in the
+# plasmazonesd executable, not plasmazones_core; the null-dependency
+# construction (no ScreenManager / registry / engine) keeps it runnable
+# headless.
+add_executable(test_unified_layout_controller_scrolling
+    daemon/test_unified_layout_controller_scrolling.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/unifiedlayoutcontroller.cpp
+)
+target_include_directories(test_unified_layout_controller_scrolling PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_unified_layout_controller_scrolling
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_unified_layout_controller_scrolling COMMAND test_unified_layout_controller_scrolling)
+
 # Shortcut teardown contract (discussion #851): unregisterShortcuts() must not
 # purge persistent bindings from the backend. Same daemon-source compilation
 # as test_cheatsheet_compression, plus a backend injected via
@@ -578,11 +596,26 @@ p_add_test(test_layout_zones core/layout/test_layout_zones.cpp)
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_layoutmanager_persistence core/layout/test_layoutmanager_persistence.cpp)
 p_add_test(test_layoutmanager_cycling core/layout/test_layoutmanager_cycling.cpp)
+p_add_test(test_scrollingtemplate_store core/layout/test_scrollingtemplate_store.cpp)
+# The scrolling-template schema is author-time only (no loader compiles it), so
+# this target reads it straight out of the source tree and runs it through the
+# same validator engine the runtime-gated schemas use. PhosphorZones is named
+# per this file's convention: the test constructs ScrollingTemplate and drives
+# ScrollingTemplateStore directly rather than reaching them through
+# plasmazones_core.
+target_link_libraries(test_scrollingtemplate_store PRIVATE PhosphorFsLoader::PhosphorFsLoader
+                                                           PhosphorZones::PhosphorZones)
+target_compile_definitions(test_scrollingtemplate_store PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+
 p_add_test(test_layoutmanager_assignment core/layout/test_layoutmanager_assignment.cpp)
+# The AssignmentEntry-shape half of the suite above, split off at its P6 banner
+# when the single file passed the 1150-line ceiling. Shares the same fixture.
+p_add_test(test_layoutmanager_assignment_entry core/layout/test_layoutmanager_assignment_entry.cpp)
 p_add_test(test_layoutmanager_default_synthesis core/layout/test_layoutmanager_default_synthesis.cpp)
 # The shared fixture header holds a Q_OBJECT base class; AUTOMOC only scans
-# headers listed as target sources, so both targets must list it explicitly.
+# headers listed as target sources, so every target must list it explicitly.
 target_sources(test_layoutmanager_assignment PRIVATE core/layout/LayoutManagerAssignmentFixture.h)
+target_sources(test_layoutmanager_assignment_entry PRIVATE core/layout/LayoutManagerAssignmentFixture.h)
 target_sources(test_layoutmanager_default_synthesis PRIVATE core/layout/LayoutManagerAssignmentFixture.h)
 p_add_test(test_layout_registry_cache core/layout/test_layout_registry_cache.cpp)
 
@@ -610,11 +643,20 @@ target_link_libraries(test_rule_cascade_fidelity
 add_test(NAME test_rule_cascade_fidelity COMMAND test_rule_cascade_fidelity)
 
 # Context-domain half of the cascade proof (gaps, orientation, active layout,
-# tiling params, overlay, lock, per-mode gap rules).
+# tiling and scrolling params, exactContextEntry).
 add_executable(test_rule_cascade_context core/test_rule_cascade_context.cpp)
 target_link_libraries(test_rule_cascade_context
     PRIVATE Qt6::Test Qt6::Core PhosphorRules::PhosphorRules PhosphorZones::PhosphorZones plasmazones_core)
 add_test(NAME test_rule_cascade_context COMMAND test_rule_cascade_context)
+
+# The overlay / lock / mode-routing sections of the same context proof, split
+# off at the overlay banner when the single file passed the 1150-line ceiling.
+# Shares RuleCascadeFixture.h with the two targets above, which is a plain
+# (non-Q_OBJECT) harness and so needs no target_sources entry.
+add_executable(test_rule_cascade_overlay_lock core/test_rule_cascade_overlay_lock.cpp)
+target_link_libraries(test_rule_cascade_overlay_lock
+    PRIVATE Qt6::Test Qt6::Core PhosphorRules::PhosphorRules PhosphorZones::PhosphorZones plasmazones_core)
+add_test(NAME test_rule_cascade_overlay_lock COMMAND test_rule_cascade_overlay_lock)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Virtual Screen Tests (ID utilities, data model, PhosphorScreens::ScreenManager)
@@ -984,10 +1026,6 @@ add_executable(test_compositor_bridge dbus/test_compositor_bridge.cpp)
 target_link_libraries(test_compositor_bridge PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)
 
-# XML ↔ adaptor contract tripwire: the dbus/*.xml files are the installed
-# public contract while the adaptors are handwritten — this compares each
-# adaptor's staticMetaObject (bus-exposed slots/invokables, signals,
-# properties) against its XML so drift fails CI instead of shipping.
 # A blanket disconnect(sender, &Signal, this, nullptr) removes EVERY connection
 # on that triple, so it is only correct above every connect it re-establishes.
 # A second one placed next to a later connect silently severs its siblings.
@@ -998,6 +1036,10 @@ target_compile_definitions(test_connect_sweep_ordering
 target_link_libraries(test_connect_sweep_ordering PRIVATE Qt6::Test Qt6::Core)
 add_test(NAME test_connect_sweep_ordering COMMAND test_connect_sweep_ordering)
 
+# XML ↔ adaptor contract tripwire: the dbus/*.xml files are the installed
+# public contract while the adaptors are handwritten — this compares each
+# adaptor's staticMetaObject (bus-exposed slots/invokables, signals,
+# properties) against its XML so drift fails CI instead of shipping.
 add_executable(test_dbus_contract_sync dbus/test_dbus_contract_sync.cpp)
 target_compile_definitions(test_dbus_contract_sync
                            PRIVATE PLASMAZONES_DBUS_XML_DIR="${CMAKE_SOURCE_DIR}/dbus")
@@ -1038,6 +1080,15 @@ add_executable(test_tiling_adaptor_panel_gate dbus/test_tiling_adaptor_panel_gat
 target_link_libraries(test_tiling_adaptor_panel_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus
                                                                  plasmazones_core)
 add_test(NAME test_tiling_adaptor_panel_gate COMMAND test_tiling_adaptor_panel_gate)
+
+# Emit-on-change gate for TilingAdaptor::setActiveLayouts. The daemon pushes
+# the rules-visible per-screen active-layout map from every updateEngineScreens
+# pass, so identical pushes must collapse to zero broadcasts while a changed map
+# reaches the wire once and reads back through the property getter.
+add_executable(test_tiling_adaptor_active_layouts dbus/test_tiling_adaptor_active_layouts.cpp)
+target_link_libraries(test_tiling_adaptor_active_layouts PRIVATE Qt6::Test Qt6::Core Qt6::DBus
+                                                                 plasmazones_core)
+add_test(NAME test_tiling_adaptor_active_layouts COMMAND test_tiling_adaptor_active_layouts)
 
 # Truth-table guard for WindowDragAdaptor::computeDragPolicy - pins the
 # (snap, autotile, context) matrix so the daemon's drag routing decision
@@ -1530,6 +1581,14 @@ add_executable(test_layout_adaptor_signals dbus/test_layout_adaptor_signals.cpp)
 target_link_libraries(test_layout_adaptor_signals PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                       PhosphorTiles::PhosphorTiles)
 add_test(NAME test_layout_adaptor_signals COMMAND test_layout_adaptor_signals)
+
+# LayoutAdaptor scrolling-template surface: the set/get pair's validation and
+# clear forms, the getter's mode gate, and the {layoutId, scrollingTemplate}
+# value shape of the flat batch getters. Same no-bus fixture as the signals
+# test above.
+add_executable(test_layout_adaptor_scrolling_template dbus/test_layout_adaptor_scrolling_template.cpp)
+target_link_libraries(test_layout_adaptor_scrolling_template PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_layout_adaptor_scrolling_template COMMAND test_layout_adaptor_scrolling_template)
 
 # Micro-benchmarks for D-Bus adaptor hot paths. Drives the
 # refactor/dbus-performance branch (SettingsAdaptor value-equality guard,

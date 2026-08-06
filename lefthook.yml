@@ -33,6 +33,7 @@ pre-commit:
       # matcher, so the paths are enumerated.
       glob:
         - "data/layouts/*.json"
+        - "data/scrolling-templates/*.json"
         - "data/curves/*.json"
         - "data/animations/*/metadata.json"
         - "data/overlays/*/metadata.json"

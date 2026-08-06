@@ -536,6 +536,12 @@ install(DIRECTORY data/layouts/
     FILES_MATCHING PATTERN "*.json"
 )
 
+# Install bundled scrolling templates
+install(DIRECTORY data/scrolling-templates/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/scrolling-templates
+    FILES_MATCHING PATTERN "*.json"
+)
+
 # Settings embeds whatsnew.json as a Qt resource at build time. Also
 # install it on disk so docs/release tooling can read the user-facing
 # entries without grabbing the binary's resource bundle.

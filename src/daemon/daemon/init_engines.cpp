@@ -208,8 +208,13 @@ void Daemon::initEnginesAndWiring()
     // routes through the router so the answer tracks the LIVE owning engine
     // (a disabled scrolling assignment downgrades to snapping and keeps its
     // layouts). Cleared alongside the scroll-zones provider in stop().
-    m_overlayService->setLayoutsProvidedResolver([this](const QString& screenId) {
-        return engineProvidesLayouts(screenId);
+    m_overlayService->setLayoutSupportResolver([this](const QString& screenId) {
+        // The LIVE capability as an int code (OverlayService::LayoutSupport*
+        // constants): None empties the layout list, Placement keeps the
+        // classic entries, Templates swaps in the native template cards and
+        // drives the overlay's template-aware arms (activeLayoutIdForScreen,
+        // isSnappingContextInactive).
+        return static_cast<int>(layoutSupportForScreen(screenId));
     });
 
     // Autotile provider. setContextGapProvider is derived-only

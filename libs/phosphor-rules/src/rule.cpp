@@ -3,10 +3,13 @@
 
 #include <PhosphorRules/Rule.h>
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonValue>
 
 #include "rulelogging.h"
+
+#include <algorithm>
 
 namespace PhosphorRules {
 
@@ -89,20 +92,28 @@ QList<ValidationIssue> Rule::validationIssues() const
         }
     }
 
-    // A terminal action (any of the Exclude family) co-located with any
-    // non-terminal slot-filling action: a terminal action stops the evaluator's
-    // resolve walk the moment it matches, so any other action on the same rule
-    // may be dropped (the appearance/animation evaluator drops border / opacity /
-    // animation slots; the daemon context evaluator drops gap / overlay / engine
-    // slots) and lower-priority rules are suppressed for the window. Flag each
-    // co-located non-terminal action so the author splits the exclusion onto its
-    // own rule.
-    if (hasTerminalAction()) {
-        const ActionRegistry& registry = ActionRegistry::instance();
+    // The BLANKET Exclude co-located with any other slot-filling action: it
+    // stops the evaluator's resolve walk the moment it matches, so any other
+    // action on the same rule may be dropped (the appearance/animation
+    // evaluator drops border / opacity / animation slots; the daemon context
+    // evaluator drops gap / overlay / engine slots) and lower-priority rules
+    // are suppressed for the window. Flag each co-located action so the author
+    // splits the exclusion onto its own rule.
+    //
+    // The blanket Exclude cancels EVERY sibling: it is in every full-store
+    // evaluator's scope. The scoped exclusions cancel only the siblings that
+    // the one evaluator honouring them also resolves (RuleEvaluator's
+    // setTerminalActionScope skips an out-of-scope terminal action entirely),
+    // and the second pass below flags exactly that intersection — see its
+    // comment for the per-scope mapping.
+    const bool hasBlanketExclude = std::any_of(actions.cbegin(), actions.cend(), [](const RuleAction& a) {
+        return a.type == ActionType::Exclude;
+    });
+    if (hasBlanketExclude) {
         for (int i = 0; i < actions.size(); ++i) {
             const RuleAction& action = actions.at(i);
-            if (registry.isTerminal(action)) {
-                continue; // the terminal action itself is the intended effect
+            if (action.type == ActionType::Exclude) {
+                continue; // the exclusion itself is the intended effect
             }
             ValidationIssue issue;
             issue.code = ValidationIssue::Code::TerminalActionWithEffectActions;
@@ -115,6 +126,95 @@ QList<ValidationIssue> Rule::validationIssues() const
                                 .arg(action.type);
             issues.append(issue);
         }
+    }
+
+    // The SCOPED exclusions are walk-stoppers only inside the evaluator bound
+    // to their slice, but that evaluator resolves real slots of its own, so a
+    // scoped exclusion still cancels the co-located actions that SAME
+    // evaluator would have resolved:
+    //  - ExcludeAnimations rides the effect's animation/appearance evaluator
+    //    (scope {Exclude, ExcludeAnimations}), which resolves the Tag::Effect
+    //    actions — border, opacity, stacking layer, animation overrides.
+    //  - ExcludePlacement rides the daemon's window-tracking evaluator (scope
+    //    {Exclude, ExcludePlacement}), which resolves the window-domain
+    //    placement/routing/open/restore slots — the slot-filling
+    //    window-domain actions that are NOT Tag::Effect.
+    //  - ExcludeDecorations' slice resolves no other slot, so it mixes freely.
+    // Context-domain slots (gaps, overlays, assignments, scroll knobs) resolve
+    // under a {Exclude}-only evaluator, so a scoped exclusion beside them is
+    // inert-and-honoured, not cancelling — they stay unflagged, which is what
+    // keeps the scoped split authorable.
+    if (!hasBlanketExclude) {
+        const bool hasExcludeAnimations = std::any_of(actions.cbegin(), actions.cend(), [](const RuleAction& a) {
+            return a.type == ActionType::ExcludeAnimations;
+        });
+        const bool hasExcludePlacement = std::any_of(actions.cbegin(), actions.cend(), [](const RuleAction& a) {
+            return a.type == ActionType::ExcludePlacement;
+        });
+        if (hasExcludeAnimations || hasExcludePlacement) {
+            const ActionRegistry& registry = ActionRegistry::instance();
+            for (int i = 0; i < actions.size(); ++i) {
+                const RuleAction& action = actions.at(i);
+                if (registry.isTerminal(action)) {
+                    continue; // exclusions themselves are the intended effect
+                }
+                const bool effectConsumed = registry.hasTag(action.type, Tag::Effect);
+                const bool cancelled = (hasExcludeAnimations && effectConsumed)
+                    || (hasExcludePlacement && !effectConsumed && registry.domainFor(action) == ActionDomain::Window
+                        && !registry.slotFor(action).isEmpty());
+                if (!cancelled) {
+                    continue;
+                }
+                ValidationIssue issue;
+                issue.code = ValidationIssue::Code::TerminalActionWithEffectActions;
+                issue.actionIndex = i;
+                issue.actionType = action.type;
+                issue.message = QStringLiteral(
+                                    "Action `%1` may not take effect: the rule also has a terminal exclusion action "
+                                    "that stops the rest of the rule from applying. "
+                                    "Put the exclusion on a separate rule.")
+                                    .arg(action.type);
+                issues.append(issue);
+            }
+        }
+    }
+
+    // Duplicate slot fill: two SAME-TYPE actions on one rule resolving to the
+    // SAME slot. Slot decoding is single-winner per (rule, type), so at most
+    // one duplicate takes effect (which one depends on the consumer's decode
+    // order) and the rest are dead weight — the exact shape a buggy rule
+    // rebuild accretes. The key is (slot, type), NOT slot alone: distinct
+    // types deliberately share a slot (SetSnappingLayout and
+    // SetTilingAlgorithm both fill the layout slot — the lossless
+    // mode-toggle pair — and the active mode picks between them), and the
+    // animation actions' event-scoped resolvers separate legitimate
+    // same-type pairs into distinct slots. A repeated SetAlgorithmParam IS
+    // flagged — its slot is constant, and the context resolver reads it
+    // single-winner, so the second copy really is dead. Unresolvable
+    // actions (empty slot) are skipped — the structural isValid() pass
+    // already rejects those.
+    QHash<QPair<QString, QString>, int> firstActionBySlotAndType;
+    for (int i = 0; i < actions.size(); ++i) {
+        const RuleAction& action = actions.at(i);
+        const QString slot = ActionRegistry::instance().slotFor(action);
+        if (slot.isEmpty()) {
+            continue;
+        }
+        const auto key = qMakePair(slot, action.type);
+        const auto it = firstActionBySlotAndType.constFind(key);
+        if (it == firstActionBySlotAndType.constEnd()) {
+            firstActionBySlotAndType.insert(key, i);
+            continue;
+        }
+        ValidationIssue issue;
+        issue.code = ValidationIssue::Code::DuplicateSlotActions;
+        issue.actionIndex = i;
+        issue.actionType = action.type;
+        issue.message = QStringLiteral(
+                            "Action `%1` fills slot `%2`, which an earlier action of the same type "
+                            "on this rule already fills; only one of them takes effect.")
+                            .arg(action.type, slot);
+        issues.append(issue);
     }
     return issues;
 }

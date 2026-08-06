@@ -101,7 +101,7 @@ void SettingsController::buildApplicationController()
     // ── Block 2: per-feature configuration ──
     regVirtual(QStringLiteral("display"), QString(), PhosphorI18n::tr("Display"), QString(),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/true);
-    // Placement groups the two placement modes (Snapping / Tiling) as an
+    // Placement groups the three placement modes (Snapping / Tiling / Scrolling) as an
     // inline-collapsible category, matching Display. Divider after it (i.e.
     // above Animations) sets the placement categories apart from the
     // Animations / Rules pages that follow.
@@ -318,6 +318,9 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/scrolling/ScrollingWindowPage.qml"), QStringLiteral("preferences-system-windows"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("scrolling-shortcuts"), QStringLiteral("scrolling"), PhosphorI18n::tr("Quick Shortcuts"),
+               QStringLiteral("pages/scrolling/ScrollingQuickShortcutsPage.qml"), QStringLiteral("bookmark"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Animations children — Transitions / Motion / Library categories drill in.
     // The simple-mode surface leads: a SimpleOnly leaf that replaces the whole

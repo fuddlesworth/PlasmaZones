@@ -43,11 +43,14 @@ namespace PlasmaZones {
 
 namespace {
 
-// Map the D-Bus quick-slot mode wire value (0 = Snapping, 1 = Autotile) to
-// the registry's AssignmentEntry::Mode, or nullopt for anything else —
-// notably Scrolling (2), which carries NO quick slots. Clamping instead of
-// rejecting would silently read or OVERWRITE the snapping slot map under a
-// scrolling request (input validation at the system boundary).
+// Map the D-Bus quick-slot mode wire value (0 = Snapping, 1 = Autotile,
+// 2 = Scrolling) to the registry's AssignmentEntry::Mode, or nullopt for
+// anything else. Every mode owns a SEPARATE slot array
+// (LayoutRegistry::slotIndexFor is the one authority; Scrolling is index 2):
+// the scrolling slots hold native ScrollingTemplate UUIDs, validated against
+// the template store on write, and applying one swaps the context's template
+// rather than its layout. Out-of-range values are still rejected rather than
+// clamped (input validation at the system boundary).
 std::optional<PhosphorZones::AssignmentEntry::Mode> quickSlotMode(int mode)
 {
     switch (mode) {
@@ -55,6 +58,8 @@ std::optional<PhosphorZones::AssignmentEntry::Mode> quickSlotMode(int mode)
         return PhosphorZones::AssignmentEntry::Snapping;
     case PhosphorZones::AssignmentEntry::Autotile:
         return PhosphorZones::AssignmentEntry::Autotile;
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        return PhosphorZones::AssignmentEntry::Scrolling;
     default:
         return std::nullopt;
     }
@@ -317,7 +322,7 @@ QStringList LayoutAdaptor::getLayoutList()
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, /*includeAutotile=*/true,
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, /*includeManual=*/true, /*includeAutotile=*/true),
-        m_autotileLayoutSource);
+        m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, m_layoutManager->scrollingTemplateStore());
     for (const auto& entry : entries) {
         QJsonObject json = PlasmaZones::toJson(entry);
 
@@ -554,6 +559,16 @@ void LayoutAdaptor::setActiveLayout(const QString& id)
 
 void LayoutAdaptor::applyQuickLayout(int mode, int number, const QString& screenId)
 {
+    // Same range refusal as the get/set/batch slot verbs. The registry treats
+    // an out-of-range number as an unset slot and no-ops silently, so without
+    // this the caller gets no trace of a typo'd slot number.
+    if (number < 1 || number > PhosphorProtocol::Service::QuickLayoutSlotCount) {
+        qCWarning(lcDbusLayout)
+            << "Invalid quick layout slot number:" << number
+            << QStringLiteral("(must be 1-%1)").arg(PhosphorProtocol::Service::QuickLayoutSlotCount);
+        return;
+    }
+
     const auto slotMode = quickSlotMode(mode);
     if (!slotMode) {
         qCWarning(lcDbusLayout) << "applyQuickLayout: mode" << mode << "carries no quick slots — ignored";
@@ -621,6 +636,12 @@ void LayoutAdaptor::deleteLayout(const QString& id)
         m_cachedActiveLayoutJson.clear();
     }
     qCInfo(lcDbusLayout) << "Deleted layout" << id;
+    // removeLayoutById's purge also sweeps quick slots bound to the deleted
+    // layout; subscribers holding slot state (the settings quick-shortcut
+    // cards) refresh only on this signal, so bump their revision. The
+    // registry API returns void here, so the hint fires unconditionally — a
+    // spare refresh is harmless.
+    Q_EMIT quickLayoutSlotsChanged();
     // Deletion-specific companion to layoutListChanged — lets subscribers
     // evict per-layout state keyed by UUID before the list refresh lands.
     Q_EMIT layoutDeleted(deletedId);
@@ -708,7 +729,10 @@ void LayoutAdaptor::setQuickLayoutSlot(int mode, int slotNumber, const QString& 
         return;
     }
     m_layoutManager->setQuickLayoutSlot(*slotMode, slotNumber, layoutId);
-    qCInfo(lcDbusLayout) << "Set quick layout slot" << slotNumber << "mode" << mode << "to" << layoutId;
+    // Attempt wording, not success: the registry returns void and refuses a
+    // layout/template id it cannot resolve, warning on its own way out. A
+    // "Set ... to" line here would claim a write that never happened.
+    qCInfo(lcDbusLayout) << "Requested quick layout slot" << slotNumber << "mode" << mode << "set to" << layoutId;
     Q_EMIT quickLayoutSlotsChanged();
 }
 

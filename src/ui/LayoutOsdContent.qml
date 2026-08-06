@@ -31,7 +31,8 @@ Item {
     property string layoutId: ""
     property string layoutName: ""
     property var zones: []
-    // Layout category: 0=Manual (matches LayoutCategory in C++)
+    // Layout category, matching LayoutCategory in C++ and the vocabulary
+    // CategoryBadge renders: 0=Manual, 1=Autotile, 2=ScrollingTemplate.
     property int category: 0
     // Per-layout autoAssign flag (raw, not yet OR'd with the global master
     // toggle). CategoryBadge folds in `globalAutoAssign` to display effective
@@ -91,6 +92,10 @@ Item {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     property bool locked: false
+    // True when the layout shown is a scrolling screen's sizing TEMPLATE
+    // (live-Templates capability): the name label captions it "Column
+    // template" so a template pick never reads as a snap-layout switch.
+    property bool isTemplate: false
     property bool disabled: false
     property string disabledReason: ""
     // The glyph that means "refused" — the one icon the overlay tints grey.
@@ -259,7 +264,12 @@ Item {
                 readonly property int maxWidth: Kirigami.Units.gridUnit * 16
 
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.disabled ? root.disabledReason : (root.locked ? i18n("%1 (Locked)", root.layoutName) : root.layoutName)
+                text: {
+                    if (root.disabled)
+                        return root.disabledReason;
+                    var name = root.isTemplate ? i18nc("OSD caption, %1 is the template name", "Column template — %1", root.layoutName) : root.layoutName;
+                    return root.locked ? i18n("%1 (Locked)", name) : name;
+                }
                 font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
                 font.weight: Font.Medium
                 color: root.textColor

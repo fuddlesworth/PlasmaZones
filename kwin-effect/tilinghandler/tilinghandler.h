@@ -18,6 +18,7 @@
 #include <QPointF>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 #include <QVector>
 
 #include <cstdint>
@@ -93,9 +94,20 @@ public:
      * @param enteringAutotile True when the screen has just changed from snap
      *        mode. Already-minimized windows then need an immediate first
      *        autotile placement when they become visible.
+     * @param screenOverrides Per-window screen ids resolved by the caller,
+     *        used in place of getWindowScreenId for the windows it names. The
+     *        engine-flip caller (setScrollingScreens) MUST supply these: the
+     *        engine-authoritative screen override is gated on the scrolling
+     *        set, so once the flip has been written a parked strip column
+     *        resolves positionally onto the neighbouring output and the
+     *        screenFilter drops it. The value chosen here is the one used for
+     *        the filter, the m_notifiedWindowScreens stamp, the pre-tile
+     *        capture and the wire entry alike, so an override cannot desync
+     *        them.
      */
     void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, const QSet<QString>& screenFilter = {},
-                                 bool resetNotified = false, bool enteringAutotile = false);
+                                 bool resetNotified = false, bool enteringAutotile = false,
+                                 const QHash<KWin::EffectWindow*, QString>& screenOverrides = {});
 
     /// Remove a window from this handler's autotile tracking and notify the daemon.
     /// INTENT NOTE: an earlier m_pendingCloses guard (deduping a close racing
@@ -310,6 +322,103 @@ public:
         return m_scrollingScreens.contains(screenId) && m_managedScreens.contains(screenId);
     }
 
+    /// The RULES-VISIBLE active layout id the daemon pushed for @p screenId
+    /// (snapping UUID / "autotile:<algo>" / "scrolling:<templateUuid>" /
+    /// bare sentinel), stamped onto Field::ActiveLayout in ruleQuery.
+    /// Empty for a screen the daemon did not name. Callers must gate on
+    /// activeLayoutsSeeded(): before the first map lands, EVERY screen reads
+    /// empty here, and an empty answer is not inert (see the seeded flag).
+    QString activeLayoutForScreen(const QString& screenId) const
+    {
+        return m_activeLayouts.value(screenId);
+    }
+
+    /// True once the daemon's first activeLayouts map has landed (live signal
+    /// or the bring-up Properties.Get reply), false again after the
+    /// daemon-loss teardown clear.
+    ///
+    /// Read by the effect's rule-admission filter
+    /// (effectNeverStampedFields in shader_config_dbus.cpp), which is the ONE
+    /// consumer: while this is false, ActiveLayout-referencing rules are not
+    /// admitted to any effect-bound rule set at all. That is the only shape
+    /// that is inert in BOTH polarities. Not stamping the field would not be:
+    /// WindowQuery::activeLayout is a plain QString context field, so
+    /// valueForField returns an ENGAGED empty string either way, and a
+    /// `None{ActiveLayout Equals X}` leaf then matches every window.
+    ///
+    /// The false→true edge re-drives loadRuleAnimationsFromDbus so the rules
+    /// held out during bring-up are admitted as soon as the map is real. The
+    /// re-drive is GATED on the effect's m_activeLayoutRulesWithheld marker,
+    /// which records whether the last admission pass actually dropped a rule
+    /// for referencing ActiveLayout: a seeded pass withholds nothing and needs
+    /// no re-fetch. The edge consumes the marker, so a later unseed→seed cycle
+    /// re-drives only on its own evidence.
+    ///
+    /// The marker is NOT cleared by either unseeding path — those paths SET
+    /// it instead, from the re-slice clearActiveLayoutsForTeardown performs.
+    /// Every getAllRules reply that PARSES recomputes it outright (the
+    /// malformed-payload arms return first, having sliced nothing). Clearing it
+    /// on teardown or bring-up would disarm this edge for the session if the
+    /// following getAllRules never lands; a stale-TRUE marker only costs one
+    /// redundant re-drive.
+    bool activeLayoutsSeeded() const
+    {
+        return m_activeLayoutsSeeded;
+    }
+
+    /// Daemon-loss teardown: drop the dead session's active-layout map. Same
+    /// shape and the same reasoning as clearScrollingScreensForTeardown — a
+    /// stale map would otherwise keep baking into rule verdicts resolved
+    /// while the daemon is down, and the live chokepoint's border sweep would
+    /// re-create rule-matched decorations one event-loop turn AFTER the
+    /// handler's clearAllDecorations.
+    ///
+    /// CALL-SITE CONTRACT: two sanctioned callers, both of which must supply
+    /// the invalidate this function deliberately omits, plus their own answer
+    /// for the decorations those verdicts baked in. The only repaint it takes
+    /// is the SetOpacity bookend inside the re-slice described below.
+    ///  - the effect's serviceUnregistered teardown
+    ///    (lifecycle_wiring_daemon.cpp), which runs invalidateAllRuleCaches
+    ///    immediately after and then clearAllDecorations — it tears the
+    ///    decorations down outright rather than sweeping them, which is why
+    ///    the live chokepoint's SCHEDULED sweep would be wrong there (it would
+    ///    re-create rule-matched decorations one turn after the teardown);
+    ///  - TilingHandler::onDaemonReady, whose own tail runs
+    ///    invalidateAllRuleCaches and scheduleBorderSweep. Bring-up needs the
+    ///    clear because a straight old→new owner handover emits no
+    ///    serviceUnregistered edge at all, so without it the seeded flag stays
+    ///    true over the dead daemon's map and the seeding edge can never fire
+    ///    again for the session.
+    ///
+    /// Clearing the seeded flag does NOT re-drive the rule admission: no
+    /// getAllRules reply is coming with the daemon down, and the re-drive's
+    /// updateAllDecorations would fight the teardown's clearAllDecorations.
+    /// Instead the clear re-slices the rule sets in place, through
+    /// PlasmaZonesEffect::sliceActiveLayoutRulesForUnseededMap: every rule
+    /// whose match references Field::ActiveLayout comes back OUT of the four
+    /// effect-bound sets (the three exclusion slices and the shader manager's
+    /// effect-rule set). Leaving them in was the defect — the rule sets
+    /// survive daemon loss on purpose, but they were filled while the map was
+    /// seeded, and an unstamped ActiveLayout reads as an ENGAGED empty string,
+    /// so a negated leaf over-matches EVERY window for the whole daemon-down
+    /// interval. Re-slicing restores the both-polarities-inert shape a cold
+    /// start has.
+    ///
+    /// Neither caller clears the effect's m_activeLayoutRulesWithheld marker
+    /// that gates the seed edge, and neither should. The re-slice SETS it
+    /// whenever it removed a rule, so on this path the marker's correctness is
+    /// by construction: the same call that withholds the rules records that it
+    /// did, and the next seeding edge re-drives loadRuleAnimationsFromDbus to
+    /// restore them from the live store. A marker left true from an earlier
+    /// admission pass is still true and must not be cleared here — that would
+    /// strand the withheld rules disarmed for the session whenever the
+    /// following getAllRules errors or times out. A stale-TRUE marker costs
+    /// one redundant re-drive, the safe direction.
+    ///
+    /// Out-of-line (state.cpp) because the re-slice reaches into effect
+    /// internals that are incomplete at this point in the header.
+    void clearActiveLayoutsForTeardown();
+
     /// The set this discriminator actually answers over.
     ///
     /// Because the answer is an INTERSECTION, it can change when EITHER input
@@ -410,6 +519,7 @@ public Q_SLOTS:
     void slotEnabledChanged(bool enabled);
     void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
     void slotScrollingScreensChanged(const QStringList& screenIds);
+    void slotActiveLayoutsChanged(const QVariantMap& activeLayouts);
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
 
     // Window state change handlers (connected per-window in setupWindowConnections)
@@ -478,9 +588,15 @@ private:
      * Skips windows the daemon already tracks as floating (a user float or
      * another mode's minimize-float record) — mirroring the runtime minimize
      * path, we never claim ownership of a float we did not create.
+     *
+     * @p resolvedScreenId, when non-empty, replaces the positional resolve.
+     * The batch caller passes the id it already resolved for the window so
+     * this arm's screen-filter test cannot disagree with the batch's — see
+     * notifyWindowsAddedBatch's screenOverrides.
      */
     void claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const QString& windowId,
-                                        const QSet<QString>& screenFilter, bool enteringAutotile);
+                                        const QSet<QString>& screenFilter, bool enteringAutotile,
+                                        const QString& resolvedScreenId = {});
 
     /**
      * @brief Cancel a pending debounced minimize→float commit.
@@ -624,6 +740,18 @@ private:
     /// loadSettings owns the re-announce — announcing there desyncs the
     /// daemon's view from the effect's until that batch lands.
     void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true);
+    /// The two bring-up property Gets loadSettings dispatches, factored out
+    /// so their bounded failure retries can re-dispatch exactly one fetch.
+    /// Every dispatch bumps the matching per-query generation, so a stale
+    /// retry reply loses to any newer query or live-signal write.
+    ///
+    /// PRIVATE deliberately: the retry budgets are granted by loadSettings
+    /// alone, so an outside caller invoking either of these directly would
+    /// re-drive a fetch under whatever budget the last loadSettings left.
+    /// loadSettings is the budget-granting entry point, the same shape
+    /// loadRuleAnimationsFromDbus has over fetchAllRulesOnce.
+    void fetchScrollingScreens();
+    void fetchActiveLayouts();
     /// Meta+wheel axis shortcuts for column focus (niri's Mod+wheel).
     /// Registered while ANY screen runs the scrolling engine, unregistered
     /// (by destroying the QActions — KWin drops an axis shortcut with its
@@ -658,6 +786,37 @@ private:
         bool canSnapRestore = false;
     };
     QHash<QString, DeferredWindowRoute> m_deferredWindowRoutes;
+    /// Per-screen rules-visible active layout ids, pushed by the daemon
+    /// (see activeLayoutForScreen). A pure ruleQuery input like
+    /// m_scrollingScreens — no lifecycle transitions key on it.
+    QHash<QString, QString> m_activeLayouts;
+    /// Authoritative write for m_activeLayouts: generation bump (voids
+    /// in-flight property replies), change gate, then rule-cache invalidate
+    /// + border sweep on a genuine change — the setScrollingScreens pattern.
+    void setActiveLayouts(const QHash<QString, QString>& activeLayouts);
+    /// Set by setActiveLayouts BEFORE its change gate (an identical map is
+    /// still a real map, and the gate would otherwise leave the effect
+    /// permanently unseeded whenever the daemon's first push is empty),
+    /// cleared by clearActiveLayoutsForTeardown. See activeLayoutsSeeded()
+    /// for what reads it and why an unstamped field is not inert.
+    bool m_activeLayoutsSeeded = false;
+    /// Stale-reply guard for the activeLayouts property fetch, same contract
+    /// as m_scrollingScreensGeneration.
+    quint64 m_activeLayoutsGeneration = 0;
+    /// Per-DISPATCH guard for the activeLayouts property fetch, the twin of
+    /// m_screenQueryGeneration. The generation guard above only voids a reply
+    /// an authoritative WRITE overtook; two Gets in flight across a daemon
+    /// restart carry no write between them, so without this the first reply
+    /// to arrive wins and the second (newer) one is discarded by its own
+    /// generation check. Bumped at dispatch so only the newest query applies.
+    quint64 m_activeLayoutsQueryGeneration = 0;
+    /// Same per-dispatch guard for the scrolling-screens property fetch.
+    quint64 m_scrollingScreensQueryGeneration = 0;
+    /// Remaining bounded-retry attempts for the two bring-up fetches.
+    /// Reset to the cap by each loadSettings run, consumed only by the
+    /// failure arms' own re-dispatches.
+    int m_activeLayoutsFetchRetriesLeft = 0;
+    int m_scrollingScreensFetchRetriesLeft = 0;
     /// Same stale-reply guard for the scrolling-screens property fetch.
     /// Bumped by setScrollingScreens on EVERY authoritative write (live
     /// signal, property reply, daemon-restart clear) — even an identical

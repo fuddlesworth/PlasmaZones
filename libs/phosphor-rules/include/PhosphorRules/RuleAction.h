@@ -84,10 +84,11 @@ struct PHOSPHORRULES_EXPORT RuleAction
  * input widget without the UI layer hand-maintaining a parallel per-type
  * switch. `kind` is a UI-side hint string (the canonical kinds are
  * `string`, `number`, `percent`, `enum`, `bool`, `color`, plus the
- * picker-aware kinds `snappingLayout`, `tilingAlgorithm`, `animationEvent`,
- * `shaderEffect`, `overlayShader`, `zoneOrdinals`, `curveEditor`, `screenId`,
- * `virtualDesktop`, `decorationChain`); QML loaders dispatch on it. Labels stay in
- * the GPL settings layer because they need translation through PhosphorI18n::tr —
+ * picker-aware kinds `snappingLayout`, `tilingAlgorithm`,
+ * `scrollingTemplate`, `animationEvent`, `shaderEffect`, `overlayShader`,
+ * `zoneOrdinals`, `curveEditor`, `screenId`, `virtualDesktop`,
+ * `decorationChain`); QML loaders dispatch on it. Labels stay in the GPL
+ * settings layer because they need translation through PhosphorI18n::tr —
  * the lib only owns the structural part of the schema.
  *
  * The optional fields are populated by kind:
@@ -305,6 +306,14 @@ namespace ActionType {
 inline constexpr QLatin1StringView SetEngineMode{"setEngineMode"};
 inline constexpr QLatin1StringView SetSnappingLayout{"setSnappingLayout"};
 inline constexpr QLatin1StringView SetTilingAlgorithm{"setTilingAlgorithm"};
+/// Scrolling-mode template for the matched context: a NATIVE
+/// ScrollingTemplate id (its own picker kind, `scrollingTemplate`, with its
+/// own name resolution — not a manual layout). It shares the LayoutId wire
+/// KEY with SetSnappingLayout but the two id namespaces are disjoint, and it
+/// fills its own cascade slot — the lossless mode-toggle contract stores it
+/// BESIDE the snapping layout in one rule, and sharing the layout slot would
+/// shadow one of the pair.
+inline constexpr QLatin1StringView SetScrollingTemplate{"setScrollingTemplate"};
 inline constexpr QLatin1StringView DisableEngine{"disableEngine"};
 /// Lock the active layout for the matched screen/desktop/activity context so
 /// it can't be switched — the rule-driven equivalent of the manual
@@ -719,7 +728,16 @@ inline constexpr QLatin1StringView Value{"value"};
 // SetEngineMode / DisableEngine engine-token key — the wire token vocabulary
 // is `PhosphorZones::modeToWireString(Mode)` (snapping / autotile / scrolling).
 inline constexpr QLatin1StringView Mode{"mode"};
-// SetSnappingLayout layout-id key — wire is a `{uuid-with-braces}` string.
+// SetSnappingLayout / SetScrollingTemplate layout-id key — wire is a
+// `{uuid-with-braces}` string. The two id namespaces are disjoint:
+// SetSnappingLayout carries a manual-layout uuid, SetScrollingTemplate a
+// native scrolling-template uuid. The split is enforced at the CONSUMER, not
+// at load, the same open-vocabulary shape SetEngineMode's `Mode` key uses: the
+// descriptor validator only checks that the string is non-empty, so a layout
+// uuid written into a SetScrollingTemplate action loads fine and then fails to
+// resolve in `LayoutRegistry::scrollingTemplateForContext`, whose template-store
+// lookup degrades an unknown id to "no template" and leaves the engine on its
+// compiled defaults.
 inline constexpr QLatin1StringView LayoutId{"layoutId"};
 // SetTilingAlgorithm algorithm-token key — wire is the algorithm registry id.
 inline constexpr QLatin1StringView Algorithm{"algorithm"};
@@ -936,6 +954,11 @@ inline constexpr QLatin1StringView Accent{"accent"};
 namespace ActionSlot {
 inline constexpr QLatin1StringView EngineMode{"engine-mode"};
 inline constexpr QLatin1StringView Layout{"layout"};
+/// Context-domain scrolling-template slot — filled by
+/// `ActionType::SetScrollingTemplate`. Its own slot (not `Layout`): the
+/// lossless assignment set can carry a snapping layout AND a scrolling
+/// template in one rule, and per-slot accumulation would drop one of them.
+inline constexpr QLatin1StringView ScrollingTemplate{"scrolling-template"};
 inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
 /// Context-domain layout-lock slot — filled by `ActionType::LockContext`.
 /// A single boolean: a winning rule with `value == true` locks the context.

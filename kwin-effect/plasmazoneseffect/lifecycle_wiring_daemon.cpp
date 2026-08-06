@@ -238,6 +238,28 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // re-create rule-matched decorations right after
         // clearAllDecorations below.
         m_tilingHandler->clearScrollingScreensForTeardown();
+        // Same reasoning for the per-screen active-layout map: it is a pure
+        // ruleQuery input owned by the dead session, and the
+        // invalidateAllRuleCaches below would otherwise re-resolve every
+        // verdict against a layout the daemon may no longer publish. Also the
+        // TEARDOWN variant (no border sweep, no repaint) for the same reason.
+        m_tilingHandler->clearActiveLayoutsForTeardown();
+        // That call also re-slices the ActiveLayout-scoped rules back out of
+        // the four effect-bound rule sets, which the teardown otherwise
+        // preserves — bound against an empty map they over-match on their
+        // negated polarity — and SETS m_activeLayoutRulesWithheld when it
+        // removed any, so the next bring-up's seeding edge re-drives
+        // loadRuleAnimationsFromDbus and restores them.
+        //
+        // m_activeLayoutRulesWithheld is deliberately never CLEARED here. Each
+        // loadRuleAnimationsFromDbus reply that PARSES recomputes it from the
+        // live store (the malformed-payload arms return before the assignment,
+        // having run no slice either), so a clear here would disarm the next
+        // seeding edge (it
+        // is gated on the marker in TilingHandler's setActiveLayouts) if the
+        // next bring-up's getAllRules never lands, stranding the withheld
+        // ActiveLayout rules for the session. A stale-TRUE marker costs one
+        // redundant re-drive, the safe direction.
         m_snapHandler->clearSnapTracking();
         // Drop the zone / floating caches that feed the IsSnapped / Zone /
         // IsFloating rule-match fields. Unlike the exclusion / animation rule

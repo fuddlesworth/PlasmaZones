@@ -30,6 +30,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 #include <PhosphorZones/LayoutComputeService.h>
@@ -164,6 +165,19 @@ void Daemon::initLayoutAndSettingsWiring()
         }
         return geom.height() > geom.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
     });
+    // Per-screen current-desktop provider (#648): the registry (and the
+    // overlay service through it) resolves per-output desktops straight from
+    // the VirtualDesktopManager — ONE authority, replacing the push-updated
+    // mirror the daemon used to maintain from the screenDesktopChanged
+    // handler. nullopt (no VDM, unknown screen) falls back to the registry's
+    // global desktop, matching the old empty-mirror behavior.
+    m_layoutManager->setCurrentVirtualDesktopProvider([this](const QString& screenId) -> std::optional<int> {
+        if (!m_virtualDesktopManager) {
+            return std::nullopt;
+        }
+        const int desktop = m_virtualDesktopManager->currentDesktopForScreen(screenId);
+        return desktop >= 1 ? std::optional<int>(desktop) : std::nullopt;
+    });
     // Snapping-preferred provider — separate from defaultLayoutIdProvider
     // because the user can have snapping enabled WITHOUT a global default
     // snap layout id (per-screen assignments cover everything). Without
@@ -181,6 +195,19 @@ void Daemon::initLayoutAndSettingsWiring()
     // per-context DefaultLayoutAssignment rule overrides this either way.
     m_layoutManager->setDefaultAssignmentSuppressedProvider([this]() {
         return m_settings && m_settings->suppressDefaultLayoutAssignment();
+    });
+    // Native scrolling-template store: created in the ctor (before the
+    // layout-source bundle build so the template provider registers) and
+    // wired into the registry HERE so the assignment/resolver choke points
+    // validate template ids and resolve template objects. The
+    // templatesChanged → engine-recompute connection is restart-scoped and
+    // lives in signals.cpp.
+    m_layoutManager->setScrollingTemplateStore(m_scrollingTemplateStore.get());
+    // Default-template provider: the setting-backed fallback for a Scrolling
+    // context whose cascade entry names no template (parity with snapping's
+    // default layout).
+    m_layoutManager->setDefaultScrollingTemplateProvider([this]() {
+        return m_settings ? m_settings->defaultScrollingTemplate() : QString();
     });
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).

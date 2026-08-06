@@ -75,6 +75,7 @@ inline void resetOsdOverlayState(QObject* window)
     // reset; the reset stays as a safety net for any future call site that
     // forgets to set one of the states.
     writeQmlProperty(window, QStringLiteral("locked"), false);
+    writeQmlProperty(window, QStringLiteral("isTemplate"), false);
     writeQmlProperty(window, QStringLiteral("disabled"), false);
     writeQmlProperty(window, QStringLiteral("disabledReason"), QString());
 }
@@ -281,14 +282,15 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
 /// Check whether a snapping mode is locked for the given screen/desktop/activity context.
 /// Used by zone selector, layout picker, and overlay update paths that must respect per-context lock state.
 ///
-/// @param currentMode  The mode to check: 0 = manual, 1 = autotile, -1 = check both lockable modes
-///                     (default). Scrolling (mode 2) is deliberately absent from this enumeration:
-///                     layout locks only exist for layout-consuming modes (the layout-lock shortcut
-///                     is capability-gated on IPlacementEngine::providesLayouts), so a "2:" key is
-///                     never written by current builds and a stale one from an older build is inert.
+/// @param currentMode  The mode to check: 0 = manual, 1 = autotile, 2 = scrolling, -1 = check all
+///                     lockable modes (default). Scrolling joined the enumeration when the
+///                     layout-lock shortcut started passing on Templates screens (the lock pins the
+///                     screen's TEMPLATE choice there): the shortcut composes contextLockKey from the
+///                     resolver's live mode, so "2:" keys are written by current builds and must be
+///                     read here or the picker badge disagrees with the apply-time refusal.
 ///
-/// When currentMode is -1 (default), BOTH lockable modes are checked. This is intentional (PR #247):
-/// a lock on either mode blocks the zone selector for consistency with the OverlayService lock checks.
+/// When currentMode is -1 (default), ALL lockable modes are checked. This is intentional (PR #247):
+/// a lock on any mode blocks the zone selector for consistency with the OverlayService lock checks.
 /// Previously, ZoneSelectorController only checked the current mode, causing inconsistencies when the
 /// overlay reported a lock but the selector did not.
 ///
@@ -309,12 +311,18 @@ inline bool isAnyModeLocked(ISettings* settings, PhosphorZones::IZoneLayoutRegis
     if (!settings) {
         return false;
     }
-    if (currentMode == 0 || currentMode == 1) {
+    if (currentMode >= 0 && currentMode <= 2) {
         return settings->isContextLocked(Utils::contextLockKey(currentMode, screenId), desktop, activity);
     }
-    // Default: check both modes (maintains PR #247 behavior)
+    // Default: a lock on ANY of the three modes blocks, snapping (0) and
+    // autotile (1) as PR #247 established, scrolling (2) on the same policy —
+    // a screen whose template choice is pinned is as locked as one whose zone
+    // layout is. The consequence is deliberate: a stale scrolling lock reports
+    // the snapping selector locked too, which is what mode-agnostic means here.
+    // Pass currentMode when only one mode's lock should count.
     return settings->isContextLocked(Utils::contextLockKey(0, screenId), desktop, activity)
-        || settings->isContextLocked(Utils::contextLockKey(1, screenId), desktop, activity);
+        || settings->isContextLocked(Utils::contextLockKey(1, screenId), desktop, activity)
+        || settings->isContextLocked(Utils::contextLockKey(2, screenId), desktop, activity);
 }
 
 /// Resolve the per-context overlay-property override (shader / style / appearance)

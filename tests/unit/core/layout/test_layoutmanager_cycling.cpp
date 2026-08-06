@@ -139,6 +139,64 @@ private Q_SLOTS:
         QCOMPARE(current->name(), QStringLiteral("L1"));
     }
 
+    // The backwards twin of the wrap test above, and the only exercise of
+    // cycleToPreviousLayout. The index math is
+    // `(currentIndex + direction + size) % size`, and the `+ size` term is
+    // load-bearing for direction -1 from index 0: without it C++'s modulo
+    // yields -1 and visible.at(-1) is undefined behaviour, so a forward-only
+    // suite would never see the guard fail.
+    void testLayoutManager_cyclePrevious_wrapsBackwardsFromFirst()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* l1 = createTestLayout(QStringLiteral("L1"));
+        mgr->addLayout(l1);
+        auto* l2 = createTestLayout(QStringLiteral("L2"));
+        mgr->addLayout(l2);
+        auto* l3 = createTestLayout(QStringLiteral("L3"));
+        mgr->addLayout(l3);
+
+        mgr->setCurrentVirtualDesktop(0);
+        mgr->assignLayout(QStringLiteral("screen1"), 0, QString(), l1);
+        mgr->setActiveLayout(l1);
+
+        mgr->cycleToPreviousLayout(QStringLiteral("screen1"));
+        PhosphorZones::Layout* current = mgr->layoutForScreen(QStringLiteral("screen1"));
+        QVERIFY(current != nullptr);
+        QCOMPARE(current->name(), QStringLiteral("L3"));
+
+        // And one more step keeps walking backwards rather than snapping.
+        mgr->cycleToPreviousLayout(QStringLiteral("screen1"));
+        current = mgr->layoutForScreen(QStringLiteral("screen1"));
+        QVERIFY(current != nullptr);
+        QCOMPARE(current->name(), QStringLiteral("L2"));
+    }
+
+    // The other backwards arm: no current layout in the visible list at all.
+    // Forward cycling seeds index -1 so it lands on the first entry; backward
+    // cycling seeds size so it lands on the LAST. A hidden assigned layout is
+    // the reachable way to get there.
+    void testLayoutManager_cyclePrevious_noCurrentStartsAtLast()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* visibleA = createTestLayout(QStringLiteral("A"));
+        mgr->addLayout(visibleA);
+        auto* visibleB = createTestLayout(QStringLiteral("B"));
+        mgr->addLayout(visibleB);
+        auto* hidden = createTestLayout(QStringLiteral("Hidden"));
+        hidden->setHiddenFromSelector(true);
+        mgr->addLayout(hidden);
+
+        mgr->setCurrentVirtualDesktop(0);
+        mgr->assignLayout(QStringLiteral("screen1"), 0, QString(), hidden);
+
+        mgr->cycleToPreviousLayout(QStringLiteral("screen1"));
+        PhosphorZones::Layout* current = mgr->layoutForScreen(QStringLiteral("screen1"));
+        QVERIFY(current != nullptr);
+        QCOMPARE(current->name(), QStringLiteral("B"));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // P1: Active/previous layout tracking
     // ═══════════════════════════════════════════════════════════════════════════

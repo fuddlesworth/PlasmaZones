@@ -7,7 +7,7 @@
 //   1. the config schema group Shortcuts.Scrolling (settingsschema_scrolling.cpp)
 //   2. ShortcutManager's registration table          (shortcutmanager.cpp)
 //   3. the cheatsheet catalog                        (shortcutmanager_catalog.cpp)
-//   4. the D-Bus settings registry                   (settingsadaptor_registry.cpp)
+//   4. the D-Bus settings registry                   (settingsadaptor_registry_scrolling.cpp)
 //
 // Both drift directions are silent and user-visible: a row in 1+2 with no
 // catalog entry binds correctly but never appears in Settings or on the
@@ -190,13 +190,19 @@ private Q_SLOTS:
                                 .arg(uncatalogued.join(QStringLiteral(", ")))));
     }
 
-    /// Pins the layout-capability tag split the daemon's engineProvidesLayouts
+    /// Pins the layout-capability tag split the daemon's layoutSupportForScreen
     /// gates rely on: the four layout-selection ids plus the quick-layout
-    /// digit family carry mode "layouts" (hidden on a non-layout screen),
-    /// while the two engine-routed layout-group rows stay "all" (Reapply
-    /// routes through reapplyLayout and Arrange All through snapAllWindows,
-    /// which every engine implements). A silent retag in either direction
-    /// would make the sheet advertise a refusing key or hide a working one.
+    /// digit family carry the capability tag "layouts", while the two
+    /// engine-routed layout-group rows stay "all" (Reapply routes through
+    /// reapplyLayout and Arrange All through snapAllWindows, which every
+    /// engine implements). The "layouts" rows show whenever the bound
+    /// screen's engine consumes layouts at all — Placement AND Templates
+    /// (scrolling screens included, where the keys drive the template) —
+    /// and hide only for a LayoutSupport::None engine, which no shipped
+    /// engine reports today; the tag is still load-bearing because it is
+    /// what an embedder's None engine keys off. A silent retag in either
+    /// direction would make the sheet advertise a refusing key or hide a
+    /// working one.
     void layoutCapabilityTagsMatchTheGates()
     {
         IsolatedConfigGuard guard;
@@ -218,14 +224,26 @@ private Q_SLOTS:
         }
         // The quick-layout family compresses into one row keyed by its first
         // member, so quick_layout_1 stands in for the whole digit family.
-        for (const QString& id : expectLayouts) {
-            QVERIFY2(modeById.contains(id), qPrintable(QStringLiteral("No cheatsheet row for %1").arg(id)));
-            QCOMPARE(modeById.value(id), QStringLiteral("layouts"));
-        }
-        for (const QString& id : expectAll) {
-            QVERIFY2(modeById.contains(id), qPrintable(QStringLiteral("No cheatsheet row for %1").arg(id)));
-            QCOMPARE(modeById.value(id), QStringLiteral("all"));
-        }
+        //
+        // Accumulated rather than asserted per row: QVERIFY / QCOMPARE abort the
+        // whole slot on the first failure, so one retagged shortcut would hide
+        // the state of every id after it and the next run would report a
+        // different single failure.
+        QStringList failures;
+        const auto checkTag = [&modeById, &failures](const QSet<QString>& ids, const QString& expected) {
+            for (const QString& id : ids) {
+                if (!modeById.contains(id)) {
+                    failures.append(QStringLiteral("no cheatsheet row for %1").arg(id));
+                    continue;
+                }
+                if (modeById.value(id) != expected) {
+                    failures.append(QStringLiteral("%1 tagged %2, expected %3").arg(id, modeById.value(id), expected));
+                }
+            }
+        };
+        checkTag(expectLayouts, QStringLiteral("layouts"));
+        checkTag(expectAll, QStringLiteral("all"));
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
     }
 };
 

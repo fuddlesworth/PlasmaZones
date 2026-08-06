@@ -104,6 +104,50 @@ inline QString tabIndicatorPosition()
 {
     return QStringLiteral("TabIndicatorPosition");
 }
+/// TEMPLATE channel: preset lists from the screen's assigned scrolling
+/// template, as a QVariantList of doubles. A
+/// present, non-empty list replaces the settings-configured preset list
+/// WHOLESALE for that screen — no merge, so preset indices and the cycle
+/// order stay stable within one template. The daemon writes these from the
+/// assignment cascade; neither the rules bridge nor the settings app does.
+inline QString presetColumnWidths()
+{
+    return QStringLiteral("PresetColumnWidths");
+}
+inline QString presetWindowHeights()
+{
+    return QStringLiteral("PresetWindowHeights");
+}
+/// TEMPLATE channel: the template's seed BLUEPRINT as a QVariantList of
+/// {width (double fraction), display (int ColumnDisplay)} maps, ordered
+/// left to right. Consumed at column CREATION on the fresh-open path: a
+/// column materializing while the strip holds fewer columns than the
+/// blueprint takes the next entry's width and display (per-window open
+/// rules still outrank it). Never resizes existing columns. Only the
+/// daemon writes it.
+///
+/// An entry may carry either key alone: a missing width or display falls
+/// through to the effective default rather than reading as zero. That makes
+/// the precedence asymmetric on purpose. Within the blueprint, an entry that
+/// DOES carry a display outranks a screen-wide SetScrollDefaultColumnDisplay
+/// rule; past the blueprint (and for entries that omit the key) the rule
+/// decides. A per-column blueprint entry is the more specific statement, so
+/// it wins where it speaks and stays silent where it does not. The in-tree
+/// daemon always writes both keys on every entry, so the either-key tolerance
+/// is a public-API belt for embedder-supplied maps rather than a fix for a
+/// shipped bug.
+inline QString templateColumns()
+{
+    return QStringLiteral("TemplateColumns");
+}
+inline QString templateColumnWidth()
+{
+    return QStringLiteral("width");
+}
+inline QString templateColumnDisplay()
+{
+    return QStringLiteral("display");
+}
 } // namespace ScrollPerScreenKeys
 
 /// The narrowest column width this engine will accept as a proportion of the
@@ -122,7 +166,10 @@ inline constexpr qreal MinColumnWidthFraction = 0.05;
 /// work area. The height twin of MinColumnWidthFraction, deliberately its own
 /// name: the two bounds happen to share a value today, and a caller that
 /// clamps a HEIGHT against the width constant would silently follow a later
-/// width-only change.
+/// width-only change. KEEP IN SYNC with PhosphorRules::MinColumnWidthRatio
+/// (RuleAction.h), which the rules-side height validation currently uses for
+/// BOTH fractions; like the width constant above, the bound is hand-mirrored
+/// because the dependency runs the other way.
 inline constexpr qreal MinWindowHeightFraction = 0.05;
 
 /// Persistent view-centering policy for the focused column (niri's
@@ -324,8 +371,10 @@ enum class DefaultWidthKind : int {
     Proportion = 0,
     Fixed = 1,
     ClientDecides = 2,
-    /// New columns open at a preset-list index (ColumnWidth::makePreset), so
-    /// they reflow with preset-list changes. Appended as 3 — 2 is taken by
+    /// New columns open on a preset VALUE anchor (ColumnWidth::makePreset
+    /// takes a fraction), so they reflow with preset-list changes by snapping
+    /// to the nearest entry. The config spin stays index-based; the engine
+    /// resolves it to the anchor at read time. Appended as 3 — 2 is taken by
     /// ClientDecides and stored configs rely on it.
     Preset = 3,
 };
@@ -367,15 +416,20 @@ struct ColumnWidth
         Proportion = 0,
         /// Absolute pixel width.
         Fixed = 1,
-        /// Index into the preset-proportion list (resolved at relayout, so a
-        /// preset-list settings change reflows preset-width columns).
+        /// Fraction ANCHOR snapped to the nearest entry of the screen's
+        /// effective preset list at relayout. Value-anchored (not an index)
+        /// so the intent survives vocabulary changes: a template swap
+        /// reflows the column onto the nearest new entry, clearing the
+        /// template restores the original width, and a cross-screen move
+        /// needs no remap. Cycling steps between vocabulary entries and
+        /// writes the NEW entry's value as the anchor.
         Preset = 2,
     };
 
     Kind kind = Proportion;
     qreal proportion = 0.5; ///< Kind::Proportion
     int fixedPx = 0; ///< Kind::Fixed
-    int presetIdx = 0; ///< Kind::Preset
+    qreal presetFraction = 0.5; ///< Kind::Preset
 
     static constexpr ColumnWidth makeProportion(qreal p)
     {
@@ -391,11 +445,11 @@ struct ColumnWidth
         w.fixedPx = px;
         return w;
     }
-    static constexpr ColumnWidth makePreset(int idx)
+    static constexpr ColumnWidth makePreset(qreal fraction)
     {
         ColumnWidth w;
         w.kind = Preset;
-        w.presetIdx = idx;
+        w.presetFraction = fraction;
         return w;
     }
 
@@ -410,7 +464,10 @@ struct ColumnWidth
         case Fixed:
             return fixedPx == other.fixedPx;
         case Preset:
-            return presetIdx == other.presetIdx;
+            // Anchors are always copied FROM vocabulary values, so the cycle
+            // no-op gate compares identical doubles in practice; fuzzy keeps
+            // JSON round-trips honest.
+            return qFuzzyCompare(presetFraction, other.presetFraction);
         }
         return false;
     }
@@ -426,14 +483,16 @@ struct WindowHeight
         Auto = 0,
         /// Absolute pixel height.
         Fixed = 1,
-        /// Index into the preset-proportion list.
+        /// Fraction anchor snapped to the nearest entry of the effective
+        /// preset list at relayout — same value-anchored contract as
+        /// ColumnWidth::Preset.
         Preset = 2,
     };
 
     Kind kind = Auto;
     qreal weight = 1.0; ///< Kind::Auto
     int fixedPx = 0; ///< Kind::Fixed
-    int presetIdx = 0; ///< Kind::Preset
+    qreal presetFraction = 0.5; ///< Kind::Preset
 
     static WindowHeight makeAuto(qreal w = 1.0)
     {
@@ -449,11 +508,11 @@ struct WindowHeight
         h.fixedPx = px;
         return h;
     }
-    static WindowHeight makePreset(int idx)
+    static WindowHeight makePreset(qreal fraction)
     {
         WindowHeight h;
         h.kind = Preset;
-        h.presetIdx = idx;
+        h.presetFraction = fraction;
         return h;
     }
 
@@ -468,11 +527,41 @@ struct WindowHeight
         case Fixed:
             return fixedPx == other.fixedPx;
         case Preset:
-            return presetIdx == other.presetIdx;
+            return qFuzzyCompare(presetFraction, other.presetFraction);
         }
         return false;
     }
 };
+
+/// Shared nearest-entry resolution for the fraction anchors above — the ONE
+/// implementation behind preset resolution, cycling, and height-fraction
+/// probes (it replaced three per-site variants).
+///
+/// An EMPTY list answers -1, not 0: every other answer is a valid index into
+/// @p presets, and handing back an out-of-range 0 made the empty case look
+/// like a hit that a caller would then use to subscript. Every in-tree caller
+/// bails on an empty list before reaching here, so the guard is the belt for
+/// the one that does not.
+inline int nearestPresetIndex(const QList<qreal>& presets, qreal fraction)
+{
+    if (presets.isEmpty()) {
+        return -1;
+    }
+    int best = 0;
+    for (int i = 1; i < presets.size(); ++i) {
+        if (qAbs(presets.at(i) - fraction) < qAbs(presets.at(best) - fraction)) {
+            best = i;
+        }
+    }
+    return best;
+}
+
+/// The nearest entry's VALUE. An empty list returns @p fallback, matching the
+/// old presetAt clamp's 0.5 answer.
+inline qreal nearestPresetValue(const QList<qreal>& presets, qreal fraction, qreal fallback = 0.5)
+{
+    return presets.isEmpty() ? fallback : presets.at(nearestPresetIndex(presets, fraction));
+}
 
 /// One window in a column.
 struct Tile
@@ -530,7 +619,7 @@ struct ScrollLayoutParams
     QRect workArea;
     int gap = 0;
     /// Preset proportion lists (niri defaults: 1/3, 1/2, 2/3). Never empty —
-    /// resolvers clamp preset indices into range.
+    /// resolvers snap a Preset fraction anchor to the nearest entry.
     /// KEEP IN SYNC with THREE other copies, not one:
     ///   1. ScrollEngine::m_presetColumnWidths / m_presetWindowHeights, the
     ///      member seeds these mirror (ScrollEngine.h);

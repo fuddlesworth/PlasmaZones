@@ -268,7 +268,7 @@ QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
     //     first match in unspecified hash order, so a stale entry can shadow
     //     the live one.
     //   - m_notifiedWindowScreens is a single value per window so it cannot be
-    //     ambiguous, but three of its five writers store a POSITION-derived
+    //     ambiguous, but several of its writers store a POSITION-derived
     //     screen (the outputChanged frame-centre resolve, the virtual-screen
     //     re-resolve). A centred column straddling the screen edge can have
     //     its centre on the neighbouring output, so those can stamp a screen
@@ -415,7 +415,8 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
 
 void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows,
                                             const QSet<QString>& screenFilter, bool resetNotified,
-                                            bool enteringAutotile)
+                                            bool enteringAutotile,
+                                            const QHash<KWin::EffectWindow*, QString>& screenOverrides)
 {
     // Collect eligible windows using the same filtering as notifyWindowAdded,
     // then send one batch D-Bus call instead of per-window round-trips.
@@ -430,7 +431,14 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         }
 
         const QString windowId = m_effect->getWindowId(w);
-        const QString screenId = m_effect->getWindowScreenId(w);
+        // A caller-supplied id wins over the positional resolve, and is then
+        // the ONE value the filter, the notified-screen stamp, the pre-tile
+        // capture and the wire entry all read (see the header): the engine
+        // flip resolves under the pre-flip scrolling set, where a parked strip
+        // column is still attributed to its own output.
+        const auto overrideIt = screenOverrides.constFind(w);
+        const QString screenId =
+            overrideIt != screenOverrides.constEnd() ? overrideIt.value() : m_effect->getWindowScreenId(w);
         if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
             continue;
         }
@@ -461,7 +469,11 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         bool minimizedOnly = false;
         if (!isEligibleForTilingNotify(w, &minimizedOnly)) {
             if (minimizedOnly) {
-                claimAlreadyMinimizedAsFloated(w, windowId, screenFilter, enteringAutotile);
+                // Same resolved id, not a second resolve: this arm reads the
+                // screen filter too, so a re-resolve after an engine flip
+                // would drop the already-minimized windows the flip path
+                // specifically re-announces to claim.
+                claimAlreadyMinimizedAsFloated(w, windowId, screenFilter, enteringAutotile, screenId);
             }
             continue;
         }
@@ -808,6 +820,39 @@ void TilingHandler::onDaemonReady()
     // that m_tileStaggerGenByScreen.clear() then discards. loadSettings owns
     // the bring-up re-announce.
     setScrollingScreens({}, /*announceFlipped=*/false);
+    // The per-screen active-layout map is the same shape of dead-session
+    // ruleQuery input, and it needs the clear here for a reason the scrolling
+    // set does not have: a straight old→new owner handover produces no
+    // serviceUnregistered edge, so the teardown clear never runs and the
+    // effect arrives at bring-up with m_activeLayoutsSeeded still TRUE over
+    // the dead daemon's map. ActiveLayout rules would then be admitted and
+    // resolved against layouts the new daemon has not published, and the
+    // seeding edge that re-drives the admission filter could never fire again
+    // for this session. Idempotent on the teardown-first path.
+    //
+    // The teardown variant's pairing contract is satisfied by this function's
+    // own tail: invalidateAllRuleCaches (below, with the tiled-membership
+    // clear) drops every verdict memoised against the dead map, and
+    // scheduleBorderSweep rebuilds the decorations those verdicts baked in.
+    clearActiveLayoutsForTeardown();
+    // That call also re-slices the ActiveLayout-scoped rules back out of the
+    // four effect-bound rule sets (which SURVIVE the teardown by design) and
+    // SETS m_activeLayoutRulesWithheld when it removed any — so on this path
+    // the marker is correct by construction, and the seed edge fired by
+    // loadSettings' reply below re-drives the fetch that restores them.
+    //
+    // m_activeLayoutRulesWithheld is deliberately never CLEARED alongside the
+    // unseeding. Every loadRuleAnimationsFromDbus reply that PARSES recomputes
+    // it outright (shader_config_dbus.cpp assigns, never ORs); the
+    // malformed-payload arms return before the assignment, and correctly so —
+    // they run no slice either, so the standing marker still matches the
+    // standing rule sets.
+    // Clearing it here would be unsafe in the one case that matters: if this
+    // bring-up's getAllRules errors or times out, no reply recomputes the
+    // marker, and a cleared marker leaves the withheld ActiveLayout rules
+    // disarmed for the rest of the session because the seed edge in state.cpp
+    // is gated on it. A stale-TRUE marker costs exactly one redundant re-drive,
+    // which is the safe direction. The seed edge consumes and clears it.
     // Void the DEAD session's in-flight managedScreens property reply too:
     // loadSettings below re-queries, and a stale reply from the previous
     // daemon would otherwise pass its generation gate and reinstate a

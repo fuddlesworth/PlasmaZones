@@ -24,8 +24,10 @@
 #include <phosphorzones_export.h>
 
 #include <PhosphorLayoutApi/ILayoutSourceRegistry.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ScrollingTemplate.h>
 
 #include <QJsonObject>
 #include <QString>
@@ -33,6 +35,8 @@
 #include <QVector>
 
 namespace PhosphorZones {
+
+class ScrollingTemplateStore;
 
 /**
  * @brief Enumeration + mutation surface for the in-memory zone-layout
@@ -114,6 +118,47 @@ public:
     /// class doc.
     virtual QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                           const QString& activity = QString()) const = 0;
+
+    /// The native scrolling-template store wired into this registry, or
+    /// null when none is (lightweight stubs, roots with no template
+    /// feature). Consumers use it for template enumeration (picker lists);
+    /// context RESOLUTION goes through scrollingTemplateForContext below.
+    virtual ScrollingTemplateStore* scrollingTemplateStore() const
+    {
+        return nullptr;
+    }
+
+    /// The resolved scrolling TEMPLATE for a context (the native
+    /// ScrollingTemplate whose vocabularies and blueprint the engine push
+    /// consumes), by value — isValid() is false when the context is not
+    /// Scrolling, names no template and no default template answers, or the
+    /// named template no longer exists in the store. Default invalid so
+    /// lightweight test stubs need not implement the template feature.
+    virtual ScrollingTemplate scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
+                                                          const QString& activity) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(virtualDesktop)
+        Q_UNUSED(activity)
+        return {};
+    }
+
+    /// The id the layout PICKER highlights for a scrolling context: the
+    /// resolved template's bare UUID, or the "scrolling:" sentinel (matches
+    /// no card) when no template resolves. The shared authority for the
+    /// picker-highlight sites (UnifiedLayoutController::displayIdForAssignment
+    /// and OverlayService::activeLayoutIdForScreen) — callers keep their own
+    /// live-capability gates. Distinct from the rules-visible query stamp,
+    /// which uses the PREFIXED "scrolling:<uuid>" form. Non-virtual on
+    /// purpose: a pure convenience over the virtual resolver above.
+    QString scrollingDisplayIdForContext(const QString& screenId, int virtualDesktop, const QString& activity) const
+    {
+        const ScrollingTemplate templ = scrollingTemplateForContext(screenId, virtualDesktop, activity);
+        if (templ.isValid()) {
+            return templ.id.toString();
+        }
+        return QString(PhosphorLayout::LayoutId::ScrollingId);
+    }
 
     /// Effective global default layout (snap-only fallback).
     virtual Layout* defaultLayout() const = 0;
@@ -253,12 +298,15 @@ Q_SIGNALS:
     // changes").
     void activeLayoutChanged(Layout* layout);
 
-    // Assignment churn. Fires when a (screenId, virtualDesktop)
-    // assignment changes; activity context is intentionally omitted
-    // from the signal - consumers that care about activity-keyed
-    // assignments re-query via @c layoutForScreen with their current
-    // activity. Concrete impl emits only on actual change (matches the
-    // project "emit only when value changes" rule).
+    // Assignment churn. Fires when a (screenId, virtualDesktop) assignment
+    // is WRITTEN; activity context is intentionally omitted from the signal -
+    // consumers that care about activity-keyed assignments re-query via
+    // @c layoutForScreen with their current activity. Deliberately NOT an
+    // emit-on-change signal: the emitters fire unconditionally on every
+    // assignment write, because consumers use it as a re-derive trigger
+    // (engine screen sets, layout filters, template vocabulary pushes) whose
+    // inputs go beyond the (screen, desktop, layout) payload - an identical
+    // payload can still mean a changed template or activity-keyed entry.
     void layoutAssigned(const QString& screenId, int virtualDesktop, Layout* layout);
 };
 

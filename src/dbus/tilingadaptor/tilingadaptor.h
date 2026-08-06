@@ -13,6 +13,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 #include <QVector>
 
 #include <optional>
@@ -54,6 +55,7 @@ class PLASMAZONES_EXPORT TilingAdaptor : public QDBusAbstractAdaptor
 
     Q_PROPERTY(bool enabled READ enabled NOTIFY enabledChanged)
     Q_PROPERTY(QStringList managedScreens READ managedScreens NOTIFY managedScreensChanged)
+    Q_PROPERTY(QVariantMap activeLayouts READ activeLayouts NOTIFY activeLayoutsChanged)
 
 public:
     /**
@@ -131,6 +133,24 @@ public:
     // Property accessors
     bool enabled() const;
     QStringList managedScreens() const;
+    QVariantMap activeLayouts() const
+    {
+        return m_activeLayouts;
+    }
+
+    /// Daemon-facing push of the per-screen rules-visible active layout map
+    /// (screenId → snapping UUID / "autotile:<algo>" / "scrolling:<templateUuid>"
+    /// / bare sentinel). Owns the emit-on-change gate — the daemon pushes
+    /// unconditionally from every updateEngineScreens pass, and multiple
+    /// triggers (desktop switch, rule edit, template swap) collapse to one
+    /// broadcast per actual change (same rationale as relayEnabledChanged).
+    /// Deliberately NOT cleared by clearEngine(): a restart's fresh push
+    /// covers it, and broadcasting an empty map at shutdown would make the
+    /// effect misfire negated ActiveLayout rules against a daemon that is
+    /// merely restarting (mirrors the empty-union guard in the coalesced
+    /// screens announce). The effect's bring-up Properties.Get self-corrects
+    /// any window where a rule query ran before the first push landed.
+    void setActiveLayouts(const QVariantMap& activeLayouts);
 
 public Q_SLOTS:
     /**
@@ -242,6 +262,16 @@ Q_SIGNALS:
      * @param isDesktopSwitch True if the change is due to desktop/activity switch
      */
     void managedScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
+
+    /**
+     * @brief Emitted when any screen's rules-visible active layout changes
+     *
+     * The KWin effect listens to this to stamp Field::ActiveLayout onto its
+     * window-domain rule queries and to invalidate its rule-verdict caches.
+     *
+     * @param activeLayouts screenId → rules-visible active layout id string
+     */
+    void activeLayoutsChanged(const QVariantMap& activeLayouts);
 
     /**
      * @brief Emitted when tiling layout changes for a screen
@@ -372,6 +402,8 @@ private:
     bool m_pendingIsDesktopSwitch = false;
     /// Last enabled value broadcast (unset until the first emission).
     std::optional<bool> m_lastEnabledBroadcast;
+    /// Per-screen rules-visible active layout map (see setActiveLayouts).
+    QVariantMap m_activeLayouts;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     /// Borrowed; outlives adaptor. Wired post-construction by the daemon so the
     /// tiling open path can resolve RouteToScreen / RouteToDesktop rules

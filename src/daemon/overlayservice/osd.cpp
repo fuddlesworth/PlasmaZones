@@ -160,9 +160,28 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     p.zones = layout->zones().isEmpty()
         ? QVariantList()
         : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full, QRectF(screenGeom));
-    p.category = static_cast<int>(PhosphorZones::LayoutCategory::Manual);
-    p.autoAssign = layout->autoAssign();
-    p.globalAutoAssign = m_settings && m_settings->autoAssignAllLayouts();
+    // Since the native-template pivot this path serves NON-template screens
+    // only: a template apply carries no Layout* and routes to
+    // showScrollingTemplateOsd instead, and every producer of this overload
+    // gates on the context's mode not being Scrolling (applyEntry refuses a
+    // manual layout on a Templates screen, the lock/unlock and KCM-apply
+    // sites take their template arm first). Category is therefore Manual in
+    // practice.
+    //
+    // The live-capability read below is defence in depth for that invariant.
+    // The Auto badge advertises snap-to-empty-zone, whose ONLY behavioural
+    // consumer is the snap engine, so if a Templates screen ever does reach
+    // here the badge, the category and the caption are corrected rather than
+    // left claiming a behaviour the screen cannot perform. Category and
+    // isTemplate move together — a "Manual" badge beside a "Column template"
+    // caption is a contradiction on one card.
+    const bool templatesScreen =
+        m_layoutSupportResolver && m_layoutSupportResolver(effectiveScreenId) == LayoutSupportTemplates;
+    p.category = static_cast<int>(templatesScreen ? PhosphorZones::LayoutCategory::ScrollingTemplate
+                                                  : PhosphorZones::LayoutCategory::Manual);
+    p.autoAssign = !templatesScreen && layout->autoAssign();
+    p.globalAutoAssign = !templatesScreen && m_settings && m_settings->autoAssignAllLayouts();
+    p.isTemplate = templatesScreen;
     p.locked = locked;
     p.screenAspectRatio = aspectRatio;
     p.aspectRatioClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
@@ -192,6 +211,68 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     syncPassiveShellSurfaceStateForSurface(surface);
     QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
     qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
+}
+
+void OverlayService::showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones,
+                                              const QString& screenId, bool locked)
+{
+    // The native-template twin of showLayoutOsdImpl: no Layout* backs a
+    // ScrollingTemplate, so the caller supplies the id, name and the
+    // blueprint-derived preview zones. Always captioned as a template; the
+    // Auto badge never applies (snap-to-empty-zone cannot happen on a
+    // Templates screen).
+    //
+    // Empty-preview bail matching showLayoutOsdImpl: a card with no columns
+    // to draw is a blank rectangle. The locked variant still shows, because
+    // there the lock badge is the message and the preview is decoration.
+    if (!locked && zones.isEmpty()) {
+        qCDebug(lcOverlay) << "Skipping OSD for empty template=" << name;
+        return;
+    }
+    QQuickWindow* window = nullptr;
+    PhosphorLayer::Surface* surface = nullptr;
+    QQuickItem* osdSlot = nullptr;
+    QScreen* physScreen = nullptr;
+    QRect screenGeom;
+    qreal aspectRatio = 0;
+    QString effectiveScreenId;
+    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
+                                screenId)) {
+        return;
+    }
+
+    LayoutOsdContentParams p;
+    p.screenId = effectiveScreenId;
+    p.id = id;
+    p.name = name;
+    p.zones = zones;
+    // Category 2, matching what the wire serializer stamps for a template
+    // card: the QML badge arm keys on this, and Manual(0) made the OSD
+    // announce a native template as a zone layout.
+    p.category = static_cast<int>(PhosphorZones::LayoutCategory::ScrollingTemplate);
+    p.autoAssign = false;
+    p.globalAutoAssign = false;
+    p.isTemplate = true;
+    p.locked = locked;
+    p.screenAspectRatio = aspectRatio;
+    // A template has no authored aspect class; classify the live screen so
+    // the preview renders at the same canonical ratio the sibling OSD paths
+    // use (see the autotile rationale in the string overload below).
+    p.aspectRatioClass =
+        PhosphorLayout::ScreenClassification::toString(PhosphorLayout::ScreenClassification::classify(aspectRatio));
+    pushLayoutOsdContent(osdSlot, p);
+    writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
+
+    sizeOsdToScreen(window, screenGeom);
+    cancelSurfacePrime(surface);
+    if (!surface->isLogicallyShown()) {
+        surface->show();
+    }
+    osdSlot->setVisible(true);
+    m_surfaceAnimator->beginShow(surface, osdSlot, PhosphorRoles::Osd, []() { });
+    syncPassiveShellSurfaceStateForSurface(surface);
+    QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
+    qCInfo(lcOverlay) << (locked ? "Locked template" : "Template") << "OSD: template=" << name << "screen=" << screenId;
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
@@ -295,6 +376,7 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     // would otherwise leave `locked` or `disabled` stuck on.
     resetOsdOverlayState(osdSlot);
     writeQmlProperty(osdSlot, QStringLiteral("locked"), p.locked);
+    writeQmlProperty(osdSlot, QStringLiteral("isTemplate"), p.isTemplate);
     writeQmlProperty(osdSlot, QStringLiteral("layoutId"), p.id);
     writeQmlProperty(osdSlot, QStringLiteral("layoutName"), p.name);
     writeQmlProperty(osdSlot, QStringLiteral("screenAspectRatio"), p.screenAspectRatio);

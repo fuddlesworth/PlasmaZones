@@ -276,7 +276,7 @@ void assignBandPrioritiesToZeroRules(QList<PhosphorRules::Rule>& rules)
 {
     using PhosphorRules::MatchExpression;
     using PhosphorRules::Rule;
-    // Bands mirror RuleTemplates (src/settings/ruletemplates.h) — duplicated as
+    // Bands mirror RuleTemplates (src/settings/rules/ruletemplates.h) — duplicated as
     // literals because that header lives in the settings tree and the core
     // library cannot link it.
     constexpr int kApplicationBandBase = 200;

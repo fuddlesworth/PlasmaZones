@@ -19,13 +19,14 @@ private Q_SLOTS:
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         // Capability contract the daemon's layout-selection gates rest on:
         // zone layouts ARE snap's placement input, so the engine must
-        // override the interface's default-false providesLayouts. Asserted
+        // override the interface's default-None layoutSupport. Asserted
         // through the base pointer too — the daemon dispatches via
         // IPlacementEngine*, and a dropped `override` with a shadowing
         // non-virtual would pass the concrete check while the interface
-        // call reverted to false.
-        QVERIFY(engine.providesLayouts());
-        QVERIFY(static_cast<PhosphorEngine::IPlacementEngine*>(&engine)->providesLayouts());
+        // call reverted to None.
+        using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
+        QCOMPARE(engine.layoutSupport(), LayoutSupport::Placement);
+        QCOMPARE(static_cast<PhosphorEngine::IPlacementEngine*>(&engine)->layoutSupport(), LayoutSupport::Placement);
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
@@ -341,10 +342,12 @@ private Q_SLOTS:
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
-        // No predicate injected — the engine must restore snapped records
-        // unconditionally (the historical default). This guards against a
-        // regression that treated a NULL predicate as "block" (skip): the gate
-        // must never fire when no predicate is wired.
+        // No predicate injected — the gate must never fire when nothing is
+        // wired, which is the regression this guards (a NULL predicate read as
+        // "block"). Note what is and is not claimed: the assertion is that the
+        // gate did NOT skip the record, not that the restore ran to completion.
+        // Geometry cannot resolve in this guiless fixture, so the completed
+        // restore is not observable here.
         PhosphorEngine::WindowPlacement rec;
         rec.windowId = QStringLiteral("app|orig");
         rec.appId = QStringLiteral("app");
@@ -410,8 +413,7 @@ private Q_SLOTS:
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
-        // Predicate present but returns false — the gate must not fire. (No
-        // predicate at all is the same: m_floatPredicate is empty.)
+        // Predicate present but returns false — the gate must not fire.
         engine.setFloatPredicate([](const QString&, const QString&) {
             return false;
         });
@@ -422,6 +424,23 @@ private Q_SLOTS:
 
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("floated by rule")),
                  "an unmatched window must not be floated by the open-floating gate");
+        m_wts->setSnapState(nullptr);
+
+        // The no-predicate case is the OTHER half of "gate inactive", and it
+        // reaches the gate through a different expression (an empty std::function
+        // rather than one returning false). It used to be asserted only in a
+        // comment, so a guard that dereferenced an unset predicate — or fired the
+        // gate when none was wired — would have gone unnoticed here.
+        SnapEngine unset(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        unset.setEngineSettings(m_settings);
+        m_wts->setSnapState(unset.snapState());
+
+        PhosphorEngine::SnapResult unsetResult;
+        const QStringList unsetLines =
+            captureResolveLogs(unset, QStringLiteral("app|uuid-no-predicate"), QStringLiteral("DP-1"), &unsetResult);
+
+        QVERIFY2(!unsetLines.join(QLatin1Char('\n')).contains(QStringLiteral("floated by rule")),
+                 "with no predicate wired at all the open-floating gate must stay inactive");
         m_wts->setSnapState(nullptr);
     }
 
@@ -875,12 +894,17 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
-    // The unfloatFallbackToZone setting GATES the fallback: with it off, a window
-    // that has no pre-float zone gets no fallback target (resolveFallbackUnfloatGeometry
-    // returns not-found), so unfloat keeps it floating. (The on-success geometry path
-    // needs a valid zoneGeometry, which this guiless fixture cannot produce — null
-    // QGuiApplication::primaryScreen(); it is covered end-to-end in the QTEST_MAIN
-    // test_snap_unfloat_fallback.cpp instead.)
+    // With unfloatFallbackToZone off, a window that has no pre-float zone gets no
+    // fallback target, so unfloat keeps it floating.
+    //
+    // What this pair does NOT establish is that the GATE is what produced the
+    // not-found: this fixture is guiless, QGuiApplication::primaryScreen() is
+    // null, so zoneGeometry() is invalid and the resolver answers not-found with
+    // the setting on as well. The resolver logs nothing on the gate's early
+    // return, so there is no branch marker to assert either. The discriminating
+    // pair lives in the QTEST_MAIN test_snap_unfloat_fallback.cpp, where geometry
+    // is valid and off-vs-on really does differ (see its
+    // "off → not-found even though zoneGeometry is valid" leg).
     void testResolveFallbackUnfloatGeometry_offReturnsNotFound()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
@@ -906,10 +930,10 @@ private Q_SLOTS:
     // chain PAST the opt-in gate — effective-screen resolution, layout lookup, and
     // zone selection (last-used → first-empty → first zone) — and reaches the final
     // geometry gate. Under QTEST_GUILESS_MAIN there is no QScreen, so zoneGeometry()
-    // returns an invalid QRect and the result is still not-found. This pins that (a)
-    // the post-gate chain executes without crashing on a real layout, and (b) the
-    // headless geometry limitation — not a broken gate — is what produces not-found
-    // here (the on-success geometry path is covered in test_snap_unfloat_fallback.cpp).
+    // returns an invalid QRect and the result is still not-found. What this leg is
+    // worth on its own: the post-gate chain executes over a real layout without
+    // crashing. It cannot tell a working gate from a broken one, because the OFF
+    // leg above reports the same not-found for a different reason.
     void testResolveFallbackUnfloatGeometry_onButHeadlessReturnsNotFound()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
