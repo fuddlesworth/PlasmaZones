@@ -46,7 +46,6 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
-import org.phosphor.animation
 
 // NOTE: no `shaderAnchor` on this content root, unlike the PopupFrame
 // cards — a multi-indicator strip has no single card rect to anchor a surface
@@ -59,43 +58,39 @@ Item {
     /// Strip entries pushed by the daemon (see file doc).
     property var strips: []
 
-    /// How far the scrolling view slid in the batch that produced `strips`,
-    /// in window-local pixels, and a counter that changes on every push.
+    /// Bumped by the daemon on every batch that slid the scrolling view, and
+    /// how long to wait after the last one before the indicators return.
     ///
-    /// The rects in `strips` are already at their FINAL positions, so an
-    /// indicator that simply drew them would jump to the end of the slide
-    /// while the windows underneath were still travelling. Instead the
-    /// indicators start `viewDeltaX` behind and settle to zero on the same
-    /// profile the compositor springs its own view offset with, which keeps
-    /// each indicator glued to the column it labels.
+    /// The indicators HIDE while the strip is moving rather than travelling
+    /// with it. They cannot travel with it accurately: the compositor moves
+    /// windows inside its own paint pass, while these live in a layer-shell
+    /// surface the daemon commits for the compositor to composite on a LATER
+    /// frame, so an indicator that mirrored the same spring still trailed the
+    /// column it labels by at least a frame. Two springs cannot close that gap;
+    /// only drawing the indicators compositor-side can, and that needs a
+    /// surface of their own (today they share one with the OSD, which must not
+    /// slide when the strip does).
     ///
-    /// This has to be mirrored rather than shared: the compositor's offset is
-    /// a paint-time translation on WINDOWS, and these indicators live in a
-    /// layer-shell surface the daemon draws, which that translation never
-    /// reaches.
+    /// A counter rather than a value, because two identical scrolls in a row
+    /// would push identical numbers and the second would raise no change signal
+    /// at all.
     ///
-    /// `viewDeltaSeq` exists because two identical scrolls in a row push an
-    /// identical `viewDeltaX`, and a value that does not change raises no
-    /// signal — the settle keys on the counter so the second scroll still
-    /// animates.
-    property int viewDeltaX: 0
+    /// `viewSettleMs` is a DEBOUNCE, not a real settle: the daemon never learns
+    /// when the compositor's spring finished, so it waits out a window sized
+    /// from the animation duration instead. A burst of fast scrolls keeps
+    /// restarting it, which is what makes the whole burst read as one hide.
     property int viewDeltaSeq: 0
+    property int viewSettleMs: 250
 
-    /// Live offset applied to every indicator. Zero at rest.
-    property real viewOffset: 0
+    /// True while the strip is considered to be moving.
+    readonly property bool stripMoving: stripMotionDebounce.running
 
-    onViewDeltaSeqChanged: {
-        viewOffset = viewDeltaX;
-        viewSettle.restart();
-    }
+    onViewDeltaSeqChanged: stripMotionDebounce.restart()
 
-    PhosphorMotionAnimation {
-        id: viewSettle
+    Timer {
+        id: stripMotionDebounce
 
-        target: root
-        property: "viewOffset"
-        to: 0
-        profile: "scrolling.view"
+        interval: root.viewSettleMs
     }
 
     /// Shown for a tab whose window reports no title. Named once so a
@@ -205,11 +200,22 @@ Item {
             readonly property int longExtent: vertical ? slotHeight : slotWidth
             readonly property int tabCount: tabs ? tabs.length : 0
 
-            // Horizontal only: the view scrolls sideways, and a vertical
-            // component would mean the strip had changed shape rather than
-            // moved, which is a structural change the rects already describe.
-            x: slotX + root.viewOffset
+            x: slotX
             y: slotY
+
+            // Out of the way while the strip moves, back once it settles. The
+            // rect is already the FINAL one, so a visible indicator would sit
+            // at the destination while its column was still travelling — worse
+            // than absent. Symmetric and short: the fade out overlaps motion
+            // that is already underway, and the fade in lands on a strip that
+            // has stopped.
+            opacity: root.stripMoving ? 0 : 1
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Kirigami.Units.shortDuration
+                }
+            }
             width: slotWidth
             height: slotHeight
             // The bar's segments floor at 1px each, so a rect too short for its

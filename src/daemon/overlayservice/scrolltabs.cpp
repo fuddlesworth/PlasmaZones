@@ -232,7 +232,17 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         ? 0
         : shifted.first().toMap().value(QStringLiteral("viewDeltaX")).toInt();
     if (viewDeltaX != 0) {
-        writeQmlProperty(slot, QStringLiteral("viewDeltaX"), viewDeltaX);
+        // How long the content waits after the last scroll before showing the
+        // indicators again. A DEBOUNCE standing in for a settle signal the
+        // daemon does not get: the compositor never reports when its view
+        // spring finished, so this waits out a window sized from the animation
+        // duration instead. The margin covers a spring ringing past its
+        // nominal duration; erring long only keeps the indicators away a
+        // little longer, while erring short brings them back onto a strip
+        // still moving, which is the artifact being removed.
+        constexpr int kSettleMarginMs = 120;
+        const int durationMs = m_settings ? m_settings->animationDuration() : 0;
+        writeQmlProperty(slot, QStringLiteral("viewSettleMs"), durationMs + kSettleMarginMs);
         writeQmlProperty(slot, QStringLiteral("viewDeltaSeq"), ++m_scrollTabViewDeltaSeq[screenId]);
     }
 
