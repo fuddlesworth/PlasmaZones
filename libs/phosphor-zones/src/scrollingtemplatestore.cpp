@@ -201,14 +201,15 @@ bool ScrollingTemplateStore::removeTemplate(const QUuid& id)
         // matches no entry, so the ordinary case still appends.
         const QString idCanonical = QFileInfo(idFile).canonicalFilePath();
         bool ownedByOther = false;
-        for (auto other = m_templates.constBegin(); !idCanonical.isEmpty() && other != m_templates.constEnd();
-             ++other) {
-            if (other->id == id || other->sourcePath.isEmpty()) {
-                continue;
-            }
-            if (QFileInfo(other->sourcePath).canonicalFilePath() == idCanonical) {
-                ownedByOther = true;
-                break;
+        if (!idCanonical.isEmpty()) {
+            for (auto other = m_templates.constBegin(); other != m_templates.constEnd(); ++other) {
+                if (other->id == id || other->sourcePath.isEmpty()) {
+                    continue;
+                }
+                if (QFileInfo(other->sourcePath).canonicalFilePath() == idCanonical) {
+                    ownedByOther = true;
+                    break;
+                }
             }
         }
         if (!ownedByOther) {

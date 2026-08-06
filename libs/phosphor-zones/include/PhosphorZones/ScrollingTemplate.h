@@ -29,6 +29,12 @@ inline constexpr qreal MinTemplateFraction = 0.05;
 /// exported to the settings UI through SettingsController::scrollingConstants().
 inline constexpr int MaxTemplateColumns = 16;
 
+/// Two preset stops closer together than this are the same stop: the
+/// normalization dedupe drops the later one. Exported to the settings UI
+/// through SettingsController::scrollingConstants() so the template editor's
+/// parse mirrors the store exactly.
+inline constexpr qreal FractionDedupeEpsilon = 0.01;
+
 /**
  * @brief One column of a scrolling template's seed blueprint
  *

@@ -734,6 +734,11 @@ void PlasmaZonesEffect::sliceActiveLayoutRulesForUnseededMap()
         const bool hadSetOpacity = m_shaderManager.hasOpacityRules();
         m_shaderManager.setRuleAnimationRules(std::move(animationRules));
         removed = true;
+        // A dropped rule can be the one routing transitions to an
+        // audio-reactive pack; re-evaluate the cava run gate the same way the
+        // admission pass does after its own setRuleAnimationRules. Deferred
+        // and coalesced, so pairing it with the callers' later work is safe.
+        scheduleEffectAudioSync();
         // The SetOpacity bookend, for the same reason loadRuleAnimationsFromDbus
         // takes it on a rule edit: opacity is resolved in the paint path, so a
         // window dimmed by an ActiveLayout-scoped SetOpacity rule stays at its
@@ -743,7 +748,9 @@ void PlasmaZonesEffect::sliceActiveLayoutRulesForUnseededMap()
         // caller is not: a straight old→new owner handover emits no
         // serviceUnregistered edge, so decorations are still live there. This
         // is the one repaint this path owns; borders and rule verdicts remain
-        // the callers' invalidateAllRuleCaches + scheduleBorderSweep.
+        // the callers' invalidateAllRuleCaches + scheduleBorderSweep. The
+        // "after" term is kept for symmetry with the admission pass's gate;
+        // a slice only removes rules, so only the "was" bookend can fire.
         if ((hadSetOpacity || m_shaderManager.hasOpacityRules()) && KWin::effects) {
             KWin::effects->addRepaintFull();
         }

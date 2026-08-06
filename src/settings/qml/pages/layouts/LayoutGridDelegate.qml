@@ -32,7 +32,8 @@ Item {
     // A template card's zoneCount carries the number of bands its preview
     // draws, and that comes from one of three sources: the template's starting
     // columns, the width presets when it has no starting columns, or the single
-    // fallback band a template with neither draws at its own default width.
+    // fallback band a template with neither draws (at its own default width
+    // when that width is a fraction, at half width otherwise).
     // Bands off the right edge are dropped either way. Only the first source is
     // literally a column count, so the footer and the accessible description say
     // "widths", which is true of all three.

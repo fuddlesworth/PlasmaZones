@@ -292,6 +292,11 @@ private Q_SLOTS:
             schema.value(QLatin1String("properties")).toObject().value(QLatin1String("columns")).toObject();
         QCOMPARE(columns.value(QLatin1String("maxItems")).toInt(), PhosphorZones::MaxTemplateColumns);
 
+        // The preset vocabularies share the same cap through fractionList.
+        const QJsonObject fractionList =
+            schema.value(QLatin1String("definitions")).toObject().value(QLatin1String("fractionList")).toObject();
+        QCOMPARE(fractionList.value(QLatin1String("maxItems")).toInt(), PhosphorZones::MaxTemplateColumns);
+
         // The kind-0 arm of defaultColumnWidth restates the same fraction bounds
         // a second time, in its own then-branch rather than by $ref, so it can
         // drift away from the shared fraction definition above on its own.

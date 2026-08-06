@@ -111,18 +111,19 @@ Kirigami.Dialog {
         root.open();
     }
 
-    // Mirrors the store's normalizeFractionList (phosphor-zones): drop anything
-    // below the proportion floor or above 1, sort ascending, drop an entry
-    // within 0.01 of the one kept before it, and keep at most as many as a
-    // template may have columns. commit() writes the surviving list back into
-    // the field, so what stays on screen is what was sent, and the preset-number
-    // spin counts the same entries the store will keep. The daemon remains the
-    // authority and normalizes again on the way in.
+    // Mirrors the store's normalizeFractionList (phosphor-zones): clamp
+    // anything above 1 down to 1, drop anything below the proportion floor,
+    // sort ascending, drop an entry within the dedupe epsilon of the one kept
+    // before it, and keep at most as many as a template may have columns.
+    // commit() writes the surviving list back into the field, so what stays on
+    // screen is what was sent, and the preset-number spin counts the same
+    // entries the store will keep. The daemon remains the authority and
+    // normalizes again on the way in.
     function parseFractionList(text) {
-        const parsed = text.split(",").map(part => parseFloat(part.trim())).filter(value => !isNaN(value) && value >= root.scrollingConstants.proportionMin && value <= 1).sort((a, b) => a - b);
+        const parsed = text.split(",").map(part => Math.min(parseFloat(part.trim()), 1)).filter(value => !isNaN(value) && value >= root.scrollingConstants.proportionMin).sort((a, b) => a - b);
         let kept = [];
         for (let i = 0; i < parsed.length && kept.length < root.scrollingConstants.maxTemplateColumns; i++) {
-            if (kept.length === 0 || Math.abs(kept[kept.length - 1] - parsed[i]) >= 0.01)
+            if (kept.length === 0 || Math.abs(kept[kept.length - 1] - parsed[i]) >= root.scrollingConstants.fractionDedupeEpsilon)
                 kept.push(parsed[i]);
         }
         return kept;

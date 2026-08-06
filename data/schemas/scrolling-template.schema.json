@@ -53,7 +53,9 @@
         },
         "fractionList": {
             "type": "array",
-            "items": { "$ref": "#/definitions/fraction" }
+            "items": { "$ref": "#/definitions/fraction" },
+            "maxItems": 16,
+            "description": "Same 16-entry cap as columns: normalize() truncates longer vocabularies, so a longer authored list would be silently repaired."
         },
         "column": {
             "type": "object",

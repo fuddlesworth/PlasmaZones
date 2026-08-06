@@ -175,6 +175,7 @@ QVariantMap SettingsController::scrollingConstants() const
         // layout adaptor clamps the two text fields on the way in, so the
         // editor dialog binds these to stop the user short of a silent cut.
         {QStringLiteral("maxTemplateColumns"), PhosphorZones::MaxTemplateColumns},
+        {QStringLiteral("fractionDedupeEpsilon"), PhosphorZones::FractionDedupeEpsilon},
         {QStringLiteral("nameMaxLength"), MaxLayoutNameLength},
         {QStringLiteral("descriptionMaxLength"), MaxTemplateDescriptionLength},
     };

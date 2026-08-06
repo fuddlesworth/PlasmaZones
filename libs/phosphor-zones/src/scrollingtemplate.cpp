@@ -13,7 +13,8 @@ namespace {
 
 // Dedupe tolerance for the preset lists, matching the settings parser's
 // treatment of editor float dust (thirds arrive as 0.333333/0.333334).
-constexpr qreal kEps = 0.01;
+// Aliases the exported constant so the template editor can mirror it.
+constexpr qreal kEps = FractionDedupeEpsilon;
 
 // Default width kinds, mirroring the engine's DefaultWidthKind wire values.
 // Spelled out here rather than included: this library deliberately does not

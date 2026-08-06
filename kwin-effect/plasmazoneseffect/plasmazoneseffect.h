@@ -2432,9 +2432,13 @@ private Q_SLOTS:
     /// without restarting the effect.
     void loadRuleAnimationsFromDbus();
 
+private:
     /// Re-slice the four effect-bound rule sets for an active-layout map that
     /// has just gone UNSEEDED (daemon-loss teardown / bring-up clear), by
     /// removing every rule whose match references `Field::ActiveLayout`.
+    /// A plain member, not a slot: nothing connects to it — the sole caller is
+    /// `TilingHandler::clearActiveLayoutsForTeardown` (a friend), so it earns
+    /// no moc metadata.
     ///
     /// The rule sets deliberately survive daemon loss, but the admission
     /// filter that filled them ran while the map was seeded, so they hold
@@ -2462,6 +2466,7 @@ private Q_SLOTS:
     /// daemon-loss caller) are still live there.
     void sliceActiveLayoutRulesForUnseededMap();
 
+private Q_SLOTS:
     /// D-Bus signal handler for `Rules.rulesChanged`. Re-arms the
     /// debounce timer rather than refetching the full ruleset on every
     /// signal — the daemon emits one signal per per-rule mutation, so a
