@@ -72,7 +72,7 @@ void OverlayService::setScrollTabIndicatorOverrides(const QString& screenId, con
     }
 }
 
-void OverlayService::updateScrollTabStrips(const QString& screenId, const QVariantList& strips)
+void OverlayService::updateScrollTabStrips(const QString& screenId, const QVariantList& strips, bool carriesViewSlide)
 {
     if (screenId.isEmpty()) {
         return;
@@ -222,7 +222,15 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     // a row push the same delta, and a bare property write would raise no
     // change signal for the second, leaving the indicator behind. QML keys the
     // restart on the sequence rather than the value.
-    const int viewDeltaX = shifted.isEmpty() ? 0 : shifted.first().toMap().value(QStringLiteral("viewDeltaX")).toInt();
+    //
+    // Gated on carriesViewSlide: the delta describes the ONE relayout that
+    // produced these rects, and the cached payload keeps carrying it, so every
+    // replay through here (a retitle, an urgency change, a settings toggle)
+    // would otherwise re-run the settle and fling the indicators in from the
+    // last scroll's direction with no scroll having happened.
+    const int viewDeltaX = (!carriesViewSlide || shifted.isEmpty())
+        ? 0
+        : shifted.first().toMap().value(QStringLiteral("viewDeltaX")).toInt();
     if (viewDeltaX != 0) {
         writeQmlProperty(slot, QStringLiteral("viewDeltaX"), viewDeltaX);
         writeQmlProperty(slot, QStringLiteral("viewDeltaSeq"), ++m_scrollTabViewDeltaSeq[screenId]);

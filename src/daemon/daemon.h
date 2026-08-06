@@ -456,7 +456,11 @@ private:
     void captureScrollingOrders(const QSet<QString>& scrollingScreens);
     /// Parse @p stripsJson, enrich each tab with live title / urgency /
     /// per-window colour, and drive @p screenId's overlay indicator.
-    void applyScrollTabStrips(const QString& screenId, const QString& stripsJson);
+    /// @param carriesViewSlide True only for the engine's own emit. The payload
+    ///        carries how far the view slid in THAT relayout, and the cached
+    ///        copy keeps carrying it, so an enrichment refresh replaying the
+    ///        same JSON must not re-run the indicators' settle.
+    void applyScrollTabStrips(const QString& screenId, const QString& stripsJson, bool carriesViewSlide = false);
     /// Re-run the enrichment for every screen holding a cached payload.
     ///
     /// Needed because enrichment reads live window state the ENGINE cannot

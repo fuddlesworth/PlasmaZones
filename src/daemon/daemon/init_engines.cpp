@@ -972,7 +972,10 @@ void Daemon::initEnginesAndWiring()
     // window registry and drives the per-screen overlay slot.
     connect(scrollEngine, &PhosphorScrollEngine::ScrollEngine::tabStripsChanged, this,
             [this](const QString& screenId, const QString& stripsJson) {
-                applyScrollTabStrips(screenId, stripsJson);
+                // The one caller that carries the view slide: this IS the
+                // relayout the delta describes. Every replay path leaves the
+                // flag at its default.
+                applyScrollTabStrips(screenId, stripsJson, /*carriesViewSlide=*/true);
             });
 
     // Enrichment is resolved from the window registry, so a change there must

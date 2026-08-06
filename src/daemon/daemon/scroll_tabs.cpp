@@ -22,7 +22,7 @@
 
 namespace PlasmaZones {
 
-void Daemon::applyScrollTabStrips(const QString& screenId, const QString& stripsJson)
+void Daemon::applyScrollTabStrips(const QString& screenId, const QString& stripsJson, bool carriesViewSlide)
 {
     if (!m_overlayService) {
         return;
@@ -81,7 +81,7 @@ void Daemon::applyScrollTabStrips(const QString& screenId, const QString& strips
     } else {
         m_lastScrollTabStripsJson.insert(screenId, stripsJson);
     }
-    m_overlayService->updateScrollTabStrips(screenId, *strips);
+    m_overlayService->updateScrollTabStrips(screenId, *strips, carriesViewSlide);
 }
 
 void Daemon::scheduleScrollTabEnrichmentRefresh()

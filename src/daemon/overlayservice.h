@@ -453,7 +453,13 @@ public:
     ///
     /// Each tab is a click target; the surface stays click-through outside the
     /// indicator rects via the per-screen input region built here.
-    void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
+    /// @param carriesViewSlide True only for the engine's own push for this
+    ///        batch. The view slide in the payload describes ONE relayout, so a
+    ///        REPLAY of the cached strips (a retitle, an urgency change, a
+    ///        settings toggle) must not re-run the settle — it would fling the
+    ///        indicators in from the last scroll's direction again, with no
+    ///        scroll having happened. Replays default to false.
+    void updateScrollTabStrips(const QString& screenId, const QVariantList& strips, bool carriesViewSlide = false);
 
     /// Drop-target indicator for a scrolling drag re-insert on @p screenId
     /// (per screen, NOT a singleton — a drag can cross screens). @p rect is
