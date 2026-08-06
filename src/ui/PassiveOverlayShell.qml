@@ -411,6 +411,18 @@ Window {
         // vertical/horizontal branch in the content item, and `windowId` is
         // what a tab click relays back.
         property var strips: []
+        // View slide for the batch that produced `strips`, and a counter that
+        // changes on every push. The rects above are already at their final
+        // positions, so the content starts this far behind and settles, which
+        // is what keeps an indicator with the column it labels while the strip
+        // slides. The counter is what re-triggers that settle when two
+        // consecutive scrolls carry an identical delta.
+        //
+        // Declared HERE and forwarded below like every other slot property: C++
+        // writes land on this Item, and a property the content declares but the
+        // slot does not is simply never written.
+        property int viewDeltaX: 0
+        property int viewDeltaSeq: 0
         // Content lifecycle gate, toggled by C++ on show/hide. Unlike the
         // OSD-style slots the content is NOT re-instantiated per update —
         // strip changes are frequent (every relayout) and flow through the
@@ -461,6 +473,8 @@ Window {
 
             ScrollTabStripContent {
                 strips: scrollTabsSlot.strips
+                viewDeltaX: scrollTabsSlot.viewDeltaX
+                viewDeltaSeq: scrollTabsSlot.viewDeltaSeq
                 fontFamily: scrollTabsSlot.fontFamily
                 fontSizeScale: scrollTabsSlot.fontSizeScale
                 fontWeight: scrollTabsSlot.fontWeight
