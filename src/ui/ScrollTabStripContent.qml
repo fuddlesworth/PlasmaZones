@@ -198,7 +198,21 @@ Item {
             // has stopped.
             opacity: root.stripMoving ? 0 : 1
 
+            // Asymmetric on purpose: instant out, eased back in.
+            //
+            // A faded hide keeps the indicator on screen for the whole fade,
+            // sitting at its DESTINATION rect while the columns are still
+            // travelling — the same artifact the hide exists to remove, just
+            // at the start of the leg instead of the end. There is nothing to
+            // soften on the way out anyway, because the thing it would ease
+            // against is already moving.
+            //
+            // Coming back is the opposite case: the strip has stopped, the
+            // rect is settled, and a hard pop would be the only motion on
+            // screen.
             Behavior on opacity {
+                enabled: !root.stripMoving
+
                 NumberAnimation {
                     duration: Kirigami.Units.shortDuration
                 }
