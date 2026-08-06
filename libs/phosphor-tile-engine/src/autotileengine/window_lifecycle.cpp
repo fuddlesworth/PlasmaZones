@@ -170,9 +170,6 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
                 }
                 oldState->removeWindow(windowId);
                 m_overflow.migrateWindow(windowId);
-                // The anchor's saved order describes the OLD context's layout.
-                m_reopenRestoredOrder.remove(windowId);
-                endCloseBurstForKey(oldKey);
                 crossScreenMigration = true;
                 qCInfo(PhosphorTileEngine::lcTileEngine) << "windowOpened: removed" << windowId << "from old screen"
                                                          << oldKey.screenId << "before adding to" << screenId;
@@ -403,7 +400,6 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
             m_windowMinSizes.remove(windowId);
             m_autotileFloatedWindows.remove(windowId);
             m_lastAppliedTileRect.remove(windowId);
-            m_reopenRestoredOrder.remove(windowId);
             if (!oldScreen.isEmpty()) {
                 migrateWindowBetweenKeys(windowId, oldKey, screenId);
             }
@@ -478,11 +474,9 @@ bool AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, Phos
     // one spans every state torn down in the same sweep.
     for (const QString& windowId : tiled) {
         m_windowMinSizes.remove(windowId);
-        m_reopenRestoredOrder.remove(windowId);
     }
     for (const QString& windowId : floated) {
         m_windowMinSizes.remove(windowId);
-        m_reopenRestoredOrder.remove(windowId);
     }
     // SCREEN-keyed, not context-keyed, so they only go when the whole screen
     // does. A context-scoped prune on a surviving screen (removed desktop or
@@ -521,9 +515,6 @@ void AutotileEngine::migrateWindowBetweenKeys(const QString& windowId, const Til
     }
     oldState->removeWindow(windowId);
     m_overflow.migrateWindow(windowId);
-    // The anchor's saved order describes the OLD context's layout.
-    m_reopenRestoredOrder.remove(windowId);
-    endCloseBurstForKey(oldKey);
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "Window" << windowId << "moved from" << oldKey.screenId << "to" << newScreenId << "- migrating";
     // Close the hole the departing window left on the SOURCE screen — the
@@ -703,7 +694,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     }
 }
 
-QString AutotileEngine::removeTrackedWindowNoRetile(const QString& windowId, RemovalOrigin origin)
+QString AutotileEngine::removeTrackedWindowNoRetile(const QString& windowId)
 {
     const QString screenId = m_states.keyForWindow(windowId).screenId;
     if (screenId.isEmpty()) {
@@ -712,7 +703,7 @@ QString AutotileEngine::removeTrackedWindowNoRetile(const QString& windowId, Rem
         // DELIBERATELY no release/retile signalling on this path: the window
         // never occupied a tile, so there is nothing for subscribers to
         // reflow — the pending-order purge is the whole cleanup.
-        removeWindow(windowId, origin);
+        removeWindow(windowId);
         return {};
     }
 
@@ -734,15 +725,13 @@ QString AutotileEngine::removeTrackedWindowNoRetile(const QString& windowId, Rem
         }
     }
 
-    removeWindow(windowId, origin);
+    removeWindow(windowId);
     return screenId;
 }
 
 void AutotileEngine::onWindowRemoved(const QString& windowId)
 {
-    // The genuine-close entry: the vacated index feeds the close-burst
-    // ledger. Non-close untracks go through untrackWindowAndRetile.
-    const QString screenId = removeTrackedWindowNoRetile(windowId, RemovalOrigin::Close);
+    const QString screenId = removeTrackedWindowNoRetile(windowId);
     if (screenId.isEmpty()) {
         return;
     }
@@ -751,16 +740,6 @@ void AutotileEngine::onWindowRemoved(const QString& windowId)
     // layout recalculation to avoid visible holes. Unlike additions, removals don't
     // arrive in bursts, so coalescing provides no benefit. (The batch prune path
     // in pruneStaleWindows is the exception — it retiles each affected screen once.)
-    retileAfterOperation(screenId, true);
-}
-
-void AutotileEngine::untrackWindowAndRetile(const QString& windowId)
-{
-    const QString screenId = removeTrackedWindowNoRetile(windowId, RemovalOrigin::Untrack);
-    if (screenId.isEmpty()) {
-        return;
-    }
-    qCInfo(PhosphorTileEngine::lcTileEngine) << "untrackWindowAndRetile:" << windowId << "screen=" << screenId;
     retileAfterOperation(screenId, true);
 }
 

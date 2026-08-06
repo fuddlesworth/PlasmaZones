@@ -256,8 +256,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // Remove from old screen's autotile state. releaseWindowTracking, NOT
     // onWindowClosed: the window is alive and crossing outputs, so the close
     // relay's placement capture would persist the OLD screen's slot as its
-    // final state and its removal would feed the engine's close-burst ledger
-    // as a phantom close.
+    // final state.
     releaseWindowTracking(windowId, oldScreenId);
 
     if (ownedMinimizeFloat && (w->isMinimized() || wasUnfloatInFlight)) {

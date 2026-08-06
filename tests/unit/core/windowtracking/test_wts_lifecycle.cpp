@@ -672,7 +672,7 @@ private Q_SLOTS:
         // record must be skipped; assert the consumed record is the dead one.
         const auto consumed = m_service->placementStore().takeForReopen(
             PhosphorEngine::WindowPlacement::scrollingEngineId(), QStringLiteral("term|new-uuid"),
-            QStringLiteral("term"), QStringLiteral("DP-1"), 0, QString());
+            QStringLiteral("term"), QStringLiteral("DP-1"));
         QVERIFY(consumed.has_value());
         QCOMPARE(consumed->freeGeometryFor(QStringLiteral("DP-1")), QRect(10, 10, 400, 300));
         // The live window's record is untouched.

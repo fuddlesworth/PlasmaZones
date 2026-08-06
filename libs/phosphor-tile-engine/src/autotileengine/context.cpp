@@ -447,10 +447,6 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                                 scheduleRetileForScreen(oldKey.screenId);
                             }
                         }
-                        // Seed inserts bypass insertWindow, so they carry its
-                        // burst-end rule themselves (a burst is closes and
-                        // nothing else).
-                        endCloseBurstForKey(stateKey);
                         ts->addWindow(windowId);
                         // Register engine tracking immediately — without the
                         // key entry, a window closing before the effect's

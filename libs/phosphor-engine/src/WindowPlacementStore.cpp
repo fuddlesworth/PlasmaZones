@@ -357,8 +357,7 @@ namespace {
 /// the store (rather than per-engine lambdas) so autotile and scroll cannot
 /// drift apart, and so the exact-final gate can reason about the SAME
 /// predicate it applies.
-bool acceptsReopen(const WindowPlacement& p, const QString& engineId, const QString& windowId, const QString& screenId,
-                   int virtualDesktop, const QString& activity, WindowPlacementStore::ReopenSlots slots)
+bool acceptsReopen(const WindowPlacement& p, const QString& engineId, const QString& windowId, const QString& screenId)
 {
     const EngineSlot s = p.slotFor(engineId);
     if (s.state == WindowPlacement::stateFloating()) {
@@ -375,20 +374,17 @@ bool acceptsReopen(const WindowPlacement& p, const QString& engineId, const QStr
         }
         return p.screenId.isEmpty() || p.screenId == screenId;
     }
-    if (slots == WindowPlacementStore::ReopenSlots::FloatingOrTiled && s.state == WindowPlacement::stateTiled()) {
-        return p.screenId == screenId && p.virtualDesktop == virtualDesktop && p.activity == activity;
-    }
+    // FLOATING slots only: a TILED record is never consumed — it stands as
+    // the exact-final verdict that the window closed tiled (see the header).
     return false;
 }
 } // namespace
 
 std::optional<WindowPlacement> WindowPlacementStore::takeForReopen(const QString& engineId, const QString& windowId,
-                                                                   const QString& appId, const QString& screenId,
-                                                                   int virtualDesktop, const QString& activity,
-                                                                   ReopenSlots slots)
+                                                                   const QString& appId, const QString& screenId)
 {
     const auto accept = [&](const WindowPlacement& p) {
-        return acceptsReopen(p, engineId, windowId, screenId, virtualDesktop, activity, slots);
+        return acceptsReopen(p, engineId, windowId, screenId);
     };
     // Exact-record rejection is FINAL — see the header contract — but only a
     // record carrying a slot FOR THE ASKING ENGINE is a verdict. Every fresh

@@ -326,71 +326,6 @@ void AutotileEngine::reapplyManagedWindowAppearance()
     retile(QString());
 }
 
-void AutotileEngine::endCloseBurstForKey(const PhosphorEngine::TilingStateKey& key)
-{
-    // Any structural order mutation that is NOT a close ends the burst —
-    // scroll's endCloseBurstForKey, verbatim rationale.
-    m_closeCompaction.remove(key);
-}
-
-int AutotileEngine::reopenInsertOrder(const PhosphorTiles::TilingState* state, int savedPos) const
-{
-    // Scroll's reopenInsertColumn, term for term: rank against the
-    // record-restored windows still present — after the rightmost with a
-    // saved order <= this one, else before the leftmost with a greater one;
-    // with no ranked neighbour the absolute saved index stands (the single
-    // in-session reopen, where it is exact). A reopen BURST arrives in
-    // announce order, not saved order, and absolute indices then permute the
-    // layout. (<=, not <: same-order records rank adjacent.) The -1
-    // append-at-end fallback bypasses ranking entirely: no anchor satisfies
-    // `value <= -1`, so ranking would file the window BEFORE every anchor
-    // instead of appending, inverting the fallback's documented meaning.
-    if (savedPos < 0) {
-        return state->windowCount();
-    }
-    int rankedPos = -1;
-    int beforeGreater = -1;
-    const QStringList order = state->windowOrder();
-    for (auto rit = m_reopenRestoredOrder.constBegin(); rit != m_reopenRestoredOrder.constEnd(); ++rit) {
-        const int pos = order.indexOf(rit.key());
-        if (pos < 0) {
-            continue; // no longer tiled here — inert entry
-        }
-        if (rit.value() <= savedPos) {
-            rankedPos = qMax(rankedPos, pos + 1);
-        } else {
-            beforeGreater = beforeGreater < 0 ? pos : qMin(beforeGreater, pos);
-        }
-    }
-    if (rankedPos < 0 && beforeGreater >= 0) {
-        rankedPos = beforeGreater;
-    } else if (rankedPos >= 0 && beforeGreater >= 0) {
-        // The ranks can conflict if the user re-ordered between restores;
-        // the smaller bound wins so the insert never lands right of a
-        // tracked-greater window.
-        rankedPos = qMin(rankedPos, beforeGreater);
-    }
-    return rankedPos >= 0 ? qMin(rankedPos, state->windowCount()) : qMin(savedPos, state->windowCount());
-}
-
-int AutotileEngine::preCloseBurstOrder(const PhosphorEngine::TilingStateKey& key, int currentOrder) const
-{
-    const auto it = m_closeCompaction.constFind(key);
-    if (currentOrder < 0 || it == m_closeCompaction.constEnd() || it->removedOrders.isEmpty()
-        || !it->sinceLastClose.isValid() || it->sinceLastClose.elapsed() > CloseBurstWindowMs) {
-        return currentOrder;
-    }
-    // Deleted-positions correction — scroll's preCloseBurstColumn, verbatim
-    // (removedOrders is kept sorted at insertion).
-    int original = currentOrder;
-    for (const int vacated : it->removedOrders) {
-        if (vacated <= original) {
-            ++original;
-        }
-    }
-    return original;
-}
-
 std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(const QString& windowId) const
 {
     using PhosphorEngine::WindowPlacement;
@@ -435,7 +370,7 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
             // write indexOf's -1 over a valid persisted order — a keyed-but-
             // unmembered window (mid-migration) must keep its stored slot.
             if (slot.state == WindowPlacement::stateTiled() && !state->isFloating(wid)) {
-                const int liveIdx = preCloseBurstOrder(key, state->windowOrder().indexOf(wid));
+                const int liveIdx = state->windowOrder().indexOf(wid);
                 if (liveIdx >= 0) {
                     slot.order = liveIdx;
                 }
@@ -485,19 +420,20 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
         // reconstructs as tiled (accepted residual).
         slot.state =
             isAutotileFloated(wid) ? QString(WindowPlacement::stateFloating()) : QString(WindowPlacement::stateTiled());
-        slot.order = preCloseBurstOrder(key, state->windowOrder().indexOf(wid));
+        slot.order = state->windowOrder().indexOf(wid);
     } else if (state->isFloating(wid) && !m_overflow.isOverflow(wid)) {
         slot.state = WindowPlacement::stateFloating();
         // Retain the live order as a stable slot reference even when the
         // frame is still on its former tile and free geometry cannot yet be
         // captured. This preserves genuine float intent through an immediate
         // minimize/teardown without making geometry-less unmanaged residue.
-        slot.order = preCloseBurstOrder(key, state->windowOrder().indexOf(wid));
+        slot.order = state->windowOrder().indexOf(wid);
     } else {
         slot.state = WindowPlacement::stateTiled();
-        // Pre-burst corrected: during a mass close (logout teardown) earlier
-        // removals already compacted windowOrder — see m_closeCompaction.
-        slot.order = preCloseBurstOrder(key, state->windowOrder().indexOf(wid));
+        // The order at capture time, recorded as context only: the reopen
+        // path takes floating slots only, and a tiled slot's job is to stand
+        // as the exact-final evidence that the window closed tiled.
+        slot.order = state->windowOrder().indexOf(wid);
     }
     p.engines.insert(engineId(), slot);
     return p;

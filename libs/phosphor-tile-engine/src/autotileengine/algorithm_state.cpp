@@ -379,18 +379,6 @@ PhosphorTiles::TilingState* AutotileEngine::tilingStateForScreen(const QString& 
         // Create new state for this screen+desktop+activity with parent ownership
         auto* state = new PhosphorTiles::TilingState(screenId, this);
 
-        // A PERMUTATION of this state's order (move/swap/rotate — never a
-        // plain add/remove, which only shifts) invalidates the reopen rank
-        // anchors naming its windows and any live close-burst ledger for its
-        // key: both are evidence about an order that no longer exists.
-        connect(state, &PhosphorTiles::TilingState::windowOrderPermuted, this, [this, state, key]() {
-            const QStringList order = state->windowOrder();
-            for (const QString& wid : order) {
-                m_reopenRestoredOrder.remove(wid);
-            }
-            endCloseBurstForKey(key);
-        });
-
         // Initialize with config defaults
         state->setMasterCount(m_config->masterCount);
         state->setSplitRatio(m_config->splitRatio);
@@ -591,9 +579,6 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
             // number can't inherit a stale "tuned" skip in propagateGlobal*.
             m_userTunedSplitRatio.remove(key);
             m_userTunedMasterCount.remove(key);
-            // A ledger keyed at the dying context must not survive to correct
-            // a rebuilt one (scroll's sweepCloseCompaction twin).
-            endCloseBurstForKey(key);
             // Through the FULL teardown, not a bare deleteLater. A deleted
             // desktop's windows are ALIVE (KWin relocates them), so skipping it
             // lost each one's autotile slot snapshot into the unified record,
@@ -662,8 +647,6 @@ void AutotileEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId
             return matches(key.screenId);
         },
         [&](const TilingStateKey& key, PhosphorTiles::TilingState* state) {
-            // Ledger goes with the context (scroll's sweep twin).
-            endCloseBurstForKey(key);
             // Through the FULL teardown body, not a bare deleteLater: the
             // capture snapshots each window's autotile slot into the
             // unified record (the unplug used to get this via the
@@ -760,7 +743,6 @@ void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities
         [&](const TilingStateKey& key, PhosphorTiles::TilingState* state) {
             m_userTunedSplitRatio.remove(key);
             m_userTunedMasterCount.remove(key);
-            endCloseBurstForKey(key); // ledger goes with the context
             // Full teardown, for the same reasons as the desktop prune above:
             // record snapshot, min-size cleanup and a windowsReleased so the
             // daemon and effect stop tracking windows this engine has dropped.

@@ -141,12 +141,6 @@ void ScrollEngine::moveFocusedInDirection(const QString& direction, const Phosph
     const bool moved =
         (h != 0) ? state->strip().moveActiveColumn(h, params) : (v != 0 && state->strip().moveActiveTile(v));
     if (moved) {
-        if (h != 0) {
-            // A column move PERMUTES the strip: reopen rank anchors and any
-            // live close-burst ledger are built on the pre-move order.
-            invalidateReopenAnchorsForState(state);
-            endCloseBurstForKey(currentKeyForScreen(screen));
-        }
         applyLayout(screen, true);
         Q_EMIT placementChanged(screen);
         // Direction-as-reason on success: the OSD arrow reads it.
@@ -345,11 +339,6 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
         }
         targetState->strip().takeWindow(partner, targetParams);
     }
-    // Both strips just mutated structurally outside any close, and the
-    // mover's rank anchor describes the SOURCE strip it is leaving.
-    endCloseBurstForKey(sourceKey);
-    endCloseBurstForKey(targetKey);
-    m_reopenRestoredColumn.remove(windowId);
     bool moverInserted = false;
     if (moverLandingSlot.tileIndex >= 0) {
         const int anchored = targetState->strip().columnOfWindow(moverLandingSlot.anchor);
@@ -408,7 +397,6 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
             m_states.setKeyForWindow(partner, sourceKey);
             m_lastAppliedRect.remove(partner); // same rationale as the mover's
             m_parkedScrollEdge.remove(partner);
-            m_reopenRestoredColumn.remove(partner); // anchor described the OTHER strip
         } else {
             // Same shape as the mover's refusal: out of the target strip,
             // refused by the source strip, so the reverse map must not keep
@@ -452,11 +440,6 @@ void ScrollEngine::swapFocusedInDirection(const QString& direction, const Phosph
     const bool moved =
         (h != 0) ? state->strip().moveActiveColumn(h, params) : (v != 0 && state->strip().moveActiveTile(v));
     if (moved) {
-        if (h != 0) {
-            // Same permutation rule as moveFocusedInDirection.
-            invalidateReopenAnchorsForState(state);
-            endCloseBurstForKey(currentKeyForScreen(screen));
-        }
         applyLayout(screen, true);
         Q_EMIT placementChanged(screen);
         // Direction-as-reason on success: the OSD arrow reads it.
@@ -548,11 +531,6 @@ void ScrollEngine::moveFocusedToPosition(int position, const PhosphorEngine::Nav
         // operated window's own number can therefore differ from the digit
         // pressed — deliberate, and documented on the VisibleTile contract.
         moved = state->strip().moveActiveColumnTo(targetColumn, params);
-        if (moved) {
-            // Column-order permutation — same rule as moveFocusedInDirection.
-            invalidateReopenAnchorsForState(state);
-            endCloseBurstForKey(currentKeyForScreen(screen));
-        }
     } else if (targetColumn >= 0 && state->strip().columns().at(targetColumn).display != ColumnDisplay::Tabbed) {
         // Target tile is a stack-mate of a NORMAL column: reorder the active
         // tile onto its slot. Read the operand from the column's
@@ -808,24 +786,12 @@ void ScrollEngine::focusColumnLast(const QString& screenId)
 
 void ScrollEngine::moveColumnToFirst(const QString& screenId)
 {
-    // The leading invalidations ride the op expression so the verb stays a
-    // macro one-liner: a to-first move permutes the column order (reopen
-    // rank anchors and any live close-burst ledger are built on the pre-move
-    // order), and invalidating before a move that then fails is harmless —
-    // both structures are best-effort accelerators.
-    P_SCROLL_VERB(screenId,
-                  (invalidateReopenAnchorsForState(state), endCloseBurstForKey(currentKeyForScreen(screen)),
-                   state->strip().moveActiveColumnToFirst(params)),
-                  "move");
+    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToFirst(params), "move");
 }
 
 void ScrollEngine::moveColumnToLast(const QString& screenId)
 {
-    // Same permutation invalidations as moveColumnToFirst.
-    P_SCROLL_VERB(screenId,
-                  (invalidateReopenAnchorsForState(state), endCloseBurstForKey(currentKeyForScreen(screen)),
-                   state->strip().moveActiveColumnToLast(params)),
-                  "move");
+    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToLast(params), "move");
 }
 
 // NOTE on the P_SCROLL_* macros above: they deliberately inject `screen`,
@@ -838,25 +804,17 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 // file.
 void ScrollEngine::consumeWindowIntoColumn(const QString& screenId)
 {
-    // Consume/expel add or remove a COLUMN outside any close, so the burst
-    // premise dies (ledger only; a pure shift leaves rank anchors valid).
-    P_SCROLL_VERB(screenId,
-                  (endCloseBurstForKey(currentKeyForScreen(screen)), state->strip().consumeWindowIntoColumn(params)),
-                  "consume");
+    P_SCROLL_VERB(screenId, state->strip().consumeWindowIntoColumn(params), "consume");
 }
 
 void ScrollEngine::expelWindowFromColumn(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId,
-                  (endCloseBurstForKey(currentKeyForScreen(screen)), state->strip().expelWindowFromColumn(params)),
-                  "expel");
+    P_SCROLL_VERB(screenId, state->strip().expelWindowFromColumn(params), "expel");
 }
 
 void ScrollEngine::consumeOrExpelWindow(int delta, const QString& screenId)
 {
-    P_SCROLL_VERB(screenId,
-                  (endCloseBurstForKey(currentKeyForScreen(screen)), state->strip().consumeOrExpel(delta, params)),
-                  "consume");
+    P_SCROLL_VERB(screenId, state->strip().consumeOrExpel(delta, params), "consume");
 }
 
 void ScrollEngine::centerColumn(const QString& screenId)

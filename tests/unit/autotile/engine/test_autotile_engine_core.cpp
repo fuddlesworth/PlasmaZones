@@ -538,62 +538,34 @@ private Q_SLOTS:
     // Window lifecycle tests
     // =========================================================================
 
-    void testMassCloseCapturesPreBurstOrdersAndReopenRestoresThem()
+    void testTiledRecordIsNotConsumedOnReopen()
     {
-        // The autotile twin of scroll's mass-close/login regression: session
-        // teardown closes every window one at a time and each removal
-        // compacts windowOrder, so without the close-burst ledger, closes
-        // 2..N captured already-shifted indices and the login rebuilt a
-        // collapsed layout. The daemon's close relay captures BEFORE
-        // AutotileEngine::windowClosed untracks, which captureClose mirrors.
+        // Order restore was removed deliberately: a TILED record must not be
+        // consumed on reopen (it stays as the exact-final evidence the window
+        // closed tiled) and the reopened window takes a config-order insert.
         PlasmaZones::TestHelpers::FakeStickyWindowTracking tracker;
         AutotileEngine engine(nullptr, &tracker, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("DP-1");
         engine.setAutotileScreens({screen});
 
-        const auto open = [&](const QString& id) {
-            engine.windowOpened(id, screen);
-        };
-        open(QStringLiteral("aa|a1"));
-        open(QStringLiteral("bb|b1"));
-        open(QStringLiteral("cc|c1"));
-        open(QStringLiteral("dd|d1"));
+        engine.windowOpened(QStringLiteral("aa|a1"), screen);
+        engine.windowOpened(QStringLiteral("bb|b1"), screen);
         QCoreApplication::processEvents();
 
-        const auto captureClose = [&](const QString& id) {
-            const auto rec = engine.capturePlacement(id);
-            QVERIFY(rec.has_value());
-            QVERIFY(tracker.placementStore().record(*rec));
-            engine.windowClosed(id);
-        };
-        // Compaction-provoking close order.
-        captureClose(QStringLiteral("bb|b1"));
-        captureClose(QStringLiteral("dd|d1"));
-        captureClose(QStringLiteral("aa|a1"));
-        captureClose(QStringLiteral("cc|c1"));
+        const auto rec = engine.capturePlacement(QStringLiteral("bb|b1"));
+        QVERIFY(rec.has_value());
+        QVERIFY(tracker.placementStore().record(*rec));
+        engine.windowClosed(QStringLiteral("bb|b1"));
 
-        const auto orderOf = [&](const QString& id) {
-            const auto rec = tracker.placementStore().peekExact(id);
-            return rec ? rec->slotFor(engine.engineId()).order : -99;
-        };
-        QCOMPARE(orderOf(QStringLiteral("aa|a1")), 0);
-        QCOMPARE(orderOf(QStringLiteral("bb|b1")), 1);
-        QCOMPARE(orderOf(QStringLiteral("cc|c1")), 2);
-        QCOMPARE(orderOf(QStringLiteral("dd|d1")), 3);
-
-        // Reopen with fresh uuids in DESCENDING saved order — the announce
-        // order an absolute-clamped insert gets wrong.
-        open(QStringLiteral("dd|d2"));
-        open(QStringLiteral("cc|c2"));
-        open(QStringLiteral("bb|b2"));
-        open(QStringLiteral("aa|a2"));
+        engine.windowOpened(QStringLiteral("bb|b2"), screen);
         QCoreApplication::processEvents();
 
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         QVERIFY(state);
-        const QStringList expected{QStringLiteral("aa|a2"), QStringLiteral("bb|b2"), QStringLiteral("cc|c2"),
-                                   QStringLiteral("dd|d2")};
-        QCOMPARE(state->windowOrder(), expected);
+        QVERIFY(state->containsWindow(QStringLiteral("bb|b2")));
+        QVERIFY(!state->isFloating(QStringLiteral("bb|b2"))); // tiled reopen stays tiled
+        // The tiled record was not consumed by the reopen.
+        QVERIFY(tracker.placementStore().peekExact(QStringLiteral("bb|b1")).has_value());
     }
 
     void testWindowLifecycle()

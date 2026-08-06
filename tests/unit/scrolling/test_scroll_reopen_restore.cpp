@@ -174,76 +174,6 @@ private Q_SLOTS:
         QVERIFY(state->isFloating(QStringLiteral("term|t1")));
     }
 
-    void reopenWithFreshUuidRestoresColumn()
-    {
-        QObject owner;
-        FakeStickyWindowTracking tracker;
-        ScrollEngine* engine = makeEngine(&owner, &tracker);
-        const QString screen = QLatin1String(Screen);
-
-        engine->windowOpened(QStringLiteral("one|a"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("two|b"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("three|c"), screen, 0, 0);
-        const int closedColumn = engine->columnIndexForWindow(screen, QStringLiteral("two|b"));
-        QVERIFY(closedColumn >= 0);
-
-        captureClose(engine, &tracker, QStringLiteral("two|b"));
-
-        engine->windowOpened(QStringLiteral("two|b2"), screen, 0, 0);
-        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("two|b2")), closedColumn);
-    }
-
-    void massCloseCapturesPreBurstColumnsAndLoginRestoresOrder()
-    {
-        // The logout regression: session teardown closes every window one at
-        // a time, and each removal compacts the strip — so closes 2..N used
-        // to capture already-shifted columns (a {0..3} strip persisted with
-        // duplicate orders) and the login rebuilt a collapsed strip with
-        // windows parked off-viewport. The close-burst ledger must make each
-        // capture answer its PRE-burst column, whatever the close order, and
-        // the reopen rank logic must rebuild the original order whatever the
-        // announce order.
-        QObject owner;
-        FakeStickyWindowTracking tracker;
-        ScrollEngine* engine = makeEngine(&owner, &tracker);
-        const QString screen = QLatin1String(Screen);
-
-        engine->windowOpened(QStringLiteral("aa|a1"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("bb|b1"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("cc|c1"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("dd|d1"), screen, 0, 0);
-        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("aa|a1")), 0);
-        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("dd|d1")), 3);
-
-        // Teardown sweep in a compaction-provoking order.
-        captureClose(engine, &tracker, QStringLiteral("bb|b1"));
-        captureClose(engine, &tracker, QStringLiteral("dd|d1"));
-        captureClose(engine, &tracker, QStringLiteral("aa|a1"));
-        captureClose(engine, &tracker, QStringLiteral("cc|c1"));
-
-        // Every record carries its PRE-burst column, not the compacted one.
-        const auto orderOf = [&tracker](const QString& windowId) {
-            const auto rec = tracker.placementStore().peekExact(windowId);
-            return rec ? rec->slotFor(WindowPlacement::scrollingEngineId()).order : -99;
-        };
-        QCOMPARE(orderOf(QStringLiteral("aa|a1")), 0);
-        QCOMPARE(orderOf(QStringLiteral("bb|b1")), 1);
-        QCOMPARE(orderOf(QStringLiteral("cc|c1")), 2);
-        QCOMPARE(orderOf(QStringLiteral("dd|d1")), 3);
-
-        // Login: fresh uuids in strictly DESCENDING saved order — the one
-        // announce order a plain absolute-clamped insert gets wrong ([a,d,b,c]
-        // instead of [a,b,c,d]), so this half genuinely pins the rank logic.
-        engine->windowOpened(QStringLiteral("dd|d2"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("cc|c2"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("bb|b2"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("aa|a2"), screen, 0, 0);
-        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("aa|a2")), 0);
-        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("bb|b2")), 1);
-        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("cc|c2")), 2);
-        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("dd|d2")), 3);
-    }
-
     void secondInstanceCannotStealLiveSiblingsReboundRecord()
     {
         // The live-instance probe at engine level: after t2 consumes t1's
@@ -275,65 +205,28 @@ private Q_SLOTS:
         QVERIFY(tracker.placementStore().peekExact(QStringLiteral("term|t2")).has_value());
     }
 
-    void stackedTileCloseDoesNotFeedTheBurstLedger()
+    void tiledRecordIsNotConsumedAndDoesNotFloatTheReopen()
     {
-        // Closing one tile of a STACKED column removes no column, so it must
-        // not append to the close-burst ledger — an appended entry would
-        // over-correct every later capture of the burst by one.
+        // Order restore was removed deliberately: a TILED record must not be
+        // consumed on reopen (it stays as the exact-final evidence the window
+        // closed tiled) and the reopened window takes a normal insert.
         QObject owner;
         FakeStickyWindowTracking tracker;
         ScrollEngine* engine = makeEngine(&owner, &tracker);
         const QString screen = QLatin1String(Screen);
 
-        engine->windowOpened(QStringLiteral("aa|a1"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("bb|b1"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("cc|c1"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("one|a"), screen, 0, 0);
+        engine->windowOpened(QStringLiteral("two|b"), screen, 0, 0);
+        captureClose(engine, &tracker, QStringLiteral("two|b"));
+        QVERIFY(tracker.placementStore().peekExact(QStringLiteral("two|b")).has_value());
+
+        engine->windowOpened(QStringLiteral("two|b2"), screen, 0, 0);
         ScrollState* state = stateFor(engine, screen);
         QVERIFY(state);
-        // Stack b into a's column: focus a, then consume the next window.
-        engine->windowFocused(QStringLiteral("aa|a1"), screen);
-        engine->consumeWindowIntoColumn(screen);
-        QCOMPARE(state->strip().columnOfWindow(QStringLiteral("bb|b1")), 0); // stacked with a
-        QCOMPARE(state->strip().columnOfWindow(QStringLiteral("cc|c1")), 1);
-
-        // The consume itself ended any burst; now a burst of two closes.
-        // Closing b removes a TILE, not a column: no ledger entry, so c's
-        // capture must answer its true column 1 — with the bug (stacked
-        // closes appended), c would be corrected to 2.
-        captureClose(engine, &tracker, QStringLiteral("bb|b1"));
-        captureClose(engine, &tracker, QStringLiteral("cc|c1"));
-        const auto rec = tracker.placementStore().peekExact(QStringLiteral("cc|c1"));
-        QVERIFY(rec.has_value());
-        QCOMPARE(rec->slotFor(WindowPlacement::scrollingEngineId()).order, 1);
-    }
-
-    void reopenRanksStraddledArrivalBetweenRestoredNeighbours()
-    {
-        // Rank discrimination beyond the mass-close case: two record-restored
-        // windows whose saved columns straddle a later arrival must bracket
-        // it, whatever the announce order.
-        QObject owner;
-        FakeStickyWindowTracking tracker;
-        ScrollEngine* engine = makeEngine(&owner, &tracker);
-        const QString screen = QLatin1String(Screen);
-
-        const auto seed = [&](const QString& windowId, const QString& appId, int order) {
-            auto p = makePlacement(windowId, appId, WindowPlacement::stateTiled(), WindowPlacement::scrollingEngineId(),
-                                   screen, QRect(), order);
-            p.virtualDesktop = 1; // match the engine's current context
-            QVERIFY(tracker.placementStore().record(p));
-        };
-        seed(QStringLiteral("aa|a1"), QStringLiteral("aa"), 0);
-        seed(QStringLiteral("bb|b1"), QStringLiteral("bb"), 1);
-        seed(QStringLiteral("cc|c1"), QStringLiteral("cc"), 2);
-
-        // Announce the outer pair first, then the straddled middle.
-        engine->windowOpened(QStringLiteral("cc|c2"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("aa|a2"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("bb|b2"), screen, 0, 0);
-        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("aa|a2")), 0);
-        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("bb|b2")), 1);
-        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("cc|c2")), 2);
+        QVERIFY(!state->isFloating(QStringLiteral("two|b2"))); // tiled reopen stays tiled
+        QVERIFY(engine->columnIndexForWindow(screen, QStringLiteral("two|b2")) >= 0);
+        // The tiled record was not consumed by the reopen.
+        QVERIFY(tracker.placementStore().peekExact(QStringLiteral("two|b")).has_value());
     }
 
     void geometrylessFloatingResidueNotConsumedByFreshSibling()

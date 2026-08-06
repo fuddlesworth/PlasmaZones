@@ -15,7 +15,6 @@
 
 #include <PhosphorScrollEngine/ScrollStashTypes.h>
 
-#include <QElapsedTimer>
 #include <QHash>
 #include <QJsonObject>
 #include <QObject>
@@ -704,10 +703,6 @@ private:
     /// Drop stash entries whose key @p stale answers true for — called by
     /// the same prunes that reap context states.
     void sweepStripStash(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale);
-    /// Drop every close-burst ledger entry whose key matches @p stale — the
-    /// context prunes' twin of sweepStripStash (a ledger keyed at a dead
-    /// desktop/activity/output is unreachable and must not survive it).
-    void sweepCloseCompaction(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale);
     // engine_apply.cpp
     /// The smart-gaps arm is resolved INSIDE, not passed in: a single-column
     /// strip on the screen's current context zeroes the OUTER gaps for every
@@ -755,21 +750,6 @@ private:
     /// Refreshes the clamp on an existing entry rather than overwriting a
     /// real remembered slot with a slotless one.
     void seedFloatRestoreForOpen(const QString& windowId, int minWidth, int minHeight);
-    /// The strip column a record-branch restore should insert at: the
-    /// recorded absolute column, rank-corrected against other record-restored
-    /// windows still present (see m_reopenRestoredColumn).
-    int reopenInsertColumn(const ScrollState* state, int restoreColumn) const;
-    /// @p currentColumn's pre-burst value per the context's live close ledger;
-    /// identity when no burst is active (or @p currentColumn is -1).
-    int preCloseBurstColumn(const PhosphorEngine::PlacementStateKey& key, int currentColumn) const;
-    /// Drop the context's close-burst ledger — called by every structural
-    /// strip mutation that is not itself a close (see m_closeCompaction).
-    void endCloseBurstForKey(const PhosphorEngine::PlacementStateKey& key);
-    /// Drop the reopen rank anchors of every window in @p state's strip —
-    /// called by the column-REORDER verbs, whose permutation invalidates the
-    /// anchors' evidence (plain inserts/removals only shift and must NOT call
-    /// this; see the implementation comment).
-    void invalidateReopenAnchorsForState(const ScrollState* state);
     /// Consume the window's FLOATING placement record on an engine-decided
     /// float at open (oversized / rule / sticky) and apply the gated
     /// float-back position restore — the same record consumption and
@@ -929,43 +909,6 @@ private:
         WindowHeight height;
     };
     QHash<QString, FloatRestore> m_floatRestore;
-    /// Recorded column order of windows the RECORD branch of
-    /// insertOpenedWindow restored, kept while they stay in a strip. A reopen
-    /// burst delivers windows in KWin's announce order, not column order, so
-    /// inserting each at its recorded ABSOLUTE column permutes the strip
-    /// (announce 2,1,0 → wrong order). Ranking a new arrival against the
-    /// recorded orders of already-restored PRESENT windows makes the relative
-    /// order come out right whatever the announce order; with no ranked
-    /// neighbour present the absolute column stands (the single in-session
-    /// reopen, where it is exact). Entries are dropped wherever the window's
-    /// strip life ends (close, prune, migration, handoff, float, release) and
-    /// invalidated strip-wide by the column-REORDER verbs via
-    /// invalidateReopenAnchorsForState; entries for windows no longer in a
-    /// strip are inert meanwhile (the rank only counts present windows).
-    QHash<QString, int> m_reopenRestoredColumn;
-    /// Close-burst compaction ledger, per placement context. A mass close
-    /// (logout teardown) untracks windows one at a time, and each removal
-    /// compacts the strip's column indices — so closes 2..N capture an
-    /// already-shifted order (six single-tile columns closed left to right
-    /// all capture column 0) and the login restore rebuilds a collapsed
-    /// strip with windows parked off-viewport. Each entry remembers the
-    /// ORIGINAL (pre-burst) column a close vacated, kept sorted;
-    /// preCloseBurstColumn reconstructs a window's pre-burst column from its
-    /// current index plus the ledger (the deleted-positions correction).
-    /// Burst-scoped: entries expire CloseBurstWindowMs after the last close,
-    /// and EVERY non-close structural strip mutation (opens, unfloats,
-    /// handoffs, drags, migrations, reorders) ends the context's burst via
-    /// endCloseBurstForKey — a burst is closes and nothing else. (The expiry
-    /// clock is monotonic and does not advance across a system suspend; a
-    /// ledger straddling a suspend lives marginally longer, which the
-    /// mutation-invalidation above bounds.)
-    struct CloseCompaction
-    {
-        QList<int> removedColumns;
-        QElapsedTimer sinceLastClose;
-    };
-    QHash<PhosphorEngine::PlacementStateKey, CloseCompaction> m_closeCompaction;
-    static constexpr int CloseBurstWindowMs = 2000;
     /// Live drag-insert preview state (drag_preview.cpp). The structural
     /// edits a preview makes while it is LIVE are signal-silent, mirroring
     /// autotile's contract, so the daemon's float bookkeeping never sees the

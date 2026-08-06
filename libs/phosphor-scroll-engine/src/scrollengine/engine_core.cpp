@@ -138,10 +138,6 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 // tabbed flags) instead of a default one-window-per-column
                 // strip. Captured BEFORE the release strips the state.
                 stashStripStructure(key, state);
-                // The context's strip is being torn down: a ledger keyed here
-                // must not survive to correct a rebuilt strip's captures if
-                // the screen cycles back to Scrolling within the expiry.
-                endCloseBurstForKey(key);
                 releaseScreenState(state, releasedWindows);
                 // Inside the callback so the payload names only screens that
                 // had a MATCHING STATE — the daemon's release handler uses
@@ -230,7 +226,6 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // report when the window comes back to scrolling.
     for (const QString& windowId : windows) {
         m_floatRestore.remove(windowId);
-        m_reopenRestoredColumn.remove(windowId);
         m_pendingSelfActivations.removeAll(windowId);
     }
     releasedWindows.append(windows);

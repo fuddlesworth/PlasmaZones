@@ -64,17 +64,6 @@ public:
                                         const std::function<bool(const WindowPlacement&)>& accept = {},
                                         const std::function<bool(const WindowPlacement&)>& preferred = {});
 
-    /// Which engine-slot states takeForReopen may consume.
-    enum class ReopenSlots {
-        /// The normal open-time restore: a floating record reopens floating, a
-        /// tiled record reopens at its recorded order.
-        FloatingOrTiled,
-        /// The caller already decided the window floats (rule float, oversized):
-        /// only a floating record is consumed; a tiled record is neither
-        /// consumed nor allowed to block a later tiled reopen.
-        FloatingOnly,
-    };
-
     /// Reopen resolve: the shared consumption pattern the TILING engines'
     /// open-time restores use (SnapEngine::resolveWindowRestore keeps its own
     /// take + re-bind: its snapped records restore cross-screen and its accept
@@ -92,9 +81,10 @@ public:
     /// instance additionally requires a valid anyFreeGeometry (a geometry-less
     /// floating record is meaningful only same-instance — consumed by a
     /// sibling it floats a fresh window at its spawn rect for no reason while
-    /// burning a FIFO slot). A TILED slot restores only in the SAME full
-    /// context (@p screenId + @p virtualDesktop + @p activity), and only under
-    /// ReopenSlots::FloatingOrTiled.
+    /// burning a FIFO slot). FLOATING slots only, deliberately: a TILED
+    /// record is never consumed and restores no position — its role is the
+    /// exact-final verdict below (the window closed tiled, so the reopen must
+    /// not float it).
     ///
     ///   1. A REJECTED exact record is FINAL — no FIFO fallback past it — but
     ///      ONLY when that record carries a slot for the ASKING engine. The
@@ -127,8 +117,7 @@ public:
     /// Returns the consumed record (already re-recorded), or nullopt when no
     /// record passed.
     std::optional<WindowPlacement> takeForReopen(const QString& engineId, const QString& windowId, const QString& appId,
-                                                 const QString& screenId, int virtualDesktop, const QString& activity,
-                                                 ReopenSlots slots = ReopenSlots::FloatingOrTiled);
+                                                 const QString& screenId);
 
     /// Non-consuming lookup (unlike take): the record for the same live instance, else
     /// the NEWEST record in the appId bucket whose `accept` passes. Leaves the

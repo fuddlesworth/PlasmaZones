@@ -259,10 +259,6 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     //     window takes the departed partner's exact slot;
     //   - a drag-drop carrying a cursor position, which the drag-insert path
     //     places separately — there we keep the simple append so the drop wins.
-    // A handoff insert is a structural mutation outside any close — the
-    // receiving context's burst premise is dead (insertWindow's rule, which
-    // this path bypasses).
-    endCloseBurstForKey(currentKeyForScreen(ctx.toScreenId));
     bool inserted = false;
     if (ctx.insertIndex >= 0 && ctx.dropPos.isNull()) {
         inserted = state->addWindow(windowId, ctx.insertIndex);
@@ -370,12 +366,6 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     // entry would replay a possibly other-screen-capped value on re-entry
     // (same rationale as windowFocused's cross-screen clear).
     m_windowMinSizes.remove(canonical);
-    // The rank anchor leaves with the tracking too — its saved order
-    // describes a layout this window is no longer part of.
-    m_reopenRestoredOrder.remove(canonical);
-    // The release removed a window outside any close — the burst premise is
-    // dead for this context (scroll's handoffRelease twin).
-    endCloseBurstForKey(key);
     // The mode-transition float marker must not outlive this engine's
     // tracking: the receiving engine owns the float bit from here. The
     // autotile->snapping direction is covered by the daemon's clear on

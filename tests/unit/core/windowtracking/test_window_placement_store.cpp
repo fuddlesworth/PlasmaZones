@@ -267,7 +267,7 @@ private Q_SLOTS:
                                    WindowPlacement::scrollingEngineId()));
 
         auto p = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("app|new"),
-                                     QStringLiteral("app"), QStringLiteral("DP-1"), 0, QString());
+                                     QStringLiteral("app"), QStringLiteral("DP-1"));
         QVERIFY(p.has_value());
         QCOMPARE(p->windowId, QStringLiteral("app|new")); // already re-bound
         QCOMPARE(store.size(), 1); // re-recorded, not consumed away
@@ -295,7 +295,7 @@ private Q_SLOTS:
 
         // Asking for DP-1 rejects app|live's own tiled-on-DP-2 record.
         auto p = store.takeForReopen(WindowPlacement::autotileEngineId(), QStringLiteral("app|live"),
-                                     QStringLiteral("app"), QStringLiteral("DP-1"), 0, QString());
+                                     QStringLiteral("app"), QStringLiteral("DP-1"));
         QVERIFY(!p.has_value());
         QCOMPARE(store.size(), 2); // sibling untouched
         QVERIFY(store.peekExact(QStringLiteral("app|sibling")).has_value());
@@ -322,7 +322,7 @@ private Q_SLOTS:
         QCOMPARE(store.size(), 2);
 
         auto p = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("octopi|new"),
-                                     QStringLiteral("octopi"), QStringLiteral("DP-1"), 0, QString());
+                                     QStringLiteral("octopi"), QStringLiteral("DP-1"));
         QVERIFY(p.has_value());
         QCOMPARE(p->slotFor(WindowPlacement::scrollingEngineId()).state, QString(WindowPlacement::stateFloating()));
 
@@ -356,13 +356,13 @@ private Q_SLOTS:
 
         liveInstances.insert(QStringLiteral("n1"));
         auto first = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("app|n1"),
-                                         QStringLiteral("app"), QStringLiteral("DP-1"), 0, QString());
+                                         QStringLiteral("app"), QStringLiteral("DP-1"));
         QVERIFY(first.has_value());
         QCOMPARE(first->freeGeometryFor(QStringLiteral("DP-1")), QRect(50, 50, 10, 10)); // newest first
 
         liveInstances.insert(QStringLiteral("n2"));
         auto second = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("app|n2"),
-                                          QStringLiteral("app"), QStringLiteral("DP-1"), 0, QString());
+                                          QStringLiteral("app"), QStringLiteral("DP-1"));
         QVERIFY(second.has_value());
         QCOMPARE(second->freeGeometryFor(QStringLiteral("DP-1")),
                  QRect(0, 0, 10, 10)); // NOT the record now bound to live n1
@@ -389,7 +389,7 @@ private Q_SLOTS:
                                    QStringLiteral("DP-1"), QRect(870, 811, 1626, 813)));
 
         auto p = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("octopi|new"),
-                                     QStringLiteral("octopi"), QStringLiteral("DP-1"), 0, QString());
+                                     QStringLiteral("octopi"), QStringLiteral("DP-1"));
         QVERIFY(p.has_value());
         QCOMPARE(p->slotFor(WindowPlacement::scrollingEngineId()).state, QString(WindowPlacement::stateFloating()));
         QCOMPARE(p->freeGeometryFor(QStringLiteral("DP-1")), QRect(870, 811, 1626, 813));
@@ -404,25 +404,20 @@ private Q_SLOTS:
         }
     }
 
-    void testTakeForReopen_floatingOnlyLeavesTiledRecordForLaterReopen()
+    void testTakeForReopen_tiledRecordIsNeverConsumed()
     {
-        // ReopenSlots::FloatingOnly (the scroll rule-float path): a TILED
-        // record in the matching context must be neither consumed nor allowed
-        // to block a later tiled reopen.
+        // FLOATING slots only: a TILED record in the matching context is not
+        // consumed — it stays in the store as the exact-final evidence that
+        // the window closed tiled (order restore was removed deliberately).
         WindowPlacementStore store;
         store.record(makePlacement(QStringLiteral("app|old"), QStringLiteral("app"), WindowPlacement::stateTiled(),
                                    WindowPlacement::scrollingEngineId(), QStringLiteral("DP-1"), QRect(), 2));
 
-        auto floatingOnly =
-            store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("app|new"), QStringLiteral("app"),
-                                QStringLiteral("DP-1"), 0, QString(), WindowPlacementStore::ReopenSlots::FloatingOnly);
-        QVERIFY(!floatingOnly.has_value());
+        auto p = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("app|new"),
+                                     QStringLiteral("app"), QStringLiteral("DP-1"));
+        QVERIFY(!p.has_value());
         QCOMPARE(store.size(), 1); // untouched
-
-        auto tiled = store.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("app|new"),
-                                         QStringLiteral("app"), QStringLiteral("DP-1"), 0, QString());
-        QVERIFY(tiled.has_value());
-        QCOMPARE(tiled->slotFor(WindowPlacement::scrollingEngineId()).order, 2);
+        QVERIFY(store.peekExact(QStringLiteral("app|old")).has_value());
     }
 
     void testTakeForReopen_newestFirstSurvivesSerializeRoundTrip()
@@ -444,7 +439,7 @@ private Q_SLOTS:
         WindowPlacementStore reloaded;
         reloaded.deserialize(store.serialize());
         auto p = reloaded.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("octopi|new"),
-                                        QStringLiteral("octopi"), QStringLiteral("DP-1"), 0, QString());
+                                        QStringLiteral("octopi"), QStringLiteral("DP-1"));
         QVERIFY(p.has_value());
         QCOMPARE(p->slotFor(WindowPlacement::scrollingEngineId()).state, QString(WindowPlacement::stateFloating()));
     }
@@ -477,7 +472,7 @@ private Q_SLOTS:
         WindowPlacementStore reloaded;
         reloaded.deserialize(stripped);
         auto p = reloaded.takeForReopen(WindowPlacement::scrollingEngineId(), QStringLiteral("app|new"),
-                                        QStringLiteral("app"), QStringLiteral("DP-1"), 0, QString());
+                                        QStringLiteral("app"), QStringLiteral("DP-1"));
         QVERIFY(p.has_value());
         QCOMPARE(p->freeGeometryFor(QStringLiteral("DP-1")), QRect(50, 50, 10, 10)); // last in array
     }

@@ -123,12 +123,6 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         return false;
     }
 
-    // An open ends any close burst for this context — a burst is closes and
-    // nothing else (see m_closeCompaction). AFTER the early returns: a
-    // refused duplicate or stateless insert mutates nothing, and wiping a
-    // live burst for it would strip the remaining closes' correction.
-    endCloseBurstForKey(currentKeyForScreen(screenId));
-
     // Resolve appId via the registry so mid-session class mutations (Emby and
     // friends) land in the correct restore bucket. Falls back to parsing the
     // canonical windowId when no registry is attached (unit tests).
@@ -248,15 +242,17 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // paths below are all skipped; the function tail still records
     // m_states and returns true.
     // Close/reopen restore from the unified placement store: ONE record per window
-    // holds both engines' slots + the shared per-screen free geometry. Take it once
-    // and branch on the autotile slot — a FLOATING slot restores the window floating
-    // (consumed only when the record's screen matches the opening screen or is
-    // empty; the GEOMETRY move below uses ONLY the screen-local recorded rect for
-    // restoreScreen — no cross-screen fallback); a TILED slot restores it at its saved
-    // order in the SAME context (index-based — best-effort if neighbours moved;
-    // wasFloating is not relevant since the slot state IS the intent). Re-record
-    // bound to the live windowId so the snap slot + per-screen free geometry survive
-    // and a second instance of the same app takes the next FIFO entry.
+    // holds both engines' slots + the shared per-screen free geometry. A FLOATING
+    // slot restores the window floating (consumed only when the record's screen
+    // matches the opening screen or is empty; the GEOMETRY move below uses ONLY the
+    // screen-local recorded rect for restoreScreen — no cross-screen fallback).
+    // FloatingOnly on purpose: a TILED record is not consumed and restores no
+    // position — it stays as the exact-final evidence that the window closed tiled
+    // (so the reopen must not float it) and the window takes a config-order insert.
+    // Saved-order restore across close/reopen was removed deliberately; see the
+    // scroll engine's twin comment for the rationale. Re-record binds a consumed
+    // record to the live windowId so the snap slot + per-screen free geometry
+    // survive and a second instance of the same app takes the next FIFO entry.
     const TilingStateKey currentKey = currentKeyForScreen(screenId);
     // A MIGRATION re-add never consults the placement store: the arrival
     // carries its live state across (insertShouldFloat reads it), and the
@@ -268,12 +264,11 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     if (!inserted && hasStableAppId && m_windowTracker && !migrationReAdd) {
         using PhosphorEngine::WindowPlacement;
         // takeForReopen carries the shared accept predicate (floating slot:
-        // screen match, FIFO consumption needs a real float-back; tiled slot:
-        // same full context) and the two reopen rules (rejected-exact WITH a
-        // slot for this engine is FINAL, consumed record re-bound to the live
-        // uuid) — see the store contract.
-        const std::optional<WindowPlacement> rec = m_windowTracker->placementStore().takeForReopen(
-            engineId(), windowId, appId, currentKey.screenId, currentKey.desktop, currentKey.activity);
+        // screen match, FIFO consumption needs a real float-back) and the two
+        // reopen rules (rejected-exact WITH a slot for this engine is FINAL,
+        // consumed record re-bound to the live uuid) — see the store contract.
+        const std::optional<WindowPlacement> rec =
+            m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, currentKey.screenId);
         if (rec) {
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
             const QString restoreScreen = rec->screenId.isEmpty() ? screenId : rec->screenId;
@@ -303,16 +298,6 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                         << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen
                         << "move=" << (freeGeo.isValid() && restorePosition);
                 }
-            } else {
-                const int savedPos = slot.order;
-                const int clampedPos = reopenInsertOrder(state, savedPos);
-                inserted = state->addWindow(windowId, clampedPos);
-                if (inserted && savedPos >= 0) {
-                    m_reopenRestoredOrder.insert(windowId, savedPos);
-                }
-                qCDebug(PhosphorTileEngine::lcTileEngine)
-                    << "insertWindow: restored" << windowId << "from placement store at position=" << clampedPos
-                    << "(saved=" << savedPos << ") inserted=" << inserted;
             }
         }
     }
@@ -394,10 +379,9 @@ void AutotileEngine::purgeFromPendingOrders(const QString& windowId)
     }
 }
 
-void AutotileEngine::removeWindow(const QString& windowId, RemovalOrigin origin)
+void AutotileEngine::removeWindow(const QString& windowId)
 {
     m_windowMinSizes.remove(windowId);
-    m_reopenRestoredOrder.remove(windowId);
     m_overflow.clearOverflow(windowId);
 
     // Purge a closed window from pending initial orders even when it was a
@@ -427,30 +411,7 @@ void AutotileEngine::removeWindow(const QString& windowId, RemovalOrigin origin)
         // only after this removal, when this engine no longer answers), and by
         // the save-time snapshot for still-open windows. The reopen consumes
         // that record in insertWindow().
-        const int removedIdx = state->windowOrder().indexOf(windowId);
         state->removeWindow(windowId);
-        if (origin == RemovalOrigin::Close && removedIdx >= 0) {
-            // Close-burst ledger (see m_closeCompaction): remember the
-            // ORIGINAL index this close vacated so the remaining captures of
-            // the same burst still answer pre-burst orders. Expiry runs
-            // BEFORE the append so a stale ledger never corrects a fresh
-            // burst; sorted insertion keeps preCloseBurstOrder a straight
-            // scan.
-            CloseCompaction& burst = m_closeCompaction[key];
-            if (burst.sinceLastClose.isValid() && burst.sinceLastClose.elapsed() > CloseBurstWindowMs) {
-                burst.removedOrders.clear();
-            }
-            const int vacated = preCloseBurstOrder(key, removedIdx);
-            burst.removedOrders.insert(std::lower_bound(burst.removedOrders.begin(), burst.removedOrders.end(), vacated)
-                                           - burst.removedOrders.begin(),
-                                       vacated);
-            burst.sinceLastClose.restart();
-        } else if (origin != RemovalOrigin::Close) {
-            // A prune or zone-clear untrack compacts the order without being
-            // a close — a mutation the ledger cannot model, so the context's
-            // burst ends rather than mis-correcting the next capture.
-            endCloseBurstForKey(key);
-        }
     }
 }
 

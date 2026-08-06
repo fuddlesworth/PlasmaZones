@@ -43,17 +43,6 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
-    // The reopen rank anchors take the same aliveness sweep: entries survive
-    // paths that drop a window's tracking key without a close (handoffs, the
-    // dead loop below only sees keyed windows), and unlike the two maps above
-    // nothing else ever ages a dead window's anchor out.
-    for (auto it = m_reopenRestoredColumn.begin(); it != m_reopenRestoredColumn.end();) {
-        if (!aliveWindowIds.contains(it.key())) {
-            it = m_reopenRestoredColumn.erase(it);
-        } else {
-            ++it;
-        }
-    }
     QStringList dead;
     const auto& windowKeys = m_states.windowKeys();
     for (auto it = windowKeys.cbegin(); it != windowKeys.cend(); ++it) {
@@ -82,15 +71,11 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             state->strip().removeWindow(windowId, *paramsIt);
             state->removeFloating(windowId);
             affectedScreens.insert(key.screenId);
-            // A prune removal compacts columns without being a close — the
-            // ledger cannot model it, so the context's burst ends here.
-            endCloseBurstForKey(key);
         }
         m_states.removeWindow(windowId);
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
-        m_reopenRestoredColumn.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         // A dead window's queued self-activation echo can never be answered;
         // left behind it would eat the first genuine focus of a reused id
@@ -347,12 +332,6 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                             m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));
                         }
                     }
-                    // The close-burst ledger is keyed by context too, but a
-                    // migration is itself a structural change the ledger
-                    // cannot model — drop both keys' entries rather than
-                    // carrying a correction into a re-keyed strip.
-                    endCloseBurstForKey(oldKey);
-                    endCloseBurstForKey(newKey);
                     qCInfo(lcScrollEngine) << "Migrated screen" << screenId << "strip from desktop" << pinnedDesktop
                                            << "to" << newKey.desktop;
                 }
@@ -430,7 +409,6 @@ void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
-        m_reopenRestoredColumn.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         // The dying context's windows can never answer their queued echoes;
         // a stale entry would swallow the first genuine focus of a reused
@@ -464,17 +442,6 @@ void ScrollEngine::sweepStatelessScreenBookkeeping(const QSet<QString>& screenId
     }
 }
 
-void ScrollEngine::sweepCloseCompaction(const std::function<bool(const PhosphorEngine::PlacementStateKey&)>& stale)
-{
-    for (auto it = m_closeCompaction.begin(); it != m_closeCompaction.end();) {
-        if (stale(it.key())) {
-            it = m_closeCompaction.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
 void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
 {
     // Unwind a preview stranded by the dying context while both its states
@@ -501,9 +468,6 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     m_context.pruneDesktop(removedDesktop);
     sweepStatelessScreenBookkeeping(touchedScreens);
     sweepStripStash([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
-        return key.desktop == removedDesktop;
-    });
-    sweepCloseCompaction([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
         return key.desktop == removedDesktop;
     });
 }
@@ -534,9 +498,6 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     });
     sweepStatelessScreenBookkeeping(touchedScreens);
     sweepStripStash([&stale](const PhosphorEngine::PlacementStateKey& key) {
-        return stale(key.activity);
-    });
-    sweepCloseCompaction([&stale](const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);
     });
 }
@@ -586,9 +547,6 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         return matches(key.screenId);
     });
     sweepStripStash([&matches](const PhosphorEngine::PlacementStateKey& key) {
-        return matches(key.screenId);
-    });
-    sweepCloseCompaction([&matches](const PhosphorEngine::PlacementStateKey& key) {
         return matches(key.screenId);
     });
     // Standalone sweep for STATELESS sub-screens too: a virtual sub-screen
@@ -658,7 +616,6 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
-        m_reopenRestoredColumn.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
     }
 }
