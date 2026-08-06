@@ -461,6 +461,12 @@ public:
     ///        scroll having happened. Replays default to false.
     void updateScrollTabStrips(const QString& screenId, const QVariantList& strips, bool carriesViewSlide = false);
 
+    /// The compositor reporting @p screenId's scrolling view has come to rest,
+    /// which is the cue to bring the tab indicators back. Only the compositor
+    /// can answer this: the view rides a spring, and a spring ignores its
+    /// profile's duration, so a daemon-side timer would be guessing.
+    void onScrollViewSettled(const QString& screenId);
+
     /// Drop-target indicator for a scrolling drag re-insert on @p screenId
     /// (per screen, NOT a singleton — a drag can cross screens). @p rect is
     /// the absolute-px slot the dragged window would land in, converted to
@@ -840,7 +846,12 @@ private:
     /// identical delta (a bare value write raises no change signal the second
     /// time, and the indicator would sit at the wrong offset for a whole leg).
     /// Wraps harmlessly: QML keys on the value CHANGING, not on its magnitude.
-    QHash<QString, int> m_scrollTabViewDeltaSeq;
+    /// Screens whose strip is mid-scroll, so the indicators are hidden. Held
+    /// daemon-side as well as pushed, because a strip update landing DURING a
+    /// leg must re-assert the hide: a replay writes the slot's properties and
+    /// can create fresh delegates, which would otherwise come up visible on a
+    /// still-moving strip.
+    QSet<QString> m_scrollTabStripMoving;
 
     /// Per-screen generation guard for the drop indicator's animated hide,
     /// same contract as m_scrollTabsHideGuard: a hide completion that lost the

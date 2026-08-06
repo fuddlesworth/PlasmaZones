@@ -72,6 +72,20 @@ void OverlayService::setScrollTabIndicatorOverrides(const QString& screenId, con
     }
 }
 
+void OverlayService::onScrollViewSettled(const QString& screenId)
+{
+    if (screenId.isEmpty() || !m_scrollTabStripMoving.remove(screenId)) {
+        return; // never moving, or already reported — idempotent by contract
+    }
+    auto it = m_screenStates.find(screenId);
+    if (it == m_screenStates.end()) {
+        return;
+    }
+    if (QQuickItem* slot = it->scrollTabsSlot()) {
+        writeQmlProperty(slot, QStringLiteral("stripMoving"), false);
+    }
+}
+
 void OverlayService::updateScrollTabStrips(const QString& screenId, const QVariantList& strips, bool carriesViewSlide)
 {
     if (screenId.isEmpty()) {
@@ -230,19 +244,13 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         ? 0
         : shifted.first().toMap().value(QStringLiteral("viewDeltaX")).toInt();
     if (viewDeltaX != 0) {
-        // How long the content waits after the last scroll before showing the
-        // indicators again. A DEBOUNCE standing in for a settle signal the
-        // daemon does not get: the compositor never reports when its view
-        // spring finished, so this waits out a window sized from the animation
-        // duration instead. The margin covers a spring ringing past its
-        // nominal duration; erring long only keeps the indicators away a
-        // little longer, while erring short brings them back onto a strip
-        // still moving, which is the artifact being removed.
-        constexpr int kSettleMarginMs = 120;
-        const int durationMs = m_settings ? m_settings->animationDuration() : 0;
-        writeQmlProperty(slot, QStringLiteral("viewSettleMs"), durationMs + kSettleMarginMs);
-        writeQmlProperty(slot, QStringLiteral("viewDeltaSeq"), ++m_scrollTabViewDeltaSeq[screenId]);
+        m_scrollTabStripMoving.insert(screenId);
     }
+    // Written unconditionally, not only on a fresh slide: a replay landing
+    // mid-leg rewrites this slot and can create fresh delegates, and one that
+    // left the flag unwritten would let them come up visible on a strip that
+    // is still moving.
+    writeQmlProperty(slot, QStringLiteral("stripMoving"), m_scrollTabStripMoving.contains(screenId));
 
     // Now the rects, with the motion state already established above.
     writeQmlProperty(slot, QStringLiteral("strips"), shifted);

@@ -58,8 +58,15 @@ Item {
     /// Strip entries pushed by the daemon (see file doc).
     property var strips: []
 
-    /// Bumped by the daemon on every batch that slid the scrolling view, and
-    /// how long to wait after the last one before the indicators return.
+    /// True while the scrolling strip is moving, pushed by the daemon: set when
+    /// a batch slides the view, cleared when the COMPOSITOR reports its view
+    /// spring has come to rest.
+    ///
+    /// It has to come from the compositor. The view rides a spring, and a
+    /// spring ignores its profile's duration and runs on its own physics, so
+    /// any timer on this side is guessing at a moment it cannot compute — and
+    /// guessing short brings the indicators back onto a strip still moving,
+    /// which is the artifact this whole mechanism exists to remove.
     ///
     /// The indicators HIDE while the strip is moving rather than travelling
     /// with it. They cannot travel with it accurately: the compositor moves
@@ -71,27 +78,7 @@ Item {
     /// surface of their own (today they share one with the OSD, which must not
     /// slide when the strip does).
     ///
-    /// A counter rather than a value, because two identical scrolls in a row
-    /// would push identical numbers and the second would raise no change signal
-    /// at all.
-    ///
-    /// `viewSettleMs` is a DEBOUNCE, not a real settle: the daemon never learns
-    /// when the compositor's spring finished, so it waits out a window sized
-    /// from the animation duration instead. A burst of fast scrolls keeps
-    /// restarting it, which is what makes the whole burst read as one hide.
-    property int viewDeltaSeq: 0
-    property int viewSettleMs: 250
-
-    /// True while the strip is considered to be moving.
-    readonly property bool stripMoving: stripMotionDebounce.running
-
-    onViewDeltaSeqChanged: stripMotionDebounce.restart()
-
-    Timer {
-        id: stripMotionDebounce
-
-        interval: root.viewSettleMs
-    }
+    property bool stripMoving: false
 
     /// Shown for a tab whose window reports no title. Named once so a
     /// translator change lands on every one of the three places it appears.

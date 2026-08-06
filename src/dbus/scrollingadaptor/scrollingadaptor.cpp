@@ -66,6 +66,19 @@ QStringList ScrollingAdaptor::scrollingScreens() const
     return out;
 }
 
+void ScrollingAdaptor::notifyViewSettled(const QString& screenId)
+{
+    // No engine gate, unlike focusColumn below. This changes no strip state —
+    // it only tells the overlay a compositor-side animation ended — and the
+    // screen may legitimately have left scrolling mode between the leg
+    // starting and settling, in which case the consumer still wants to know
+    // the motion is over rather than be left waiting.
+    if (screenId.isEmpty()) {
+        return;
+    }
+    Q_EMIT viewSettled(screenId);
+}
+
 void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
 {
     // Wire-boundary validation: only the two adjacent steps are meaningful,

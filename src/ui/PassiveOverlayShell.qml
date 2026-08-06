@@ -411,16 +411,15 @@ Window {
         // vertical/horizontal branch in the content item, and `windowId` is
         // what a tab click relays back.
         property var strips: []
-        // Bumped on every batch that slid the scrolling view, plus how long to
-        // wait after the last one before the indicators return. The content
-        // hides them while the strip moves — see ScrollTabStripContent for why
-        // travelling with it cannot be made accurate from this side.
+        // True while the strip is mid-scroll: set when a batch slides the view,
+        // cleared when the compositor reports its spring has settled. The
+        // content hides the indicators meanwhile — see ScrollTabStripContent
+        // for why travelling with the strip cannot be made accurate from here.
         //
         // Declared HERE and forwarded below like every other slot property: C++
         // writes land on this Item, and a property the content declares but the
         // slot does not is simply never written.
-        property int viewDeltaSeq: 0
-        property int viewSettleMs: 250
+        property bool stripMoving: false
         // Content lifecycle gate, toggled by C++ on show/hide. Unlike the
         // OSD-style slots the content is NOT re-instantiated per update —
         // strip changes are frequent (every relayout) and flow through the
@@ -471,8 +470,7 @@ Window {
 
             ScrollTabStripContent {
                 strips: scrollTabsSlot.strips
-                viewDeltaSeq: scrollTabsSlot.viewDeltaSeq
-                viewSettleMs: scrollTabsSlot.viewSettleMs
+                stripMoving: scrollTabsSlot.stripMoving
                 fontFamily: scrollTabsSlot.fontFamily
                 fontSizeScale: scrollTabsSlot.fontSizeScale
                 fontWeight: scrollTabsSlot.fontWeight

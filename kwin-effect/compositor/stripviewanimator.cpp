@@ -19,6 +19,11 @@ void StripViewAnimator::setRepaintRequest(RepaintRequest request)
     m_repaintRequest = std::move(request);
 }
 
+void StripViewAnimator::setSettleCallback(RepaintRequest callback)
+{
+    m_settleCallback = std::move(callback);
+}
+
 void StripViewAnimator::setEnabled(bool enabled)
 {
     if (m_enabled == enabled) {
@@ -26,6 +31,15 @@ void StripViewAnimator::setEnabled(bool enabled)
     }
     m_enabled = enabled;
     if (!m_enabled && !m_motions.empty()) {
+        // Every in-flight leg is about to be dropped, and a dropped leg is
+        // still a strip coming to rest as far as anyone waiting is concerned.
+        if (m_settleCallback) {
+            for (const auto& [output, motion] : m_motions) {
+                if (motion.animation.isAnimating()) {
+                    m_settleCallback(output);
+                }
+            }
+        }
         // Drop in-flight legs on disable, the same reasoning as
         // WindowAnimator's: advanceAnimations has no enabled gate, so a leg
         // from before the toggle would keep offsetting the strip while the
@@ -143,6 +157,12 @@ int StripViewAnimator::reapAnimationsForClock(const PhosphorAnimation::IMotionCl
             if (m_repaintRequest) {
                 m_repaintRequest(it->first);
             }
+            // Reaped, not finished — but the strip is equally at rest, and a
+            // consumer waiting on a leg whose output just went away would wait
+            // forever otherwise.
+            if (m_settleCallback) {
+                m_settleCallback(it->first);
+            }
             it = m_motions.erase(it);
             ++reaped;
         } else {
@@ -168,10 +188,19 @@ void StripViewAnimator::advanceAnimations()
             }
         }
         motion.animation.advance();
-        if (!motion.animation.isAnimating() && m_repaintRequest) {
+        if (!motion.animation.isAnimating()) {
             // Settling frame: the offset has just become zero, and the last
             // frame drawn still carries the old one.
-            m_repaintRequest(output);
+            if (m_repaintRequest) {
+                m_repaintRequest(output);
+            }
+            // The strip is at rest. This edge is the only honest answer to
+            // "when did the scroll finish" — a spring ignores its profile's
+            // duration and runs on its own physics, so nothing outside this
+            // loop can compute the moment.
+            if (m_settleCallback) {
+                m_settleCallback(output);
+            }
         }
     }
 }

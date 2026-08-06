@@ -876,6 +876,15 @@ void Daemon::initEnginesAndWiring()
     m_tilingAdaptor->setLifecycleEngines({autotileEngine, scrollEngine});
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_algorithmRegistry.get(), this);
     m_scrollingAdaptor = new ScrollingAdaptor(scrollEngine, this);
+    // The compositor's report that a screen's view spring has settled, relayed
+    // to the overlay so the tab indicators know when to come back. It bypasses
+    // the engine entirely: no strip state changes, and the engine has no notion
+    // of the compositor-side view offset this describes.
+    connect(m_scrollingAdaptor, &ScrollingAdaptor::viewSettled, this, [this](const QString& screenId) {
+        if (m_overlayService) {
+            m_overlayService->onScrollViewSettled(screenId);
+        }
+    });
     connect(autotileEngine, &PhosphorTileEngine::AutotileEngine::windowsTiled, m_tilingAdaptor,
             &TilingAdaptor::relayTileRequestsJson);
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,

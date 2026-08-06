@@ -102,7 +102,28 @@ public Q_SLOTS:
      */
     QString visibleStripJson(const QString& screenId) const;
 
+    /**
+     * @brief The compositor reporting that a screen's view has come to rest.
+     *
+     * Relayed straight out as @c viewSettled — the engine is not involved,
+     * because the strip's model never moved: the view offset is a compositor
+     * paint-time concern and this is only the overlay's cue that it is over.
+     *
+     * Also arrives for a CANCELLED leg (animations switched off mid-flight, an
+     * output reaped), which is deliberate: consumers read it as "at rest now",
+     * so a leg that stops without finishing has to report or they wait forever.
+     *
+     * @param screenId Screen whose view stopped moving
+     */
+    void notifyViewSettled(const QString& screenId);
+
 Q_SIGNALS:
+    /**
+     * @brief Relay of notifyViewSettled to in-process consumers.
+     * @param screenId Screen whose view stopped moving
+     */
+    void viewSettled(const QString& screenId);
+
     /**
      * @brief Emitted when the set of screens using the scrolling engine changes
      * @param screenIds List of screen IDs currently in scrolling mode
