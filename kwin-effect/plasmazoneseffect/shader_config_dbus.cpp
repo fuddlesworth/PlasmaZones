@@ -52,6 +52,12 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 
+/// Bounded retry for a failed getAllRules fetch, matching the tiling
+/// handler's bring-up fetch budget: a fresh external trigger resets it,
+/// only the retry chain's own failures consume it.
+constexpr int kRuleFetchRetryMax = 3;
+constexpr int kRuleFetchRetryDelayMs = 1000;
+
 /// Context fields NO effect-side resolver stamps onto its WindowQuery —
 /// the effect twin of the daemon open-path's neverStampedFields()
 /// (src/dbus/windowtrackingadaptor/rules.cpp), for the same reason: an
@@ -504,6 +510,16 @@ void PlasmaZonesEffect::slotRulesChanged()
 
 void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
 {
+    // Every external invocation (bring-up, rulesChanged debounce, the
+    // seed-edge re-drive) grants a fresh bounded retry budget. The retry
+    // path calls fetchAllRulesOnce directly, so only its own failures
+    // consume it — a fresh trigger always gets a full set of attempts.
+    m_ruleFetchRetriesLeft = kRuleFetchRetryMax;
+    fetchAllRulesOnce();
+}
+
+void PlasmaZonesEffect::fetchAllRulesOnce()
+{
     // Fetch the unified Rule store via getAllRules (returns a JSON
     // string of a v4 RuleSet), deserialise, filter to rules whose
     // action list contains any effect-consumed (Tag::Effect) action, and
@@ -523,6 +539,20 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
             // subscription below will deliver the next change. Log at debug
             // so the noise stays out of normal-startup logs.
             qCDebug(lcEffect) << "loadRuleAnimationsFromDbus: getAllRules failed:" << reply.error().message();
+            // Bounded retry. This is what recovers the seed-edge re-drive
+            // when its fetch fails: without it, rules sliced by the unseeded
+            // clear would stay withheld until the next rulesChanged or a
+            // daemon restart. Past the budget those remain the recovery
+            // paths, and the marker's stale-TRUE direction keeps that safe.
+            if (m_ruleFetchRetriesLeft > 0) {
+                --m_ruleFetchRetriesLeft;
+                QTimer::singleShot(kRuleFetchRetryDelayMs, this, [this] {
+                    fetchAllRulesOnce();
+                });
+            } else {
+                qCWarning(lcEffect) << "loadRuleAnimationsFromDbus: retry budget exhausted;"
+                                    << "effect-bound rules refresh on the next rulesChanged or daemon restart";
+            }
             return;
         }
         const QByteArray payload = reply.value().toUtf8();

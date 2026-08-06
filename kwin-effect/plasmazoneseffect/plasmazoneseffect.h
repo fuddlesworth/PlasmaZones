@@ -1051,6 +1051,11 @@ private:
     /// `getAllRules` fetch at the trailing edge.
     QTimer m_animationRulesRefreshDebounce;
 
+    /// Remaining bounded-retry attempts for a failed getAllRules fetch.
+    /// Reset by every external loadRuleAnimationsFromDbus invocation,
+    /// consumed only by fetchAllRulesOnce's failure-arm re-dispatches.
+    int m_ruleFetchRetriesLeft = 0;
+
     /// Wire the DecorationManager into the effect: the windowDecorationRestored
     /// connection. Defined in decorations.cpp with the rest of the decoration code;
     /// called once from the constructor.
@@ -2465,6 +2470,12 @@ private:
     /// edge, so the decorations (and the tint layer whose teardown covers the
     /// daemon-loss caller) are still live there.
     void sliceActiveLayoutRulesForUnseededMap();
+
+    /// One getAllRules round trip: the body of loadRuleAnimationsFromDbus,
+    /// which is the budget-granting wrapper. The failure arm re-dispatches
+    /// this directly (bounded, m_ruleFetchRetriesLeft) so retries do not
+    /// re-grant themselves a fresh budget.
+    void fetchAllRulesOnce();
 
 private Q_SLOTS:
     /// D-Bus signal handler for `Rules.rulesChanged`. Re-arms the

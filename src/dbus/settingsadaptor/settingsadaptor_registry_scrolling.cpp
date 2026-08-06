@@ -1,0 +1,337 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// The Scrolling-family slice of SettingsAdaptor's getSetting/setSetting
+// registry: every scrolling key on the generic wire (core, tab indicator,
+// drop indicator, behavior, shortcuts). Split out of
+// settingsadaptor_registry.cpp when that TU crossed the file-size ceiling;
+// initializeRegistry() calls initializeRegistryScrolling() where the block
+// used to sit, so registration order is unchanged.
+//
+// The REGISTER_CONCRETE_* / REGISTER_THEME_FALLBACK_COLOR macros are
+// duplicated from settingsadaptor_registry.cpp on purpose: both TUs define
+// them inside their registration function and #undef them at the end, which
+// keeps them out of every other TU in a unity batch — a shared macro header
+// with an include guard would define them only once per batch and leave the
+// second TU without them. KEEP IN SYNC with the definitions in
+// settingsadaptor_registry.cpp (they are frozen boilerplate; a change there
+// must land here in the same commit).
+
+#include "settingsadaptor.h"
+#include "config/settings.h" // For concrete Settings type
+#include "config/configdefaults.h" // ConfigDefaults::isValidScrolling* validators
+#include <QColor>
+
+namespace PlasmaZones {
+
+void SettingsAdaptor::initializeRegistryScrolling()
+{
+#define REGISTER_CONCRETE_BOOL(name, getter, setter)                                                                   \
+    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
+        return concrete->getter();                                                                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        concrete->setter(v.toBool());                                                                                  \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("bool");
+#define REGISTER_CONCRETE_INT(name, getter, setter)                                                                    \
+    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
+        return concrete->getter();                                                                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        concrete->setter(v.toInt());                                                                                   \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("int");
+#define REGISTER_CONCRETE_DOUBLE(name, getter, setter)                                                                 \
+    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
+        return concrete->getter();                                                                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        concrete->setter(v.toDouble());                                                                                \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("double");
+#define REGISTER_CONCRETE_STRING(name, getter, setter)                                                                 \
+    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
+        return concrete->getter();                                                                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        concrete->setter(v.toString());                                                                                \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
+
+// A theme-fallback colour: EMPTY (follow the theme) or a colour QColor can
+// parse. Rejects anything else at the boundary rather than letting it reach
+// the QML `color` property, where an unparseable string renders as an invalid
+// colour rather than falling back. Returning false surfaces the rejection to
+// the D-Bus caller instead of silently dropping the write.
+#define REGISTER_THEME_FALLBACK_COLOR(name, getter, setter)                                                            \
+    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
+        return concrete->getter();                                                                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        const QString s = v.toString();                                                                                \
+        /* Same validity predicate as REGISTER_COLOR_SETTING; only the                                                 \
+           empty-string exemption ("follow the theme") is extra here. */                                               \
+        if (!s.isEmpty() && !QColor(s).isValid()) {                                                                    \
+            return false;                                                                                              \
+        }                                                                                                              \
+        concrete->setter(s);                                                                                           \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
+
+    auto* concrete = qobject_cast<Settings*>(m_settings);
+
+    // Scrolling settings (concrete Settings only)
+    if (concrete) {
+        REGISTER_CONCRETE_BOOL("scrollingEnabled", scrollingEnabled, setScrollingEnabled)
+        REGISTER_CONCRETE_STRING("defaultScrollingTemplate", defaultScrollingTemplate, setDefaultScrollingTemplate)
+        // scrollingCenterFocusedColumn: enum (0=Never, 1=Always, 2=OnOverflow) — needs range validation
+        m_getters[QStringLiteral("scrollingCenterFocusedColumn")] = [concrete]() {
+            return concrete->scrollingCenterFocusedColumn();
+        };
+        m_setters[QStringLiteral("scrollingCenterFocusedColumn")] = [concrete](const QVariant& v) {
+            const int mode = v.toInt();
+            if (!ConfigDefaults::isValidScrollingCenterFocusedColumn(mode)) {
+                return false;
+            }
+            concrete->setScrollingCenterFocusedColumn(mode);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingCenterFocusedColumn")] = QStringLiteral("int");
+        REGISTER_CONCRETE_BOOL("scrollingAlwaysCenterSingleColumn", scrollingAlwaysCenterSingleColumn,
+                               setScrollingAlwaysCenterSingleColumn)
+        REGISTER_CONCRETE_BOOL("scrollingCropStraddlers", scrollingCropStraddlers, setScrollingCropStraddlers)
+        // scrollingDefaultColumnWidthKind: enum (0=Proportion, 1=Fixed, 2=ClientDecides, 3=Preset)
+        m_getters[QStringLiteral("scrollingDefaultColumnWidthKind")] = [concrete]() {
+            return concrete->scrollingDefaultColumnWidthKind();
+        };
+        m_setters[QStringLiteral("scrollingDefaultColumnWidthKind")] = [concrete](const QVariant& v) {
+            const int kind = v.toInt();
+            if (!ConfigDefaults::isValidScrollingWidthKind(kind)) {
+                return false;
+            }
+            concrete->setScrollingDefaultColumnWidthKind(kind);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingDefaultColumnWidthKind")] = QStringLiteral("int");
+        REGISTER_CONCRETE_DOUBLE("scrollingDefaultColumnWidthValue", scrollingDefaultColumnWidthValue,
+                                 setScrollingDefaultColumnWidthValue)
+        // scrollingDefaultColumnDisplay: enum (0=Normal, 1=Tabbed)
+        m_getters[QStringLiteral("scrollingDefaultColumnDisplay")] = [concrete]() {
+            return concrete->scrollingDefaultColumnDisplay();
+        };
+        m_setters[QStringLiteral("scrollingDefaultColumnDisplay")] = [concrete](const QVariant& v) {
+            const int display = v.toInt();
+            if (!ConfigDefaults::isValidScrollingColumnDisplay(display)) {
+                return false;
+            }
+            concrete->setScrollingDefaultColumnDisplay(display);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingDefaultColumnDisplay")] = QStringLiteral("int");
+        REGISTER_CONCRETE_STRING("scrollingPresetColumnWidths", scrollingPresetColumnWidthsString,
+                                 setScrollingPresetColumnWidths)
+        REGISTER_CONCRETE_STRING("scrollingPresetWindowHeights", scrollingPresetWindowHeightsString,
+                                 setScrollingPresetWindowHeights)
+
+        REGISTER_CONCRETE_INT("scrollingDefaultColumnWidthPresetIndex", scrollingDefaultColumnWidthPresetIndex,
+                              setScrollingDefaultColumnWidthPresetIndex)
+        // scrollingDefaultWindowHeightKind: enum (0=Auto, 1=Fixed, 2=Preset)
+        m_getters[QStringLiteral("scrollingDefaultWindowHeightKind")] = [concrete]() {
+            return concrete->scrollingDefaultWindowHeightKind();
+        };
+        m_setters[QStringLiteral("scrollingDefaultWindowHeightKind")] = [concrete](const QVariant& v) {
+            const int kind = v.toInt();
+            if (!ConfigDefaults::isValidScrollingHeightKind(kind)) {
+                return false;
+            }
+            concrete->setScrollingDefaultWindowHeightKind(kind);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingDefaultWindowHeightKind")] = QStringLiteral("int");
+        REGISTER_CONCRETE_DOUBLE("scrollingDefaultWindowHeightValue", scrollingDefaultWindowHeightValue,
+                                 setScrollingDefaultWindowHeightValue)
+        REGISTER_CONCRETE_INT("scrollingDefaultWindowHeightPresetIndex", scrollingDefaultWindowHeightPresetIndex,
+                              setScrollingDefaultWindowHeightPresetIndex)
+        // ── Scrolling.TabIndicator ──
+        // scrollingTabIndicatorEnabled is registered through ISettings in
+        // initializeRegistry; the other twelve live here so the whole family
+        // sits in one block. EVERY key of the group must be present: this
+        // generic surface is the ONLY channel the settings app has to the
+        // daemon, so an unregistered key is a control that writes the settings
+        // app's own store and never reaches the engine or the overlay — it
+        // looks wired and does nothing.
+        //
+        // The two enums get validated setters (the isValidScrollingTabIndicator*
+        // closed sets, same shape as scrollingDefaultColumnDisplay above) rather
+        // than a bare int, so a garbage wire value is refused instead of being
+        // cast into a nonexistent style or edge.
+        m_getters[QStringLiteral("scrollingTabIndicatorStyle")] = [concrete]() {
+            return concrete->scrollingTabIndicatorStyle();
+        };
+        m_setters[QStringLiteral("scrollingTabIndicatorStyle")] = [concrete](const QVariant& v) {
+            const int style = v.toInt();
+            if (!ConfigDefaults::isValidScrollingTabIndicatorStyle(style)) {
+                return false;
+            }
+            concrete->setScrollingTabIndicatorStyle(style);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingTabIndicatorStyle")] = QStringLiteral("int");
+        m_getters[QStringLiteral("scrollingTabIndicatorPosition")] = [concrete]() {
+            return concrete->scrollingTabIndicatorPosition();
+        };
+        m_setters[QStringLiteral("scrollingTabIndicatorPosition")] = [concrete](const QVariant& v) {
+            const int position = v.toInt();
+            if (!ConfigDefaults::isValidScrollingTabIndicatorPosition(position)) {
+                return false;
+            }
+            concrete->setScrollingTabIndicatorPosition(position);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingTabIndicatorPosition")] = QStringLiteral("int");
+        REGISTER_CONCRETE_BOOL("scrollingTabIndicatorHideWhenSingleTab", scrollingTabIndicatorHideWhenSingleTab,
+                               setScrollingTabIndicatorHideWhenSingleTab)
+        REGISTER_CONCRETE_BOOL("scrollingTabIndicatorPlaceWithinColumn", scrollingTabIndicatorPlaceWithinColumn,
+                               setScrollingTabIndicatorPlaceWithinColumn)
+        REGISTER_CONCRETE_INT("scrollingTabIndicatorGap", scrollingTabIndicatorGap, setScrollingTabIndicatorGap)
+        REGISTER_CONCRETE_INT("scrollingTabIndicatorWidth", scrollingTabIndicatorWidth, setScrollingTabIndicatorWidth)
+        REGISTER_CONCRETE_DOUBLE("scrollingTabIndicatorLengthProportion", scrollingTabIndicatorLengthProportion,
+                                 setScrollingTabIndicatorLengthProportion)
+        REGISTER_CONCRETE_INT("scrollingTabIndicatorGapsBetweenTabs", scrollingTabIndicatorGapsBetweenTabs,
+                              setScrollingTabIndicatorGapsBetweenTabs)
+        REGISTER_CONCRETE_INT("scrollingTabIndicatorCornerRadius", scrollingTabIndicatorCornerRadius,
+                              setScrollingTabIndicatorCornerRadius)
+        // Colours are strings, not REGISTER_COLOR_SETTING: EMPTY is the
+        // meaningful "follow the theme" value and a QColor round-trip cannot
+        // carry it. They are still validated at this boundary rather than
+        // passed through — the string lands on a QML `color` property, where an
+        // unparseable value renders as an invalid colour instead of falling
+        // back to the theme, so an arbitrary D-Bus write must not reach it.
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
+                                      setScrollingTabIndicatorActiveColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
+                                      setScrollingTabIndicatorInactiveColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
+                                      setScrollingTabIndicatorUrgentColor)
+
+        // ── Scrolling.DropIndicator ──
+        // scrollingDropIndicatorEnabled is registered through ISettings in
+        // initializeRegistry; the other FIVE live here (two colours, opacity,
+        // border width and radius) so the whole group is reachable. Same
+        // every-key-must-be-present rule as the tab indicator block above:
+        // this generic surface is the settings app's ONLY channel to the
+        // daemon, so an unregistered key looks wired and does nothing.
+        REGISTER_THEME_FALLBACK_COLOR("scrollingDropIndicatorColor", scrollingDropIndicatorColor,
+                                      setScrollingDropIndicatorColor)
+        REGISTER_THEME_FALLBACK_COLOR("scrollingDropIndicatorBorderColor", scrollingDropIndicatorBorderColor,
+                                      setScrollingDropIndicatorBorderColor)
+        REGISTER_CONCRETE_DOUBLE("scrollingDropIndicatorOpacity", scrollingDropIndicatorOpacity,
+                                 setScrollingDropIndicatorOpacity)
+        REGISTER_CONCRETE_INT("scrollingDropIndicatorBorderWidth", scrollingDropIndicatorBorderWidth,
+                              setScrollingDropIndicatorBorderWidth)
+        REGISTER_CONCRETE_INT("scrollingDropIndicatorBorderRadius", scrollingDropIndicatorBorderRadius,
+                              setScrollingDropIndicatorBorderRadius)
+
+        REGISTER_CONCRETE_BOOL("scrollingWheelFocusEnabled", scrollingWheelFocusEnabled, setScrollingWheelFocusEnabled)
+        REGISTER_CONCRETE_BOOL("scrollingWheelFocusInverted", scrollingWheelFocusInverted,
+                               setScrollingWheelFocusInverted)
+
+        // Scrolling behavior settings
+        // scrollingInsertPosition: enum (0=RightOfActive .. 4=IntoActiveColumn)
+        m_getters[QStringLiteral("scrollingInsertPosition")] = [concrete]() {
+            return concrete->scrollingInsertPosition();
+        };
+        m_setters[QStringLiteral("scrollingInsertPosition")] = [concrete](const QVariant& v) {
+            const int position = v.toInt();
+            if (!ConfigDefaults::isValidScrollingInsertPosition(position)) {
+                return false;
+            }
+            concrete->setScrollingInsertPosition(position);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingInsertPosition")] = QStringLiteral("int");
+        REGISTER_CONCRETE_BOOL("scrollingFocusNewWindows", scrollingFocusNewWindows, setScrollingFocusNewWindows)
+        REGISTER_CONCRETE_BOOL("scrollingFocusFollowsMouse", scrollingFocusFollowsMouse, setScrollingFocusFollowsMouse)
+        // scrollingStickyWindowHandling: enum (0=TreatAsNormal, 1=RestoreOnly, 2=IgnoreAll)
+        m_getters[QStringLiteral("scrollingStickyWindowHandling")] = [concrete]() {
+            return concrete->scrollingStickyWindowHandling();
+        };
+        m_setters[QStringLiteral("scrollingStickyWindowHandling")] = [concrete](const QVariant& v) {
+            const int handling = v.toInt();
+            if (!ConfigDefaults::isValidScrollingStickyWindowHandling(handling)) {
+                return false;
+            }
+            concrete->setScrollingStickyWindowHandling(handling);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingStickyWindowHandling")] = QStringLiteral("int");
+        REGISTER_CONCRETE_BOOL("scrollingRespectMinimumSize", scrollingRespectMinimumSize,
+                               setScrollingRespectMinimumSize)
+        REGISTER_CONCRETE_BOOL("scrollingRestoreStripsOnLogin", scrollingRestoreStripsOnLogin,
+                               setScrollingRestoreStripsOnLogin)
+        // scrollingRestoreFloatedWindowsOnLogin is registered through ISettings in initializeRegistry.
+        REGISTER_CONCRETE_INT("scrollingColumnWidthStepPercent", scrollingColumnWidthStepPercent,
+                              setScrollingColumnWidthStepPercent)
+        REGISTER_CONCRETE_INT("scrollingWindowHeightStepPercent", scrollingWindowHeightStepPercent,
+                              setScrollingWindowHeightStepPercent)
+
+        // Scrolling shortcuts
+        REGISTER_CONCRETE_STRING("scrollingFocusColumnFirstShortcut", scrollingFocusColumnFirstShortcut,
+                                 setScrollingFocusColumnFirstShortcut)
+        REGISTER_CONCRETE_STRING("scrollingFocusColumnLastShortcut", scrollingFocusColumnLastShortcut,
+                                 setScrollingFocusColumnLastShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMoveColumnToFirstShortcut", scrollingMoveColumnToFirstShortcut,
+                                 setScrollingMoveColumnToFirstShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMoveColumnToLastShortcut", scrollingMoveColumnToLastShortcut,
+                                 setScrollingMoveColumnToLastShortcut)
+        REGISTER_CONCRETE_STRING("scrollingConsumeWindowShortcut", scrollingConsumeWindowShortcut,
+                                 setScrollingConsumeWindowShortcut)
+        REGISTER_CONCRETE_STRING("scrollingExpelWindowShortcut", scrollingExpelWindowShortcut,
+                                 setScrollingExpelWindowShortcut)
+        REGISTER_CONCRETE_STRING("scrollingConsumeOrExpelLeftShortcut", scrollingConsumeOrExpelLeftShortcut,
+                                 setScrollingConsumeOrExpelLeftShortcut)
+        REGISTER_CONCRETE_STRING("scrollingConsumeOrExpelRightShortcut", scrollingConsumeOrExpelRightShortcut,
+                                 setScrollingConsumeOrExpelRightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCenterColumnShortcut", scrollingCenterColumnShortcut,
+                                 setScrollingCenterColumnShortcut)
+        REGISTER_CONCRETE_STRING("scrollingToggleColumnTabbedShortcut", scrollingToggleColumnTabbedShortcut,
+                                 setScrollingToggleColumnTabbedShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleColumnWidthShortcut", scrollingCycleColumnWidthShortcut,
+                                 setScrollingCycleColumnWidthShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleColumnWidthBackShortcut", scrollingCycleColumnWidthBackShortcut,
+                                 setScrollingCycleColumnWidthBackShortcut)
+        REGISTER_CONCRETE_STRING("scrollingIncreaseColumnWidthShortcut", scrollingIncreaseColumnWidthShortcut,
+                                 setScrollingIncreaseColumnWidthShortcut)
+        REGISTER_CONCRETE_STRING("scrollingDecreaseColumnWidthShortcut", scrollingDecreaseColumnWidthShortcut,
+                                 setScrollingDecreaseColumnWidthShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMaximizeColumnShortcut", scrollingMaximizeColumnShortcut,
+                                 setScrollingMaximizeColumnShortcut)
+        REGISTER_CONCRETE_STRING("scrollingExpandColumnShortcut", scrollingExpandColumnShortcut,
+                                 setScrollingExpandColumnShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightShortcut", scrollingCycleWindowHeightShortcut,
+                                 setScrollingCycleWindowHeightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCycleWindowHeightBackShortcut", scrollingCycleWindowHeightBackShortcut,
+                                 setScrollingCycleWindowHeightBackShortcut)
+        REGISTER_CONCRETE_STRING("scrollingIncreaseWindowHeightShortcut", scrollingIncreaseWindowHeightShortcut,
+                                 setScrollingIncreaseWindowHeightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingDecreaseWindowHeightShortcut", scrollingDecreaseWindowHeightShortcut,
+                                 setScrollingDecreaseWindowHeightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingResetWindowHeightsShortcut", scrollingResetWindowHeightsShortcut,
+                                 setScrollingResetWindowHeightsShortcut)
+    }
+
+// Clean up macros (local scope; unity-batch hygiene)
+#undef REGISTER_CONCRETE_BOOL
+#undef REGISTER_CONCRETE_INT
+#undef REGISTER_CONCRETE_DOUBLE
+#undef REGISTER_CONCRETE_STRING
+#undef REGISTER_THEME_FALLBACK_COLOR
+}
+
+} // namespace PlasmaZones

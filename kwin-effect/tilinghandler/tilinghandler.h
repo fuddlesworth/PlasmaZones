@@ -222,6 +222,12 @@ public:
     // D-Bus signal connections and settings
     void connectSignals();
     void loadSettings();
+    /// The two bring-up property Gets loadSettings dispatches, factored out
+    /// so their bounded failure retries can re-dispatch exactly one fetch.
+    /// Every dispatch bumps the matching per-query generation, so a stale
+    /// retry reply loses to any newer query or live-signal write.
+    void fetchScrollingScreens();
+    void fetchActiveLayouts();
 
     // Cleanup: unmaximize all monocle-maximized windows (called on daemon loss / effect teardown)
     void restoreAllMonocleMaximized();
@@ -779,6 +785,11 @@ private:
     quint64 m_activeLayoutsQueryGeneration = 0;
     /// Same per-dispatch guard for the scrolling-screens property fetch.
     quint64 m_scrollingScreensQueryGeneration = 0;
+    /// Remaining bounded-retry attempts for the two bring-up fetches.
+    /// Reset to the cap by each loadSettings run, consumed only by the
+    /// failure arms' own re-dispatches.
+    int m_activeLayoutsFetchRetriesLeft = 0;
+    int m_scrollingScreensFetchRetriesLeft = 0;
     /// Same stale-reply guard for the scrolling-screens property fetch.
     /// Bumped by setScrollingScreens on EVERY authoritative write (live
     /// signal, property reply, daemon-restart clear) — even an identical

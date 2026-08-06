@@ -311,6 +311,11 @@ Q_SIGNALS:
 
 private:
     void initializeRegistry();
+    /// The Scrolling-family slice of the registry, split into
+    /// settingsadaptor_registry_scrolling.cpp for file size. Called only by
+    /// initializeRegistry, at the point the block used to occupy, so
+    /// registration order is unchanged.
+    void initializeRegistryScrolling();
 
     /**
      * @brief Schedule a debounced save

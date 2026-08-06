@@ -137,6 +137,7 @@ set(plasmazones_core_SRCS
     dbus/settingsadaptor/settingsadaptor.cpp
     dbus/settingsadaptor/settingsadaptor_batch.cpp
     dbus/settingsadaptor/settingsadaptor_registry.cpp
+    dbus/settingsadaptor/settingsadaptor_registry_scrolling.cpp
     dbus/settingsadaptor/settingsadaptor.h
     dbus/shaderadaptor.cpp
     dbus/shaderadaptor.h
