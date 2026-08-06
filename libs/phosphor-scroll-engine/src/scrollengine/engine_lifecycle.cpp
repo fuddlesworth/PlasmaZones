@@ -299,6 +299,30 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // a lost slot. IntoActiveColumn routes through the consume verb
         // (same shape as the openColumnPlacement rule) and falls through to
         // a positional insert on an empty strip.
+        //
+        // TEMPLATE blueprint: while the strip holds fewer columns than the
+        // context template's blueprint, the materializing column takes the
+        // next blueprint entry's width and display. Applied ONLY here (a
+        // genuinely new column on the fresh-open path) so restore, seed and
+        // stash adoptions keep their remembered shapes, and never
+        // retroactively — a template change reshapes nothing that already
+        // exists. Precedence: per-window open rules above outrank the
+        // blueprint; the blueprint outranks every default, including a
+        // client-decides width already resolved into `width`.
+        const QVariantList blueprint = screenOverrides.value(ScrollPerScreenKeys::templateColumns()).toList();
+        const int columnCount = int(state->strip().columns().size());
+        if (columnCount < blueprint.size()) {
+            const QVariantMap entry = blueprint.at(columnCount).toMap();
+            const qreal fraction = entry.value(ScrollPerScreenKeys::templateColumnWidth()).toDouble();
+            if (!openParams.widthFraction && fraction >= MinColumnWidthFraction && fraction <= 1.0) {
+                width = ColumnWidth::makeProportion(fraction);
+            }
+            if (!openParams.tabbed) {
+                display = entry.value(ScrollPerScreenKeys::templateColumnDisplay()).toInt() == 1
+                    ? ColumnDisplay::Tabbed
+                    : ColumnDisplay::Normal;
+            }
+        }
         const ScrollInsertPosition insertPos = effectiveInsertPosition(screenId);
         if (insertPos == ScrollInsertPosition::IntoActiveColumn && !state->strip().isEmpty()) {
             inserted =

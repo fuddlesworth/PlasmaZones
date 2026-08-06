@@ -214,6 +214,9 @@ private Q_SLOTS:
     void templatePresetHeightsReplaceSettingsHeights();
     void templateListShrinkClampsResolvedPresetWidth();
     void invalidTemplateEntriesFallBackToSettingsList();
+    void templateBlueprintSeedsFirstColumns();
+    void openRuleOutranksTemplateBlueprint();
+    void templateBlueprintNeverResizesExistingColumns();
     void tabIndicatorOverridesArePerProperty();
     void tabIndicatorRejectsGarbageNumericOverrides();
     void tabIndicatorRejectsAGarbagePositionOverride();
@@ -735,6 +738,107 @@ void TestScrollEnginePerScreen::tabIndicatorRejectsAGarbagePositionOverride()
     valid.insert(ScrollPerScreenKeys::tabIndicatorPosition(), static_cast<int>(TabIndicatorPosition::Right));
     engine->applyPerScreenConfig(kS2, valid);
     QCOMPARE(engine->tabIndicatorParamsForScreen(kS2).position, TabIndicatorPosition::Right);
+}
+
+void TestScrollEnginePerScreen::templateBlueprintSeedsFirstColumns()
+{
+    // The template's blueprint shapes the first N materializing columns
+    // (width AND display), and the column beyond it takes the pushed
+    // beyond-blueprint default.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVariantMap templ;
+    QVariantList blueprint;
+    QVariantMap first;
+    first.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.6);
+    blueprint.append(first);
+    QVariantMap second;
+    second.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.4);
+    second.insert(ScrollPerScreenKeys::templateColumnDisplay(), 1);
+    blueprint.append(second);
+    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
+    templ.insert(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::Proportion));
+    templ.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 0.3);
+    engine->applyPerScreenConfig(kS1, templ);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
+
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    QCOMPARE(state->strip().columns().size(), 3);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).kind, ColumnWidth::Proportion);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.6);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|b")).proportion, 0.4);
+    // The second blueprint column opened tabbed; the strip stores display
+    // per column, so find app|b's column.
+    for (const Column& col : state->strip().columns()) {
+        if (col.indexOfWindow(QStringLiteral("app|b")) >= 0) {
+            QCOMPARE(col.display, ColumnDisplay::Tabbed);
+        }
+    }
+    // Beyond the blueprint: the template's declared default.
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|c")).proportion, 0.3);
+}
+
+void TestScrollEnginePerScreen::openRuleOutranksTemplateBlueprint()
+{
+    // A per-window open rule pins the width; the blueprint entry the column
+    // would have taken must not override it.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVariantMap templ;
+    QVariantList blueprint;
+    QVariantMap first;
+    first.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.6);
+    blueprint.append(first);
+    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
+    engine->applyPerScreenConfig(kS1, templ);
+
+    engine->setOpenParamsResolver([](const QString&, const QString&) {
+        ScrollOpenParams params;
+        params.widthFraction = 0.25;
+        return params;
+    });
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).kind, ColumnWidth::Proportion);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.25);
+}
+
+void TestScrollEnginePerScreen::templateBlueprintNeverResizesExistingColumns()
+{
+    // Applying a template reshapes nothing that already exists: existing
+    // columns keep their widths, and only columns created AFTER the apply
+    // consume blueprint entries (from the current column count onward).
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
+    settings->widthValue = 0.5;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.5);
+
+    QVariantMap templ;
+    QVariantList blueprint;
+    for (qreal width : {0.7, 0.2}) {
+        QVariantMap entry;
+        entry.insert(ScrollPerScreenKeys::templateColumnWidth(), width);
+        blueprint.append(entry);
+    }
+    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
+    engine->applyPerScreenConfig(kS1, templ);
+
+    // The existing column is untouched.
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.5);
+    // The next column materializes at index 1 and takes blueprint[1].
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|b")).proportion, 0.2);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePerScreen)

@@ -118,6 +118,25 @@ inline QString presetWindowHeights()
 {
     return QStringLiteral("PresetWindowHeights");
 }
+/// TEMPLATE channel: the template's seed BLUEPRINT as a QVariantList of
+/// {width (double fraction), display (int ColumnDisplay)} maps, ordered
+/// left to right. Consumed at column CREATION on the fresh-open path: a
+/// column materializing while the strip holds fewer columns than the
+/// blueprint takes the next entry's width and display (per-window open
+/// rules still outrank it). Never resizes existing columns. Only the
+/// daemon writes it.
+inline QString templateColumns()
+{
+    return QStringLiteral("TemplateColumns");
+}
+inline QString templateColumnWidth()
+{
+    return QStringLiteral("width");
+}
+inline QString templateColumnDisplay()
+{
+    return QStringLiteral("display");
+}
 } // namespace ScrollPerScreenKeys
 
 /// The narrowest column width this engine will accept as a proportion of the

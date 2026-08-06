@@ -164,11 +164,57 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultWindowHeight(),
                              *params.defaultWindowHeight);
         }
-        // TEMPLATE channel: the mined-from-zone-layouts projection was
-        // removed with the pivot to native ScrollingTemplate objects; the
-        // native template push (preset vocabularies + column blueprint +
-        // defaults from the resolved ScrollingTemplate) lands here when the
-        // template store ships. Until then the settings preset lists stand.
+        // TEMPLATE channel: the context's resolved native ScrollingTemplate
+        // (cascade entry, else the default-template setting) pushes its
+        // whole shape. Precedence is rule > template > settings > engine
+        // fallback: the template overwrites the settings-channel slots the
+        // seed above copied, while the RULE-channel keys the params block
+        // wrote are a different key set the engine reads first — except the
+        // shared display key, which is therefore only written when no rule
+        // filled it. Fail-soft: no resolved template inserts nothing and
+        // the settings/compiled defaults stand.
+        const PhosphorZones::ScrollingTemplate templ =
+            m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity);
+        if (templ.isValid()) {
+            namespace SPK = PhosphorScrollEngine::ScrollPerScreenKeys;
+            const auto fractionList = [](const QList<qreal>& values) {
+                QVariantList list;
+                for (qreal v : values) {
+                    list.append(v);
+                }
+                return list;
+            };
+            // Preset vocabularies replace the settings lists WHOLESALE (no
+            // merge — indices and cycle order stay stable within one
+            // template). Empty lists insert nothing so the engine keeps its
+            // fallback vocabulary.
+            if (!templ.presetColumnWidths.isEmpty()) {
+                overrides.insert(SPK::presetColumnWidths(), fractionList(templ.presetColumnWidths));
+            }
+            if (!templ.presetWindowHeights.isEmpty()) {
+                overrides.insert(SPK::presetWindowHeights(), fractionList(templ.presetWindowHeights));
+            }
+            // Seed blueprint for columns materializing on the fresh-open
+            // path (engine_lifecycle consumes it at column creation).
+            if (!templ.columns.isEmpty()) {
+                QVariantList blueprint;
+                for (const PhosphorZones::ScrollingTemplateColumn& column : templ.columns) {
+                    QVariantMap entry;
+                    entry.insert(SPK::templateColumnWidth(), column.width);
+                    entry.insert(SPK::templateColumnDisplay(), column.display);
+                    blueprint.append(entry);
+                }
+                overrides.insert(SPK::templateColumns(), blueprint);
+            }
+            // Beyond-blueprint defaults ride the settings-channel trio
+            // (template values mirror the wire enums by construction).
+            overrides.insert(SPK::defaultColumnWidthKind(), templ.defaultColumnWidthKind);
+            overrides.insert(SPK::defaultColumnWidthValue(), templ.defaultColumnWidthValue);
+            overrides.insert(SPK::defaultColumnWidthPresetIndex(), templ.defaultColumnWidthPresetIndex);
+            if (!params.defaultColumnDisplay) {
+                overrides.insert(SPK::defaultColumnDisplay(), templ.defaultColumnDisplay);
+            }
+        }
         // The tab indicator's GEOMETRY overrides. Only these seven reach the
         // engine: the six paint fields alongside them in ContextScrollingParams
         // cannot change a resolved rect, so they are collected separately below
