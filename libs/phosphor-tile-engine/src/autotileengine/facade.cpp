@@ -87,10 +87,9 @@ void AutotileEngine::setWindowRegistry(QObject* registry)
             algo->setAppIdResolver(resolver);
         }
     }
-    // Drop the previous invocation's hook first: setWindowRegistry is a public
-    // re-wireable seam, and stacking a second identical lambda would call
-    // setAppIdResolver N times per hot-reloaded algorithm.
-    disconnect(m_appIdResolverHook);
+    // The entry-point disconnect above is THE de-dup guard (nothing between
+    // it and here re-populates the handle), so this connect installs onto an
+    // always-clean slot.
     m_appIdResolverHook = connect(algoRegistry, &PhosphorTiles::ITileAlgorithmRegistry::algorithmRegistered, this,
                                   [this, resolver](const QString& id) {
                                       auto* reg = m_algorithmRegistry;
@@ -431,6 +430,9 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
         slot.order = state->windowOrder().indexOf(wid);
     } else {
         slot.state = WindowPlacement::stateTiled();
+        // The order at capture time, recorded as context only: the reopen
+        // path takes floating slots only, and a tiled slot's job is to stand
+        // as the exact-final evidence that the window closed tiled.
         slot.order = state->windowOrder().indexOf(wid);
     }
     p.engines.insert(engineId(), slot);

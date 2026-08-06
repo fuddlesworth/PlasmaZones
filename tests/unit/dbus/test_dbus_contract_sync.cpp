@@ -561,11 +561,11 @@ private Q_SLOTS:
 
     void testWindowTrackingContract()
     {
-        // windowClosedNotification is a documented in-process Qt signal —
-        // bus-visible but deliberately off the published contract (see its
-        // doc comment in windowtrackingadaptor.h).
+        // windowClosedNotification and stalePruned are documented in-process
+        // Qt signals — bus-visible but deliberately off the published
+        // contract (see their doc comments in windowtrackingadaptor.h).
         verifyContract(WindowTrackingAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.WindowTracking"),
-                       {QStringLiteral("windowClosedNotification")});
+                       {QStringLiteral("windowClosedNotification"), QStringLiteral("stalePruned")});
     }
 
     void testTilingContract()

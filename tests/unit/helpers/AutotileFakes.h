@@ -6,6 +6,7 @@
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
@@ -294,6 +295,18 @@ public:
     }
     void recordFreeGeometry(const QString&, const QString&, const QRect&, bool) override
     {
+    }
+    /// Windows the store's live-instance probe reports as OPEN. Wired below
+    /// with production's extractInstanceId keying so the engine suites see
+    /// the same no-steal exclusion the daemon-wired store applies; tests
+    /// simulating a close remove the instance here, matching the registry
+    /// removal on the real close path.
+    QSet<QString> liveInstances;
+    void wireLiveInstanceProbe()
+    {
+        m_store.setLiveInstanceProbe([this](const QString& windowId) {
+            return liveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+        });
     }
     using PhosphorEngine::IWindowTrackingService::clearFreeGeometry;
     void clearFreeGeometry(const QString&) override

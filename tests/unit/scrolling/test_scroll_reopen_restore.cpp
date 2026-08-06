@@ -11,10 +11,12 @@
 #include <PhosphorScrollEngine/ScrollState.h>
 
 #include "helpers/AutotileFakes.h"
+#include "helpers/WindowPlacementBuilders.h"
 
 using namespace PhosphorScrollEngine;
 using PhosphorEngine::WindowPlacement;
 using PlasmaZones::TestHelpers::FakeStickyWindowTracking;
+using PlasmaZones::TestHelpers::makePlacement;
 
 /**
  * @brief Close/reopen restore through the unified placement store, on the
@@ -94,6 +96,20 @@ private Q_SLOTS:
         captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300));
         QVERIFY(!state->containsWindow(QStringLiteral("term|t1")));
 
+        // Reproduce the production open sequence: the effect's pre-tile
+        // geometry capture writes a geometry-only, ENGINE-SLOT-LESS record
+        // under the fresh uuid BEFORE the engine's restore runs (the exact
+        // stub whose veto was the original bug — the fake's recordFreeGeometry
+        // is a no-op, so without this the gate never even fires here).
+        {
+            PhosphorEngine::WindowPlacement stub;
+            stub.windowId = QStringLiteral("term|t2");
+            stub.appId = QStringLiteral("term");
+            stub.screenId = screen;
+            stub.freeGeometryByScreen.insert(screen, QRect(0, 0, 800, 600));
+            QVERIFY(tracker.placementStore().record(stub));
+        }
+
         // Reopen: same app, FRESH uuid. The floating record must be consumed
         // via the appId FIFO and the window must arrive floating, not tiled.
         engine->windowOpened(QStringLiteral("term|t2"), screen, 0, 0);
@@ -158,8 +174,42 @@ private Q_SLOTS:
         QVERIFY(state->isFloating(QStringLiteral("term|t1")));
     }
 
-    void reopenWithFreshUuidRestoresColumn()
+    void secondInstanceCannotStealLiveSiblingsReboundRecord()
     {
+        // The live-instance probe at engine level: after t2 consumes t1's
+        // floating record (re-bound to the live t2), a THIRD instance must
+        // not steal it — t2 would be left recordless. Probe wired with
+        // production's extractInstanceId keying.
+        QObject owner;
+        FakeStickyWindowTracking tracker;
+        tracker.wireLiveInstanceProbe();
+        ScrollEngine* engine = makeEngine(&owner, &tracker);
+        const QString screen = QLatin1String(Screen);
+
+        tracker.liveInstances.insert(QStringLiteral("t1"));
+        engine->windowOpened(QStringLiteral("term|t1"), screen, 0, 0);
+        engine->setWindowFloat(QStringLiteral("term|t1"), true, screen);
+        captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300));
+        tracker.liveInstances.remove(QStringLiteral("t1"));
+
+        tracker.liveInstances.insert(QStringLiteral("t2"));
+        engine->windowOpened(QStringLiteral("term|t2"), screen, 0, 0);
+        ScrollState* state = stateFor(engine, screen);
+        QVERIFY(state);
+        QVERIFY(state->isFloating(QStringLiteral("term|t2"))); // consumed t1's record
+
+        tracker.liveInstances.insert(QStringLiteral("t3"));
+        engine->windowOpened(QStringLiteral("term|t3"), screen, 0, 0);
+        QVERIFY(!state->isFloating(QStringLiteral("term|t3"))); // nothing to steal — tiles
+        // t2's re-bound record survived.
+        QVERIFY(tracker.placementStore().peekExact(QStringLiteral("term|t2")).has_value());
+    }
+
+    void tiledRecordIsNotConsumedAndDoesNotFloatTheReopen()
+    {
+        // Order restore was removed deliberately: a TILED record must not be
+        // consumed on reopen (it stays as the exact-final evidence the window
+        // closed tiled) and the reopened window takes a normal insert.
         QObject owner;
         FakeStickyWindowTracking tracker;
         ScrollEngine* engine = makeEngine(&owner, &tracker);
@@ -167,14 +217,16 @@ private Q_SLOTS:
 
         engine->windowOpened(QStringLiteral("one|a"), screen, 0, 0);
         engine->windowOpened(QStringLiteral("two|b"), screen, 0, 0);
-        engine->windowOpened(QStringLiteral("three|c"), screen, 0, 0);
-        const int closedColumn = engine->columnIndexForWindow(screen, QStringLiteral("two|b"));
-        QVERIFY(closedColumn >= 0);
-
         captureClose(engine, &tracker, QStringLiteral("two|b"));
+        QVERIFY(tracker.placementStore().peekExact(QStringLiteral("two|b")).has_value());
 
         engine->windowOpened(QStringLiteral("two|b2"), screen, 0, 0);
-        QCOMPARE(engine->columnIndexForWindow(screen, QStringLiteral("two|b2")), closedColumn);
+        ScrollState* state = stateFor(engine, screen);
+        QVERIFY(state);
+        QVERIFY(!state->isFloating(QStringLiteral("two|b2"))); // tiled reopen stays tiled
+        QVERIFY(engine->columnIndexForWindow(screen, QStringLiteral("two|b2")) >= 0);
+        // The tiled record was not consumed by the reopen.
+        QVERIFY(tracker.placementStore().peekExact(QStringLiteral("two|b")).has_value());
     }
 
     void geometrylessFloatingResidueNotConsumedByFreshSibling()

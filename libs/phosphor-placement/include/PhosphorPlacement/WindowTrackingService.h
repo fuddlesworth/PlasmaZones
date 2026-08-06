@@ -235,6 +235,46 @@ public:
     bool isWindowEngineTiled(const QString& windowId) const;
 
     /**
+     * @brief Resolver: which engine id owns @p windowId's mode on @p screenId?
+     *
+     * Injected by the daemon (engine-/settings-agnostic LGPL boundary), same
+     * pattern as AutotileModePredicate but answering with the OWNING engine's
+     * WindowPlacement engine id ("snap" / "autotile" / "scrolling") for an
+     * explicit screen. Used wherever a slot must be synthesized for a window
+     * no engine captured (recordFloatingClose, the minimize preserve): the
+     * reopen accepts are keyed strictly per engine slot, so a synthesized
+     * float slot filed under the wrong engine is invisible to the engine that
+     * will actually field the reopen — the float-is-per-mode invariant read
+     * from the store side.
+     */
+    using ModeEngineIdResolver = std::function<QString(const QString& windowId, const QString& screenId)>;
+    void setModeEngineIdResolver(ModeEngineIdResolver resolver);
+
+    /// The owning engine id for @p windowId on @p screenId per the resolver;
+    /// snap's engine id when the resolver is unwired (snap-only tests) or
+    /// answers empty. The production resolver's mode switch is total and
+    /// never answers empty, so the empty arm is pure defence — but it is a
+    /// REAL branch: a future resolver answering empty on a tiling-mode
+    /// screen would file the synthesized close slot under snap, invisibly to
+    /// that engine's reopen accept.
+    QString owningModeEngineId(const QString& windowId, const QString& screenId) const;
+
+    /**
+     * @brief Downgrade managed slots recorded against a different screen.
+     *
+     * When @p recordedScreenId names a screen that does not match
+     * @p closeScreenId, every snapped/tiled slot in @p placement is flipped to
+     * plain floating with its zone ids and order cleared: a managed slot
+     * references THAT screen's zones / tile order, and restoring it under the
+     * new screen would land the window in another screen's slots. Same-screen
+     * (or unscreened) records pass through untouched. Shared by
+     * recordFloatingClose and the adaptor's minimize preserve so the two
+     * close-shaped writers cannot drift.
+     */
+    static void downgradeMismatchedManagedSlots(PhosphorEngine::WindowPlacement& placement,
+                                                const QString& recordedScreenId, const QString& closeScreenId);
+
+    /**
      * @brief Accessor for consumers that need direct access (effect, adaptor).
      */
     PhosphorEngine::WindowRegistry* windowRegistry() const;
@@ -796,8 +836,12 @@ public:
      * windows can be teleported to their zone immediately on windowAdded,
      * eliminating the visible "flash" from KWin's session-restored position.
      * Sourced from the unified WindowPlacementStore's snapped records; for a
-     * multi-instance appId the lowest-sequence (FIFO-head) record is chosen
-     * deterministically. Entries whose saved screen is currently in autotile
+     * multi-instance appId the lowest-sequence (least-recently-recorded)
+     * record is chosen. That pick is DETERMINISTIC but is not the FIFO head
+     * snap's take() consumes — record()'s in-place merge keeps bucket
+     * position while restamping sequence, so the two orders legitimately
+     * diverge; the cache is a best-effort anti-flash hint the async resolver
+     * corrects. Entries whose saved screen is currently in autotile
      * mode are skipped: the effect cache is a snap-mode-only fast path, and
      * autotile on the saved screen will own placement. Validates desktop
      * context so the cache never contains geometries the async resolver rejects.
@@ -848,7 +892,12 @@ public:
     const QSet<QString>& userSnappedClasses() const;
 
     /**
-     * @brief Set pending restore queues (loaded from KConfig by adaptor)
+     * @brief Set pending restore queues (test / bulk-seed entry point)
+     *
+     * No production loader remains: the adaptor's save path DELETES the
+     * legacy KConfig key (saveload.cpp), and the queues are documented
+     * in-session-only. Kept as public API for the unit suites that seed
+     * restore state directly.
      */
     void setPendingRestoreQueues(const QHash<QString, QList<PendingRestore>>& queues);
 
@@ -870,7 +919,12 @@ public:
     void setLastUsedZone(const QString& zoneId, const QString& screenId, const QString& zoneClass, int desktop);
 
     /**
-     * @brief Set floating windows (loaded from KConfig by adaptor)
+     * @brief Set floating windows (test / bulk-seed entry point)
+     *
+     * No production loader remains: floating state is ephemeral and the
+     * adaptor's save path never writes it (the implementation documents
+     * this). Kept as public API for the unit suites that seed float state
+     * directly.
      */
     void setFloatingWindows(const QSet<QString>& windows);
 
@@ -1124,6 +1178,7 @@ private:
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     AutotileModePredicate m_autotileModePredicate{};
     EngineTiledPredicate m_engineTiledPredicate{};
+    ModeEngineIdResolver m_modeEngineIdResolver{};
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence.

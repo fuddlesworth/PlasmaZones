@@ -27,7 +27,7 @@ namespace PhosphorPlacement {
 
 namespace {
 
-static QRect clampToRect(const QRect& geometry, const QRect& bounds)
+QRect clampToRect(const QRect& geometry, const QRect& bounds)
 {
     QRect adjusted = geometry;
     if (adjusted.right() > bounds.right()) {
@@ -76,8 +76,10 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     // autotile, close it, and the snap restore is silently dropped even though
     // its snapping-mode verdict was never "floating". Third instance of this
     // family; the resnap pair was fixed the same way.
-    const PhosphorSnapEngine::SnapState* floatSource = snapForWindow(windowId);
-    bool isFloating = floatSource && floatSource->isFloating(windowId);
+    // snapState above IS the same store this read needs; the point of the
+    // comment is the SOURCE (snap's own float bit, never the mode-routed
+    // isWindowFloating), not a second lookup.
+    bool isFloating = snapState && snapState->isFloating(windowId);
     if (!zoneId.isEmpty() && !zoneId.startsWith(kZoneSelectorIdPrefix)
         && !isFloating
         // A whitespace-only / whitespace-bearing appId is a corrupt window
@@ -796,6 +798,22 @@ void WindowTrackingService::setEngineTiledPredicate(EngineTiledPredicate predica
 bool WindowTrackingService::isWindowEngineTiled(const QString& windowId) const
 {
     return m_engineTiledPredicate && m_engineTiledPredicate(windowId);
+}
+
+void WindowTrackingService::setModeEngineIdResolver(ModeEngineIdResolver resolver)
+{
+    m_modeEngineIdResolver = std::move(resolver);
+}
+
+QString WindowTrackingService::owningModeEngineId(const QString& windowId, const QString& screenId) const
+{
+    if (m_modeEngineIdResolver) {
+        const QString resolved = m_modeEngineIdResolver(windowId, screenId);
+        if (!resolved.isEmpty()) {
+            return resolved;
+        }
+    }
+    return QString(PhosphorEngine::WindowPlacement::snapEngineId());
 }
 
 PhosphorEngine::WindowRegistry* WindowTrackingService::windowRegistry() const

@@ -597,7 +597,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         it = matches(*it) ? m_scrollingScreens.erase(it) : std::next(it);
     }
     for (auto it = m_burstPendingApplies.begin(); it != m_burstPendingApplies.end();) {
-        it = matches(it.key()) ? m_burstPendingApplies.erase(it) : std::next(it);
+        it = matches(it.key().screenId) ? m_burstPendingApplies.erase(it) : std::next(it);
     }
     // A dead screen id must not keep feeding the hint-less shortcut paths
     // (autotile's twin clears the same way).

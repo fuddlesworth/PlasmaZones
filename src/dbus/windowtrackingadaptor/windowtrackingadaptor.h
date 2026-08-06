@@ -713,13 +713,19 @@ public:
     ///
     /// @p authoritativeScreen (the close path passes KWin's getWindowScreenId)
     /// therefore plays TWO roles when non-empty: it marks the capture as a
-    /// close (enabling the minimize preserve branch above and the pure-float
-    /// sibling collapse), and it is the fallback screen when NEITHER engine
-    /// produces a placement — the case where a cross-screen move removed the
-    /// window from the source engine's tracking and the destination never
-    /// adopted it, so both capturePlacement calls return nullopt and the live
-    /// screen would otherwise be lost. In that case the float-back is recorded
-    /// on @p authoritativeScreen via WindowTrackingService::recordFloatingClose.
+    /// close-with-known-screen (enabling the minimize preserve branch above
+    /// and the pure-float sibling collapse), and it is the fallback screen
+    /// when NEITHER engine produces a placement — the case where a
+    /// cross-screen move removed the window from the source engine's tracking
+    /// and the destination never adopted it, so both capturePlacement calls
+    /// return nullopt and the live screen would otherwise be lost. In that
+    /// case the float-back is recorded on @p authoritativeScreen via
+    /// WindowTrackingService::recordFloatingClose. NOTE a screen-LESS call is
+    /// not necessarily a live capture: TilingAdaptor::windowClosed runs the
+    /// funnel screen-less while its engine still tracks the closing window,
+    /// deliberately forfeiting the three close-only branches above in
+    /// exchange for an authoritative engine slot; the WindowTracking close
+    /// then re-runs the funnel WITH the screen.
     /// @param fromStateChange Pass true when the capture is triggered by an
     ///        authoritative engine state change (snap commit/uncommit relay):
     ///        such a capture must run even for a minimized window, because the
@@ -989,6 +995,17 @@ Q_SIGNALS:
      * contract (absent from the XML) and nothing external subscribes.
      */
     void windowClosedNotification(const QString& windowId);
+
+    /**
+     * @brief Qt signal emitted during pruneStaleWindows with the INSTANCE-id
+     * view of the alive set, so sibling adaptors can sweep their own
+     * per-window caches in the same key space (TilingAdaptor's
+     * float-broadcast dedup map is the current consumer). Same in-process,
+     * not-part-of-the-wire-contract stance as windowClosedNotification —
+     * and like every adaptor signal it IS auto-relayed onto the bus, which
+     * is why the payload is a marshallable QStringList rather than QSet.
+     */
+    void stalePruned(const QStringList& aliveInstances);
 
     /**
      * @brief Emitted when a window's floating state changes

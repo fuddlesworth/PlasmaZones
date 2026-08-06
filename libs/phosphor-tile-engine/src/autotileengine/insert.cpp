@@ -132,6 +132,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // Check if this window has a pre-seeded position from zone-ordered transition.
     // Take a value copy of the pending list — the erase below invalidates iterators/refs.
     bool inserted = false;
+    bool preSeeded = false;
     auto pendingIt = m_pendingInitialOrders.find(screenId);
     if (pendingIt != m_pendingInitialOrders.end()) {
         const QStringList pendingOrder = pendingIt.value(); // copy, not reference (BUG-1 fix)
@@ -140,8 +141,11 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         // daemon's lifetime gap (i.e. only the daemon reloaded; the window's
         // compositor-assigned identity is unchanged). The saved position is
         // therefore an authoritative restoration target, not yesterday's
-        // historical hint — treat it as strict below so daemon-reload bursts
-        // restore the prior layout even when arrivals are out of sequence.
+        // historical hint — treat it as strict below. FORWARD CONTRACT: with
+        // setInitialWindowOrder the sole pending-order producer today (and it
+        // always marks its screen strict), this disjunct cannot currently
+        // change the outcome; it exists for a future cross-session producer
+        // of advisory orders, alongside the advisory branch it pairs with.
         const bool exactWindowIdMatch = (desiredPos >= 0);
 
         // Fallback: match by appId when exact windowId not found (KWin restart
@@ -223,6 +227,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     << ") — falling back to insertPosition";
             }
         }
+        preSeeded = (desiredPos >= 0);
         // Clean up pending order when all pre-seeded windows have been inserted (or closed)
         if (inserted) {
             cleanupPendingOrderIfResolved(screenId);
@@ -237,82 +242,62 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // paths below are all skipped; the function tail still records
     // m_states and returns true.
     // Close/reopen restore from the unified placement store: ONE record per window
-    // holds both engines' slots + the shared per-screen free geometry. Take it once
-    // and branch on the autotile slot — a FLOATING slot restores the window floating
-    // (consumed only when the record's screen matches the opening screen or is
-    // empty; the GEOMETRY move below uses ONLY the screen-local recorded rect for
-    // restoreScreen — no cross-screen fallback); a TILED slot restores it at its saved
-    // order in the SAME context (index-based — best-effort if neighbours moved;
-    // wasFloating is not relevant since the slot state IS the intent). Re-record
-    // bound to the live windowId so the snap slot + per-screen free geometry survive
-    // and a second instance of the same app takes the next FIFO entry.
+    // holds both engines' slots + the shared per-screen free geometry. A FLOATING
+    // slot restores the window floating (consumed only when the record's screen
+    // matches the opening screen or is empty; the GEOMETRY move below uses ONLY the
+    // screen-local recorded rect for restoreScreen — no cross-screen fallback).
+    // FloatingOnly on purpose: a TILED record is not consumed and restores no
+    // position — it stays as the exact-final evidence that the window closed tiled
+    // (so the reopen must not float it) and the window takes a config-order insert.
+    // Saved-order restore across close/reopen was removed deliberately; see the
+    // scroll engine's twin comment for the rationale. Re-record binds a consumed
+    // record to the live windowId so the snap slot + per-screen free geometry
+    // survive and a second instance of the same app takes the next FIFO entry.
     const TilingStateKey currentKey = currentKeyForScreen(screenId);
-    if (!inserted && hasStableAppId && m_windowTracker) {
+    // A MIGRATION re-add never consults the placement store: the arrival
+    // carries its live state across (insertShouldFloat reads it), and the
+    // record is cross-session memory — consuming it here could re-float and
+    // geometry-teleport a live window on a same-screen context change (the
+    // floating accept has no desktop term). Tier 3 already carries this
+    // guard through insertShouldFloat; tier 2 needs its own.
+    const bool migrationReAdd = m_migrationArrival && m_migrationArrival->windowId == windowId;
+    if (!inserted && hasStableAppId && m_windowTracker && !migrationReAdd) {
         using PhosphorEngine::WindowPlacement;
-        const auto accept = [&](const WindowPlacement& p) {
-            const PhosphorEngine::EngineSlot s = p.slotFor(engineId());
-            if (s.state == WindowPlacement::stateFloating()) {
-                // A geometry-less floating record (the order-only slot the
-                // capture writes to preserve float intent through an
-                // immediate minimize/teardown) is meaningful for the SAME
-                // instance — restore floating in place — but consumed by a
-                // FIFO sibling it floats a fresh window at its spawn rect
-                // for no user-visible reason while burning a slot a real
-                // placement may need. Same-instance restores stay
-                // unconditional; FIFO consumption requires a real float-back.
-                const bool sameInstance = ::PhosphorIdentity::WindowId::extractInstanceId(p.windowId)
-                    == ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
-                if (!sameInstance && !p.anyFreeGeometry().isValid()) {
-                    return false;
-                }
-                return p.screenId.isEmpty() || p.screenId == screenId;
-            }
-            if (s.state == WindowPlacement::stateTiled()) {
-                return p.screenId == currentKey.screenId && p.virtualDesktop == currentKey.desktop
-                    && p.activity == currentKey.activity;
-            }
-            return false;
-        };
-        // takeForReopen carries the two reopen rules (rejected-exact is FINAL,
+        // takeForReopen carries the shared accept predicate (floating slot:
+        // screen match, FIFO consumption needs a real float-back) and the two
+        // reopen rules (rejected-exact WITH a slot for this engine is FINAL,
         // consumed record re-bound to the live uuid) — see the store contract.
         const std::optional<WindowPlacement> rec =
-            m_windowTracker->placementStore().takeForReopen(windowId, appId, accept);
+            m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, currentKey.screenId);
         if (rec) {
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
             const QString restoreScreen = rec->screenId.isEmpty() ? screenId : rec->screenId;
             if (slot.state == WindowPlacement::stateFloating()) {
-                state->addWindow(windowId);
-                state->setFloating(windowId, true);
-                inserted = true;
-                // SCREEN-LOCAL recorded position only — deliberately NOT the
-                // anyFreeGeometry() cross-screen fallback (mirroring snap's
-                // resolveWindowRestore). The free geometry is in global compositor
-                // coordinates; applying a rect captured on a DIFFERENT screen while
-                // the float tracking points at restoreScreen would teleport the
-                // window to a third monitor with the state saying otherwise — a
-                // visible/state desync. No recorded rect for restoreScreen → nothing
-                // meaningful to restore, so the move is skipped.
-                const QRect freeGeo = rec->freeGeometryFor(restoreScreen);
-                // The window is marked floating unconditionally above; the geometry
-                // MOVE is gated on the floated-position-restore opt-in (daemon-wired
-                // autotileRestoreFloatedWindowsOnLogin setting + per-window
-                // RestorePosition rule). When the predicate is unset (tests / no
-                // daemon) the move always fires, preserving historical behaviour.
-                const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
-                if (freeGeo.isValid() && restorePosition) {
-                    Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+                inserted = state->addWindow(windowId);
+                if (inserted) {
+                    state->setFloating(windowId, true);
+                    // SCREEN-LOCAL recorded position only — deliberately NOT the
+                    // anyFreeGeometry() cross-screen fallback (mirroring snap's
+                    // resolveWindowRestore). The free geometry is in global compositor
+                    // coordinates; applying a rect captured on a DIFFERENT screen while
+                    // the float tracking points at restoreScreen would teleport the
+                    // window to a third monitor with the state saying otherwise — a
+                    // visible/state desync. No recorded rect for restoreScreen → nothing
+                    // meaningful to restore, so the move is skipped.
+                    const QRect freeGeo = rec->freeGeometryFor(restoreScreen);
+                    // The geometry MOVE is gated on the floated-position-restore opt-in
+                    // (daemon-wired autotileRestoreFloatedWindowsOnLogin setting +
+                    // per-window RestorePosition rule). When the predicate is unset
+                    // (tests / no daemon) the move always fires, preserving
+                    // historical behaviour.
+                    const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
+                    if (freeGeo.isValid() && restorePosition) {
+                        Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+                    }
+                    qCInfo(PhosphorTileEngine::lcTileEngine)
+                        << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen
+                        << "move=" << (freeGeo.isValid() && restorePosition);
                 }
-                qCInfo(PhosphorTileEngine::lcTileEngine)
-                    << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen
-                    << "move=" << (freeGeo.isValid() && restorePosition);
-            } else {
-                const int savedPos = slot.order;
-                const int clampedPos = savedPos < 0 ? state->windowCount() : qMin(savedPos, state->windowCount());
-                state->addWindow(windowId, clampedPos);
-                inserted = true;
-                qCDebug(PhosphorTileEngine::lcTileEngine)
-                    << "insertWindow: restored" << windowId << "from placement store at position=" << clampedPos
-                    << "(saved=" << savedPos << ")";
             }
         }
     }
@@ -338,6 +323,14 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         state->setFloating(windowId, true);
     }
 
+    // A pre-seeded window placed by a LATER tier (the advisory fall-through)
+    // can be the last unresolved entry of its screen's pending order — the
+    // gated call inside the tier-1 block never re-checks, and the order then
+    // died by timeout instead of resolving. Idempotent, so the double-check
+    // for the tier-1-inserted case costs nothing.
+    if (preSeeded) {
+        cleanupPendingOrderIfResolved(screenId);
+    }
     m_states.setKeyForWindow(windowId, currentKey);
     return true;
 }
@@ -412,10 +405,12 @@ void AutotileEngine::removeWindow(const QString& windowId)
     PhosphorTiles::TilingState* state = m_states.stateForKey(key);
     if (state) {
         // No position is saved here. The window's autotiled placement (its position)
-        // is captured into the unified WindowPlacementStore by the common close hook
-        // (WindowTrackingAdaptor::windowClosed → capturePlacement) BEFORE this
-        // removal runs, and by the save-time snapshot for still-open windows. The
-        // reopen consumes that record in insertWindow().
+        // is captured into the unified WindowPlacementStore by the tiling close
+        // relay (TilingAdaptor::windowClosed runs the shared capture funnel
+        // BEFORE forwarding the close here — the WindowTracking close arrives
+        // only after this removal, when this engine no longer answers), and by
+        // the save-time snapshot for still-open windows. The reopen consumes
+        // that record in insertWindow().
         state->removeWindow(windowId);
     }
 }

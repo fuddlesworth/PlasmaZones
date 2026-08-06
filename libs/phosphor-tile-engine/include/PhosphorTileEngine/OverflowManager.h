@@ -85,11 +85,16 @@ public:
      * @param maxWindows Maximum windows allowed on the screen
      * @param isFloating Predicate: returns true if window is currently floating
      * @param containsWindow Predicate: returns true if window exists in PhosphorTiles::TilingState
+     * @param orderIndex Optional: the window's index in the tiling order.
+     *        When supplied, candidates recover front-of-order first, so which
+     *        window returns when room is scarce is deterministic instead of
+     *        QSet hash order.
      * @return Window IDs that should be unfloated (caller mutates state and emits signals)
      */
     QStringList recoverIfRoom(const QString& screenId, int tiledCount, int maxWindows,
                               const std::function<bool(const QString&)>& isFloating,
-                              const std::function<bool(const QString&)>& containsWindow);
+                              const std::function<bool(const QString&)>& containsWindow,
+                              const std::function<int(const QString&)>& orderIndex = {});
 
     /**
      * @brief Take and remove all overflow entries for a screen

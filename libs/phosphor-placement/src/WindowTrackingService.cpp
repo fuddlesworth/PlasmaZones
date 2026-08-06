@@ -36,6 +36,19 @@ WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layo
 {
     Q_ASSERT(layoutManager);
 
+    // Live-window probe for the placement store's reopen fallback: a record
+    // whose window is still open must never be consumed by a sibling's
+    // reopen (see WindowPlacementStore::takeForReopen). Evaluated at consume
+    // time; registry-less test services answer false, i.e. no exclusion.
+    m_placementStore.setLiveInstanceProbe([this](const QString& windowId) {
+        // Bare ids (no '|') answer false outright: extractInstanceId treats a
+        // bare string AS the instance id, so a bare-id record would
+        // fuzzy-match a live composite's uuid and become permanently
+        // unconsumable by the reopen fallback.
+        return windowId.contains(QLatin1Char('|')) && m_windowRegistry
+            && m_windowRegistry->contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    });
+
     // No save timer here: the service is an in-memory state manager whose
     // persistence is driven by the WindowTrackingAdaptor's dirty-mask
     // save/load (WindowTrackingAdaptor::saveState/loadState, debounced via
@@ -511,6 +524,28 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
     }
 }
 
+void WindowTrackingService::downgradeMismatchedManagedSlots(PhosphorEngine::WindowPlacement& placement,
+                                                            const QString& recordedScreenId,
+                                                            const QString& closeScreenId)
+{
+    // A managed slot inherited from a DIFFERENT screen references that
+    // screen's zones / tile order — restoring it under the new screen would
+    // land the window in another screen's slots. Downgrade mismatched managed
+    // slots to plain floating (the state the window actually closed in);
+    // same-screen and unscreened records pass through untouched.
+    if (recordedScreenId.isEmpty() || PhosphorScreens::ScreenIdentity::screensMatch(recordedScreenId, closeScreenId)) {
+        return;
+    }
+    for (auto it = placement.engines.begin(); it != placement.engines.end(); ++it) {
+        if (it->state == PhosphorEngine::WindowPlacement::stateSnapped()
+            || it->state == PhosphorEngine::WindowPlacement::stateTiled()) {
+            it->state = PhosphorEngine::WindowPlacement::stateFloating();
+            it->zoneIds.clear();
+            it->order = -1;
+        }
+    }
+}
+
 void WindowTrackingService::recordFloatingClose(const QString& windowId, const QString& screenId, const QRect& geometry)
 {
     if (windowId.isEmpty() || screenId.isEmpty() || !geometry.isValid()) {
@@ -558,33 +593,22 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
         p.activity = existing->activity;
         p.kind = existing->kind;
         p.engines = existing->engines;
-        // The merge adopts THIS close's screenId as the managed context, but a
-        // managed slot inherited from a DIFFERENT screen references that
-        // screen's zones/tile order — restoring it under the new screenId
-        // would land the window in another screen's zone ids. Downgrade
-        // mismatched managed slots to plain floating (the state the window
-        // actually closed in); same-screen slots pass through untouched.
-        if (!existing->screenId.isEmpty()
-            && !PhosphorScreens::ScreenIdentity::screensMatch(existing->screenId, screenId)) {
-            for (auto it = p.engines.begin(); it != p.engines.end(); ++it) {
-                if (it->state == PhosphorEngine::WindowPlacement::stateSnapped()
-                    || it->state == PhosphorEngine::WindowPlacement::stateTiled()) {
-                    it->state = PhosphorEngine::WindowPlacement::stateFloating();
-                    it->zoneIds.clear();
-                    it->order = -1;
-                }
-            }
-        }
+        downgradeMismatchedManagedSlots(p, existing->screenId, screenId);
     }
-    if (p.engines.isEmpty()) {
-        // No prior record, or a geometry-only record with no engine slot (the
-        // shape recordFreeGeometry produces): synthesize a floating slot so
-        // the merge still adopts the screen. A floated restore
-        // keys off screenId + freeGeometryByScreen, not the slot's engine id, so
-        // the slot id is not load-bearing here.
+    // Synthesize the OWNING engine's floating slot whenever the record lacks
+    // one — not merely when the map is empty. The slot's engine id is
+    // load-bearing: the tiling engines' reopen accept reads strictly their
+    // OWN slot, so a record carrying only FOREIGN slots (another mode's or
+    // screen's life) satisfies neither the accept nor the old isEmpty gate,
+    // and the window that closed floating reopened tiled. Adding (never
+    // re-keying) preserves the other engines' per-mode memory. A non-empty
+    // engine map is also what makes record()'s merge adopt this close's
+    // screen as the managed context.
+    const QString owningEngine = owningModeEngineId(windowId, screenId);
+    if (!p.engines.contains(owningEngine)) {
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateFloating();
-        p.engines.insert(QString(PhosphorEngine::WindowPlacement::snapEngineId()), slot);
+        p.engines.insert(owningEngine, slot);
     }
     if (m_placementStore.record(p)) {
         markDirty(DirtyWindowPlacements);
@@ -952,7 +976,27 @@ QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) co
     // no live zones reads the same app-level answer — indistinguishable from the
     // relogin case at this layer, and a live-ASSIGNED sibling always resolves via
     // its own live store first (see the sameAppInstancesEachKeepOwnZone test).
-    const auto rec = m_placementStore.peek(windowId, currentAppIdFor(windowId));
+    // The window's OWN record stays authoritative: an exact-instance record
+    // whose snap slot is NOT snapped answers "no zones" outright — falling
+    // through to the app-level fallback there would hand a window that
+    // explicitly floats a sibling's zone list.
+    if (const auto own = m_placementStore.peekExact(windowId)) {
+        const PhosphorEngine::EngineSlot ownSlot = own->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        return ownSlot.state == PhosphorEngine::WindowPlacement::stateSnapped() ? ownSlot.zoneIds : QStringList{};
+    }
+    // Record-less window: the appId fallback, with an accept selecting
+    // genuinely SNAPPED records. peek's appId branch returns the newest
+    // record by sequence, and close captures restamp a pure-float sibling to
+    // the highest sequence — without the accept, that float record shadowed
+    // an older sibling's real snapped slot and a durably-snapped window read
+    // as "never snapped" (mis-seeding it into autotile and losing its resnap
+    // target). validatedUnmanagedGeometry documents the same shadowing trap
+    // for the geometry axis.
+    const auto rec =
+        m_placementStore.peek(QString(), currentAppIdFor(windowId), [](const PhosphorEngine::WindowPlacement& p) {
+            return p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state
+                == PhosphorEngine::WindowPlacement::stateSnapped();
+        });
     if (rec) {
         const PhosphorEngine::EngineSlot snapSlot = rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()) {
