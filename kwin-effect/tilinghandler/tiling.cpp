@@ -918,8 +918,24 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // strip position beats a point synthesized just outside
                         // the screen edge, because that is where it actually
                         // was.
-                        const KWin::RectF cur = snap.window->frameGeometry();
-                        originOverride = QRectF(cur.x() - snap.viewDeltaX, cur.y(), cur.width(), cur.height());
+                        if (!snap.scrollEdge.isEmpty()) {
+                            // ARRIVING from a park. Its live frameGeometry is
+                            // the park itself — below the union of all outputs
+                            // — which is not a visual position at all, so
+                            // differencing against it would start the leg from
+                            // somewhere off the bottom of the desktop.
+                            //
+                            // A column arriving has no per-window motion to
+                            // describe: the view alone brought it back. Making
+                            // the origin the target is what says that, because
+                            // the paint position is origin + offset, and the
+                            // offset already starts a delta out — which is
+                            // exactly where this column was before the scroll.
+                            originOverride = QRectF(geo);
+                        } else {
+                            const KWin::RectF cur = snap.window->frameGeometry();
+                            originOverride = QRectF(cur.x() - snap.viewDeltaX, cur.y(), cur.width(), cur.height());
+                        }
                     } else if (!snap.scrollEdge.isEmpty()) {
                         const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
                         const QRect screenRect = out ? QRect(out->geometry()) : QRect();
