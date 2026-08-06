@@ -29,6 +29,7 @@ AnimationPageScope animationPageScope(const QString& page)
         {QStringLiteral("animations-side-panels"), {{QStringLiteral("panel")}, {}}},
         {QStringLiteral("animations-widgets"), {{QStringLiteral("widget")}, {}}},
         {QStringLiteral("animations-editor"), {{QStringLiteral("editor")}, {}}},
+        {QStringLiteral("animations-scrolling"), {{QStringLiteral("scrolling")}, {}}},
     };
     const auto it = kEventRoots.constFind(page);
     if (it != kEventRoots.cend())

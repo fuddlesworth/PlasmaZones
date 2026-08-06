@@ -364,6 +364,10 @@ void SettingsController::buildApplicationController()
                PhosphorI18n::tr("Desktop"), QStringLiteral("pages/animations/AnimationsDesktopsPage.qml"),
                QStringLiteral("virtual-desktops"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
+    regVirtual(QStringLiteral("animations-scrolling"), QStringLiteral("animations-motion"),
+               PhosphorI18n::tr("Scrolling"), QStringLiteral("pages/animations/AnimationsScrollingPage.qml"),
+               QStringLiteral("view-split-left-right"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+
     regVirtual(QStringLiteral("animations-window-motion"), QStringLiteral("animations-motion"),
                PhosphorI18n::tr("Window Motion"), QStringLiteral("pages/animations/AnimationsWindowMotionPage.qml"),
                QStringLiteral("window-new"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
