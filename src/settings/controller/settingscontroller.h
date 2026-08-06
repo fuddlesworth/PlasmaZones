@@ -452,6 +452,19 @@ public:
     Q_INVOKABLE bool createNewLayout(const QString& name, const QString& type, int aspectRatioClass, bool openInEditor);
     Q_INVOKABLE void deleteLayout(const QString& layoutId);
     Q_INVOKABLE void duplicateLayout(const QString& layoutId);
+
+    // Native scrolling-template CRUD (daemon-first; the local store is a
+    // read view refreshed on scrollingTemplatesChanged). The layouts model
+    // already carries the template entries (isScrollingTemplate flag);
+    // scrollingTemplateForEditing answers the full column/default detail the
+    // editor form needs.
+    Q_INVOKABLE QVariantMap scrollingTemplateForEditing(const QString& templateId) const;
+    /// D-Bus subscription slot: reload the local template store, then run
+    /// the debounced layout refresh.
+    Q_SLOT void onScrollingTemplatesChanged();
+    Q_INVOKABLE bool saveScrollingTemplate(const QVariantMap& templateData);
+    Q_INVOKABLE void deleteScrollingTemplate(const QString& templateId);
+    Q_INVOKABLE void duplicateScrollingTemplate(const QString& templateId);
     Q_INVOKABLE void editLayout(const QString& layoutId);
     Q_INVOKABLE void editLayoutOnScreen(const QString& layoutId, const QString& screenId);
     Q_INVOKABLE void openLayoutsFolder();

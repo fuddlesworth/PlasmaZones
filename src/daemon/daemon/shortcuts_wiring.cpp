@@ -92,10 +92,10 @@ void Daemon::connectShortcutSignals()
     });
     // Quick layout shortcuts (Meta+Alt+1-9). Quick slots are per slot ARRAY:
     // in snapping mode the slot holds a zone-layout UUID, in autotile mode an
-    // autotile algorithm ID, and scrolling shares the snapping array (the
-    // same manual-layout UUIDs double as template vocabulary). Resolve the
-    // cursor screen's current mode, look up that mode's slot, and apply the
-    // explicitly-bound layout — NOT the Nth layout in priority order.
+    // autotile algorithm ID, and scrolling its own array of native template
+    // ids. Resolve the cursor screen's current mode, look up that mode's
+    // slot, and apply the explicitly-bound entry — NOT the Nth entry in
+    // priority order.
     connect(m_shortcutManager.get(), &ShortcutManager::quickLayoutRequested, this, [this](int number) {
         if (!m_unifiedLayoutController || !m_layoutManager) {
             return;
@@ -108,9 +108,9 @@ void Daemon::connectShortcutSignals()
             return;
         }
         // Quick slots need an engine with a layout concept. On a Templates
-        // screen (scrolling) the slot's manual layout applies as the
-        // screen's sizing template via applyEntry's scrolling branch; only
-        // a capability-less engine answers with feedback.
+        // screen (scrolling) the slot names a native template and applies
+        // through applyEntry's template branch; only a capability-less
+        // engine answers with feedback.
         if (layoutSupportForScreen(screenId) == LayoutSupport::None) {
             showLayoutsUnavailableOsd(screenId);
             return;
@@ -142,7 +142,8 @@ void Daemon::connectShortcutSignals()
         // applyLayoutById routes through applyEntry, which handles both manual
         // assignment and autotile algorithm switching.
         const bool autotile = (mode == PhosphorZones::AssignmentEntry::Autotile);
-        m_unifiedLayoutController->setLayoutFilter(!autotile, autotile);
+        const bool scrolling = (mode == PhosphorZones::AssignmentEntry::Scrolling);
+        m_unifiedLayoutController->setLayoutFilter(!autotile && !scrolling, autotile, scrolling);
         if (!m_unifiedLayoutController->applyLayoutById(slotId)) {
             return;
         }

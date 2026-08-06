@@ -339,14 +339,23 @@ private Q_SLOTS:
     void everyParamKindIsInTheKnownVocabulary()
     {
         static const QSet<QString> known = {
-            QStringLiteral("string"),         QStringLiteral("number"),
-            QStringLiteral("percent"),        QStringLiteral("enum"),
-            QStringLiteral("bool"),           QStringLiteral("color"),
-            QStringLiteral("snappingLayout"), QStringLiteral("tilingAlgorithm"),
-            QStringLiteral("animationEvent"), QStringLiteral("shaderEffect"),
-            QStringLiteral("overlayShader"),  QStringLiteral("zoneOrdinals"),
-            QStringLiteral("curveEditor"),    QStringLiteral("screenId"),
-            QStringLiteral("virtualDesktop"), QStringLiteral("decorationChain"),
+            QStringLiteral("string"),
+            QStringLiteral("number"),
+            QStringLiteral("percent"),
+            QStringLiteral("enum"),
+            QStringLiteral("bool"),
+            QStringLiteral("color"),
+            QStringLiteral("snappingLayout"),
+            QStringLiteral("tilingAlgorithm"),
+            QStringLiteral("scrollingTemplate"),
+            QStringLiteral("animationEvent"),
+            QStringLiteral("shaderEffect"),
+            QStringLiteral("overlayShader"),
+            QStringLiteral("zoneOrdinals"),
+            QStringLiteral("curveEditor"),
+            QStringLiteral("screenId"),
+            QStringLiteral("virtualDesktop"),
+            QStringLiteral("decorationChain"),
         };
         const ActionRegistry& reg = ActionRegistry::instance();
         QStringList offenders;

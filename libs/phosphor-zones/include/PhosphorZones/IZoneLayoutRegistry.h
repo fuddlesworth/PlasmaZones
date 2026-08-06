@@ -35,6 +35,8 @@
 
 namespace PhosphorZones {
 
+class ScrollingTemplateStore;
+
 /**
  * @brief Enumeration + mutation surface for the in-memory zone-layout
  * catalog.
@@ -115,6 +117,15 @@ public:
     /// class doc.
     virtual QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                           const QString& activity = QString()) const = 0;
+
+    /// The native scrolling-template store wired into this registry, or
+    /// null when none is (lightweight stubs, roots with no template
+    /// feature). Consumers use it for template enumeration (picker lists);
+    /// context RESOLUTION goes through scrollingTemplateForContext below.
+    virtual ScrollingTemplateStore* scrollingTemplateStore() const
+    {
+        return nullptr;
+    }
 
     /// The resolved scrolling TEMPLATE for a context (the native
     /// ScrollingTemplate whose vocabularies and blueprint the engine push

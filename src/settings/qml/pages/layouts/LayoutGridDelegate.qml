@@ -279,6 +279,9 @@ Item {
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.visible: systemIconMA.containsMouse && visible
                         ToolTip.text: {
+                            if (root.modelData.isScrollingTemplate && root.modelData.isSystem)
+                                return i18n("Built-in template. Editing stores your own copy.");
+
                             if (root.modelData.isAutotile && root.modelData.isSystem)
                                 return i18n("Bundled algorithm");
 
@@ -359,7 +362,7 @@ Item {
                         width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
                         height: width
                         padding: 0
-                        visible: root.modelData.isAutotile !== true && (root.isHovered || effectiveAuto)
+                        visible: root.modelData.isAutotile !== true && root.modelData.isScrollingTemplate !== true && (root.isHovered || effectiveAuto)
                         enabled: !globalAuto
                         icon.name: effectiveAuto ? "window-duplicate" : "window-new"
                         icon.width: Kirigami.Units.iconSizes.small
@@ -376,7 +379,7 @@ Item {
                         width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
                         height: width
                         padding: 0
-                        visible: root.isHovered || root.modelData.hiddenFromSelector === true
+                        visible: root.modelData.isScrollingTemplate !== true && (root.isHovered || root.modelData.hiddenFromSelector === true)
                         icon.name: root.modelData.hiddenFromSelector ? "view-hidden" : "view-visible"
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small

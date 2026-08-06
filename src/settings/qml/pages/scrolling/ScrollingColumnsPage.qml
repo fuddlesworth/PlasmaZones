@@ -344,71 +344,75 @@ SettingsFlickable {
         // =================================================================
         SettingsCard {
             Layout.fillWidth: true
-            headerText: i18n("Width and height presets")
-            searchAnchor: "scrollingPresets"
+            headerText: i18n("Layout template")
+            searchAnchor: "scrollingDefaultTemplate"
             collapsible: true
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                // Template precedence note. Plain label rather than an
-                // InlineMessage: this is standing behavior, not a condition
-                // the page can detect (templates resolve per screen, desktop
-                // and activity, the lists here are app-wide).
                 Label {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    text: i18n("Screens with a layout template assigned through the layout picker use the template's column widths instead of these presets. The window heights are replaced too when the template has stacked zones.")
+                    text: i18n("Templates carry the starting columns and the width and height presets the cycling shortcuts step through. Manage them on the Layouts page under Scrolling Templates, and assign one per screen with the layout picker. The template chosen here applies to every scrolling screen without its own assignment.")
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
                     wrapMode: Text.Wrap
                 }
 
-                // Section header + full-width card grid, the Virtual Screens
-                // presets shape: the rows carry the titles, the editors get
-                // the card content width with the page's standard margins.
                 SettingsRow {
-                    title: i18n("Column widths")
-                    searchAnchor: "presetColumnWidths"
-                    description: i18n("Percentages of the work area width, cycled in this order by the preset shortcuts")
-                }
+                    title: i18n("Default template")
+                    searchAnchor: "defaultScrollingTemplate"
+                    description: i18n("Used when a scrolling screen has no template assigned")
 
-                PresetListEditor {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    presets: appSettings.scrollingPresetColumnWidths
-                    cardName: i18nc("accessible name for one preset card, %1 is a percentage", "%1% column width preset")
-                    removeName: i18nc("accessible name for a preset card's remove button, %1 is a percentage", "Remove the %1% column width preset")
-                    addValueName: i18nc("accessible name for the add-preset percentage field", "New column width preset percentage")
-                    addName: i18nc("accessible name for the add-preset button", "Add a column width preset")
-                    commit: function (joined) {
-                        appSettings.scrollingPresetColumnWidths = joined;
-                    }
-                }
+                    ComboBox {
+                        id: defaultTemplateCombo
 
-                SettingsSeparator {}
+                        // Templates from the shared layouts model (the
+                        // isScrollingTemplate family), with a leading None.
+                        function rebuild() {
+                            let entries = [
+                                {
+                                    "text": i18n("None"),
+                                    "value": ""
+                                }
+                            ];
+                            const all = settingsController.layouts;
+                            for (let i = 0; i < all.length; i++) {
+                                if (all[i].isScrollingTemplate === true)
+                                    entries.push({
+                                        "text": all[i].displayName,
+                                        "value": all[i].id
+                                    });
+                            }
+                            model = entries;
+                            // Re-resolve AFTER the model swap: indexOfValue
+                            // inside a binding evaluates against the OLD
+                            // model (the combo-derived reset trap).
+                            currentIndex = Math.max(0, indexOfValue(appSettings.defaultScrollingTemplate));
+                        }
 
-                SettingsRow {
-                    title: i18n("Window heights")
-                    searchAnchor: "presetWindowHeights"
-                    description: i18n("Percentages of the work area height, cycled in this order by the preset shortcuts")
-                }
+                        textRole: "text"
+                        valueRole: "value"
+                        onActivated: appSettings.defaultScrollingTemplate = currentValue
+                        Component.onCompleted: rebuild()
 
-                PresetListEditor {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    Layout.bottomMargin: Kirigami.Units.largeSpacing
-                    presets: appSettings.scrollingPresetWindowHeights
-                    cardName: i18nc("accessible name for one preset card, %1 is a percentage", "%1% window height preset")
-                    removeName: i18nc("accessible name for a preset card's remove button, %1 is a percentage", "Remove the %1% window height preset")
-                    addValueName: i18nc("accessible name for the add-preset percentage field", "New window height preset percentage")
-                    addName: i18nc("accessible name for the add-preset button", "Add a window height preset")
-                    vertical: true
-                    commit: function (joined) {
-                        appSettings.scrollingPresetWindowHeights = joined;
+                        Connections {
+                            function onLayoutsChanged() {
+                                defaultTemplateCombo.rebuild();
+                            }
+
+                            target: settingsController
+                        }
+
+                        Connections {
+                            function onDefaultScrollingTemplateChanged() {
+                                defaultTemplateCombo.currentIndex = Math.max(0, defaultTemplateCombo.indexOfValue(appSettings.defaultScrollingTemplate));
+                            }
+
+                            target: appSettings
+                        }
                     }
                 }
             }

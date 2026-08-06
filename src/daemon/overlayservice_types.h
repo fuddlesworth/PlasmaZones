@@ -94,6 +94,10 @@ struct LayoutIncludeFlags
 {
     bool manual = true;
     bool autotile = true;
+    /// Native scrolling-template entries — default false: only a
+    /// live-Templates (scrolling) screen offers them, and it offers ONLY
+    /// them.
+    bool templates = false;
 };
 
 /// Shared property-push parameters for layout-OSD content. Used by both

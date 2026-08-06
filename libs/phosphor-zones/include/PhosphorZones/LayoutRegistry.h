@@ -431,7 +431,7 @@ public:
     {
         m_scrollingTemplateStore = store;
     }
-    ScrollingTemplateStore* scrollingTemplateStore() const
+    ScrollingTemplateStore* scrollingTemplateStore() const override
     {
         return m_scrollingTemplateStore;
     }

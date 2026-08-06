@@ -819,13 +819,12 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
         flags.manual = false;
         flags.autotile = true;
     } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-        // The live Templates arm: a scrolling screen's picker/popup offers
-        // the MANUAL list as template candidates and drops the autotile
-        // cards (algorithms are not templates). Also the unwired-resolver
-        // fallback, where keeping the manual list beats guessing an empty
-        // one for a possibly-stale assignment.
-        flags.manual = true;
+        // The live Templates arm: since the native-template pivot a
+        // scrolling screen's picker offers TEMPLATE cards only (manual
+        // layouts are not templates, algorithms never were).
+        flags.manual = false;
         flags.autotile = false;
+        flags.templates = true;
     } else {
         flags.manual = true;
         flags.autotile = false;
@@ -853,7 +852,7 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
         inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
         !templatesScreen && m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource,
-        autotilePreviewCanvas);
+        autotilePreviewCanvas, inc.templates, m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr);
     return PlasmaZones::toVariantList(entries);
 }
 
@@ -893,7 +892,8 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
         m_layoutManager, m_algorithmRegistry, resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity,
         inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
         !templatesScreen && m_settings && m_settings->filterLayoutsByAspectRatio(),
-        /*customOrder=*/{}, m_autotileLayoutSource);
+        /*customOrder=*/{}, m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, inc.templates,
+        m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr);
     return entries.size();
 }
 

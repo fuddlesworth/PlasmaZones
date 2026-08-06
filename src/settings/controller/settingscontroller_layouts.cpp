@@ -25,6 +25,7 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/LayoutComputeService.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include <QDBusMessage>
 #include <QDesktopServices>
@@ -317,6 +318,75 @@ void SettingsController::duplicateLayout(const QString& layoutId)
     scheduleLayoutLoad();
 }
 
+void SettingsController::onScrollingTemplatesChanged()
+{
+    if (m_localTemplateStore) {
+        m_localTemplateStore->loadTemplates();
+    }
+    scheduleLayoutLoad();
+}
+
+QVariantMap SettingsController::scrollingTemplateForEditing(const QString& templateId) const
+{
+    // Full template JSON from the LOCAL store (same files the daemon
+    // reads); the editor form needs the columns/defaults the flat layouts
+    // model doesn't carry. Empty map for an unknown id.
+    if (!m_localTemplateStore) {
+        return {};
+    }
+    const PhosphorZones::ScrollingTemplate templ = m_localTemplateStore->templateById(QUuid::fromString(templateId));
+    if (!templ.isValid()) {
+        return {};
+    }
+    QVariantMap map = templ.toJson().toVariantMap();
+    map.insert(QStringLiteral("isSystem"), templ.isSystem);
+    return map;
+}
+
+bool SettingsController::saveScrollingTemplate(const QVariantMap& templateData)
+{
+    // Daemon-first like every layout mutation; the local store refreshes on
+    // the scrollingTemplatesChanged subscription.
+    const QString payload =
+        QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(templateData)).toJson(QJsonDocument::Compact));
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("saveScrollingTemplate"), {payload});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()
+        || reply.arguments().first().toString().isEmpty()) {
+        const QString error = reply.type() == QDBusMessage::ErrorMessage
+            ? reply.errorMessage()
+            : PhosphorI18n::tr("The daemon refused the template. Check that it has a name.");
+        qCWarning(lcCore) << "saveScrollingTemplate failed:" << error;
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not save the template: %1").arg(error));
+        return false;
+    }
+    scheduleLayoutLoad();
+    return true;
+}
+
+void SettingsController::deleteScrollingTemplate(const QString& templateId)
+{
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("deleteScrollingTemplate"), {templateId});
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "deleteScrollingTemplate failed:" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not delete the template: %1").arg(reply.errorMessage()));
+    }
+    scheduleLayoutLoad();
+}
+
+void SettingsController::duplicateScrollingTemplate(const QString& templateId)
+{
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("duplicateScrollingTemplate"), {templateId});
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "duplicateScrollingTemplate failed:" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(
+            PhosphorI18n::tr("Could not duplicate the template: %1").arg(reply.errorMessage()));
+    }
+    scheduleLayoutLoad();
+}
+
 QVariantMap SettingsController::physicalScreenResolution(const QString& screenId) const
 {
     QVariantMap result;
@@ -579,25 +649,26 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
 
 QVariantList SettingsController::activeLayoutMatchOptions() const
 {
-    // Every layouts() entry as-is, then one derived template entry per MANUAL
-    // layout: id "scrolling:<uuid>" (LayoutId::makeScrollingId), the value the
-    // context resolvers stamp for a scrolling context with that template
-    // active. Autotile entries and the bare scrolling sentinel derive nothing
-    // (algorithms are not templates; the sentinel already sits in the base
-    // list as "scrolling with no template").
-    QVariantList out = m_layouts;
+    // Base entries first (manual layouts, autotile entries, the bare
+    // scrolling sentinel), with the NATIVE template rows transformed: a
+    // template entry's raw UUID is not an ActiveLayout value — the context
+    // resolvers stamp the PREFIXED "scrolling:<uuid>" form — so each
+    // template row is rewritten to that wire id with a "Template:" label,
+    // replacing the pre-pivot derivation from manual layouts.
+    QVariantList out;
+    out.reserve(m_layouts.size());
     for (const QVariant& lv : m_layouts) {
         const QVariantMap m = lv.toMap();
         const QString id = m.value(QStringLiteral("id")).toString();
-        if (id.isEmpty() || PhosphorLayout::LayoutId::isAutotile(id)
-            || PhosphorLayout::LayoutId::isScrollingFamily(id)) {
+        if (m.value(QStringLiteral("isScrollingTemplate")).toBool()) {
+            QVariantMap derived;
+            derived[QStringLiteral("id")] = PhosphorLayout::LayoutId::makeScrollingId(id);
+            derived[QStringLiteral("displayName")] =
+                PhosphorI18n::tr("Template: %1").arg(m.value(QStringLiteral("displayName")).toString());
+            out.append(derived);
             continue;
         }
-        QVariantMap derived;
-        derived[QStringLiteral("id")] = PhosphorLayout::LayoutId::makeScrollingId(id);
-        derived[QStringLiteral("displayName")] =
-            PhosphorI18n::tr("Template: %1").arg(m.value(QStringLiteral("displayName")).toString());
-        out.append(derived);
+        out.append(lv);
     }
     return out;
 }

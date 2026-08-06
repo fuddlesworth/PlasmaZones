@@ -507,6 +507,7 @@ qt_add_qml_module(plasmazones-settings
         qml/components/SettingsButtonGroup.qml
         qml/components/ColorSwatchRow.qml
         qml/pages/layouts/NewLayoutDialog.qml
+        qml/pages/layouts/ScrollingTemplateEditorDialog.qml
         qml/pages/tiling/NewAlgorithmDialog.qml
         qml/pages/wizard/WizardStepIndicator.qml
         qml/pages/wizard/WizardFooter.qml

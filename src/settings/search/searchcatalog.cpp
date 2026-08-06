@@ -613,16 +613,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Preset height"),
                {PhosphorI18n::tr("preset"), PhosphorI18n::tr("height"), PhosphorI18n::tr("index"),
                 PhosphorI18n::tr("template")});
-    addSection(search, QStringLiteral("scrolling-columns"), QStringLiteral("scrollingPresets"),
-               PhosphorI18n::tr("Width and height presets"));
-    addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("presetColumnWidths"),
-               PhosphorI18n::tr("Column widths"),
-               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("width"), PhosphorI18n::tr("cycle"),
-                PhosphorI18n::tr("template")});
-    addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("presetWindowHeights"),
-               PhosphorI18n::tr("Window heights"),
-               {PhosphorI18n::tr("preset"), PhosphorI18n::tr("height"), PhosphorI18n::tr("cycle"),
-                PhosphorI18n::tr("template")});
+    addSection(search, QStringLiteral("scrolling-columns"), QStringLiteral("scrollingDefaultTemplate"),
+               PhosphorI18n::tr("Layout template"));
+    addSetting(search, QStringLiteral("scrolling-columns"), QStringLiteral("defaultScrollingTemplate"),
+               PhosphorI18n::tr("Default template"),
+               {PhosphorI18n::tr("template"), PhosphorI18n::tr("preset"), PhosphorI18n::tr("columns"),
+                PhosphorI18n::tr("scrolling")});
 
     // ── Scrolling → Tabs ──
     // Three sections mirroring the page's three cards, so a search hit lands

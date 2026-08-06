@@ -37,8 +37,20 @@ SettingsFlickable {
     // two set the minimum size AND the fixed aspect of every card.
     readonly property real cardHeight: Kirigami.Units.gridUnit * 12
     readonly property real minCardWidth: Kirigami.Units.gridUnit * 14
-    // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
+    // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms,
+    // 2 = Scrolling Templates
     property int viewMode: 0
+    // The view modes the switch offers, gated per family's master switch.
+    // Maps switch index → viewMode so hiding a middle tab cannot misroute
+    // the ones after it.
+    readonly property var availableViewModes: {
+        let modes = [0];
+        if (settingsBridge.autotileEnabled)
+            modes.push(1);
+        if (settingsBridge.scrollingEnabled)
+            modes.push(2);
+        return modes;
+    }
     // Selected layout id (tracked across group cards).
     property string selectedLayoutId: ""
     // Grouped, filtered, sorted layouts — `[{ label, items: [...] }]` from
@@ -143,13 +155,21 @@ SettingsFlickable {
         let filtered = [];
         for (let i = 0; i < allLayouts.length; i++) {
             let isAutotile = allLayouts[i].isAutotile === true;
-            if (root.viewMode === 0 && !isAutotile)
+            let isTemplate = allLayouts[i].isScrollingTemplate === true;
+            if (root.viewMode === 0 && !isAutotile && !isTemplate)
                 filtered.push(allLayouts[i]);
             else if (root.viewMode === 1 && isAutotile)
                 filtered.push(allLayouts[i]);
+            else if (root.viewMode === 2 && isTemplate)
+                filtered.push(allLayouts[i]);
         }
         let search = filterBar.filterText.toLowerCase();
-        if (root.viewMode === 0)
+        if (root.viewMode === 2) {
+            // Templates have no source/visibility filter axes yet; the
+            // search box is the only filter.
+            if (search.length > 0)
+                filtered = filtered.filter(item => (item.displayName || "").toLowerCase().includes(search) || (item.description || "").toLowerCase().includes(search));
+        } else if (root.viewMode === 0)
             filtered = Logic.applySnappingFilters(filtered, search, filterBar);
         else
             filtered = Logic.applyTilingFilters(filtered, search, filterBar);
@@ -159,20 +179,24 @@ SettingsFlickable {
         // algorithm id ("bsp"). The tiling cards are keyed "autotile:<id>", so
         // prefix the tiling order to the card namespace before matching, or the
         // Priority sort silently no-ops for the tiling view.
-        let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder().map(id => "autotile:" + id);
-        Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
+        if (root.viewMode !== 2) {
+            let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder().map(id => "autotile:" + id);
+            Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
+        }
         // "None" is the one grouping that should still show its (single) card
         // header — the user wants the title + count even with no grouping. Every
         // other grouping keeps the legacy "drop the header when it collapses to a
         // single group" behaviour (a lone "Built-in" card needs no redundant
         // header).
-        let isNoneGroup = root.viewMode === 0 ? filterBar.groupByIndex === filterBar.groupSnappingNone : filterBar.groupByIndex === filterBar.groupTilingNone;
+        let isNoneGroup = root.viewMode === 2 ? false : (root.viewMode === 0 ? filterBar.groupByIndex === filterBar.groupSnappingNone : filterBar.groupByIndex === filterBar.groupTilingNone);
         root.groupsModel = Core.finalizeGroups(groups, isNoneGroup);
     }
 
     function selectDefaultLayout(mode) {
         let defaultId;
-        if (mode === 1) {
+        if (mode === 2) {
+            defaultId = root.settingsBridge.defaultScrollingTemplate;
+        } else if (mode === 1) {
             const algo = root.settingsBridge.defaultAutotileAlgorithm;
             // Empty algo would produce a truthy "autotile:" sentinel that
             // sails through the `if (defaultId)` guard below and selects a
@@ -197,7 +221,9 @@ SettingsFlickable {
             for (let j = 0; j < items.length; ++j) {
                 const item = items[j];
                 const itemIsAutotile = item.isAutotile === true;
-                if ((mode === 1) === itemIsAutotile && item.id) {
+                const itemIsTemplate = item.isScrollingTemplate === true;
+                const matchesMode = mode === 2 ? itemIsTemplate : ((mode === 1) === itemIsAutotile && !itemIsTemplate);
+                if (matchesMode && item.id) {
                     root.selectedLayoutId = String(item.id);
                     return;
                 }
@@ -215,6 +241,12 @@ SettingsFlickable {
 
     // Grouping — kept in QML because group labels require i18n/i18np.
     function buildGroups(filtered, groupIdx) {
+        if (root.viewMode === 2) {
+            // Bundled vs user is the one axis a template carries.
+            return Core.groupByBoolKey(filtered, item => {
+                return item.isSystem !== true;
+            }, "user", i18n("Your Templates"), "builtin", i18n("Built-in"));
+        }
         if (root.viewMode === 1) {
             if (groupIdx === filterBar.groupCapability)
                 return Logic.groupByCapability(filtered, root.tilingCapabilityGroups, i18n("Other"));
@@ -261,10 +293,20 @@ SettingsFlickable {
         selectDefaultLayout(root.viewMode);
     }
 
-    // Reset to Snapping Layouts when autotiling is disabled.
+    // Reset to Snapping Layouts when the shown family's master switch
+    // turns off.
     Connections {
         function onAutotileEnabledChanged() {
-            if (!root.settingsBridge.autotileEnabled && root.viewMode !== 0) {
+            if (!root.settingsBridge.autotileEnabled && root.viewMode === 1) {
+                root.viewMode = 0;
+                root.selectedLayoutId = "";
+                root.rebuildModel();
+                root.selectDefaultLayout(0);
+            }
+        }
+
+        function onScrollingEnabledChanged() {
+            if (!root.settingsBridge.scrollingEnabled && root.viewMode === 2) {
                 root.viewMode = 0;
                 root.selectedLayoutId = "";
                 root.rebuildModel();
@@ -302,19 +344,25 @@ SettingsFlickable {
         // Centered monitor-switcher-style tiles (shared SegmentedViewSwitch).
         SegmentedViewSwitch {
             Layout.fillWidth: true
-            visible: root.settingsBridge.autotileEnabled
-            modes: [i18n("Snapping"), i18n("Tiling")]
-            currentIndex: root.viewMode
+            visible: root.availableViewModes.length > 1
+            modes: root.availableViewModes.map(vm => vm === 0 ? i18n("Snapping") : (vm === 1 ? i18n("Tiling") : i18n("Scrolling Templates")))
+            currentIndex: Math.max(0, root.availableViewModes.indexOf(root.viewMode))
             onIndexChanged: index => {
-                root.viewMode = index;
+                const mode = root.availableViewModes[index];
+                root.viewMode = mode;
                 root.selectedLayoutId = "";
-                // rebuildModel() runs via filterBar.onViewModeChanged → loadState → filterSettingsChanged.
-                root.selectDefaultLayout(index);
+                // For 0/1, rebuildModel() runs via filterBar.onViewModeChanged →
+                // loadState → filterSettingsChanged; the template view bypasses
+                // the filter bar so it rebuilds directly.
+                if (mode === 2)
+                    root.rebuildModel();
+                root.selectDefaultLayout(mode);
             }
         }
 
         // ─── Import / Open Folder card (shader-style, drop-zone) ───
         LayoutManageCard {
+            visible: root.viewMode !== 2
             viewMode: root.viewMode
             onRequestImportLayout: importDialog.open()
             onRequestImportFromKZones: settingsController.importFromKZones()
@@ -333,7 +381,7 @@ SettingsFlickable {
                 id: searchField
 
                 Layout.fillWidth: true
-                placeholderText: root.viewMode === 0 ? i18n("Search layouts…") : i18n("Search algorithms…")
+                placeholderText: root.viewMode === 2 ? i18n("Search templates…") : (root.viewMode === 0 ? i18n("Search layouts…") : i18n("Search algorithms…"))
                 onTextChanged: filterBar.setSearchText(text)
 
                 Connections {
@@ -347,6 +395,7 @@ SettingsFlickable {
             }
 
             ToolButton {
+                visible: root.viewMode !== 2
                 icon.name: "view-filter"
                 // Active state is binding-driven, not a user toggle — checkable omitted.
                 checked: filterBar.hasActiveFilters
@@ -358,9 +407,16 @@ SettingsFlickable {
             }
 
             Button {
-                text: root.viewMode === 0 ? i18n("New Layout") : i18n("New Algorithm")
+                text: root.viewMode === 2 ? i18n("New Template") : (root.viewMode === 0 ? i18n("New Layout") : i18n("New Algorithm"))
                 icon.name: "list-add"
-                onClicked: root.viewMode === 0 ? newLayoutDialog.open() : newAlgorithmDialog.open()
+                onClicked: {
+                    if (root.viewMode === 2)
+                        templateEditorDialog.openForNew();
+                    else if (root.viewMode === 0)
+                        newLayoutDialog.open();
+                    else
+                        newAlgorithmDialog.open();
+                }
             }
         }
 
@@ -369,7 +425,11 @@ SettingsFlickable {
             id: filterBar
 
             Layout.fillWidth: true
-            viewMode: root.viewMode
+            visible: root.viewMode !== 2
+            // The filter bar has no template axes; pin its own mode to the
+            // snapping vocabulary while the template view is up (search
+            // still routes through it).
+            viewMode: root.viewMode === 2 ? 0 : root.viewMode
             onFilterSettingsChanged: root.rebuildModel()
         }
 
@@ -380,6 +440,8 @@ SettingsFlickable {
             visible: root.groupsModel.length === 0
             icon.name: "view-grid-symbolic"
             text: {
+                if (root.viewMode === 2)
+                    return filterBar.filterText.length > 0 ? i18n("No matching templates") : i18n("No scrolling templates available");
                 if (filterBar.hasActiveFilters)
                     return root.viewMode === 1 ? i18n("No matching algorithms") : i18n("No matching layouts");
 
@@ -429,7 +491,7 @@ SettingsFlickable {
 
                 Layout.fillWidth: true
                 headerText: modelData.label
-                headerTrailingText: root.viewMode === 1 ? i18np("%n algorithm", "%n algorithms", modelData.items.length) : i18np("%n layout", "%n layouts", modelData.items.length)
+                headerTrailingText: root.viewMode === 2 ? i18np("%n template", "%n templates", modelData.items.length) : (root.viewMode === 1 ? i18np("%n algorithm", "%n algorithms", modelData.items.length) : i18np("%n layout", "%n layouts", modelData.items.length))
                 // Only labelled groups get a collapse affordance — a header-less
                 // ungrouped card has nothing to click to toggle.
                 collapsible: modelData.label.length > 0
@@ -474,12 +536,17 @@ SettingsFlickable {
                                 // (KCM / future preview) `window.layoutContextMenu`
                                 // is undefined; suppress the right-button mask so a
                                 // missing menu doesn't pretend to exist.
-                                contextMenuEnabled: !!(typeof window !== "undefined" && window && window.layoutContextMenu)
+                                // Templates have no context menu (the card's
+                                // own edit/delete affordances cover CRUD).
+                                contextMenuEnabled: root.viewMode !== 2 && !!(typeof window !== "undefined" && window && window.layoutContextMenu)
                                 onSelected: idx => {
                                     root.selectedLayoutId = String(modelData.id);
                                 }
                                 onActivated: layoutId => {
-                                    settingsController.editLayout(layoutId);
+                                    if (root.viewMode === 2)
+                                        templateEditorDialog.openForEdit(layoutId);
+                                    else
+                                        settingsController.editLayout(layoutId);
                                 }
                                 onDeleteRequested: layout => {
                                     deleteConfirmDialog.layoutToDelete = layout;
@@ -596,6 +663,13 @@ SettingsFlickable {
         controller: settingsController
     }
 
+    // Scrolling template form editor (create + edit share the one dialog)
+    ScrollingTemplateEditorDialog {
+        id: templateEditorDialog
+
+        controller: settingsController
+    }
+
     // New Algorithm wizard dialog
     NewAlgorithmDialog {
         id: newAlgorithmDialog
@@ -663,8 +737,9 @@ SettingsFlickable {
 
         property var layoutToDelete: null
         readonly property bool isAlgorithm: layoutToDelete && layoutToDelete.isAutotile === true
+        readonly property bool isTemplate: layoutToDelete && layoutToDelete.isScrollingTemplate === true
 
-        title: isAlgorithm ? i18n("Delete Algorithm") : i18n("Delete Layout")
+        title: isTemplate ? i18n("Delete Template") : (isAlgorithm ? i18n("Delete Algorithm") : i18n("Delete Layout"))
         subtitle: layoutToDelete ? i18n("Are you sure you want to delete \"%1\"?", layoutToDelete.displayName || "") : ""
         standardButtons: Kirigami.Dialog.NoButton
         onRejected: layoutToDelete = null
@@ -675,7 +750,9 @@ SettingsFlickable {
                 icon.name: "edit-delete"
                 onTriggered: {
                     if (deleteConfirmDialog.layoutToDelete) {
-                        if (deleteConfirmDialog.isAlgorithm) {
+                        if (deleteConfirmDialog.isTemplate) {
+                            settingsController.deleteScrollingTemplate(deleteConfirmDialog.layoutToDelete.id);
+                        } else if (deleteConfirmDialog.isAlgorithm) {
                             let algoId = settingsController.algorithmIdFromLayoutId(deleteConfirmDialog.layoutToDelete.id);
                             settingsController.deleteAlgorithm(algoId);
                         } else {
