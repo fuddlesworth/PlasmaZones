@@ -1,7 +1,7 @@
 {
     "id": "phosphor-slipstream",
     "name": "Phosphor Slipstream",
-    "description": "The strip leg of the official Phosphor set. While the strip scrolls, luminous trails in the brand gradient shed from the edges of the moving columns and stream out behind them, with a few ember sparks drifting in the wake. Everything scales with scroll speed and vanishes as the strip settles.",
+    "description": "The strip leg of the official Phosphor set. While the strip scrolls, glowing signal lanes light up across it and bright gradient pulses race along them, overtaking the content in the direction of travel. Highlights in the content throw comet tails behind the motion and ember sparks drift in the wake. Everything scales with scroll speed and vanishes as the strip settles.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Particle",
@@ -29,6 +29,17 @@
             "step": 0.05,
             "description": "How far the trails stream out behind the moving columns.",
             "group": "Trails"
+        },
+        {
+            "id": "lanes",
+            "name": "Signal Lanes",
+            "type": "float",
+            "default": 7.0,
+            "min": 2.0,
+            "max": 16.0,
+            "step": 1.0,
+            "description": "How many signal lanes cross the strip.",
+            "group": "Lanes"
         },
         {
             "id": "embers",
