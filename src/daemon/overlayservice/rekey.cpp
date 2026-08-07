@@ -233,6 +233,21 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         rekeyed.overlayGeomConnection = installOverlayGeometryWatcher(physScreen, newKey, isVS);
     }
 
+    // Re-publish the tab surface under the new key. ShellHost::rekey moves the
+    // ShellState between keys without firing PreDestroy, so the wl_surface
+    // survives — but the compositor was told about it under oldKey, and the
+    // effect's map is keyed by screen with the announcement as its only writer.
+    // Left alone, nothing would ever name the surface under newKey, and the
+    // eventual teardown would retract newKey, leaving the effect holding an
+    // oldKey entry that points at a destroyed object. Wayland reuses ids, so
+    // that is the mismatch the announce/retract pairing exists to prevent, not
+    // merely a lost indicator. Retract first: the two keys are different, so
+    // the change gate cannot collapse the pair.
+    announceScrollTabSurface(oldKey, nullptr);
+    if (rekeyed.tabShell) {
+        announceScrollTabSurface(newKey, rekeyed.tabShell->shellWindow());
+    }
+
     qCInfo(lcOverlay) << "rekeyOverlayState: migrated overlay" << oldKey << "->" << newKey
                       << "(same physical monitor, preserving Vulkan surface)";
     return true;
@@ -312,11 +327,27 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
                 // Anchors (Top|Left) are fixed at attach and can't change.
                 const QRect vsGeom = resolveScreenGeometry(m_screenManager, sid);
                 if (vsGeom.isValid() && st.shell->shellSurface()) {
-                    if (auto* handle = st.shell->shellSurface()->transport()) {
-                        handle->setMargins(layerPlacementForVs(vsGeom, newGeom).margins);
-                    }
-                    w->setWidth(vsGeom.width());
-                    w->setHeight(vsGeom.height());
+                    // Both shells carry the VS margins, so both go stale, and
+                    // a stranded one keeps drawing over the old VS rectangle —
+                    // the same failure rekeyOverlayState re-anchors both shells
+                    // to avoid. The tab shell cannot self-heal: its size is set
+                    // on the show path, and an already-visible indicator
+                    // returns before reaching it.
+                    const auto placement = layerPlacementForVs(vsGeom, newGeom);
+                    const auto reanchor = [&](PhosphorOverlay::ShellState* shell) {
+                        if (!shell || !shell->shellSurface()) {
+                            return;
+                        }
+                        if (auto* handle = shell->shellSurface()->transport()) {
+                            handle->setMargins(placement.margins);
+                        }
+                        if (auto* sw = shell->shellWindow()) {
+                            sw->setWidth(vsGeom.width());
+                            sw->setHeight(vsGeom.height());
+                        }
+                    };
+                    reanchor(st.shell);
+                    reanchor(st.tabShell);
                     st.overlayGeometry = vsGeom;
                     updateOverlayWindow(sid, screenPtr);
                     return;
