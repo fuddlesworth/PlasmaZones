@@ -1024,6 +1024,26 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 // the animator's current rect is what the draw transforms by.
                 animatedFrame = m_windowAnimator->currentValue(w, QRectF());
             }
+            // Fold in the two scroll displacements the draw applies further
+            // down, which neither term above accounts for. Without this a
+            // decorated scrolling column samples the scene slice at its
+            // COMMITTED rect while being drawn somewhere else: a view offset
+            // away for the length of every leg, and for a parked column at a
+            // rect that intersects no output at all, which is a garbage
+            // capture re-blitted every frame rather than a slightly-off one.
+            //
+            // Order matches the draw: relocate to the strip position first,
+            // then add the view offset.
+            if (KWin::LogicalOutput* scrollOut = scrollManagedOutputFor(w)) {
+                if (!animatedFrame.isValid()) {
+                    animatedFrame = w->frameGeometry();
+                }
+                if (const auto visualIt = m_scrollVisualPos.constFind(getWindowId(w));
+                    visualIt != m_scrollVisualPos.constEnd()) {
+                    animatedFrame.moveTopLeft(QPointF(*visualIt));
+                }
+                animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut), 0.0);
+            }
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, deviceRegion, animatedFrame);
         }
     }

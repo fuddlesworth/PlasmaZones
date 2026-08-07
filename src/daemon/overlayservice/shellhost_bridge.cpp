@@ -216,7 +216,16 @@ void OverlayService::unwireScrollTabShellSlots(const QString& screenId)
     // name an unrelated one and the compositor would slide the wrong thing.
     announceScrollTabSurface(screenId, nullptr);
     m_scrollTabsHidePending.remove(screenId);
-    m_lastScrollTabStrips.remove(screenId);
+    // The strip model SURVIVES, unlike its neighbours. It is the only replay
+    // source the daemon has, and both of its producers are change-latched: the
+    // engine re-emits tabStripsChanged only on a structural change, and
+    // replayScrollTabStrips walks this very map. Dropping it meant a screen
+    // whose shells were destroyed and rebuilt — a monitor power-cycle is the
+    // ordinary case — showed no indicators until the strip's STRUCTURE
+    // happened to change, which for a settled workspace can be a long time.
+    // Keeping it costs one entry per screen id ever seen and makes the replay
+    // self-healing, since updateScrollTabStrips recreates the shell through
+    // ensureScrollTabShellFor. Genuine screen removal drops it below.
     m_scrollTabInputRegions.remove(screenId);
     m_scrollTabIndicatorOverrides.remove(screenId);
     auto it = m_screenStates.find(screenId);
@@ -433,6 +442,11 @@ void OverlayService::removeShellStates(const QString& screenId)
     // keys. Both hosts share the key space, so both are dropped together.
     m_shellHost->removeState(screenId);
     m_tabShellHost->removeState(screenId);
+    // This is the genuine-removal path — the screen's whole entry is going, not
+    // just its surfaces — so the cached strip model goes with it. The shell
+    // teardown hook deliberately keeps that cache so a rebuilt shell can replay
+    // it; without this drop, the entry would outlive the screen itself.
+    m_lastScrollTabStrips.remove(screenId);
 }
 
 void OverlayService::clearShellFailuresForPhysicalScreen(const QString& physicalScreenId)
