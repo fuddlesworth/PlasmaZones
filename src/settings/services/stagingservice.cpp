@@ -3,6 +3,7 @@
 
 #include "stagingservice.h"
 
+#include "settings/controller/settingscontroller_pagekeys.h"
 #include "settings/utils/dbusutils.h"
 #include "settings/utils/virtualscreenutils.h"
 #include "config/settings.h"
@@ -11,6 +12,7 @@
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QChar>
@@ -107,6 +109,7 @@ void StagingService::clearAll()
     m_virtualScreenConfigs.clear();
     m_snappingQuickSlots.clear();
     m_tilingQuickSlots.clear();
+    m_scrollingQuickSlots.clear();
 }
 
 // Snapping and tiling slots are mutually exclusive in the unified Rule
@@ -254,11 +257,13 @@ bool StagingService::flushAssignmentsToDaemon()
         // `assignLayoutToScreen(snap)` followed by `setAssignmentEntry(mode=0,
         // "", "")` clobbers the snap we just assigned. Coalesce into a single
         // `setAssignmentEntry` so the daemon writes the combined state in one
-        // shot. Mode = 1 when a non-empty tiling algo is staged, 0 otherwise.
+        // shot. Mode is Autotile when a non-empty tiling algo is staged,
+        // Snapping otherwise.
         if (hasSnap && hasTile) {
             const QString snap = *s.snappingLayoutId;
             const QString tile = normTile(*s.tilingAlgorithmId);
-            const int mode = tile.isEmpty() ? 0 : 1;
+            const int mode = static_cast<int>(tile.isEmpty() ? PhosphorZones::AssignmentEntry::Snapping
+                                                             : PhosphorZones::AssignmentEntry::Autotile);
             check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                          QStringLiteral("setAssignmentEntry"),
                                          {s.screenId, s.virtualDesktop, s.activityId, mode, snap, tile}),
@@ -293,9 +298,10 @@ bool StagingService::flushAssignmentsToDaemon()
             continue;
         }
 
-        // Only tile staged. Empty ≡ tiling-clear (reverts to snapping mode 0).
+        // Only tile staged. Empty ≡ tiling-clear (reverts to Snapping).
         const QString tile = normTile(*s.tilingAlgorithmId);
-        const int mode = tile.isEmpty() ? 0 : 1;
+        const int mode = static_cast<int>(tile.isEmpty() ? PhosphorZones::AssignmentEntry::Snapping
+                                                         : PhosphorZones::AssignmentEntry::Autotile);
         check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                      QStringLiteral("setAssignmentEntry"),
                                      {s.screenId, s.virtualDesktop, s.activityId, mode, QString(), tile}),
@@ -388,6 +394,11 @@ void StagingService::stageTilingQuickSlot(int slotNumber, const QString& layoutI
     m_tilingQuickSlots[slotNumber] = layoutId;
 }
 
+void StagingService::stageScrollingQuickSlot(int slotNumber, const QString& templateId)
+{
+    m_scrollingQuickSlots[slotNumber] = templateId;
+}
+
 bool StagingService::stagedSnappingQuickSlot(int slotNumber, QString& out) const
 {
     auto it = m_snappingQuickSlots.constFind(slotNumber);
@@ -408,6 +419,16 @@ bool StagingService::stagedTilingQuickSlot(int slotNumber, QString& out) const
     return true;
 }
 
+bool StagingService::stagedScrollingQuickSlot(int slotNumber, QString& out) const
+{
+    auto it = m_scrollingQuickSlots.constFind(slotNumber);
+    if (it == m_scrollingQuickSlots.constEnd()) {
+        return false;
+    }
+    out = *it;
+    return true;
+}
+
 void StagingService::clearSnappingQuickSlots()
 {
     m_snappingQuickSlots.clear();
@@ -418,13 +439,17 @@ void StagingService::clearTilingQuickSlots()
     m_tilingQuickSlots.clear();
 }
 
+void StagingService::clearScrollingQuickSlots()
+{
+    m_scrollingQuickSlots.clear();
+}
+
 bool StagingService::flushQuickSlotsToDaemon()
 {
     // Quick slots are mode-keyed in the daemon's LayoutRegistry: snapping
-    // slots hold zone-layout UUIDs, tiling slots hold autotile algorithm IDs.
-    // The wire mode matches AssignmentEntry::Mode (Snapping = 0, Autotile = 1).
-    constexpr int kSnappingMode = 0;
-    constexpr int kAutotileMode = 1;
+    // slots hold zone-layout UUIDs, tiling slots hold autotile algorithm
+    // IDs, and scrolling slots hold native template ids. The wire mode comes
+    // from the shared QuickSlotMode* aliases of AssignmentEntry::Mode.
     const auto flush = [](int mode, QHash<int, QString>& slots) {
         bool ok = true;
         for (auto it = slots.constBegin(); it != slots.constEnd(); ++it) {
@@ -444,11 +469,13 @@ bool StagingService::flushQuickSlotsToDaemon()
         }
         return ok;
     };
-    // Both modes are attempted before the verdict — `&&` would short-circuit
-    // the second flush on a snapping failure and silently skip it.
-    const bool snappingOk = flush(kSnappingMode, m_snappingQuickSlots);
-    const bool tilingOk = flush(kAutotileMode, m_tilingQuickSlots);
-    return snappingOk && tilingOk;
+    // All three modes are attempted before the verdict — `&&` would
+    // short-circuit the later flushes on a snapping failure and silently skip
+    // them.
+    const bool snappingOk = flush(QuickSlotModeSnapping, m_snappingQuickSlots);
+    const bool tilingOk = flush(QuickSlotModeTiling, m_tilingQuickSlots);
+    const bool scrollingOk = flush(QuickSlotModeScrolling, m_scrollingQuickSlots);
+    return snappingOk && tilingOk && scrollingOk;
 }
 
 } // namespace PlasmaZones

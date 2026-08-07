@@ -95,6 +95,8 @@ ColumnLayout {
             // Issue codes mirror PhosphorRules::ValidationIssue::Code:
             //   0 = ContextActionWithWindowMatch (the action never fires)
             //   1 = TerminalActionWithEffectActions (the action may not apply)
+            //   2 = DuplicateSlotActions (only one of the duplicates applies)
+            //   3 = IncompleteActionPayload (the action would be dropped on save)
             var lines = [];
             for (var i = 0; i < root.validationIssues.length; ++i) {
                 var issue = root.validationIssues[i];
@@ -104,6 +106,10 @@ ColumnLayout {
                 var name = issue.actionLabel && issue.actionLabel.length > 0 ? issue.actionLabel : issue.actionType;
                 if (issue.code === 1) {
                     lines.push("• " + i18n("Action “%1” may not take effect because this rule also has an exclusion that stops the rest of the rule from applying. Put the exclusion on a separate rule.", name));
+                } else if (issue.code === 2) {
+                    lines.push("• " + i18n("Action “%1” is a duplicate. An earlier action of the same type on this rule already sets it, so only one of them takes effect.", name));
+                } else if (issue.code === 3) {
+                    lines.push("• " + i18n("Action “%1” is not filled in yet. Choose a value for it, or remove the action. Otherwise it is dropped when the rule is saved.", name));
                 } else {
                     lines.push("• " + i18n("Action “%1” is a context action, but the rule matches window properties, so it never fires.", name));
                 }

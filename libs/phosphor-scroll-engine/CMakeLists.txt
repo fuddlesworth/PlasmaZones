@@ -4,7 +4,7 @@
 # PhosphorScrollEngine — niri-style scrolling placement engine.
 #
 # Provides the pure ScrollStrip model (columns on an unbounded horizontal
-# strip, unit-testable in isolation) plus the ScrollEngine that drives it
+# strip, unit-testable in isolation) and the ScrollEngine that drives it
 # against the IPlacementEngine contract from phosphor-engine.
 
 cmake_minimum_required(VERSION 3.16)
@@ -33,7 +33,9 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollstrip_relayout.cpp
     src/scrollstrip_sizing.cpp
     src/scrollengine/engine_core.cpp
+    src/scrollengine/engine_overrides.cpp
     src/scrollengine/engine_context.cpp
+    src/scrollengine/enginelimits.h
     src/scrollengine/engine_apply.cpp
     src/scrollengine/drag_preview.cpp
     src/scrollengine/engine_lifecycle.cpp

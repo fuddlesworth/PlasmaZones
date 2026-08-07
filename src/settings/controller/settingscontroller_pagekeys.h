@@ -19,6 +19,7 @@
 #include "config/settings.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorZones/AssignmentEntry.h>
 
 #include <QString>
 #include <QtGlobal>
@@ -86,8 +87,19 @@ enum class OrderingPageKind {
 };
 OrderingPageKind orderingPageKind(const QString& page);
 
-/// The two Quick Shortcuts pages. Same shared-classification rationale.
+/// The three Quick Shortcuts pages. Same shared-classification rationale.
 bool isShortcutsPage(const QString& page);
+
+/// The wire values the daemon's quick-layout slot map is keyed on. Named
+/// aliases of AssignmentEntry::Mode so the reset loop, the per-slot accessors
+/// and the Save-time flush all spell the same mode the same way instead of
+/// carrying bare 0/1/2 literals with a comment each. The enum's numbering is
+/// frozen (see the AssignmentEntry::Mode doc), so these are stable on the wire.
+/// PascalCase rather than UPPER_SNAKE on purpose, matching the other named
+/// constants in this header and the repo's wider precedent (ReasonDaemonUnreachable).
+constexpr int QuickSlotModeSnapping = static_cast<int>(PhosphorZones::AssignmentEntry::Snapping);
+constexpr int QuickSlotModeTiling = static_cast<int>(PhosphorZones::AssignmentEntry::Autotile);
+constexpr int QuickSlotModeScrolling = static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling);
 
 /// Quick-layout slots are numbered 1..QUICK_LAYOUT_SLOT_COUNT. Shared by the
 /// slot accessors' bounds checks (settingscontroller_session.cpp) and the

@@ -101,8 +101,31 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
         const QString value = predicate.value.toString();
         QString label = value;
         if (PhosphorLayout::LayoutId::isScrolling(value)) {
-            // The bare mode sentinel has no layout entity to look up.
-            label = PhosphorI18n::tr("Scrolling", "tiling mode name");
+            // The bare mode sentinel has no layout entity to look up. The
+            // wording matches the picker's sentinel entry
+            // (activeLayoutMatchOptions) so the collapsed summary and the
+            // editor agree.
+            label = PhosphorI18n::tr("Scrolling (no template)");
+        } else if (PhosphorLayout::LayoutId::isScrollingFamily(value)) {
+            // The prefixed "scrolling:<uuid>" template stamp: resolve the
+            // template's name through the shared layouts model, which carries
+            // native template rows keyed by their raw UUID. Raw-id fallback
+            // mirrors the deleted-layout behavior below.
+            //
+            // The bare resolved NAME, not templateDisplayLabel's "Template: …"
+            // form. This label is already wrapped in the field label below, so
+            // the composed variant read "Active layout: Template: Fibonacci".
+            // The "Template: …" prefix stays in the PICKER (activeLayoutMatchOptions
+            // and the value renderers), where entries sit unlabelled beside
+            // manual layouts and need the family marker. A lookup MISS still
+            // falls through to the verbatim "scrolling:<uuid>" in `label`.
+            if (layoutLookup) {
+                const QString templateId = PhosphorLayout::LayoutId::extractTemplateId(value);
+                const QString resolved = layoutLookup(templateId);
+                if (!resolved.isEmpty() && resolved != templateId) {
+                    label = resolved;
+                }
+            }
         } else if (PhosphorLayout::LayoutId::isAutotile(value)) {
             if (tilingAlgorithmLookup) {
                 const QString resolved = tilingAlgorithmLookup(PhosphorLayout::LayoutId::extractAlgorithmId(value));
@@ -167,6 +190,9 @@ QString engineModeDisplayLabel(const QString& wire)
 /// validator has not run yet, so a bool, a string, or an out-of-range number
 /// is reachable here; the same reject paths SetOpacity and SetTintStrength
 /// mirror, so a summary never claims a size the runtime will not apply.
+///
+/// Only for params whose descriptor floors at 0.05. A fraction param that
+/// admits 0 belongs to zeroFlooredFractionPercent below.
 int scrollFractionPercent(const QJsonValue& raw)
 {
     if (raw.isNull() || raw.isUndefined()) {
@@ -184,6 +210,25 @@ int scrollFractionPercent(const QJsonValue& raw)
     // MinTabIndicatorLengthRatio), so a summary confidently printing "3%"
     // would claim a size the runtime refuses.
     if (v < PhosphorRules::MinColumnWidthRatio || v > 1.0) {
+        return -1;
+    }
+    return qRound(v * 100.0);
+}
+
+/// The zero-floored twin of scrollFractionPercent, for a fraction param whose
+/// descriptor really does admit 0. The drop indicator's fill opacity is the
+/// only one: 0 there is an outline with no fill, a legal value the shared
+/// 0.05 floor would render "(invalid)".
+int zeroFlooredFractionPercent(const QJsonValue& raw)
+{
+    if (raw.isNull() || raw.isUndefined()) {
+        return -1;
+    }
+    if (!raw.isDouble()) {
+        return -1;
+    }
+    const double v = raw.toDouble();
+    if (v < PhosphorRules::MinDropIndicatorOpacity || v > PhosphorRules::MaxDropIndicatorOpacity) {
         return -1;
     }
     return qRound(v * 100.0);
@@ -225,10 +270,13 @@ bool isUnresolvedEnumToken(const QString& token, const QString& label)
 }
 
 /// Human label for one action ("Snapping", "Float", "Excluded"). @p
-/// snappingLayoutLookup resolves SetSnappingLayout's layoutId UUIDs;
-/// @p tilingAlgorithmLookup resolves SetTilingAlgorithm's wire tokens
-/// ("bsp", …) — split so a stray cross-resolve can't surface an algorithm
-/// name in a snapping action's label or vice versa.
+/// snappingLayoutLookup resolves SetSnappingLayout's AND
+/// SetScrollingTemplate's layoutId UUIDs — it goes through the shared layouts
+/// model, which carries native template rows keyed by their raw UUID
+/// alongside the manual layouts; @p tilingAlgorithmLookup resolves
+/// SetTilingAlgorithm's wire tokens ("bsp", …) — split so a stray
+/// cross-resolve can't surface an algorithm name in a layout action's label or
+/// vice versa.
 QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snappingLayoutLookup,
                     const RuleModel::LabelLookup& tilingAlgorithmLookup,
                     const RuleModel::LabelLookup& shaderEffectLookup, const RuleModel::LabelLookup& overlayShaderLookup,
@@ -252,6 +300,15 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         const QString layoutId = action.params.value(PhosphorRules::ActionParam::LayoutId).toString();
         return layoutId.isEmpty() ? PhosphorI18n::tr("Snapping layout")
                                   : PhosphorI18n::tr("Snapping: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
+    }
+    if (action.type == ActionType::SetScrollingTemplate) {
+        // Same raw-UUID value shape as SetSnappingLayout, and the shared
+        // layouts model behind the lookup carries the native template rows
+        // under that same id, so one lookup resolves both.
+        const QString layoutId = action.params.value(PhosphorRules::ActionParam::LayoutId).toString();
+        return layoutId.isEmpty()
+            ? PhosphorI18n::tr("Scrolling template")
+            : PhosphorI18n::tr("Scrolling template: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
     if (action.type == ActionType::SetTilingAlgorithm) {
         const QString algo = action.params.value(PhosphorRules::ActionParam::Algorithm).toString();
@@ -610,7 +667,7 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // upper-case a valid hex and read "(invalid)" otherwise so the summary
         // never claims a colour the runtime discards.
         if (action.type == ActionType::SetDropIndicatorOpacity) {
-            const int pct = scrollFractionPercent(raw);
+            const int pct = zeroFlooredFractionPercent(raw);
             return pct < 0 ? PhosphorI18n::tr("Drop indicator fill opacity (invalid)")
                            : PhosphorI18n::tr("Drop indicator fill opacity: %1%").arg(pct);
         }

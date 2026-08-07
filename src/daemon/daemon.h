@@ -134,6 +134,12 @@ public:
 
     // OSD notifications
     void showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
+    /// Announce a native scrolling template (picker/slot/cycle/KCM apply,
+    /// or @p locked for the lock-toggle preview): projects the blueprint
+    /// into preview zones and hands the payload to the overlay's
+    /// template OSD. Impl in daemon/osd.cpp.
+    void showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& templ, const QString& screenId,
+                                  bool locked = false);
     void showLockedOsd(const QString& screenId);
     void showLockedPreviewOsd(const QString& screenId);
     void showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity, DisabledReason reason);
@@ -169,7 +175,7 @@ public:
     /// the KCM assignment apply, and the desktop-switch batch.
     static constexpr int kScrollingOsdAdoptSettleMs = 300;
 
-    // Shortcut cheatsheet overlay (impls in daemon/osd.cpp).
+    // Shortcut cheatsheet overlay (impls in daemon/cheatsheet.cpp).
     /// Toggle the cheatsheet on the cursor's screen. Show path resolves the
     /// screen's tiling mode, the two feature gates, the engine layouts
     /// capability and the shortcut catalog, and pushes them all into the
@@ -201,6 +207,10 @@ private:
         bool autotileAvailable = false;
         bool scrollingAvailable = false;
         bool layoutsAvailable = false;
+        /// True when the bound screen's engine consumes layouts as sizing
+        /// TEMPLATES (LayoutSupport::Templates): the sheet swaps the layouts
+        /// rows' tooltips for template wording.
+        bool layoutsAreTemplates = false;
     };
     CheatsheetPushState cheatsheetPushStateFor(const QString& screenId) const;
     /**
@@ -352,19 +362,20 @@ private:
      */
     PhosphorZones::AssignmentEntry::Mode currentModeFor(const QString& screenId) const;
 
+    using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
     /**
-     * @brief Whether the engine owning @p screenId consumes user-selectable
-     * layouts (IPlacementEngine::providesLayouts). Gates the layout picker
+     * @brief How the engine owning @p screenId relates to user-selectable
+     * layouts (IPlacementEngine::layoutSupport). Gates the layout picker
      * and the layout-selection shortcuts (cycle, quick slots, layout lock),
-     * feeds the OverlayService's injected LayoutsProvidedResolver (the
+     * feeds the OverlayService's injected LayoutSupportResolver (the
      * picker/drag-popup layout lists) and the cheatsheet's layouts-row
      * filter — so no surface assumes snap semantics on a screen whose
-     * engine has no layout concept (scrolling) or falls through to the
-     * manual layout list. Only a null ROUTER falls back to true (the
-     * shutdown window; same Snapping fallback as currentModeFor) —
-     * engineFor itself never returns null for a routed screen.
+     * engine has no layout concept or falls through to the manual layout
+     * list. Only a null ROUTER falls back to Placement (the shutdown
+     * window; same Snapping fallback as currentModeFor) — engineFor itself
+     * never returns null for a routed screen.
      */
-    bool engineProvidesLayouts(const QString& screenId) const;
+    LayoutSupport layoutSupportForScreen(const QString& screenId) const;
 
     /**
      * @brief Failure OSD for a layout-selection shortcut pressed on a screen
@@ -446,9 +457,11 @@ private:
     /// engine (scrolling_init.cpp).
     void connectScrollingShortcuts();
     /// Push the derived scrolling screen set into the scroll engine —
-    /// order seeding, per-context rule params, setActiveScreens
-    /// (scrolling.cpp). Called from updateEngineScreens so both
-    /// engines' sets flip atomically per context recompute.
+    /// order seeding, per-context rule params, the TEMPLATE vocabulary
+    /// (each screen's resolved template layout extracted into per-screen
+    /// preset lists), setActiveScreens (scrolling.cpp). Called from
+    /// updateEngineScreens so both engines' sets flip atomically per
+    /// context recompute.
     void updateScrollingScreens(const QSet<QString>& scrollingScreens);
     /// Shared capture phase: store leaving-scrolling screens' column order
     /// into m_lastEngineOrders BEFORE either engine seeds (see
@@ -767,13 +780,24 @@ private:
     // member (stable address) so the bound RuleEvaluator's per-revision cache
     // stays valid across back-to-back resolves.
     PhosphorRules::RuleSet m_excludeRuleSet;
+    /// Native scrolling-template store. Created in the Daemon constructor,
+    /// deliberately before the layout-source bundle is built so the template
+    /// provider has a store to register against. initServices then injects it
+    /// into m_layoutManager for the template-backed assignment cascade, and
+    /// stop() clears that injection before this unique_ptr resets.
+    ///
+    /// Declared BEFORE m_layoutManager for the same reason m_ruleStore is:
+    /// the registry borrows it, so reverse-order destruction must tear the
+    /// registry down first or the borrow dangles.
+    std::unique_ptr<PhosphorZones::ScrollingTemplateStore> m_scrollingTemplateStore;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry, replacing the old
     // AlgorithmRegistry::instance() singleton: plugins can't share
     // process-global state safely, so the composition root owns it.
     // DECLARATION ORDER INVARIANT: every FactoryContext service the bundle
     // borrows (m_layoutManager → IZoneLayoutRegistry, m_algorithmRegistry
-    // → ITileAlgorithmRegistry) MUST precede m_layoutSources, so
+    // → ITileAlgorithmRegistry, m_scrollingTemplateStore →
+    // ScrollingTemplateSource) MUST precede m_layoutSources, so
     // reverse-order destruction tears the bundle and its ZonesLayoutSource
     // / AutotileLayoutSource children down before the registries they
     // borrow. See the LayoutSourceBundle contract
@@ -1269,12 +1293,41 @@ private:
     /// Set between a scheduleScrollTabEnrichmentRefresh() and its queued run.
     bool m_scrollTabEnrichmentPending = false;
 
-    // Last-applied active assignment id per effective screen (resolved for that
+    /// One screen's last-applied assignment state: the resolved assignment id
+    /// plus, for Scrolling contexts, the resolved template layout id (empty
+    /// elsewhere — the template resolver is mode-gated). The template rides
+    /// the snapshot so the KCM apply path can tell a template-only change
+    /// (same sentinel id, different template) from a genuine mode/layout
+    /// switch and skip the mode-switch OSD for it; the diff's CHANGED set
+    /// stays keyed on assignmentId alone (only an id change moves windows).
+    struct ActiveAssignmentSnapshot
+    {
+        QString assignmentId;
+        QString templateId;
+        bool operator==(const ActiveAssignmentSnapshot&) const = default;
+    };
+    // Last-applied active assignment per effective screen (resolved for that
     // screen's current desktop/activity). Diffed on rulesChanged to find the
     // screens a rule edit actually moved; refreshed on context switches and
     // after any apply so a later edit doesn't falsely re-resnap. See
     // reconcileActiveAssignments / diffActiveAssignments.
-    QHash<QString, QString> m_activeAssignmentByScreen;
+    QHash<QString, ActiveAssignmentSnapshot> m_activeAssignmentByScreen;
+
+    /// Per effective screen, the scrolling template id the LAST OSD card shown
+    /// for that screen announced (empty value = announced with no template).
+    /// A screen is absent when the last card it showed was not a scrolling one,
+    /// or when it has shown none yet.
+    ///
+    /// Separate from m_activeAssignmentByScreen on purpose: that snapshot is
+    /// refreshed by diffActiveAssignments, which the rule-driven setter runs
+    /// synchronously BEFORE handleAssignmentChangesApplied, so a gate reading it
+    /// can never see a pre-apply value. This map advances inside
+    /// showScrollingModeOsd / showScrollingTemplateOsd — the funnels every
+    /// scrolling-card producer routes through — plus the announce loop's
+    /// silent-clear record (no card shows for a template clear). The apply
+    /// loop's up-front remove() covers non-scrolling cards, and the
+    /// screenRemoved tail drops unplugged screens.
+    QHash<QString, QString> m_lastAnnouncedTemplateByScreen;
 
     // Compression latch for the deferred rulesChanged → reconcile pass. The
     // store emits rulesChanged synchronously from inside every mutation, and

@@ -10,12 +10,14 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Four siblings carry the rest of the suite, split off at this file's size
+// Five siblings carry the rest of the suite, split off at this file's size
 // ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
 // zone-number walk and the verbs that address it, test_scrollengine_perscreen
-// owns the per-screen override resolution, and test_scrollengine_draginsert
-// owns the drag-insert state machine.
+// owns the per-screen override resolution, test_scrollengine_draginsert owns
+// the drag-insert state machine, and test_scrollengine_boundary.cpp owns the
+// screen-boundary contract (the straddler clamp, the park peek floor, and
+// crop mode).
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -66,8 +68,8 @@ private Q_SLOTS:
     void partiallyConsumedSeedGuardsReopens();
     void orderedOpenForwardArrivalsKeepSeedOrder();
     void floatedOpenConsumesSeed();
-    void migrateOutAnnouncesDroppedFloat();
     void tileFlaggedFloatingBySiblingEngineSyncsClear();
+    void migrateOutAnnouncesDroppedFloat();
     void contextSwitchFlagRidesChangedScreenSets();
 
 private:
@@ -100,13 +102,12 @@ void TestScrollEngineSmoke::screensSetLifecycle()
     auto* engine = new ScrollEngine(nullptr, nullptr, &owner);
     QVERIFY(!engine->isEnabled());
     // Capability contract the daemon's layout-selection gates rest on: the
-    // strip has no layout concept, so the engine must keep the interface's
-    // default-false providesLayouts (snap and autotile override true).
-    // One call, not two: providesLayouts is virtual, so the cast added
-    // nothing — both lines were the identical dispatch through the identical
-    // vtable slot, and the second read as though it proved the interface view
-    // agrees with the concrete one.
-    QVERIFY(!engine->providesLayouts());
+    // strip consumes layouts as sizing TEMPLATES, never as placement (snap
+    // and autotile answer Placement). One call, not two: layoutSupport is
+    // virtual, so an added base-pointer cast would dispatch through the
+    // identical vtable slot and prove nothing.
+    using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
+    QCOMPARE(engine->layoutSupport(), LayoutSupport::Templates);
     QSignalSpy screensSpy(engine, &ScrollEngine::scrollingScreensChanged);
 
     QSignalSpy enabledSpy(engine, &ScrollEngine::enabledChanged);

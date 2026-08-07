@@ -23,9 +23,10 @@ class Settings;
 ///   2. **Virtual-screen configurations** — staged virtual screen layouts
 ///      per physical screen, flushed to Settings (for persistence) BEFORE
 ///      `Settings::save()` and to the daemon (via D-Bus) AFTER.
-///   3. **Quick-layout slots** — both snapping and tiling slot writes go
-///      to the daemon's mode-keyed LayoutRegistry via D-Bus (after
-///      `notifyReload`), flushed together by `flushQuickSlotsToDaemon()`.
+///   3. **Quick-layout slots** — the snapping, tiling and scrolling slot
+///      writes all go to the daemon's mode-keyed LayoutRegistry via D-Bus
+///      (after `notifyReload`), flushed together by
+///      `flushQuickSlotsToDaemon()`.
 ///
 /// Orchestrated by SettingsController's save lifecycle — callers are
 /// expected to invoke the flush methods in the right order (persistence
@@ -158,11 +159,13 @@ public:
 
     void stageSnappingQuickSlot(int slotNumber, const QString& layoutId);
     void stageTilingQuickSlot(int slotNumber, const QString& layoutId);
+    void stageScrollingQuickSlot(int slotNumber, const QString& templateId);
 
     /// Returns true if slot has a staged value. Fills @p out with the
     /// staged layout ID (possibly empty).
     bool stagedSnappingQuickSlot(int slotNumber, QString& out) const;
     bool stagedTilingQuickSlot(int slotNumber, QString& out) const;
+    bool stagedScrollingQuickSlot(int slotNumber, QString& out) const;
 
     /// True if any quick-slot edit is staged for the mode. Backs the per-page
     /// dirty check for the Quick Shortcuts pages.
@@ -174,20 +177,26 @@ public:
     {
         return !m_tilingQuickSlots.isEmpty();
     }
+    bool hasStagedScrollingQuickSlots() const
+    {
+        return !m_scrollingQuickSlots.isEmpty();
+    }
 
     /// Drop all staged quick-slot edits for the mode (per-page Discard reverts
     /// to the daemon's saved slots; the getters fall back to the daemon when a
     /// slot is not staged).
     void clearSnappingQuickSlots();
     void clearTilingQuickSlots();
+    void clearScrollingQuickSlots();
 
-    /// Push staged quick-layout slots (both snapping and tiling modes) to the
-    /// daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER `notifyReload`
-    /// so the daemon has the fresh config.
+    /// Push staged quick-layout slots (snapping, tiling and scrolling modes)
+    /// to the daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER
+    /// `notifyReload` so the daemon has the fresh config.
     ///
     /// Same failure contract as `flushAssignmentsToDaemon`: false when any
     /// per-slot call errored, and the staging map for the failing mode is
-    /// retained. Both modes are attempted regardless of the other's outcome.
+    /// retained. All three modes are attempted regardless of the others'
+    /// outcome.
     [[nodiscard]] bool flushQuickSlotsToDaemon();
 
 private:
@@ -200,6 +209,7 @@ private:
     QHash<QString, QVariantList> m_virtualScreenConfigs;
     QHash<int, QString> m_snappingQuickSlots;
     QHash<int, QString> m_tilingQuickSlots;
+    QHash<int, QString> m_scrollingQuickSlots;
 };
 
 } // namespace PlasmaZones

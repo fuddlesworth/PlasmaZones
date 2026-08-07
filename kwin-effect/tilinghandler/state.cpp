@@ -16,9 +16,14 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusVariant>
+#include <QHash>
+#include <QList>
 #include <QLoggingCategory>
+#include <QMetaType>
 #include <QPointer>
 #include <QScopeGuard>
+#include <QVariant>
 
 namespace PlasmaZones {
 
@@ -394,9 +399,6 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
         return;
     }
     const QSet<QString> oldSet = m_scrollingScreens;
-    m_scrollingScreens = newSet;
-    m_effect->invalidateAllRuleCaches();
-    m_effect->scheduleBorderSweep();
 
     // Engine-flip re-announce. A screen that changes tiling ENGINE while
     // staying in the union (autotile↔scrolling) never transits
@@ -415,7 +417,46 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // slotScreensChanged only processes union membership changes).
     QSet<QString> flipped = (newSet - oldSet) + (oldSet - newSet);
     flipped &= m_managedScreens;
-    if (announceFlipped && !flipped.isEmpty()) {
+    const bool announcing = announceFlipped && !flipped.isEmpty();
+
+    // The re-announce's per-window screen ids are resolved HERE, under the
+    // OLD scrolling set, and threaded into the batch. getWindowScreenId's
+    // engine-authoritative override is gated on m_scrollingScreens membership
+    // (via scrollTrackedScreenFor), so the moment the assignment below drops a
+    // screen from the set, a parked strip column — which the strip places
+    // ENTIRELY outside its own output — resolves POSITIONALLY onto the
+    // neighbouring output. The batch would then filter it out against
+    // `flipped` and never announce it, stranding the window at its parked rect
+    // with neither engine owning it. The entering direction needs no such care
+    // (those windows are on-canvas, so positional and override agree), but
+    // resolving both under the old set keeps one rule for the whole batch.
+    QList<KWin::EffectWindow*> announceWindows;
+    QHash<KWin::EffectWindow*, QString> announceScreens;
+    if (announcing) {
+        announceWindows = KWin::effects->stackingOrder();
+        announceScreens.reserve(announceWindows.size());
+        for (KWin::EffectWindow* w : std::as_const(announceWindows)) {
+            // Close-grabbed dying windows linger in the stacking order and
+            // resolving one re-pollutes the scrubbed id caches — the same bail
+            // the batch itself takes before any id lookup.
+            if (w && !w->isDeleted()) {
+                announceScreens.insert(w, m_effect->getWindowScreenId(w));
+            }
+        }
+    }
+
+    m_scrollingScreens = newSet;
+    m_effect->invalidateAllRuleCaches();
+    m_effect->scheduleBorderSweep();
+    // Mode is a ruleQuery input too, so the same static-window problem the
+    // active-layout write documents applies here: a `Mode Equals "scrolling"`
+    // SetOpacity rule flips verdict on an engine swap, and an undamaged
+    // window would keep its last-painted alpha until incidental damage.
+    if (m_effect->m_shaderManager.hasOpacityRules()) {
+        KWin::effects->addRepaintFull();
+    }
+
+    if (announcing) {
         qCInfo(lcEffect) << "Scrolling flip within managed union — re-announcing windows on" << flipped;
         // A flipped screen's pending staggered applies were computed by the
         // OLD engine; void them per-screen before the re-announce drives the
@@ -433,10 +474,124 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
         // re-assert, so on unminimize it sat at the PRIOR engine's rect for the
         // animation grace and then visibly hopped into its new tile — the same
         // class as the minimized-window-on-mode-swap regression.
-        notifyWindowsAddedBatch(KWin::effects->stackingOrder(), flipped, /*resetNotified=*/true,
-                                /*enteringAutotile=*/true);
+        notifyWindowsAddedBatch(announceWindows, flipped, /*resetNotified=*/true,
+                                /*enteringAutotile=*/true, announceScreens);
     }
     updateScrollWheelShortcuts();
+}
+
+void TilingHandler::slotActiveLayoutsChanged(const QVariantMap& activeLayouts)
+{
+    // Boundary validation: this map crosses D-Bus from another process and
+    // lands directly in a rule-match input. An empty key would be a screen id
+    // no window can ever resolve to (dead weight that still defeats the
+    // change gate), and a non-string value would silently stringify to
+    // something no authored rule can match.
+    QHash<QString, QString> next;
+    next.reserve(activeLayouts.size());
+    for (auto it = activeLayouts.cbegin(); it != activeLayouts.cend(); ++it) {
+        if (it.key().isEmpty()) {
+            qCWarning(lcEffect) << "activeLayouts: dropping entry with empty screen id";
+            continue;
+        }
+        // a{sv} values can arrive either already demarshalled to their inner
+        // type (the property Get path, which qdbus_cast unwraps) or still
+        // wrapped in a QDBusVariant (a signal delivered without a registered
+        // argument type). Unwrap one level before the type test so the guard
+        // filters genuinely wrong types instead of silently discarding every
+        // entry the moment the transport shape changes.
+        QVariant value = it.value();
+        if (value.typeId() == QMetaType::fromType<QDBusVariant>().id()) {
+            value = qvariant_cast<QDBusVariant>(value).variant();
+        }
+        if (value.typeId() != QMetaType::QString) {
+            qCWarning(lcEffect) << "activeLayouts: dropping non-string layout id for screen" << it.key() << "type"
+                                << value.typeName();
+            continue;
+        }
+        next.insert(it.key(), value.toString());
+    }
+    setActiveLayouts(next);
+}
+
+void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayouts)
+{
+    // Any authoritative write voids in-flight property replies, identical
+    // map or not — the writer is always newer than a reply dispatched
+    // earlier (see the m_activeLayoutsGeneration doc).
+    ++m_activeLayoutsGeneration;
+    // Seed BEFORE the change gate: an identical map is still a real map, and
+    // the daemon's very first push is legitimately empty on a session with no
+    // engine-managed screen. Gating the flag would leave the effect
+    // permanently unseeded there, holding every ActiveLayout rule out of the
+    // evaluator for the whole session.
+    if (!m_activeLayoutsSeeded) {
+        m_activeLayoutsSeeded = true;
+        // Seeding edge: ActiveLayout-referencing rules were held out of every
+        // effect-bound rule set while the map was unknown (see
+        // activeLayoutsSeeded). Re-fetch the store so the admission filter
+        // re-runs with the field admitted. Above the change gate because an
+        // all-empty first map is still the edge; async, so it lands after
+        // everything below regardless of where it sits here.
+        //
+        // Gated on the effect's withheld marker: the re-drive costs a
+        // getAllRules round-trip, a full RuleSet parse and an
+        // updateAllDecorations sweep, and it can only change an outcome when
+        // the last admission pass actually dropped a rule for referencing
+        // ActiveLayout. A pass that ran with the map already seeded leaves the
+        // marker false, which is also the right answer: it admitted the field
+        // itself. The other writer is clearActiveLayoutsForTeardown, which
+        // sets the marker when its re-slice actually removed a rule — so an
+        // unseed that withheld nothing does not arm this edge either. The
+        // marker is consumed here so a later unseed→seed cycle re-drives only
+        // on its own evidence.
+        if (m_effect->m_activeLayoutRulesWithheld) {
+            m_effect->m_activeLayoutRulesWithheld = false;
+            m_effect->loadRuleAnimationsFromDbus();
+        }
+    }
+    if (activeLayouts == m_activeLayouts) {
+        return;
+    }
+    m_activeLayouts = activeLayouts;
+    // Rule verdicts are memoised per window and ActiveLayout is a ruleQuery
+    // input: a layout/template change on any screen can flip a border,
+    // opacity, decoration, or animation-exclusion verdict, so the whole
+    // cache goes (there is no per-screen invalidation surface) and the
+    // sweep repaints borders that changed.
+    m_effect->invalidateAllRuleCaches();
+    m_effect->scheduleBorderSweep();
+    // The sweep re-folds decorations, but a SetOpacity rule scoped on
+    // ActiveLayout alters paint output for windows that are otherwise static
+    // and undamaged — those never reach a paint pass to pick the new alpha
+    // up. Same bookend loadRuleAnimationsFromDbus takes on a rule edit,
+    // gated on rule PRESENCE so a session with no opacity rule pays nothing.
+    if (m_effect->m_shaderManager.hasOpacityRules()) {
+        KWin::effects->addRepaintFull();
+    }
+}
+
+void TilingHandler::clearActiveLayoutsForTeardown()
+{
+    ++m_activeLayoutsGeneration;
+    m_activeLayouts.clear();
+    m_activeLayoutsSeeded = false;
+    // Take the rules that resolve against the map back out of the effect's
+    // rule sets — see the header doc for why leaving them bound over the
+    // daemon-down interval over-matches. This also arms the seed edge above
+    // (it sets m_activeLayoutRulesWithheld when it removed anything), so the
+    // rules are re-admitted from the live store on the next real map.
+    //
+    // No border sweep and no cache invalidation here, by the call-site
+    // contract: both callers run invalidateAllRuleCaches (which drops the
+    // verdicts these removals change, and carries the window-layer sweep)
+    // immediately after, and each then rebuilds what those verdicts had baked
+    // into decorations its own way — onDaemonReady with scheduleBorderSweep,
+    // the serviceUnregistered teardown with clearAllDecorations, which tears
+    // the decorations down outright and so needs no sweep. The re-slice does take
+    // the SetOpacity repaint bookend, which neither caller covers on the
+    // handover path — see its own doc.
+    m_effect->sliceActiveLayoutRulesForUnseededMap();
 }
 
 void TilingHandler::updateScrollWheelShortcuts()

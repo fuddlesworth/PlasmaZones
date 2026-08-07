@@ -179,10 +179,11 @@ void Daemon::connectScreenSignals()
                 // physical output ids), matching removedScreenId. The overlay service
                 // delegates to the layout registry, so clearing it there suffices.
                 if (m_virtualDesktopManager) {
+                    // The VDM is the ONE per-output desktop authority: the
+                    // layout registry (and the overlay service through it)
+                    // resolves per-screen desktops via the injected provider
+                    // that reads this manager, so this removal covers them.
                     m_virtualDesktopManager->removeScreenDesktop(removedScreenId);
-                }
-                if (m_layoutManager) {
-                    m_layoutManager->clearCurrentVirtualDesktopForScreen(removedScreenId);
                 }
 
                 // A live drag-insert preview on the departing output (any
@@ -256,8 +257,11 @@ void Daemon::connectScreenSignals()
                 }
                 // Drop the removed screen from the assignment snapshot so it
                 // doesn't linger as a stale entry (kept consistent with the
-                // add / context-switch / apply refresh points).
+                // add / context-switch / apply refresh points), and from the
+                // announce ledger — a replugged monitor must not carry a
+                // stale "already saw template X" verdict across the unplug.
                 diffActiveAssignments();
+                m_lastAnnouncedTemplateByScreen.remove(removedScreenId);
                 // Same union-park staleness rule as the screenAdded tail: a
                 // removed bottom monitor lowers the output union, so every
                 // scroll park must re-derive against the new topology.
@@ -357,10 +361,12 @@ void Daemon::connectDesktopActivity()
                 if (m_scrollEngine) {
                     m_scrollEngine->setCurrentDesktopForScreen(screenId, desktop);
                 }
-                // [SEQ D] Per-screen layout/overlay resolution context. The
-                // overlay service delegates to the layout registry for per-output
-                // desktop resolution, so this one push drives both (#648).
-                m_layoutManager->setCurrentVirtualDesktopForScreen(screenId, desktop);
+                // [SEQ D] Per-screen layout/overlay resolution context needs no
+                // push anymore: the layout registry (and the overlay service
+                // through it) resolves per-output desktops via the injected
+                // provider reading the VirtualDesktopManager, which this
+                // handler's own signal already updated — one authority, no
+                // mirror to lag (#648).
                 // [SEQ E] Per-desktop assignments may differ — recompute autotile
                 // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateEngineScreens();
@@ -636,7 +642,12 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     // Layout cycling is meaningless on a screen whose engine has no layout
     // concept (scrolling) — answer with feedback instead of applying a snap
     // layout there (the old one-way-door-out-of-scrolling policy).
-    if (!engineProvidesLayouts(screenId)) {
+    // Push the LIVE capability first so applyEntry's template branch routes
+    // on the engine that actually owns the screen (see the quick-slot
+    // handler in shortcuts_wiring.cpp).
+    const LayoutSupport support = layoutSupportForScreen(screenId);
+    m_unifiedLayoutController->setCurrentLayoutSupport(support);
+    if (support == LayoutSupport::None) {
         showLayoutsUnavailableOsd(screenId);
         return;
     }
@@ -645,6 +656,26 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
         return;
     }
     updateLayoutFilterForScreen(screenId);
+    // Same empty-vocabulary answer the picker gives (shortcuts_wiring.cpp):
+    // an empty candidate list means cycling would silently do nothing, on
+    // ANY screen. On a Templates screen that means the template store is
+    // empty, which the user can act on and which the generic "engine
+    // provides no layouts" card would misdescribe; everywhere else the
+    // allow-lists plus the aspect filter wiped the list and the generic card
+    // is the right answer. Same if/else split as the picker so the two
+    // shortcuts never disagree about what an empty list means.
+    if (m_overlayService && m_overlayService->visibleLayoutCount(screenId) == 0) {
+        if (support == LayoutSupport::Templates) {
+            qCDebug(lcDaemon) << "Layout cycle: no templates in the store for screen" << screenId;
+            if (m_settings && m_settings->showNavigationOsd()) {
+                m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
+                                                    QString(), QString(), screenId);
+            }
+        } else {
+            showLayoutsUnavailableOsd(screenId);
+        }
+        return;
+    }
     if (forward) {
         m_unifiedLayoutController->cycleNext();
     } else {
@@ -905,13 +936,15 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     // The scroll engine subscribes to no ScreenManager signal of its own
     // (unlike autotile's virtualScreenRegionsChanged handler), so its
     // affected strips must be retiled here or their columns keep stale
-    // widths/offsets until an unrelated retile.
-    if (m_scrollEngine) {
-        for (const QString& sid : affectedScreenIds) {
-            if (m_scrollEngine->isActiveOnScreen(sid)) {
-                m_scrollEngine->scheduleRetileForScreen(sid);
-            }
-        }
+    // widths/offsets until an unrelated retile. The retile relays out of
+    // the STORED override map, and the per-context rule params and gaps that
+    // feed it re-resolve on the push, not on the retile. Native templates
+    // hold fractions, so the template half of the push does not depend on
+    // geometry. updateScrollingScreens' per-pass push plus its identical-set
+    // retile covers both needs in one call, keeping this handler's
+    // single-retile property.
+    if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {
+        updateScrollingScreens(m_scrollEngine->activeScreens());
     }
 }
 

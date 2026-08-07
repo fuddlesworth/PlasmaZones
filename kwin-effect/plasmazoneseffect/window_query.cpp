@@ -105,8 +105,15 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     // Engine mode (context field) — derived from the snapped / tiled state above
     // so a per-mode rule (`Mode Equals "tiling"`) resolves this window's border /
     // title / colour the same way the daemon resolves its per-mode gaps. A
-    // floating (unmanaged) window has no mode, so query.mode is left empty and
-    // no Mode leaf matches it. Scrolling is indistinguishable from tiling at
+    // floating (unmanaged) window has no mode, so query.mode is left empty —
+    // which is NOT inert in both polarities: `mode` is a plain QString, so
+    // valueForField hands the evaluator an ENGAGED empty value. A positive leaf
+    // (`Mode Equals "tiling"`) correctly never matches, but a negated one
+    // (`None{Mode Equals "tiling"}`) matches every floating window precisely
+    // because the inner leaf failed. That is the intended reading of "not
+    // tiled" here, so the field is stamped rather than withheld — unlike
+    // ActiveLayout, whose empty stamp carries no such meaning. Scrolling is
+    // indistinguishable from tiling at
     // this level (strip windows ride the tile pipeline); the effect's
     // ruleQuery() funnel re-stamps "scrolling" from the per-screen engine
     // discriminator, which this free helper cannot reach.
@@ -277,9 +284,20 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     query.positionY = static_cast<int>(frame.y());
     // virtualDesktop: first non-null desktop's 1-based x11 number (0 = all/
     // unknown). activity: first activity UUID (empty = all/unknown). Both
-    // mirror the daemon-side setWindowMetadata derivation in
-    // window_identity.cpp so a window-domain rule pinning VirtualDesktop /
-    // Activity resolves the same way the context cascade does.
+    // mirror the METADATA derivation this effect pushes to the daemon
+    // (window_identity.cpp), so the two ends describe a window identically.
+    //
+    // They do NOT mirror the daemon's own CONTEXT cascade, and a rule author
+    // should not expect them to: buildRuleQueryForWindow
+    // (src/dbus/windowtrackingadaptor/rules.cpp) resolves the governing
+    // desktop / activity through WindowContext::effectiveDesktop /
+    // effectiveActivity, which prefer the SCREEN's current desktop when a
+    // window spans several and handle sticky windows. This builder sees only
+    // the window, so for a spanning or sticky window it reports the first
+    // entry where the daemon reports the one actually on screen. Both values
+    // are always engaged (the fields are a plain int and QString, not
+    // optionals), so a negated VirtualDesktop / Activity leaf matches the
+    // unknown 0 / "" case here too.
     if (kw) {
         const QList<KWin::VirtualDesktop*> desktops = kw->desktops();
         for (const KWin::VirtualDesktop* vd : desktops) {
@@ -293,13 +311,16 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     if (!activities.isEmpty()) {
         query.activity = activities.first();
     }
+    // activeLayout is left at the empty string HERE and re-stamped by the
+    // caller: ruleQuery (window_filtering.cpp) resolves it from the daemon's
+    // per-screen map, which this window-only builder has no handle on. It is
+    // not an inert default — the field is a plain QString, so an empty value
+    // still resolves ENGAGED and a negated leaf would match every window —
+    // which is why the map's bring-up window is covered by holding
+    // ActiveLayout rules out of the evaluator entirely (see
+    // TilingHandler::activeLayoutsSeeded).
+    //
     // DELIBERATELY NOT STAMPED effect-side:
-    //  - activeLayout: a context-resolution field, stamped only by the
-    //    daemon's LayoutRegistry context resolvers. Effect-side it stays the
-    //    empty string, so an `ActiveLayout Equals X` leaf never matches here
-    //    (fine) and a NEGATED ActiveLayout leaf matches every window (the
-    //    dangerous direction — it silently widens an exclusion or appearance
-    //    rule). Author ActiveLayout predicates on context rules only.
     //  - tiledWindowCount: optional and left disengaged, so a positive count
     //    leaf is inert here by design; the context resolvers exclude negated
     //    references structurally for the same absence-polarity reason.

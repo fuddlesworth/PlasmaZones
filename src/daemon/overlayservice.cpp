@@ -666,15 +666,24 @@ bool OverlayService::isSnappingContextInactive(const QString& screenId) const
     }
     // The context is in an ENGINE mode (autotile or scrolling) — the
     // snapping overlay/selector never applies there. Active engine screens
-    // are already kept out via setExcludedScreens, but a bare/suppressed
-    // autotile context, or a scrolling context whose engine is
-    // context-disabled, is deliberately NOT in that active set — without
-    // this check the snap overlay would surface on it and make a screen the
-    // user just switched away from snapping look like it's still snapping.
-    // Derive the mode from the resolved assignment id ("autotile:" bare or
-    // concrete, or the "scrolling:" sentinel).
+    // are already kept out via setExcludedScreens; this leg covers the
+    // bare/suppressed autotile context. The SCROLLING half additionally
+    // consults the LIVE resolver: the router downgrades a scrolling
+    // assignment to snapping when the scroll engine does not own the screen
+    // (master switch off, Scrolling axis context-disabled), and on such a
+    // screen the drag pipeline runs the full snap path and windows really do
+    // snap into zones — suppressing the overlay there recreated the
+    // drag-vs-overlay disagreement class of #724. With no resolver wired
+    // (the shutdown window), the raw read stands, which errs on the
+    // suppressed side.
     const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, virtualDesktop, m_currentActivity);
-    return PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId);
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+        return true;
+    }
+    if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        return !m_layoutSupportResolver || m_layoutSupportResolver(screenId) == LayoutSupportTemplates;
+    }
+    return false;
 }
 
 PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
@@ -697,21 +706,36 @@ QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
 {
     // Autotile contexts have no backing Layout object — their active id is the
     // resolved "autotile:<algorithm>" assignment id, which matches the autotile
-    // cards in the picker / selector. Manual contexts keep the existing
-    // Layout-based resolution (its fallback chain to default/global is what makes
-    // snapping highlight correctly).
+    // cards in the picker / selector. Live-Templates scrolling contexts answer
+    // with the resolved TEMPLATE layout's UUID (the arm below). Manual contexts
+    // keep the existing Layout-based resolution (its fallback chain to
+    // default/global is what makes snapping highlight correctly).
     if (m_layoutManager && !screenId.isEmpty()) {
-        const QString assignmentId = m_layoutManager->assignmentIdForScreen(
-            screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
+        const int virtualDesktop = currentVirtualDesktopForScreen(screenId);
+        const QString assignmentId =
+            m_layoutManager->assignmentIdForScreen(screenId, virtualDesktop, m_currentActivity);
         if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
             return assignmentId;
         }
         if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-            // Scrolling has no layout entity: no picker card is "active", so
-            // return the sentinel (matches nothing) rather than falling into
-            // the manual resolution, which would highlight a snap layout the
-            // screen is not using.
-            return assignmentId;
+            // A scrolling screen's active picker card is its assigned
+            // TEMPLATE layout — but only when the scroll engine actually
+            // OWNS the screen (live resolver answers Templates). The router
+            // downgrades a disabled scrolling assignment to live snapping;
+            // highlighting the template there would mark a card the screen
+            // is not using while the manual resolution below highlights the
+            // snap layout that IS live. With no template (or an unset
+            // resolver answering for a live scrolling screen), return the
+            // sentinel, which matches nothing.
+            const bool liveTemplates =
+                !m_layoutSupportResolver || m_layoutSupportResolver(screenId) == LayoutSupportTemplates;
+            if (liveTemplates) {
+                // Shared authority with UnifiedLayoutController::
+                // displayIdForAssignment: template UUID or the sentinel.
+                return m_layoutManager->scrollingDisplayIdForContext(screenId, virtualDesktop, m_currentActivity);
+            }
+            // Downgraded: fall through to the manual resolution below, which
+            // highlights the live snapping layout.
         }
     }
     PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
@@ -728,8 +752,8 @@ void OverlayService::hideDisabledAndRefresh()
     // both clear the per-screen sentinel on completion.
     // The zone selector / layout picker is gated ONLY by the disabled list (it
     // is how a layout gets assigned, so suppress must not hide it); the snap
-    // overlay is additionally gated by suppress / autotile mode via
-    // isSnappingContextInactive.
+    // overlay is additionally gated by suppress and by the engine modes
+    // (autotile, and live-Templates scrolling) via isSnappingContextInactive.
     // No m_settings gate here: neither context predicate reads settings (both
     // fail closed on their own null members), and skipping the destroy loop on
     // a null settings pointer would leave stale selector/overlay slots up.
@@ -794,10 +818,12 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     // Both buildLayoutsList (populates the popup) and visibleLayoutCount
     // (used by isNearTriggerEdge to size the keep-visible bar) go through
     // here so the trigger geometry matches the rendered popup row count.
-    // The brace-init seeds BOTH fields from the settings-backed member
-    // toggles (so the struct's in-class defaults never apply here); the
-    // resolution below only narrows them per screen.
-    LayoutIncludeFlags flags{m_includeManualLayouts, m_includeAutotileLayouts};
+    // The brace-init seeds the manual and autotile fields from the
+    // settings-backed member toggles (so the struct's in-class defaults never
+    // apply to those two) and leaves templates off, since no member toggle
+    // governs it. Every per-screen arm below assigns all three fields
+    // outright, so the seed is the answer only for a screen no arm claims.
+    LayoutIncludeFlags flags{m_includeManualLayouts, m_includeAutotileLayouts, /*templates=*/false};
     const QString resolvedId = PhosphorScreens::ScreenIdentity::isConnectorName(screenId)
         ? PhosphorScreens::ScreenIdentity::idForName(screenId)
         : screenId;
@@ -808,19 +834,21 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
         *resolvedIdOut = resolvedId.isEmpty() ? screenId : resolvedId;
     }
     // Engine capability gate FIRST — ahead of the layout-manager guard,
-    // which the resolver does not need: a screen whose engine does not
-    // consume layouts (IPlacementEngine::providesLayouts — scrolling) gets
-    // no layout list at all, so the picker's show bails on the empty list.
-    // (The drag-time popup is already suppressed on engine-owned screens by
+    // which the resolver does not need: only an engine reporting
+    // LayoutSupport::None gets no layout list at all (the picker's show
+    // bails on the empty list); a Templates screen gets the native template
+    // cards via the isScrolling arm below. (The drag-time
+    // popup is already suppressed on engine-owned screens by
     // WindowDragAdaptor's dragMoved gate; here that is defence in depth.)
     // The daemon-injected resolver routes through
     // ScreenModeRouter::engineFor, so a disabled/gated scrolling assignment
-    // correctly downgrades to snapping and keeps its manual list — the raw
+    // correctly downgrades to snapping and keeps its manual list. The raw
     // assignmentId check below cannot see that downgrade, which is why the
-    // resolver answers before it.
-    if (!resolvedId.isEmpty() && m_layoutsProvidedResolver && !m_layoutsProvidedResolver(resolvedId)) {
+    // scrolling arm consults the resolver too rather than trusting the id.
+    if (!resolvedId.isEmpty() && m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportNone) {
         flags.manual = false;
         flags.autotile = false;
+        flags.templates = false;
         return flags;
     }
     if (!m_layoutManager || resolvedId.isEmpty()) {
@@ -831,17 +859,30 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         flags.manual = false;
         flags.autotile = true;
-    } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-        // Unwired-resolver fallback only (the daemon injects the resolver at
-        // engine init, which answers first for live scrolling screens). Keep
-        // the manual list rather than guessing an empty one: without the
-        // capability answer this arm cannot distinguish a live scrolling
-        // screen from a stale assignment.
-        flags.manual = true;
+        flags.templates = false;
+    } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)
+               && (!m_layoutSupportResolver || m_layoutSupportResolver(resolvedId) == LayoutSupportTemplates)) {
+        // The live Templates arm: since the native-template pivot a
+        // scrolling screen's picker offers TEMPLATE cards only (manual
+        // layouts are not templates, algorithms never were). Gated on the
+        // LIVE resolver, not the raw assignment id: a downgraded scrolling
+        // screen (master switch off, Scrolling axis context-disabled)
+        // answers Placement and falls through to the manual arm below,
+        // which is the list its live snapping path actually uses. Same
+        // shape as isSnappingContextInactive / activeLayoutIdForScreen.
+        //
+        // An unwired resolver trusts the scrolling assignment id and still
+        // yields template cards: the pre-injection default must not blank a
+        // scrolling picker. buildLayoutsList and visibleLayoutCount take their
+        // aspect-filter skip from this flag rather than re-reading the
+        // resolver, so both polarities are decided here, once.
+        flags.manual = false;
         flags.autotile = false;
+        flags.templates = true;
     } else {
         flags.manual = true;
         flags.autotile = false;
+        flags.templates = false;
     }
     return flags;
 }
@@ -853,12 +894,25 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
     // for the identity id and rows for the raw name.
     QString resolvedId;
     const auto inc = resolvePerScreenLayoutInclude(screenId, &resolvedId);
+    // Aspect filtering is a placement heuristic (does this zone layout fit
+    // this screen shape); on a Templates screen the same layouts are a
+    // SIZING vocabulary, where a portrait-classed column layout is a
+    // perfectly good template for an ultrawide, and filtering can empty the
+    // candidate list so the picker bails silently. Skip the filter there.
+    // Mirrored in visibleLayoutCount below — the two must agree row-for-row.
+    //
+    // Read off the include flags, not the live resolver: the include arm
+    // decides "this screen shows templates" from the assignment id AND the
+    // resolver together, and a second, resolver-only read of the same question
+    // answers differently wherever the two disagree (an unwired resolver, most
+    // of all).
+    const bool templatesScreen = inc.templates;
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity,
         inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
-        m_settings && m_settings->filterLayoutsByAspectRatio(),
+        !templatesScreen && m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource,
-        autotilePreviewCanvas);
+        autotilePreviewCanvas, inc.templates, m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr);
     return PlasmaZones::toVariantList(entries);
 }
 
@@ -890,12 +944,15 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
     QString resolvedId;
     const auto inc = resolvePerScreenLayoutInclude(screenId, &resolvedId);
     // Ordering doesn't affect count - skip custom order for performance.
-    // Same gate/rows id agreement as buildLayoutsList.
+    // Same gate/rows id agreement as buildLayoutsList, including the
+    // Templates-screen aspect-filter skip read off the include flags.
+    const bool templatesScreen = inc.templates;
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity,
         inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
-        m_settings && m_settings->filterLayoutsByAspectRatio(),
-        /*customOrder=*/{}, m_autotileLayoutSource);
+        !templatesScreen && m_settings && m_settings->filterLayoutsByAspectRatio(),
+        /*customOrder=*/{}, m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, inc.templates,
+        m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr);
     return entries.size();
 }
 

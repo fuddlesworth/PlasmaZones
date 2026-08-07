@@ -107,7 +107,8 @@ inline constexpr QLatin1String ScriptedAlgorithmSubdir{"plasmazones/algorithms"}
  * @brief Maximum length for user-visible layout and zone names.
  *
  * Client-side cap in the QML text fields that author a name (editor
- * TopBar.qml and PropertyPanel.qml, settings NewLayoutDialog.qml, all via
+ * TopBar.qml and PropertyPanel.qml, settings NewLayoutDialog.qml and
+ * ScrollingTemplateEditorDialog.qml, all via
  * @c maximumLength). The UI cap is advisory only: callers can bypass it
  * entirely over D-Bus, and @c QQuickTextInput::maximumLength truncates by
  * UTF-16 code units so even the UI can produce a name that needs repair.
@@ -116,6 +117,18 @@ inline constexpr QLatin1String ScriptedAlgorithmSubdir{"plasmazones/algorithms"}
  * layout controller (@c settingscontroller_layouts.cpp).
  */
 inline constexpr int MaxLayoutNameLength = 40;
+
+/**
+ * @brief Maximum length for a scrolling template's free-text description.
+ *
+ * The sibling of @ref MaxLayoutNameLength for the one template field that has
+ * no name-length counterpart. The settings-side
+ * ScrollingTemplateEditorDialog.qml mirrors this cap client-side via
+ * @c maximumLength, and the layout adaptor's D-Bus boundary re-applies it via
+ * @ref clampName: a direct D-Bus caller can hand us an unbounded string that
+ * then lands in the store's JSON file and in every picker tooltip.
+ */
+inline constexpr int MaxTemplateDescriptionLength = 500;
 
 /**
  * @brief Clamp a user-visible name to @p maxLength UTF-16 code units without

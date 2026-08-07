@@ -16,7 +16,8 @@ SettingsCard {
     // controller invokables; `settings` is the shared Settings object the
     // combo bridge below reads the global auto-assign toggle from.
     required property var appSettings
-    // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
+    // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms),
+    // 2 = scrolling (native templates)
     property int viewMode: 0
 
     // Bridge for LayoutComboBox — exposes only what it accesses, in the shape
@@ -26,22 +27,25 @@ SettingsCard {
     // the badge never lit. Same pattern as MonitorStatePage's _layoutBridge.
     // The `layouts` binding auto-generates the layoutsChanged signal the
     // combo's Connections target listens for. defaultLayoutId /
-    // defaultAutotileAlgorithm are deliberately absent: every combo below
-    // pins resolvedDefaultId to "" (a slot has no default layout), so the
-    // combo never reads them.
+    // defaultAutotileAlgorithm / defaultScrollingTemplate are deliberately
+    // absent: every combo below pins resolvedDefaultId to "" (a slot has no
+    // default layout), so the combo never reads them.
     readonly property QtObject _comboBridge: QtObject {
         readonly property var layouts: root.appSettings.layouts
         readonly property bool autoAssignAllLayouts: root.appSettings.settings ? root.appSettings.settings.autoAssignAllLayouts : false
     }
 
-    // Bumped on EXTERNAL (daemon) quick-layout-slot changes. Both snapping and
-    // tiling slots are daemon-backed (mode-keyed registry) and the daemon emits
+    // Bumped on EXTERNAL (daemon) quick-layout-slot changes. All three slot
+    // families (snapping, tiling, scrolling templates) are daemon-backed
+    // through the same mode-keyed registry and the daemon emits
     // quickLayoutSlotsChanged for any slot change, so a single bump here
     // re-evaluates every slot delegate's currentLayoutId binding. One Connections
     // at root, not one per delegate, so an external change fires a single handler.
     property int slotRevision: 0
 
     function getSlot(slotNumber) {
+        if (viewMode === 2)
+            return appSettings.getScrollingQuickLayoutSlot(slotNumber);
         return viewMode === 1 ? appSettings.getTilingQuickLayoutSlot(slotNumber) : appSettings.getQuickLayoutSlot(slotNumber);
     }
 
@@ -53,7 +57,9 @@ SettingsCard {
         if (getSlot(slotNumber) === value)
             return;
 
-        if (viewMode === 1)
+        if (viewMode === 2)
+            appSettings.setScrollingQuickLayoutSlot(slotNumber, value);
+        else if (viewMode === 1)
             appSettings.setTilingQuickLayoutSlot(slotNumber, value);
         else
             appSettings.setQuickLayoutSlot(slotNumber, value);
@@ -83,7 +89,7 @@ SettingsCard {
         }
     }
 
-    headerText: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Snapping Quick Shortcuts")
+    headerText: root.viewMode === 2 ? i18n("Scrolling Quick Shortcuts") : (root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Snapping Quick Shortcuts"))
     searchAnchor: "quickShortcuts"
     collapsible: true
 
@@ -142,17 +148,18 @@ SettingsCard {
                         spacing: Kirigami.Units.smallSpacing / 2
 
                         Label {
-                            text: root.viewMode === 1 ? i18n("Quick Tiling %1", slotDelegate.slotNumber) : i18n("Quick Snapping %1", slotDelegate.slotNumber)
+                            text: root.viewMode === 2 ? i18n("Quick Scrolling %1", slotDelegate.slotNumber) : (root.viewMode === 1 ? i18n("Quick Tiling %1", slotDelegate.slotNumber) : i18n("Quick Snapping %1", slotDelegate.slotNumber))
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                         }
 
                         Label {
-                            // One key per slot for BOTH modes: pressing it
-                            // applies the snapping slot on a snapping monitor
-                            // and the tiling slot on a tiling one, so the
-                            // caption says which monitors this page's slot
-                            // answers for rather than implying a second key.
+                            // One key per slot across every mode: pressing it
+                            // applies the snapping slot on a snapping monitor,
+                            // the tiling slot on a tiling one, and the
+                            // scrolling slot on a scrolling one, so the caption
+                            // says which monitors this page's slot answers for
+                            // rather than implying a second key.
                             text: slotDelegate.shortcutText !== "" ? i18nc("%1 is a keyboard shortcut such as Meta+Alt+1", "Shortcut %1, used on monitors in this mode", slotDelegate.shortcutText) : i18n("No shortcut assigned")
                             Layout.fillWidth: true
                             elide: Text.ElideRight
@@ -182,13 +189,13 @@ SettingsCard {
                             appSettings: root._comboBridge
                             noneText: i18n("None")
                             showPreview: true
-                            layoutFilter: root.viewMode === 1 ? 1 : 0
+                            layoutFilter: root.viewMode === 2 ? 2 : (root.viewMode === 1 ? 1 : 0)
                             resolvedDefaultId: ""
                             // Nine combos would otherwise all announce the
                             // component's generic "Layout selection", leaving
                             // a screen-reader user no way to tell which slot
                             // they are on.
-                            Accessible.name: root.viewMode === 1 ? i18n("Tiling algorithm for quick shortcut %1", slotDelegate.slotNumber) : i18n("Zone layout for quick shortcut %1", slotDelegate.slotNumber)
+                            Accessible.name: root.viewMode === 2 ? i18n("Scrolling template for quick shortcut %1", slotDelegate.slotNumber) : (root.viewMode === 1 ? i18n("Tiling algorithm for quick shortcut %1", slotDelegate.slotNumber) : i18n("Zone layout for quick shortcut %1", slotDelegate.slotNumber))
                             currentLayoutId: {
                                 void (root.slotRevision);
                                 return root.getSlot(slotDelegate.slotNumber);
@@ -216,8 +223,8 @@ SettingsCard {
                             ToolTip.visible: hovered
                             // The button clears the slot's LAYOUT. The shortcut
                             // itself is not editable here.
-                            ToolTip.text: i18n("Clear layout")
-                            Accessible.name: i18n("Clear layout for quick shortcut %1", slotDelegate.slotNumber)
+                            ToolTip.text: root.viewMode === 2 ? i18n("Clear template") : i18n("Clear layout")
+                            Accessible.name: root.viewMode === 2 ? i18n("Clear template for quick shortcut %1", slotDelegate.slotNumber) : i18n("Clear layout for quick shortcut %1", slotDelegate.slotNumber)
                         }
                     }
                 }

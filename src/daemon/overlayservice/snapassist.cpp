@@ -527,11 +527,18 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     const QString resolvedId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
 
-    // Same-screen re-request while visible is a no-op; a request for a
+    // Same-screen re-request while visible is a visual no-op; a request for a
     // DIFFERENT screen migrates the picker there (dismiss + reshow below),
     // mirroring showSnapAssist's cross-screen singleton handling instead of
-    // silently dropping the request.
+    // silently dropping the request. The highlight can still have gone stale
+    // under the open picker (a quick-slot press swaps the template or layout
+    // without closing it), so re-push the active id before bailing.
     if (m_layoutPickerVisible && m_layoutPickerScreenId == resolvedId) {
+        auto it = m_screenStates.find(resolvedId);
+        if (it != m_screenStates.end() && it->shell && it->layoutPickerSlot()) {
+            writeQmlProperty(it->layoutPickerSlot(), QStringLiteral("activeLayoutId"),
+                             activeLayoutIdForScreen(resolvedId));
+        }
         return;
     }
 
@@ -555,6 +562,11 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
     QVariantList layoutsList = buildLayoutsList(resolvedId, autotileCanvas);
     if (layoutsList.isEmpty()) {
+        // Silent bail by design: the only caller (Daemon's layoutPickerRequested
+        // handler) already checks visibleLayoutCount and shows the OSD for the
+        // empty case, including the Templates-specific "no column templates"
+        // card, so anything reaching here is a race against a store mutation
+        // rather than something to tell the user about.
         qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
         return;
     }
@@ -595,14 +607,23 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     writeQmlProperty(slot, QStringLiteral("layouts"), layoutsList);
     writeQmlProperty(slot, QStringLiteral("activeLayoutId"), activeId);
     writeQmlProperty(slot, QStringLiteral("screenAspectRatio"), aspectRatio);
-    writeQmlProperty(slot, QStringLiteral("globalAutoAssign"), m_settings && m_settings->autoAssignAllLayouts());
+    // Auto badges advertise snap-to-empty-zone; suppressed on Templates
+    // screens where that behaviour cannot happen (see showLayoutOsdImpl).
+    const bool templatesScreenForBadges =
+        m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportTemplates;
+    writeQmlProperty(slot, QStringLiteral("globalAutoAssign"),
+                     !templatesScreenForBadges && m_settings && m_settings->autoAssignAllLayouts());
     writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     bool locked = false;
     if (m_settings && m_layoutManager) {
         int curDesktop = currentVirtualDesktopForScreen(resolvedId);
         QString curActivity = m_layoutManager->currentActivity();
-        locked = isAnyModeLocked(m_settings, m_layoutManager, resolvedId, curDesktop, curActivity);
+        // Pass the LIVE mode lens (see pickerLockModeFor) — shared with the
+        // live lock re-push in refreshContextLockState so the two cannot
+        // disagree about which mode's lock the picker is showing.
+        locked = isAnyModeLocked(m_settings, m_layoutManager, resolvedId, curDesktop, curActivity,
+                                 pickerLockModeFor(resolvedId));
     }
     writeQmlProperty(slot, QStringLiteral("locked"), locked);
     const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, resolvedId);
@@ -702,8 +723,12 @@ void OverlayService::onLayoutPickerDismissRequested()
 void OverlayService::onLayoutPickerSelected(const QString& layoutId)
 {
     qCInfo(lcOverlay) << "Layout picker selected=" << layoutId;
+    // Capture the bound screen BEFORE the hide clears it — the consumer
+    // re-binds the layout controller to this screen so the pick cannot
+    // land on a screen a mid-pick desktop switch retargeted.
+    const QString boundScreenId = m_layoutPickerScreenId;
     hideLayoutPicker();
-    Q_EMIT layoutPickerSelected(layoutId);
+    Q_EMIT layoutPickerSelected(layoutId, boundScreenId);
 }
 
 void OverlayService::pickerMoveSelection(int dx, int dy)

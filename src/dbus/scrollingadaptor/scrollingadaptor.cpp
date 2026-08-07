@@ -157,6 +157,27 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
 }
 
+QString ScrollingAdaptor::presetVocabularyJson(const QString& screenId) const
+{
+    // Same wire-boundary and screen gates as visibleStripJson, for the same
+    // reasons: a screen that is not scrolling must not answer with the
+    // settings fallback its surviving overrides would resolve to.
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return QStringLiteral("{}");
+    }
+    const auto toArray = [](const QList<qreal>& values) {
+        QJsonArray arr;
+        for (const qreal v : values) {
+            arr.append(v);
+        }
+        return arr;
+    };
+    QJsonObject obj;
+    obj[QLatin1String("columnWidths")] = toArray(m_engine->effectivePresetColumnWidths(screenId));
+    obj[QLatin1String("windowHeights")] = toArray(m_engine->effectivePresetWindowHeights(screenId));
+    return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+}
+
 void ScrollingAdaptor::clearEngine()
 {
     if (m_engine) {

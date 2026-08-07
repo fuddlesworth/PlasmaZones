@@ -80,7 +80,7 @@ private:
     {
         PWR::Rule rule =
             CRB::makeAssignmentRule(QStringLiteral("Default"), QString(), 0, QString(), QStringLiteral("snapping"),
-                                    QStringLiteral("{global-layout}"), QString(), 0);
+                                    QStringLiteral("{global-layout}"), QString(), 0, QString());
         rule.id = providerDefaultId();
         return rule;
     }
@@ -121,7 +121,7 @@ private Q_SLOTS:
         // alongside the provider-default catch-all that must be removed.
         const PWR::Rule screenRule = CRB::makeAssignmentRule(
             QStringLiteral("DP-1"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"),
-            QStringLiteral("{dp1-layout}"), QString(), CRB::kContextBandBase + 1);
+            QStringLiteral("{dp1-layout}"), QString(), CRB::kContextBandBase + 1, QString());
         seedRules({makeProviderDefaultLike(), screenRule});
 
         writeJson(ConfigDefaults::configFilePath(), baseCurrentConfig());
@@ -149,9 +149,9 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
-        const PWR::Rule screenRule = CRB::makeAssignmentRule(QStringLiteral("DP-2"), QStringLiteral("DP-2"), 0,
-                                                             QString(), QStringLiteral("autotile"), QString(),
-                                                             QStringLiteral("bsp"), CRB::kContextBandBase + 2);
+        const PWR::Rule screenRule = CRB::makeAssignmentRule(
+            QStringLiteral("DP-2"), QStringLiteral("DP-2"), 0, QString(), QStringLiteral("autotile"), QString(),
+            QStringLiteral("bsp"), CRB::kContextBandBase + 2, QString());
         seedRules({screenRule});
 
         writeJson(ConfigDefaults::configFilePath(), baseCurrentConfig());
@@ -173,7 +173,7 @@ private Q_SLOTS:
 
         const PWR::Rule screenRule = CRB::makeAssignmentRule(
             QStringLiteral("DP-3"), QStringLiteral("DP-3"), 0, QString(), QStringLiteral("snapping"),
-            QStringLiteral("{dp3-layout}"), QString(), CRB::kContextBandBase + 3);
+            QStringLiteral("{dp3-layout}"), QString(), CRB::kContextBandBase + 3, QString());
         seedRules({makeProviderDefaultLike(), screenRule});
         writeJson(ConfigDefaults::configFilePath(), baseCurrentConfig());
 

@@ -236,10 +236,10 @@ Q_SIGNALS:
 
     /**
      * @brief Load-bearing signal (NOT merely informational: shortcuts_wiring.cpp's
-    // handler is the ONLY binder of the shared Escape grab for the snap-assist
-    // phase, which drop.cpp defers to it, and overlayadaptor.cpp relays it onto
-    // the bus — removing or reordering the emission leaves snap assist
-    // un-dismissable). Also emitted when the Snap Assist overlay is shown.
+     * handler is the ONLY binder of the shared Escape grab for the snap-assist
+     * phase, which drop.cpp defers to it, and overlayadaptor.cpp relays it onto
+     * the bus — removing or reordering the emission leaves snap assist
+     * un-dismissable). Also emitted when the Snap Assist overlay is shown.
      *
      * The kwin-effect drives thumbnail capture independently as part of the
      * `showSnapAssist` call sequence (not in response to this signal); the
@@ -258,7 +258,12 @@ Q_SIGNALS:
      * @brief Emitted when a layout is selected from the layout picker overlay
      * @param layoutId The UUID of the selected layout
      */
-    void layoutPickerSelected(const QString& layoutId);
+    /// @p screenId is the screen the picker was BOUND to when the pick was
+    /// made — captured before the hide clears the binding, because the
+    /// controller's current screen is a single mutable slot that desktop
+    /// switches and cycle presses on other screens can retarget while the
+    /// picker sits open.
+    void layoutPickerSelected(const QString& layoutId, const QString& screenId);
 
     /**
      * @brief Emitted when the layout picker overlay is dismissed for any

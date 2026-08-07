@@ -32,9 +32,9 @@ Item {
     // One of the tokens handled by successMessage() and/or failureMessage():
     // "rotate", "move", "span", "focus", "swap", "push", "restore", "float",
     // "snap", "cycle", "focus_master", "swap_master", "master_ratio",
-    // "master_count", "retile", "resnap", "snap_assist", "snap_all",
-    // "swap_vs", "rotate_vs", "layout" ("layout" is failure-only by
-    // producer contract; see failureMessage).
+    // "master_count", "retile", "resnap", "resize", "tabbed", "snap_assist",
+    // "snap_all", "swap_vs", "rotate_vs", "layout" ("layout" is failure-only
+    // by producer contract; see failureMessage).
     property string action: ""
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/tiled/unfloated/overflow)
     property var zones: []
@@ -114,6 +114,13 @@ Item {
             if (reason === "no_window_in_zone" || reason === "no_neighbor")
                 return i18n("No window in that direction");
 
+            // The scroll engine's universal "the strip has nothing there"
+            // refusal: pressing move/focus at the strip's edge is the
+            // ordinary single-monitor case, and the zone fallthrough below
+            // would name zones a scrolling screen does not have.
+            if (reason === "no_target")
+                return i18n("No window in that direction");
+
             if (reason === "swap_failed")
                 return i18n("Could not move the window");
 
@@ -151,6 +158,11 @@ Item {
             if (reason === "already_at_position")
                 return i18n("Window is already in that position");
 
+            // Scrolling: the digit named a strip position that does not
+            // exist right now.
+            if (reason === "no_target")
+                return i18n("No window in that position");
+
             return unavailableText;
         } else if (action === "float") {
             if (reason === "no_active_window" || reason === "no_focused_window" || reason === "no_window" || reason === "window_not_tracked" || reason === "invalid_window")
@@ -164,7 +176,7 @@ Item {
             if (reason === "single_window")
                 return i18n("No other window in this zone");
 
-            if (reason === "no_neighbor")
+            if (reason === "no_neighbor" || reason === "no_target")
                 return i18n("No other window");
 
             if (reason === "not_snapped")
@@ -273,10 +285,32 @@ Item {
         } else if (action === "layout") {
             // Daemon-level gate: a layout-selection shortcut (picker, cycle,
             // quick slot, layout lock) fired on a screen whose engine has no
-            // layout concept (IPlacementEngine::providesLayouts is false).
-            // Sole reason today is not_supported; the fallthrough keeps any
-            // future reason from rendering the generic "Failed".
+            // layout concept (IPlacementEngine::layoutSupport is None), or
+            // one whose engine browses templates and has none to offer.
+            // no_templates means the template store is empty, which the user
+            // can act on; not_supported is the capability-less engine. The
+            // fallthrough keeps any future reason from rendering the generic
+            // "Failed".
+            if (reason === "no_templates")
+                return i18n("No column templates available");
+
             return i18n("Layouts are not available in this mode");
+        } else if (action === "resize") {
+            // Scrolling width/height verbs. no_target for the preset cycle
+            // means the vocabulary offers no other value (a single-entry
+            // template list is refused by design, not broken).
+            if (reason === "no_target")
+                return i18n("Column is already at that size");
+
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
+                return noWindowText;
+
+            return i18n("Resizing is unavailable");
+        } else if (action === "tabbed") {
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
+                return noWindowText;
+
+            return i18n("Tabbing is unavailable");
         } else if (action === "focus_master")
             return i18n("No windows to focus");
         else if (action === "swap_master") {
@@ -293,8 +327,9 @@ Item {
 
     /// Success copy for the current action, including the zone numbers and
     /// direction arrows the reason token carries. No "layout" arm on
-    /// purpose: that action is failure-only by producer contract (the sole
-    /// emitter, Daemon::showLayoutsUnavailableOsd, hardcodes success=false).
+    /// purpose: that action is failure-only by producer contract. All three
+    /// emitters (Daemon::showLayoutsUnavailableOsd, and the two no_templates
+    /// sites in shortcuts_wiring.cpp and start.cpp) hardcode success=false.
     function successMessage(): string {
         if (action === "rotate") {
             const arrow = rotationArrow(reason);
@@ -386,6 +421,10 @@ Item {
             return count ? i18n("Master count → %1", count) : i18n("Master count changed");
         } else if (action === "retile") {
             return i18n("Layout refreshed");
+        } else if (action === "resize") {
+            return i18n("Resized");
+        } else if (action === "tabbed") {
+            return i18n("Tabbed display toggled");
         } else if (action === "swap_vs") {
             const vsSwapArrow = directionArrow(reason);
             return glyphed(vsSwapArrow, i18n("Virtual screens swapped"));

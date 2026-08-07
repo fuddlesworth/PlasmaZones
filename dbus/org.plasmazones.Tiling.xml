@@ -21,6 +21,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <property name="managedScreens" type="as" access="read">
             <annotation name="org.gtk.GDBus.DocString" value="UNION of every tiling-family engine's screens. org.plasmazones.Scrolling names the scrolling subset."/>
         </property>
+        <property name="activeLayouts" type="a{sv}" access="read">
+            <annotation name="org.qtproject.QtDBus.QtTypeName" value="QVariantMap"/>
+            <annotation name="org.gtk.GDBus.DocString" value="Per-screen RULES-VISIBLE active layout id (screenId to string): a snapping layout UUID, autotile:&lt;algorithmId&gt;, scrolling:&lt;templateUuid&gt; for a templated scrolling context, or the bare scrolling: sentinel when no template resolves. Pushed by the daemon so effect-evaluated window rules see the same ActiveLayout vocabulary as daemon-evaluated context rules. Covers EVERY effective screen, not just engine-managed ones. Changes are announced on the activeLayoutsChanged signal below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
+        </property>
 
         <!-- ═══════════════════════════════════════════════════════════════════════════
              Tiling Operations
@@ -128,6 +132,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </signal>
 
+        <signal name="activeLayoutsChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when any screen's rules-visible active layout changes (see the activeLayouts property for the value vocabulary). Deduplicated: the daemon pushes on every screen-set recompute and only actual map changes reach the wire."/>
+            <arg name="activeLayouts" type="a{sv}">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QVariantMap"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Full screenId to rules-visible layout id map after the change."/>
+            </arg>
+        </signal>
+
         <signal name="tilingChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when tiling layout changes for a screen."/>
             <arg name="screenId" type="s">
@@ -151,7 +163,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </signal>
 
         <signal name="windowsReleasedFromTiling">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows are released from engine management (e.g., screen left an engine-managed mode). KWin effect should restore these windows to pre-tile geometry."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows are released from engine management (e.g., screen left an engine-managed mode). External contract surface only: the PlasmaZones KWin effect does not subscribe, because the restore runs through the daemon-internal windowsReleased wiring and the resnap path."/>
             <arg name="windowIds" type="as">
                 <annotation name="org.gtk.GDBus.DocString" value="Window IDs no longer under engine control."/>
             </arg>

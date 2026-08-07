@@ -471,6 +471,24 @@ void Daemon::updateEngineScreens()
     // batched restore — consuming it here strands previously-floated
     // windows off their zones (found the hard way).
     emitPendingSnapFloatRestoresForResnapBuffer(/*preserveZoneEntries=*/true);
+
+    // Push the per-screen RULES-VISIBLE active layout map to the effect so
+    // window-domain (appearance/animation) rules can match Field::ActiveLayout
+    // with the same vocabulary the daemon's context rules see (snapping UUID,
+    // "autotile:<algo>", "scrolling:<templateUuid>", bare sentinel). Runs
+    // UNCONDITIONALLY at this tail and must never move behind a
+    // sets-unchanged short-circuit: a desktop switch changes the map while
+    // both engines' screen sets stay identical. The adaptor owns the
+    // emit-on-change dedup, so the unconditional push costs one map compare.
+    if (m_tilingAdaptor) {
+        QVariantMap activeLayouts;
+        for (const QString& screenId : effectiveIds) {
+            activeLayouts.insert(
+                screenId,
+                m_layoutManager->rulesVisibleActiveLayoutId(screenId, currentDesktopForScreen(screenId), activity));
+        }
+        m_tilingAdaptor->setActiveLayouts(activeLayouts);
+    }
 }
 
 QSet<QString> Daemon::diffActiveAssignments()
@@ -480,7 +498,7 @@ QSet<QString> Daemon::diffActiveAssignments()
         return changed;
     }
     const QString activity = currentActivity();
-    QHash<QString, QString> next;
+    QHash<QString, ActiveAssignmentSnapshot> next;
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     next.reserve(effectiveIds.size());
     for (const QString& screenId : effectiveIds) {
@@ -490,9 +508,21 @@ QSet<QString> Daemon::diffActiveAssignments()
         // "autotile:<algo>"), so this fires only when the visible layout changes
         // — e.g. a tiling-algorithm edit while the screen is in snapping mode
         // resolves to the same snapping id and is correctly ignored.
-        const QString id = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        next.insert(screenId, id);
-        if (m_activeAssignmentByScreen.value(screenId) != id) {
+        ActiveAssignmentSnapshot snapshot;
+        snapshot.assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        // The resolved template rides the snapshot for the KCM apply's
+        // template-only OSD gate. Mode-gated resolver: empty on every
+        // non-Scrolling context. Deliberately NOT part of the `changed` key —
+        // a template swap moves no windows, so it must not trigger the
+        // resnap/OSD apply below (the engine re-derives its vocabulary via
+        // the unconditional updateEngineScreens either way).
+        const PhosphorZones::ScrollingTemplate templ =
+            m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity);
+        if (templ.isValid()) {
+            snapshot.templateId = templ.id.toString();
+        }
+        next.insert(screenId, snapshot);
+        if (m_activeAssignmentByScreen.value(screenId).assignmentId != snapshot.assignmentId) {
             changed.insert(screenId);
         }
     }
@@ -506,13 +536,16 @@ void Daemon::reconcileActiveAssignments()
     const QSet<QString> changed = diffActiveAssignments();
     // Per-context tiling rules change a screen's resolved layout WITHOUT changing
     // its assignment id, so they never appear in `changed` (diffActiveAssignments
-    // only tracks the active snapping-layout uuid / "autotile:<algo>" id). Two
+    // only tracks the active snapping-layout uuid / "autotile:<algo>" id). Three
     // families need updateEngineScreens() to apply them live: tiling-PARAM rules
     // (SetMaxWindows / SetSplitRatio / SetMasterCount / SetInsertPosition /
     // SetOverflowBehavior / SetAlgorithmParam), which land in the per-screen overrides
-    // map and self-retile via applyPerScreenConfig; and GAP rules, which resolve
+    // map and self-retile via applyPerScreenConfig; GAP rules, which resolve
     // through the context-gap provider at retile time and rely on the force-retile
-    // inside updateEngineScreens (see the comment there). SetDragBehavior needs no
+    // inside updateEngineScreens (see the comment there); and SCROLLING TEMPLATE
+    // rules (SetScrollingTemplate), whose id stays the bare "scrolling:" sentinel
+    // while the resolved template — and so the pushed preset vocabulary — changes.
+    // SetDragBehavior needs no
     // retile — it is read live by the drag adaptor.
     updateEngineScreens();
     // A rule edit that demotes a screen from tiling to snapping releases its
@@ -920,6 +953,23 @@ void Daemon::processPendingGeometryUpdates()
     // turned earlier-round results stale en masse.
 
     m_geometryUpdatePending = false;
+
+    // Re-derive the scrolling screens' per-screen overrides. Native
+    // templates carry fractions, so no geometry feeds the push itself. What
+    // this pass is for is the rest of the resolve: per-context rule params
+    // and the context gaps both re-resolve here. The engine's equality guard
+    // no-ops an unchanged override map, so the pass is cheap and idempotent.
+    // What makes the re-resolved values LAND is updateScrollingScreens'
+    // own push: the set it hands setActiveScreens is identical to the
+    // engine's current one, and that branch retiles every screen
+    // unconditionally (engine_core.cpp, `screens == m_scrollingScreens`) —
+    // the same guarantee scrolling.cpp's LOAD-BEARING gate leans on. The
+    // retile loop at the tail of this function is an extra pass that only
+    // runs when the compute barrier below is non-empty (an empty barrier
+    // returns early), so it cannot be the mechanism relied on here.
+    if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {
+        updateScrollingScreens(m_scrollEngine->activeScreens());
+    }
 
     if (pending->isEmpty()) {
         m_overlayService->updateGeometries();

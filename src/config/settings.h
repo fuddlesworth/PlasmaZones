@@ -369,8 +369,16 @@ public:
                    setScrollingDefaultWindowHeightValue NOTIFY scrollingDefaultWindowHeightValueChanged)
     Q_PROPERTY(int scrollingDefaultWindowHeightPresetIndex READ scrollingDefaultWindowHeightPresetIndex WRITE
                    setScrollingDefaultWindowHeightPresetIndex NOTIFY scrollingDefaultWindowHeightPresetIndexChanged)
-    Q_PROPERTY(int scrollingInsertPosition READ scrollingInsertPosition WRITE setScrollingInsertPosition NOTIFY
-                   scrollingInsertPositionChanged)
+    // The template an unassigned screen resolves to, empty for none.
+    Q_PROPERTY(QString defaultScrollingTemplate READ defaultScrollingTemplate WRITE setDefaultScrollingTemplate NOTIFY
+                   defaultScrollingTemplateChanged)
+    // Input knobs on the plain Scrolling group beside the sizing defaults above,
+    // not on Scrolling.Behavior: they say how a wheel event over the strip moves
+    // the focus, not how the strip behaves once a window is placed.
+    Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
+                   NOTIFY scrollingWheelFocusEnabledChanged)
+    Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
+                   NOTIFY scrollingWheelFocusInvertedChanged)
     // Scrolling.TabIndicator
     Q_PROPERTY(bool scrollingTabIndicatorEnabled READ scrollingTabIndicatorEnabled WRITE setScrollingTabIndicatorEnabled
                    NOTIFY scrollingTabIndicatorEnabledChanged)
@@ -411,10 +419,6 @@ public:
                    setScrollingDropIndicatorBorderWidth NOTIFY scrollingDropIndicatorBorderWidthChanged)
     Q_PROPERTY(int scrollingDropIndicatorBorderRadius READ scrollingDropIndicatorBorderRadius WRITE
                    setScrollingDropIndicatorBorderRadius NOTIFY scrollingDropIndicatorBorderRadiusChanged)
-    Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
-                   NOTIFY scrollingWheelFocusEnabledChanged)
-    Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
-                   NOTIFY scrollingWheelFocusInvertedChanged)
     // QML-facing STRING facade: the Q_PROPERTY shares its name with the
     // C++ QStringList accessor (the IScrollSettings surface the engine
     // consumes). Deliberate — QML edits the raw comma-joined text while the
@@ -426,6 +430,8 @@ public:
                    setScrollingPresetWindowHeights NOTIFY scrollingPresetWindowHeightsChanged)
 
     // Scrolling Behavior Settings (Scrolling.Behavior)
+    Q_PROPERTY(int scrollingInsertPosition READ scrollingInsertPosition WRITE setScrollingInsertPosition NOTIFY
+                   scrollingInsertPositionChanged)
     Q_PROPERTY(bool scrollingFocusNewWindows READ scrollingFocusNewWindows WRITE setScrollingFocusNewWindows NOTIFY
                    scrollingFocusNewWindowsChanged)
     Q_PROPERTY(bool scrollingFocusFollowsMouse READ scrollingFocusFollowsMouse WRITE setScrollingFocusFollowsMouse
@@ -1218,6 +1224,8 @@ public:
     void setScrollingDropIndicatorBorderWidth(int px) override;
     int scrollingDropIndicatorBorderRadius() const override;
     void setScrollingDropIndicatorBorderRadius(int px) override;
+    QString defaultScrollingTemplate() const;
+    void setDefaultScrollingTemplate(const QString& templateId);
     bool scrollingWheelFocusEnabled() const;
     void setScrollingWheelFocusEnabled(bool enabled);
     bool scrollingWheelFocusInverted() const;

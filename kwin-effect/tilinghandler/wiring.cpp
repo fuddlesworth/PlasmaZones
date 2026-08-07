@@ -14,16 +14,27 @@
 
 #include <effect/effecthandler.h>
 
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
+#include <QTimer>
 
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+
+namespace {
+// Bounded retry for the bring-up property fetches: enough attempts to ride
+// out a daemon that is still constructing its adaptors, short enough that a
+// genuinely absent daemon stops costing round trips. Budgets reset per
+// loadSettings run; the live-signal path needs no retry.
+constexpr int kBringUpFetchRetryMax = 3;
+constexpr int kBringUpFetchRetryDelayMs = 1000;
+} // anonymous namespace
 
 void TilingHandler::connectSignals()
 {
@@ -51,6 +62,9 @@ void TilingHandler::connectSignals()
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
                    SLOT(slotScrollingScreensChanged(QStringList)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
+                   SLOT(slotActiveLayoutsChanged(QVariantMap)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowsTileRequested"), this,
@@ -75,6 +89,10 @@ void TilingHandler::connectSignals()
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
                 SLOT(slotScrollingScreensChanged(QStringList)));
+
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
+                SLOT(slotActiveLayoutsChanged(QVariantMap)));
 
     qCInfo(lcEffect) << "Connected to tiling D-Bus signals";
 }
@@ -134,6 +152,17 @@ void TilingHandler::loadSettings()
                     if (scrollingScreenIntersection() != scrollingBefore) {
                         m_effect->invalidateAllRuleCaches();
                         m_effect->scheduleBorderSweep();
+                        // The Mode-flip repaint bookend setScrollingScreens
+                        // takes for the same discriminator move: opacity is
+                        // resolved in the paint path, so a `Mode Equals
+                        // "scrolling"` SetOpacity rule that flips verdict here
+                        // leaves an undamaged window at its last-painted alpha.
+                        // The border sweep above does not cover it — it rebuilds
+                        // decorations, not the per-frame alpha of windows that
+                        // have none.
+                        if (m_effect->m_shaderManager.hasOpacityRules()) {
+                            KWin::effects->addRepaintFull();
+                        }
                     }
                     qCInfo(lcEffect) << "Loaded managed screens:" << m_managedScreens;
                     const QSet<QString> completedDeferredRoutes = completeDeferredWindowRoutes();
@@ -168,9 +197,22 @@ void TilingHandler::loadSettings()
                 }
             });
 
-    // Scrolling screen subset — the Mode-stamp discriminator only, no
-    // lifecycle transitions to run, so the reply handling is a guarded
-    // plain assignment.
+    // Bring-up fetches for the two pure ruleQuery inputs. Each grants itself
+    // a fresh bounded retry budget per loadSettings run: a post-daemonReady
+    // Get failure otherwise leaves Mode stamps wrong or ActiveLayout rules
+    // held out until the next live signal or a daemon restart.
+    m_scrollingScreensFetchRetriesLeft = kBringUpFetchRetryMax;
+    m_activeLayoutsFetchRetriesLeft = kBringUpFetchRetryMax;
+    fetchScrollingScreens();
+    fetchActiveLayouts();
+}
+
+// Scrolling screen subset — the Mode-stamp discriminator only, no
+// lifecycle transitions to run, so the reply handling is a guarded
+// plain assignment. Dispatched from loadSettings; a failed Get re-dispatches
+// itself while the retry budget lasts.
+void TilingHandler::fetchScrollingScreens()
+{
     QDBusMessage scrollMsg =
         QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
@@ -179,9 +221,17 @@ void TilingHandler::loadSettings()
         QDBusConnection::sessionBus().asyncCall(scrollMsg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* scrollWatcher = new QDBusPendingCallWatcher(scrollCall, this);
     const quint64 scrollGenerationAtDispatch = m_scrollingScreensGeneration;
+    // Per-dispatch guard, the managedScreens fetch's pattern: two loadSettings
+    // runs across a daemon restart put two Gets in flight with no authoritative
+    // write between them, so the write-generation check alone lets whichever
+    // reply lands FIRST win and then discards the newer one.
+    const quint64 scrollQueryGeneration = ++m_scrollingScreensQueryGeneration;
     connect(scrollWatcher, &QDBusPendingCallWatcher::finished, this,
-            [this, scrollGenerationAtDispatch](QDBusPendingCallWatcher* w) {
+            [this, scrollGenerationAtDispatch, scrollQueryGeneration](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
+                if (scrollQueryGeneration != m_scrollingScreensQueryGeneration) {
+                    return; // a newer query superseded this one
+                }
                 if (m_scrollingScreensGeneration != scrollGenerationAtDispatch) {
                     return; // a live signal carried a newer set
                 }
@@ -205,6 +255,79 @@ void TilingHandler::loadSettings()
                     // Without this trail, "Mode == scrolling rules never
                     // match" has no diagnostic at all.
                     qCDebug(lcEffect) << "Scrolling screens: query failed, daemon may not be running";
+                    // Bounded retry. The two generation guards above already
+                    // returned for a superseded query or a live-signal write,
+                    // so reaching here means this is still the newest attempt
+                    // and nothing has seeded the set.
+                    if (m_scrollingScreensFetchRetriesLeft > 0) {
+                        --m_scrollingScreensFetchRetriesLeft;
+                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this] {
+                            fetchScrollingScreens();
+                        });
+                    }
+                }
+            });
+}
+
+// Rules-visible active layout map — a pure ruleQuery input like the
+// scrolling subset, so the reply handling is a guarded assignment
+// through the setActiveLayouts chokepoint (which owns the rule-cache
+// invalidate). This closes the bring-up window where a rule verdict was
+// memoised with an empty ActiveLayout stamp before the daemon's first
+// push landed. Dispatched from loadSettings; a failed Get re-dispatches
+// itself while the retry budget lasts.
+void TilingHandler::fetchActiveLayouts()
+{
+    QDBusMessage layoutsMsg =
+        QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+    layoutsMsg << PhosphorProtocol::Service::Interface::Tiling << QStringLiteral("activeLayouts");
+    QDBusPendingCall layoutsCall =
+        QDBusConnection::sessionBus().asyncCall(layoutsMsg, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    auto* layoutsWatcher = new QDBusPendingCallWatcher(layoutsCall, this);
+    const quint64 layoutsGenerationAtDispatch = m_activeLayoutsGeneration;
+    // Same per-dispatch guard as the scrolling fetch above.
+    const quint64 layoutsQueryGeneration = ++m_activeLayoutsQueryGeneration;
+    connect(layoutsWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, layoutsGenerationAtDispatch, layoutsQueryGeneration](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                if (layoutsQueryGeneration != m_activeLayoutsQueryGeneration) {
+                    return; // a newer query superseded this one
+                }
+                if (m_activeLayoutsGeneration != layoutsGenerationAtDispatch) {
+                    return; // a live signal carried a newer map
+                }
+                QDBusPendingReply<QDBusVariant> reply = *w;
+                if (reply.isValid()) {
+                    // a{sv} arrives as a QDBusArgument-wrapped variant;
+                    // toMap() on it returns empty — demarshal explicitly.
+                    const QVariantMap map = qdbus_cast<QVariantMap>(reply.value().variant());
+                    slotActiveLayoutsChanged(map);
+                    qCInfo(lcEffect) << "Loaded active layouts for" << map.size() << "screens";
+                } else {
+                    // Not a debug-level trail: a failed fetch leaves the map
+                    // unseeded, so every ActiveLayout rule stays out of the
+                    // evaluator until something seeds it — a rule the user
+                    // authored silently does nothing in the meantime.
+                    //
+                    // Bounded retry below; past the budget, the recovery
+                    // paths are the daemon's next live activeLayoutsChanged
+                    // (which seeds through the same chokepoint) and a daemon
+                    // restart, whose onDaemonReady re-runs this very query.
+                    // Seeding on failure is FORBIDDEN — it would admit
+                    // ActiveLayout rules against a map that was never
+                    // received, and the field resolves to an engaged empty
+                    // string, so every negated ActiveLayout leaf would fire
+                    // for every window. Held-out rules are the inert failure;
+                    // that is the one this path keeps.
+                    qCWarning(lcEffect) << "Active layouts: query failed, daemon may not be running:"
+                                        << reply.error().message();
+                    if (m_activeLayoutsFetchRetriesLeft > 0) {
+                        --m_activeLayoutsFetchRetriesLeft;
+                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this] {
+                            fetchActiveLayouts();
+                        });
+                    }
                 }
             });
 }

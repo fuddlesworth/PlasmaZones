@@ -50,6 +50,20 @@ public Q_SLOTS:
     }
 };
 
+/// Echoes an a{sv} map. Callers that read such a reply with QVariant::toMap()
+/// silently get an empty map, so this object exists to pin the demarshalling
+/// idiom the settings app relies on (getAllQuickLayoutSlots and its peers).
+class VariantMapEcho : public QObject
+{
+    Q_OBJECT
+
+public Q_SLOTS:
+    QVariantMap echoMap(const QVariantMap& map) const
+    {
+        return map;
+    }
+};
+
 namespace {
 
 /**
@@ -835,6 +849,52 @@ private Q_SLOTS:
         PhosphorProtocol::SnapConfirmationEntry defaultEntry;
         QVERIFY(defaultEntry.windowId.isEmpty());
         QCOMPARE(defaultEntry.isRestore, false);
+    }
+
+    // =================================================================
+    // a{sv} replies: toMap() vs qdbus_cast
+    // =================================================================
+
+    // The daemon returns several maps as a{sv} (getAllQuickLayoutSlots is the
+    // one the page-reset path reads). Off the wire the argument is a
+    // QDBusArgument, so QVariant::toMap() returns an empty map instead of
+    // failing — the discriminating case below. qdbus_cast is the demarshalling
+    // that actually works, and it must also survive a value that is already a
+    // QVariantMap because an in-process caller never crosses the bus.
+    void testVariantMapReplyNeedsQdbusCast()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected()) {
+            QSKIP("No session bus available for a wire round-trip");
+        }
+        VariantMapEcho echo;
+        const QString path = QStringLiteral("/test/wiretypes/variantmapecho");
+        QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+
+        QVariantMap sent;
+        sent.insert(QStringLiteral("1"), QStringLiteral("{layout-a}"));
+        sent.insert(QStringLiteral("2"), QString());
+
+        QDBusMessage call =
+            QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoMap"));
+        call << QVariant::fromValue(sent);
+        const QDBusMessage reply = bus.call(call);
+        bus.unregisterObject(path);
+
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(reply.arguments().size(), 1);
+        const QVariant raw = reply.arguments().at(0);
+
+        // Negative case: the plain accessor loses the whole map.
+        QVERIFY(raw.toMap().isEmpty());
+
+        const QVariantMap got = qdbus_cast<QVariantMap>(raw);
+        QCOMPARE(got.size(), 2);
+        QCOMPARE(got.value(QStringLiteral("1")).toString(), QStringLiteral("{layout-a}"));
+        QVERIFY(got.value(QStringLiteral("2")).toString().isEmpty());
+
+        // Already-converted input degrades to a plain qvariant_cast.
+        QCOMPARE(qdbus_cast<QVariantMap>(QVariant::fromValue(sent)), sent);
     }
 };
 

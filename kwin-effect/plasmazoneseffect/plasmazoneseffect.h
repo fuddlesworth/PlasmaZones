@@ -712,6 +712,12 @@ private:
     /// only fires when the daemon service is registered.
     void reportScreenDesktop(const QString& screenId, int desktop);
     QString getWindowScreenId(KWin::EffectWindow* w) const;
+    /// getWindowScreenId for a caller that has already resolved the window id.
+    /// The engine-authoritative scroll override is keyed on the window id, so
+    /// the plain overload has to look it up; a caller holding one (ruleQuery)
+    /// passes it here instead of paying the id-cache probe twice. Behaviour is
+    /// otherwise identical — the id is the ONLY thing the overloads differ on.
+    QString getWindowScreenId(KWin::EffectWindow* w, const QString& windowId) const;
     /// Resolve the KWin output a window sits on by POSITION (the output whose
     /// geometry contains the window centre), falling back to w->screen() only
     /// when no output contains the centre. Never trust w->screen() first: KWin
@@ -1078,6 +1084,20 @@ private:
     /// (a 50-rule batch edit emits 50 signals) collapses into a single
     /// `getAllRules` fetch at the trailing edge.
     QTimer m_animationRulesRefreshDebounce;
+
+    /// Remaining bounded-retry attempts for a failed getAllRules fetch.
+    /// Reset by every external loadRuleAnimationsFromDbus invocation,
+    /// consumed only by fetchAllRulesOnce's failure-arm re-dispatches.
+    int m_ruleFetchRetriesLeft = 0;
+
+    /// Per-DISPATCH guard for the getAllRules fetch, the twin of
+    /// TilingHandler's m_activeLayoutsQueryGeneration. Bumped by every
+    /// fetchAllRulesOnce call and captured by its reply handler, so when the
+    /// debounce, the bring-up load and the seed-edge re-drive put several
+    /// round-trips in flight at once only the newest reply is applied. Without
+    /// it an older reply landing last rewrites all four effect-bound rule sets
+    /// and republishes m_activeLayoutRulesWithheld from a stale store snapshot.
+    quint64 m_ruleFetchQueryGeneration = 0;
 
     /// Wire the DecorationManager into the effect: the windowDecorationRestored
     /// connection. Defined in decorations.cpp with the rest of the decoration code;
@@ -2220,6 +2240,34 @@ private:
     // gate keeps the no-geometry-rules user at zero cost.
     bool m_hasGeometryScopedRules = false;
 
+    // True when the last completed loadRuleAnimationsFromDbus admission pass
+    // ran with the active-layout map UNSEEDED and dropped at least one rule
+    // that would otherwise have been bound to an effect rule set, purely
+    // because it references Field::ActiveLayout (see effectNeverStampedFields
+    // in shader_config_dbus.cpp).
+    //
+    // Read by exactly one consumer: the seeding edge in
+    // TilingHandler::setActiveLayouts, which re-drives the whole rule fetch so
+    // the held-out rules are admitted. Without this marker that re-drive is
+    // unconditional, and every session with no ActiveLayout rule at all — the
+    // overwhelming majority — pays a getAllRules round-trip, a full RuleSet
+    // parse and an updateAllDecorations sweep for rules that do not exist.
+    //
+    // Cleared on exactly one path: consumption by that seeding edge. Every
+    // loadRuleAnimationsFromDbus reply that PARSES recomputes it outright
+    // (shader_config_dbus.cpp assigns the pass verdict, never ORs). The two
+    // malformed-payload arms (non-object JSON, RuleSet::fromJson refusal)
+    // return before that assignment, which is the right answer rather than a
+    // gap: no slice ran either, so the standing marker still describes the
+    // standing rule sets. The unseeding paths themselves deliberately do NOT
+    // clear it — see
+    // TilingHandler::clearActiveLayoutsForTeardown, which re-slices the
+    // ActiveLayout rules out of the four rule sets and SETS this marker when
+    // it removed any. Clearing on teardown or bring-up would disarm the edge
+    // for the session whenever the following getAllRules never lands; a
+    // stale-TRUE marker only costs one redundant re-drive.
+    bool m_activeLayoutRulesWithheld = false;
+
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForTilingNotify() to prevent small utility
     // windows (emoji picker, color picker, etc.) from entering the tiling tree.
@@ -2470,6 +2518,49 @@ private Q_SLOTS:
     /// without restarting the effect.
     void loadRuleAnimationsFromDbus();
 
+private:
+    /// Re-slice the four effect-bound rule sets for an active-layout map that
+    /// has just gone UNSEEDED (daemon-loss teardown / bring-up clear), by
+    /// removing every rule whose match references `Field::ActiveLayout`.
+    /// A plain member, not a slot: nothing connects to it — the sole caller is
+    /// `TilingHandler::clearActiveLayoutsForTeardown` (a friend), so it earns
+    /// no moc metadata.
+    ///
+    /// The rule sets deliberately survive daemon loss, but the admission
+    /// filter that filled them ran while the map was seeded, so they hold
+    /// rules that resolve against a map which is now empty — and an empty
+    /// ActiveLayout stamp is not inert (a `None{ActiveLayout Equals X}` leaf
+    /// matches EVERY window). Dropping them restores the both-polarities-inert
+    /// shape `effectNeverStampedFields` gives a cold start.
+    ///
+    /// Sets `m_activeLayoutRulesWithheld` when anything was removed, so the
+    /// next seeding edge in `TilingHandler::setActiveLayouts` re-drives
+    /// `loadRuleAnimationsFromDbus` and restores them from the live store.
+    /// That makes the marker correct BY CONSTRUCTION on this path: the same
+    /// call that withholds the rules records that it did.
+    ///
+    /// Runs no border sweep and no rule-cache invalidation of its own — the
+    /// sanctioned callers of `TilingHandler::clearActiveLayoutsForTeardown`
+    /// (its only caller) already run `invalidateAllRuleCaches`, whose
+    /// window-layer sweep a removed `SetWindowLayer` rule needs, and each then
+    /// rebuilds the affected decorations its own way: `onDaemonReady` with
+    /// `scheduleBorderSweep`, the `serviceUnregistered` teardown with
+    /// `clearAllDecorations` (which needs no sweep, having removed them).
+    ///
+    /// It DOES take the `SetOpacity` repaint bookend, because nothing else
+    /// covers it on the bring-up caller: opacity resolves in the paint path,
+    /// and a straight old→new daemon handover emits no `serviceUnregistered`
+    /// edge, so the decorations (and the tint layer whose teardown covers the
+    /// daemon-loss caller) are still live there.
+    void sliceActiveLayoutRulesForUnseededMap();
+
+    /// One getAllRules round trip: the body of loadRuleAnimationsFromDbus,
+    /// which is the budget-granting wrapper. The failure arm re-dispatches
+    /// this directly (bounded, m_ruleFetchRetriesLeft) so retries do not
+    /// re-grant themselves a fresh budget.
+    void fetchAllRulesOnce();
+
+private Q_SLOTS:
     /// D-Bus signal handler for `Rules.rulesChanged`. Re-arms the
     /// debounce timer rather than refetching the full ruleset on every
     /// signal — the daemon emits one signal per per-rule mutation, so a

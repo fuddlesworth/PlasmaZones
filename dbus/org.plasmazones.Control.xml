@@ -21,7 +21,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="toggleAutotileForScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Toggle between snapping and autotile mode for a screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Toggle between snapping and autotile mode for a screen, at the screen level (all desktops, all activities). This is a bare mode switch: it also clears whatever snapping layout and tiling algorithm that context had pinned, so the toggled mode resolves through the assignment cascade and the global default. A scrolling template assigned to the context is left intact. Callers that need the pinned slots kept should drive org.plasmazones.LayoutRegistry.setAssignmentEntry directly and pass them back."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to toggle."/>
             </arg>

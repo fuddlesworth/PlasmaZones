@@ -102,10 +102,12 @@ ColumnLayout {
 
     /// True iff every action carries a non-empty type. A freshly-added action
     /// is a type-less placeholder ("Choose…" in the picker) until the user
-    /// picks one — block saving that incomplete action. The rule library's
-    /// validator deliberately treats an empty-type slot as a benign
-    /// placeholder (see validationIssuesForJson), so the completeness gate has
-    /// to live here rather than surfacing as a validation issue.
+    /// picks one — block saving that incomplete action. `validationIssuesForJson`
+    /// drops every issue raised against a type-less slot (the library's
+    /// co-located-exclusion check does flag them, with no action name to print),
+    /// so this completeness gate is what blocks the save. An action that HAS a
+    /// type but an unfilled param is the other half and arrives as an
+    /// IncompleteActionPayload validation issue, which canSave gates on below.
     function _actionsAllHaveType(actions) {
         if (actions === undefined || actions === null)
             return false;

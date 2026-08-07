@@ -167,6 +167,11 @@ inline constexpr double kTabIndicatorCornerRadiusPill = TabIndicatorCornerRadius
 inline constexpr double kMaxTabIndicatorCornerRadius = MaxTabIndicatorCornerRadius;
 inline constexpr double kMinTabIndicatorLengthRatio = MinTabIndicatorLengthRatio;
 inline constexpr double kMaxTabIndicatorLengthRatio = MaxTabIndicatorLengthRatio;
+// LENGTH is stored as a fraction and edited as a percent, so it carries the
+// derived display pair the split ratio and column width do rather than
+// open-coding the * 100.0 in the descriptor.
+inline constexpr double kMinTabIndicatorLengthPercent = kMinTabIndicatorLengthRatio * 100.0;
+inline constexpr double kMaxTabIndicatorLengthPercent = kMaxTabIndicatorLengthRatio * 100.0;
 
 // Drop indicator. Every floor here really is zero — a zero border width is a
 // fill with no edge and a zero radius is a square corner, neither a sentinel —
@@ -174,7 +179,13 @@ inline constexpr double kMaxTabIndicatorLengthRatio = MaxTabIndicatorLengthRatio
 // tab indicator's signed bounds need.
 inline constexpr double kMinDropIndicatorOpacity = MinDropIndicatorOpacity;
 inline constexpr double kMaxDropIndicatorOpacity = MaxDropIndicatorOpacity;
+// OPACITY is stored as a fraction and edited as a percent, like every other
+// opacity action; the display pair derives from the wire pair.
+inline constexpr double kMinDropIndicatorOpacityPercent = kMinDropIndicatorOpacity * 100.0;
+inline constexpr double kMaxDropIndicatorOpacityPercent = kMaxDropIndicatorOpacity * 100.0;
+inline constexpr double kMinDropIndicatorBorderWidth = MinDropIndicatorBorderWidth;
 inline constexpr double kMaxDropIndicatorBorderWidth = MaxDropIndicatorBorderWidth;
+inline constexpr double kMinDropIndicatorBorderRadius = MinDropIndicatorBorderRadius;
 inline constexpr double kMaxDropIndicatorBorderRadius = MaxDropIndicatorBorderRadius;
 
 /// Helper to keep the registerBuiltins body legible — every built-in shares

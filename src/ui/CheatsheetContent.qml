@@ -48,12 +48,18 @@ Item {
     /// refresh has already re-pushed the model — gating on the setting keeps
     /// the Scrolling group from surviving its own master switch.
     property bool scrollingAvailable: true
-    /// Whether the bound screen's engine consumes user-selectable layouts
-    /// (IPlacementEngine::providesLayouts, pushed by the daemon). Gates the
-    /// rows tagged mode === "layouts": on a screen without the capability
-    /// (scrolling) those shortcuts answer with a "not available" OSD, so
-    /// advertising them here would be noise.
+    /// Whether the bound screen's engine has any layout concept
+    /// (IPlacementEngine::layoutSupport is not None, pushed by the daemon).
+    /// Gates the rows tagged mode === "layouts": scrolling screens now
+    /// consume layouts as sizing templates, so their rows show too; only a
+    /// capability-less engine answers those shortcuts with a "not
+    /// available" OSD, and advertising them there would be noise.
     property bool layoutsAvailable: true
+    /// True when the bound screen's engine consumes layouts as sizing
+    /// TEMPLATES (a scrolling screen): rows carrying a templatesDescription
+    /// swap their tooltip for the template wording, since the same key picks
+    /// a template there rather than a placement layout.
+    property bool layoutsAreTemplates: false
     property string fontFamily: ""
     property real fontSizeScale: 1
 
@@ -412,7 +418,13 @@ Item {
                                         // shows, so a translator cannot make
                                         // the two diverge.
                                         Accessible.name: shortcutRow.modelData.assigned ? i18nc("shortcut row: action, keys", "%1, %2", shortcutRow.modelData.label, shortcutRow.modelData.triggers.join(", ")) : i18nc("shortcut row: action, state", "%1, %2", shortcutRow.modelData.label, unassignedLabel.text)
-                                        Accessible.description: shortcutRow.modelData.description
+                                        // Template-capability rows swap their
+                                        // tooltip wording; templatesDescription
+                                        // falls back to description in the
+                                        // model, so this stays a two-way pick.
+                                        readonly property string effectiveDescription: root.layoutsAreTemplates ? (shortcutRow.modelData.templatesDescription || shortcutRow.modelData.description || "") : (shortcutRow.modelData.description || "")
+
+                                        Accessible.description: shortcutRow.effectiveDescription
 
                                         // Plain-prose explanation from the
                                         // catalog, on hover (long-press on
@@ -421,7 +433,7 @@ Item {
                                         HoverHandler {
                                             id: rowHover
 
-                                            enabled: (shortcutRow.modelData.description || "").length > 0
+                                            enabled: shortcutRow.effectiveDescription.length > 0
                                         }
 
                                         // Touch path: the sheet-level latch is
@@ -462,7 +474,7 @@ Item {
                                                 if (root.latchedRow === shortcutRow)
                                                     root.latchedRow = null;
                                             }
-                                            text: shortcutRow.modelData.description
+                                            text: shortcutRow.effectiveDescription
                                             delay: Kirigami.Units.toolTipDelay
                                             font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
                                             font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * root.fontSizeScale)

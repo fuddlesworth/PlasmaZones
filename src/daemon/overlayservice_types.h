@@ -101,13 +101,19 @@ struct PerScreenOverlayState
 };
 
 /// Per-screen layout-family filter used for the zone selector. `manual`
-/// enables PhosphorZones layout entries; `autotile` enables algorithm
-/// previews. Both default-true is "show everything"; the resolver narrows
-/// to a single family when the screen has an explicit assignment.
+/// enables PhosphorZones layout entries, `autotile` enables algorithm
+/// previews, and `templates` enables native scrolling-template cards. The
+/// first two default true and the third false, so the unnarrowed answer is
+/// "every non-template family". The resolver narrows to a single family
+/// when the screen has an explicit assignment.
 struct LayoutIncludeFlags
 {
     bool manual = true;
     bool autotile = true;
+    /// Native scrolling-template entries — default false: only a
+    /// live-Templates (scrolling) screen offers them, and it offers ONLY
+    /// them.
+    bool templates = false;
 };
 
 /// Shared property-push parameters for layout-OSD content. Used by both
@@ -125,6 +131,10 @@ struct LayoutOsdContentParams
     bool autoAssign = false; ///< per-layout autoAssign flag (raw, pre-OR with global)
     bool globalAutoAssign = false; ///< master "auto-assign for all layouts" toggle (#370)
     bool locked = false; ///< draws lock badge + " (Locked)" suffix
+    /// True on a live-Templates (scrolling) screen: the layout shown is the
+    /// screen's sizing TEMPLATE, and the OSD captions it "Column template"
+    /// so a template pick never reads as a snap-layout switch.
+    bool isTemplate = false;
     qreal screenAspectRatio = 16.0 / 9.0;
     QString aspectRatioClass = QStringLiteral("any");
     bool showMasterDot = false;

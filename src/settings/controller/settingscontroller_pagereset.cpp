@@ -27,6 +27,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
+#include <QDBusArgument>
 #include <QDebug>
 #include <QSet>
 #include <QStringList>
@@ -146,7 +147,7 @@ bool SettingsController::pageSupportsDiscard(const QString& page) const
     return pageSupportsReset(page);
 }
 
-bool SettingsController::stageQuickSlotClears(bool snappingMode, bool& stagedAny)
+bool SettingsController::stageQuickSlotClears(int wireMode, bool& stagedAny)
 {
     stagedAny = false;
     // Fetch the whole map in ONE D-Bus call. The per-slot accessors fall through
@@ -155,7 +156,7 @@ bool SettingsController::stageQuickSlotClears(bool snappingMode, bool& stagedAny
     // all-default page would pay all nine to stage nothing.
     const QDBusMessage slotsReply =
         DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getAllQuickLayoutSlots"), {snappingMode ? 0 : 1});
+                               QStringLiteral("getAllQuickLayoutSlots"), {wireMode});
     if (slotsReply.type() != QDBusMessage::ReplyMessage) {
         // An error map is indistinguishable from "all slots already unassigned",
         // so falling through would stage nothing, reconcile the page CLEAN, and
@@ -165,13 +166,19 @@ bool SettingsController::stageQuickSlotClears(bool snappingMode, bool& stagedAny
                                        << slotsReply.errorMessage();
         return false;
     }
-    const QVariantMap allSlots = slotsReply.arguments().value(0).toMap();
+    // a{sv} arrives as a QDBusArgument, and QVariant::toMap() on one yields an
+    // EMPTY map — indistinguishable from "every slot already unassigned", which
+    // would stage nothing and reconcile the page clean. qdbus_cast demarshals it
+    // and degrades to qvariant_cast when the argument is already a QVariantMap
+    // (an in-process caller that never crossed the bus).
+    const QVariantMap allSlots = qdbus_cast<QVariantMap>(slotsReply.arguments().value(0));
     for (int slot = 1; slot <= QUICK_LAYOUT_SLOT_COUNT; ++slot) {
         // Staged value wins over the daemon's, matching the per-slot accessors'
         // precedence.
         QString current;
-        const bool haveStaged = snappingMode ? m_staging.stagedSnappingQuickSlot(slot, current)
-                                             : m_staging.stagedTilingQuickSlot(slot, current);
+        const bool haveStaged = wireMode == QuickSlotModeSnapping ? m_staging.stagedSnappingQuickSlot(slot, current)
+            : wireMode == QuickSlotModeScrolling                  ? m_staging.stagedScrollingQuickSlot(slot, current)
+                                                                  : m_staging.stagedTilingQuickSlot(slot, current);
         if (!haveStaged)
             current = allSlots.value(QString::number(slot)).toString();
         // An already-empty slot needs no change, so resetting an all-default
@@ -179,8 +186,10 @@ bool SettingsController::stageQuickSlotClears(bool snappingMode, bool& stagedAny
         // clears.
         if (current.isEmpty())
             continue;
-        if (snappingMode)
+        if (wireMode == QuickSlotModeSnapping)
             m_staging.stageSnappingQuickSlot(slot, QString());
+        else if (wireMode == QuickSlotModeScrolling)
+            m_staging.stageScrollingQuickSlot(slot, QString());
         else
             m_staging.stageTilingQuickSlot(slot, QString());
         stagedAny = true;
@@ -208,11 +217,18 @@ void SettingsController::resetPage(const QString& page)
         const auto& manifest = pageOwnedConfigKeys();
         const auto ownedIt = manifest.constFind(page);
         if (ownedIt != manifest.constEnd()) {
+            // The mode enable switches are manifest-owned (for dirty/save/
+            // discard) but a page Reset must not flip the mode itself, so
+            // strip them before handing the list to resetKeys.
+            Settings::ConfigKeyList keys = *ownedIt;
+            for (const Settings::ConfigKey& exempt : resetExemptModeEnableKeys()) {
+                keys.removeAll(exempt);
+            }
             // Suppress onSettingsPropertyChanged for the reset's NOTIFY storm;
             // reconcile `page`'s dirty state explicitly below.
             {
                 const ScopedFlag loadingScope(m_loading);
-                m_settings.resetKeys(*ownedIt);
+                m_settings.resetKeys(keys);
             }
             reconcilePageDirty(page);
             return;
@@ -261,7 +277,10 @@ void SettingsController::resetPage(const QString& page)
     // clears. quickLayoutSlotsChanged refreshes the slot cards.
     if (isShortcutsPage(page)) {
         bool staged = false;
-        if (!stageQuickSlotClears(page == QLatin1String("snapping-shortcuts"), staged)) {
+        const int wireMode = page == QLatin1String("snapping-shortcuts") ? QuickSlotModeSnapping
+            : page == QLatin1String("scrolling-shortcuts")               ? QuickSlotModeScrolling
+                                                                         : QuickSlotModeTiling;
+        if (!stageQuickSlotClears(wireMode, staged)) {
             // Reconcile before leaving so a pre-existing stale dirty entry for
             // this page is cleaned on this exit too, matching every other path.
             reconcilePageDirty(page);
@@ -508,11 +527,15 @@ void SettingsController::discardPage(const QString& page)
     // fall back to the daemon's saved slots.
     if (isShortcutsPage(page)) {
         const bool snapping = (page == QLatin1String("snapping-shortcuts"));
-        const bool hadStaged =
-            snapping ? m_staging.hasStagedSnappingQuickSlots() : m_staging.hasStagedTilingQuickSlots();
+        const bool scrolling = (page == QLatin1String("scrolling-shortcuts"));
+        const bool hadStaged = snapping ? m_staging.hasStagedSnappingQuickSlots()
+            : scrolling                 ? m_staging.hasStagedScrollingQuickSlots()
+                                        : m_staging.hasStagedTilingQuickSlots();
         if (hadStaged) {
             if (snapping)
                 m_staging.clearSnappingQuickSlots();
+            else if (scrolling)
+                m_staging.clearScrollingQuickSlots();
             else
                 m_staging.clearTilingQuickSlots();
             Q_EMIT quickLayoutSlotsChanged();

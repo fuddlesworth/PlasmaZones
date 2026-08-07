@@ -15,7 +15,7 @@ import org.plasmazones.common as PZCommon
  * This component eliminates duplication of the layout model building logic
  * across MonitorAssignments, ActivityAssignments, and QuickLayoutSlots.
  *
- * Category: 0 = Manual
+ * Category: 0 = Manual, 1 = Autotile, 2 = Scrolling template
  *
  * The "Default" option resolves to the actual default layout for preview.
  */
@@ -35,20 +35,26 @@ ComboBox {
     property bool showPreview: false
     // Whether to show the "Default"/"None" entry at the top of the list
     property bool showNoneOption: true
-    // Filter layouts by category: -1 = show all, 0 = manual/zone only, 1 = autotile only
+    // Filter layouts by category: -1 = show all, 0 = manual/zone only,
+    // 1 = autotile only, 2 = scrolling templates only
     property int layoutFilter: -1
     // The layout ID that "Default" actually resolves to at runtime.
     // Set by parent based on context:
     // - Monitor dropdown: appSettings.defaultLayoutId (global default)
     // - Per-desktop dropdown: monitor's layout (or global if none)
     // - Activity dropdown: monitor's layout (or global if none)
-    // When layoutFilter === 1 (autotile only), falls back to the global default algorithm.
+    // When layoutFilter === 1 (autotile only), falls back to the global default
+    // algorithm; when it is 2 (scrolling templates only), to the global default
+    // scrolling template.
     property string resolvedDefaultId: {
         if (!appSettings)
             return "";
 
         if (root.layoutFilter === 1)
             return "autotile:" + appSettings.defaultAutotileAlgorithm;
+
+        if (root.layoutFilter === 2)
+            return appSettings.defaultScrollingTemplate;
 
         return appSettings.defaultLayoutId;
     }
@@ -78,11 +84,15 @@ ComboBox {
     }
 
     // Helper to get category with default fallback.
-    // Layout objects use `isAutotile` (bool), while overlay/D-Bus objects
-    // use `category` (int: 0=Manual, 1=Autotile). Check both fields.
+    // Layout objects use `isAutotile` / `isScrollingTemplate` (bool), while
+    // overlay/D-Bus objects use `category` (int: 0=Manual, 1=Autotile,
+    // 2=ScrollingTemplate). Check both fields.
     function getCategory(layout, defaultCategory) {
         if (!layout)
             return defaultCategory;
+
+        if (layout.isScrollingTemplate === true)
+            return 2;
 
         if (layout.category !== undefined)
             return layout.category;
@@ -131,8 +141,10 @@ ComboBox {
                     "isDefaultOption": false
                 });
             }
-            // Sort: manual (category 0) before dynamic (category 1),
-            // alphabetical within each group.
+            // Sort by category ascending — manual (0), then dynamic (1), then
+            // scrolling templates (2) — and alphabetically within each group.
+            // A filtered combo holds one category, so the category term only
+            // matters on the unfiltered (-1) view.
             layoutItems.sort(function (a, b) {
                 if (a.category !== b.category)
                     return a.category - b.category;
@@ -594,12 +606,22 @@ ComboBox {
                             return i18n("No layout assigned");
                         } else if (!hasLayout) {
                             return i18n("No default configured");
-                        } else if (isDefaultOption) {
-                            let layoutName = (modelData.layout && modelData.layout.displayName) || "";
-                            return i18n("→ %1 (%2)", layoutName, i18np("%n zone", "%n zones", (modelData.layout && modelData.layout.zoneCount) || 0));
-                        } else {
-                            return i18np("%n zone", "%n zones", (modelData.layout && modelData.layout.zoneCount) || 0);
                         }
+                        // A scrolling template's zoneCount carries the number of
+                        // bands its preview draws, which is its starting columns,
+                        // or its width presets, or the single fallback band a
+                        // template with neither draws (default width when a
+                        // fraction, half width otherwise), so the honest
+                        // wording here is widths not columns.
+                        // Read the category off the resolved layout: the option's
+                        // own category follows layoutFilter when one is set.
+                        const count = (modelData.layout && modelData.layout.zoneCount) || 0;
+                        const countText = root.getCategory(modelData.layout, modelData.category) === 2 ? i18np("%n width", "%n widths", count) : i18np("%n zone", "%n zones", count);
+                        if (isDefaultOption) {
+                            let layoutName = (modelData.layout && modelData.layout.displayName) || "";
+                            return i18n("→ %1 (%2)", layoutName, countText);
+                        }
+                        return countText;
                     }
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.textColor

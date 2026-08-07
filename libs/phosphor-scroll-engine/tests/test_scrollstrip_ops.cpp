@@ -191,7 +191,12 @@ void TestScrollStripOps::widthPresetCycling()
 {
     const auto params = defaultParams();
     ScrollStrip strip;
-    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makePreset(1), ColumnDisplay::Normal, params));
+    // Value-anchored preset intent: the anchor is the picked FRACTION and
+    // cycling steps between vocabulary entries by value (the default list is
+    // 1/3, 1/2, 2/3).
+    const QList<qreal>& presets = params.presetColumnWidths;
+    QVERIFY(
+        strip.insertWindow(QStringLiteral("a"), ColumnWidth::makePreset(presets.at(1)), ColumnDisplay::Normal, params));
 
     // activeColumn() is dereferenced after every mutation below, so it is
     // QVERIFY'd after every mutation: a regression that loses the active
@@ -199,16 +204,16 @@ void TestScrollStripOps::widthPresetCycling()
     // suite's results rather than failing this one test.
     QVERIFY(strip.activeColumn());
 
-    // Preset 1 (1/2) → cycle forward → preset 2 (2/3) → wraps to 0 (1/3).
+    // Anchor 1/2 → cycle forward → 2/3 → wraps to 1/3 → back to 2/3.
     QVERIFY(strip.cycleActiveColumnPresetWidth(+1, params));
     QVERIFY(strip.activeColumn());
-    QCOMPARE(strip.activeColumn()->width.presetIdx, 2);
+    QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(2));
     QVERIFY(strip.cycleActiveColumnPresetWidth(+1, params));
     QVERIFY(strip.activeColumn());
-    QCOMPARE(strip.activeColumn()->width.presetIdx, 0);
+    QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(0));
     QVERIFY(strip.cycleActiveColumnPresetWidth(-1, params));
     QVERIFY(strip.activeColumn());
-    QCOMPARE(strip.activeColumn()->width.presetIdx, 2);
+    QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(2));
 
     // From a non-preset width the cycle enters at the nearest preset.
     QVERIFY(strip.setActiveColumnWidth(
@@ -216,7 +221,7 @@ void TestScrollStripOps::widthPresetCycling()
     QVERIFY(strip.cycleActiveColumnPresetWidth(+1, params));
     QVERIFY(strip.activeColumn());
     QCOMPARE(strip.activeColumn()->width.kind, ColumnWidth::Preset);
-    QCOMPARE(strip.activeColumn()->width.presetIdx, 0);
+    QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(0));
 }
 
 void TestScrollStripOps::widthAdjustByPercent()

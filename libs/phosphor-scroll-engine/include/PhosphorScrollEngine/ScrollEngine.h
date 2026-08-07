@@ -332,6 +332,26 @@ public:
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 
+    // Layout capability (see IPlacementEngine's Layout capability section)
+    /// The strip consumes layouts as sizing TEMPLATES: a layout's zone
+    /// x-extents become the screen's preset column-width vocabulary (and its
+    /// stacked-zone heights the height vocabulary, when it defines any),
+    /// never window placement. Explicit override — the capability is load-bearing
+    /// for the daemon's layout-selection gates, not an inherited absence.
+    LayoutSupport layoutSupport() const override
+    {
+        return LayoutSupport::Templates;
+    }
+
+    /// Effective preset vocabulary for a screen: the per-screen TEMPLATE
+    /// override when the daemon pushed a usable one (every entry validated
+    /// against the same floor as the settings parser), else the cached
+    /// settings list. Wholesale replacement, never a merge — see
+    /// ScrollPerScreenKeys. Public for D-Bus/introspection consumers
+    /// (ScrollingAdaptor::presetVocabularyJson).
+    QList<qreal> effectivePresetColumnWidths(const QString& screenId) const;
+    QList<qreal> effectivePresetWindowHeights(const QString& screenId) const;
+
     // ═══════════════════════════════════════════════════════════════════════
     // Cross-engine handoff
     // ═══════════════════════════════════════════════════════════════════════
@@ -584,13 +604,17 @@ public:
     }
 
     // Per-screen overrides layered over the config defaults, one map per
-    // screen with two producer channels the daemon merges (rules win): the
+    // screen with three producer channels the daemon merges (rules win): the
     // RULE channel (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
     // SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
-    // SetScrollDefaultWindowHeight) and the SETTINGS channel (the per-monitor
-    // New-columns sizing trio pairs). Key spellings live in
-    // ScrollPerScreenKeys (ScrollTypes.h) — the accessor comments there are
-    // the authoritative key list.
+    // SetScrollDefaultWindowHeight), the SETTINGS channel (the per-monitor
+    // New-columns sizing trio pairs), and the TEMPLATE channel (from the
+    // context's assigned ScrollingTemplate: the presetColumnWidths /
+    // presetWindowHeights lists, replaced wholesale per list; the
+    // TemplateColumns seed blueprint that engine_lifecycle consumes at column
+    // creation; and the beyond-blueprint default width trio and display).
+    // Key spellings live in ScrollPerScreenKeys (ScrollTypes.h) — the
+    // accessor comments there are the authoritative key list.
     void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides) override;
     void clearPerScreenConfig(const QString& screenId) override;
     QVariantMap perScreenOverrides(const QString& screenId) const override
@@ -709,12 +733,12 @@ private:
     /// caller alike. It has to be every caller — the geometry producers
     /// (applyLayout, the visibleTiles walks) and the pure-math verbs
     /// (navigation, anchor math, the maximize compare) resolve against the
-    /// same work area, and a defaulted parameter only two of eighteen call
-    /// sites passed left the verbs computing against a gapped rect the apply
-    /// path then un-gapped: a lone column off-centre by (outerL+outerR)/2,
-    /// leftover width nobody claimed, and a maximize compare that never
-    /// matched. Inner gaps need no arm — with one column no inter-column gap
-    /// exists.
+    /// same work area, and a defaulted parameter that only a handful of the
+    /// twenty-eight call sites passed left the verbs computing against a
+    /// gapped rect the apply path then un-gapped: a lone column off-centre by
+    /// (outerL+outerR)/2, leftover width nobody claimed, and a maximize
+    /// compare that never matched. Inner gaps need no arm — with one column no
+    /// inter-column gap exists.
     /// @param columnCountOverride When >= 0, the smart-gaps arm judges the
     /// single-column case against THIS count instead of the live strip's.
     /// Only the drop indicator passes it: while a preview holds the dragged
@@ -866,10 +890,16 @@ private:
     /// It has to be remembered rather than derived: the park position is
     /// direction-agnostic (below the union of all outputs), so the parked
     /// rect cannot answer the question. The entry is written when the window
-    /// parks and consumed when it comes back on screen; windows that are
-    /// never parked never appear here. Every path that drops the window's
-    /// m_lastAppliedRect while it stays alive drops this too, and the
-    /// aliveness sweep reclaims died-parked entries. One seam-only gap: an
+    /// parks with a departure direction and consumed when it comes back on
+    /// screen; windows that are never parked never appear here. A park with no
+    /// direction (a hidden tab of an on-screen tabbed column, or a vertical
+    /// stack-overflow park) does not write one, and the tab case clears any
+    /// stale entry so the next activation appears in place. A path that drops
+    /// the window's m_lastAppliedRect while it stays alive drops this too, with
+    /// one deliberate exception: re-adoption TAKES the edge and puts it back
+    /// when the insert is refused, because a refusal leaves this strip alive
+    /// and the window may genuinely be parked right now. The aliveness sweep
+    /// reclaims died-parked entries. One seam-only gap: an
     /// embedder driving strip-level minimize directly (production models
     /// minimize as a float toggle, which clears) can strand an entry until
     /// the sweep.
@@ -1029,10 +1059,24 @@ private:
     /// m_screensWithTabStrips instead). Swept with the screen's state.
     QHash<QString, QString> m_lastTabStripPayload;
 
+    // engine_overrides.cpp
     /// Effective per-screen values: the rule override when present, else the
-    /// cached config default.
+    /// cached config default. Each accessor is a thin screenId wrapper over a
+    /// map-taking overload, so a caller resolving several values for one
+    /// screen (layoutParamsForScreen resolves six per relayout) fetches the
+    /// override map ONCE and threads it through instead of re-looking it up
+    /// per accessor.
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
+    CenterFocusedColumn effectiveCenterFocusedColumn(const QVariantMap& overrides) const;
     ColumnWidth effectiveDefaultColumnWidth(const QString& screenId) const;
+    ColumnWidth effectiveDefaultColumnWidth(const QVariantMap& overrides) const;
+    /// Vocabulary-taking overload, the same "resolve it ONCE" shape as the
+    /// override map above: a Preset kind resolves its spin against the
+    /// screen's effective width list, which layoutParamsForScreen has already
+    /// parsed for the params it hands the strip. The one-argument map-taking
+    /// form (above) is a wrapper that parses it again, for the call sites that
+    /// need only this one value.
+    ColumnWidth effectiveDefaultColumnWidth(const QVariantMap& overrides, const QList<qreal>& presetWidths) const;
     /// Whether "the client decides" is the EFFECTIVE default-width verdict
     /// for @p screenId: a per-screen kind override answers for itself (true
     /// only when it IS ClientDecides), and only an absent override defers to
@@ -1041,13 +1085,24 @@ private:
     /// a width" and gets the opposite of what the user chose.
     bool effectiveWidthClientDecides(const QString& screenId) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QString& screenId) const;
+    ColumnDisplay effectiveDefaultColumnDisplay(const QVariantMap& overrides) const;
     /// Height needs the work area: the rule channel's bare fraction is
     /// committed as Fixed pixels against the live work area.
     WindowHeight effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const;
+    WindowHeight effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea) const;
+    /// Vocabulary-taking overload — the height twin of the width one above.
+    WindowHeight effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea,
+                                              const QList<qreal>& presetHeights) const;
     ScrollInsertPosition effectiveInsertPosition(const QString& screenId) const;
+    ScrollInsertPosition effectiveInsertPosition(const QVariantMap& overrides) const;
     /// Per-property override, so a rule that sets only the position leaves the
     /// other six geometry fields on their configured values.
     TabIndicatorParams effectiveTabIndicator(const QString& screenId) const;
+    TabIndicatorParams effectiveTabIndicator(const QVariantMap& overrides) const;
+    /// Map-taking overloads of the two PUBLIC preset accessors (declared in
+    /// the public section above), private because the override map is.
+    QList<qreal> effectivePresetColumnWidths(const QVariantMap& overrides) const;
+    QList<qreal> effectivePresetWindowHeights(const QVariantMap& overrides) const;
 
     QHash<QString, QVariantMap> m_perScreenOverrides;
     std::function<void()> m_persistSaveFn;

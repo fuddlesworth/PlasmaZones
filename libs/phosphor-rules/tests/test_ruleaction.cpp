@@ -30,6 +30,9 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetEngineMode,
     ActionType::SetSnappingLayout,
     ActionType::SetTilingAlgorithm,
+    // Scrolling template — context-domain like its assignment siblings,
+    // decoded by entryFromRuleMatchActions into the AssignmentEntry.
+    ActionType::SetScrollingTemplate,
     ActionType::DisableEngine,
     // Layout lock — context-domain, resolved during the screen/desktop/
     // activity pass (mode-agnostic) like the other context actions.
@@ -206,6 +209,38 @@ private Q_SLOTS:
         wrongShape.insert(QString(ActionParam::Chain), QStringLiteral("frosted-glass"));
         const RuleAction nonArray{QString(ActionType::OverrideDecorationChain), wrongShape};
         QVERIFY(!RuleAction::fromJson(nonArray.toJson()).has_value());
+    }
+
+    void testSetScrollingTemplate_roundTripAndRejections()
+    {
+        // The scrolling assignment action at the public boundary, the way its
+        // snapping and tiling siblings are covered. Its layoutId shares the
+        // wire KEY with SetSnappingLayout, so the strict-key and non-empty
+        // checks are what keep a half-authored template action from loading.
+        QJsonObject params;
+        params.insert(QString(ActionParam::LayoutId), QStringLiteral("{2f2a1b3c-0000-4000-8000-0000000000aa}"));
+        const RuleAction a{QString(ActionType::SetScrollingTemplate), params};
+        const auto reloaded = RuleAction::fromJson(a.toJson());
+        QVERIFY(reloaded.has_value());
+        QCOMPARE(*reloaded, a);
+
+        // An empty id is the unfilled-picker shape and is refused, so the
+        // editor cannot save a template action that resolves to nothing.
+        QJsonObject empty;
+        empty.insert(QString(ActionParam::LayoutId), QString());
+        QVERIFY(
+            !RuleAction::fromJson(RuleAction{QString(ActionType::SetScrollingTemplate), empty}.toJson()).has_value());
+
+        // A missing id is refused for the same reason.
+        QVERIFY(!RuleAction::fromJson(RuleAction{QString(ActionType::SetScrollingTemplate), QJsonObject()}.toJson())
+                     .has_value());
+
+        // A stray key is refused whole — strict-key discipline, not a
+        // silent drop of the extra key.
+        QJsonObject stray = params;
+        stray.insert(QString(ActionParam::Algorithm), QStringLiteral("bsp"));
+        QVERIFY(
+            !RuleAction::fromJson(RuleAction{QString(ActionType::SetScrollingTemplate), stray}.toJson()).has_value());
     }
 
     void testJson_typeWrittenInline()
@@ -806,7 +841,7 @@ private Q_SLOTS:
         // vocabulary. One of each SHAPE covers it: the stray-key path is the
         // descriptor's, not the validator's, so a bool, a signed-range number,
         // a fraction, a zero-floored number, a token and a colour exercise
-        // every distinct descriptor form the sixteen are built from.
+        // every distinct descriptor form the thirteen are built from.
         rejectsStray(ActionType::SetTabIndicatorEnabled, QJsonValue(true));
         rejectsStray(ActionType::SetTabIndicatorGap, QJsonValue(-4));
         rejectsStray(ActionType::SetTabIndicatorLength, QJsonValue(0.5));
@@ -815,6 +850,16 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetTabIndicatorActiveColor, QJsonValue(QStringLiteral("#ff224466")));
         // …and the window-domain half, which is a separate registration path.
         rejectsStray(ActionType::TabColorUrgent, QJsonValue(QStringLiteral("#ff884422")));
+        // The drop-indicator family, one per distinct descriptor shape for the
+        // tab indicator's reason: a bool, a colour, a [0,1] fraction and a
+        // zero-floored pixel number are the four forms the six context-domain
+        // actions are built from.
+        rejectsStray(ActionType::SetDropIndicatorEnabled, QJsonValue(true));
+        rejectsStray(ActionType::SetDropIndicatorColor, QJsonValue(QStringLiteral("#ff224466")));
+        rejectsStray(ActionType::SetDropIndicatorOpacity, QJsonValue(0.25));
+        rejectsStray(ActionType::SetDropIndicatorBorderWidth, QJsonValue(2));
+        // …and the window-domain half, which is a separate registration path.
+        rejectsStray(ActionType::DropIndicatorColor, QJsonValue(QStringLiteral("#ff884422")));
     }
 
     void testOverrideOverlay_fromJson()

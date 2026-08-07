@@ -2,20 +2,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import "../../js/PresetList.js" as PresetList
 
 /**
  * @brief Scrolling → Columns: what a fresh column and a fresh tile look like
- * (default width and height, display mode) and the preset lists the cycle
- * shortcuts step through. One of the three advanced scrolling leaves
- * (Columns / Tabs / Window).
+ * (default width and height, display mode), plus the template a scrolling
+ * screen falls back to when it has none assigned. One of the three advanced
+ * scrolling leaves (Columns / Tabs / Window).
  *
  * The New columns card is per-monitor overridable through its scope chip
- * (the Columns sub-domain of the per-screen scrolling map). The preset lists
- * are app-wide, so they sit in their own unscoped card rather than under the
- * scope chip.
+ * (the Columns sub-domain of the per-screen scrolling map). The preset
+ * vocabularies the cycling shortcuts step through live on templates now, so
+ * this page only picks the default template and leaves editing them to the
+ * Layouts page.
  *
  * This page decides WHICH columns open tabbed (the display row on the New
  * columns card). How a tabbed column's indicator is drawn is the Tabs leaf.
@@ -33,7 +35,7 @@ SettingsFlickable {
     readonly property int heightKindFixed: _scrollConsts.heightKindFixed
     readonly property int heightKindPreset: _scrollConsts.heightKindPreset
 
-    // Live preset counts, through the shared parse PresetListEditor also uses
+    // Live preset counts, through the shared PresetList.js parse
     // so the page has exactly one implementation of "how many presets".
     readonly property int widthPresetCount: PresetList.count(appSettings.scrollingPresetColumnWidths)
     readonly property int heightPresetCount: PresetList.count(appSettings.scrollingPresetWindowHeights)
@@ -66,18 +68,24 @@ SettingsFlickable {
     // A preset list can shrink under a stored index. The spin would then
     // display-clamp without firing onValueModified, leaving config holding an
     // index the user can no longer see, so write the clamped value back.
-    function clampPresetIndex(key, count, globalValue, globalSetter) {
+    function clampPresetIndex(count, globalValue, globalSetter) {
         if (!root.built)
             return;
         var maxIndex = root.presetSpinCeiling(count) - 1;
-        if (root.settingValue(key, globalValue) > maxIndex)
-            root.writeSetting(key, maxIndex, globalSetter);
+        // Clamp the GLOBAL value through the global setter directly. Routing
+        // through writeSetting while a monitor happens to be scoped would
+        // materialize a stray per-screen override holding the clamp and leave
+        // the global index unclamped. A scoped override past the ceiling
+        // display-clamps in the spin and re-clamps at relayout, so it needs
+        // no write-back here.
+        if (globalValue > maxIndex)
+            globalSetter(maxIndex);
     }
 
-    onWidthPresetCountChanged: root.clampPresetIndex("DefaultColumnWidthPresetIndex", root.widthPresetCount, appSettings.scrollingDefaultColumnWidthPresetIndex, function (v) {
+    onWidthPresetCountChanged: root.clampPresetIndex(root.widthPresetCount, appSettings.scrollingDefaultColumnWidthPresetIndex, function (v) {
         appSettings.scrollingDefaultColumnWidthPresetIndex = v;
     })
-    onHeightPresetCountChanged: root.clampPresetIndex("DefaultWindowHeightPresetIndex", root.heightPresetCount, appSettings.scrollingDefaultWindowHeightPresetIndex, function (v) {
+    onHeightPresetCountChanged: root.clampPresetIndex(root.heightPresetCount, appSettings.scrollingDefaultWindowHeightPresetIndex, function (v) {
         appSettings.scrollingDefaultWindowHeightPresetIndex = v;
     })
 
@@ -212,7 +220,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset width")
                     searchAnchor: "defaultColumnWidthPresetIndex"
-                    description: i18n("Which entry of the column width presets a new column opens at, counted from 1. Columns opened this way follow later preset changes.")
+                    description: i18n("Which width a new column opens at, counted from 1 into the widths of the screen's layout template. Screens with no template of their own use the default template below, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.")
                     enabled: newColumnsCard.effectiveWidthKind === root.widthKindPreset
                     visible: true
 
@@ -306,7 +314,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset height")
                     searchAnchor: "defaultWindowHeightPresetIndex"
-                    description: i18n("Which entry of the window height presets a new window opens at, counted from 1")
+                    description: i18n("Which height a new window opens at, counted from 1 into the heights of the screen's layout template. Screens with no template of their own use the default template below, and with no template at all the built-in height steps apply.")
                     enabled: newColumnsCard.effectiveHeightKind === root.heightKindPreset
                     visible: true
 
@@ -333,61 +341,99 @@ SettingsFlickable {
         }
 
         // =================================================================
-        // Presets Card
+        // Layout Template Card
         // =================================================================
         SettingsCard {
             Layout.fillWidth: true
-            headerText: i18n("Width and height presets")
-            searchAnchor: "scrollingPresets"
+            headerText: i18n("Layout template")
+            searchAnchor: "scrollingDefaultTemplate"
             collapsible: true
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                // Section header + full-width card grid, the Virtual Screens
-                // presets shape: the rows carry the titles, the editors get
-                // the card content width with the page's standard margins.
-                SettingsRow {
-                    title: i18n("Column widths")
-                    searchAnchor: "presetColumnWidths"
-                    description: i18n("Percentages of the work area width, cycled in this order by the preset shortcuts")
-                }
-
-                PresetListEditor {
+                Label {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    presets: appSettings.scrollingPresetColumnWidths
-                    cardName: i18nc("accessible name for one preset card, %1 is a percentage", "%1% column width preset")
-                    removeName: i18nc("accessible name for a preset card's remove button, %1 is a percentage", "Remove the %1% column width preset")
-                    addValueName: i18nc("accessible name for the add-preset percentage field", "New column width preset percentage")
-                    addName: i18nc("accessible name for the add-preset button", "Add a column width preset")
-                    commit: function (joined) {
-                        appSettings.scrollingPresetColumnWidths = joined;
-                    }
+                    text: i18n("Templates carry the starting columns and the width and height presets the cycling shortcuts step through. Manage them on the Layouts page under Scrolling Templates, and assign one per screen with the layout picker. The template chosen here applies to every scrolling screen without its own assignment.")
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.Wrap
                 }
-
-                SettingsSeparator {}
 
                 SettingsRow {
-                    title: i18n("Window heights")
-                    searchAnchor: "presetWindowHeights"
-                    description: i18n("Percentages of the work area height, cycled in this order by the preset shortcuts")
-                }
+                    title: i18n("Default template")
+                    searchAnchor: "defaultScrollingTemplate"
+                    description: i18n("Used when a scrolling screen has no template assigned")
 
-                PresetListEditor {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    Layout.bottomMargin: Kirigami.Units.largeSpacing
-                    presets: appSettings.scrollingPresetWindowHeights
-                    cardName: i18nc("accessible name for one preset card, %1 is a percentage", "%1% window height preset")
-                    removeName: i18nc("accessible name for a preset card's remove button, %1 is a percentage", "Remove the %1% window height preset")
-                    addValueName: i18nc("accessible name for the add-preset percentage field", "New window height preset percentage")
-                    addName: i18nc("accessible name for the add-preset button", "Add a window height preset")
-                    vertical: true
-                    commit: function (joined) {
-                        appSettings.scrollingPresetWindowHeights = joined;
+                    // `storedValue` is left undefined on purpose: rebuild()
+                    // owns currentIndex so a miss can stay at -1 instead of
+                    // taking WideComboBox's clamp to the leading None.
+                    WideComboBox {
+                        id: defaultTemplateCombo
+
+                        // Templates from the shared layouts model (the
+                        // isScrollingTemplate family), with a leading None.
+                        function rebuild() {
+                            let entries = [
+                                {
+                                    "text": i18n("None"),
+                                    "value": ""
+                                }
+                            ];
+                            const all = settingsController.layouts;
+                            for (let i = 0; i < all.length; i++) {
+                                if (all[i].isScrollingTemplate === true)
+                                    entries.push({
+                                        "text": all[i].displayName,
+                                        "value": all[i].id
+                                    });
+                            }
+                            model = entries;
+                            // Re-resolve AFTER the model swap: indexOfValue
+                            // inside a binding evaluates against the OLD
+                            // model (the combo-derived reset trap).
+                            // A miss stays at -1 rather than snapping to the
+                            // leading None: config still holds the stored id,
+                            // and displayText below names it as missing.
+                            currentIndex = indexOfValue(appSettings.defaultScrollingTemplate);
+                        }
+
+                        textRole: "text"
+                        valueRole: "value"
+                        // Gate the alarm on the layouts model having landed
+                        // (MonitorStatePage's in-flight rule): before it does,
+                        // every stored id resolves to -1, which is an unloaded
+                        // catalogue rather than a missing template. Once the
+                        // model is live the alarm shows even when only the
+                        // leading None row remains — a stored default with no
+                        // surviving template genuinely IS missing.
+                        displayText: currentIndex >= 0 ? currentText : (settingsController.layouts.length > 0 ? i18n("Missing template (%1)", appSettings.defaultScrollingTemplate) : "")
+                        Accessible.name: i18n("Default scrolling template")
+                        onActivated: appSettings.defaultScrollingTemplate = currentValue
+                        // Supersedes WideComboBox's own completion handler on
+                        // purpose: rebuild() assigns the model, whose change
+                        // hooks re-run the width sync, and storedValue stays
+                        // undefined so the base sync never fights rebuild()'s
+                        // ownership of currentIndex.
+                        Component.onCompleted: rebuild()
+
+                        Connections {
+                            function onLayoutsChanged() {
+                                defaultTemplateCombo.rebuild();
+                            }
+
+                            target: settingsController
+                        }
+
+                        Connections {
+                            function onDefaultScrollingTemplateChanged() {
+                                defaultTemplateCombo.currentIndex = defaultTemplateCombo.indexOfValue(appSettings.defaultScrollingTemplate);
+                            }
+
+                            target: appSettings
+                        }
                     }
                 }
             }

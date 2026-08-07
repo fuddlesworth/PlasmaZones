@@ -311,6 +311,16 @@ Q_SIGNALS:
 
 private:
     void initializeRegistry();
+    /// The per-mode slices of the registry, split into
+    /// settingsadaptor_registry_snapping.cpp,
+    /// settingsadaptor_registry_autotile.cpp and
+    /// settingsadaptor_registry_scrolling.cpp for file size. Each is called
+    /// only by initializeRegistry and fills the same getter / setter / schema
+    /// maps; which key lives in which slice follows the boundary rule
+    /// documented in those files' banners.
+    void initializeRegistrySnapping();
+    void initializeRegistryAutotile();
+    void initializeRegistryScrolling();
 
     /**
      * @brief Schedule a debounced save

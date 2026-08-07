@@ -9,7 +9,8 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Filter bar for layout/algorithm grid — group by, sort by, filters, and text search.
  *
- * Options change dynamically based on viewMode (0 = Snapping, 1 = Tiling).
+ * Options change dynamically based on viewMode (0 = Snapping, 1 = Tiling,
+ * 2 = Scrolling Templates).
  */
 RowLayout {
     id: root
@@ -34,6 +35,9 @@ RowLayout {
     property bool showManualLayouts: true
     property bool showBuiltInLayouts: true
     property bool showUserLayouts: true
+    // ── Exposed state: template filters ─────────────────────────────────────
+    property bool showBuiltInTemplates: true
+    property bool showUserTemplates: true
     // ── Exposed state: tiling filters ───────────────────────────────────────
     property bool showBuiltInAlgorithms: true
     property bool showUserAlgorithms: true
@@ -50,7 +54,7 @@ RowLayout {
     // Derived from the active mode's filter button rather than a hand-written
     // list: its `excluded` already tracks every bool filter that is off, via
     // _excludedKeys over the button's own group entries.
-    readonly property bool hasActiveFilters: filterText.length > 0 || (viewMode === 0 ? snappingFilterButton : tilingFilterButton).excluded.length > 0
+    readonly property bool hasActiveFilters: filterText.length > 0 || (viewMode === 2 ? templateFilterButton : (viewMode === 0 ? snappingFilterButton : tilingFilterButton)).excluded.length > 0
     // ── Group-by index constants (must match model order below) ───────────
     // Snapping
     readonly property int groupAspectRatio: 0
@@ -61,6 +65,10 @@ RowLayout {
     readonly property int groupSnappingNone: 5
     // Tiling. "Persistent" was dropped — it was a degenerate yes/no split already
     // covered by the Capability grouping's "Persistent (Memory)" bucket.
+    // Scrolling templates
+    readonly property int groupTemplateSource: 0
+    readonly property int groupTemplateNone: 1
+    // Tiling capability grouping
     readonly property int groupCapability: 0
     readonly property int groupTilingSource: 1
     readonly property int groupTilingVisibility: 2
@@ -68,11 +76,17 @@ RowLayout {
     // Static ComboBox models (avoids inline array recreation that resets currentIndex)
     readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("Visibility"), i18n("None")]
     readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Visibility"), i18n("None")]
+    readonly property var templateGroupModel: [i18n("Source"), i18n("None")]
     // "Priority" sorts by the order set on the Configuration → Priority page
     // (snappingLayoutOrder / tilingAlgorithmOrder). Falls back to Name order when
     // no priority has been set yet.
     readonly property var snappingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Priority")]
     readonly property var tilingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Priority")]
+    // Width Count deliberately shares sort index 1 with Zone Count: the
+    // shared sort logic reads the same zoneCount field (a template's
+    // width count) so no template-specific comparator is needed. No
+    // Priority entry — templates have no custom-order page.
+    readonly property var templateSortModel: [i18n("Name"), i18n("Width Count")]
     // Guard to suppress redundant filterSettingsChanged during batch resets
     property bool _resetting: false
     property int _previousViewMode: 0
@@ -83,7 +97,16 @@ RowLayout {
     property bool _hasPriorityOrder: false
 
     function _refreshHasPriorityOrder() {
-        _hasPriorityOrder = viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder();
+        // Templates have no priority order (and no Priority sort entry).
+        _hasPriorityOrder = viewMode === 2 ? false : (viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder());
+    }
+
+    // The state map for @p mode — the one authority every save/load/reset
+    // walk uses, so a third view mode cannot be missed by one of them.
+    function _stateMapFor(mode) {
+        if (mode === 2)
+            return _templateStateMap;
+        return mode === 0 ? _snappingStateMap : _tilingStateMap;
     }
     // Property-name maps for data-driven save/load.
     // Each entry: [rootPropertyName, persistedStatePropertyName].
@@ -93,6 +116,7 @@ RowLayout {
     // note above _defaultValues below — keep both lists in sync).
     // hasActiveFilters needs no update: it derives from the button's excluded.
     readonly property var _snappingStateMap: [["groupByIndex", "snappingGroupByIndex"], ["sortByIndex", "snappingSortByIndex"], ["sortAscending", "snappingSortAscending"], ["showHidden", "snappingShowHidden"], ["showAspectAny", "snappingShowAspectAny"], ["showAspectStandard", "snappingShowAspectStandard"], ["showAspectUltrawide", "snappingShowAspectUltrawide"], ["showAspectSuperUltrawide", "snappingShowAspectSuperUltrawide"], ["showAspectPortrait", "snappingShowAspectPortrait"], ["showAutoLayouts", "snappingShowAutoLayouts"], ["showManualLayouts", "snappingShowManualLayouts"], ["showBuiltInLayouts", "snappingShowBuiltInLayouts"], ["showUserLayouts", "snappingShowUserLayouts"]]
+    readonly property var _templateStateMap: [["groupByIndex", "templateGroupByIndex"], ["sortByIndex", "templateSortByIndex"], ["sortAscending", "templateSortAscending"], ["showBuiltInTemplates", "templateShowBuiltIn"], ["showUserTemplates", "templateShowUser"]]
     readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"], ["showScriptState", "tilingShowScriptState"], ["showSingleWindow", "tilingShowSingleWindow"], ["showReflowsOnFocus", "tilingShowReflowsOnFocus"]]
     // Default values for all resettable filter properties (not group/sort).
     // Adding a filter requires updating: property declaration, _defaultValues,
@@ -109,6 +133,8 @@ RowLayout {
         "showManualLayouts": true,
         "showBuiltInLayouts": true,
         "showUserLayouts": true,
+        "showBuiltInTemplates": true,
+        "showUserTemplates": true,
         "showBuiltInAlgorithms": true,
         "showUserAlgorithms": true,
         "showMasterCount": true,
@@ -140,7 +166,9 @@ RowLayout {
     // Open the filter checkbox menu for the current view mode. Invoked by the
     // page's filter button (the button moved to the search row).
     function popupFilterMenu() {
-        if (viewMode === 0)
+        if (viewMode === 2)
+            templateFilterButton.popup();
+        else if (viewMode === 0)
             snappingFilterButton.popup();
         else
             tilingFilterButton.popup();
@@ -184,7 +212,7 @@ RowLayout {
         searchCleared();
         filterText = "";
         // Only reset properties relevant to the current view mode
-        let map = viewMode === 0 ? _snappingStateMap : _tilingStateMap;
+        let map = _stateMapFor(viewMode);
         for (let i = 0; i < map.length; i++) {
             let prop = map[i][0];
             if (prop in _defaultValues)
@@ -195,7 +223,7 @@ RowLayout {
     }
 
     function saveState(mode) {
-        let map = mode === 0 ? _snappingStateMap : _tilingStateMap;
+        let map = _stateMapFor(mode);
         for (let i = 0; i < map.length; i++)
             persistedState[map[i][1]] = root[map[i][0]];
     }
@@ -206,9 +234,9 @@ RowLayout {
         searchDebounce.stop();
         searchCleared();
         filterText = "";
-        let map = mode === 0 ? _snappingStateMap : _tilingStateMap;
-        let maxGroup = (mode === 0 ? snappingGroupModel : tilingGroupModel).length - 1;
-        let maxSort = (mode === 0 ? snappingSortModel : tilingSortModel).length - 1;
+        let map = _stateMapFor(mode);
+        let maxGroup = (mode === 2 ? templateGroupModel : (mode === 0 ? snappingGroupModel : tilingGroupModel)).length - 1;
+        let maxSort = (mode === 2 ? templateSortModel : (mode === 0 ? snappingSortModel : tilingSortModel)).length - 1;
         for (let i = 0; i < map.length; i++) {
             let prop = map[i][0];
             let val = persistedState[map[i][1]];
@@ -282,9 +310,9 @@ RowLayout {
     GroupSortBar {
         id: groupSort
 
-        groupModel: root.viewMode === 0 ? root.snappingGroupModel : root.tilingGroupModel
-        sortModel: root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel
-        sortItemAvailable: [true, true, root._hasPriorityOrder]
+        groupModel: root.viewMode === 2 ? root.templateGroupModel : (root.viewMode === 0 ? root.snappingGroupModel : root.tilingGroupModel)
+        sortModel: root.viewMode === 2 ? root.templateSortModel : (root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel)
+        sortItemAvailable: root.viewMode === 2 ? [true, true] : [true, true, root._hasPriorityOrder]
         disabledSortTooltip: i18n("Set a layout order on the Priority page first")
         onChanged: {
             root.groupByIndex = groupByIndex;
@@ -376,6 +404,32 @@ RowLayout {
         }
     }
 
+    // ── Template Filter Menu ────────────────────────────────────────────────
+    FilterMenuButton {
+        id: templateFilterButton
+
+        visible: false
+        menuTitle: i18n("Filter Templates")
+        externalFilterActive: root.filterText.length > 0
+        groups: [[
+                {
+                    "key": "showBuiltInTemplates",
+                    "label": i18n("Built-in")
+                },
+                {
+                    "key": "showUserTemplates",
+                    "label": i18n("Your Templates")
+                }
+            ]]
+        onFilterToggled: (key, included) => root._applyFilterToggle(key, included)
+        onResetTriggered: root.resetFilters()
+
+        Binding on excluded {
+            value: root._excludedKeys(templateFilterButton.groups)
+            restoreMode: Binding.RestoreNone
+        }
+    }
+
     // ── Tiling Filter Menu ──────────────────────────────────────────────────
     FilterMenuButton {
         id: tilingFilterButton
@@ -462,6 +516,12 @@ RowLayout {
         property bool snappingShowManualLayouts: true
         property bool snappingShowBuiltInLayouts: true
         property bool snappingShowUserLayouts: true
+        // Scrolling-template mode
+        property int templateGroupByIndex: 0
+        property int templateSortByIndex: 0
+        property bool templateSortAscending: true
+        property bool templateShowBuiltIn: true
+        property bool templateShowUser: true
         // Tiling mode
         property int tilingGroupByIndex: 0
         property int tilingSortByIndex: 0

@@ -5,12 +5,12 @@
 
 Most schemas under data/schemas/ are the single source of truth shared
 with runtime validation: phosphor-fsloader's SchemaValidator (valijson)
-compiles the same schema files at load time. A few (surface-metadata) are
-an author-time-only contract, because that document type validates its
-metadata directly in C++ rather than through a runtime schema. Either way
-this script is the author-time gate — run from lefthook on commit and from
-CI — so a malformed bundled data file fails review rather than shipping and
-being skipped at runtime.
+compiles the same schema files at load time. A few (surface-metadata,
+scrolling-template) are an author-time-only contract, because those
+document types validate their content directly in C++ rather than through
+a runtime schema. Either way this script is the author-time gate — run from
+lefthook on commit and from CI — so a malformed bundled data file fails
+review rather than shipping and being skipped at runtime.
 
 The schema dialect is Draft 7 (what valijson supports), validated here
 with the `jsonschema` package's Draft7Validator so the two engines agree.
@@ -39,16 +39,23 @@ _BOOTSTRAP_ENV = "PZ_JSONSCHEMA_BOOTSTRAPPED"
 # Maps a schema (relative to the source root) to the glob(s) of data
 # files it governs. Add an entry here when a new document type gets a
 # schema. Most schemas are also embedded via RCC and compiled by the
-# runtime SchemaValidator; a few (surface-metadata) are validated only
-# here, where the runtime checks that document type in C++ directly.
+# runtime SchemaValidator; a few (surface-metadata, scrolling-template) are
+# validated only here, where the runtime checks those document types in C++
+# directly.
 SCHEMA_MAP: dict[str, list[str]] = {
     "data/schemas/layout.schema.json": ["data/layouts/*.json"],
+    "data/schemas/scrolling-template.schema.json": ["data/scrolling-templates/*.json"],
     "data/schemas/curve.schema.json": ["data/curves/*.json"],
     "data/schemas/animation-metadata.schema.json": ["data/animations/*/metadata.json"],
     "data/schemas/shader-metadata.schema.json": ["data/overlays/*/metadata.json"],
     "data/schemas/surface-metadata.schema.json": ["data/surface/*/metadata.json"],
     "data/schemas/whatsnew.schema.json": ["data/whatsnew.json"],
 }
+
+# The one dialect this gate speaks. Draft7Validator is used unconditionally
+# below, so every mapped schema has to declare the matching $schema or it
+# would be validated under rules it did not ask for.
+DRAFT7_URI = "http://json-schema.org/draft-07/schema#"
 
 
 def fail(msg: str) -> None:
@@ -224,6 +231,15 @@ def main() -> int:
             Draft7Validator.check_schema(schema)
         except Exception as exc:  # noqa: BLE001 - report any schema defect (parse or schema error)
             fail(f"invalid schema {schema_rel}: {exc}")
+            failures += 1
+            continue
+
+        # check_schema() above validates against draft-07 whatever the schema
+        # declares, so a schema that names a different draft would be checked
+        # and then validated under rules it never asked for. Pin the dialect.
+        declared = schema.get("$schema")
+        if declared != DRAFT7_URI:
+            fail(f"{schema_rel}: $schema must be {DRAFT7_URI} (found {declared!r})")
             failures += 1
             continue
 

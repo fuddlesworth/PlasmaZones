@@ -6,6 +6,9 @@
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
+// LayoutCategory: the wire value of K::Category is that enum's numeric value,
+// so it is written through the enumerators rather than hand-copied literals.
+#include <PhosphorZones/Layout.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QJsonArray>
@@ -26,11 +29,13 @@ constexpr QLatin1String Description{"description"};
 constexpr QLatin1String ZoneCount{"zoneCount"};
 constexpr QLatin1String Zones{"zones"};
 constexpr QLatin1String IsAutotile{"isAutotile"};
-// PhosphorZones::LayoutCategory mirror — `isAutotile` is the canonical
-// boolean, but QML consumers (LayoutCard, CategoryBadge) read a numeric
-// `category` field (0 = Manual, 1 = Autotile) to match the
+constexpr QLatin1String IsScrollingTemplate{"isScrollingTemplate"};
+// PhosphorZones::LayoutCategory mirror — `isAutotile` and
+// `isScrollingTemplate` are the canonical booleans, but QML consumers
+// (LayoutCard, CategoryBadge) read a numeric `category` field
+// (0 = Manual, 1 = Autotile, 2 = ScrollingTemplate) to match the
 // LayoutCategory enum used elsewhere. Emit both so QML doesn't need to
-// translate, and the C++ `isAutotile` consumer keeps its name.
+// translate, and the C++ boolean consumers keep their names.
 constexpr QLatin1String Category{"category"};
 constexpr QLatin1String IsSystem{"isSystem"};
 constexpr QLatin1String Recommended{"recommended"};
@@ -125,7 +130,11 @@ QJsonObject toJson(const PhosphorLayout::LayoutPreview& preview)
     }
     json[K::ZoneCount] = preview.zoneCount;
     json[K::IsAutotile] = preview.isAutotile();
-    json[K::Category] = preview.isAutotile() ? 1 : 0;
+    json[K::IsScrollingTemplate] = preview.isScrollingTemplate;
+    json[K::Category] = preview.isScrollingTemplate
+        ? static_cast<int>(PhosphorZones::LayoutCategory::ScrollingTemplate)
+        : (preview.isAutotile() ? static_cast<int>(PhosphorZones::LayoutCategory::Autotile)
+                                : static_cast<int>(PhosphorZones::LayoutCategory::Manual));
     json[K::IsSystem] = preview.isSystem;
     json[K::Recommended] = preview.recommended;
     json[K::AutoAssign] = preview.autoAssign;
@@ -173,13 +182,17 @@ QVariantMap toVariantMap(const PhosphorLayout::LayoutPreview& preview)
 {
     QVariantMap map;
     map[K::Id] = preview.id;
+    map[K::IsScrollingTemplate] = preview.isScrollingTemplate;
     map[K::DisplayName] = preview.displayName;
     if (!preview.description.isEmpty()) {
         map[K::Description] = preview.description;
     }
     map[K::ZoneCount] = preview.zoneCount;
     map[K::IsAutotile] = preview.isAutotile();
-    map[K::Category] = preview.isAutotile() ? 1 : 0;
+    map[K::Category] = preview.isScrollingTemplate
+        ? static_cast<int>(PhosphorZones::LayoutCategory::ScrollingTemplate)
+        : (preview.isAutotile() ? static_cast<int>(PhosphorZones::LayoutCategory::Autotile)
+                                : static_cast<int>(PhosphorZones::LayoutCategory::Manual));
     map[K::IsSystem] = preview.isSystem;
     map[K::Recommended] = preview.recommended;
     map[K::AutoAssign] = preview.autoAssign;

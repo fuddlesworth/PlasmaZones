@@ -33,6 +33,33 @@ SettingsFlickable {
 
     readonly property int presetCount: PresetList.count(appSettings.scrollingPresetColumnWidths)
 
+    // Largest 1-based preset number the spin may offer: the shorter of the
+    // live list and the schema's stored-index ceiling. Same rule as the
+    // Columns page's presetSpinCeiling, over the same global key.
+    function presetSpinCeiling(count) {
+        return Math.max(1, Math.min(count, root._scrollConsts.presetIndexMax + 1));
+    }
+
+    // Gate on construction being finished: the count binding settles while
+    // the page is built, and a write from that first evaluation would badge
+    // the page dirty before the user has touched anything.
+    property bool built: false
+
+    Component.onCompleted: root.built = true
+
+    // Twin of ScrollingColumnsPage's write-back over the same global key: a
+    // preset list can shrink under a stored index, and the spin would then
+    // display-clamp without firing onValueModified, leaving config holding an
+    // index the user can no longer see. This page is global-scope only, so
+    // the write goes straight to appSettings.
+    onPresetCountChanged: {
+        if (!root.built)
+            return;
+        var maxIndex = root.presetSpinCeiling(root.presetCount) - 1;
+        if (appSettings.scrollingDefaultColumnWidthPresetIndex > maxIndex)
+            appSettings.scrollingDefaultColumnWidthPresetIndex = maxIndex;
+    }
+
     // Bumped on every override change so the check below re-runs:
     // hasPerScreenScrollingSettings is a plain invokable with no NOTIFY, so a
     // binding over it would never re-evaluate on its own.
@@ -159,7 +186,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset width")
                     searchAnchor: "simpleDefaultColumnWidthPresetIndex"
-                    description: i18n("Which entry of the column width presets a new column opens at, counted from 1. The presets themselves are edited on the Columns page in advanced mode.")
+                    description: i18n("Which width a new column opens at, counted from 1 into the widths of the screen's layout template. Screens with no template of their own use the default template set on Scrolling → Columns, and with no template at all the built-in width steps apply.")
                     enabled: appSettings.scrollingDefaultColumnWidthKind === root.widthKindPreset
                     visible: true
 
@@ -170,7 +197,7 @@ SettingsFlickable {
                         // An ordinal, not a measurement.
                         unitText: ""
                         from: 1
-                        to: Math.max(1, Math.min(root.presetCount, root._scrollConsts.presetIndexMax + 1))
+                        to: root.presetSpinCeiling(root.presetCount)
                         stepSize: 1
                         // Stored 0-based, shown 1-based to match the preset
                         // cycling OSD.

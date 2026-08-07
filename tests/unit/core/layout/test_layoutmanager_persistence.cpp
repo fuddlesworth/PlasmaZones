@@ -26,6 +26,8 @@
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/Zone.h>
 #include "helpers/StubSettings.h"
 #include "helpers/IsolatedConfigGuard.h"
@@ -362,8 +364,9 @@ private Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
 
     // The current on-disk format nests slots per mode
-    // ({ "snapping": {...}, "autotile": {...} }). Both modes must survive a
-    // save → fresh-load round trip and stay independent.
+    // ({ "snapping": {...}, "autotile": {...}, "scrolling": {...} }). All
+    // three modes must survive a save → fresh-load round trip and stay
+    // independent.
     void testLayoutManager_quickLayouts_nestedFormatRoundTrip()
     {
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
@@ -373,9 +376,20 @@ private Q_SLOTS:
         const QString uuid = layout->id().toString();
         const auto snapping = PhosphorZones::AssignmentEntry::Snapping;
         const auto autotile = PhosphorZones::AssignmentEntry::Autotile;
+        const auto scrolling = PhosphorZones::AssignmentEntry::Scrolling;
 
         mgr->setQuickLayoutSlot(snapping, 1, uuid); // each set writes the sidecar
         mgr->setQuickLayoutSlot(autotile, 2, QStringLiteral("autotile:bsp"));
+        // Scrolling owns its OWN array and on-disk key since the
+        // native-template pivot; its slot values are template ids.
+        PhosphorZones::ScrollingTemplateStore store;
+        mgr->setScrollingTemplateStore(&store);
+        PhosphorZones::ScrollingTemplate slotTemplate;
+        slotTemplate.name = QStringLiteral("SlotTemplate");
+        slotTemplate.presetColumnWidths = {0.5};
+        const QString templId = store.saveTemplate(slotTemplate).toString();
+        mgr->setQuickLayoutSlot(scrolling, 3, templId);
+        mgr->setScrollingTemplateStore(nullptr);
 
         // A fresh registry on the SAME guard-isolated dirs reloads the sidecar
         // (quicklayouts.json lives next to rules.json, not in the layout
@@ -389,6 +403,11 @@ private Q_SLOTS:
         // Modes stay independent across the round trip.
         QVERIFY(!mgr2->quickLayoutSlots(snapping).contains(2));
         QVERIFY(!mgr2->quickLayoutSlots(autotile).contains(1));
+        // The scrolling-mode write round-trips through its OWN on-disk key
+        // and never leaks into the snapping array.
+        QCOMPARE(mgr2->quickLayoutSlots(scrolling).value(3), templId);
+        QVERIFY(!mgr2->quickLayoutSlots(snapping).contains(3));
+        QVERIFY(!mgr2->quickLayoutSlots(autotile).contains(3));
     }
 
     // A pre-mode (flat) quicklayouts.json is NOT a supported format: the reader
@@ -401,19 +420,118 @@ private Q_SLOTS:
         const QString uuid = QUuid::createUuid().toString();
         const QString path = ConfigDefaults::quickLayoutsFilePath();
         QDir().mkpath(QFileInfo(path).absolutePath());
+
+        const auto writeSidecar = [&path](const QJsonObject& document) {
+            QFile f(path);
+            if (!f.open(QIODevice::WriteOnly)) {
+                return false;
+            }
+            f.write(QJsonDocument(document).toJson());
+            return true;
+        };
+
+        // POSITIVE CONTROL first: the same hand-computed path, holding a
+        // document in the SUPPORTED nested shape, must load. Without this the
+        // emptiness below would also be the result of writing to a path the
+        // registry never reads, and the test would pass for the wrong reason.
+        QJsonObject nestedSlots;
+        nestedSlots.insert(QStringLiteral("1"), uuid);
+        QJsonObject nested;
+        nested.insert(PhosphorZones::LayoutRegistry::QuickSlotsSnappingKey, nestedSlots);
+        QVERIFY(writeSidecar(nested));
+        mgr->loadAssignments();
+        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).value(1), uuid);
+
+        // Now the flat document, over the same path the control just proved is
+        // live. The reader is nested-only, so every mode comes back empty.
         QJsonObject flat;
         flat.insert(QStringLiteral("1"), uuid);
         flat.insert(QStringLiteral("3"), uuid);
-        {
-            QFile f(path);
-            QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(QJsonDocument(flat).toJson());
-        }
+        QVERIFY(writeSidecar(flat));
 
         mgr->loadAssignments(); // re-reads the sidecar we just wrote
 
         QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).isEmpty());
         QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).isEmpty());
+        // Scrolling owns a third array read from the same document, so it has
+        // to be asserted too or a flat file could leak into it unnoticed.
+        QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Scrolling).isEmpty());
+    }
+
+    // setAllQuickLayoutSlots is the batch peer of setQuickLayoutSlot and had no
+    // coverage at all. Its scrolling arm HAND-DUPLICATES the single setter's
+    // canonicalization and validation rather than sharing it, so the two can
+    // drift silently: an unbraced id stored verbatim would survive the delete
+    // of the template it names (the purge sweep compares exact strings), and a
+    // malformed or unknown id stored at all would leave a dangling slot.
+    void testLayoutManager_setAllQuickLayoutSlots_validatesAndCanonicalizes()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        PhosphorZones::ScrollingTemplateStore store;
+        mgr->setScrollingTemplateStore(&store);
+
+        PhosphorZones::ScrollingTemplate templ;
+        templ.name = QStringLiteral("Batch");
+        templ.presetColumnWidths = {0.5};
+        const QUuid templId = store.saveTemplate(templ);
+        QVERIFY(!templId.isNull());
+
+        // Slot 1 braced (accepted as is), slot 2 the SAME id unbraced and
+        // upper-cased (must come back canonical), slot 3 a well-formed id no
+        // template owns, slot 4 not a UUID at all. Only 1 and 2 survive.
+        const QString unbraced = templId.toString(QUuid::WithoutBraces).toUpper();
+        QHash<int, QString> batch;
+        batch.insert(1, templId.toString());
+        batch.insert(2, unbraced);
+        batch.insert(3, QStringLiteral("{99999999-9999-9999-9999-999999999999}"));
+        batch.insert(4, QStringLiteral("not-a-uuid"));
+        mgr->setAllQuickLayoutSlots(PhosphorZones::AssignmentEntry::Scrolling, batch);
+
+        const QHash<int, QString> stored = mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(stored.size(), 2);
+        QCOMPARE(stored.value(1), templId.toString());
+        QCOMPARE(stored.value(2), templId.toString());
+        QVERIFY(!stored.contains(3));
+        QVERIFY(!stored.contains(4));
+
+        // The batch write goes through the sidecar like the single setter, so
+        // a fresh registry on the same isolated dirs reads back the canonical
+        // spellings rather than what the caller handed in.
+        mgr->setScrollingTemplateStore(nullptr);
+        QScopedPointer<PhosphorZones::LayoutRegistry> reloaded(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        reloaded->loadAssignments();
+        const QHash<int, QString> afterReload = reloaded->quickLayoutSlots(PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(afterReload.value(1), templId.toString());
+        QCOMPARE(afterReload.value(2), templId.toString());
+        QCOMPARE(afterReload.size(), 2);
+    }
+
+    // The batch setter CLEARS the mode's array before applying, and only that
+    // mode's. A caller replacing the scrolling slots must not disturb the
+    // snapping or autotile arrays sharing the sidecar.
+    void testLayoutManager_setAllQuickLayoutSlots_clearsOnlyItsOwnMode()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Slotted"));
+        mgr->addLayout(layout);
+        const QString uuid = layout->id().toString();
+
+        mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Snapping, 1, uuid);
+        mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Autotile, 1, QStringLiteral("autotile:bsp"));
+        mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Snapping, 5, uuid);
+
+        // Replacing the snapping array drops slot 5 (not named in the batch)
+        // and leaves autotile untouched.
+        QHash<int, QString> batch;
+        batch.insert(2, uuid);
+        mgr->setAllQuickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping, batch);
+
+        const QHash<int, QString> snapping = mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(snapping.size(), 1);
+        QCOMPARE(snapping.value(2), uuid);
+        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).value(1),
+                 QStringLiteral("autotile:bsp"));
     }
 };
 

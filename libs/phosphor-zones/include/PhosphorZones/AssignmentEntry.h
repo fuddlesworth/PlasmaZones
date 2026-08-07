@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QUuid>
 #include <QVariantMap>
 #include <QtGlobal>
 
@@ -92,11 +93,13 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 }
 
 /**
- * @brief Explicit per-context assignment entry storing both mode fields
+ * @brief Explicit per-context assignment entry storing every mode's payload
  *
- * Each screen/desktop/activity context stores an explicit Mode, SnappingLayout (UUID),
- * and PhosphorTiles::TilingAlgorithm. Toggling between modes only flips the mode field —
- * the other field is preserved, eliminating the need for shadow assignments.
+ * Each screen/desktop/activity context stores an explicit Mode plus all three
+ * per-mode payloads: SnappingLayout (UUID), PhosphorTiles::TilingAlgorithm,
+ * and ScrollingTemplateLayout (UUID). Toggling between modes only flips the
+ * mode field — the other fields are preserved, eliminating the need for
+ * shadow assignments.
  */
 struct AssignmentEntry
 {
@@ -116,13 +119,26 @@ struct AssignmentEntry
         /// form columns on an endless horizontal strip per context.
         /// `ScreenModeRouter::engineFor` hands Scrolling screens to the
         /// live ScrollEngine; the (Mode, Family) settings table here still
-        /// drives all downstream config routing. Scrolling has no layout
-        /// entity of its own — the mode lookup is the discriminator.
+        /// drives all downstream config routing. Scrolling consumes no manual
+        /// layout at all: its sizing comes from a native ScrollingTemplate
+        /// (scrollingTemplateLayout below), its activeLayoutId() stays the
+        /// bare "scrolling:" sentinel, and the mode lookup is the
+        /// discriminator.
         Scrolling = 2
     };
     Mode mode = Snapping;
     QString snappingLayout; // UUID string of manual layout
     QString tilingAlgorithm; // e.g. "dwindle", "wide", "tall"
+    /// Id of the native scrolling template (ScrollingTemplate) a Scrolling
+    /// context uses for its seed blueprint, default column width and preset
+    /// vocabularies. Its own UUID namespace, disjoint from manual layout ids.
+    /// Deliberately its own field, never a reuse of
+    /// snappingLayout: the lossless mode-toggle contract preserves the
+    /// snapping choice across mode flips, and the "scrolling:" sentinel in
+    /// activeLayoutId() stays payload-free (rules match on the bare
+    /// sentinel). Empty = no template; the engine falls back to the
+    /// settings preset lists.
+    QString scrollingTemplateLayout;
 
     QString activeLayoutId() const
     {
@@ -157,14 +173,18 @@ struct AssignmentEntry
     /// This is NOT the cascade's visibility predicate — that is
     /// activeLayoutId() non-empty, which a payload-less Scrolling entry
     /// satisfies through the "scrolling:" sentinel while isValid() stays
-    /// false. Kept for tests/tooling; no production caller branches on it.
+    /// false. scrollingTemplateLayout is deliberately EXCLUDED: a template
+    /// never feeds activeLayoutId(), so counting it would make an entry
+    /// "valid" that still resolves to nothing on a Snapping/Autotile
+    /// context. Kept for tests/tooling; no production caller branches on it.
     bool isValid() const
     {
         return !snappingLayout.isEmpty() || !tilingAlgorithm.isEmpty();
     }
     bool operator==(const AssignmentEntry& other) const
     {
-        return mode == other.mode && snappingLayout == other.snappingLayout && tilingAlgorithm == other.tilingAlgorithm;
+        return mode == other.mode && snappingLayout == other.snappingLayout && tilingAlgorithm == other.tilingAlgorithm
+            && scrollingTemplateLayout == other.scrollingTemplateLayout;
     }
 
     /** @brief Update an existing AssignmentEntry from a layoutId, preserving the "other" field.
@@ -180,13 +200,24 @@ struct AssignmentEntry
             entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
         } else if (PhosphorLayout::LayoutId::isScrolling(layoutId)) {
             // The "scrolling:" sentinel carries no layout entity — flip the
-            // mode and preserve both layout fields (the lossless-toggle
+            // mode and preserve all three layout fields (the lossless-toggle
             // contract), so a get→set round-trip cannot degrade a Scrolling
             // assignment into Snapping-pointing-at-a-bogus-id.
             entry.mode = Scrolling;
         } else {
             entry.mode = Snapping;
-            entry.snappingLayout = layoutId;
+            // Normalize a UUID-shaped id to its canonical braced spelling at
+            // this ONE classification choke point, so every caller (the D-Bus
+            // setAssignmentEntry and the four setAll*Assignments verbs, the
+            // batch rebuilds, the controllers) stores one spelling. A braceless
+            // or upper-case bus-supplied uuid stored verbatim defeats the
+            // exact-string compare that purgeLayoutIdFromAssignments does on
+            // layout delete, and the byte-wise action compare in
+            // upsertAssignmentRule's no-op guard. Anything that is not a UUID
+            // passes through untouched — the snapping slot is not required to
+            // hold one.
+            const QUuid parsed = QUuid::fromString(layoutId);
+            entry.snappingLayout = parsed.isNull() ? layoutId : parsed.toString();
         }
         return entry;
     }

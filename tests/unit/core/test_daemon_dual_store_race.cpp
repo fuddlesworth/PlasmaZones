@@ -72,7 +72,7 @@ PhosphorRules::Rule makeTestAssignmentRule()
 {
     return PhosphorRules::ContextRuleBridge::makeAssignmentRule(
         QStringLiteral("Test assignment rule"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"),
-        QUuid::createUuid().toString(), QString(), PhosphorRules::ContextRuleBridge::kContextBandBase);
+        QUuid::createUuid().toString(), QString(), PhosphorRules::ContextRuleBridge::kContextBandBase, QString());
 }
 
 /// True iff @p store contains a rule with the assignment-action shape — i.e.,

@@ -39,7 +39,10 @@ void ActionRegistry::registerBuiltinsAppearance()
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
         .category = QStringLiteral("windowManagement"),
-        .displayOrder = 5,
+        // 9, not 5: ExcludePlacement already holds 5 in this category
+        // (ruleaction_builtins_engine.cpp), and displayOrder is meant to be
+        // unique per category.
+        .displayOrder = 9,
     });
 
     // Two more per-window restore-policy overrides, same shape as RestorePosition
@@ -944,8 +947,8 @@ void ActionRegistry::registerBuiltinsAppearance()
         // Stored as a fraction, edited as a percent — the SetScrollDefaultColumnWidth shape.
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("percent"),
-                     .min = kMinTabIndicatorLengthRatio * 100.0,
-                     .max = kMaxTabIndicatorLengthRatio * 100.0,
+                     .min = kMinTabIndicatorLengthPercent,
+                     .max = kMaxTabIndicatorLengthPercent,
                      .scale = 0.01,
                      .defaultDisplay = 50.0}},
         .category = QStringLiteral("tabIndicator"),
@@ -1167,10 +1170,11 @@ void ActionRegistry::registerBuiltinsAppearance()
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("number"),
-                     .min = kMinDropIndicatorOpacity,
-                     .max = kMaxDropIndicatorOpacity,
-                     .defaultDisplay = 0.25}},
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinDropIndicatorOpacityPercent,
+                     .max = kMaxDropIndicatorOpacityPercent,
+                     .scale = 0.01,
+                     .defaultDisplay = 25.0}},
         .category = QStringLiteral("dropIndicator"),
         .displayOrder = 4,
         .tags = {QString(Tag::LayoutEngine)},
@@ -1188,7 +1192,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("number"),
-                     .min = 0.0,
+                     .min = kMinDropIndicatorBorderWidth,
                      .max = kMaxDropIndicatorBorderWidth,
                      .defaultDisplay = 2.0}},
         .category = QStringLiteral("dropIndicator"),
@@ -1208,7 +1212,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("number"),
-                     .min = 0.0,
+                     .min = kMinDropIndicatorBorderRadius,
                      .max = kMaxDropIndicatorBorderRadius,
                      .defaultDisplay = 8.0}},
         .category = QStringLiteral("dropIndicator"),

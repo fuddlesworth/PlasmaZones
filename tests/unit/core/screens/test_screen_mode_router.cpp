@@ -20,6 +20,9 @@
  *  - the scrolling engine's live set is consulted the same way (after
  *    autotile), and a cascade Scrolling/Autotile answer whose engine does
  *    not claim the screen downgrades to Snapping.
+ *  - engineFor()->layoutSupport() follows the live engine for all three
+ *    engines, and a downgraded scrolling cascade reports the snap engine's
+ *    Placement rather than Templates.
  */
 
 #include <QTest>
@@ -47,8 +50,9 @@ class TestScreenModeRouter : public QObject
 
 private:
     // setAssignmentEntryDirect PERSISTS a rule via RuleStore::save(); without
-    // this guard the downgrade test would write DP-7 rules into the shared
-    // test-xdg config that every sibling test then loads.
+    // this guard the three call sites below (DP-6, DP-7, DP-9) would write
+    // their rules into the shared test-xdg config that every sibling test
+    // then loads.
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     SnapEngine* m_snapEngine = nullptr;
@@ -201,17 +205,36 @@ private Q_SLOTS:
         m_autotileEngine->setAutotileScreens({QStringLiteral("DP-1"), QStringLiteral("phys/vs:0")});
         m_scrollEngine->setActiveScreens({QStringLiteral("DP-9")});
 
+        // Accumulated and asserted once: a per-screen QCOMPARE aborts the slot on
+        // the first bad screen, so the remaining screens (including the empty id,
+        // deliberately last) would never be checked at all.
+        QStringList failures;
+        const auto label = [](const QString& sid) {
+            return sid.isEmpty() ? QStringLiteral("(empty screen id)") : sid;
+        };
         for (const QString& sid : screens) {
             const bool isSnap = m_router->isSnapMode(sid);
             const bool isAuto = m_router->isAutotileMode(sid);
             const bool isScroll = m_router->isScrollingMode(sid);
             const int claims = int(isSnap) + int(isAuto) + int(isScroll);
-            QCOMPARE_EQ(claims, 1);
+            if (claims != 1) {
+                failures.append(
+                    QStringLiteral("%1: %2 predicates claim it, expected exactly 1").arg(label(sid)).arg(claims));
+            }
             // All THREE predicates must agree with modeFor's verdict.
-            QCOMPARE(isSnap, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Snapping);
-            QCOMPARE(isAuto, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Autotile);
-            QCOMPARE(isScroll, m_router->modeFor(sid) == PhosphorZones::AssignmentEntry::Scrolling);
+            const auto mode = m_router->modeFor(sid);
+            if (isSnap != (mode == PhosphorZones::AssignmentEntry::Snapping)
+                || isAuto != (mode == PhosphorZones::AssignmentEntry::Autotile)
+                || isScroll != (mode == PhosphorZones::AssignmentEntry::Scrolling)) {
+                failures.append(QStringLiteral("%1: predicates (%2,%3,%4) disagree with modeFor=%5")
+                                    .arg(label(sid))
+                                    .arg(isSnap)
+                                    .arg(isAuto)
+                                    .arg(isScroll)
+                                    .arg(int(mode)));
+            }
         }
+        QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
     }
 
     // ─── partitionByMode ──────────────────────────────────────────────────
@@ -285,6 +308,43 @@ private Q_SLOTS:
         QVERIFY(m_router->isScrollingMode(QStringLiteral("DP-1")));
         QVERIFY(!m_router->isSnapMode(QStringLiteral("DP-1")));
         QVERIFY(!m_router->isAutotileMode(QStringLiteral("DP-1")));
+    }
+
+    void engineFor_layoutSupport_followsTheLiveEngine()
+    {
+        // The daemon's layoutSupportForScreen gates read
+        // engineFor(screen)->layoutSupport(); pin the router-level capability
+        // answer for all three engines, and that a downgraded scrolling
+        // cascade answers Placement (the snap engine's), never Templates.
+        using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
+        // Hoisted and null-checked before every deref, like the engineFor
+        // tests above: a null return would otherwise crash the run instead of
+        // failing the assertion.
+        PhosphorEngine::IPlacementEngine* engine = m_router->engineFor(QStringLiteral("DP-1"));
+        QVERIFY(engine != nullptr);
+        QCOMPARE(engine->layoutSupport(), LayoutSupport::Placement);
+
+        m_scrollEngine->setActiveScreens({QStringLiteral("DP-1")});
+        engine = m_router->engineFor(QStringLiteral("DP-1"));
+        QVERIFY(engine != nullptr);
+        QCOMPARE(engine->layoutSupport(), LayoutSupport::Templates);
+
+        m_scrollEngine->setActiveScreens({});
+        m_autotileEngine->setAutotileScreens({QStringLiteral("DP-1")});
+        engine = m_router->engineFor(QStringLiteral("DP-1"));
+        QVERIFY(engine != nullptr);
+        QCOMPARE(engine->layoutSupport(), LayoutSupport::Placement);
+        m_autotileEngine->setAutotileScreens({});
+
+        // Cascade Scrolling, engine not claiming: the downgrade must reach
+        // the capability too, or the picker would apply templates on a
+        // screen the snap engine actually owns.
+        PhosphorZones::AssignmentEntry entry;
+        entry.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-6"), 0, QString(), entry);
+        engine = m_router->engineFor(QStringLiteral("DP-6"));
+        QVERIFY(engine != nullptr);
+        QCOMPARE(engine->layoutSupport(), LayoutSupport::Placement);
     }
 
     void modeFor_cascadeScrollingWithoutEngineClaim_downgradesToSnapping()

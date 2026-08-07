@@ -8,6 +8,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
+#include "enginelimits.h"
 #include "scrollenginelogging.h"
 
 #include <algorithm>
@@ -156,7 +157,10 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         }
     }
 
-    ColumnWidth width = effectiveDefaultColumnWidth(screenId);
+    // Taken off the params rather than re-resolved: layoutParamsForScreen
+    // already resolved this exact value against this screen's override map and
+    // preset vocabulary, and the screenId overload would parse both again.
+    ColumnWidth width = params.defaultColumnWidth;
     ColumnDisplay display = effectiveDefaultColumnDisplay(screenId);
     // "Client decides" is the CONFIG default, so a per-screen rule override
     // outranks it — the header documents these overrides as layering over the
@@ -168,8 +172,8 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // The rule channel's bare fraction pins a width outright. The settings
     // channel's kind trio answers BY VALUE through
     // effectiveWidthClientDecides: a per-screen kind of Fixed/Preset/
-    // Proportion pins a width (effectiveDefaultColumnWidth above already
-    // resolved it), while a per-screen kind of ClientDecides means exactly
+    // Proportion pins a width (params.defaultColumnWidth above already
+    // carries it resolved), while a per-screen kind of ClientDecides means exactly
     // that — testing the kind key's mere PRESENCE here inverted the setting,
     // gating the client-size branch off on precisely the monitors scoped to
     // it.
@@ -264,6 +268,48 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // a lost slot. IntoActiveColumn routes through the consume verb
         // (same shape as the openColumnPlacement rule) and falls through to
         // a positional insert on an empty strip.
+        //
+        // TEMPLATE blueprint: while the strip holds fewer columns than the
+        // context template's blueprint, the materializing column takes the
+        // next blueprint entry's width and display. Applied ONLY here (a
+        // genuinely new column on the fresh-open path) so restore, seed and
+        // stash adoptions keep their remembered shapes, and never
+        // retroactively — a template change reshapes nothing that already
+        // exists. Precedence: per-window open rules above outrank the
+        // blueprint; the blueprint outranks every default, including a
+        // client-decides width already resolved into `width`.
+        const auto blueprintIt = screenOverrides.constFind(ScrollPerScreenKeys::templateColumns());
+        const int columnCount = int(state->strip().columns().size());
+        // Bounded at kMaxTemplateEntries, the same library-boundary cap the
+        // preset vocabularies get: applyPerScreenConfig is exported LGPL
+        // surface and an embedder-supplied blueprint must not be read past
+        // it. Tested BEFORE the list conversion so a strip that is already
+        // longer than any consumable entry pays nothing on the open path.
+        if (blueprintIt != screenOverrides.constEnd() && columnCount < kMaxTemplateEntries) {
+            const QVariantList blueprint = blueprintIt->toList();
+            if (columnCount < blueprint.size()) {
+                const QVariantMap entry = blueprint.at(columnCount).toMap();
+                const qreal fraction = entry.value(ScrollPerScreenKeys::templateColumnWidth()).toDouble();
+                if (!openParams.widthFraction && fraction >= MinColumnWidthFraction && fraction <= 1.0) {
+                    width = ColumnWidth::makeProportion(fraction);
+                }
+                // Guarded on PRESENCE, mirroring the width arm's fall-through:
+                // an entry that carries a width only must leave `display` on
+                // the effective default resolved above. Reading an absent key
+                // as 0 forced every such column to Normal and silently
+                // discarded a Tabbed default (from the settings-channel
+                // default, or a SetScrollDefaultColumnDisplay rule) for
+                // exactly the first N columns. The in-tree daemon always
+                // writes both keys on every entry, so this guard is a
+                // public-API belt for embedder-supplied maps rather than a
+                // fix for a shipped bug.
+                if (!openParams.tabbed && entry.contains(ScrollPerScreenKeys::templateColumnDisplay())) {
+                    display = entry.value(ScrollPerScreenKeys::templateColumnDisplay()).toInt() == 1
+                        ? ColumnDisplay::Tabbed
+                        : ColumnDisplay::Normal;
+                }
+            }
+        }
         const ScrollInsertPosition insertPos = effectiveInsertPosition(screenId);
         if (insertPos == ScrollInsertPosition::IntoActiveColumn && !state->strip().isEmpty()) {
             inserted =

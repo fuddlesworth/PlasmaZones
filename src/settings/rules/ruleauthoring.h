@@ -75,6 +75,14 @@ QString windowTypeLabel(int windowTypeValue);
 QString modeLabel(const QString& modeToken);
 QString orientationLabel(const QString& orientationToken);
 
+/// The display form of a scrolling template's name, marking it as a template
+/// rather than a plain layout. The one consumer is the ActiveLayout match
+/// options SettingsController builds (activeLayoutMatchOptions). The collapsed
+/// rule-list summary deliberately does NOT use it: there the value already sits
+/// behind the field label, so wrapping it reads doubled ("Active layout:
+/// Template: X").
+QString templateDisplayLabel(const QString& templateName);
+
 /// A complete, default-seeded action payload for @p typeWire — a JSON map of
 /// the form `{ type: <typeWire>, ...defaults }` ready to drop into a rule's
 /// `actions` list. See `RuleController::defaultPayloadFor` for the

@@ -59,6 +59,8 @@ namespace PhosphorZones {
 class Layout;
 class LayoutComputeService;
 class LayoutRegistry;
+class ScrollingTemplate;
+class ScrollingTemplateStore;
 class ZoneDetector;
 } // namespace PhosphorZones
 
