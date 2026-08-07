@@ -591,11 +591,12 @@ QString ScrollEngine::heldScreenForWindow(const QString& windowId) const
     // window, tiled or floating — a phantom key from a refused open answers
     // empty. This is the predicate the adaptor's post-reclaim ownership
     // check runs; see IPlacementEngine::heldScreenForWindow for why neither
-    // isWindowTracked nor isWindowManaged can serve.
+    // isWindowTracked nor isWindowManaged can serve, and why the answer is
+    // scoped to the screen's CURRENT context.
     const QString canonical = canonicalizeForLookup(windowId);
     PhosphorEngine::PlacementStateKey key;
     const ScrollState* state = stateForWindow(canonical, &key);
-    if (state && state->containsWindow(canonical)) {
+    if (state && state->containsWindow(canonical) && key == currentKeyForScreen(key.screenId)) {
         return key.screenId;
     }
     return {};

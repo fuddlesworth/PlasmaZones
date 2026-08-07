@@ -138,9 +138,12 @@ public:
         return false;
     }
 
-    /// OPTIONAL: the screen this engine genuinely HOLDS the window on — a
-    /// MEMBERSHIP answer (tiled or engine-floating both count; a phantom
-    /// reverse-map key does not), empty when the engine does not hold it.
+    /// OPTIONAL: the screen this engine genuinely HOLDS the window on IN THE
+    /// SCREEN'S CURRENT CONTEXT — a MEMBERSHIP answer (tiled or
+    /// engine-floating both count; a phantom reverse-map key does not),
+    /// empty when the engine does not hold it or holds it only in a
+    /// background context.
+    ///
     /// This exists for the adaptor's post-reclaim ownership check: after a
     /// cross-screen reclaim, the effect's already-queued arrival announce
     /// still carries the ARRIVAL screen, and dispatching it would migrate
@@ -150,6 +153,16 @@ public:
     /// meaning must not change). isWindowManaged/isWindowTiled cannot serve
     /// either — both exclude engine-floating windows, which a reclaim can
     /// legitimately produce.
+    ///
+    /// CURRENT-context only, and that restriction is what keeps the check
+    /// from suppressing repair. A reclaim's adoption always keys by the home
+    /// screen's current context, so a fresh reclaim is always visible here;
+    /// a hold in a BACKGROUND context (a mode flip preserves other-desktop
+    /// states and their keys) is never a fresh reclaim, and the announce
+    /// that would heal such a stale hold — the engines' own cross-screen
+    /// migration in windowOpened — must not be refused. A stale hold in the
+    /// CURRENT context is still indistinguishable from a fresh one here and
+    /// remains healed by windowFocused instead.
     virtual QString heldScreenForWindow(const QString& windowId) const
     {
         Q_UNUSED(windowId)

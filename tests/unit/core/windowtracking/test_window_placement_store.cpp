@@ -1123,9 +1123,10 @@ private Q_SLOTS:
             });
         QVERIFY(sawRecordCtx);
         // The snap specialization is the same predicate keyed on (snap,
-        // snapped) — compared on BOTH sides, since agreeing only where both
-        // are true would also hold for a specialization keyed on the wrong
-        // state.
+        // snapped). The BOTH-TRUE comparison is the discriminating one — a
+        // specialization mis-keyed on (snap, tiled) would answer false where
+        // the generalized form answers true. The false-side comparisons
+        // below are symmetry, not additional discrimination.
         WindowPlacement snapRec =
             makePlacement(QStringLiteral("kitty|c"), QStringLiteral("kitty"), WindowPlacement::stateSnapped(),
                           WindowPlacement::snapEngineId(), QStringLiteral("DP-1"));

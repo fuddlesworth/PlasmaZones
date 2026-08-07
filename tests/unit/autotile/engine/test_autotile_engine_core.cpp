@@ -15,6 +15,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "helpers/AutotileTestHelpers.h"
 #include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LogCapture.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 #include "helpers/StubZoneDetector.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
@@ -42,33 +43,13 @@ class TestAutotileEngineCore : public QObject
 private:
     PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
 
-    /// Tile-engine log capture, so a test can assert WHICH branch produced
-    /// an outcome rather than only that the outcome happened. Captures the
-    /// tile-engine category at both severities the engine uses (the branch
-    /// markers are a mix of qCDebug and qCInfo), and restores the caller's
-    /// filter rules rather than clearing them.
-    static QStringList& tileLogSink()
-    {
-        static QStringList sink;
-        return sink;
-    }
-    static void tileLogHandler(QtMsgType, const QMessageLogContext& ctx, const QString& msg)
-    {
-        if (ctx.category && QLatin1String(ctx.category) == QLatin1String("org.phosphor.tile-engine")) {
-            tileLogSink().append(msg);
-        }
-    }
+    /// Tile-engine log capture (shared helper), so a test can assert WHICH
+    /// branch produced an outcome rather than only that it happened.
     template<typename Fn>
     static QStringList captureTileLogs(Fn&& fn)
     {
-        QLoggingCategory::setFilterRules(
-            QStringLiteral("org.phosphor.tile-engine.debug=true\norg.phosphor.tile-engine.info=true"));
-        tileLogSink().clear();
-        QtMessageHandler prev = qInstallMessageHandler(&TestAutotileEngineCore::tileLogHandler);
-        fn();
-        qInstallMessageHandler(prev);
-        QLoggingCategory::setFilterRules(qEnvironmentVariable("QT_LOGGING_RULES"));
-        return tileLogSink();
+        return PlasmaZones::TestHelpers::captureCategoryLogs(QLatin1String("org.phosphor.tile-engine"),
+                                                             std::forward<Fn>(fn));
     }
 
 private Q_SLOTS:
@@ -1035,15 +1016,16 @@ private Q_SLOTS:
 
         const QString here = QStringLiteral("DP-1");
         engine.setAutotileScreens({here});
-        // DP-2 is a scrolling-mode screen (a payload-less Scrolling entry is
-        // the canonical KCM shape — the "scrolling:" sentinel needs no id).
+        // Registry setup for realism only — DP-2 genuinely IS a scrolling
+        // screen in the assignment cascade (a payload-less Scrolling entry
+        // is the canonical KCM shape; the "scrolling:" sentinel needs no
+        // id). It does NOT decide this test: the defer term consults the
+        // daemon-injected resolver below, which answers mode AND
+        // scroll-engine liveness, because a defer keyed on mode alone would
+        // stand down for a window the scroll engine then declines.
         PhosphorZones::AssignmentEntry scrolling;
         scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
         layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), scrolling);
-        // The defer term asks the daemon-injected resolver, which answers
-        // mode AND scroll-engine liveness — a defer keyed on mode alone
-        // would stand down for a window the scroll engine then declines.
-        // Stands in for the daemon's wiring: DP-2 is scrolling AND live.
         engine.setScrollingModeResolver([](const QString& rec, int, const QString&) {
             return rec == QStringLiteral("DP-2");
         });

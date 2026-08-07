@@ -12,6 +12,7 @@
 #include <PhosphorScrollEngine/ScrollState.h>
 
 #include "helpers/AutotileFakes.h"
+#include "helpers/LogCapture.h"
 #include "helpers/WindowPlacementBuilders.h"
 
 using namespace PhosphorScrollEngine;
@@ -63,32 +64,13 @@ private:
         return static_cast<ScrollState*>(engine->stateForScreen(screenId));
     }
 
-    /// Scroll-engine log capture, so a test can assert WHICH branch produced
-    /// an outcome rather than only that the outcome happened. Both severities
-    /// the engine's branch markers use, category-filtered, and the caller's
-    /// filter rules are restored rather than cleared.
-    static QStringList& scrollLogSink()
-    {
-        static QStringList sink;
-        return sink;
-    }
-    static void scrollLogHandler(QtMsgType, const QMessageLogContext& ctx, const QString& msg)
-    {
-        if (ctx.category && QLatin1String(ctx.category) == QLatin1String("org.phosphor.scroll-engine")) {
-            scrollLogSink().append(msg);
-        }
-    }
+    /// Scroll-engine log capture (shared helper), so a test can assert WHICH
+    /// branch produced an outcome rather than only that it happened.
     template<typename Fn>
     static QStringList captureScrollLogs(Fn&& fn)
     {
-        QLoggingCategory::setFilterRules(
-            QStringLiteral("org.phosphor.scroll-engine.debug=true\norg.phosphor.scroll-engine.info=true"));
-        scrollLogSink().clear();
-        QtMessageHandler prev = qInstallMessageHandler(&TestScrollReopenRestore::scrollLogHandler);
-        fn();
-        qInstallMessageHandler(prev);
-        QLoggingCategory::setFilterRules(qEnvironmentVariable("QT_LOGGING_RULES"));
-        return scrollLogSink();
+        return PlasmaZones::TestHelpers::captureCategoryLogs(QLatin1String("org.phosphor.scroll-engine"),
+                                                             std::forward<Fn>(fn));
     }
 
     /// The daemon's close capture, condensed: snapshot the engine's slot,

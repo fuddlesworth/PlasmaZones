@@ -232,6 +232,9 @@ private Q_SLOTS:
         // gate" substring (the appRule/session re-checks log a different
         // phrasing) — so the assertion fails only if the caller-screen gate
         // actually rejected an enabled context.
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "log capture produced nothing — the absence assertion below would pass "
+                 "vacuously");
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
                  "an enabled context must pass the disabled-context gate");
         m_wts->setSnapState(nullptr);
@@ -251,6 +254,9 @@ private Q_SLOTS:
 
         QVERIFY2(!result.shouldSnap,
                  "guiless fixture has no layout/app-rule/session entry — restore resolves to noSnap");
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "log capture produced nothing — the absence assertion below would pass "
+                 "vacuously");
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
                  "with no predicate the disabled-context gate must never fire");
         m_wts->setSnapState(nullptr);
@@ -333,6 +339,9 @@ private Q_SLOTS:
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
 
         QVERIFY2(consulted, "the snapped-record restore path must consult the managed-restore predicate");
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "log capture produced nothing — the absence assertion below would pass "
+                 "vacuously");
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("managed-restore gate skipped snapped record")),
                  "with managed restore on, the managed-restore gate must not skip the record");
         m_wts->setSnapState(nullptr);
@@ -364,6 +373,9 @@ private Q_SLOTS:
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
 
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "log capture produced nothing — the absence assertion below would pass "
+                 "vacuously");
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("managed-restore gate skipped snapped record")),
                  "with no predicate the managed-restore gate must never fire");
         m_wts->setSnapState(nullptr);
@@ -424,6 +436,9 @@ private Q_SLOTS:
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|uuid-no-float-rule"), QStringLiteral("DP-1"), &result);
 
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "log capture produced nothing — the absence assertion below would pass "
+                 "vacuously");
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("floated by rule")),
                  "an unmatched window must not be floated by the open-floating gate");
         m_wts->setSnapState(nullptr);
@@ -494,7 +509,8 @@ private Q_SLOTS:
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-2"), &result);
 
         const QString joinedCross = lines.join(QLatin1Char('\n'));
-        verifyCaptureNonEmpty(lines);
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "snap-engine log capture produced nothing — the absence assertions below would pass vacuously");
         QVERIFY2(!joinedCross.contains(QStringLiteral("defers to the owning engine")),
                  "a pending cross-screen snap restore must NOT be deferred by the opening-screen ownership gate");
         // resolveWindowRestore has TWO defer branches now; this test's whole
@@ -575,7 +591,8 @@ private Q_SLOTS:
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
         const QString joined = lines.join(QLatin1Char('\n'));
 
-        verifyCaptureNonEmpty(lines);
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "snap-engine log capture produced nothing — the absence assertions below would pass vacuously");
         QVERIFY2(!result.shouldSnap, "a pending cross-screen tile restore must never be snapped here");
         QVERIFY2(result.deferredToTilingEngine,
                  "the verdict must be reported as a tile-defer, not a bare no-snap: the adaptor gates the reclaim "
@@ -623,7 +640,8 @@ private Q_SLOTS:
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
 
-        verifyCaptureNonEmpty(lines);
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "snap-engine log capture produced nothing — the absence assertions below would pass vacuously");
         QVERIFY2(!result.shouldSnap, "an autotile-homed cross-screen tiled record must not be snapped here");
         QVERIFY2(result.deferredToTilingEngine, "the autotile term of the tile-defer gate must fire");
         QCOMPARE(floatSpy.count(), 0);

@@ -388,34 +388,40 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
                 return;
             }
         }
-    }
-    // Post-reclaim ownership check. A reclaim can also come from the OTHER
-    // channel (SnapAdaptor::resolveWindowRestore, which the effect drives
-    // FIRST for a snap-restore candidate and whose reply callback then sends
-    // this very announce), and that announce still carries the ARRIVAL
-    // screen — the reclaim's retile is queued and cannot have moved the
-    // window before the reply returns. Dispatching it would hand the window
-    // to the arrival screen's engine, whose windowOpened sees it as already
-    // tracked, skips its defer gate entirely, and MIGRATES it back: the
-    // reclaim silently undone.
-    //
-    // Stated over LIVE engine state, so it is indifferent to which channel
-    // claimed and covers every interleaving. heldScreenForWindow, not
-    // isWindowTracked (raw reverse-map key, which a refused adoption can
-    // leave dangling) and not isWindowManaged/isWindowTiled (both exclude a
-    // legitimately-floated adoption). Compared by SCREEN, never by engine
-    // identity: a mode flip preserves other-desktop states and their keys on
-    // the flipped screen, and an engine-identity test would refuse those
-    // windows' re-announce and strand them — whereas their held screen
-    // EQUALS the arriving screen, so a screen comparison passes them through.
-    for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
-        const QString heldScreen = engine->heldScreenForWindow(entry.windowId);
-        if (!heldScreen.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(heldScreen, entry.screenId)) {
-            removeUnclaimedOpen(entry.windowId);
-            qCInfo(lcDbusTiling) << "dispatchOpenToClaimingEngine:" << entry.windowId << "announced on"
-                                 << entry.screenId << "but already held on" << heldScreen
-                                 << "— ignoring the stale arrival (cross-screen reclaim already placed it)";
-            return;
+        // Post-reclaim ownership check. A reclaim can also come from the
+        // OTHER channel (SnapAdaptor::resolveWindowRestore, which the effect
+        // drives FIRST for a snap-restore candidate and whose reply callback
+        // then sends this very announce), and that announce still carries
+        // the ARRIVAL screen — the reclaim's retile is queued and cannot
+        // have moved the window before the reply returns. Dispatching it
+        // would hand the window to the arrival screen's engine, whose
+        // windowOpened sees it as already tracked, skips its defer gate
+        // entirely, and MIGRATES it back: the reclaim silently undone.
+        //
+        // INSIDE the directive guard, with the claim it protects. When a
+        // routing directive matched, no reclaim ran, so there is nothing to
+        // protect — and refusing the dispatch there would be actively wrong:
+        // applyOpenRoutingForTiling has already emitted the output-move
+        // marker, so the window physically moves to the routed screen while
+        // no engine adopts it there and the old engine still believes it
+        // holds it. The directive must win on both halves or on neither.
+        //
+        // Stated over LIVE engine state, so it is indifferent to which
+        // channel claimed and covers every interleaving. heldScreenForWindow,
+        // not isWindowTracked (raw reverse-map key, which a refused adoption
+        // can leave dangling) and not isWindowManaged/isWindowTiled (both
+        // exclude a legitimately-floated adoption). Compared by SCREEN, never
+        // by engine identity: an identity test would refuse a window whose
+        // engine legitimately holds it on THIS screen in another context.
+        for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
+            const QString heldScreen = engine->heldScreenForWindow(entry.windowId);
+            if (!heldScreen.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(heldScreen, entry.screenId)) {
+                removeUnclaimedOpen(entry.windowId);
+                qCInfo(lcDbusTiling) << "dispatchOpenToClaimingEngine:" << entry.windowId << "announced on"
+                                     << entry.screenId << "but already held on" << heldScreen
+                                     << "— ignoring the stale arrival (cross-screen reclaim already placed it)";
+                return;
+            }
         }
     }
     // Per-screen engine dispatch: the effect reports opens for every
