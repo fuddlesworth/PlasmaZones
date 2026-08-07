@@ -100,12 +100,21 @@ void translatePackParams(
         customParams[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
     }
     for (int slot = 0; slot < ASC::kMaxCustomColors; ++slot) {
+        // Write EVERY slot, zeroing on both miss branches (absent key AND
+        // invalid color), exactly as the params loop above assigns every
+        // slot unconditionally. Skipping a miss leaves whatever the caller's
+        // array held — and the strip pass re-translates into its LIVE entry
+        // on a mid-leg pack switch, so a skipped slot would hand the new
+        // pack the old pack's color. Desktop callers pass value-initialised
+        // arrays, for which the zero write is a no-op.
         const auto it = translated.constFind(ASC::colorKey(slot));
         if (it == translated.constEnd()) {
+            customColors[slot] = QVector4D();
             continue;
         }
         const QColor c = it->value<QColor>();
         if (!c.isValid()) {
+            customColors[slot] = QVector4D();
             continue;
         }
         customColors[slot] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());

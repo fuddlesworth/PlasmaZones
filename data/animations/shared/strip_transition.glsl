@@ -52,7 +52,13 @@
 //   - surfaceColor() is a per-WINDOW helper. It is in scope (the entry
 //     prologue always includes animation_uniforms.glsl) and compiles here,
 //     but returns black: iWindowOpacity and iAnchorRectInTexture are both
-//     zero. oldColor() lives in shared/old_content.glsl, which no strip pack
+//     zero.
+//   - surfaceSeed() (shared/noise.glsl, which a pack may well include for its
+//     own noise) derives its value from iAnchorRectInTexture, so it is a
+//     constant 0.0 on every fragment of every strip pass. A pack that varies
+//     anything per-surface through it gets no variation at all. Seed off
+//     iTime or the uv instead.
+//   oldColor() lives in shared/old_content.glsl, which no strip pack
 //     includes, so reaching for it is a COMPILE error — the manager caches a
 //     null-shader sentinel, abandons the pass (the plain translation shows),
 //     warns on the journal once, and never recompiles that pack this
@@ -69,9 +75,13 @@ uniform sampler2D uStrip;
 //       drawn displaced this far along +x from its committed rest position;
 //       it decays to 0 as the spring settles. Its SIGN is the direction the
 //       strip content is travelling from, so -sign(.x) points where the
-//       content is heading.
+//       content is heading. None of the bundled packs read .x or .z: they
+//       key off velocity alone. The offset lanes are part of the contract
+//       and are uploaded every frame, but they ship unexercised, so treat
+//       them as the less-travelled path when something looks wrong.
 //   .y  view velocity in DEVICE px per second, signed (the smoothed rate of
-//       change of .x).
+//       change of .x, with the per-batch commit jump compensated out so a
+//       new wheel batch does not spike or invert the sign for one frame).
 //   .z  = .x / iResolution.x (offset as a fraction of the output width).
 //   .w  = .y / iResolution.x (velocity in output-widths per second).
 // All four converge to 0 at settle — the identity contract above keys off
@@ -110,12 +120,20 @@ float stripMask(vec2 uv, float feather) {
 }
 
 // 1.0 well inside the output, falling to 0.0 at the LEFT and RIGHT screen
-// edges over `span` uv units. Content beyond the output edge does not exist
+// edges over `span` uv units OF THE OUTPUT WIDTH (unlike stripMask's feather,
+// which is measured on the shorter axis — an easy mismatch to carry between
+// the two on a wide output). Content beyond the output edge does not exist
 // in the capture: uStrip is CLAMP_TO_EDGE, so a sample past the edge repeats
 // the last pixel column and any displaced sample there smears/stretches the
-// edge. Every pack that displaces its sample horizontally MUST scale the
-// displacement by this, with `span` at least twice its maximum displacement,
-// so the displacement dies out before its sample can cross the edge.
+// edge.
+//
+// Every pack that displaces its sample horizontally MUST handle that edge one
+// of two ways. Either scale the displacement by this fade, with `span` at
+// least twice the maximum displacement, so the displacement dies out before
+// its sample can cross the edge (blur, chromatic, jelly), or detect the
+// out-of-range sample and paint something deliberate there instead of the
+// clamped smear (carousel fades those samples into shadow). What is not
+// allowed is displacing into the clamp and showing the result.
 float stripEdgeFade(vec2 uv, float span) {
     float s = max(span, 1.0e-4);
     return smoothstep(0.0, s, uv.x) * (1.0 - smoothstep(1.0 - s, 1.0, uv.x));

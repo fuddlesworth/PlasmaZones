@@ -1,10 +1,10 @@
 {
     "id": "strip-motion-blur",
     "name": "Strip Motion Blur",
-    "description": "Directional motion blur on the scrolling strip. The blur follows the scroll speed and fades out as the strip settles.",
+    "description": "Motion blur on the scrolling strip. The blur follows the scroll speed and fades out as the strip settles.",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Blur",
+    "category": "Distortion",
     "appliesTo": ["strip"],
     "fragmentShader": "effect.frag",
     "parameters": [

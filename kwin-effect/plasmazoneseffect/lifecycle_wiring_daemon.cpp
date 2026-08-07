@@ -251,6 +251,18 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // re-create rule-matched decorations right after
         // clearAllDecorations below.
         m_tilingHandler->clearScrollingScreensForTeardown();
+        // The view springs and the strip shader pass die with the session
+        // too. With the scrolling set cleared, scrollManagedOutputFor
+        // answers null for every column, so the paint path stops applying
+        // the offset — but a live spring and an armed pass would keep
+        // capturing and decorating a scene that is no longer scrolling for
+        // the leg's remainder. No per-screen list exists on this path, so
+        // reset both wholesale and repaint everything (the last presented
+        // frames carry the dying offset/pass and the daemon that would
+        // have damaged them is gone).
+        m_stripTransition.reset();
+        m_stripViewAnimator->reset();
+        KWin::effects->addRepaintFull();
         // The tab-indicator surface ids name objects that died with the daemon,
         // and a retraction only ever arrives from a daemon healthy enough to
         // send one — a crash sends nothing. Wayland reuses object ids, so a

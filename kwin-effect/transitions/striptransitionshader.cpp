@@ -10,6 +10,7 @@
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
@@ -51,6 +52,17 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
     if (!eff.isValid()) {
         qCWarning(lcEffect) << "Unknown strip transition effect id" << effectId;
         return &compiled; // sentinel: unknown id
+    }
+    // Re-validate the strip contract HERE, not only in notifyLeg: a pack
+    // hot-reload clears this cache (registry commit) without re-running
+    // notifyLeg, so a pack edited mid-leg to drop "strip" from appliesTo
+    // would otherwise recompile and run with uStrip unconsumed — pack-only
+    // pixels over the whole output. The sentinel routes the armed pass to
+    // the same abandon path as an uninstall.
+    if (!PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff,
+                                                                  PhosphorAnimation::ProfilePaths::ScrollingView)) {
+        qCWarning(lcEffect) << "Effect" << effectId << "no longer declares the strip contract; abandoning strip pass";
+        return &compiled; // sentinel: class contract lost (hot-reload edit)
     }
 
     QFile shaderFile(eff.fragmentShaderPath);
@@ -94,6 +106,16 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
 
     std::unique_ptr<KWin::GLShader> shader = KWin::ShaderManager::instance()->generateCustomShader(
         KWin::ShaderTrait::MapTexture, vertWithKwinDefine, fragWithKwinDefine);
+    if (shader && shader->uniformLocation("uStrip") < 0) {
+        // A pack that never samples uStrip has it optimised out at link
+        // time. The quad REPLACES the output (blend off), so running such a
+        // pack discards the live scene for sourceless pixels — abandon to
+        // the plain translation instead, via the same null-shader sentinel
+        // as a compile failure.
+        qCWarning(lcEffect) << "Strip effect" << effectId
+                            << "never samples uStrip (getStripColor); abandoning strip pass";
+        shader.reset();
+    }
     if (shader) {
         compiled.uStripLoc = shader->uniformLocation("uStrip");
         compiled.iTimeLoc = shader->uniformLocation("iTime");

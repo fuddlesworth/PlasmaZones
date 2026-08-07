@@ -3,6 +3,14 @@
 //
 // Tiling request handling and window centering for TilingHandler.
 // Part of TilingHandler — split from tilinghandler.cpp for SRP.
+//
+// FILE-SIZE EXCEPTION (sanctioned): slotWindowsTileRequested is one batch
+// pipeline — parse, float split, view-leg seeding, cascade ordering, the
+// apply lambda and its completion — whose stages hand per-batch state
+// (generations, seeded sets, the residual-origin gates) straight down the
+// function. Over the 1150 ceiling before PR #891 and accepted as such;
+// a future split should carve at the batch-parse / apply boundary, not
+// mid-pipeline.
 
 #include "tilinghandler.h"
 #include "handlers/dragtracker.h"
@@ -353,41 +361,47 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // the paint path for every column, instead of N per-window springs that
     // each start a moment apart and integrate themselves apart.
     //
-    // Set when any output actually got a leg. The applies below must then land
-    // in ONE pass: the paint path adds the view offset to every scroll-managed
-    // window on the output with no test for whether that window's own commit
-    // has arrived, so a column still waiting on its stagger timer draws at (old
-    // rect + offset), which is a full delta away from where it belongs. With
-    // the shipped 40 ms cascade against a 150 ms leg, columns from the fourth
-    // on would sit still for the whole leg and then teleport in sequence.
-    bool startedViewLegs = false;
+    // Filled with the screenIds whose spring actually STARTED (or
+    // retargeted) a leg this batch. Consumed twice below: the residual-
+    // origin branch of the apply lambda treats an entry's viewDeltaX as
+    // real only for these screens (with no leg the paint offset is zero,
+    // so an origin placed a delta behind the target would pop backwards
+    // and slide double), and the cascade decision skips the direction sort
+    // only when a leg exists to make the one-pass apply mandatory.
+    // Membership comes from applyBatchDelta's return value, NOT from the
+    // wire delta: animations-off and clockless outputs fold the delta into
+    // the accumulator without a leg.
+    //
+    // When any leg started, the applies must land in ONE pass: the paint
+    // path adds the view offset to every scroll-managed window on the
+    // output with no test for whether that window's own commit has arrived,
+    // so a column still waiting on its stagger timer draws at (old rect +
+    // offset), a full delta from where it belongs. With the shipped 40 ms
+    // cascade against a 150 ms leg, columns from the fourth on would sit
+    // still for the whole leg and then teleport in sequence.
+    QSet<QString> startedViewScreens;
     {
-        // Resolved once per batch, not per screen: the view's motion node is
-        // not screen-dependent, and this is the same cascade every other
+        // Both resolves are LAZY: an ordinary autotile batch with no view
+        // travel never pays the two tree walks. Once needed they resolve
+        // once per batch, not per screen — the view's motion node is not
+        // screen-dependent, and this is the same cascade every other
         // event's animation goes through (global animator profile → the
-        // scrolling.view motion-tree override). A windowless query skips the
-        // per-window rule tier, which is right — the view belongs to the strip,
-        // not to any window on it.
-        const PhosphorAnimation::Profile viewProfile = m_effect->resolveEventMotionProfile(
-            PhosphorAnimation::ProfilePaths::ScrollingView, PhosphorRules::WindowQuery{}, QString());
-        // The `scrolling.view` SHADER leg, resolved once per batch through
-        // the same cascade the desktop legs use (resolveShaderWithDefault:
-        // user override → ancestor override → built-in default, which is
-        // empty for scrolling). Gated on the animations master toggle like
-        // every other shader path; folded into an empty id rather than a
-        // skip so notifyLeg's erase contract still runs — clearing the pack
-        // (or disabling animations) mid-flight disarms the pass on the very
-        // next wheel tick.
+        // scrolling.view motion-tree override). A windowless query skips
+        // the per-window rule tier, which is right — the view belongs to
+        // the strip, not to any window on it. The SHADER leg resolves
+        // through resolveShaderWithDefault exactly like the desktop legs
+        // (user override → ancestor override → built-in default, empty for
+        // scrolling), gated on the animations master toggle and folded
+        // into an empty id rather than a skip so notifyLeg's erase
+        // contract still runs — clearing the pack (or disabling
+        // animations) mid-flight disarms the pass on the very next wheel
+        // tick.
+        bool resolved = false;
+        PhosphorAnimation::Profile viewProfile;
         QString stripEffectId;
         QVariantMap stripEffectParams;
-        if (m_effect->m_windowAnimator->isEnabled()) {
-            const PhosphorAnimationShaders::ShaderProfile stripShaderProfile =
-                PhosphorAnimationShaders::resolveShaderWithDefault(m_effect->m_shaderManager.profileTree(),
-                                                                   PhosphorAnimation::ProfilePaths::ScrollingView);
-            stripEffectId = stripShaderProfile.effectiveEffectId();
-            stripEffectParams = stripShaderProfile.effectiveParameters();
-        }
         QSet<QString> seededScreens;
+        QSet<KWin::LogicalOutput*> seededOutputs;
         for (const TileSnap& s : toApply) {
             if (s.viewDeltaX == 0 || s.screenId.isEmpty() || seededScreens.contains(s.screenId)) {
                 continue;
@@ -398,15 +412,52 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // carried column repeats the delta — could not retry it.
             if (KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
                 seededScreens.insert(s.screenId);
-                m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDeltaX, viewProfile);
+                // Dedup on the resolved OUTPUT as well as the id string:
+                // applyBatchDelta is additive, so two screenId spellings
+                // resolving to one output would spring the strip twice as
+                // far — the exact defect the once-per-output rule exists to
+                // prevent. A second spelling still lands in seededScreens
+                // (and startedViewScreens below) so ITS entries take the
+                // residual-origin path against the one shared spring.
+                if (seededOutputs.contains(out)) {
+                    if (m_effect->m_stripViewAnimator->isAnimatingOn(out)) {
+                        startedViewScreens.insert(s.screenId);
+                    }
+                    continue;
+                }
+                seededOutputs.insert(out);
+                if (!resolved) {
+                    resolved = true;
+                    viewProfile = m_effect->resolveEventMotionProfile(PhosphorAnimation::ProfilePaths::ScrollingView,
+                                                                      PhosphorRules::WindowQuery{}, QString());
+                    if (m_effect->m_windowAnimator->isEnabled()) {
+                        const PhosphorAnimationShaders::ShaderProfile stripShaderProfile =
+                            PhosphorAnimationShaders::resolveShaderWithDefault(
+                                m_effect->m_shaderManager.profileTree(),
+                                PhosphorAnimation::ProfilePaths::ScrollingView);
+                        stripEffectId = stripShaderProfile.effectiveEffectId();
+                        stripEffectParams = stripShaderProfile.effectiveParameters();
+                    }
+                }
                 // Arm (or refresh, or — empty id — disarm) the strip shader
-                // pass for this leg. Liveness stays the spring's; this only
-                // tells the pass WHICH pack decorates it.
-                m_effect->m_stripTransition.notifyLeg(out, stripEffectId, stripEffectParams);
-                startedViewLegs = true;
+                // pass BEFORE the spring moves: notifyLeg distinguishes a
+                // fresh leg from a retarget by whether the spring is
+                // already live, so this ordering is load-bearing (see its
+                // header contract).
+                m_effect->m_stripTransition.notifyLeg(out, stripEffectId, stripEffectParams, s.viewDeltaX);
+                if (m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDeltaX, viewProfile)) {
+                    startedViewScreens.insert(s.screenId);
+                } else {
+                    // The spring declined (animations off, no clock): there
+                    // is no leg for the pass to decorate and no offset for
+                    // a residual origin to lean on — disarm the pass and
+                    // let this screen's entries take the ordinary paths.
+                    m_effect->m_stripTransition.notifyLeg(out, QString(), QVariantMap(), 0);
+                }
             }
         }
     }
+    const bool startedViewLegs = !startedViewScreens.isEmpty();
 
     // Cascade order follows the direction of travel for a scrolling strip.
     //
@@ -805,7 +856,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 
     m_effect->applyStaggeredOrImmediate(
         toApply.size(),
-        [this, toApply, gen, genByScreen](int i) {
+        [this, toApply, gen, genByScreen, startedViewScreens](int i) {
             // Local copy (not const ref) so a stale window pointer can be
             // re-resolved below; the rest of the body reads snap.window.
             TileSnap snap = toApply[i];
@@ -1004,10 +1055,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // deliberately degenerate — the edge-anchored slide-out
                         // below would fight the view offset for the same pixels.
                         originOverride = QRectF(geo);
-                    } else if (snap.viewDeltaX != 0) {
+                    } else if (snap.viewDeltaX != 0 && startedViewScreens.contains(snap.screenId)) {
                         // Carried by the view: the strip's own spring moves
                         // this window, so the per-window animation must cover
                         // only what the view does NOT explain — the residual.
+                        //
+                        // Gated on the spring having actually STARTED for
+                        // this screen, not on the wire delta alone: when
+                        // applyBatchDelta declined (no clock, animations
+                        // off), the paint offset is zero and an origin
+                        // placed a delta behind the target pops the column
+                        // backwards and slides it double. Declined screens
+                        // fall through to the scrollEdge / plain branches,
+                        // which already handle the no-view case.
                         //
                         // The paint position is `animatedRect + viewOffset`,
                         // and the offset starts at exactly viewDeltaX. So for

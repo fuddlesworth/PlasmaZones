@@ -223,26 +223,31 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
             qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: appliesTo for effect" << e.id
                                          << "is not an array; ignoring it (pack treated as universal).";
         }
+        // Validated against the exported vocabulary, not a hand-copied list:
+        // a class token added to ProfilePaths becomes accepted here and named
+        // in the diagnostic without touching this loop.
+        const QStringList validTokens = PP::allEventClassTokens();
         const QJsonArray appliesArr = appliesVal.toArray();
         for (const QJsonValue& v : appliesArr) {
             const QString token = v.toString().trimmed();
-            if (token == PP::EventClassGeometry || token == PP::EventClassAppearance || token == PP::EventClassDesktop
-                || token == PP::EventClassMove || token == PP::EventClassStrip) {
+            if (validTokens.contains(token)) {
                 if (!e.appliesTo.contains(token))
                     e.appliesTo.append(token);
             } else if (!token.isEmpty()) {
                 qCWarning(lcAnimationShader)
                     << "AnimationShaderEffect::fromJson: unknown appliesTo token" << token << "for effect" << e.id
-                    << "— accepted values are \"geometry\", \"appearance\", \"desktop\", \"move\" and \"strip\"; "
-                       "dropping.";
+                    << "— accepted values are" << qPrintable(validTokens.join(QLatin1String(", "))) << "; dropping.";
             }
         }
     }
-    // Shared shape guard for the array-valued fields, hoisted from the
-    // appliesTo-specific check: a present-but-non-array value (a bare string
-    // is the plausible author typo) silently reduces to empty via toArray(),
-    // and the parameters/textures/bufferShaders fields deserve the same
-    // journal signal appliesTo gets. Returns the array (empty on mismatch).
+    // Shared shape guard for the array-valued fields, modelled on the
+    // appliesTo check above: a present-but-non-array value (a bare string is
+    // the plausible author typo) silently reduces to empty via toArray(), and
+    // the parameters/textures/bufferShaders fields deserve the same journal
+    // signal appliesTo gets. Returns the array (empty on mismatch). appliesTo
+    // keeps its own copy rather than calling this because its consequence is
+    // different enough to say out loud: an ignored appliesTo does not leave
+    // the field empty, it makes the pack UNIVERSAL.
     const auto arrayOrWarn = [&obj, &e](const char* key) -> QJsonArray {
         const QJsonValue v = obj.value(QLatin1String(key));
         if (!v.isUndefined() && !v.isArray()) {
@@ -268,8 +273,8 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     for (const QJsonValue& v : bufArr) {
         if (e.bufferShaderPaths.size() >= AnimationShaderContract::kMaxBufferPasses) {
             qCWarning(lcAnimationShader).nospace()
-                << "AnimationShaderEffect " << obj.value(QLatin1String("id")).toString() << ": bufferShaders declares "
-                << bufArr.size() << " passes; the contract budget is " << AnimationShaderContract::kMaxBufferPasses
+                << "AnimationShaderEffect " << e.id << ": bufferShaders declares " << bufArr.size()
+                << " passes; the contract budget is " << AnimationShaderContract::kMaxBufferPasses
                 << " — surplus passes dropped";
             break;
         }
@@ -531,21 +536,26 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     // concrete class AND the effect doesn't list it. An ambiguous row
     // (mixed ancestor / non-window path → empty class) is left compatible
     // so the picker never dims an effect on a row it can't classify — EXCEPT
-    // effects that provably cannot drive anything the row cascades to:
-    //   • A desktop- or strip-declaring effect. The desktop two-texture
-    //     (from/to) contract and the strip one-scene contract must never be
-    //     offered on an ambiguous row, where their samplers are unbound (and
-    //     for strip, no screen-level pass ever consumes an ancestor row's
-    //     resolution). This is the inverse of the universal-excluded rules
-    //     above, keeping both opt-ins symmetric.
-    //   • An effect declaring neither geometry nor appearance (i.e. move-only,
-    //     once desktop and strip are excluded). The move leaf takes no
-    //     inherited shader (ShaderProfileTree::resolve), so an ancestor row
-    //     can only ever feed geometry / appearance legs — a move-only pack
-    //     there is runtime-dead.
+    // an effect that declares NEITHER geometry NOR appearance, which is to
+    // say a pack that is exclusively one of the three opt-in classes
+    // (desktop / move / strip).
+    //
+    // What an ambiguous row can actually feed is only the geometry and
+    // appearance legs beneath it. The move leaf takes no inherited shader at
+    // all (ShaderProfileTree::resolve leaf isolation), and while the desktop
+    // and strip leaves DO inherit — so a screen-level-only pack assigned at
+    // `global` would in fact be picked up and run — offering it on a row that
+    // spans mostly single-surface events advertises a behaviour it does not
+    // have there. So for those two this is picker POLICY (assign it on the
+    // leaf that runs it) rather than a deadness proof, while for move-only it
+    // is a genuine proof.
+    //
+    // The test is on the single-surface classes rather than on the opt-in
+    // ones so a HYBRID keeps working: a pack declaring ["strip",
+    // "appearance"] is live on every appearance leg under an ambiguous row,
+    // and excluding it by its strip token would deny it the assignment its
+    // appearance leg earns.
     if (cls.isEmpty()) {
-        if (effect.appliesTo.contains(PP::EventClassDesktop) || effect.appliesTo.contains(PP::EventClassStrip))
-            return false;
         return effect.appliesTo.contains(PP::EventClassGeometry) || effect.appliesTo.contains(PP::EventClassAppearance);
     }
     return effect.appliesTo.contains(cls);

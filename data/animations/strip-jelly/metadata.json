@@ -18,6 +18,17 @@
             "step": 0.05,
             "description": "How far the edges bow behind the middle at a given scroll speed.",
             "group": "Jelly"
+        },
+        {
+            "id": "edgeFeather",
+            "name": "Edge Feather",
+            "type": "float",
+            "default": 0.03,
+            "min": 0.0,
+            "max": 0.2,
+            "step": 0.01,
+            "description": "How softly the bow fades out at the edges of the strip area.",
+            "group": "Jelly"
         }
     ]
 }

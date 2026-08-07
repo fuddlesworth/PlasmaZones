@@ -104,12 +104,12 @@
             "min": 8,
             "max": 60,
             "step": 1,
-            "description": "How many rows of ember sparks the arrival gate carries.",
+            "description": "How many rows of ember sparks the arrival gate carries. More rows also means smaller sparks, since each one is sized to its row.",
             "group": "Embers"
         },
         {
             "id": "edgeFeather",
-            "name": "Area Feather",
+            "name": "Edge Feather",
             "type": "float",
             "default": 0.02,
             "min": 0.0,

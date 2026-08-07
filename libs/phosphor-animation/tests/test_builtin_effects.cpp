@@ -116,7 +116,14 @@ private Q_SLOTS:
     // Same hazard, strip class: a strip pack missing the "strip" token is
     // refused on `scrolling.view` and becomes silently unselectable. Pinned
     // per id for the same delete-the-token reason as the desktop list above.
-    // A new strip pack is expected to add its id here.
+    //
+    // The list is checked for SET EQUALITY against the registry rather than
+    // membership only, so it maintains itself in both directions: a new strip
+    // pack that forgets to register here fails, and so does an id left behind
+    // by a deleted pack. The declaration is compared for EQUALITY too, not
+    // containment: a strip pack that grew an "appearance" token would stop
+    // being compositor-only and the daemon would start warm-baking kwin
+    // classic-GL source that cannot compile on its target.
     void testStripPacksDeclareStripContract()
     {
         const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
@@ -131,14 +138,40 @@ private Q_SLOTS:
             QStringLiteral("strip-jelly"),       QStringLiteral("strip-carousel"),
         };
 
+        // Collect, then assert once: a QVERIFY2 inside the loop stops at the
+        // first bad pack and hides the rest of the picture.
+        QStringList missing;
+        QStringList misdeclared;
         for (const QString& id : stripPacks) {
-            QVERIFY2(registry.hasEffect(id), qPrintable(QStringLiteral("Missing strip pack: ") + id));
+            if (!registry.hasEffect(id)) {
+                missing << id;
+                continue;
+            }
             const AnimationShaderEffect e = registry.effect(id);
-            QVERIFY2(e.appliesTo.contains(QStringLiteral("strip")),
-                     qPrintable(QStringLiteral("Pack ") + id
-                                + QStringLiteral(" does not declare appliesTo \"strip\"; it would be refused on "
-                                                 "the scrolling view path")));
+            if (e.appliesTo != QStringList{QStringLiteral("strip")}) {
+                misdeclared << (id + QStringLiteral(" → [") + e.appliesTo.join(QLatin1String(", "))
+                                + QStringLiteral("]"));
+            }
         }
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("Missing strip packs: ") + missing.join(QLatin1String(", "))));
+        QVERIFY2(misdeclared.isEmpty(),
+                 qPrintable(QStringLiteral("Strip packs must declare exactly [strip] (anything else changes their "
+                                           "compositor-only classification): ")
+                            + misdeclared.join(QLatin1String("; "))));
+
+        // The inverse guard: every strip-declaring pack the registry knows
+        // about is in the list above.
+        QStringList scanned;
+        for (const AnimationShaderEffect& e : registry.availableEffects()) {
+            if (e.appliesTo.contains(QStringLiteral("strip"))) {
+                scanned << e.id;
+            }
+        }
+        scanned.sort();
+        QStringList expected = stripPacks;
+        expected.sort();
+        QCOMPARE(scanned, expected);
     }
 
     void testDissolveHasExpectedParameters()

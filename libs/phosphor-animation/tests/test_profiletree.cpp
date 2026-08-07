@@ -86,6 +86,12 @@ private Q_SLOTS:
         // The strip walk-up: scrolling.view → scrolling → global.
         QCOMPARE(PP::parentPath(PP::ScrollingView), PP::Scrolling);
         QCOMPARE(PP::parentPath(PP::Scrolling), PP::Global);
+        // The sub-tree match is SEGMENT-aware: the prefix carries the dot, so
+        // a sibling root that merely starts with the same letters is not
+        // swept into the class. Dropping the '.' from the startsWith would
+        // leave every other assert here green.
+        QVERIFY(PP::eventClassForPath(QStringLiteral("scrollingx")).isEmpty());
+        QVERIFY(PP::eventClassForPath(QStringLiteral("scrollingx.view")).isEmpty());
     }
 
     void testAllBuiltInPathsNonEmpty()
@@ -125,6 +131,12 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::Desktop));
         QVERIFY(paths.contains(PP::DesktopSwitch));
         QVERIFY(paths.contains(PP::DesktopPeek));
+        // Scrolling strip family. Membership here is what gates the path out
+        // of the motion sets, the presets and the settings tree walk, so a
+        // constant declared but never registered would ship a row nothing can
+        // reach.
+        QVERIFY(paths.contains(PP::Scrolling));
+        QVERIFY(paths.contains(PP::ScrollingView));
         // No regression: legacy zone.* strings must not reappear.
         for (const QString& path : paths) {
             QVERIFY2(!path.startsWith(QLatin1String("zone.")) && path != QLatin1String("zone"),

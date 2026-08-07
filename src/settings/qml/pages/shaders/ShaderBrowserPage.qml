@@ -114,6 +114,11 @@ SettingsFlickable {
             "key": "desktop",
             "label": i18nc("@item shader capability", "Desktop"),
             "order": 4
+        },
+        {
+            "key": "strip",
+            "label": i18nc("@item shader capability (the scrolling strip's view motion)", "Scrolling strip"),
+            "order": 5
         }
     ]
     readonly property string _universalKey: "universal"

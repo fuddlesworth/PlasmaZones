@@ -26,7 +26,10 @@ vec4 pTransition(vec2 uv, float t) {
     // vertical center, full at the top and bottom edges. Content at a lagging
     // row has not caught up with the middle yet, so it is sampled from where
     // it still is: behind, along the travel direction.
+    // stripUv runs past 0..1 in the feather band outside the work area, where
+    // the mask has not yet reached zero. Clamp the profile so the bow never
+    // exceeds the amplitude the stripEdgeFade budget above was sized for.
     float sy = stripUv(uv).y;
-    float prof = pow(abs(sy - 0.5) * 2.0, 2.0);
+    float prof = pow(min(abs(sy - 0.5) * 2.0, 1.0), 2.0);
     return getStripColor(uv + vec2(lag * prof, 0.0));
 }

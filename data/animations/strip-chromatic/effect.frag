@@ -11,7 +11,7 @@
 #include <strip_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-    float m = stripMask(uv, 0.02);
+    float m = stripMask(uv, p_edgeFeather);
     // Signed velocity in output-widths per second, saturating so a violent
     // fling cannot pull the channels apart by more than ~1.4% of the output.
     float shift = clamp(iStripMotion.w * 0.02 * p_strength, -0.014, 0.014) * m;
@@ -24,5 +24,10 @@ vec4 pTransition(vec2 uv, float t) {
     vec4 base = getStripColor(uv);
     float r = getStripColor(uv + vec2(shift, 0.0)).r;
     float b = getStripColor(uv - vec2(shift, 0.0)).b;
+    // Taking r and b from neighbours while alpha comes from the centre can in
+    // principle break the premultiplied invariant (rgb <= a). It cannot today:
+    // the strip capture is the composited scene, opaque everywhere the strip
+    // covers, so base.a is 1 wherever shift is non-zero. A future capture that
+    // carries real alpha would need min(rgb, a) here.
     return vec4(r, base.g, b, base.a);
 }

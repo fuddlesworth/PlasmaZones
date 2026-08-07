@@ -298,6 +298,33 @@ private Q_SLOTS:
         QCOMPARE(AnimationShaderEffect::fromJson(stripOnly.toJson()).appliesTo, stripOnly.appliesTo);
     }
 
+    /// The accepted token vocabulary, pinned as a SET. fromJson validates
+    /// against ProfilePaths::allEventClassTokens(), and this asserts what
+    /// that SSOT contains: a class added there without its downstream
+    /// consumers (the browser's type catalog, the coverage chip, the
+    /// compositor-only rule — see the checklist on the ProfilePaths block)
+    /// fails here first and points at the list to work through.
+    void testEventClassTokenVocabulary()
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        const QStringList expected{QStringLiteral("geometry"), QStringLiteral("appearance"), QStringLiteral("desktop"),
+                                   QStringLiteral("move"), QStringLiteral("strip")};
+        QCOMPARE(PP::allEventClassTokens(), expected);
+
+        // Every one of them survives a fromJson round trip. The vocabulary
+        // and the parser cannot drift apart while both read the SSOT, but a
+        // future short-circuit in the parser would show up right here.
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("all-classes"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray arr;
+        for (const QString& token : expected) {
+            arr.append(token);
+        }
+        obj.insert(QLatin1String("appliesTo"), arr);
+        QCOMPARE(AnimationShaderEffect::fromJson(obj).appliesTo, expected);
+    }
+
     /// Unknown / duplicate tokens are dropped at parse time; a list that
     /// validates down to empty is treated as universal.
     void testAppliesToValidation()
@@ -508,9 +535,11 @@ private Q_SLOTS:
 
         // Strip effect: opt-in exactly like desktop and move. Accepted only on
         // the scrolling paths (root and leaf, mirroring desktop); refused on
-        // every single-surface leg, the desktop paths, and ambiguous rows (no
-        // screen-level pass ever consumes an ancestor row's resolution, so a
-        // strip-only pack there is provably runtime-dead).
+        // every single-surface leg, the desktop paths, and ambiguous rows.
+        // The ambiguous-row refusal is picker POLICY, not a deadness proof: a
+        // strip pack assigned at `global` would in fact be picked up by the
+        // scrolling leaf through the cascade. It is withheld because the row
+        // spans mostly single-surface events where the pack does nothing.
         AnimationShaderEffect stripOnly;
         stripOnly.id = QStringLiteral("strip-motion-blur");
         stripOnly.fragmentShaderPath = QStringLiteral("effect.frag");
@@ -528,6 +557,34 @@ private Q_SLOTS:
         QVERIFY(!shaderEffectAppliesToEventPath(morph, PP::ScrollingView));
         QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::ScrollingView));
         QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::ScrollingView));
+        // The Scrolling ROOT too, for parity with the desktop pair above: a
+        // regression that classed only the leaf would leave the root
+        // permissive and offer every single-surface pack on it.
+        QVERIFY(!shaderEffectAppliesToEventPath(morph, PP::Scrolling));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::Scrolling));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::Scrolling));
+
+        // The move class must not leak across into the strip class or back:
+        // they are the two continuous-motion opt-ins and the easiest pair to
+        // conflate.
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::ScrollingView));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::Scrolling));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowMaximize));
+
+        // A HYBRID that declares strip alongside a single-surface class is
+        // accepted on BOTH — the classes are independent capabilities, not a
+        // mode switch. This is what makes the ambiguous-row exclusion a
+        // policy rather than a proof: this pack is genuinely live on both
+        // sides of it.
+        AnimationShaderEffect stripHybrid;
+        stripHybrid.id = QStringLiteral("hybrid-strip-appearance");
+        stripHybrid.fragmentShaderPath = QStringLiteral("effect.frag");
+        stripHybrid.appliesTo = QStringList{QStringLiteral("strip"), QStringLiteral("appearance")};
+        QVERIFY(shaderEffectAppliesToEventPath(stripHybrid, PP::ScrollingView));
+        QVERIFY(shaderEffectAppliesToEventPath(stripHybrid, PP::WindowOpen));
+        // On an ambiguous row the appearance leg carries it, so unlike the
+        // strip-ONLY pack above it is NOT withheld there.
+        QVERIFY(shaderEffectAppliesToEventPath(stripHybrid, PP::Global));
     }
 
     /// Compositor-only classification: a pack whose declared classes never

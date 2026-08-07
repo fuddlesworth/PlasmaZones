@@ -713,6 +713,40 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
                 }
             });
 
+    // The strip view spring is per-OUTPUT while scroll state is
+    // per-(screen, desktop, activity), so a desktop switch orphans any
+    // residual offset: it belongs to the desktop being LEFT, and carrying
+    // it across paints the incoming desktop's columns (and freezes a
+    // shifted outgoing capture into the switch blend). Drop the spring and
+    // the strip shader pass for the switched output(s); the incoming
+    // desktop's own scroll state re-seeds a fresh accumulation on its next
+    // batch. forgetOutput fires no repaint of its own, so damage each
+    // dropped output — with a transition pack assigned the blend repaints
+    // everything anyway, but a pack-less switch relies on this.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this,
+            [this](KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow*,
+                   KWin::LogicalOutput* output) {
+                if (!oldDesktop || !newDesktop || oldDesktop == newDesktop) {
+                    return;
+                }
+                const auto dropFor = [this](KWin::LogicalOutput* out) {
+                    if (!out) {
+                        return;
+                    }
+                    m_stripTransition.outputRemoved(out);
+                    m_stripViewAnimator->forgetOutput(out);
+                    KWin::effects->addRepaint(out->geometry());
+                };
+                if (output) {
+                    dropFor(output);
+                    return;
+                }
+                const auto outputs = KWin::effects->screens();
+                for (KWin::LogicalOutput* out : outputs) {
+                    dropFor(out);
+                }
+            });
+
     // Full-screen desktop-switch TRANSITION (separate from the daemon-reporting
     // connection above). Resolve the `desktop.switch` shader from the profile
     // tree; when one is assigned, run the two-desktop blend. An empty resolve
@@ -865,6 +899,11 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             // without a preceding close never reaches. No restore is possible
             // (the window is gone); this only keeps the map bounded.
             m_ruleWindowLayerSnapshots.remove(cachedId);
+            // And for the parked-column paint hint, whose normal removal is
+            // also close-path (window_lifecycle) or daemon-teardown. A
+            // stranded entry is never READ back (the paint-side probes key
+            // on a LIVE window's id), so this is purely bounding the map.
+            m_scrollVisualPos.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);

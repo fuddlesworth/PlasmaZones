@@ -9,8 +9,10 @@ namespace ProfilePaths {
 // Root
 const QString Global = QStringLiteral("global");
 
-// Event-class tokens (see ProfilePaths.h). Kept as QStringLiteral so they
-// compare cheaply against AnimationShaderEffect::appliesTo entries.
+// Event-class tokens (see ProfilePaths.h). QStringLiteral rather than a bare
+// literal because these are namespace-scope QStrings: the literal form builds
+// its QString data at compile time, so construction allocates nothing at
+// static-init.
 const QString EventClassGeometry = QStringLiteral("geometry");
 const QString EventClassAppearance = QStringLiteral("appearance");
 const QString EventClassDesktop = QStringLiteral("desktop");
@@ -235,8 +237,23 @@ QString parentPath(const QString& path)
     return path.left(dotIdx);
 }
 
+QStringList allEventClassTokens()
+{
+    return {EventClassGeometry, EventClassAppearance, EventClassDesktop, EventClassMove, EventClassStrip};
+}
+
 QString eventClassForPath(const QString& path)
 {
+    // The dotted sub-tree prefixes, built once. This runs per row per repaint
+    // behind the settings picker's filter, and each of these used to allocate
+    // a temporary QString on every call.
+    static const QString movementPrefix = WindowMovement + QLatin1Char('.');
+    static const QString appearancePrefix = WindowAppearance + QLatin1Char('.');
+    static const QString osdPrefix = Osd + QLatin1Char('.');
+    static const QString popupPrefix = Popup + QLatin1Char('.');
+    static const QString desktopPrefix = Desktop + QLatin1Char('.');
+    static const QString scrollingPrefix = Scrolling + QLatin1Char('.');
+
     // The interactive-drag leaf is its own opt-in class. A drag installs a
     // HELD transition: there is no old→new crossfade to play (iFromRect stays
     // invalid, progress clamps while the pointer is down), so a geometry
@@ -252,7 +269,7 @@ QString eventClassForPath(const QString& path)
     // maximize) — the rest of the window.movement sub-tree, including its
     // cascade parent. Maximize IS a geometry change with a before/after
     // rect, so morph can drive it even though it isn't a built-in default.
-    if (path == WindowMovement || path.startsWith(WindowMovement + QLatin1Char('.'))) {
+    if (path == WindowMovement || path.startsWith(movementPrefix)) {
         return EventClassGeometry;
     }
     // Appearance legs animate a single surface in or out: the whole
@@ -260,11 +277,10 @@ QString eventClassForPath(const QString& path)
     // popup surface — the osd/popup roots and all their show/hide/pop
     // descendants. `startsWith` keeps future sub-surfaces classified without
     // touching this list.
-    if (path == WindowAppearance || path.startsWith(WindowAppearance + QLatin1Char('.'))) {
+    if (path == WindowAppearance || path.startsWith(appearancePrefix)) {
         return EventClassAppearance;
     }
-    if (path == Osd || path == Popup || path.startsWith(Osd + QLatin1Char('.'))
-        || path.startsWith(Popup + QLatin1Char('.'))) {
+    if (path == Osd || path == Popup || path.startsWith(osdPrefix) || path.startsWith(popupPrefix)) {
         return EventClassAppearance;
     }
     // Desktop family — the full-screen two-texture switch contract. The
@@ -272,7 +288,7 @@ QString eventClassForPath(const QString& path)
     // desktop-transition shader validates on the root or the leaf, and the
     // single-surface shaders are dimmed (see shaderEffectAppliesToEventPath,
     // which makes this class opt-in rather than universal-permissive).
-    if (path == Desktop || path.startsWith(Desktop + QLatin1Char('.'))) {
+    if (path == Desktop || path.startsWith(desktopPrefix)) {
         return EventClassDesktop;
     }
     // Scrolling family — the strip's one-scene post-process contract. The
@@ -282,7 +298,7 @@ QString eventClassForPath(const QString& path)
     // offset/velocity (iStripMotion) and must opt in via
     // `appliesTo: ["strip"]`. Root and every leaf carry the class, mirroring
     // desktop.
-    if (path == Scrolling || path.startsWith(Scrolling + QLatin1Char('.'))) {
+    if (path == Scrolling || path.startsWith(scrollingPrefix)) {
         return EventClassStrip;
     }
     // `window` root (mixed: spans both classes), `global`, and the
@@ -323,6 +339,12 @@ QString defaultShaderEffectIdForPath(const QString& path)
     // stay opt-in. A fresh config animates them only once the user picks a
     // desktop pack (e.g. Desktop Fade) on the Animations → Transitions →
     // Desktop page.
+    //
+    // `scrolling.view` is opt-in for the same reason from the other
+    // direction: its pass runs on EVERY wheel scroll, so a built-in default
+    // would put a full-screen post-process on the most frequent interaction
+    // in the mode. Scrolling stays a plain translation until the user picks a
+    // strip pack on Animations → Motion → Scrolling.
     // Every other event defaults to no shader.
     return QString();
 }

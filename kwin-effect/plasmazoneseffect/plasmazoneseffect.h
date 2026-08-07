@@ -172,11 +172,17 @@ public:
     void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data) override;
     // Per-window borders are rendered by routing the redirected window through
     // the offscreen border MapTexture shader (see the drawWindow override below +
-    // decorations.cpp), NOT here. paintScreen is overridden solely for the
+    // decorations.cpp), NOT here. paintScreen is overridden for the TWO
+    // scene-replacement paths, tried in a load-bearing order: first the
     // full-screen desktop transitions (the virtual-desktop switch and the
-    // show-desktop peek, which share the same path): while one is live,
-    // m_desktopTransition.paintOutput draws the two-texture blend for that output
-    // and we skip the normal scene; otherwise this chains straight through.
+    // show-desktop peek, which share one path) — while one is live,
+    // m_desktopTransition.paintOutput draws the two-texture blend for that
+    // output and we skip the normal scene — and second the strip shader pass
+    // (m_stripTransition.paintOutput), which captures the scrolling scene and
+    // draws the pack's decoration of it. Desktop deliberately outranks strip:
+    // a desktop blend replaces the scene wholesale, so a strip pass under it
+    // would decorate a frame nobody sees. Otherwise this chains straight
+    // through.
     void paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, int mask,
                      const KWin::Region& deviceRegion, KWin::LogicalOutput* screen) override;
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
@@ -732,7 +738,9 @@ private:
     /// paths that hold an id and need the output's geometry.
     KWin::LogicalOutput* outputForScreenId(const QString& screenId) const;
     /// The output a scroll-strip window is managed by, or nullptr when the
-    /// window is not a strip column (or is exempt: user move/resize, floating).
+    /// window is not a strip column (or is exempt: user move/resize, floating,
+    /// deleted — a close-grabbed column counts as exempt for its whole close
+    /// leg — or no screen is scrolling at all).
     /// The paint path compares this against the output currently being painted.
     /// Answers are memoised per output pass (see m_scrollManagedCache) so the
     /// prePaintWindow and paintWindow probes for one window cost one predicate
@@ -761,13 +769,6 @@ private:
      */
     QRect scrollClipGeometryFor(KWin::EffectWindow* w) const;
 
-    /// True when @p w stacks ABOVE the strip layer and must stay out of the
-    /// strip shader pass's capture (composited sharp on top instead): OSDs,
-    /// notifications, floating windows, panels, daemon overlays — everything
-    /// that is not a strip member, the tab-indicator surface, the desktop
-    /// background or a keep-below window. Only meaningful while
-    /// m_stripCaptureExclusionOutput is latched. Impl in scroll_clip.cpp.
-    bool stripPassPaintsAboveStrip(KWin::EffectWindow* w) const;
     TilingHandler* tilingHandler() const
     {
         return m_tilingHandler.get();
@@ -1908,14 +1909,27 @@ private:
     mutable QHash<KWin::EffectWindow*, KWin::LogicalOutput*> m_scrollManagedCache;
 
     /// Latched by StripTransitionManager around its capture's paintScreen:
-    /// while set, paintWindow skips every window stripPassPaintsAboveStrip
-    /// accepts and records it below, so the pass can composite exactly that
-    /// set sharp on top of the shader output. Null outside a capture.
+    /// while set, paintWindow skips every window in the above-strip set
+    /// below and records it, so the pass can composite exactly that set
+    /// sharp on top of the shader output. Null outside a capture. The
+    /// stored value is the capture's output; the record site only tests it
+    /// for truthiness (membership in the set already encodes the output),
+    /// so treat the pointer as a latch with a debugging-friendly value, not
+    /// as something compared against.
     KWin::LogicalOutput* m_stripCaptureExclusionOutput = nullptr;
+    /// Which windows the current capture excludes: everything ABOVE the
+    /// topmost strip member (a column managed by the capture output, or its
+    /// tab-indicator surface) in KWin's stacking order that also intersects
+    /// the capture output. Prebuilt by StripTransitionManager::paintOutput
+    /// right before its capture and cleared by the same scope guard as the
+    /// latch — a stacking FACT, where the old role-based predicate promoted
+    /// below-strip floats and closing columns above the shader output.
+    QSet<KWin::EffectWindow*> m_stripCaptureAboveStrip;
     /// The windows skipped by the current capture, in paint (bottom-to-top
-    /// stacking) order. Filled while the latch above is set; consumed and
-    /// cleared by the same paintOutput call, so entries never outlive the
-    /// frame.
+    /// stacking) order. Filled while the latch above is set; consumed by
+    /// the same paintOutput call on the normal path, and cleared by an
+    /// unwind guard when the capture's scene walk throws — either way
+    /// entries never outlive the frame.
     QList<KWin::EffectWindow*> m_stripCaptureSkippedWindows;
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
     void onScreenAdded(KWin::LogicalOutput* output);
@@ -2130,9 +2144,13 @@ private:
     Qt::KeyboardModifiers m_currentModifiers = Qt::NoModifier;
     Qt::MouseButtons m_currentMouseButtons = Qt::NoButton;
     bool m_keyboardGrabbed = false;
-    // Re-entrancy guard: true while captureOldWindowSnapshot's drawWindow walks
-    // the chain, so paint/apply hooks behave plainly during the raw capture
-    // pass (no morph quad deform / re-capture).
+    // Re-entrancy guard: true while a WINDOW-RECT offscreen capture walks the
+    // chain, so paint/apply hooks behave plainly during the raw capture pass
+    // (no morph quad deform / re-capture). TWO setters:
+    // captureOldWindowSnapshot (paint_capture.cpp) and captureWindowSurface
+    // (surface_capture.cpp) — both build their viewport from the WINDOW's
+    // rect rather than an output's, which is why the foreign-output cull and
+    // the strip-capture exclusion both exempt on this flag.
     bool m_capturingSnapshot = false;
 
     /// True while prePaintScreen has switched vertex snapping to None for an
@@ -2142,10 +2160,13 @@ private:
     /// initRenderingAndRegistries).
     bool m_vertexSnappingDisabled = false;
 
-    /// True while DesktopTransitionManager::compositeWindowsInto drives
-    /// paintWindow DIRECTLY (outside KWin's chain walk). That is the shared tail
-    /// of BOTH desktop captures — captureDesktop (the switch legs) and
-    /// capturePeekWindowsScene (the peek's windows layer). paintWindow's tail then terminates
+    /// True while a direct-drive caller runs paintWindow OUTSIDE KWin's chain
+    /// walk. THREE setters: DesktopTransitionManager::compositeWindowsInto —
+    /// the shared tail of both desktop captures, captureDesktop (the switch
+    /// legs) and capturePeekWindowsScene (the peek's windows layer) — and
+    /// StripTransitionManager's top-composite, which draws the above-strip
+    /// windows onto the SCREEN target after its quad (not a capture, and
+    /// per-frame for the whole leg). paintWindow's tail then terminates
     /// with effects->drawWindow instead of continuing the paintWindow chain:
     /// the chain iterator sits at begin() in that context, so chaining would
     /// re-enter our own paintWindow (double fold, animator transform applied

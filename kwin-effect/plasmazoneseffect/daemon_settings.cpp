@@ -446,6 +446,19 @@ void PlasmaZonesEffect::loadCachedSettings()
         // its own: with animations off, a scroll should place the strip
         // outright, which is exactly what a disabled view animator does.
         m_stripViewAnimator->setEnabled(v.toBool());
+        if (!v.toBool()) {
+            // Disarm the strip shader pass with the springs it decorates.
+            // setEnabled(false) clears the animator's motions OUTSIDE the
+            // paint bracket, and the pass's lazy reap runs only from
+            // postPaintScreen — which needs isActive() true. With every
+            // spring gone and no other clause holding, an armed entry would
+            // otherwise retain its output-sized capture texture until the
+            // next scroll. reset() makes its own GL context current, so it
+            // is safe from this D-Bus reply path; the dropped shader cache
+            // recompiles on the next scroll, which is negligible against a
+            // settings toggle.
+            m_stripTransition.reset();
+        }
         // The animations master toggle is part of the suppression predicate
         // for every group: with animations off none of our packs run, so
         // KWin's own minimize / maximize / show-desktop effects must come

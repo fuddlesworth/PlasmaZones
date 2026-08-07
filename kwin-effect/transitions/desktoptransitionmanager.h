@@ -296,7 +296,7 @@ private:
     /// @p outputTarget and @p outputViewport are the ON-SCREEN target this
     /// capture will ultimately be blended into. They supply the capture's device
     /// size, internal format and colour space, so the blend is a pass-through
-    /// rather than a conversion — see captureFormatFor.
+    /// rather than a conversion. See TransitionPass::captureFormatFor.
     std::unique_ptr<KWin::GLTexture> captureDesktop(KWin::VirtualDesktop* desktop, KWin::LogicalOutput* screen,
                                                     const KWin::RenderTarget& outputTarget,
                                                     const KWin::RenderViewport& outputViewport);

@@ -16,33 +16,53 @@
 #include <strip_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-    float m = stripMask(uv, 0.04);
+    float m = stripMask(uv, p_edgeFeather);
     // Signed velocity in output-widths per second. The tilt saturates well
     // before anything folds over.
     float tilt = clamp(iStripMotion.w * 0.35 * p_tilt, -0.22, 0.22);
     if (abs(tilt) < 1.0e-4 || m < 1.0e-3) {
         return getStripColor(uv);
     }
-    // Perspective-ish remap around the output center. sx in [-0.5, 0.5];
-    // the receding side (sign of travel) compresses, the near side expands,
-    // and rows taper vertically toward the receding side.
-    float sx = uv.x - 0.5;
+    // Perspective-ish remap around the WORK AREA's centre, not the output's:
+    // under a side panel the two differ, and pivoting on the output centre
+    // would tilt the drum about a point the columns are not centred on. sx is
+    // the signed distance from that centre in output uv, so the remap stays
+    // in the space getStripColor samples.
+    float centreX = 0.5;
+    float centreY = 0.5;
+    if (iStripRect.z > 0.0 && iStripRect.w > 0.0) {
+        centreX = (iStripRect.x + iStripRect.z * 0.5) / max(iResolution.x, 1.0);
+        centreY = (iStripRect.y + iStripRect.w * 0.5) / max(iResolution.y, 1.0);
+    }
+    float sx = uv.x - centreX;
     float depth = 1.0 + tilt * sx * 2.0;
+    // Sampling FURTHER from the centre means the content reads as compressed,
+    // so the receding side (tilt * sx > 0) squeezes horizontally. The vertical
+    // taper only ever swells the NEAR side: letting the receding side sample
+    // outward too would run the sample off the top and bottom of the capture
+    // and band those rows black, and the horizontal squeeze plus the shading
+    // below already carry the drum.
     vec2 warped;
-    warped.x = 0.5 + sx * depth;
-    warped.y = 0.5 + (uv.y - 0.5) * (1.0 + tilt * sx * 0.9);
+    warped.x = centreX + sx * depth;
+    warped.y = centreY + (uv.y - centreY) * (1.0 + min(tilt * sx, 0.0) * 0.9);
     vec2 su = mix(uv, warped, m);
     vec4 c = getStripColor(su);
     // Depth cue: the compressed side falls into shade, scaled with the same
-    // mask and tilt so it vanishes at settle.
-    float shade = 1.0 - p_shading * 0.35 * clamp(tilt * sx * 6.0, 0.0, 1.0) * m;
+    // mask and tilt so it vanishes at settle. p_shading is clamped because a
+    // hand-edited profile could otherwise drive it negative and blow the
+    // colour past white, or past 1 and drive it negative.
+    float shade = 1.0 - clamp(p_shading, 0.0, 1.0) * 0.35 * clamp(tilt * sx * 6.0, 0.0, 1.0) * m;
     // Off the drum: on the receding side the warp legitimately asks for
     // content past the screen edge, which the clamped capture would answer
     // by smearing its last pixel row/column. Fade those samples into shadow
     // instead: the tilted plane's far edge pulls away from the screen edge
     // and darkness shows behind it, which is the depth cue a real drum
     // would give. Vanishes with the tilt, so settle stays the identity.
+    // Ramp INTO the void before the edge rather than after it: a sample is
+    // already clamped the instant it leaves [0,1], so a ramp starting at 0
+    // would show a band of half-lit smear. Starting the ramp 0.006 uv inside
+    // means the void is fully closed by the time clamping begins.
     vec2 outside = max(-su, su - 1.0);
-    float voidAmt = smoothstep(0.0, 0.01, max(max(outside.x, outside.y), 0.0));
+    float voidAmt = smoothstep(-0.006, 0.0, max(outside.x, outside.y));
     return vec4(c.rgb * shade * (1.0 - voidAmt), c.a);
 }

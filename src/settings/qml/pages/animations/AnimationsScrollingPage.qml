@@ -12,18 +12,22 @@ import QtQuick
 // Curve, duration AND a shader leg. The shader picker offers only the strip
 // class (appliesTo ["strip"], e.g. Strip Motion Blur): the view spring
 // retargets continuously under wheel scrolling, so there is no from/to pair
-// for a crossfade pack, and shaderEffectAppliesToEventPath dims everything
-// but the packs that consume the strip contract (uStrip / iStripMotion via
-// strip_transition.glsl). The pass decorates the live scene per output while
-// the spring is in flight (StripTransitionManager); with no pack assigned
-// the strip scrolls exactly as before.
+// for a crossfade pack, so availableShaderEffectsForPath FILTERS the list
+// down to the packs that consume the strip contract (uStrip / iStripMotion
+// via strip_transition.glsl). Nothing is shown dimmed — the incompatible
+// packs are simply absent. The pass decorates the strip and what lies under
+// it, per output, while the spring is in flight (StripTransitionManager);
+// anything stacked above the strip is composited sharp on top afterwards.
+// With no pack assigned the strip scrolls exactly as before.
 //
 // No "All Scrolling Events" parent row: a cascade over a single child is
 // noise, the same reason the Desktop page left its parent off while `switch`
 // was its only leaf. Add one if a second leg ever lands.
+//
+// Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
-    Accessible.name: i18n("Scrolling animation events")
-    headerText: i18n("Animations for the scrolling strip. The whole strip moves together, so this is one setting for every column.")
+    Accessible.name: i18n("Scrolling animation event")
+    headerText: i18n("Animation for the scrolling strip. The whole strip moves together, so this is one setting for every column. Strip shaders decorate that motion as it happens, so only those shaders are offered here.")
     eventModel: [
         {
             "eventPath": "scrolling.view",

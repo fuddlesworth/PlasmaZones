@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "tilinghandler.h"
+#include "compositor/stripviewanimator.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/snaphandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
@@ -446,6 +447,26 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     }
 
     m_scrollingScreens = newSet;
+
+    // A screen LEAVING the scrolling set mid-leg must take its view spring
+    // and strip shader pass with it. The instant the set changes,
+    // scrollManagedOutputFor answers null for every column on that screen,
+    // so the paint path stops applying the offset (the columns snap to
+    // committed geometry) — but the spring and the armed pass know nothing
+    // of the set, so the pass would keep capturing and decorating a scene
+    // that is no longer scrolling for the leg's remaining duration, with
+    // the whole capture now classified as wallpaper-under-everything.
+    // forgetOutput fires no repaint of its own, so damage the output too:
+    // the last presented frame carries the dying offset/pass and nothing
+    // else is scheduled to repaint it away.
+    for (const QString& removedScreen : oldSet - newSet) {
+        if (KWin::LogicalOutput* out = m_effect->outputForScreenId(removedScreen)) {
+            m_effect->m_stripTransition.outputRemoved(out);
+            m_effect->m_stripViewAnimator->forgetOutput(out);
+            KWin::effects->addRepaint(out->geometry());
+        }
+    }
+
     m_effect->invalidateAllRuleCaches();
     m_effect->scheduleBorderSweep();
     // Mode is a ruleQuery input too, so the same static-window problem the

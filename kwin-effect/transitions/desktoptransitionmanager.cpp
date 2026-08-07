@@ -160,6 +160,16 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     // discipline the shader-registry reload path uses.
     ensureGlContextCurrent();
 
+    // Sample the live-peek predicate BEFORE the insert loop: insert_or_assign
+    // replaces a peek leg's entry with a Kind::Switch one, so scanning m_active
+    // after the loop can never see a peek on an output being switched — on a
+    // global (all-output) switch the post-loop scan is always false. The claim
+    // guard below wants the pre-switch truth: was a peek leg live anywhere when
+    // this switch arrived.
+    const bool peekLive = std::any_of(m_active.cbegin(), m_active.cend(), [](const auto& entry) {
+        return entry.second.kind != Kind::Switch;
+    });
+
     for (KWin::LogicalOutput* screen : outputs) {
         if (!screen) {
             continue;
@@ -203,9 +213,6 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     // already cancels show desktop before desktopChanged is emitted
     // (Workspace::updateWindowVisibilityOnDesktopChange), so this arm is
     // defence in depth against signal-order changes, at the same benign cost.
-    const bool peekLive = std::any_of(m_active.cbegin(), m_active.cend(), [](const auto& entry) {
-        return entry.second.kind != Kind::Switch;
-    });
     if (!peekLive && !PlasmaZonesEffect::isShowingDesktop() && !m_fullScreenClaimed
         && !KWin::effects->activeFullScreenEffect()) {
         KWin::effects->setActiveFullScreenEffect(m_effect);
@@ -491,6 +498,12 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
 
     // Settle check first: once the switch has run its course, tear this output
     // down and let the normal scene (the now-current desktop) paint.
+    //
+    // Unpinned clock on purpose. The strip pass pins nowMs once per screen
+    // paint because it finite-differences OFFSET against time and a mid-paint
+    // clock step would corrupt the velocity estimate. This pass has no such
+    // derivative: nowMs feeds a duration-clamped progress ramp sampled once
+    // per output, where sub-millisecond drift within a paint is invisible.
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     const qint64 elapsed = nowMs - tr.startTimeMs;
     if (elapsed >= tr.durationMs) {

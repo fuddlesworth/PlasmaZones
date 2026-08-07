@@ -36,9 +36,11 @@ KWin::LogicalOutput* PlasmaZonesEffect::scrollManagedOutputFor(KWin::EffectWindo
     // INPUT filter also routes through here (via scrollClipGeometryFor) but
     // runs outside any pass — a tile batch can land between passes and is
     // exactly what moves a column across the boundary — so outside a pass
-    // the predicate is always computed fresh and never cached. Pass-gating
-    // the writes also keeps the map free of dead-window keys: it is cleared
-    // at every prePaintScreen and windows do not die mid-pass.
+    // the predicate is always computed fresh and never cached. Stale keys
+    // for windows that died between passes CAN sit in the map until the
+    // next prePaintScreen's clear, but they are never read before that
+    // clear (every read is behind the same in-pass gate) and keys are only
+    // hashed by pointer value, never dereferenced.
     const bool inPass = m_currentPassOutput != nullptr;
     if (inPass) {
         if (const auto it = m_scrollManagedCache.constFind(w); it != m_scrollManagedCache.constEnd()) {
@@ -55,27 +57,6 @@ KWin::LogicalOutput* PlasmaZonesEffect::scrollManagedOutputFor(KWin::EffectWindo
         m_scrollManagedCache.insert(w, managed);
     }
     return managed;
-}
-
-bool PlasmaZonesEffect::stripPassPaintsAboveStrip(KWin::EffectWindow* w) const
-{
-    // Which windows the strip shader pass must NOT warp: everything stacked
-    // above the strip layer. The capture keeps only the strip members, the
-    // tab-indicator surface that rides them, and what lies beneath (the
-    // desktop background and keep-below windows); the pass then composites
-    // the excluded set sharp on top (StripTransitionManager::paintOutput).
-    // Consulted only while m_stripCaptureExclusionOutput is latched, i.e.
-    // inside that capture's paintScreen.
-    if (!w || w->isDesktop() || w->keepBelow()) {
-        return false;
-    }
-    if (scrollManagedOutputFor(w) == m_stripCaptureExclusionOutput) {
-        return false;
-    }
-    if (isScrollTabIndicatorSurface(w)) {
-        return false;
-    }
-    return true;
 }
 
 QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w) const

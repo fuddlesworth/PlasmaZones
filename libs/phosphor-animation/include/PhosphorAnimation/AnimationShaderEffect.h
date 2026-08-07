@@ -67,13 +67,15 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// ("appearance" — open/close/minimize/focus + OSD/popup show/hide),
     /// `EventClassGeometry` ("geometry" — snap*/layoutSwitch/maximize),
     /// `EventClassDesktop` ("desktop" — the two-texture
-    /// full-screen switch) or `EventClassMove` ("move" — the held
-    /// interactive drag, driven by the move-physics inputs). EMPTY (the
+    /// full-screen switch), `EventClassMove` ("move" — the held
+    /// interactive drag, driven by the move-physics inputs) or
+    /// `EventClassStrip` ("strip" — the scrolling strip's view spring,
+    /// a one-scene post-process driven by offset/velocity). EMPTY (the
     /// default) means "universal" — the effect applies to every
     /// single-surface event class, which is the right answer for the bulk
     /// of transitions (fade, glitch, dissolve …) that operate on a single
-    /// surface and need no before/after geometry. The desktop and move
-    /// classes are opt-in and never covered by "universal".
+    /// surface and need no before/after geometry. The desktop, move and
+    /// strip classes are opt-in and never covered by "universal".
     ///
     /// A geometry-only effect like `window-morph` cross-fades an old rect
     /// into a new rect (`iFromRect → iToRect`); that pair only exists on
@@ -303,17 +305,20 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
 /// True iff @p effect may meaningfully run on event @p path.
 ///
 /// An effect with an empty `appliesTo` is universal and always returns
-/// true on single-surface paths (the opt-in desktop and move classes are
-/// excluded). Otherwise the predicate maps @p path to its event class via
+/// true on single-surface paths (the opt-in desktop, move and strip
+/// classes are excluded). Otherwise the predicate maps @p path to its
+/// event class via
 /// `PhosphorAnimation::ProfilePaths::eventClassForPath` and checks
 /// membership. A path with no determinable class (a mixed ancestor like
 /// `window`, or a non-window/overlay path) also returns true — the
 /// predicate only reports false when it can PROVE a mismatch, so it never
-/// over-restricts a row whose class is ambiguous. The exceptions on
-/// ambiguous rows are effects that provably cannot drive anything the row
-/// cascades to: desktop-declaring packs (unbound second sampler) and
-/// packs declaring neither geometry nor appearance (move-only — the move
-/// leaf takes no inherited shader).
+/// over-restricts a row whose class is ambiguous. The one exception is a
+/// pack declaring NEITHER geometry NOR appearance — exclusively one of the
+/// three opt-in classes. For move-only that is a proof (the move leaf takes
+/// no inherited shader at all); for desktop-only and strip-only it is
+/// picker POLICY, since those leaves do inherit and would run it. A HYBRID
+/// such as `["strip", "appearance"]` stays offered on ambiguous rows: its
+/// appearance leg is live under them.
 ///
 /// This is the (effect × path) analogue of
 /// `PlasmaZones::eventPathSupportsShaderLeg(path)`, which gates whether a
@@ -331,8 +336,9 @@ PHOSPHORANIMATION_EXPORT bool shaderEffectAppliesToEventPath(const AnimationShad
 /// (empty `appliesTo`) runs there too; the remaining daemon-side families
 /// (editor / panel / widget) carry no shader leg in the first place (see
 /// `eventPathSupportsShaderLeg`). The desktop (two-texture switch/peek),
-/// geometry (iFromRect → iToRect morph) and move (held-drag physics)
-/// classes exist only inside the kwin-effect. So a pack whose declared
+/// geometry (iFromRect → iToRect morph), move (held-drag physics) and
+/// strip (the scrolling view spring's one-scene post-process) classes
+/// exist only inside the kwin-effect. So a pack whose declared
 /// `appliesTo` names classes but not `appearance` is provably
 /// compositor-only.
 ///

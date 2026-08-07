@@ -73,8 +73,8 @@ std::unique_ptr<KWin::GLTexture> allocateOutputTexture(const QSize& deviceSize, 
 /// projection is applied.
 void drawOutputQuad(const KWin::RenderViewport& viewport);
 
-/// The full-screen quad vertex stage shared by the screen-level passes (the
-/// GLSL drawOutputQuad's vertices feed). Positions arrive in the
+/// The GLSL vertex stage shared by the screen-level passes. This is what
+/// drawOutputQuad's vertices feed into. Positions arrive in the
 /// RenderViewport's device coordinate space and are projected by KWin's own
 /// matrix, which encodes RenderTarget::transform() (the output rotation/flip,
 /// combined with the buffer's FlipY) and the render offset. Emitting

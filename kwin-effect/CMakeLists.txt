@@ -155,16 +155,12 @@ kcoreaddons_add_plugin(kwin_effect_plasmazones
 set_source_files_properties(compositor/snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 # All four TUs of DesktopTransitionManager stay out of the Unity blob.
 #
-# None of them fixes a PRESENT collision, and the comments here used to imply
-# otherwise. Every file-local name across the four is unique repo-wide
-# (drawDesktopBlendQuad, translatePackParams, captureFormatFor,
-# allocateOutputTexture), and desktoptransitionmanager.cpp:42 is explicit that
-# its quad helper was given a distinct name from surfacelayers.cpp's
-# drawFullscreenQuad precisely so the blob CANNOT collide — differently-named
-# anonymous-namespace entities never do. The remaining two TUs carry no
-# file-local entity at all: the vertex source in desktoptransitionshader.cpp is
-# a FUNCTION-local static, and desktoptransitionteardown.cpp has no anonymous
-# namespace.
+# None of them fixes a PRESENT collision. The helpers that used to be
+# file-local to these TUs (drawDesktopBlendQuad, translatePackParams,
+# captureFormatFor, allocateOutputTexture) were lifted into the named
+# TransitionPass namespace in transitionpasshelpers.cpp when the strip pass
+# arrived, so the desktop TUs no longer carry anonymous-namespace entities
+# that could collide inside a blob at all.
 #
 # The exclusion is a uniform prophylactic rule instead: this class is split by
 # concern across four files that freely add file-local helpers, and a future one
@@ -176,9 +172,9 @@ set_source_files_properties(transitions/desktoptransitioncapture.cpp PROPERTIES 
 set_source_files_properties(transitions/desktoptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 set_source_files_properties(transitions/desktoptransitionteardown.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 # StripTransitionManager's TUs and the shared pass helpers follow the same
-# prophylactic rule as the desktop set above (and the desktop drive TU now
-# pulls file-local `using` aliases from the helpers, another reason to keep
-# these out of the blob).
+# prophylactic rule as the desktop set above: concern-split TUs that freely
+# add file-local helpers stay out of the blob wholesale rather than being
+# audited for collisions one name at a time.
 set_source_files_properties(transitions/striptransitionmanager.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 set_source_files_properties(transitions/striptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 set_source_files_properties(transitions/transitionpasshelpers.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)

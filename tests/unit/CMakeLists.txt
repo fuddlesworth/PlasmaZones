@@ -1639,6 +1639,36 @@ target_include_directories(test_strip_view_animator PRIVATE ${CMAKE_SOURCE_DIR}/
 target_link_libraries(test_strip_view_animator PRIVATE Qt6::Test PhosphorAnimation::PhosphorAnimation)
 add_test(NAME test_strip_view_animator COMMAND test_strip_view_animator)
 
+# StripMotionSampler is header-only plain numbers (no KWin types at all), so
+# the suite includes it straight from the effect tree and drives it with a
+# hand-rolled clock — the same shape as test_strip_view_animator above.
+add_executable(test_strip_motion_sampler compositor-common/test_strip_motion_sampler.cpp)
+target_include_directories(test_strip_motion_sampler PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+target_link_libraries(test_strip_motion_sampler PRIVATE Qt6::Test)
+add_test(NAME test_strip_motion_sampler COMMAND test_strip_motion_sampler)
+
+# The offline pack validator's metadata lints. The bundled-pack gate
+# (shader_validate_animations) only proves the shipped packs are clean; this
+# builds deliberately-broken packs in a temp dir and asserts the diagnostic.
+# Compiles packvalidators.cpp straight in, the way the tool does, so it links
+# the same parsers and needs no glslang for the metadata paths it exercises.
+add_executable(test_pack_validators shadervalidate/test_pack_validators.cpp
+               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidators.cpp
+               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
+target_include_directories(test_pack_validators PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_pack_validators
+    PRIVATE
+        Qt6::Test
+        plasmazones_rendering
+        PhosphorRendering::PhosphorRendering
+        PhosphorShaders::PhosphorShaders
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorSurface::PhosphorSurface
+        Qt6::GuiPrivate
+        Qt6::ShaderToolsPrivate
+)
+add_test(NAME test_pack_validators COMMAND test_pack_validators)
+
 add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
 target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_decoration_manager COMMAND test_decoration_manager)

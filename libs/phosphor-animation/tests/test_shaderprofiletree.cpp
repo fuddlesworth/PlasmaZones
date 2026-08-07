@@ -458,6 +458,30 @@ private Q_SLOTS:
         // resolves in isolation (AnimationsDesktopsPage.qml). Pin it here.
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::DesktopPeek));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::DesktopSwitch));
+        // The strip leaf too. It is the class most easily confused with
+        // `move` (both are continuous motion), and move IS the isolated one,
+        // so a fix that generalised the predicate from the move leaf to "the
+        // continuous classes" would take the strip leaf's inheritance with
+        // it.
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::ScrollingView));
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::Scrolling));
+    }
+
+    // The other half of the same property: because the strip leaf is NOT
+    // isolated, a shader set on the `scrolling` root cascades down to it.
+    // That is what makes the picker's ambiguous-row policy a policy rather
+    // than a proof, and what the settings page's parent-row decision rests
+    // on, so pin the cascade itself rather than only the predicate.
+    void testScrollingRootCascadesToView()
+    {
+        ShaderProfileTree tree;
+        ShaderProfile root;
+        root.effectId = QStringLiteral("strip-motion-blur");
+        tree.setOverride(PP::Scrolling, root);
+
+        const ShaderProfile resolved = tree.resolve(PP::ScrollingView);
+        QVERIFY(resolved.effectId.has_value());
+        QCOMPARE(*resolved.effectId, QStringLiteral("strip-motion-blur"));
     }
 };
 

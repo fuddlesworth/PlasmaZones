@@ -352,6 +352,42 @@ private Q_SLOTS:
                  "refreshFromTree's latch reset is no longer transition- and selfDriven-gated");
     }
 
+    /// ShaderBrowserPage's `_typeCatalog` labels the shader browser's type
+    /// axis, one entry per event class. There is no way to derive it from the
+    /// C++ SSOT (ProfilePaths::allEventClassTokens) inside QML, so it is a
+    /// hand-maintained list — and a class added without an entry here ships
+    /// an untranslated raw token sorted last, which is exactly how the strip
+    /// class first shipped. Pin the key set against the same literal
+    /// vocabulary test_animationshadereffect pins on the C++ side.
+    void shaderBrowserTypeCatalogCoversEveryEventClass()
+    {
+        const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserPage.qml");
+        const QString src = readFile(qmlPath);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
+
+        const int start = src.indexOf(QStringLiteral("_typeCatalog"));
+        QVERIFY2(start >= 0, "_typeCatalog is gone from ShaderBrowserPage.qml");
+        const int end = src.indexOf(QStringLiteral("_universalKey"), start);
+        QVERIFY2(end > start, "could not find the end of the _typeCatalog block (_universalKey moved?)");
+        const QString block = src.mid(start, end - start);
+
+        // Mirrors PhosphorAnimation::ProfilePaths::allEventClassTokens().
+        // "universal" is deliberately absent: it is the synthetic order-0
+        // bucket the helpers resolve, not a declared class.
+        const QStringList classTokens{QStringLiteral("geometry"), QStringLiteral("appearance"),
+                                      QStringLiteral("desktop"), QStringLiteral("move"), QStringLiteral("strip")};
+        QStringList missing;
+        for (const QString& token : classTokens) {
+            if (!block.contains(QStringLiteral("\"key\": \"") + token + QLatin1Char('"'))) {
+                missing << token;
+            }
+        }
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("_typeCatalog has no entry for event class(es): ")
+                            + missing.join(QLatin1String(", "))
+                            + QStringLiteral(" — such packs get an untranslated badge sorted last")));
+    }
+
     // ─── Shader-browser bridge route ──────────────────────────────────────
 
     /// The Animations → Shaders page routes AnimationsPageController through

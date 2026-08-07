@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "stripmotionsampler.h"
+
 #include <PhosphorAnimation/AnimationShaderContract.h> // kMaxCustomParams / kMaxCustomColors
 
 #include <QHash> // std::hash<QString> specialization (used by the unordered_map key below)
@@ -61,7 +63,19 @@ class PlasmaZonesEffect;
 /// blocksDirectScanout) — a surface presented directly on a hardware plane
 /// would bypass it entirely — and never runs under a live desktop transition,
 /// which replaces the scene wholesale (paintScreen consults the desktop
-/// manager first).
+/// manager first). NOTE that preemption also FREEZES the strip visually: the
+/// desktop blend reuses its two captures for its whole duration while the
+/// view spring keeps integrating behind it, so the strip reappears at (or
+/// near) its settled position when the blend ends. That is accepted — a
+/// desktop switch replaces the whole scene, so animating the strip under it
+/// would be invisible work — and the sampler's gap discipline keeps the
+/// resume from spiking the velocity.
+///
+/// The spring is cut at a nonzero velocity (its settle band), so the pass
+/// does not stop dead with it: a short SETTLE FADE (StripMotionSampler)
+/// keeps painting with the last live velocity decaying to zero, which is
+/// what makes velocity-driven packs land without a pop. The fade outlives
+/// the spring, so liveness here is "spring live OR fade open".
 class StripTransitionManager
 {
 public:
@@ -72,26 +86,40 @@ public:
     StripTransitionManager& operator=(const StripTransitionManager&) = delete;
 
     /// Arm (or refresh) the strip pass for @p output. Called from the tiling
-    /// batch path every time a view leg is seeded, with the already resolved
+    /// batch path BEFORE the batch's applyBatchDelta for the same output
+    /// (that ordering is load-bearing: it is what lets this method tell a
+    /// fresh leg from a retarget — see below), with the already resolved
     /// `scrolling.view` @p effectId and @p params (the profile's effective
-    /// pack parameters). An EMPTY id erases any entry for the output — the
-    /// user cleared the pack (or disabled animations) mid-flight, and the
-    /// next frame falls through to the plain translation that was running
-    /// inside the capture all along, visually seamless.
+    /// pack parameters) and the batch's @p viewDeltaX. An EMPTY id erases
+    /// any entry for the output — the user cleared the pack (or disabled
+    /// animations) mid-flight, and the next frame falls through to the plain
+    /// translation that was running inside the capture all along, visually
+    /// seamless.
     ///
-    /// Refreshing an ALREADY-ACTIVE output only updates effectId/params: the
-    /// capture texture, iTime origin and velocity state persist. This is the
-    /// retarget path — a wheel batch landing mid-leg must not restart the
-    /// pass any more than it restarts the spring.
-    void notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params);
+    /// Refresh semantics on an already-armed output:
+    ///   • RETARGET (spring already live, same pack): capture texture,
+    ///     accumulated iTime and velocity state all persist — a wheel batch
+    ///     landing mid-leg must not restart the pass any more than it
+    ///     restarts the spring. The sampler's offset baseline is shifted by
+    ///     @p viewDeltaX so the committed step never reads as velocity.
+    ///   • FRESH LEG (spring NOT live at call time — possible because this
+    ///     runs before applyBatchDelta): the motion sampler resets, so a
+    ///     pass that begins after a stale armed entry (animations toggled,
+    ///     spring cleared outside the paint bracket) starts at iTime 0 with
+    ///     no inherited velocity.
+    ///   • PACK SWAP (different @p effectId): the sampler resets too — pack
+    ///     B must not begin at pack A's accumulated clock and frame count.
+    void notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params, int viewDeltaX);
 
-    /// True while any armed output's view spring is live. Feeds
-    /// PlasmaZonesEffect::isActive() and blocksDirectScanout().
+    /// True while any armed output's view spring is live OR its settle fade
+    /// is open. Feeds PlasmaZonesEffect::isActive() and
+    /// blocksDirectScanout().
     bool isRunning() const;
 
-    /// True while @p screen specifically is armed AND its view spring is
-    /// live. prePaintScreen gates the per-output PAINT_SCREEN_TRANSFORMED
-    /// mask on this; paintOutput repeats it as its entry check.
+    /// True while @p screen specifically is armed AND (its view spring is
+    /// live OR its settle fade is open). prePaintScreen gates the per-output
+    /// PAINT_SCREEN_TRANSFORMED mask on this; paintOutput repeats it as its
+    /// entry check.
     bool isRunningForOutput(KWin::LogicalOutput* screen) const;
 
     /// Paint one output's strip pass. Returns true when the decorated scene
@@ -103,13 +131,16 @@ public:
     bool paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, int mask,
                      const KWin::Region& deviceRegion, KWin::LogicalOutput* screen);
 
-    /// Erase entries whose view spring is no longer live, freeing their
-    /// capture textures (GL-context guard). Called from postPaintScreen —
-    /// the settle frame itself needs no repaint (paintOutput returns false
-    /// and the normal scene paints in the SAME frame), so this is pure
-    /// resource hygiene, and it also covers outputs that stopped painting
-    /// mid-leg (DPMS) once StripViewAnimator's own clock reap clears their
-    /// springs.
+    /// Erase entries whose view spring is dead AND whose settle fade has
+    /// closed, freeing their capture textures (GL-context guard). Called
+    /// from postPaintScreen; pure resource hygiene (the frame that ends the
+    /// fade already painted the normal scene). PAINT-DRIVEN ONLY: an output
+    /// that stops painting mid-leg (DPMS) keeps its entry until it paints
+    /// again or is torn down — its spring's clock freezes with it, the leg
+    /// completes on wake, and the retained cost is one capture texture. The
+    /// non-paint kill paths (animations toggled off, a screen leaving the
+    /// scrolling set, output removal, teardown) each disarm at their own
+    /// site rather than relying on this reap.
     void reapSettled();
 
     /// Drop every compiled strip shader so the next scroll recompiles against
@@ -135,28 +166,21 @@ private:
         // profile's overrides) — same translation as the desktop pass.
         std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParams{};
         std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColors{};
-        // Persistent per-output capture target, reused across frames and
-        // revalidated against the viewport's device size + the on-screen
-        // target's internal format each paint (reallocated on mismatch).
-        // Deliberately NOT allocated fresh per frame the way the desktop
-        // captures are: this pass re-renders the scene into it every frame
-        // for the whole leg, so churning an output-sized allocation per
-        // frame would be pure waste.
+        // Capture target reused across the frames of ONE leg (plus its
+        // settle fade), revalidated against the viewport's device size + the
+        // on-screen target's internal format each paint (reallocated on
+        // mismatch). Not allocated fresh per frame the way the desktop
+        // captures are — this pass re-renders the scene into it every frame
+        // — but it does NOT outlive the leg: reapSettled frees the entry at
+        // settle, so a new burst of scrolling pays one allocation.
         std::unique_ptr<KWin::GLTexture> captureTex;
         std::unique_ptr<KWin::GLFramebuffer> captureFbo;
-        // iTime origin (pinned-clock ms of the first painted frame); -1 =
-        // not yet painted. Persists across notifyLeg refreshes — iTime is
-        // monotonic for the whole pass, never rewinding on a retarget.
-        qint64 startTimeMs = -1;
-        // Previous paint tick (pinned-clock ms) for the velocity dt; -1 = no
-        // prior tick (first frame reports zero velocity).
-        qint64 lastPaintTimeMs = -1;
-        // Previous tick's view offset in LOGICAL px (offsetFor's space);
-        // converted to device px only at upload.
-        qreal lastOffsetPx = 0.0;
-        // One-pole smoothed velocity, logical px/s. Smoothing (~30 ms tau)
-        // keeps per-batch retargets from spiking a velocity-driven blur.
-        qreal smoothedVelocity = 0.0;
+        // Velocity estimation, painted-frame iTime accumulation, batch-jump
+        // compensation and the settle fade, extracted into a plain-numbers
+        // struct so the arithmetic is unit-testable without a compositor
+        // (test_strip_motion_sampler). Persists across RETARGET refreshes;
+        // reset on a fresh leg or a pack swap (see notifyLeg).
+        StripMotionSampler motion;
         // Monotonic paint counter uploaded as iFrame, zero-based.
         int frameCount = 0;
     };
