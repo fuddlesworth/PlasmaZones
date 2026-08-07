@@ -127,26 +127,6 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // leg's duration.
         KWin::effects->addRepaint(KWin::Region(output->geometry()));
     });
-    m_stripViewAnimator->setSettleCallback([this](KWin::LogicalOutput* output) {
-        // Tell the daemon the strip is at rest, so the tab-indicator overlay
-        // knows when to come back. It cannot work this out for itself: the view
-        // rides a spring, and a spring ignores its profile's duration and runs
-        // on its own physics, so any daemon-side timer is guessing.
-        //
-        // Fire-and-forget. The overlay is cosmetic, a dropped notification
-        // costs one stretch of hidden indicators until the next scroll, and
-        // blocking the paint loop on the daemon's event loop would be a far
-        // worse trade.
-        const QString screenId = outputScreenId(output);
-        if (screenId.isEmpty()) {
-            return;
-        }
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-            PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("notifyViewSettled"));
-        msg << screenId;
-        QDBusConnection::sessionBus().asyncCall(msg);
-    });
     m_windowAnimator->setOnAnimationCompleteCallback([this](KWin::EffectWindow* w) {
         // Only tear down ANIMATOR-DRIVEN shader transitions
         // (durationMs == 0; the leg rides m_windowAnimator's timeline).

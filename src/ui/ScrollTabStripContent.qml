@@ -58,28 +58,6 @@ Item {
     /// Strip entries pushed by the daemon (see file doc).
     property var strips: []
 
-    /// True while the scrolling strip is moving, pushed by the daemon: set when
-    /// a batch slides the view, cleared when the COMPOSITOR reports its view
-    /// spring has come to rest.
-    ///
-    /// It has to come from the compositor. The view rides a spring, and a
-    /// spring ignores its profile's duration and runs on its own physics, so
-    /// any timer on this side is guessing at a moment it cannot compute — and
-    /// guessing short brings the indicators back onto a strip still moving,
-    /// which is the artifact this whole mechanism exists to remove.
-    ///
-    /// The indicators HIDE while the strip is moving rather than travelling
-    /// with it. They cannot travel with it accurately: the compositor moves
-    /// windows inside its own paint pass, while these live in a layer-shell
-    /// surface the daemon commits for the compositor to composite on a LATER
-    /// frame, so an indicator that mirrored the same spring still trailed the
-    /// column it labels by at least a frame. Two springs cannot close that gap;
-    /// only drawing the indicators compositor-side can, and that needs a
-    /// surface of their own (today they share one with the OSD, which must not
-    /// slide when the strip does).
-    ///
-    property bool stripMoving: false
-
     /// Shown for a tab whose window reports no title. Named once so a
     /// translator change lands on every one of the three places it appears.
     readonly property string untitledLabel: i18n("Untitled window")
@@ -190,33 +168,12 @@ Item {
             x: slotX
             y: slotY
 
-            // Out of the way while the strip moves, back once it settles. The
-            // rect is already the FINAL one, so a visible indicator would sit
-            // at the destination while its column was still travelling — worse
-            // than absent. Symmetric and short: the fade out overlaps motion
-            // that is already underway, and the fade in lands on a strip that
-            // has stopped.
-            opacity: root.stripMoving ? 0 : 1
-
-            // Asymmetric on purpose: instant out, eased back in.
-            //
-            // A faded hide keeps the indicator on screen for the whole fade,
-            // sitting at its DESTINATION rect while the columns are still
-            // travelling — the same artifact the hide exists to remove, just
-            // at the start of the leg instead of the end. There is nothing to
-            // soften on the way out anyway, because the thing it would ease
-            // against is already moving.
-            //
-            // Coming back is the opposite case: the strip has stopped, the
-            // rect is settled, and a hard pop would be the only motion on
-            // screen.
-            Behavior on opacity {
-                enabled: !root.stripMoving
-
-                NumberAnimation {
-                    duration: Kirigami.Units.shortDuration
-                }
-            }
+            // No motion state to react to. The rects written here are the
+            // post-scroll ones, exactly as the compositor commits the columns'
+            // post-scroll geometry, and the compositor slides this whole
+            // surface by the strip's view offset — so an indicator drawn at its
+            // final rect is on screen where its column is, on every frame of
+            // the scroll. See ScrollTabShell.qml.
             width: slotWidth
             height: slotHeight
             // The bar's segments floor at 1px each, so a rect too short for its

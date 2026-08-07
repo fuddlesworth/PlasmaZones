@@ -783,6 +783,18 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         data.setTransformed();
     }
 
+    // The tab-indicator surface is translated off its committed rect for the
+    // whole view leg (paintWindow adds the strip's offset to it), so KWin must
+    // stop deciding where it goes from that rect. Marked translucent for the
+    // same reason the transition branch above is: a surface drawn away from its
+    // frame leaves the pixels it vacated uncomposited, and the last presented
+    // frame reads back as a ghost indicator standing still while the real one
+    // slides.
+    if (w && m_stripViewAnimator->isAnimatingOn(w->screen()) && isScrollTabIndicatorSurface(w)) {
+        data.setTransformed();
+        data.setTranslucent();
+    }
+
     OffscreenEffect::prePaintWindow(view, w, data);
 }
 
@@ -1109,6 +1121,24 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (!qFuzzyIsNull(viewOffset)) {
                 data += QPointF(viewOffset, 0.0);
             }
+        } else if (KWin::LogicalOutput* out = w->screen();
+                   out && m_stripViewAnimator->isAnimatingOn(out) && isScrollTabIndicatorSurface(w)) {
+            // The tab indicators take the SAME offset as the columns they
+            // label, from the same spring, inside the same paint pass. That is
+            // the whole reason they were given a surface of their own: a second
+            // spring in the daemon could never catch this one, because the
+            // daemon renders and commits its surface for the compositor to
+            // composite a frame or more later.
+            //
+            // The daemon pushes each indicator at its post-scroll rect, exactly
+            // as the apply path commits each column's post-scroll geometry, so
+            // one shared offset puts both back where they were and slides them
+            // in step.
+            //
+            // The cheap map lookup is deliberately first: the scope test behind
+            // it walks a cast and a string, and no surface needs an offset on
+            // an output whose strip is at rest.
+            data += QPointF(m_stripViewAnimator->offsetFor(out), 0.0);
         }
     }
 

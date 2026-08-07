@@ -94,7 +94,23 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     // (lib only touches m_states).
     if (existing != m_screenStates.end()) {
         existing->shell = nullptr;
+        existing->tabShell = nullptr;
         m_screenStates.erase(existing);
+    }
+
+    // The tab-indicator shell follows the same key. It is best-effort on
+    // purpose: it exists only for a screen that has shown a tabbed column, so
+    // "no live shell under oldKey" is the ordinary answer, not a fault. When
+    // one IS live and the host refuses the move (a live shell already under
+    // newKey), destroy it rather than leave the donor's surface stranded under
+    // a key nothing will ever address again — the next strip update recreates
+    // it, at the cost of one surface rebuild.
+    if (m_tabShellHost->stateFor(oldKey) != nullptr && !m_tabShellHost->rekey(oldKey, newKey)) {
+        qCInfo(lcOverlay) << "rekeyOverlayState: tab shell rekey refused" << oldKey << "->" << newKey
+                          << "; destroying it, the next strip update rebuilds it";
+        m_tabShellHost->destroyShell(oldKey);
+        m_tabShellHost->removeState(oldKey);
+        donor->tabShell = nullptr;
     }
     PerScreenOverlayState state = std::move(donor.value());
     m_screenStates.erase(donor);
@@ -115,7 +131,7 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     //    direction.
     //  - m_scrollTabInputRegions MUST follow. The rekey preserves the live
     //    surface, so the slot can still be visible; left under the dead key,
-    //    syncPassiveShellSurfaceState(newKey) would read an empty region and
+    //    syncScrollTabShellSurfaceState(newKey) would read an empty region and
     //    the indicator would be UNCLICKABLE until the next strip update.
     //  - m_scrollTabIndicatorOverrides MUST follow. Otherwise the screen's
     //    context-rule paint overrides silently fall back to the config values
@@ -183,20 +199,35 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         // transport handle. (isVS == wasVS by the guard, so the physical
         // branch below is the both-bare-physical case, where AnchorAll
         // already covers the whole monitor and only the margins are reset.)
-        if (rekeyed.shell && rekeyed.shell->shellSurface()) {
-            if (auto* handle = rekeyed.shell->shellSurface()->transport()) {
-                const QRect targetVsGeom = resolveScreenGeometry(m_screenManager, newKey);
-                const auto placement = layerPlacementForVs(isVS ? targetVsGeom : QRect(), physScreen->geometry());
-                handle->setAnchors(placement.anchors);
-                handle->setMargins(placement.margins);
-                if (isVS && targetVsGeom.isValid()) {
-                    rekeyed.overlayGeometry = targetVsGeom;
-                    if (auto* w = rekeyed.shell->shellWindow()) {
-                        w->setWidth(targetVsGeom.width());
-                        w->setHeight(targetVsGeom.height());
-                    }
+        const QRect targetVsGeom = resolveScreenGeometry(m_screenManager, newKey);
+        const auto placement = layerPlacementForVs(isVS ? targetVsGeom : QRect(), physScreen->geometry());
+        // Both of the screen's surfaces are re-anchored, not just the passive
+        // one: the tab shell was attached against the old key's region too, and
+        // a stranded one would keep drawing the indicators over the old VS's
+        // rectangle.
+        const auto reanchor = [&](PhosphorOverlay::ShellState* shellState) {
+            if (!shellState || !shellState->shellSurface()) {
+                return;
+            }
+            auto* handle = shellState->shellSurface()->transport();
+            if (!handle) {
+                return;
+            }
+            handle->setAnchors(placement.anchors);
+            handle->setMargins(placement.margins);
+            if (isVS && targetVsGeom.isValid()) {
+                if (auto* w = shellState->shellWindow()) {
+                    w->setWidth(targetVsGeom.width());
+                    w->setHeight(targetVsGeom.height());
                 }
             }
+        };
+        reanchor(rekeyed.shell);
+        reanchor(rekeyed.tabShell);
+        // Tracked for the passive shell only — overlayGeometry is the zone
+        // overlay's hit-testing reference, and the tab indicators have none.
+        if (isVS && targetVsGeom.isValid() && rekeyed.shell && rekeyed.shell->shellSurface()) {
+            rekeyed.overlayGeometry = targetVsGeom;
         }
 
         rekeyed.overlayGeomConnection = installOverlayGeometryWatcher(physScreen, newKey, isVS);

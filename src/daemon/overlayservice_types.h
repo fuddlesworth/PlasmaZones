@@ -51,10 +51,24 @@ struct PerScreenOverlayState
     // state, not lib-mechanism state.
     PhosphorOverlay::ShellState* shell = nullptr;
 
+    /// The scrolling tab indicators' own shell state, borrowed from the
+    /// SECOND ShellHost the daemon runs (@c m_tabShellHost) with the same
+    /// contract as @c shell above.
+    ///
+    /// They get a surface to themselves because the compositor slides it:
+    /// the KWin effect adds the scrolling strip's view offset to this
+    /// surface so the indicators travel with their columns. A surface
+    /// translates as a whole, and the passive shell carries the navigation
+    /// OSD, which fires on the very action that scrolls — so sharing one
+    /// would slide the OSD sideways on every scroll. See
+    /// PhosphorRoles::ScrollTabShell.
+    PhosphorOverlay::ShellState* tabShell = nullptr;
+
     /// Convenience accessors that resolve the named PZ slot through
     /// the shell's generic slot map. Returns nullptr when no shell
     /// is wired up, or when the QML aliasing in PassiveOverlayShell.qml
-    /// did not expose the requested slot Item.
+    /// (ScrollTabShell.qml for @c scrollTabsSlot) did not expose the
+    /// requested slot Item.
     QQuickItem* osdSlot() const;
     QQuickItem* snapAssistSlot() const;
     QQuickItem* layoutPickerSlot() const;

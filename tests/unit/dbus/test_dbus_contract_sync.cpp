@@ -585,12 +585,7 @@ private Q_SLOTS:
 
     void testScrollingContract()
     {
-        // viewSettled is an in-process relay of the notifyViewSettled METHOD,
-        // which IS on the contract. The daemon connects to it to reach the
-        // overlay; no external consumer has any use for it, and publishing it
-        // would put a per-scroll broadcast on the bus for one in-process hop.
-        verifyContract(ScrollingAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Scrolling"),
-                       {QStringLiteral("viewSettled")});
+        verifyContract(ScrollingAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Scrolling"));
     }
 
     void testControlContract()

@@ -490,6 +490,33 @@ private:
     static bool isOwnOverlayClass(const QString& windowClass);
 
     /**
+     * @brief Recognise the daemon's dedicated scrolling tab-indicator layer
+     *        surface, the one overlay that rides the strip's view offset.
+     *
+     * The indicators get a surface of their own so the paint path can translate
+     * them with the columns they label without dragging the OSD (which fires on
+     * the very action that scrolls) sideways with them.
+     *
+     * Matched by the wl_surface's protocol object id, which the daemon
+     * announces over D-Bus. Nothing KWin exposes per window can tell the
+     * daemon's overlays apart: they share a window class, carry no caption,
+     * role or desktop file, sit on the same layer and cover the same rect, and
+     * the layer-shell scope that WOULD name them is not reachable from an
+     * exported API. The object id is the one handle both sides can name.
+     */
+    bool isScrollTabIndicatorSurface(KWin::EffectWindow* w) const;
+
+    /**
+     * @brief Lower every known tab-indicator surface to the bottom of its layer.
+     *
+     * wlr-layer-shell cannot order two surfaces within one layer, so the
+     * lazily-created indicator surface stacks above the daemon's passive
+     * overlay shell and would paint across the modal cards that shell hosts.
+     * A client has no say in this; the compositor does, and we are it.
+     */
+    void restackScrollTabSurfaces();
+
+    /**
      * @brief Recognise only the daemon's non-interactive passthrough overlay
      *        surface ("plasmazonesd") by window class.
      *
@@ -1863,6 +1890,20 @@ private:
     /// it leaves the viewport. Absent for every window whose committed rect
     /// already IS its paint position, which is almost all of them.
     QHash<QString, QPoint> m_scrollVisualPos;
+    /// wl_surface object ids of the daemon's scrolling tab-indicator surfaces,
+    /// announced over D-Bus. The paint path slides these with the strip so the
+    /// indicators travel with the columns they label.
+    ///
+    /// Held as a flat set because the paint path only asks "is this window one
+    /// of them" and resolves the output from the window itself. The per-screen
+    /// map beside it exists solely so an announcement can retract the id it
+    /// replaces — the signal names a screen, not the id going away.
+    ///
+    /// Ids are dropped when the daemon retracts them and cleared wholesale at
+    /// bringup: Wayland reuses object ids, so a registration outliving its
+    /// surface would come to name an unrelated one.
+    QSet<quint32> m_scrollTabSurfaceIds;
+    QHash<QString, quint32> m_scrollTabSurfaceIdsByScreen;
 
     // Phase 6: per-window shader transitions via OffscreenEffect.
     // Shader/texture cache, LRU eviction, warm-up pipeline, profile tree,
@@ -2396,6 +2437,10 @@ private:
 private Q_SLOTS:
     /// Handle daemon signal when virtual screen definitions change
     void onVirtualScreensChanged(const QString& physicalScreenId);
+
+    /// Handle the daemon naming the wl_surface that draws @p screenId's
+    /// scrolling tab indicators. A @p surfaceId of 0 retracts the registration.
+    void onScrollTabSurfaceChanged(const QString& screenId, uint surfaceId);
 
     /// Handle daemon signal when the per-event motion-profile tree
     /// changes (a per-event animation duration was edited). Re-fetches

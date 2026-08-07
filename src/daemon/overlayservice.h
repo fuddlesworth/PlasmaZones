@@ -453,19 +453,12 @@ public:
     ///
     /// Each tab is a click target; the surface stays click-through outside the
     /// indicator rects via the per-screen input region built here.
-    /// @param carriesViewSlide True only for the engine's own push for this
-    ///        batch. The view slide in the payload describes ONE relayout, so a
-    ///        REPLAY of the cached strips (a retitle, an urgency change, a
-    ///        settings toggle) must not re-run the settle — it would fling the
-    ///        indicators in from the last scroll's direction again, with no
-    ///        scroll having happened. Replays default to false.
-    void updateScrollTabStrips(const QString& screenId, const QVariantList& strips, bool carriesViewSlide = false);
-
-    /// The compositor reporting @p screenId's scrolling view has come to rest,
-    /// which is the cue to bring the tab indicators back. Only the compositor
-    /// can answer this: the view rides a spring, and a spring ignores its
-    /// profile's duration, so a daemon-side timer would be guessing.
-    void onScrollViewSettled(const QString& screenId);
+    ///
+    /// The rects are always the POST-scroll ones and are written plainly, with
+    /// no motion state alongside them. The indicators have a wl_surface to
+    /// themselves and the compositor slides it by the scrolling strip's view
+    /// offset, so they ride a scroll the same way the columns do.
+    void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
 
     /// Drop-target indicator for a scrolling drag re-insert on @p screenId
     /// (per screen, NOT a singleton — a drag can cross screens). @p rect is
@@ -488,7 +481,7 @@ public:
     /// values when the indicator is drawn. Keyed by the overlay SLOT's own
     /// property names (tabStyle, gapsBetweenTabs, cornerRadius, activeColor,
     /// inactiveColor, urgentColor); an absent key falls through to config.
-    /// Those names must match PassiveOverlayShell's scrollTabsSlot exactly —
+    /// Those names must match ScrollTabShell's scrollTabsSlot exactly —
     /// setProperty on an undeclared name silently creates a dead dynamic
     /// property instead of failing.
     ///
@@ -808,6 +801,13 @@ private:
     // safe even if a future change removes the explicit reset.
     QHash<QString, PerScreenOverlayState> m_screenStates;
     std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
+    /// Twin host for the scrolling tab indicators' own per-screen surface,
+    /// keyed the same way and torn down at the same call sites. They are not
+    /// slots on the passive shell because the compositor SLIDES their surface
+    /// with the strip, and a surface translates as a whole — see
+    /// PhosphorRoles::ScrollTabShell. Declared next to m_shellHost so the
+    /// destruction-order rationale above covers both.
+    std::unique_ptr<PhosphorOverlay::ShellHost> m_tabShellHost;
 
     // Scroll tab-strip bookkeeping. Below m_shellHost deliberately: these
     // are plain per-screen maps with no teardown dependency on either
@@ -837,21 +837,15 @@ private:
     /// entry, so the common case costs one empty-hash lookup.
     QHash<QString, QVariantMap> m_scrollTabIndicatorOverrides;
     /// Window-local rects of the live tab indicators per screen, handed to the
-    /// shell as its input region so clicks land on a tab but fall through
+    /// tab shell as its input region so clicks land on a tab but fall through
     /// everywhere else. Rebuilt from each strip update; cleared with the
     /// screen's strips.
     QHash<QString, QRegion> m_scrollTabInputRegions;
-    /// Monotonic per-screen counter stamped onto every view-slide push, so the
-    /// overlay restarts its settle even when two consecutive scrolls carry an
-    /// identical delta (a bare value write raises no change signal the second
-    /// time, and the indicator would sit at the wrong offset for a whole leg).
-    /// Wraps harmlessly: QML keys on the value CHANGING, not on its magnitude.
-    /// Screens whose strip is mid-scroll, so the indicators are hidden. Held
-    /// daemon-side as well as pushed, because a strip update landing DURING a
-    /// leg must re-assert the hide: a replay writes the slot's properties and
-    /// can create fresh delegates, which would otherwise come up visible on a
-    /// still-moving strip.
-    QSet<QString> m_scrollTabStripMoving;
+    /// Last announced wl_surface object id per screen's tab-indicator surface.
+    /// The change gate for scrollTabSurfaceChanged, and the record of what the
+    /// compositor currently believes, so teardown knows whether it owes a
+    /// retraction.
+    QHash<QString, quint32> m_scrollTabSurfaceIds;
 
     /// Per-screen generation guard for the drop indicator's animated hide,
     /// same contract as m_scrollTabsHideGuard: a hide completion that lost the
@@ -1075,6 +1069,42 @@ private:
     /// half-destroyed scene graph. Runs from inside ShellHost::destroyShell
     /// before the library schedules the shell surface for deletion.
     void unwirePassiveShellSlots(const QString& screenId);
+
+    /// Lazily create the per-screen ScrollTabShell + return the state entry
+    /// (or nullptr if creation failed). The twin of @ref ensurePassiveShellFor
+    /// for the tab indicators' exclusive surface; called only from the strip
+    /// update path, so a screen that never shows a tabbed column never
+    /// materialises one.
+    PerScreenOverlayState* ensureScrollTabShellFor(const QString& effectiveId, QScreen* physScreen);
+
+    /// PostCreate / PreDestroy hooks registered with @c m_tabShellHost, the
+    /// twins of @ref wirePassiveShellSlots and @ref unwirePassiveShellSlots.
+    /// The tab shell hosts exactly one slot and forwards exactly one signal,
+    /// so both are correspondingly short.
+    void wireScrollTabShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState);
+    void unwireScrollTabShellSlots(const QString& screenId);
+
+    /// Reconcile the tab shell's mapped state and input region for @p
+    /// effectiveId. Simpler than its passive-shell counterpart because the
+    /// surface hosts one display-only slot: it is mapped exactly while that
+    /// slot is visible, never grabs input wholesale, and takes clicks only on
+    /// the indicator rects.
+    void syncScrollTabShellSurfaceState(const QString& effectiveId);
+
+    /// Publish (or retract, with @p window null) the wl_surface object id of
+    /// @p screenId's tab-indicator surface. Change-gated, so the ordinary
+    /// re-assert on every strip update costs one hash compare.
+    void announceScrollTabSurface(const QString& screenId, QQuickWindow* window);
+
+    /// Drop @p screenId's now-dead ShellState entry on BOTH hosts. Destroying a
+    /// shell only zeroes its fields; the entry survives, so hot-plug cycles
+    /// would accumulate dead keys without this.
+    void removeShellStates(const QString& screenId);
+
+    /// Clear sticky creation-failure sentinels on both hosts for every screen
+    /// id rooted on @p physicalScreenId (the bare id and its `/vs:N` children),
+    /// so a replug of the same monitor can create its shells again.
+    void clearShellFailuresForPhysicalScreen(const QString& physicalScreenId);
 
     /// Slot-hide animation completion - flips the OSD slot Item's
     /// `visible` to false once the SurfaceAnimator's hide leg settles,

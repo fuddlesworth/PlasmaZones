@@ -199,6 +199,7 @@ set(phosphorwayland_layershell_SRCS
     src/topleveldrag.cpp
     src/foreigntoplevel.cpp
     src/idleinhibitor.cpp
+    src/surfaceidentity.cpp
     src/clipboarddevice.cpp
     src/sessionlock.cpp
     src/compositorlost.cpp

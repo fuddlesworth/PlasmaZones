@@ -677,7 +677,20 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // single-tab skip (TabIndicatorParams::resolvesFor), so the emitter
         // never re-tests those and cannot disagree with the relayout that
         // decided how much space to reserve.
-        if (!column.tabbed || column.tabIndicatorRect.isNull() || !column.rect.intersects(params.workArea)) {
+        // Visible at the view this batch resolved, OR at the one it is sliding
+        // FROM. The second term is what lets a column scrolling out of view
+        // keep its indicator for the length of the leg: the compositor slides
+        // the indicator surface by the same offset it slides the columns, so an
+        // indicator dropped the moment its column's final rect left the work
+        // area would vanish while the column it labels is still on screen
+        // travelling. Translating by +viewDelta undoes the slide, which is
+        // where the column was before this batch moved the view.
+        //
+        // The extra entries cost nothing once at rest: they resolve outside the
+        // screen, so the per-screen surface simply clips them.
+        const bool visibleNow = column.rect.intersects(params.workArea);
+        const bool visibleBefore = viewDelta != 0 && column.rect.translated(viewDelta, 0).intersects(params.workArea);
+        if (!column.tabbed || column.tabIndicatorRect.isNull() || (!visibleNow && !visibleBefore)) {
             continue;
         }
         QJsonObject strip;
@@ -719,18 +732,11 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         }
         strip[QLatin1String("activeIndex")] = activeIndex;
         strip[QLatin1String("tabs")] = tabs;
-        // The same view delta the tile batch carries. The indicator has to
-        // slide with the column it labels, and it cannot ride the compositor's
-        // spring: it is drawn by the daemon into a layer-shell surface, which
-        // the effect's paint offset never reaches. So the delta travels here
-        // too and the overlay springs it locally with the same profile.
-        //
-        // Repeated per strip rather than sent once per screen because the
-        // payload IS the array — the same shape the tile wire uses, and for
-        // the same reason it costs nothing to read the first one.
-        if (viewDelta != 0) {
-            strip[QLatin1String("viewDeltaX")] = viewDelta;
-        }
+        // No view delta rides along, unlike the tile wire above. The indicators
+        // are drawn into a layer-shell surface of their own that the effect
+        // slides by the strip's view offset, so they need nothing but their
+        // resolved rect — the offset that moves them is the same one that moves
+        // the columns, applied in the same paint pass.
         strips.append(strip);
     }
     if (!strips.isEmpty()) {

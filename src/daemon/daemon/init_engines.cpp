@@ -876,15 +876,16 @@ void Daemon::initEnginesAndWiring()
     m_tilingAdaptor->setLifecycleEngines({autotileEngine, scrollEngine});
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_algorithmRegistry.get(), this);
     m_scrollingAdaptor = new ScrollingAdaptor(scrollEngine, this);
-    // The compositor's report that a screen's view spring has settled, relayed
-    // to the overlay so the tab indicators know when to come back. It bypasses
-    // the engine entirely: no strip state changes, and the engine has no notion
-    // of the compositor-side view offset this describes.
-    connect(m_scrollingAdaptor, &ScrollingAdaptor::viewSettled, this, [this](const QString& screenId) {
-        if (m_overlayService) {
-            m_overlayService->onScrollViewSettled(screenId);
-        }
-    });
+    // The overlay's tab-indicator surface, relayed to the compositor so it can
+    // slide that surface with the strip. It bypasses the engine entirely: the
+    // strip's model has no notion of which wl_surface happens to be drawing its
+    // indicators.
+    if (m_overlayService) {
+        connect(m_overlayService.get(), &IOverlayService::scrollTabSurfaceChanged, m_scrollingAdaptor,
+                [adaptor = m_scrollingAdaptor](const QString& screenId, quint32 surfaceId) {
+                    adaptor->setScrollTabSurface(screenId, surfaceId);
+                });
+    }
     connect(autotileEngine, &PhosphorTileEngine::AutotileEngine::windowsTiled, m_tilingAdaptor,
             &TilingAdaptor::relayTileRequestsJson);
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,
@@ -981,10 +982,7 @@ void Daemon::initEnginesAndWiring()
     // window registry and drives the per-screen overlay slot.
     connect(scrollEngine, &PhosphorScrollEngine::ScrollEngine::tabStripsChanged, this,
             [this](const QString& screenId, const QString& stripsJson) {
-                // The one caller that carries the view slide: this IS the
-                // relayout the delta describes. Every replay path leaves the
-                // flag at its default.
-                applyScrollTabStrips(screenId, stripsJson, /*carriesViewSlide=*/true);
+                applyScrollTabStrips(screenId, stripsJson);
             });
 
     // Enrichment is resolved from the window registry, so a change there must

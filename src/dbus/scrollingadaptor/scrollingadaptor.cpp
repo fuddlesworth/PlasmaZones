@@ -66,17 +66,30 @@ QStringList ScrollingAdaptor::scrollingScreens() const
     return out;
 }
 
-void ScrollingAdaptor::notifyViewSettled(const QString& screenId)
+void ScrollingAdaptor::setScrollTabSurface(const QString& screenId, quint32 surfaceId)
 {
-    // No engine gate, unlike focusColumn below. This changes no strip state —
-    // it only tells the overlay a compositor-side animation ended — and the
-    // screen may legitimately have left scrolling mode between the leg
-    // starting and settling, in which case the consumer still wants to know
-    // the motion is over rather than be left waiting.
+    // No engine gate, and no change gate either: the producer (the overlay
+    // service) already only calls this on a real change, and re-broadcasting a
+    // value the compositor may have missed is the safe direction for a
+    // registration the compositor cannot re-derive.
     if (screenId.isEmpty()) {
         return;
     }
-    Q_EMIT viewSettled(screenId);
+    if (surfaceId == 0) {
+        m_scrollTabSurfaces.remove(screenId);
+    } else {
+        m_scrollTabSurfaces.insert(screenId, surfaceId);
+    }
+    Q_EMIT scrollTabSurfaceChanged(screenId, surfaceId);
+}
+
+QVariantMap ScrollingAdaptor::scrollTabSurfaces() const
+{
+    QVariantMap out;
+    for (auto it = m_scrollTabSurfaces.constBegin(); it != m_scrollTabSurfaces.constEnd(); ++it) {
+        out.insert(it.key(), it.value());
+    }
+    return out;
 }
 
 void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)

@@ -72,12 +72,6 @@ public:
     /// strip moves, so this is deliberately per-OUTPUT rather than per-window:
     /// there is no useful smaller region while every column is sliding.
     void setRepaintRequest(RepaintRequest request);
-    /// Fired when @p output's view stops moving, for any reason — settled,
-    /// disabled mid-flight, or reaped with its clock. Consumers treat it as
-    /// "the strip is at rest now", so a leg that is CANCELLED must report too
-    /// or they wait forever for a finish that never comes.
-    void setSettleCallback(RepaintRequest callback);
-
     void setEnabled(bool enabled);
     bool isEnabled() const
     {
@@ -138,7 +132,6 @@ private:
     std::unordered_map<KWin::LogicalOutput*, ViewMotion> m_motions;
     OutputClockResolver m_outputClockResolver;
     RepaintRequest m_repaintRequest;
-    RepaintRequest m_settleCallback;
     bool m_enabled = true;
 };
 

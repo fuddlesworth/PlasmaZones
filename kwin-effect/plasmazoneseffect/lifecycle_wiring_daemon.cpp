@@ -47,6 +47,19 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         qCWarning(lcEffect) << "Failed to connect to daemon settingsChanged D-Bus signal";
     }
 
+    // Which wl_surface carries each screen's scrolling tab indicators. The
+    // paint path slides that surface with the strip, and the object id is the
+    // only handle it can match on: every daemon overlay reports the same window
+    // class, and a layer surface's scope is not exposed per window.
+    const bool tabSurfaceConnected = QDBusConnection::sessionBus().connect(
+        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+        PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollTabSurfaceChanged"), this,
+        SLOT(onScrollTabSurfaceChanged(QString, uint)));
+    if (!tabSurfaceConnected) {
+        qCWarning(lcEffect) << "Failed to connect to daemon scrollTabSurfaceChanged D-Bus signal"
+                            << "— scrolling tab indicators will not ride the strip";
+    }
+
     // Connect to virtual screen changes — daemon emits this when a physical screen's
     // virtual subdivisions are added, removed, or modified.
     const bool vsChangedConnected = QDBusConnection::sessionBus().connect(

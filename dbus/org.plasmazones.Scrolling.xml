@@ -22,13 +22,6 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
-        <method name="notifyViewSettled">
-            <annotation name="org.gtk.GDBus.DocString" value="The compositor reporting that a screen's scrolling view has come to rest. Sent on the settling frame of the view spring, and also when a leg is cancelled (animations switched off mid-flight, the output reaped) — a consumer treats it as 'the strip is at rest now', so a cancelled leg has to report or the consumer waits forever for a finish that never comes. This edge is the only honest answer to when a scroll ended: the view rides a spring, and a spring ignores its profile's duration and runs on its own physics, so no timer outside the compositor can compute the moment. Idempotent and fire-and-forget: a repeat for a screen already at rest is a no-op, and the compositor does not wait for a reply."/>
-            <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen whose view stopped moving."/>
-            </arg>
-        </method>
-
         <method name="visibleStripJson">
             <annotation name="org.gtk.GDBus.DocString" value="The strip as it currently looks on a screen: a JSON array of visible tile rects plus zoneNumber, the tile's 1-based visible slot in strip order. Each rect is {x, y, width, height}, 0.0 to 1.0 per axis, normalized against the screen's FULL geometry. The tiles themselves are clipped to the work area after the outer gaps are subtracted, so the fractions show the panel gap and a consumer maps back to pixels by scaling against the screen rectangle. Same basis as the daemon's own OSD strip card. Only what is on screen is listed. Hidden tabs of a tabbed column, minimized tiles, parked columns, and tiles whose intersection with the work area is empty (a stack whose minimum heights overflow the work area resolves its tail below the bottom edge) are all left out and carry no number. A partially visible column is clipped to the work area rather than dropped, with no minimum-visibility threshold: an arbitrarily thin sliver still gets its own number. zoneNumber is the scroll zone number, and the Snap-to-Zone shortcuts cover 1 to 9, so a strip showing more than nine tiles numbers them all but only the first nine have a digit that reaches them. The settings app renders the array where the other modes show a layout thumbnail. Empty array when the screen has no strip or is not scrolling."/>
             <arg name="screenId" type="s" direction="in">
@@ -38,6 +31,23 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="JSON array string."/>
             </arg>
         </method>
+
+        <method name="scrollTabSurfaces">
+            <annotation name="org.gtk.GDBus.DocString" value="Every live tab-indicator surface, as a map of effective screen id to wl_surface protocol object id. The replay half of scrollTabSurfaceChanged, for a compositor-side consumer that starts (or restarts) after the surfaces already exist and would otherwise wait for an announcement that only fires on change."/>
+            <arg name="surfaces" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of effective screen id to wl_surface object id."/>
+            </arg>
+        </method>
+
+        <signal name="scrollTabSurfaceChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="The wl_surface drawing a screen's scrolling tab indicators changed. The compositor slides that surface with the scrolling strip so the indicators travel with the columns they label, and the object id is the only handle it can match on: every one of the daemon's overlays reports the same window class, and a layer surface's scope is not exposed per window. A surfaceId of 0 retracts the registration, and one always precedes the surface's destruction, because Wayland reuses object ids and a stale registration would come to name an unrelated surface."/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Effective screen id."/>
+            </arg>
+            <arg name="surfaceId" type="u">
+                <annotation name="org.gtk.GDBus.DocString" value="wl_surface protocol object id, or 0 when the surface is gone."/>
+            </arg>
+        </signal>
 
         <signal name="scrollingScreensChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using the scrolling engine changes."/>

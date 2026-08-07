@@ -216,6 +216,25 @@ Q_SIGNALS:
     void scrollTabActivated(const QString& windowId);
 
     /**
+     * @brief The Wayland surface carrying @p screenId's tab indicators changed.
+     *
+     * Relayed to the compositor, which slides that surface with the scrolling
+     * strip so the indicators travel with the columns they label. The
+     * compositor cannot work out which surface it is on its own: every one of
+     * the daemon's overlays reports the same window class, and a layer
+     * surface's scope, role and geometry are either identical between them or
+     * not exposed per surface. The protocol object id is the one handle both
+     * sides can name.
+     *
+     * @param screenId  Effective screen id whose indicator surface this is
+     * @param surfaceId wl_surface protocol object id, or 0 when the surface is
+     *                  gone. Zero MUST be sent before the surface is destroyed:
+     *                  Wayland reuses object ids, so a stale registration can
+     *                  come to name an unrelated surface.
+     */
+    void scrollTabSurfaceChanged(const QString& screenId, quint32 surfaceId);
+
+    /**
      * @brief Load-bearing signal (NOT merely informational: shortcuts_wiring.cpp's
     // handler is the ONLY binder of the shared Escape grab for the snap-assist
     // phase, which drop.cpp defers to it, and overlayadaptor.cpp relays it onto
