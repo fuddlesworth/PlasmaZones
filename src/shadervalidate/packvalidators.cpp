@@ -359,8 +359,8 @@ static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
     };
     static const auto kCompositorOnlySamplers = [] {
         QList<SamplerMatcher> matchers;
-        for (const QString& name :
-             {QStringLiteral("uOldWindow"), QStringLiteral("uFromDesktop"), QStringLiteral("uToDesktop")}) {
+        for (const QString& name : {QStringLiteral("uOldWindow"), QStringLiteral("uFromDesktop"),
+                                    QStringLiteral("uToDesktop"), QStringLiteral("uStrip")}) {
             matchers.append({name, QRegularExpression(QStringLiteral("\\b") + name + QStringLiteral("\\b"))});
         }
         return matchers;
@@ -651,7 +651,8 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                     if (!kwinOnly.isEmpty()) {
                         out << "    (hint: " << kwinOnly.join(QStringLiteral(", "))
                             << " is declared by the compositor-only shared/old_content.glsl / "
-                               "shared/desktop_transition.glsl helpers; packs that use them outside "
+                               "shared/desktop_transition.glsl / shared/strip_transition.glsl helpers; "
+                               "packs that use them outside "
                                "a PLASMAZONES_KWIN guard must declare a compositor-only appliesTo — "
                                "omit \"appearance\")\n";
                     }

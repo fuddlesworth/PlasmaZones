@@ -136,8 +136,14 @@ bool PlasmaZonesEffect::isActive() const
     // DesktopTransitionManager::paintOutput never gets a frame, and the blend
     // sits unrendered until its own wall-clock reap. Also O(1) (an
     // unordered_map emptiness check).
+    // `m_stripTransition.isRunning()` is the strip pass's version of the
+    // desktop clause. A live strip leg normally holds the effect active
+    // through the window animator (a scroll batch installs window legs
+    // alongside the view spring), but a pure-residual batch can leave the
+    // spring as the only live animation — the pass must not depend on a
+    // sibling clause happening to be true. O(monitor count).
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
-        || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning();
+        || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning() || m_stripTransition.isRunning();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)

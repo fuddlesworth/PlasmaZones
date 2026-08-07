@@ -101,6 +101,11 @@ set(plasmazones_effect_SRCS
     transitions/desktoptransitionshader.cpp
     transitions/desktoptransitionteardown.cpp
     transitions/desktoptransitionmanager.h
+    transitions/striptransitionmanager.cpp
+    transitions/striptransitionshader.cpp
+    transitions/striptransitionmanager.h
+    transitions/transitionpasshelpers.cpp
+    transitions/transitionpasshelpers.h
     tilinghandler/tilinghandler.cpp
     tilinghandler/tilinghandler.h
     tilinghandler/minimizefloat.cpp
@@ -170,6 +175,13 @@ set_source_files_properties(transitions/desktoptransitionmanager.cpp PROPERTIES 
 set_source_files_properties(transitions/desktoptransitioncapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 set_source_files_properties(transitions/desktoptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 set_source_files_properties(transitions/desktoptransitionteardown.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+# StripTransitionManager's TUs and the shared pass helpers follow the same
+# prophylactic rule as the desktop set above (and the desktop drive TU now
+# pulls file-local `using` aliases from the helpers, another reason to keep
+# these out of the blob).
+set_source_files_properties(transitions/striptransitionmanager.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(transitions/striptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(transitions/transitionpasshelpers.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE

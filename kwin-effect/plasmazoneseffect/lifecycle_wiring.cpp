@@ -232,6 +232,9 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
                 // invalidate the DesktopTransitionManager's parallel compiled-shader
                 // cache too — otherwise the next switch renders with the stale shader.
                 m_desktopTransition.invalidateShaderCache();
+                // …and the strip pass's, for the same reason (a reloaded
+                // `scrolling.view` pack must recompile on the next scroll).
+                m_stripTransition.invalidateShaderCache();
                 // A pack reload can flip a pack's `audio` metadata flag, which
                 // feeds the cava run gate via hasAudioReactiveAnimation().
                 scheduleEffectAudioSync();

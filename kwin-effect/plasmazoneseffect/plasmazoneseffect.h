@@ -61,6 +61,7 @@
 
 #include "transitions/shadertransitionmanager.h"
 #include "transitions/desktoptransitionmanager.h"
+#include "transitions/striptransitionmanager.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
@@ -912,6 +913,7 @@ private:
     friend class KWinCompositorBridge;
     friend class ShaderTransitionManager;
     friend class DesktopTransitionManager;
+    friend class StripTransitionManager;
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -1950,6 +1952,13 @@ private:
     // same ownership shape as m_shaderManager; must be initialised AFTER it in
     // the ctor init list to match declaration order.
     DesktopTransitionManager m_desktopTransition;
+
+    // The scrolling strip's per-output shader pass (`scrolling.view`,
+    // appliesTo ["strip"]): a velocity-driven post-process over the live
+    // scene while StripViewAnimator's view spring is in flight. Armed from
+    // the tiling batch path (notifyLeg); liveness belongs to the spring.
+    // Same ownership shape and init-order rule as m_desktopTransition.
+    StripTransitionManager m_stripTransition;
 
     // Shader transition methods — implementations in shader_transitions.cpp,
     // operating on m_shaderManager state.

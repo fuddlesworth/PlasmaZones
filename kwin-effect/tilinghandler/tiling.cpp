@@ -9,6 +9,9 @@
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
+#include "transitions/striptransitionmanager.h"
+
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
@@ -367,6 +370,23 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // not to any window on it.
         const PhosphorAnimation::Profile viewProfile = m_effect->resolveEventMotionProfile(
             PhosphorAnimation::ProfilePaths::ScrollingView, PhosphorRules::WindowQuery{}, QString());
+        // The `scrolling.view` SHADER leg, resolved once per batch through
+        // the same cascade the desktop legs use (resolveShaderWithDefault:
+        // user override → ancestor override → built-in default, which is
+        // empty for scrolling). Gated on the animations master toggle like
+        // every other shader path; folded into an empty id rather than a
+        // skip so notifyLeg's erase contract still runs — clearing the pack
+        // (or disabling animations) mid-flight disarms the pass on the very
+        // next wheel tick.
+        QString stripEffectId;
+        QVariantMap stripEffectParams;
+        if (m_effect->m_windowAnimator->isEnabled()) {
+            const PhosphorAnimationShaders::ShaderProfile stripShaderProfile =
+                PhosphorAnimationShaders::resolveShaderWithDefault(m_effect->m_shaderManager.profileTree(),
+                                                                   PhosphorAnimation::ProfilePaths::ScrollingView);
+            stripEffectId = stripShaderProfile.effectiveEffectId();
+            stripEffectParams = stripShaderProfile.effectiveParameters();
+        }
         QSet<QString> seededScreens;
         for (const TileSnap& s : toApply) {
             if (s.viewDeltaX == 0 || s.screenId.isEmpty() || seededScreens.contains(s.screenId)) {
@@ -379,6 +399,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             if (KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
                 seededScreens.insert(s.screenId);
                 m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDeltaX, viewProfile);
+                // Arm (or refresh, or — empty id — disarm) the strip shader
+                // pass for this leg. Liveness stays the spring's; this only
+                // tells the pass WHICH pack decorates it.
+                m_effect->m_stripTransition.notifyLeg(out, stripEffectId, stripEffectParams);
                 startedViewLegs = true;
             }
         }

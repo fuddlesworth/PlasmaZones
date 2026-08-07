@@ -63,7 +63,14 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
     // an effect-side ack the settings path does not have; crop is off by
     // default and the flip is an explicit user action, so the window is
     // accepted rather than engineered away.
-    return m_cachedScrollCropStraddlers && m_tilingHandler && m_tilingHandler->hasScrollingScreens();
+    if (m_cachedScrollCropStraddlers && m_tilingHandler && m_tilingHandler->hasScrollingScreens()) {
+        return true;
+    }
+    // A live strip pass replaces the output with its decorated capture; a
+    // surface presented directly on a hardware plane bypasses the effect
+    // chain and would punch through the pass for its whole leg. Live legs
+    // only — an armed-but-settled output costs nothing here.
+    return m_stripTransition.isRunning();
 }
 
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
@@ -265,6 +272,18 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
         data.mask |= PAINT_SCREEN_TRANSFORMED;
     }
 
+    // Same arm for the strip pass: while this output's view spring is live
+    // with a pack armed, paintScreen replaces the scene with the decorated
+    // capture, and the capture itself relies on this mask routing the scene
+    // through the generic infinite-region path (see captureLiveScene's
+    // region note — a damage-clipped capture goes black on any secondary
+    // monitor).
+    const bool stripOnThisOutput =
+        data.screen ? m_stripTransition.isRunningForOutput(data.screen) : m_stripTransition.isRunning();
+    if (stripOnThisOutput) {
+        data.mask |= PAINT_SCREEN_TRANSFORMED;
+    }
+
     // Cache cursor pos once per frame for the iMouse uniforms. paintWindow
     // runs once per active transition (and may run multiple times across
     // outputs); reading KWin::effects->cursorPos() at every call multiplies
@@ -311,6 +330,14 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     if (m_desktopTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
         return;
     }
+    // The strip pass sits BELOW the desktop transition on purpose: a desktop
+    // switch replaces the scene wholesale, so a strip pass under it would
+    // decorate a frame nobody sees. When the strip pass paints (captures the
+    // scene, runs the pack, returns true) the normal scene paint is skipped
+    // the same way.
+    if (m_stripTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
+        return;
+    }
     KWin::effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
 }
 
@@ -327,6 +354,9 @@ void PlasmaZonesEffect::postPaintScreen()
     m_windowAnimator->scheduleRepaints();
     // Keep the desktop-switch transition ticking (per-output repaints) while live.
     m_desktopTransition.scheduleRepaints();
+    // Free strip-pass entries whose view spring has settled (the spring's own
+    // repaint pump drives live legs; this is resource hygiene, not a ticker).
+    m_stripTransition.reapSettled();
     // Time-based shader transitions (window.*) ride a steady-clock
     // timer, not m_windowAnimator, so paintWindow would only fire on
     // surface damage and iTime would stall. Mirror KWin's own
