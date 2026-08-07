@@ -127,8 +127,9 @@ private Q_SLOTS:
         registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
 
         const QStringList stripPacks = {
-            QStringLiteral("strip-motion-blur"), QStringLiteral("phosphor-slipstream"),
-            QStringLiteral("strip-chromatic"),   QStringLiteral("strip-jelly"),
+            QStringLiteral("strip-motion-blur"),
+            QStringLiteral("strip-chromatic"),
+            QStringLiteral("strip-jelly"),
             QStringLiteral("strip-carousel"),
         };
 
