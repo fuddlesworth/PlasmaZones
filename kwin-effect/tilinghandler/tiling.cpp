@@ -161,8 +161,22 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // the per-window D-Bus roundtrip through the daemon's applyGeometryForFloat.
         if (req.floating) {
             const QString& screenId = req.screenId;
-            qCInfo(lcEffect) << "Autotile batch float:" << windowId << "screen:" << screenId;
-            applyFloatCleanup(windowId);
+            // Re-key to the window's LIVE id, the same way the rule-cache
+            // invalidation above and the tile path below both do. After a
+            // cross-session restore the daemon can still send the pre-restore
+            // UUID, and every operation in applyFloatCleanup is id-keyed
+            // (floating flag, tiled-state clear, target-zone and centering
+            // maps, decoration reconcile, monocle unmaximize) — with a stale id
+            // all of them miss the live entries and the exact resolve below
+            // returns null, so the pre-autotile geometry restore is skipped
+            // with nothing logged on that arm. Falls back to the daemon id when
+            // unresolved, which is correct for the ordinary same-session case.
+            QString floatWindowId = windowId;
+            if (KWin::EffectWindow* const live = m_effect->findWindowById(windowId)) {
+                floatWindowId = m_effect->getWindowId(live);
+            }
+            qCInfo(lcEffect) << "Autotile batch float:" << floatWindowId << "screen:" << screenId;
+            applyFloatCleanup(floatWindowId);
 
             // Restore pre-autotile geometry from the effect's local cache.
             // Scan all screen buckets (all-bucket reader policy — a VS
@@ -170,9 +184,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // its geometry bucket). Exact resolve, matching the tile lambda's
             // deliberate policy: a fuzzy hit would teleport a same-app
             // SIBLING onto this window's restored rect.
-            KWin::EffectWindow* floatWin = m_effect->findWindowByIdExact(windowId);
+            KWin::EffectWindow* floatWin = m_effect->findWindowByIdExact(floatWindowId);
             if (floatWin) {
-                if (const QRectF savedGeo = findPreTileGeometry(windowId); savedGeo.isValid()) {
+                if (const QRectF savedGeo = findPreTileGeometry(floatWindowId); savedGeo.isValid()) {
                     // Daemon-driven apply: the restored rect may lie in a
                     // different virtual screen than the tiled rect, and batch
                     // floats fire in the same swap/rotate window the
@@ -191,7 +205,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
                                                   PhosphorAnimation::ProfilePaths::WindowSnapOut);
-                    qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId << savedGeo.toRect();
+                    qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << floatWindowId
+                                     << savedGeo.toRect();
                 }
             }
             continue;

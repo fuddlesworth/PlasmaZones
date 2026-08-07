@@ -204,6 +204,15 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         m_lastScrollDropIndicatorRect.insert(newKey, dropRectIt.value());
         m_lastScrollDropIndicatorRect.remove(oldKey);
     }
+    // The drop indicator's paint overrides follow for the same reason its tab
+    // twin does: their only writer is a context re-resolve, so an entry left
+    // under the dead key means the rekeyed screen silently falls back to config
+    // colours until one happens, and the stranded entry never goes away.
+    if (const auto dropOverrideIt = m_scrollDropIndicatorOverrides.constFind(oldKey);
+        dropOverrideIt != m_scrollDropIndicatorOverrides.constEnd()) {
+        m_scrollDropIndicatorOverrides.insert(newKey, dropOverrideIt.value());
+        m_scrollDropIndicatorOverrides.remove(oldKey);
+    }
     m_scrollTabsHidePending.remove(oldKey);
     m_scrollDropIndicatorHidePending.remove(oldKey);
 

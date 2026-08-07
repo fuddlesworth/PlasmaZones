@@ -396,6 +396,9 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     // and early-return, and the indicator would silently never show again.
     m_scrollDropIndicatorHidePending.remove(screenId);
     m_lastScrollDropIndicatorRect.remove(screenId);
+    // The paint overrides go too, matching the tab twin above. They belong to
+    // the torn-down shell's context, and nothing else drops them.
+    m_scrollDropIndicatorOverrides.remove(screenId);
     QObject::disconnect(it->overlayGeomConnection);
     it->overlayGeomConnection = {};
     it->overlayPhysScreen = nullptr;

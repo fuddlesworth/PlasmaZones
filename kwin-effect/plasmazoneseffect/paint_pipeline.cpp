@@ -779,7 +779,15 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // it goes from that rect. Occlusion culling is forfeited for it, which
     // costs nothing: the window is off the viewport by definition — that is
     // why it parked.
-    if (w && !m_scrollVisualPos.isEmpty() && m_scrollVisualPos.contains(getWindowId(w))) {
+    //
+    // Gated on the SAME predicate paintWindow relocates under, not on map
+    // membership alone. A window that floats or is dragged to another output
+    // stops being scroll-managed, so the relocation stops while its entry
+    // lingers — flagging it transformed then would surrender occlusion culling
+    // every frame of the drag for a window nothing is moving. windowId is the
+    // one derived above rather than a second getWindowId call, which is what
+    // the note at the top of this function asks for.
+    if (w && !m_scrollVisualPos.isEmpty() && scrollManagedOutputFor(w) && m_scrollVisualPos.contains(windowId)) {
         data.setTransformed();
     }
 

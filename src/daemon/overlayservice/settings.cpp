@@ -101,6 +101,18 @@ void OverlayService::setSettings(ISettings* settings)
                     &OverlayService::replayScrollTabStrips);
             connect(m_settings, &ISettings::scrollingTabIndicatorUrgentColorChanged, this,
                     &OverlayService::replayScrollTabStrips);
+            // The overlay FONT, for the same reason. The five sibling slots are
+            // transient and pick a font change up the next time they are shown;
+            // a tab indicator stays up for as long as its column is tabbed, so
+            // without this the pills keep the old family until something hides
+            // and re-shows the strip. All six, because writeFontProperties
+            // reads all six.
+            connect(m_settings, &ISettings::labelFontFamilyChanged, this, &OverlayService::replayScrollTabStrips);
+            connect(m_settings, &ISettings::labelFontSizeScaleChanged, this, &OverlayService::replayScrollTabStrips);
+            connect(m_settings, &ISettings::labelFontWeightChanged, this, &OverlayService::replayScrollTabStrips);
+            connect(m_settings, &ISettings::labelFontItalicChanged, this, &OverlayService::replayScrollTabStrips);
+            connect(m_settings, &ISettings::labelFontUnderlineChanged, this, &OverlayService::replayScrollTabStrips);
+            connect(m_settings, &ISettings::labelFontStrikeoutChanged, this, &OverlayService::replayScrollTabStrips);
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
             // Frame rate drives BOTH the CAVA capture rate and the shader
             // render loop's interval. syncCavaState covers the first; the

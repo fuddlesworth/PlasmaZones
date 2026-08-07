@@ -274,6 +274,17 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         push("urgentColor", m_settings->scrollingTabIndicatorUrgentColor());
     }
 
+    // The user font, pushed here for the same reason the paint block above is
+    // and NOT on the show path like the five sibling slots. Those are
+    // transient: an OSD or a cheatsheet is shown, read and dismissed, so it
+    // picks up a font change the next time it appears. The tab indicator is
+    // persistent — it stays up for as long as a column is tabbed — so a
+    // show-path-only push left the pills on the old family, size and weight
+    // until something happened to hide and re-show the strip. Unchanged QML
+    // properties emit no change notification, so a plain relayout pays six
+    // compares for this.
+    writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
+
     if (slot->isVisible() && !hideWasInFlight) {
         // Re-assert the surface's input state on EVERY update, not just when
         // the slot is first shown. The rects move whenever the strip relayouts
@@ -291,13 +302,6 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     // animating toward 0). In BOTH cases the show choreography must run:
     // early-returning on a fading slot would leave it visible+loaded at
     // opacity 0 forever once the superseded hide completion no-ops.
-
-    // Same user-font pipeline as every other overlay slot (OSD, cheatsheet,
-    // picker): the pills must honour the overlay font family and size scale.
-    // Pushed on the show path only, like all five siblings — a strip relayout
-    // changes no font, so re-pushing six settings-derived properties on every
-    // relayout was pure churn.
-    writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     if (shellWindow) {
         assertWindowOnScreen(shellWindow, screen, screenGeom);

@@ -299,26 +299,36 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scrolling,
                                                        QStringLiteral("scrollTabSurfaces")),
             this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            QDBusPendingReply<QVariantMap> reply = *w;
-            if (!reply.isValid()) {
-                qCWarning(lcEffect) << "scrollTabSurfaces failed at bringup:" << reply.error().message()
-                                    << "— tab indicators will not ride the strip until one is rebuilt";
-                return;
-            }
-            const QVariantMap surfaces = reply.value();
-            for (auto it = surfaces.constBegin(); it != surfaces.constEnd(); ++it) {
-                if (const quint32 id = it.value().toUInt(); id != 0) {
-                    m_scrollTabSurfaceIdsByScreen.insert(it.key(), id);
-                    m_scrollTabSurfaceIds.insert(id);
-                }
-            }
-            // These surfaces predate this bringup, so their one-shot lower was
-            // either never applied (fresh effect) or belongs to a stacking
-            // order this process never saw. Re-assert it.
-            restackScrollTabSurfaces();
-        });
+        const quint64 surfacesGeneration = m_daemonGate.bridgeRegistrationGeneration;
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, surfacesGeneration](QDBusPendingCallWatcher* w) {
+                    w->deleteLater();
+                    // Superseded: the daemon this went to is gone and a newer one may
+                    // already have announced its own surfaces. Seeding the dead
+                    // session's ids over them would publish numbers naming destroyed
+                    // objects, and Wayland hands ids out again.
+                    if (m_daemonGate.bridgeRegistrationGeneration != surfacesGeneration) {
+                        qCInfo(lcEffect) << "scrollTabSurfaces reply from a superseded daemon cycle — ignoring";
+                        return;
+                    }
+                    QDBusPendingReply<QVariantMap> reply = *w;
+                    if (!reply.isValid()) {
+                        qCWarning(lcEffect) << "scrollTabSurfaces failed at bringup:" << reply.error().message()
+                                            << "— tab indicators will not ride the strip until one is rebuilt";
+                        return;
+                    }
+                    const QVariantMap surfaces = reply.value();
+                    for (auto it = surfaces.constBegin(); it != surfaces.constEnd(); ++it) {
+                        if (const quint32 id = it.value().toUInt(); id != 0) {
+                            m_scrollTabSurfaceIdsByScreen.insert(it.key(), id);
+                            m_scrollTabSurfaceIds.insert(id);
+                        }
+                    }
+                    // These surfaces predate this bringup, so their one-shot lower was
+                    // either never applied (fresh effect) or belongs to a stacking
+                    // order this process never saw. Re-assert it.
+                    restackScrollTabSurfaces();
+                });
     }
 
     // Re-sync floating windows (async, no QDBusInterface needed).
