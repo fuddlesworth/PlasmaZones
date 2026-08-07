@@ -1667,6 +1667,7 @@ target_link_libraries(test_pack_validators
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
 )
+target_compile_definitions(test_pack_validators PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_pack_validators COMMAND test_pack_validators)
 
 add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)

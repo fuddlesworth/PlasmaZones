@@ -459,8 +459,27 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
         return false;
     if (author != other.author || version != other.version || category != other.category)
         return false;
-    if (appliesTo != other.appliesTo)
-        return false;
+    // appliesTo compares as a SET, not a sequence. It is a set everywhere it
+    // is consumed — every reader asks "does it contain X" — so two packs
+    // declaring the same classes in different order are behaviourally
+    // identical, and reporting them unequal made a metadata reorder look like
+    // a content change to every equality-gated path (registry reload
+    // diffing, the settings dirty check). fromJson already dedupes, so a
+    // sorted copy is a faithful set comparison; both lists are at most the
+    // five class tokens, so the sort is free.
+    //
+    // The one consumer that used to care about order was the shader
+    // browser's type badge, which read appliesTo[0]; it now picks by catalog
+    // order (ShaderBrowserPage._effectTypeKey), so nothing observes the
+    // declaration order any more.
+    {
+        QStringList mine = appliesTo;
+        QStringList theirs = other.appliesTo;
+        mine.sort();
+        theirs.sort();
+        if (mine != theirs)
+            return false;
+    }
     if (fragmentShaderPath != other.fragmentShaderPath || vertexShaderPath != other.vertexShaderPath)
         return false;
     if (sourceDir != other.sourceDir || isUserEffect != other.isUserEffect)

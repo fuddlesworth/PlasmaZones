@@ -8,13 +8,15 @@
 // undetected. These tests build deliberately-broken packs in a temp dir and
 // assert the diagnostic.
 //
-// Only metadata lints are exercised. The stage compile needs glslang and is
-// covered by the bundled gate.
+// Mostly metadata lints, plus the multipass buffer-pass bake. That bake has
+// no other coverage at all: no bundled animation pack is multipass, so the
+// CI gate walks straight past it and the stage would rot unnoticed.
 
 #include <QtTest>
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -32,6 +34,27 @@ struct PackResult
     int errors = 0;
     QString report;
 };
+
+/// The validator derives its include path from the pack's PARENT directory
+/// (`<packs-root>/shared`), matching the animation runtime. A temp packs-root
+/// has no such directory, so every fragment stage would fail include
+/// expansion for reasons that have nothing to do with the pack under test.
+/// Link the real bundled one in once per root.
+///
+/// Returns false when the source tree is not available, which is the caller's
+/// cue to skip rather than fail.
+bool linkSharedIncludes(const QTemporaryDir& tmp)
+{
+    const QString target = QStringLiteral(P_SOURCE_DIR "/data/animations/shared");
+    if (!QDir(target).exists()) {
+        return false;
+    }
+    const QString link = tmp.filePath(QStringLiteral("shared"));
+    if (QFileInfo::exists(link)) {
+        return true;
+    }
+    return QFile::link(target, link);
+}
 
 /// Write a pack directory from @p metadata (plus a trivial fragment shader
 /// unless the caller declared its own) and run the animation validator over
@@ -97,6 +120,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
+        if (!linkSharedIncludes(tmp))
+            QSKIP("data/animations/shared not found — running outside source tree");
 
         const QStringList tokens = PhosphorAnimation::ProfilePaths::allEventClassTokens();
         QVERIFY(!tokens.isEmpty());
@@ -121,6 +146,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
+        if (!linkSharedIncludes(tmp))
+            QSKIP("data/animations/shared not found — running outside source tree");
 
         QJsonObject obj = basePack(QStringLiteral("bad-token"));
         obj.insert(QStringLiteral("appliesTo"), toArray({QStringLiteral("teleport")}));
@@ -134,12 +161,43 @@ private Q_SLOTS:
         }
     }
 
+    /// An explicit `"appliesTo": []` is a legal spelling of the universal
+    /// default and must stay lint-free, while the two degenerate spellings
+    /// that LOOK like a constraint and silently become universal are linted.
+    /// The difference is author intent, not effect: `[""]` and `["teleport"]`
+    /// are typos, `[]` is a statement. This pins the asymmetry so nobody
+    /// "evens it up" and starts failing every universal pack that spells its
+    /// default out.
+    void explicitEmptyAppliesToIsNotLinted()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        if (!linkSharedIncludes(tmp))
+            QSKIP("data/animations/shared not found — running outside source tree");
+
+        QJsonObject empty = basePack(QStringLiteral("empty-applies"));
+        empty.insert(QStringLiteral("appliesTo"), QJsonArray());
+        const PackResult r = validate(tmp, QStringLiteral("empty-applies"), empty);
+        QVERIFY2(!r.report.contains(QStringLiteral("appliesTo")),
+                 qPrintable(QStringLiteral("an explicit empty appliesTo must draw no diagnostic:\n") + r.report));
+        QCOMPARE(r.errors, 0);
+
+        // The degenerate cousins DO lint, which is what makes the silence
+        // above a decision rather than a gap.
+        QJsonObject blank = basePack(QStringLiteral("blank-token"));
+        blank.insert(QStringLiteral("appliesTo"), toArray({QString()}));
+        QVERIFY(validate(tmp, QStringLiteral("blank-token"), blank)
+                    .report.contains(QStringLiteral("empty appliesTo token")));
+    }
+
     /// A bare string instead of an array is ignored wholesale at load, which
     /// silently makes the pack universal.
     void nonArrayAppliesToIsLinted()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
+        if (!linkSharedIncludes(tmp))
+            QSKIP("data/animations/shared not found — running outside source tree");
 
         QJsonObject obj = basePack(QStringLiteral("bad-shape"));
         obj.insert(QStringLiteral("appliesTo"), QStringLiteral("strip"));
@@ -156,6 +214,8 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
+        if (!linkSharedIncludes(tmp))
+            QSKIP("data/animations/shared not found — running outside source tree");
 
         QJsonObject obj = basePack(QStringLiteral("strip-vert"));
         obj.insert(QStringLiteral("appliesTo"), toArray({QStringLiteral("strip")}));
@@ -181,12 +241,106 @@ private Q_SLOTS:
         QVERIFY(!ok.report.contains(QStringLiteral("geometryGrid is ignored")));
     }
 
+    /// A multipass pack's BUFFER shaders are compiled, not just existence
+    /// checked. No bundled animation pack is multipass today, so the
+    /// bundled-pack gate cannot exercise this path at all — without this test
+    /// the bake would be dead code that silently stops working.
+    ///
+    /// This one really does invoke glslang, unlike the metadata-only tests
+    /// above.
+    void multipassBufferShadersAreCompiled()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        if (!linkSharedIncludes(tmp))
+            QSKIP("data/animations/shared not found — running outside source tree");
+
+        const auto writeBuffer = [&tmp](const QString& pack, const QString& body) {
+            const QString dir = tmp.filePath(pack);
+            QDir().mkpath(dir);
+            QFile buf(dir + QStringLiteral("/buffer0.frag"));
+            QVERIFY(buf.open(QIODevice::WriteOnly));
+            buf.write(body.toUtf8());
+            buf.close();
+        };
+
+        QJsonObject obj = basePack(QStringLiteral("mp-good"));
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer0.frag")}));
+
+        // A buffer pass ships its own main() and no entry scaffold.
+        writeBuffer(QStringLiteral("mp-good"),
+                    QStringLiteral("#version 440\n"
+                                   "layout(location = 0) out vec4 fragColor;\n"
+                                   "void main() { fragColor = vec4(1.0); }\n"));
+        const PackResult good = validate(tmp, QStringLiteral("mp-good"), obj);
+        QVERIFY2(!good.report.contains(QStringLiteral("buffer0.frag    ERROR")),
+                 qPrintable(QStringLiteral("a valid buffer pass must bake clean:\n") + good.report));
+
+        // The same pack with a syntax error in the buffer must be caught
+        // HERE, not at the live daemon.
+        QJsonObject bad = basePack(QStringLiteral("mp-bad"));
+        bad.insert(QStringLiteral("multipass"), true);
+        bad.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer0.frag")}));
+        writeBuffer(QStringLiteral("mp-bad"),
+                    QStringLiteral("#version 440\n"
+                                   "layout(location = 0) out vec4 fragColor;\n"
+                                   "void main() { fragColor = notADeclaredThing; }\n"));
+        const PackResult r = validate(tmp, QStringLiteral("mp-bad"), bad);
+        QVERIFY2(r.errors > 0, qPrintable(QStringLiteral("a broken buffer pass must fail the gate:\n") + r.report));
+        QVERIFY(r.report.contains(QStringLiteral("buffer0.frag")));
+    }
+
+    /// A buffer pass gets NO p_<id> preamble, because
+    /// ShaderNodeRhi::bakeBufferShaders does not splice one — it loads,
+    /// expands includes and compiles. The gate must reproduce that exactly:
+    /// splicing a preamble the runtime withholds would pass sources that fail
+    /// live, and withholding one the runtime splices would fail sources that
+    /// work. Pin the direction so a future "helpful" splice is caught.
+    void multipassBufferShadersGetNoParamPreamble()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        if (!linkSharedIncludes(tmp))
+            QSKIP("data/animations/shared not found — running outside source tree");
+
+        QJsonObject param;
+        param.insert(QStringLiteral("id"), QStringLiteral("strength"));
+        param.insert(QStringLiteral("type"), QStringLiteral("float"));
+        param.insert(QStringLiteral("default"), 0.5);
+        QJsonArray params;
+        params.append(param);
+
+        QJsonObject obj = basePack(QStringLiteral("mp-param"));
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer0.frag")}));
+        obj.insert(QStringLiteral("parameters"), params);
+
+        const QString dir = tmp.filePath(QStringLiteral("mp-param"));
+        QDir().mkpath(dir);
+        QFile buf(dir + QStringLiteral("/buffer0.frag"));
+        QVERIFY(buf.open(QIODevice::WriteOnly));
+        buf.write(
+            "#version 440\n"
+            "layout(location = 0) out vec4 fragColor;\n"
+            "void main() { fragColor = vec4(p_strength); }\n");
+        buf.close();
+
+        const PackResult r = validate(tmp, QStringLiteral("mp-param"), obj);
+        QVERIFY2(r.errors > 0,
+                 qPrintable(QStringLiteral("p_<id> in a buffer pass must NOT resolve — the runtime splices no "
+                                           "preamble there, so the gate must not either:\n")
+                            + r.report));
+    }
+
     /// geometryGrid clamps to 0 at load, so a negative value disables the
     /// grid indistinguishably from never declaring it.
     void negativeGeometryGridIsLinted()
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
+        if (!linkSharedIncludes(tmp))
+            QSKIP("data/animations/shared not found — running outside source tree");
 
         QJsonObject obj = basePack(QStringLiteral("neg-grid"));
         obj.insert(QStringLiteral("geometryGrid"), -4);

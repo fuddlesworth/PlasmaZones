@@ -289,12 +289,27 @@ SettingsFlickable {
     }
 
     // ── Type-axis helpers ────────────────────────────────────────────────
-    // Real packs declare at most one capability token, so the first token is
-    // the effect's primary bucket; an empty `appliesTo` is universal.
+    // A pack's primary bucket is the FIRST class it declares in catalog
+    // order, not the first in its own declaration order. `appliesTo` is a set
+    // as far as every other consumer is concerned (they all ask "does it
+    // contain X"), so a hybrid declaring ["strip", "appearance"] must land in
+    // the same bucket as one declaring ["appearance", "strip"] — reading
+    // appliesTo[0] made two behaviourally identical packs badge and sort
+    // differently based on nothing but the order their metadata happened to
+    // list. An empty `appliesTo` is universal. A pack declaring only tokens
+    // this catalog does not know falls back to its first declared token so a
+    // future class still shows something rather than vanishing into
+    // "Universal".
     function _effectTypeKey(e) {
         if (!e || !e.appliesTo || e.appliesTo.length === 0)
             return root._universalKey;
 
+        for (var i = 0; i < root._typeCatalog.length; i++) {
+            var key = root._typeCatalog[i].key;
+            for (var j = 0; j < e.appliesTo.length; j++)
+                if (String(e.appliesTo[j]) === key)
+                    return key;
+        }
         return String(e.appliesTo[0]);
     }
     function _typeLabel(key) {

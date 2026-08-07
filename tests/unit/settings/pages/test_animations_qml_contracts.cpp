@@ -388,6 +388,39 @@ private Q_SLOTS:
                             + QStringLiteral(" — such packs get an untranslated badge sorted last")));
     }
 
+    /// _effectTypeKey must bucket a pack by CATALOG order, not by the order
+    /// its metadata happens to list its classes. Reading `appliesTo[0]` made
+    /// two behaviourally identical hybrids badge and sort into different
+    /// buckets, and it was the last consumer anywhere that observed the
+    /// declaration order — AnimationShaderEffect::operator== now compares
+    /// appliesTo as a set on the strength of that. A regression here would
+    /// silently reintroduce the asymmetry, so guard the shape.
+    void shaderBrowserTypeKeyIsIndependentOfDeclarationOrder()
+    {
+        const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserPage.qml");
+        const QString src = readFile(qmlPath);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
+
+        const int start = src.indexOf(QStringLiteral("function _effectTypeKey"));
+        QVERIFY2(start >= 0, "_effectTypeKey is gone from ShaderBrowserPage.qml");
+        const int end = src.indexOf(QStringLiteral("function _typeLabel"), start);
+        QVERIFY2(end > start, "could not find the end of _effectTypeKey");
+        const QString body = src.mid(start, end - start);
+
+        QVERIFY2(body.contains(QStringLiteral("_typeCatalog")),
+                 "_effectTypeKey must resolve the bucket through _typeCatalog so the result is independent of "
+                 "the pack's declaration order");
+        // The bare first-token read is the regression. The catalog-order
+        // walk keeps `appliesTo[0]` only as the unknown-token fallback, so
+        // require the catalog lookup to come FIRST.
+        const int catalogAt = body.indexOf(QStringLiteral("_typeCatalog"));
+        const int firstTokenAt = body.indexOf(QStringLiteral("appliesTo[0]"));
+        if (firstTokenAt >= 0) {
+            QVERIFY2(catalogAt >= 0 && catalogAt < firstTokenAt,
+                     "appliesTo[0] may only be the unknown-token fallback, after the catalog-order lookup");
+        }
+    }
+
     // ─── Shader-browser bridge route ──────────────────────────────────────
 
     /// The Animations → Shaders page routes AnimationsPageController through

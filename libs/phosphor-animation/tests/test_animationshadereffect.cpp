@@ -325,6 +325,34 @@ private Q_SLOTS:
         QCOMPARE(AnimationShaderEffect::fromJson(obj).appliesTo, expected);
     }
 
+    /// appliesTo compares as a SET. Every consumer asks "does it contain X",
+    /// so two packs declaring the same classes in a different order are
+    /// behaviourally identical — an order-sensitive comparison made a
+    /// metadata reorder look like a content change to every equality-gated
+    /// path.
+    void testAppliesToComparesAsASet()
+    {
+        AnimationShaderEffect a;
+        a.id = QStringLiteral("hybrid");
+        a.fragmentShaderPath = QStringLiteral("effect.frag");
+        a.appliesTo = QStringList{QStringLiteral("strip"), QStringLiteral("appearance")};
+
+        AnimationShaderEffect b = a;
+        b.appliesTo = QStringList{QStringLiteral("appearance"), QStringLiteral("strip")};
+        QVERIFY2(a == b, "the same classes in a different order must compare equal");
+
+        // A genuinely different class set still compares unequal — the sort
+        // must not flatten everything into "equal".
+        AnimationShaderEffect c = a;
+        c.appliesTo = QStringList{QStringLiteral("strip"), QStringLiteral("geometry")};
+        QVERIFY(!(a == c));
+
+        // And a subset is not the same as the full set.
+        AnimationShaderEffect d = a;
+        d.appliesTo = QStringList{QStringLiteral("strip")};
+        QVERIFY(!(a == d));
+    }
+
     /// Unknown / duplicate tokens are dropped at parse time; a list that
     /// validates down to empty is treated as universal.
     void testAppliesToValidation()

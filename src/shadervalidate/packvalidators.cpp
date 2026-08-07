@@ -488,6 +488,16 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         if (!appliesToValue.isUndefined() && !appliesToValue.isArray()) {
             lints << QStringLiteral("appliesTo must be an array of tokens (ignored at load; pack becomes universal)");
         }
+        // An explicit empty array (`"appliesTo": []`) draws NO lint, and that
+        // is deliberate rather than an oversight — do not "even it up" with
+        // the two cases below. Those two are TYPOS: the author wrote a
+        // constraint, it validated down to nothing, and the pack silently
+        // became universal, which is the opposite of what they asked for. An
+        // empty array is not a typo; it says "no constraint", which is
+        // exactly what it gets. Linting it would flag a legal spelling of
+        // the documented default, and every universal pack that spells it
+        // out would start failing the CI gate. Pinned by
+        // test_pack_validators::explicitEmptyAppliesToIsNotLinted.
         const QJsonArray declaredAppliesTo = appliesToValue.toArray();
         for (const QJsonValue& v : declaredAppliesTo) {
             const QString token = v.toString().trimmed();
@@ -714,6 +724,60 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                     }
                 }
             }
+        }
+    }
+
+    // ── multipass buffer passes ──
+    // The zone and surface validators have always baked their buffer passes;
+    // the animation validator never did, so a broken buffer shader in an
+    // animation pack passed this gate and failed only at the live daemon.
+    //
+    // Reproduce ShaderNodeRhi::bakeBufferShaders exactly: load, expand
+    // includes, compile. NO entry scaffold (there is no pTransition to wrap)
+    // and — verified against that function — NO p_<id> preamble either, so a
+    // buffer pass that wants the pack's parameters must include
+    // <animation_uniforms.glsl> itself and read customParams directly.
+    // Splicing a preamble the runtime does not splice would be worse than no
+    // coverage: the gate would pass sources that fail live and fail sources
+    // that work.
+    //
+    // Skipped for compositor-only packs for the same reason the fragment
+    // stage is: the strict SPIR-V target rejects their dialect by design.
+    if (eff.isMultipass && !PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
+        const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
+        for (const QString& declaredBuf : eff.bufferShaderPaths) {
+            // fromJson leaves these RELATIVE (unlike the fragment path, which
+            // the block at the top of this function resolves), so resolve
+            // against the pack dir the way the runtime's parseEffect does.
+            // Baking the raw string would silently find nothing and report a
+            // clean pack — which is exactly how this whole stage was missing.
+            if (declaredBuf.isEmpty()) {
+                continue; // already linted above
+            }
+            const auto confinedBuf = confinedPackPath(packDir, declaredBuf);
+            if (!confinedBuf || !QFile::exists(*confinedBuf)) {
+                continue; // escaping and absent buffers are already linted above
+            }
+            const QString buf = *confinedBuf;
+            const QString label = QFileInfo(buf).fileName();
+            QFile bufFile(buf);
+            if (!bufFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << buf << "\n";
+                ++errors;
+                continue;
+            }
+            const QString rawBuf = QString::fromUtf8(bufFile.readAll());
+            QString bufErr;
+            const QString expandedBuf =
+                ShaderCompiler::expandSource(rawBuf, QFileInfo(buf).absolutePath(), includePaths, &bufErr);
+            if (expandedBuf.isEmpty()) {
+                out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << bufErr << "\n";
+                ++errors;
+                continue;
+            }
+            const ShaderCompiler::Result bufResult =
+                ShaderCompiler::compile(expandedBuf.toUtf8(), QShader::FragmentStage);
+            errors += reportCompile(out, label, bufResult, declaredParamNames(eff.parameters));
         }
     }
 
