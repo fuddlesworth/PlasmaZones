@@ -20,28 +20,27 @@ Q_LOGGING_CATEGORY(lcAnimationShader, "phosphoranimationshaders.effect")
 ///   * `"anchor"`     → Anchor (default; FBO == captured anchor)
 ///   * `"surface"`    → Surface (FBO == QQuickWindow contentItem)
 ///
-/// Returns `true` on success and writes through `outExtent`; returns
-/// `false` for an unknown / malformed string and emits a `qCWarning`
-/// so a typo in metadata.json surfaces on the journal rather than
-/// degrading silently. Caller keeps the struct's default value
-/// (Anchor) on failure.
-bool parseFboExtent(const QString& raw, AnimationShaderEffect::FboExtentKind& outExtent)
+/// Writes through `outExtent` on success and leaves it alone otherwise, so a
+/// caller that passes a struct field already holding the default (Anchor)
+/// needs no failure branch — which is why this reports nothing. An unknown or
+/// malformed string emits a `qCWarning` here, so a typo in metadata.json
+/// surfaces on the journal rather than degrading silently.
+void parseFboExtent(const QString& raw, AnimationShaderEffect::FboExtentKind& outExtent)
 {
     const QString s = raw.trimmed();
     if (s.isEmpty()) {
-        return false;
+        return;
     }
     if (s.compare(QLatin1String("anchor"), Qt::CaseInsensitive) == 0) {
         outExtent = AnimationShaderEffect::FboExtentKind::Anchor;
-        return true;
+        return;
     }
     if (s.compare(QLatin1String("surface"), Qt::CaseInsensitive) == 0) {
         outExtent = AnimationShaderEffect::FboExtentKind::Surface;
-        return true;
+        return;
     }
     qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: unrecognised fboExtent" << raw
                                  << "Accepted forms are \"anchor\" and \"surface\". Falling back to defaults.";
-    return false;
 }
 
 /// Emit the internal `FboExtentKind` as a `fboExtent` string. Inverse

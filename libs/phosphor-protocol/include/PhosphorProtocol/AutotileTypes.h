@@ -84,8 +84,13 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     }
 
     /// Returns empty QString if valid, or a human-readable description of
-    /// the invariant violation. Call at every unmarshal site to detect a
-    /// garbled payload before acting on it.
+    /// the invariant violation. Call at every unmarshal site for THIS type to
+    /// detect a garbled payload before acting on it.
+    ///
+    /// Not every wire type in this header has one — AlgorithmInfoEntry and
+    /// PreTileGeometryEntry are unmarshalled unvalidated. That is a gap rather
+    /// than a policy: the types that carry a validator are the ones whose
+    /// garbled values were seen to do damage.
     QString validationError() const;
 };
 

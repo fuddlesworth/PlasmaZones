@@ -664,9 +664,10 @@ void TilingAdaptor::clearEngine()
 {
     // Interface-only borrows, no connections to drop. Also neutralise any
     // pending coalesced announce (its lambda re-checks the empty list) and
-    // every per-session queue/dedup cache — none of it may leak into a
-    // restart (a stale dedup value could suppress the first genuine
-    // broadcast of the new session).
+    // every per-session queue/dedup cache except m_activeLayouts — none of it
+    // may leak into a restart (a stale dedup value could suppress the first
+    // genuine broadcast of the new session). m_activeLayouts is deliberately
+    // kept; setActiveLayouts documents why.
     m_lifecycleEngines.clear();
     ++m_announceGeneration;
     m_screensAnnouncePending = false;
@@ -678,10 +679,11 @@ void TilingAdaptor::clearEngine()
     // The WTA borrow is NOT cleared here — Daemon::stop's teardown block is
     // its canonical clear (setWindowTrackingAdaptor(nullptr)), and every
     // deref in this file null-checks.
-    // m_pendingOpensListenerInstalled deliberately survives: the underlying
-    // connection object does too (sender and receiver both outlive a
-    // session restart), so resetting the latch here would make the next
-    // install a DUPLICATE connection, double-flushing the pending queue.
+    // m_pendingOpensListenerInstalled is left alone, and it does not matter
+    // either way: the latch is per-instance and the daemon deletes and re-news
+    // this adaptor on every init(), so the connection it tracks dies with the
+    // object and the fresh one starts with the latch already false. There is
+    // no duplicate-connection hazard to guard against here.
 }
 
 } // namespace PlasmaZones

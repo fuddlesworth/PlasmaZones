@@ -11,15 +11,10 @@
 #include <QtGlobal>
 
 #include <functional>
-#include <memory>
 #include <unordered_map>
 
 namespace KWin {
 class LogicalOutput;
-}
-
-namespace PhosphorAnimation {
-class Curve;
 }
 
 namespace PlasmaZones {

@@ -118,8 +118,8 @@ public:
     /**
      * @brief Number of windowOpened entries waiting for panel geometry
      *
-     * Observable state for tests and for support-bundle output: returns the size
-     * of the deferred windowOpened queue (see windowsOpenedBatch rationale).
+     * Observable state for tests: returns the size of the deferred
+     * windowOpened queue (see windowsOpenedBatch rationale).
      * Always zero once @c panelGeometryReady has fired.
      */
     int pendingWindowOpensCount() const;

@@ -37,9 +37,10 @@ public Q_SLOTS:
     }
 };
 
-/// Same shape for TileRequestEntry, whose wire signature this PR-line widened
-/// with scrollEdge — the round-trip pins operator<< and operator>> agree on
-/// the field order.
+/// Same shape for TileRequestEntry. That struct has been widened more than
+/// once, so this says nothing about which fields are current: the round-trip
+/// pins that operator<< and operator>> agree on the field order, whatever that
+/// order happens to be.
 class TileRequestEcho : public QObject
 {
     Q_OBJECT

@@ -20,10 +20,11 @@ inline constexpr QLatin1String ObjectPath("/PlasmaZones");
 /// because the daemon validates the bound on the D-Bus boundary while the
 /// settings app walks it in its Quick Shortcuts reset loop, and the two live
 /// in different trees. Kept here so those two cannot drift. Note the
-/// LayoutManager backend in phosphor-zones (layoutregistry.cpp) enforces the
-/// same 1..9 bound with its own literal: it deliberately does not depend on
-/// phosphor-protocol, so that site is not covered by this constant and must be
-/// updated in step by hand if the count ever changes.
+/// phosphor-zones mirror, `LayoutRegistry::QuickSlotCount` (LayoutRegistry.h),
+/// enforces the same 1..9 bound as its own named constant: that library
+/// deliberately does not depend on phosphor-protocol, so the two are not
+/// covered by one definition and must be updated in step by hand if the count
+/// ever changes.
 inline constexpr int QuickLayoutSlotCount = 9;
 
 namespace Interface {
@@ -48,6 +49,8 @@ inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
 inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridge");
 inline constexpr QLatin1String Snap("org.plasmazones.Snap");
 inline constexpr QLatin1String Rules("org.plasmazones.Rules");
+inline constexpr QLatin1String Control("org.plasmazones.Control");
+inline constexpr QLatin1String Shader("org.plasmazones.Shader");
 }
 
 /// D-Bus error names returned via `QDBusMessage::createErrorReply`. Centralised
