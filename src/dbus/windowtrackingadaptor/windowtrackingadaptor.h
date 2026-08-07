@@ -426,6 +426,15 @@ public Q_SLOTS:
      * handlers (float toggle, etc.) so they can compose pre-tile geometry
      * without a round-trip back to the effect.
      *
+     * ABSENCE IS NOT LATENCY. The shadow has exactly two writers: this
+     * motion-driven flush, and the bulk seed on daemon (re)registration
+     * (kwin-effect daemon_bringup.cpp, which states the consequence). A
+     * window that has never MOVED therefore has no entry at all — not one
+     * that arrives 50 ms later — so a freshly opened session window reads
+     * back invalid indefinitely, while a daemon-restart re-announce of an
+     * already-open window reads back populated. Callers deciding policy on
+     * an invalid read must not assume a retry would populate it.
+     *
      * @param windowId Window identifier
      * @param x/y/width/height Current frame geometry in compositor coordinates
      */
@@ -698,6 +707,19 @@ public:
     /// record is left intact (never cleared here — records are per-mode memory,
     /// only merge-updated, consumed, or explicitly pruned); with an
     /// @p authoritativeScreen it records a floating-close placement instead.
+    ///
+    /// "Left intact" is no longer inert. The cross-screen reclaim
+    /// (IPlacementEngine::claimCrossScreenReopen) reads a managed slot plus
+    /// the record-level screenId as a HOME to pull a window back to, so a
+    /// record this capture leaves unrepaired can later MOVE a live window
+    /// between monitors rather than merely restoring it to a slightly stale
+    /// spot. Two safeguards keep that sound and both must be preserved: an
+    /// engine that knowingly gives a window up clears its own slot
+    /// (WindowPlacementStore::clearEngineSlot, called from handoffRelease),
+    /// and the claims validate the record against LIVE state (live screen
+    /// set, context compatibility, membership after adoption) instead of
+    /// trusting it. downgradeMismatchedManagedSlots is the repair for the
+    /// close paths that do run.
     /// Shadow-written in P1; the single funnel every state-change + close hook
     /// calls so the persisted record always reflects the window's live state.
     ///

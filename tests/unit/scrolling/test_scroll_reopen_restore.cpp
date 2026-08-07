@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <QCoreApplication>
+#include <QLoggingCategory>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -62,18 +63,57 @@ private:
         return static_cast<ScrollState*>(engine->stateForScreen(screenId));
     }
 
+    /// Scroll-engine log capture, so a test can assert WHICH branch produced
+    /// an outcome rather than only that the outcome happened. Both severities
+    /// the engine's branch markers use, category-filtered, and the caller's
+    /// filter rules are restored rather than cleared.
+    static QStringList& scrollLogSink()
+    {
+        static QStringList sink;
+        return sink;
+    }
+    static void scrollLogHandler(QtMsgType, const QMessageLogContext& ctx, const QString& msg)
+    {
+        if (ctx.category && QLatin1String(ctx.category) == QLatin1String("org.phosphor.scroll-engine")) {
+            scrollLogSink().append(msg);
+        }
+    }
+    template<typename Fn>
+    static QStringList captureScrollLogs(Fn&& fn)
+    {
+        QLoggingCategory::setFilterRules(
+            QStringLiteral("org.phosphor.scroll-engine.debug=true\norg.phosphor.scroll-engine.info=true"));
+        scrollLogSink().clear();
+        QtMessageHandler prev = qInstallMessageHandler(&TestScrollReopenRestore::scrollLogHandler);
+        fn();
+        qInstallMessageHandler(prev);
+        QLoggingCategory::setFilterRules(qEnvironmentVariable("QT_LOGGING_RULES"));
+        return scrollLogSink();
+    }
+
     /// The daemon's close capture, condensed: snapshot the engine's slot,
     /// graft the free-geometry rect the shared layer would carry, record.
-    static void captureClose(ScrollEngine* engine, FakeStickyWindowTracking* tracker, const QString& windowId,
-                             const QRect& freeGeo = QRect())
+    ///
+    /// Returns success rather than asserting: a QVERIFY inside a helper
+    /// returns from the HELPER only, so a failure here would skip
+    /// windowClosed and let the caller run on against an engine that still
+    /// tracks the window — reporting a confusing downstream failure instead
+    /// of this one. Callers check the result.
+    [[nodiscard]] static bool captureClose(ScrollEngine* engine, FakeStickyWindowTracking* tracker,
+                                           const QString& windowId, const QRect& freeGeo = QRect())
     {
         auto record = engine->capturePlacement(windowId);
-        QVERIFY(record.has_value());
+        if (!record.has_value()) {
+            return false;
+        }
         if (freeGeo.isValid()) {
             record->freeGeometryByScreen.insert(QLatin1String(Screen), freeGeo);
         }
-        QVERIFY(tracker->placementStore().record(*record));
+        if (!tracker->placementStore().record(*record)) {
+            return false;
+        }
         engine->windowClosed(windowId);
+        return true;
     }
 
 private Q_SLOTS:
@@ -93,7 +133,7 @@ private Q_SLOTS:
         QVERIFY(state);
         QVERIFY(state->isFloating(QStringLiteral("term|t1")));
 
-        captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300));
+        QVERIFY(captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300)));
         QVERIFY(!state->containsWindow(QStringLiteral("term|t1")));
 
         // Reproduce the production open sequence: the effect's pre-tile
@@ -142,7 +182,7 @@ private Q_SLOTS:
         ScrollState* state = stateFor(engine, screen);
         QVERIFY(state);
         QVERIFY(state->isFloating(QStringLiteral("term|t1"))); // rule float
-        captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300));
+        QVERIFY(captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300)));
 
         QSignalSpy restoreSpy(engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
         engine->windowOpened(QStringLiteral("term|t2"), screen, 0, 0);
@@ -166,7 +206,7 @@ private Q_SLOTS:
 
         engine->windowOpened(QStringLiteral("term|t1"), screen, 0, 0);
         engine->setWindowFloat(QStringLiteral("term|t1"), true, screen);
-        captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300));
+        QVERIFY(captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300)));
 
         engine->windowOpened(QStringLiteral("term|t1"), screen, 0, 0);
         ScrollState* state = stateFor(engine, screen);
@@ -189,7 +229,7 @@ private Q_SLOTS:
         tracker.liveInstances.insert(QStringLiteral("t1"));
         engine->windowOpened(QStringLiteral("term|t1"), screen, 0, 0);
         engine->setWindowFloat(QStringLiteral("term|t1"), true, screen);
-        captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300));
+        QVERIFY(captureClose(engine, &tracker, QStringLiteral("term|t1"), QRect(40, 40, 500, 300)));
         tracker.liveInstances.remove(QStringLiteral("t1"));
 
         tracker.liveInstances.insert(QStringLiteral("t2"));
@@ -217,7 +257,7 @@ private Q_SLOTS:
 
         engine->windowOpened(QStringLiteral("one|a"), screen, 0, 0);
         engine->windowOpened(QStringLiteral("two|b"), screen, 0, 0);
-        captureClose(engine, &tracker, QStringLiteral("two|b"));
+        QVERIFY(captureClose(engine, &tracker, QStringLiteral("two|b")));
         QVERIFY(tracker.placementStore().peekExact(QStringLiteral("two|b")).has_value());
 
         engine->windowOpened(QStringLiteral("two|b2"), screen, 0, 0);
@@ -242,7 +282,7 @@ private Q_SLOTS:
 
         engine->windowOpened(QStringLiteral("term|t1"), screen, 0, 0);
         engine->setWindowFloat(QStringLiteral("term|t1"), true, screen);
-        captureClose(engine, &tracker, QStringLiteral("term|t1")); // no free rect
+        QVERIFY(captureClose(engine, &tracker, QStringLiteral("term|t1"))); // no free rect
 
         engine->windowOpened(QStringLiteral("term|t2"), screen, 0, 0);
         ScrollState* state = stateFor(engine, screen);
@@ -272,7 +312,7 @@ private Q_SLOTS:
 
         // Last session: the window closed tiled in Screen's strip.
         engine->windowOpened(QStringLiteral("term|t1"), screen, 0, 0);
-        captureClose(engine, &tracker, QStringLiteral("term|t1"));
+        QVERIFY(captureClose(engine, &tracker, QStringLiteral("term|t1")));
         QVERIFY(tracker.placementStore().peekExact(QStringLiteral("term|t1")).has_value());
 
         // This session: KWin drops the fresh-uuid window on another output.
@@ -282,6 +322,35 @@ private Q_SLOTS:
         QVERIFY(state);
         QVERIFY2(state->strip().containsWindow(QStringLiteral("term|t2")),
                  "the reclaimed window must re-enter the RECORDED screen's strip");
+    }
+
+    void claimCrossScreenReopenIgnoresLiveSiblingsRecord()
+    {
+        // The claim runs on EVERY open, not only session restore. While one
+        // instance is open and tiled, launching a second instance of the
+        // same app must NOT match the live sibling's record and teleport the
+        // newcomer onto the sibling's monitor — that record describes a
+        // different, living window, not this one's history.
+        QObject owner;
+        FakeStickyWindowTracking tracker;
+        tracker.wireLiveInstanceProbe();
+        ScrollEngine* engine = makeEngine(&owner, &tracker);
+        const QString screen = QLatin1String(Screen);
+        engine->setScrollingModeResolver([&](const QString& rec, int, const QString&) {
+            return rec == screen;
+        });
+
+        // Instance 1: open, tiled, and its live record captured (the save
+        // sweep re-captures every open window, so this is the steady state).
+        engine->windowOpened(QStringLiteral("term|t1"), screen, 0, 0);
+        auto live = engine->capturePlacement(QStringLiteral("term|t1"));
+        QVERIFY(live.has_value());
+        QVERIFY(tracker.placementStore().record(*live));
+        tracker.liveInstances.insert(QStringLiteral("t1")); // instance half of term|t1
+
+        // Instance 2 opens on another output.
+        QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("term|t2"), QStringLiteral("OTHER"), 0, 0),
+                 "a LIVE sibling's record must never justify pulling a fresh instance cross-screen");
     }
 
     void claimCrossScreenReopenRefusalLadder()
@@ -297,13 +366,13 @@ private Q_SLOTS:
         // FLOATING record: float restore is screen-local, never a pull.
         engine->windowOpened(QStringLiteral("edit|e1"), screen, 0, 0);
         engine->setWindowFloat(QStringLiteral("edit|e1"), true, screen);
-        captureClose(engine, &tracker, QStringLiteral("edit|e1"), QRect(30, 30, 400, 300));
+        QVERIFY(captureClose(engine, &tracker, QStringLiteral("edit|e1"), QRect(30, 30, 400, 300)));
         QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("edit|e2"), QStringLiteral("OTHER"), 0, 0),
                  "a scroll-floating record must not claim cross-screen");
 
         // Same-screen arrival: the ordinary open path owns it, never the claim.
         engine->windowOpened(QStringLiteral("term|t1"), screen, 0, 0);
-        captureClose(engine, &tracker, QStringLiteral("term|t1"));
+        QVERIFY(captureClose(engine, &tracker, QStringLiteral("term|t1")));
         QVERIFY2(!engine->claimCrossScreenReopen(QStringLiteral("term|t2"), screen, 0, 0),
                  "an arrival on the recorded screen itself is not cross-screen");
 
@@ -314,7 +383,7 @@ private Q_SLOTS:
 
         // Home context no longer in scrolling mode: the resolver's verdict wins.
         engine->windowOpened(QStringLiteral("web|w1"), screen, 0, 0);
-        captureClose(engine, &tracker, QStringLiteral("web|w1"));
+        QVERIFY(captureClose(engine, &tracker, QStringLiteral("web|w1")));
         engine->setScrollingModeResolver([](const QString&, int, const QString&) {
             return false;
         });
@@ -350,12 +419,24 @@ private Q_SLOTS:
         rec.engines.insert(WindowPlacement::autotileEngineId(), slot);
         QVERIFY(tracker.placementStore().record(rec));
 
-        engine->windowOpened(QStringLiteral("ide|new"), screen, 0, 0);
+        const QStringList deferLines = captureScrollLogs([&] {
+            engine->windowOpened(QStringLiteral("ide|new"), screen, 0, 0);
+        });
+        QVERIFY2(!deferLines.isEmpty(),
+                 "scroll-engine log capture produced nothing — the branch assertion below "
+                 "would pass vacuously");
+        // ScrollEngine::stateForScreen does NOT create on demand (it passes
+        // create=false), so a deferred arrival that never reached the insert
+        // path legitimately leaves NO state for the screen — a null state is
+        // the strongest evidence of non-adoption, not a skipped assertion.
+        // (Autotile's tilingStateForScreen differs and does create.)
         ScrollState* state = stateFor(engine, screen);
-        if (state) {
-            QVERIFY2(!state->containsWindow(QStringLiteral("ide|new")),
-                     "a cross-screen autotile restore must not be adopted into the strip");
-        }
+        QVERIFY2(!state || !state->containsWindow(QStringLiteral("ide|new")),
+                 "a cross-screen autotile restore must not be adopted into the strip");
+        // ...and specifically via the DEFER branch, not some unrelated bail.
+        QVERIFY2(deferLines.join(QLatin1Char('\n'))
+                     .contains(QStringLiteral("defers — carries a cross-screen restore for another engine")),
+                 "the cross-screen defer gate must be the branch that refused adoption");
         // The record survives untouched for autotile's claim.
         QVERIFY(tracker.placementStore().peekExact(QStringLiteral("ide|old")).has_value());
     }

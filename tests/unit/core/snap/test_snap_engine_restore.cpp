@@ -3,6 +3,8 @@
 
 #include "helpers/SnapEngineTestFixture.h"
 
+#include <PhosphorRules/ExclusionRules.h>
+
 /**
  * @brief SnapEngine restore-path coverage: the snap-to-empty auto-assign gate,
  *        focus-new-windows, resolveWindowRestore predicate gates, capturePlacement,
@@ -491,8 +493,14 @@ private Q_SLOTS:
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-2"), &result);
 
-        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("defers to the owning engine")),
+        const QString joinedCross = lines.join(QLatin1Char('\n'));
+        verifyCaptureNonEmpty(lines);
+        QVERIFY2(!joinedCross.contains(QStringLiteral("defers to the owning engine")),
                  "a pending cross-screen snap restore must NOT be deferred by the opening-screen ownership gate");
+        // resolveWindowRestore has TWO defer branches now; this test's whole
+        // point is that neither may swallow this window, so assert both.
+        QVERIFY2(!joinedCross.contains(QStringLiteral("deferring to its recorded engine")),
+                 "nor may the cross-screen TILE defer claim a snapped record");
         m_wts->setSnapState(nullptr);
     }
 
@@ -539,6 +547,7 @@ private Q_SLOTS:
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
 
         // DP-2 is a scrolling-mode screen; DP-1 stays snapping (the default).
         PhosphorZones::AssignmentEntry scrolling;
@@ -566,14 +575,101 @@ private Q_SLOTS:
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
         const QString joined = lines.join(QLatin1Char('\n'));
 
+        verifyCaptureNonEmpty(lines);
         QVERIFY2(!result.shouldSnap, "a pending cross-screen tile restore must never be snapped here");
+        QVERIFY2(result.deferredToTilingEngine,
+                 "the verdict must be reported as a tile-defer, not a bare no-snap: the adaptor gates the reclaim "
+                 "on it, and an exclusion or disabled-context refusal must not be mistaken for one");
         QVERIFY2(joined.contains(QStringLiteral("deferring to its recorded engine")),
                  "the tile-defer gate must fire for a scrolling-tiled record homed on a scrolling screen");
         QVERIFY2(!joined.contains(QStringLiteral("defaulting to floated")),
                  "the defer must run BEFORE the no-match floating default — float state written here would "
                  "fight the scroll engine's re-tile of the same window");
+        // The behavioural half of that claim: no float announcement either.
+        // The log assertion alone survives a message rewording; this pins the
+        // contract the daemon and the effect actually observe.
+        QCOMPARE(floatSpy.count(), 0);
         QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
                  "deferring must not consume the record — the scroll engine's reclaim still needs it");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_crossScreenAutotileTiledRecord_defersOnSnapScreen()
+    {
+        // The gate's OTHER term. Deleting the autotile half left every test
+        // green, yet an autotile-tiled record arriving on a snap screen is
+        // the same reported bug shape as the scrolling one.
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateTiled());
+        slot.order = 0;
+        rec.engines.insert(PhosphorEngine::WindowPlacement::autotileEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+
+        verifyCaptureNonEmpty(lines);
+        QVERIFY2(!result.shouldSnap, "an autotile-homed cross-screen tiled record must not be snapped here");
+        QVERIFY2(result.deferredToTilingEngine, "the autotile term of the tile-defer gate must fire");
+        QCOMPARE(floatSpy.count(), 0);
+        QVERIFY(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")));
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_excludedWindow_neverDefersToTilingEngine()
+    {
+        // A gate that says "nobody should manage this" outranks one that
+        // says "someone else should". Without the exclusion check the defer
+        // fired first and handed an excluded window to a reclaim the user's
+        // rules had vetoed.
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        // Size-based exclusion, the same lever test_snap_engine_exclude uses:
+        // a sub-threshold full query makes isWindowExcluded true.
+        m_settings->setMinimumWindowWidth(200);
+        m_settings->setMinimumWindowHeight(150);
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorRules::WindowQuery q;
+            q.width = 80;
+            q.height = 60;
+            return std::optional<PhosphorRules::WindowQuery>(q);
+        });
+
+        PhosphorZones::AssignmentEntry scrolling;
+        scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), scrolling);
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateTiled());
+        slot.order = 0;
+        rec.engines.insert(PhosphorEngine::WindowPlacement::scrollingEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        PhosphorEngine::SnapResult result;
+        captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!result.deferredToTilingEngine, "an excluded window must not be offered to the cross-screen reclaim");
+        engine.setExclusionQueryProvider({});
         m_wts->setSnapState(nullptr);
     }
 
@@ -899,9 +995,11 @@ private Q_SLOTS:
         const auto p = engine.capturePlacement(tracked);
         QVERIFY(p.has_value());
         const PhosphorEngine::EngineSlot slot = p->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        // Equality with `floating` is the whole assertion: it already
+        // excludes the retired `free` token, so a separate `!= free` check
+        // could never fail independently. The intent it documented — that
+        // capture must never produce `free` again — lives here.
         QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
-        QVERIFY2(slot.state != PhosphorEngine::WindowPlacement::stateFree(),
-                 "the retired `free` state must never be produced");
         m_wts->setSnapState(nullptr);
     }
 

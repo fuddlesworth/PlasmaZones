@@ -917,14 +917,16 @@ void Daemon::initEnginesAndWiring()
     // this function — so these members are null here on a re-cycle.
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
-    // Cross-screen tiling reclaim off the resolveWindowRestore channel — the
-    // one per-window open path the effect drives for EVERY screen (the tiling
-    // dispatch below only hears about engine-managed screens, so a session
-    // window KWin dropped on a snap-mode screen would otherwise never be
-    // offered back to the engine whose record homes it). Min sizes are not
-    // carried on this channel; 0,0 matches a pre-announce open and the
-    // engine picks up the real minimum from the next windowMinSizeUpdated.
-    // Cleared in stop() alongside the engines' other injected closures.
+    // Cross-screen tiling reclaim off the resolveWindowRestore channel. It
+    // covers arrivals on SNAP-mode screens, which the tiling dispatch below
+    // never hears about — without it a session window KWin dropped on a snap
+    // screen would never be offered back to the engine whose record homes
+    // it. Min sizes are not carried on this channel (the slot's signature
+    // has none), so 0,0: the clamp self-heals through the engines'
+    // windowMinSizeUpdated, which also re-runs the oversized float verdict
+    // that the missing size would otherwise have decided wrongly for the
+    // session. Cleared in stop() and in SnapAdaptor::clearEngine alongside
+    // the engines' other injected closures.
     m_snapAdaptor->setCrossScreenTileReclaim([autotile = QPointer<PhosphorTileEngine::AutotileEngine>(autotileEngine),
                                               scroll = QPointer<PhosphorScrollEngine::ScrollEngine>(scrollEngine)](
                                                  const QString& windowId, const QString& screenId) {

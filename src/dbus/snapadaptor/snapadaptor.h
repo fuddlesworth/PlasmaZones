@@ -316,15 +316,20 @@ public:
     QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
 
     /// Cross-screen tiling-engine reclaim hook, invoked as (windowId,
-    /// openingScreenId) → claimed. resolveWindowRestore is the ONE per-window
-    /// channel the effect drives for EVERY open regardless of screen (the
-    /// tiling dispatch only ever hears about engine-managed screens), so a
-    /// session window KWin dropped on a snap-mode screen while its placement
-    /// record homes it TILED on a tiling-mode screen is offered back to the
-    /// pipeline engines from here. Wired by the daemon over both pipeline
-    /// engines' claimCrossScreenReopen; cleared before engine teardown (same
-    /// contract as the engines' injected closures). Unset → no reclaim
-    /// (headless/test path).
+    /// openingScreenId) → claimed. This channel exists because the tiling
+    /// dispatch only ever hears about ENGINE-MANAGED screens: a session
+    /// window KWin dropped on a SNAP-mode screen while its placement record
+    /// homes it TILED elsewhere would otherwise never be offered to the
+    /// engine that owns it. The effect drives resolveWindowRestore for a
+    /// window on a non-managed screen, and for a managed-screen window that
+    /// is also a snap-restore candidate; both are gated on canSnapRestore
+    /// (kwin-effect/plasmazoneseffect/window_lifecycle.cpp), so a window
+    /// failing that gate — minimized at open, or a multi-instance sibling
+    /// with a different pid — reaches this channel not at all and is covered
+    /// only by the tiling dispatch. Wired by the daemon over both pipeline
+    /// engines' claimCrossScreenReopen; cleared in clearEngine and in
+    /// Daemon::stop (same contract as the engines' injected closures).
+    /// Unset → no reclaim (headless/test path).
     void setCrossScreenTileReclaim(std::function<bool(const QString& windowId, const QString& screenId)> hook)
     {
         m_crossScreenTileReclaim = std::move(hook);

@@ -103,9 +103,39 @@ protected:
         static QStringList sink;
         return sink;
     }
-    static void gateLogHandler(QtMsgType, const QMessageLogContext&, const QString& msg)
+    /// Captures the snap-engine category only. An unfiltered handler let any
+    /// other category's output satisfy a `contains()` assertion, and — worse
+    /// for the ~11 assertions that check a line is ABSENT — made an empty
+    /// sink indistinguishable from a correctly-silent branch.
+    static void gateLogHandler(QtMsgType, const QMessageLogContext& ctx, const QString& msg)
     {
-        gateLogSink().append(msg);
+        if (ctx.category && QLatin1String(ctx.category) == QLatin1String("org.phosphor.snap-engine")) {
+            gateLogSink().append(msg);
+        }
+    }
+
+    /// Arm log capture for the snap-engine category. Enables BOTH severities
+    /// the suite asserts on: the branch markers are a mix of qCDebug and
+    /// qCInfo, and requesting only debug left the info lines dependent on
+    /// Qt's default floor — tighten the category to QtWarningMsg and every
+    /// negative assertion would pass against an empty sink instead of
+    /// failing. Returns the previous handler for endLogCapture().
+    QtMessageHandler beginLogCapture()
+    {
+        QLoggingCategory::setFilterRules(
+            QStringLiteral("org.phosphor.snap-engine.debug=true\norg.phosphor.snap-engine.info=true"));
+        gateLogSink().clear();
+        return qInstallMessageHandler(&SnapEngineTestFixture::gateLogHandler);
+    }
+
+    /// Disarm capture and RESTORE the caller's filter rules rather than
+    /// clearing them: setFilterRules(QString()) wipes whatever
+    /// QT_LOGGING_RULES the developer set for the run, permanently, from the
+    /// first captured call onward.
+    void endLogCapture(QtMessageHandler prev)
+    {
+        qInstallMessageHandler(prev);
+        QLoggingCategory::setFilterRules(qEnvironmentVariable("QT_LOGGING_RULES"));
     }
 
     /// Run calculateSnapToEmptyZone with the given gate inputs and capture
@@ -116,9 +146,7 @@ protected:
         layout->setAutoAssign(perLayoutAuto);
         m_settings->setAutoAssignAllLayouts(globalAuto);
 
-        QLoggingCategory::setFilterRules(QStringLiteral("org.phosphor.snap-engine.debug=true"));
-        gateLogSink().clear();
-        QtMessageHandler prev = qInstallMessageHandler(&SnapEngineTestFixture::gateLogHandler);
+        QtMessageHandler prev = beginLogCapture();
 
         // Result is intentionally ignored — geometry resolution depends on a
         // wired ScreenManager, which a guiless fixture doesn't provide. The
@@ -126,8 +154,7 @@ protected:
         // contract is actually about.
         (void)engine.calculateSnapToEmptyZone(QStringLiteral("app|uuid-gate"), screenId, /*isSticky*/ false);
 
-        qInstallMessageHandler(prev);
-        QLoggingCategory::setFilterRules(QString());
+        endLogCapture(prev);
         return gateLogSink();
     }
 
@@ -137,17 +164,25 @@ protected:
     QStringList captureResolveLogs(SnapEngine& engine, const QString& windowId, const QString& screenId,
                                    PhosphorEngine::SnapResult* outResult)
     {
-        QLoggingCategory::setFilterRules(QStringLiteral("org.phosphor.snap-engine.debug=true"));
-        gateLogSink().clear();
-        QtMessageHandler prev = qInstallMessageHandler(&SnapEngineTestFixture::gateLogHandler);
+        QtMessageHandler prev = beginLogCapture();
 
         const PhosphorEngine::SnapResult result = engine.resolveWindowRestore(windowId, screenId, /*sticky*/ false);
         if (outResult) {
             *outResult = result;
         }
 
-        qInstallMessageHandler(prev);
-        QLoggingCategory::setFilterRules(QString());
+        endLogCapture(prev);
         return gateLogSink();
+    }
+
+    /// Positive control for absence-based assertions: every resolve logs
+    /// SOMETHING on the snap-engine category, so an empty capture means the
+    /// harness is broken, not that the asserted branch stayed silent. Tests
+    /// that assert a line is ABSENT must call this first, or they would pass
+    /// green against a capture that recorded nothing at all.
+    static void verifyCaptureNonEmpty(const QStringList& lines)
+    {
+        QVERIFY2(!lines.isEmpty(),
+                 "snap-engine log capture produced nothing — any absence assertion below would pass vacuously");
     }
 };

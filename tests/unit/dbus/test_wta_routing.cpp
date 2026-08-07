@@ -297,7 +297,8 @@ private Q_SLOTS:
         QSignalSpy outputSpy(wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
         QSignalSpy geomSpy(wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
-        wta->applyOpenScreenRouting(w, QStringLiteral("DP-1"));
+        QVERIFY2(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")),
+                 "a matched bare route must report the directive as matched");
 
         // Output-move marker for DP-2.
         QCOMPARE(outputSpy.count(), 1);
@@ -366,7 +367,9 @@ private Q_SLOTS:
         QSignalSpy outputSpy(wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
         QSignalSpy geomSpy(wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
-        wta->applyOpenScreenRouting(w, QStringLiteral("DP-1"));
+        QVERIFY2(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")),
+                 "a valid placement directive owns the window's placement, so it must report as matched even "
+                 "though nothing moved here");
 
         QVERIFY2(outputSpy.isEmpty(), "a route+snap rule must not free-move via applyOpenScreenRouting");
         QVERIFY2(geomSpy.isEmpty(), "a route+snap rule must not free-move via applyOpenScreenRouting");
@@ -376,6 +379,69 @@ private Q_SLOTS:
         wta->service()->setSnapEngine(nullptr);
         wta->service()->setSnapState(nullptr);
         delete snap;
+    }
+
+    // The bool verdict of applyOpenScreenRouting and the directiveMatched
+    // out-param of applyOpenRoutingForTiling gate the cross-screen reclaim
+    // on their respective channels. Both must report "a directive matched"
+    // for the cases where a rule OWNS the window's monitor but no move is
+    // needed or possible — reading those as "no rule" is what let the two
+    // channels apply opposite precedence to the same rule.
+    void testRoutingVerdicts_matchedButNoMove_reportMatchedOnBothChannels()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* registry = new PhosphorEngine::WindowRegistry(&parent);
+        wta->setWindowRegistry(registry);
+        wta->setWindowMetadata(QStringLiteral("inst3"), QStringLiteral("pinapp"), QString(), QString(), QString(), 0, 0,
+                               QString(), 0, QVariantMap());
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("pinapp"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToScreen);
+        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-1"));
+        rule.actions = {route};
+        RuleStore store(ConfigDefaults::rulesFilePath(), &parent);
+        QVERIFY(store.addRule(rule));
+        wta->setRuleStore(&store);
+
+        const QString w = QStringLiteral("pinapp|inst3");
+        wta->setFrameGeometry(w, 100, 100, 800, 600);
+
+        // ALREADY ON TARGET. The snap channel returns true...
+        QVERIFY2(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")),
+                 "a rule pinning the window to the screen it already occupies still owns that monitor");
+        // ...and the tiling channel must agree, with an EMPTY redirect (no
+        // move needed) but directiveMatched set — the two answers are
+        // deliberately separate.
+        bool matched = false;
+        const QString routed = wta->applyOpenRoutingForTiling(w, QStringLiteral("DP-1"), &matched);
+        QVERIFY2(routed.isEmpty(), "already on target: no redirect");
+        QVERIFY2(matched, "…but the directive matched, so the reclaim must be vetoed on this channel too");
+
+        // NO RULE AT ALL: both channels report unmatched, so the reclaim runs.
+        wta->setWindowMetadata(QStringLiteral("inst4"), QStringLiteral("otherapp"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, QVariantMap());
+        const QString other = QStringLiteral("otherapp|inst4");
+        wta->setFrameGeometry(other, 100, 100, 800, 600);
+        QVERIFY2(!wta->applyOpenScreenRouting(other, QStringLiteral("DP-1")), "no rule → no directive");
+        bool otherMatched = true;
+        QVERIFY(wta->applyOpenRoutingForTiling(other, QStringLiteral("DP-1"), &otherMatched).isEmpty());
+        QVERIFY2(!otherMatched, "no rule → no directive on the tiling channel either");
+
+        wta->setRuleStore(nullptr);
+        wta->setWindowRegistry(nullptr);
     }
 
     void testGuardedHandoff_refusalRehomesIntoSource()

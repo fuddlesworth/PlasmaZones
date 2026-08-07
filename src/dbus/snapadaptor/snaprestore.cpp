@@ -205,13 +205,16 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // defer verdict, never on a bare no-snap: an exclusion refusal, a
         // disabled context, or an ordinary no-match must not hand the window
         // to a reclaim those gates already settled. This is the channel that
-        // covers arrivals on snap-mode screens (the tiling dispatch only
-        // hears about engine-managed screens) — the engine whose TILED slot
-        // the record carries adopts the window into its recorded home and
-        // its retile moves it there. isOpenPath keeps the two NON-open
-        // drivers of this slot (the unminimize of a daemon-restart orphan,
-        // the pending-restores sweep) from teleporting a window the user
-        // merely unminimized.
+        // covers arrivals on SNAP-mode screens, which the tiling dispatch
+        // never hears about — the engine whose TILED slot the record carries
+        // adopts the window into its recorded home and its retile moves it
+        // there. (Managed-screen arrivals reach the reclaim through
+        // TilingAdaptor::dispatchOpenToClaimingEngine instead; windows that
+        // fail the effect's canSnapRestore gate never reach this slot at
+        // all — see setCrossScreenTileReclaim's contract.) isOpenPath keeps
+        // the two NON-open drivers of this slot (the unminimize of a
+        // daemon-restart orphan, the pending-restores sweep) from
+        // teleporting a window the user merely unminimized.
         if (result.deferredToTilingEngine) {
             const bool reclaimed =
                 isOpenPath && !routed && m_crossScreenTileReclaim && m_crossScreenTileReclaim(windowId, screenId);

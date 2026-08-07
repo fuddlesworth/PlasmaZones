@@ -763,6 +763,12 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
 QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId, const QString& screenId,
                                                          bool* directiveMatched)
 {
+    // Owned by this function, not the caller: a set-only out-param leaves a
+    // caller's pre-set value standing on every no-match path, which reads as
+    // "a rule matched" and silently vetoes the reclaim.
+    if (directiveMatched) {
+        *directiveMatched = false;
+    }
     if (!m_ruleStore) {
         return QString();
     }

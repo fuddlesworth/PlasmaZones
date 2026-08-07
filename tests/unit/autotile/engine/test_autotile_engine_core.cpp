@@ -3,6 +3,7 @@
 
 #include <QTest>
 #include <QCoreApplication>
+#include <QLoggingCategory>
 #include <QSignalSpy>
 
 #include <memory>
@@ -40,6 +41,35 @@ class TestAutotileEngineCore : public QObject
 
 private:
     PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
+
+    /// Tile-engine log capture, so a test can assert WHICH branch produced
+    /// an outcome rather than only that the outcome happened. Captures the
+    /// tile-engine category at both severities the engine uses (the branch
+    /// markers are a mix of qCDebug and qCInfo), and restores the caller's
+    /// filter rules rather than clearing them.
+    static QStringList& tileLogSink()
+    {
+        static QStringList sink;
+        return sink;
+    }
+    static void tileLogHandler(QtMsgType, const QMessageLogContext& ctx, const QString& msg)
+    {
+        if (ctx.category && QLatin1String(ctx.category) == QLatin1String("org.phosphor.tile-engine")) {
+            tileLogSink().append(msg);
+        }
+    }
+    template<typename Fn>
+    static QStringList captureTileLogs(Fn&& fn)
+    {
+        QLoggingCategory::setFilterRules(
+            QStringLiteral("org.phosphor.tile-engine.debug=true\norg.phosphor.tile-engine.info=true"));
+        tileLogSink().clear();
+        QtMessageHandler prev = qInstallMessageHandler(&TestAutotileEngineCore::tileLogHandler);
+        fn();
+        qInstallMessageHandler(prev);
+        QLoggingCategory::setFilterRules(qEnvironmentVariable("QT_LOGGING_RULES"));
+        return tileLogSink();
+    }
 
 private Q_SLOTS:
 
@@ -435,7 +465,11 @@ private Q_SLOTS:
         original.outerGap = 10;
         original.splitRatio = 0.65;
         original.masterCount = 2;
-        original.algorithmId = QStringLiteral("bsp");
+        // NOT the default ("bsp", AutotileDefaults::DefaultAlgorithmId): a
+        // round-trip assertion against a field's own default cannot fail,
+        // and this is the field that decides which algorithm a reloaded
+        // per-screen config uses.
+        original.algorithmId = QStringLiteral("columns");
         original.smartGaps = false;
         original.focusNewWindows = false;
         original.focusFollowsMouse = true;
@@ -915,6 +949,10 @@ private Q_SLOTS:
         QVERIFY(state);
         QVERIFY2(state->containsWindow(QStringLiteral("app|new")),
                  "the reclaimed window must re-enter the RECORDED screen's tiling state");
+        // A claim that pulled the window home and then floated it there would
+        // satisfy containsWindow alone — the record said TILED, so pin that.
+        QVERIFY2(!state->isFloating(QStringLiteral("app|new")),
+                 "a TILED record must be reclaimed as tiled, not floated on arrival");
     }
 
     void testClaimCrossScreenReopen_refusalLadder()
@@ -965,7 +1003,10 @@ private Q_SLOTS:
                  "a window this engine already tracks must never be re-claimed");
 
         // Home context NOT in autotile mode (default entry is Snapping):
-        // the mode check refuses even a perfectly-shaped tiled record.
+        // the MODE check must be the refusing branch, so DP-5 is added to
+        // the live screen set first — otherwise isActiveOnScreen refuses too
+        // and the leg would pass even with the mode term deleted.
+        engine.setAutotileScreens({home, QStringLiteral("DP-5")});
         WindowPlacement offMode;
         offMode.windowId = QStringLiteral("web|old");
         offMode.appId = QStringLiteral("web");
@@ -974,6 +1015,14 @@ private Q_SLOTS:
         QVERIFY(wts.placementStore().record(offMode));
         QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("web|new"), QStringLiteral("DP-9"), 0, 0),
                  "a home screen not in autotile mode must refuse the claim");
+
+        // Null dependencies (headless path): never claims. The scroll twin
+        // covers this through its unset resolver; autotile's equivalent is
+        // the tracker/layout-manager guard.
+        AutotileEngine headless(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        headless.setAutotileScreens({home});
+        QVERIFY2(!headless.claimCrossScreenReopen(QStringLiteral("app|new"), QStringLiteral("DP-9"), 0, 0),
+                 "an engine with no tracker or layout manager must never claim");
     }
 
     void testWindowOpened_defersToScrollingCrossScreenRestore()
@@ -1010,12 +1059,24 @@ private Q_SLOTS:
         rec.engines.insert(WindowPlacement::scrollingEngineId(), slot);
         QVERIFY(wts.placementStore().record(rec));
 
-        engine.windowOpened(QStringLiteral("term|new"), here);
+        const QStringList deferLines = captureTileLogs([&] {
+            engine.windowOpened(QStringLiteral("term|new"), here);
+        });
+        QVERIFY2(!deferLines.isEmpty(),
+                 "tile-engine log capture produced nothing — the branch assertion below "
+                 "would pass vacuously");
+        // tilingStateForScreen creates on demand (testStateForScreen_createNew
+        // pins that), so the state is never null here — asserting under an
+        // `if` would silently skip the whole check if that ever changed.
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(here);
-        if (state) {
-            QVERIFY2(!state->containsWindow(QStringLiteral("term|new")),
-                     "a cross-screen scrolling restore must not be adopted by autotile");
-        }
+        QVERIFY(state);
+        QVERIFY2(!state->containsWindow(QStringLiteral("term|new")),
+                 "a cross-screen scrolling restore must not be adopted by autotile");
+        // ...and specifically because the DEFER branch refused it, not some
+        // unrelated early bail: the engine logs a distinctive line there.
+        QVERIFY2(deferLines.join(QLatin1Char('\n'))
+                     .contains(QStringLiteral("defers — carries a cross-screen restore for another engine")),
+                 "the cross-screen defer gate must be the branch that refused adoption");
         // The record survives untouched for scrolling's claim.
         QVERIFY(wts.placementStore().peekExact(QStringLiteral("term|old")).has_value());
     }
