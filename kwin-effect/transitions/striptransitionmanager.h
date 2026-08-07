@@ -36,9 +36,12 @@ class PlasmaZonesEffect;
 /// no from/to endpoint pair and no progress: wheel scrolling retargets the
 /// view spring with PreserveVelocity on every batch (StripViewAnimator), so
 /// there are no discrete legs for a crossfade to play. Instead, every frame
-/// while the spring is live, the ordinary scene — columns already translated
+/// while the spring is live, the strip layer — columns already translated
 /// by the spring's offset, parked columns relocated, the tab-indicator
-/// surface riding along — is rendered into a per-output capture, and one
+/// surface riding along, the desktop background beneath — is rendered into
+/// a per-output capture (windows stacked ABOVE the strip are excluded and
+/// composited sharp on top after the pass, so an OSD popped mid-scroll is
+/// never smeared; see stripPassPaintsAboveStrip), and one
 /// full-screen quad runs the assigned strip pack (data/animations/<id>,
 /// appliesTo ["strip"], sampling uStrip via strip_transition.glsl) over it,
 /// driven by offset/velocity uniforms (iStripMotion). The pack DECORATES the

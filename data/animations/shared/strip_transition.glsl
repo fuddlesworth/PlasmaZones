@@ -22,10 +22,14 @@
 // on the settle frame — no fade is run for you — so a pack that still
 // distorts at zero motion pops when the normal scene paint takes over.
 //
-// The pass covers the FULL OUTPUT, so panels and floating windows above the
-// strip are inside the capture. A well-behaved pack confines its distortion
-// to the strip region via stripMask() below and passes everything else
-// through untouched.
+// The pass covers the FULL OUTPUT, but the capture holds only the STRIP
+// LAYER and what lies beneath it (the desktop background, keep-below
+// windows). Everything stacked above the strip — OSDs, notifications,
+// floating windows, panels, daemon overlays — is excluded from the capture
+// and composited sharp on top after the pass, so a pack cannot smear a
+// surface that is not scrolling. stripMask() below is still useful for
+// confining distortion to the strip's work area (keeping the wallpaper
+// margins steady, feathering the blur at the strip's edges).
 //
 // Strip transitions only ever run in the kwin-effect, and compositor-only
 // packs are excluded from the daemon's SPIR-V bake entirely, so the sampler

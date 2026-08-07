@@ -27,7 +27,7 @@
             "min": 0.0,
             "max": 0.2,
             "step": 0.01,
-            "description": "How softly the blur fades at the strip's edges, so panels and docks stay sharp.",
+            "description": "How softly the blur fades out at the edges of the strip area.",
             "group": "Blur"
         }
     ]

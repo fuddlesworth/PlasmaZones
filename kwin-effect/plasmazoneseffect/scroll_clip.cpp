@@ -57,6 +57,27 @@ KWin::LogicalOutput* PlasmaZonesEffect::scrollManagedOutputFor(KWin::EffectWindo
     return managed;
 }
 
+bool PlasmaZonesEffect::stripPassPaintsAboveStrip(KWin::EffectWindow* w) const
+{
+    // Which windows the strip shader pass must NOT warp: everything stacked
+    // above the strip layer. The capture keeps only the strip members, the
+    // tab-indicator surface that rides them, and what lies beneath (the
+    // desktop background and keep-below windows); the pass then composites
+    // the excluded set sharp on top (StripTransitionManager::paintOutput).
+    // Consulted only while m_stripCaptureExclusionOutput is latched, i.e.
+    // inside that capture's paintScreen.
+    if (!w || w->isDesktop() || w->keepBelow()) {
+        return false;
+    }
+    if (scrollManagedOutputFor(w) == m_stripCaptureExclusionOutput) {
+        return false;
+    }
+    if (isScrollTabIndicatorSurface(w)) {
+        return false;
+    }
+    return true;
+}
+
 QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w) const
 {
     // The rect form of scrollManagedOutputFor, for the input filter, which

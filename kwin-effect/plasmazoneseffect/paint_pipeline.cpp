@@ -890,6 +890,20 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         }
     }
 
+    // Strip-pass capture exclusion. While StripTransitionManager captures the
+    // scene for its post-process, every window stacked ABOVE the strip (OSDs,
+    // notifications, floating windows, panels, daemon overlays) is skipped
+    // here and RECORDED — the manager composites exactly the recorded set,
+    // in this same bottom-to-top paint order, sharp on top of the shader
+    // output. Without this the capture is the whole scene and a volume OSD
+    // popped mid-scroll gets motion-blurred with the columns. The latch is
+    // scoped to the capture's paintScreen call, so the top-composite's own
+    // paintWindow re-entry (latch already cleared) paints normally.
+    if (m_stripCaptureExclusionOutput && stripPassPaintsAboveStrip(w)) {
+        m_stripCaptureSkippedWindows.append(w);
+        return;
+    }
+
     // Read the cached per-frame clock pinned by prePaintScreen. Multiple
     // paintWindow calls within one OUTPUT PASS (multi-pass, back-to-back
     // paint cycles driven by our addRepaint) would otherwise each see a

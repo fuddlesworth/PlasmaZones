@@ -760,6 +760,14 @@ private:
      * overhang is drawn and remains interactive either way.
      */
     QRect scrollClipGeometryFor(KWin::EffectWindow* w) const;
+
+    /// True when @p w stacks ABOVE the strip layer and must stay out of the
+    /// strip shader pass's capture (composited sharp on top instead): OSDs,
+    /// notifications, floating windows, panels, daemon overlays — everything
+    /// that is not a strip member, the tab-indicator surface, the desktop
+    /// background or a keep-below window. Only meaningful while
+    /// m_stripCaptureExclusionOutput is latched. Impl in scroll_clip.cpp.
+    bool stripPassPaintsAboveStrip(KWin::EffectWindow* w) const;
     TilingHandler* tilingHandler() const
     {
         return m_tilingHandler.get();
@@ -1898,6 +1906,17 @@ private:
     /// cross), so the cache also bounds what that mode pays for a cull that
     /// cannot fire for it.
     mutable QHash<KWin::EffectWindow*, KWin::LogicalOutput*> m_scrollManagedCache;
+
+    /// Latched by StripTransitionManager around its capture's paintScreen:
+    /// while set, paintWindow skips every window stripPassPaintsAboveStrip
+    /// accepts and records it below, so the pass can composite exactly that
+    /// set sharp on top of the shader output. Null outside a capture.
+    KWin::LogicalOutput* m_stripCaptureExclusionOutput = nullptr;
+    /// The windows skipped by the current capture, in paint (bottom-to-top
+    /// stacking) order. Filled while the latch above is set; consumed and
+    /// cleared by the same paintOutput call, so entries never outlive the
+    /// frame.
+    QList<KWin::EffectWindow*> m_stripCaptureSkippedWindows;
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
     void onScreenAdded(KWin::LogicalOutput* output);
     void onScreenRemoved(KWin::LogicalOutput* output);

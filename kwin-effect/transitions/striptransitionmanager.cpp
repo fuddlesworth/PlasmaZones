@@ -17,12 +17,16 @@
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
 #include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 #include <opengl/glframebuffer.h>
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
 
+#include <scene/windowitem.h>
+
 #include <QPoint>
 #include <QRectF>
+#include <QScopeGuard>
 #include <QSize>
 #include <QVector2D>
 
@@ -209,6 +213,18 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         KWin::GLFramebuffer::pushFramebuffer(pass.captureFbo.get());
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
+        // Exclude everything stacked ABOVE the strip from the capture (OSDs,
+        // notifications, floating windows, panels, daemon overlays): the
+        // pack must not smear surfaces that are not scrolling. paintWindow
+        // records the skipped set in paint order while this latch is set,
+        // and the tail below composites exactly that set sharp on top of
+        // the shader output. Scope-guarded so a throw inside the scene walk
+        // cannot leak the latch into live painting.
+        m_effect->m_stripCaptureSkippedWindows.clear();
+        m_effect->m_stripCaptureExclusionOutput = screen;
+        const auto exclusionGuard = qScopeGuard([this] {
+            m_effect->m_stripCaptureExclusionOutput = nullptr;
+        });
         // Device-space region rooted at (0, 0) — the FBO's own space, not the
         // output-positioned logical geometry; see captureLiveScene's note.
         KWin::effects->paintScreen(captureTarget, captureViewport, mask,
@@ -271,53 +287,83 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     glViewport(0, 0, targetSize.width(), targetSize.height());
     glDisable(GL_BLEND); // the decorated scene is itself opaque — replace the output
 
-    KWin::ShaderBinder binder(cs->shader.get());
-    cs->shader->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, viewport.projectionMatrix());
-    if (cs->iTimeLoc >= 0) {
-        // SECONDS since this output's pass activated — monotonic, never
-        // rewinding on a retarget. NOT progress; see strip_transition.glsl.
-        cs->shader->setUniform(cs->iTimeLoc, float(qreal(nowMs - pass.startTimeMs) / 1000.0));
-    }
-    if (cs->iResolutionLoc >= 0) {
-        cs->shader->setUniform(cs->iResolutionLoc, QVector2D(float(deviceSize.width()), float(deviceSize.height())));
-    }
-    if (cs->iFrameLoc >= 0) {
-        cs->shader->setUniform(cs->iFrameLoc, pass.frameCount);
-    }
-    ++pass.frameCount;
-    if (cs->iStripMotionLoc >= 0) {
-        cs->shader->setUniform(
-            cs->iStripMotionLoc,
-            QVector4D(offsetDevice, velocityDevice, offsetDevice / deviceW, velocityDevice / deviceW));
-    }
-    if (cs->iStripRectLoc >= 0) {
-        cs->shader->setUniform(cs->iStripRectLoc, stripRect);
-    }
-    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
-        if (cs->customParamsLoc[slot] >= 0) {
-            cs->shader->setUniform(cs->customParamsLoc[slot], pass.customParams[slot]);
+    {
+        KWin::ShaderBinder binder(cs->shader.get());
+        cs->shader->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, viewport.projectionMatrix());
+        if (cs->iTimeLoc >= 0) {
+            // SECONDS since this output's pass activated — monotonic, never
+            // rewinding on a retarget. NOT progress; see strip_transition.glsl.
+            cs->shader->setUniform(cs->iTimeLoc, float(qreal(nowMs - pass.startTimeMs) / 1000.0));
         }
-    }
-    for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
-        if (cs->customColorsLoc[slot] >= 0) {
-            cs->shader->setUniform(cs->customColorsLoc[slot], pass.customColors[slot]);
+        if (cs->iResolutionLoc >= 0) {
+            cs->shader->setUniform(cs->iResolutionLoc,
+                                   QVector2D(float(deviceSize.width()), float(deviceSize.height())));
         }
-    }
-    if (cs->uStripLoc >= 0) {
-        cs->shader->setUniform(cs->uStripLoc, 0);
-        glActiveTexture(GL_TEXTURE0);
-        pass.captureTex->bind();
-    }
+        if (cs->iFrameLoc >= 0) {
+            cs->shader->setUniform(cs->iFrameLoc, pass.frameCount);
+        }
+        ++pass.frameCount;
+        if (cs->iStripMotionLoc >= 0) {
+            cs->shader->setUniform(
+                cs->iStripMotionLoc,
+                QVector4D(offsetDevice, velocityDevice, offsetDevice / deviceW, velocityDevice / deviceW));
+        }
+        if (cs->iStripRectLoc >= 0) {
+            cs->shader->setUniform(cs->iStripRectLoc, stripRect);
+        }
+        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
+            if (cs->customParamsLoc[slot] >= 0) {
+                cs->shader->setUniform(cs->customParamsLoc[slot], pass.customParams[slot]);
+            }
+        }
+        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
+            if (cs->customColorsLoc[slot] >= 0) {
+                cs->shader->setUniform(cs->customColorsLoc[slot], pass.customColors[slot]);
+            }
+        }
+        if (cs->uStripLoc >= 0) {
+            cs->shader->setUniform(cs->uStripLoc, 0);
+            glActiveTexture(GL_TEXTURE0);
+            pass.captureTex->bind();
+        }
 
-    TransitionPass::drawOutputQuad(viewport);
+        TransitionPass::drawOutputQuad(viewport);
 
-    // Unbind the capture unit: ScopedGlState restores the active-unit ENUM,
-    // not the BINDINGS, and a name still bound when a reap later deletes it
-    // survives as a dangling reference — the exact hole the desktop pass
-    // documents at its own unbind.
-    if (cs->uStripLoc >= 0) {
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        // Unbind the capture unit: ScopedGlState restores the active-unit
+        // ENUM, not the BINDINGS, and a name still bound when a reap later
+        // deletes it survives as a dangling reference — the exact hole the
+        // desktop pass documents at its own unbind.
+        if (cs->uStripLoc >= 0) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+    } // binder out of scope before the composite binds its own shaders
+
+    // Composite the windows the capture excluded — exactly the set recorded
+    // during the exclusion latch, in the same bottom-to-top paint order —
+    // sharp on top of the shader output. Same direct-drive shape as the
+    // desktop pass's compositeWindowsInto: drive each window through OUR OWN
+    // paintWindow so decorations, rule opacity and in-flight per-window
+    // transitions all apply, with m_directPaintCapture terminating its tail
+    // in a raw draw (the chain iterator is at begin() here). These windows
+    // DID get prePaintWindow this frame — they were in the scene walk and
+    // skipped only at paint — so no state is missing. KWin's item renderer
+    // manages its own blend state for translucent surfaces (the tail's
+    // glDisable(GL_BLEND) above only covered the opaque quad).
+    const QList<KWin::EffectWindow*> aboveStrip = std::move(m_effect->m_stripCaptureSkippedWindows);
+    m_effect->m_stripCaptureSkippedWindows.clear();
+    if (!aboveStrip.isEmpty()) {
+        m_effect->m_directPaintCapture = true;
+        const auto directPaintGuard = qScopeGuard([this] {
+            m_effect->m_directPaintCapture = false;
+        });
+        for (KWin::EffectWindow* w : aboveStrip) {
+            KWin::ItemEffect keepRenderable(w->windowItem());
+            KWin::WindowPaintData aboveData;
+            aboveData.setOpacity(1.0);
+            const int aboveMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
+            m_effect->paintWindow(renderTarget, viewport, w, aboveMask, KWin::Region::infinite(), aboveData);
+        }
     }
 
     if (targetFb) {
