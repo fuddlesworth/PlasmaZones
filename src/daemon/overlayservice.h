@@ -1111,10 +1111,13 @@ private:
     void destroyZoneSelectorWindow(const QString& screenId);
     void updateZoneSelectorWindow(const QString& screenId);
     void showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked);
-    /// Tear down the per-screen passive overlay shell. Deletes the
-    /// shell PhosphorLayer::Surface (and its QQuickWindow + every slot
-    /// QQuickItem owned by it). Called from
-    /// `destroyAllWindowsForPhysicalScreen` on screen hot-plug cleanup.
+    /// Tear down BOTH of the screen's shells, tab shell first. Deletes each
+    /// PhosphorLayer::Surface (and its QQuickWindow + every slot QQuickItem
+    /// owned by it). Despite the name this is the tab shell's ONLY teardown
+    /// path, which is why the two are paired here rather than at each caller.
+    /// Called from `destroyAllWindowsForPhysicalScreen` on hot-plug cleanup and
+    /// from the virtual-screen reconfiguration branches of
+    /// `onVirtualScreensChanged`.
     void destroyPassiveShell(const QString& screenId);
 
     /// Lazily create the per-screen PassiveOverlayShell + return the
@@ -1164,8 +1167,9 @@ private:
     void syncScrollTabShellSurfaceState(const QString& effectiveId);
 
     /// Publish (or retract, with @p window null) the wl_surface object id of
-    /// @p screenId's tab-indicator surface. Change-gated, so the ordinary
-    /// re-assert on every strip update costs one hash compare.
+    /// @p screenId's tab-indicator surface. Change-gated, so the re-assert on
+    /// every SHOW costs one hash compare. Not on every strip update: an
+    /// already-visible indicator returns before reaching the announce.
     void announceScrollTabSurface(const QString& screenId, QQuickWindow* window);
 
     /// Drop @p screenId's now-dead ShellState entry on BOTH hosts. Destroying a

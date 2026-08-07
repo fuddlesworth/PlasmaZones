@@ -148,9 +148,10 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     m_screenStates.erase(donor);
     auto inserted = m_screenStates.insert(newKey, std::move(state));
 
-    // SEVEN per-screen overlay maps are keyed by screen id too — five for the
-    // scroll tab strips, two for the drag drop indicator — and each needs
-    // something different from the move:
+    // Several more per-screen overlay maps are keyed by screen id, and each
+    // needs something different from the move. Deliberately not a count: the
+    // enumeration below drifted from one twice already, and what matters is
+    // that a map is named here at all.
     //  - m_lastScrollTabStrips MUST follow. It is the cached model the
     //    enable toggle replays, so left under the dead key, re-enabling the
     //    indicator would replay nothing until the next structural strip
@@ -303,17 +304,28 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
         // both be null/missing). Catches desync from a failed rekey,
         // an out-of-band lib mutation, or a future code path that
         // forgets to refresh the daemon-side cache.
+        // stateFor is a peek: it is declared const-only and returns
+        // pointer-or-nullptr, and the accessor that materializes an entry on a
+        // miss is separately named getOrCreateStateFor precisely so a
+        // debug-only check like this one cannot reach it by accident.
+        //
+        // Both borrowed pointers are checked. The tab shell is a second
+        // pointer into a second host with the same desync sources — a refused
+        // rekey, or a PostCreate that tears itself down.
         if (it.value().shell) {
-            // Explicit const-pointer binding to reach the const
-            // overload of stateFor (returns pointer-or-nullptr); the
-            // non-const overload would materialize an entry on a
-            // miss, which we must not do from a debug-only check.
-            const PhosphorOverlay::ShellHost* host = m_shellHost.get();
-            const PhosphorOverlay::ShellState* libState = host->stateFor(it.key());
+            const PhosphorOverlay::ShellState* libState = m_shellHost->stateFor(it.key());
             if (libState != it.value().shell) {
                 qCWarning(lcOverlay) << "validateScreenStateInvariant: daemon/lib ShellState pointer desync for"
                                      << it.key() << "daemon=" << it.value().shell << "lib=" << libState;
                 Q_ASSERT_X(false, "OverlayService", "daemon/lib ShellState pointer desync");
+            }
+        }
+        if (it.value().tabShell) {
+            const PhosphorOverlay::ShellState* libTabState = m_tabShellHost->stateFor(it.key());
+            if (libTabState != it.value().tabShell) {
+                qCWarning(lcOverlay) << "validateScreenStateInvariant: daemon/lib tab ShellState pointer desync for"
+                                     << it.key() << "daemon=" << it.value().tabShell << "lib=" << libTabState;
+                Q_ASSERT_X(false, "OverlayService", "daemon/lib tab ShellState pointer desync");
             }
         }
         if (!it.value().overlayPhysScreen) {

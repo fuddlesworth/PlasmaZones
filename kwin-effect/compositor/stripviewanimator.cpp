@@ -51,9 +51,12 @@ void StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
 
     if (!m_enabled) {
         // Animations off: the strip jumps to the committed positions, which is
-        // what the apply path has already done. Keep the accumulator moving so
-        // a later re-enable starts from a truthful baseline rather than
-        // springing away an offset that was never on screen.
+        // what the apply path has already done. The accumulator still moves,
+        // but only for bookkeeping symmetry within this disabled episode —
+        // setEnabled(false) clears m_motions outright, so nothing survives the
+        // toggle itself. That costs nothing either way: offsetFor only ever
+        // reads committed MINUS the animated value, so the absolute origin is
+        // arbitrary and only differences are observable.
         motion.animation.cancel();
         return;
     }
@@ -64,6 +67,16 @@ void StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
         // drive a leg, and an un-advanced animation would freeze the strip at
         // a permanent offset, so leave the view at rest on the committed
         // geometry.
+        //
+        // Damage first if a leg was live: the offset it was contributing
+        // vanishes with the cancel, and nothing else will repaint it away.
+        // advance() was the frame pump, and the columns' committed geometry is
+        // already final, so KWin sees no reason of its own to redraw — the last
+        // presented frame would keep the stale offset until unrelated damage
+        // happened along. setEnabled(false) handles the same case the same way.
+        if (motion.animation.isAnimating() && m_repaintRequest) {
+            m_repaintRequest(output);
+        }
         motion.animation.cancel();
         return;
     }

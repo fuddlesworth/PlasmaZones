@@ -520,10 +520,11 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     // below would offer geometry and appearance packs on a row that can only
     // ever ignore them — the silent no-op this predicate exists to prevent.
     //
-    // A settle leg is genuinely pack-SHAPED (it has real endpoints and rides an
-    // AnimatedValue exactly like a geometry morph), so this is a statement
-    // about the current wiring and not about the contract. Whoever gives the
-    // view leg a shader contract deletes this branch and classes it instead.
+    // The view leg is nonetheless pack-SHAPED in principle: it has real
+    // endpoints and rides an AnimatedValue exactly like a geometry morph. So
+    // this is a statement about the current wiring and not about the contract.
+    // Whoever gives it a shader contract deletes this branch and classes it
+    // instead.
     if (path == PP::Scrolling || path.startsWith(PP::Scrolling + QLatin1Char('.')))
         return false;
     // Universal effect (no declared constraint) runs on every single-surface path.

@@ -116,9 +116,19 @@ public:
     int reapAnimationsForClock(const PhosphorAnimation::IMotionClock* clock);
 
     void advanceAnimations();
-    void scheduleRepaints() const;
 
 private:
+    /// Damage every output with a live leg.
+    ///
+    /// Private, and deliberately not a per-frame driver the way the window
+    /// animator's namesake is: an in-flight AnimatedValue calls
+    /// clock->requestFrame() on every tick, and CompositorClock turns that
+    /// into an addRepaint for the output, so the leg pumps its own frames.
+    /// This exists for the paths that drop a leg without advancing it, where
+    /// the last presented frame still carries an offset nothing else will
+    /// repaint away.
+    void scheduleRepaints() const;
+
     struct ViewMotion
     {
         /// Where the strip's committed geometry currently sits, in this

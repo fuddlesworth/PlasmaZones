@@ -1135,9 +1135,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // one shared offset puts both back where they were and slides them
             // in step.
             //
-            // The cheap map lookup is deliberately first: the scope test behind
-            // it walks a cast and a string, and no surface needs an offset on
-            // an output whose strip is at rest.
+            // The cheap map lookup is deliberately first: the indicator test
+            // behind it resolves the window's surface and compares its window
+            // class, and no surface needs an offset on an output whose strip is
+            // at rest.
             data += QPointF(m_stripViewAnimator->offsetFor(out), 0.0);
         }
     }
