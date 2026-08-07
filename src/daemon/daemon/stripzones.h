@@ -194,7 +194,9 @@ parseTabStripPayload(const QString& stripsJson, const std::function<QString(cons
         // The engine always writes the position; a missing key would mean a
         // producer/consumer version split, and Top is the least surprising
         // reading of a rect whose orientation we cannot confirm.
-        strip.insert(QLatin1String("position"), stripObj.value(QLatin1String("position")).toInt(2));
+        strip.insert(QLatin1String("position"),
+                     stripObj.value(QLatin1String("position"))
+                         .toInt(static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Top)));
         // -1, not 0, purely defensive: the producer always writes the key, but
         // a missing one must read as "no active tab" rather than lighting up
         // tab 0.

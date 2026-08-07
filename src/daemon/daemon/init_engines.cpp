@@ -273,6 +273,11 @@ void Daemon::initEnginesAndWiring()
             m_settings->save();
         }
     });
+    // Wired for symmetry, not because it fires today: the only producer of
+    // settingsPersistRequested is AutotileEngine's write-back guard timer, and
+    // the scroll engine emits it nowhere. Kept so a scroll-side write-back
+    // lands with its persistence already connected rather than silently
+    // dropping, which is the failure this signal exists to prevent.
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
         if (m_settings) {
             m_settings->save();

@@ -345,8 +345,8 @@ void SettingsController::buildApplicationController()
     // Motion — movement and geometry events. Window motion (maximize / snap /
     // layout switch) carries the geometry shader contract, so its page still
     // shows a shader picker; the held drag is its own opt-in `move` class on
-    // the Window Dragging child page; side panels, widgets and the editor are
-    // timing/curve only.
+    // the Window Dragging child page; scrolling, side panels, widgets and the
+    // editor are timing/curve only.
     regVirtual(QStringLiteral("animations-motion"), QStringLiteral("animations"), PhosphorI18n::tr("Motion"), QString(),
                QStringLiteral("chronometer"), /*collapsible=*/true);
     regVirtual(QStringLiteral("animations-library"), QStringLiteral("animations"), PhosphorI18n::tr("Library"),
@@ -367,9 +367,17 @@ void SettingsController::buildApplicationController()
                PhosphorI18n::tr("Desktop"), QStringLiteral("pages/animations/AnimationsDesktopsPage.qml"),
                QStringLiteral("virtual-desktops"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
+    // First among Motion's children because the strip's view is the coarsest
+    // subject here — one leg moves every window on the screen — and the rows
+    // below it narrow from there to a single window's motion.
+    //
+    // Icon matches the Placement → Scrolling row rather than the Snapping one:
+    // this page configures that section's motion, and the rail showing the
+    // same glyph for two unrelated rows is what the note above the Snapping
+    // registration warns against.
     regVirtual(QStringLiteral("animations-scrolling"), QStringLiteral("animations-motion"),
                PhosphorI18n::tr("Scrolling"), QStringLiteral("pages/animations/AnimationsScrollingPage.qml"),
-               QStringLiteral("view-split-left-right"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+               QStringLiteral("distribute-horizontal-equal"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     regVirtual(QStringLiteral("animations-window-motion"), QStringLiteral("animations-motion"),
                PhosphorI18n::tr("Window Motion"), QStringLiteral("pages/animations/AnimationsWindowMotionPage.qml"),

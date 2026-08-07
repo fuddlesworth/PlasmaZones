@@ -544,8 +544,21 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // straddle. Vertical stack overflow is enforced unconditionally
             // further down.
             constexpr int kMinVisiblePeekPx = 48;
+            // Set when the clamp MOVES the tile's left edge, which pins its x
+            // at the screen edge instead of leaving it where the strip put it.
+            // The right-edge clamp keeps x and only changes width, so it does
+            // not qualify — the asymmetry is QRect's: setLeft moves x1 and
+            // holds x2, setRight holds x1 and moves x2.
+            bool clampPinnedX = false;
             if (!m_cropStraddlers && !parkedNow) {
                 const bool straddleRight = rect.right() > screenRect.right() && rect.left() <= screenRect.right();
+                // Both predicates read the PRE-mutation rect, and the left one
+                // is consumed after the right branch may have called setRight.
+                // Safe only because the two are mutually exclusive: a column
+                // cannot straddle both edges, since columnWidthPx caps every
+                // column at the work area's width, which is never wider than
+                // the screen. That is a non-local invariant holding this code
+                // up, so it is stated here rather than left to be rediscovered.
                 const bool straddleLeft = rect.left() < screenRect.left() && rect.right() >= screenRect.left();
                 if (straddleRight || straddleLeft) {
                     // Under respectMinimumSize the peek floor rises to the
@@ -586,6 +599,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                     if (!parkedNow && straddleLeft) {
                         const int visible = rect.right() + 1 - screenRect.left();
                         if (visible >= peekFloorX) {
+                            clampPinnedX = rect.left() != screenRect.left();
                             rect.setLeft(screenRect.left());
                         } else {
                             scrollEdge = QStringLiteral("left");
@@ -655,7 +669,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // back by the delta lands it at its real pre-scroll strip position,
             // which is where it actually was, rather than at a made-up point
             // just outside the screen edge.
-            if (!parkedNow && viewDelta != 0) {
+            //
+            // Suppressed when the left-edge clamp pinned this tile's x. The
+            // field asserts that the view carried the window by exactly this
+            // much, which the effect relies on to build a DEGENERATE per-window
+            // leg — origin = current - delta lands on the target, so no second
+            // spring runs. A pinned tile sits at the same x across consecutive
+            // batches while the delta says otherwise, so that leg would be real
+            // and would fight the view spring over the same pixels with a
+            // different profile: the peek column would visibly swing out and
+            // back instead of staying against the edge. Dropping the field
+            // costs it the ride and leaves it to its own motion, which is the
+            // honest description of a window the layout is holding still.
+            if (!parkedNow && viewDelta != 0 && !clampPinnedX) {
                 obj[QLatin1String("viewDeltaX")] = viewDelta;
             }
             // A parked column keeps its strip position as a PAINT hint. The

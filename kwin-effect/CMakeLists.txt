@@ -184,7 +184,8 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # direct link, matching the PhosphorAnimation rationale below.
     PhosphorEngine::PhosphorEngine
     PhosphorProtocol::PhosphorProtocol
-    # Explicit link: `compositorclock.h` and `windowanimator.h` directly
+    # Explicit link: `compositorclock.h`, `windowanimator.h` and
+    # `stripviewanimator.h` directly
     # include `<PhosphorAnimation/...>`. PhosphorCompositor does NOT link
     # PhosphorAnimation, so this is a genuine direct dependency, not a
     # transitive re-export. Named here so the link graph matches the

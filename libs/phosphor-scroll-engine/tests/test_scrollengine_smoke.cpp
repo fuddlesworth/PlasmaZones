@@ -897,6 +897,12 @@ void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
         // Sign: the field is the translation that puts the window BACK where
         // it was rendered, which is where the effect starts its spring before
         // ringing it out to zero — so it is the negation of the movement.
+        //
+        // Holds for a tile the layout left where the strip put it, which is
+        // every tile in this fixture. A straddling tile whose left edge the
+        // clamp pins at the screen edge does NOT move by the view delta, and
+        // the engine drops the field for exactly that reason — the boundary
+        // suite owns that case.
         QCOMPARE(prev->x() - now.x(), o.value(QLatin1String("viewDeltaX")).toInt());
         QCOMPARE(now.y(), prev->y());
         QCOMPARE(now.size(), prev->size());
