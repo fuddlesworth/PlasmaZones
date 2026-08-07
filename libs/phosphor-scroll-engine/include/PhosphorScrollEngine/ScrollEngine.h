@@ -130,6 +130,18 @@ public:
 
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
+    /// Cross-screen session reclaim (see IPlacementEngine for the base
+    /// contract). This implementation: first-observation gate by ScrollState
+    /// MEMBERSHIP (not the raw reverse-map key); decides via the store's
+    /// live-instance-excluding peekForReclaim over the registry-aware appId;
+    /// requires the recorded home in the LIVE scrolling set AND the record's
+    /// (desktop, activity) to equal the home screen's current key; and
+    /// returns the REAL adoption outcome verified by membership after the
+    /// windowOpened re-entry. Peek-not-take: consumption stays with the open
+    /// path's own restore machinery (strip stash claim, takeForReopen).
+    bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
+                                int minHeight) override;
+    QString heldScreenForWindow(const QString& windowId) const override;
     void beginArrivalBurst() override;
     void endArrivalBurst() override;
     void windowClosed(const QString& windowId) override;
@@ -574,19 +586,48 @@ public:
         m_openParamsResolver = std::move(resolver);
     }
 
-    /// Snapping-mode resolver for windowOpened's cross-screen snap-restore
-    /// defer gate (the reciprocal of SnapEngine::resolveWindowRestore's
-    /// recorded-screen gate; AutotileEngine::windowOpened carries the same
-    /// gate). Invoked as (screenId, virtualDesktop, activity) and must
-    /// answer whether that context resolves to Snapping mode AND snapping
-    /// is globally preferred — the daemon bakes both into the closure so
-    /// this library stays free of the zones-layer mode type. Unset → the
-    /// gate is off and every open is claimed (headless/test path). Same
-    /// clear-before-destroy contract as the other injected closures.
-    using SnappingModeResolver = std::function<bool(const QString& screenId, int desktop, const QString& activity)>;
-    void setSnappingModeResolver(SnappingModeResolver resolver)
+    /// Context-mode resolver shape shared by the three injected closures
+    /// below: invoked as (screenId, virtualDesktop, activity) → bool. The
+    /// daemon bakes the mode lookup (and, where relevant, engine liveness
+    /// and global toggles) into each closure so this library stays free of
+    /// the zones-layer mode type. Same clear-before-destroy contract as the
+    /// other injected closures.
+    using ModeResolver = std::function<bool(const QString& screenId, int desktop, const QString& activity)>;
+
+    /// Snapping-mode resolver for windowOpened's cross-screen restore defer
+    /// gate (one term of the N-way reciprocity with the other engines'
+    /// gates and claims). Must answer whether the RECORDED context resolves
+    /// to Snapping mode AND snapping is globally preferred — a disabled snap
+    /// engine never claims, so deferring to it would strand the window.
+    /// Unset → this gate TERM is off (the autotile term below self-gates
+    /// independently); with neither resolver set every open is claimed
+    /// (headless/test path).
+    void setSnappingModeResolver(ModeResolver resolver)
     {
         m_snappingModeResolver = std::move(resolver);
+    }
+
+    /// Scrolling-mode resolver for claimCrossScreenReopen — must answer
+    /// whether the RECORDED context resolves to Scrolling mode, so a session
+    /// window KWin dropped on the wrong output is pulled back to its recorded
+    /// scrolling screen. Unset → this engine never claims cross-screen
+    /// (headless/test path).
+    void setScrollingModeResolver(ModeResolver resolver)
+    {
+        m_scrollingModeResolver = std::move(resolver);
+    }
+
+    /// Autotile-mode resolver for windowOpened's cross-screen tile-restore
+    /// defer gate: a window arriving here that carries a TILED autotile slot
+    /// recorded on an autotile-mode screen belongs to autotile's cross-screen
+    /// reclaim, and this engine must not splice it into the strip. Must
+    /// answer mode AND autotile liveness on that screen (the daemon owns
+    /// both engines and bakes the liveness term in — deferring to an engine
+    /// whose live set disagrees with the assignment would strand the
+    /// window). Unset → this gate TERM is off.
+    void setAutotileModeResolver(ModeResolver resolver)
+    {
+        m_autotileModeResolver = std::move(resolver);
     }
 
     /// Per-context (window-rule) gap overrides, resolved daemon-side so this
@@ -717,9 +758,11 @@ private:
     /// Consume @p windowId from a screen's mode-transition seed (marking it
     /// in m_consumedInitialOrder; the list itself keeps its positions) and
     /// drop both entries once every listed id is consumed — MUST run on
-    /// every windowOpened outcome (tiled, consumed, floated, and the
-    /// cross-screen snap-restore defer that hands the window to snap), or a
-    /// stale seed survives to re-position an unrelated later open.
+    /// every windowOpened outcome (tiled, consumed, floated, the cross-screen
+    /// restore defer that hands the window to another engine, and — for the
+    /// ARRIVAL screen — a successful claimCrossScreenReopen, whose dispatch
+    /// short-circuits the arrival-screen open), or a stale seed survives to
+    /// re-position an unrelated later open.
     void consumePendingInitialOrder(const QString& screenId, const QString& windowId);
     /// Drop per-screen bookkeeping (seed, tab-strip latch) for each screen
     /// in @p screenIds that no longer has ANY context state. Overrides
@@ -926,38 +969,8 @@ private:
     QHash<QString, QString> m_parkedScrollEdge;
     /// What a floated/minimized window's column held, so unfloat restores
     /// the slot AND the user's width/display intent (a Proportion/Preset
-    /// column must not come back as the default width). The min size IS
-    /// captured (minWidth/minHeight below): dropping it would strip the
-    /// relayout clamps until the compositor re-reports.
-    struct FloatRestore
-    {
-        int column = -1;
-        ColumnWidth width;
-        ColumnDisplay display = ColumnDisplay::Normal;
-        /// The tile slot inside a SHARED column (-1 when the window had its
-        /// own column). A stacked tile's float round-trip re-enters its
-        /// surviving stack instead of spawning a new column at the index.
-        int tileIndex = -1;
-        /// A surviving SIBLING of the shared column, used to re-locate the
-        /// stack at restore time — the bare column index goes stale when
-        /// columns close while the window floats, and a stale index would
-        /// splice the window into a stranger's stack.
-        QString stackAnchor;
-        /// Client-reported minimum size at float time — the tile that held
-        /// it dies with takeWindow, and dropping it would strip the
-        /// relayout clamps until the compositor happens to re-report.
-        /// Kept CURRENT while the window floats: windowMinSizeUpdated has no
-        /// tile to write to then, and without the write-through the unfloat
-        /// re-applies whatever the client reported at float time.
-        int minWidth = 0;
-        int minHeight = 0;
-        /// The tile's height INTENT at float time. Same reasoning as the
-        /// width/display above: without it a float round trip (which the
-        /// effect's minimize machinery also drives) silently reset a
-        /// user-set window height to Auto, while a mode round trip — which
-        /// stashes the intent — preserved it.
-        WindowHeight height;
-    };
+    /// column must not come back as the default width). Value type hoisted
+    /// to ScrollStashTypes.h (the stash types' file-size-ceiling precedent).
     QHash<QString, FloatRestore> m_floatRestore;
     /// Live drag-insert preview state (drag_preview.cpp). The structural
     /// edits a preview makes while it is LIVE are signal-silent, mirroring
@@ -970,53 +983,6 @@ private:
     /// re-home a window whose prior context died — those paths genuinely
     /// changed which strip holds the window, so leaving the daemon's
     /// bookkeeping stale would be the bug.
-    struct DragInsertPreview
-    {
-        QString windowId;
-        QString targetScreenId;
-        /// The context the preview inserted into, captured at begin so the
-        /// prune paths can tell whether a dying context strands it.
-        PhosphorEngine::PlacementStateKey targetKey;
-        /// The most recent hit-tested drop target, stored verbatim —
-        /// nothing structural happens until commit applies it.
-        DragInsertTarget lastTarget;
-        /// The window's OWN begin-time width/display/height/min-size
-        /// intents. Never refreshed mid-drag: reading them from a transient
-        /// host column stamped foreign widths across columns in the abandoned
-        /// live-restructure design.
-        ///
-        /// How much of it commit applies depends on the drop. A NEW-COLUMN
-        /// drop applies all of it. A JOIN discards width and display, because
-        /// the window becomes a tile of a host column that already owns both,
-        /// and only the height and min-size intents survive. That is a
-        /// property of what a join means rather than an oversight, but the
-        /// word "applied at commit" read as though the whole struct always
-        /// made it through.
-        FloatRestore carried;
-        // ── cancel restoration ──
-        /// Set when begin's defensive block took the window out of the
-        /// TARGET strip despite it having no reverse-map entry (a stale
-        /// forward state). That take is a real structural edit made with
-        /// hadPriorState false, so cancel's "fresh adoption never touched
-        /// anything" early return would abandon the window: out of the strip
-        /// AND untracked, gone from the engine entirely. The slot it held is
-        /// in defensiveSlot.
-        bool defensivelyDetached = false;
-        FloatRestore defensiveSlot;
-        bool hadPriorState = false;
-        PhosphorEngine::PlacementStateKey priorKey;
-        /// Whole-key comparison (screen AND desktop AND activity): a
-        /// same-screen/different-desktop prior context reads false.
-        bool priorSameKey = false;
-        bool priorFloating = false;
-        /// The tiled slot at begin time (valid when !priorFloating).
-        FloatRestore priorSlot;
-        /// The m_floatRestore entry begin consumed when it silently
-        /// unfloated the window; re-inserted verbatim on cancel.
-        bool hadFloatRestoreEntry = false;
-        FloatRestore floatRestoreEntry;
-        bool wasScrollFloated = false;
-    };
     std::optional<DragInsertPreview> m_dragInsertPreview;
     /// Canonical id of the window under a compositor interactive move (see
     /// setInteractiveDragWindow). Independent of the preview: the mark
@@ -1130,7 +1096,9 @@ private:
     FloatPredicate m_floatPredicate;
     RestorePositionPredicate m_restorePositionPredicate{};
     OpenParamsResolver m_openParamsResolver;
-    SnappingModeResolver m_snappingModeResolver;
+    ModeResolver m_snappingModeResolver;
+    ModeResolver m_scrollingModeResolver;
+    ModeResolver m_autotileModeResolver;
     ContextGapProvider m_contextGapProvider;
 };
 

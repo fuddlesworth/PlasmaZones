@@ -266,6 +266,23 @@ public:
         m_liveModeResolver = std::move(resolver);
     }
 
+    /// Whether the tiling engine owning @p mode is actually LIVE on
+    /// @p screenId — the liveness half of resolveWindowRestore's
+    /// cross-screen tile-defer gate. The gate must ask exactly what the
+    /// CLAIMING side answers: both tiling engines' claimCrossScreenReopen
+    /// require the recorded home in their live screen set on top of the
+    /// record-context mode verdict, so a defer keyed on mode alone stands
+    /// down for a window the tiling engine then declines — the both-skipped
+    /// strand. Only the daemon sees the engines' live sets, hence the
+    /// injection. Unset → the gate falls back to mode alone (headless/test
+    /// path). Clear with {} at teardown.
+    using TilingEngineLiveResolver =
+        std::function<bool(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId)>;
+    void setTilingEngineLiveResolver(TilingEngineLiveResolver resolver)
+    {
+        m_tilingEngineLiveResolver = std::move(resolver);
+    }
+
     /**
      * @brief Predicate deciding whether an opening window should start FLOATING
      *        because a "Float this app" rule matched it. Daemon-injected,
@@ -557,6 +574,14 @@ public:
     bool isFloating(const QString& windowId) const;
     void setFloating(const QString& windowId, bool floating);
     QStringList floatingWindows() const;
+
+    /// The no-match float-default terminal of resolveWindowRestore, callable
+    /// by the SnapAdaptor when a SnapResult::deferredToTilingEngine verdict
+    /// was returned and the offered reclaim then DECLINED — without this
+    /// fallback a defer-then-decline left the window with no state in any
+    /// engine. No-op when the window already has a definite snap state, when
+    /// snapping is disabled, or on empty arguments.
+    void applyNoMatchFloatDefault(const QString& windowId, const QString& screenId);
 
     /// Primary zone of @p windowId across the per-screen stores (empty if none).
     /// Used by the cross-mode handoff to read a snap partner's slot.
@@ -1166,6 +1191,8 @@ private:
     // the engine falls back to the layout registry's cascade. See LiveModeResolver
     // doc above.
     LiveModeResolver m_liveModeResolver{};
+    /// See setTilingEngineLiveResolver.
+    TilingEngineLiveResolver m_tilingEngineLiveResolver{};
 
     // Rule-driven open-floating gate. Empty until the daemon wires it; while
     // empty no window is rule-floated. See FloatPredicate doc above.

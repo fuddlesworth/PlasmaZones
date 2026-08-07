@@ -344,6 +344,103 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     return inserted;
 }
 
+bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QString& openingScreenId, int minWidth,
+                                          int minHeight)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    // openingScreenId validated here, at the library boundary: the adaptor's
+    // dispatch cannot produce an empty one, but this is public engine API and
+    // an empty opening screen would defeat the predicate's same-screen bail
+    // (empty compares unequal to every recorded screen).
+    if (windowId.isEmpty() || openingScreenId.isEmpty() || !m_scrollingModeResolver || !m_windowTracker) {
+        return false;
+    }
+    // First observation only, by MEMBERSHIP: a window this engine already
+    // holds anywhere is an in-session move or re-announce, never a session
+    // restore — yanking it back to the record's screen would undo the very
+    // move that re-announced it. Membership, not the raw reverse-map key
+    // (the rule windowOpened's defer gate documents): a phantom key left by
+    // a refused earlier open must not veto a legitimate claim.
+    if (const ScrollState* tracked = stateForWindow(windowId); tracked && tracked->containsWindow(windowId)) {
+        return false;
+    }
+    // Registry-aware appId, like autotile's twin and like every record
+    // producer (captures write the tracker's current appId): parsing the
+    // frozen canonical string would look in the wrong bucket after an
+    // Electron/CEF class mutation.
+    const QString appId = m_windowTracker->currentAppIdFor(windowId);
+    if (!PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
+        return false;
+    }
+    // peekForReclaim, not peek: the live-instance exclusion is what stops a
+    // fresh second instance being pulled onto its OPEN sibling's monitor on
+    // the strength of that sibling's live record. Non-consuming either way —
+    // consumption stays with windowOpened's own restore machinery (the strip
+    // stash claim and takeForReopen), which this claim funnels the window
+    // into by re-entering the open path with the RECORDED screen. Only a
+    // TILED slot earns the pull — a scroll-floating record is screen-local,
+    // matching snap's float doctrine.
+    const auto pending = m_windowTracker->placementStore().peekForReclaim(
+        windowId, appId, [&](const PhosphorEngine::WindowPlacement& p) {
+            return PhosphorEngine::pendingCrossScreenManagedRestore(
+                p, PhosphorEngine::WindowPlacement::scrollingEngineId(), PhosphorEngine::WindowPlacement::stateTiled(),
+                openingScreenId, [this](const QString& rec, int desktop, const QString& activity) {
+                    return m_scrollingModeResolver(rec, desktop, activity);
+                });
+        });
+    if (!pending) {
+        return false;
+    }
+    const QString homeScreen = pending->screenId;
+    // The LIVE screen set must agree with the record-context verdict:
+    // windowOpened's own m_scrollingScreens gate would otherwise refuse the
+    // adoption AFTER this method already answered "claimed", stranding the
+    // window untracked (a per-desktop mode override can make the resolver
+    // and the live set disagree during a context switch).
+    if (!m_scrollingScreens.contains(homeScreen)) {
+        qCInfo(lcScrollEngine) << "claimCrossScreenReopen:" << windowId << "recorded home" << homeScreen
+                               << "is scrolling-mode by record context but absent from the live set — declining";
+        return false;
+    }
+    // Grant-context must be compatible with insert-context. The predicate
+    // granted on the RECORD's (desktop, activity); windowOpened inserts into
+    // the home screen's CURRENT key. When two CONCRETE contexts disagree,
+    // adopting would splice the window into a strip on a desktop it is not
+    // visible on (displacing that desktop's real windows) and miss its
+    // stashed column outright — the conservative skip leaves the window to
+    // the ordinary open path instead. Sticky / unknown-context records
+    // (the 0 and empty sentinels) stay eligible; see
+    // recordContextMatchesLive.
+    const PhosphorEngine::PlacementStateKey homeKey = currentKeyForScreen(homeScreen);
+    if (!PhosphorEngine::recordContextMatchesLive(*pending, homeKey.desktop, homeKey.activity)) {
+        qCInfo(lcScrollEngine) << "claimCrossScreenReopen:" << windowId << "recorded context desktop"
+                               << pending->virtualDesktop << "activity" << pending->activity << "differs from"
+                               << homeScreen << "current context — declining";
+        return false;
+    }
+    windowOpened(windowId, homeScreen, minWidth, minHeight);
+    // Return the REAL outcome, verified by membership (ScrollState-level: a
+    // legitimately floated adoption is in the floating set, not the strip).
+    // An optimistic true converted every silently-refused re-entry into a
+    // window no engine manages — the caller hands a claimed window to no
+    // other engine.
+    const ScrollState* adopted = stateForWindow(windowId);
+    if (!adopted || !adopted->containsWindow(windowId)) {
+        qCWarning(lcScrollEngine) << "claimCrossScreenReopen:" << windowId << "adoption on" << homeScreen
+                                  << "was refused — not claimed";
+        return false;
+    }
+    // The ARRIVAL screen's mode-transition seed still names this id; the
+    // arrival-screen windowOpened that would have consumed it never runs on
+    // a successful claim (the dispatch returns), and one unconsumed id pins
+    // that screen's seed for the whole session. Safe no-op for a screen with
+    // no seed.
+    consumePendingInitialOrder(openingScreenId, windowId);
+    qCInfo(lcScrollEngine) << "claimCrossScreenReopen:" << windowId << "opened on" << openingScreenId
+                           << "— reclaimed to recorded scrolling home" << homeScreen;
+    return true;
+}
+
 void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& screenId, int minWidth, int minHeight)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
@@ -365,35 +462,62 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         return;
     }
 
-    // Cross-screen snap-restore defer, the reciprocal of
-    // SnapEngine::resolveWindowRestore's recorded-screen gate and the twin
-    // of AutotileEngine::windowOpened's — all three run
-    // PhosphorEngine::pendingCrossScreenSnapRestore over the same record
-    // fields, so a session window snapped on a snapping-mode monitor that
-    // KWin drops on a scrolling screen at login is claimed by snap
-    // cross-screen and NOT double-claimed into the strip here. Gated on
+    // Cross-screen restore defer, the reciprocal of SnapEngine's
+    // recorded-screen gate and autotile's claimCrossScreenReopen — every
+    // engine runs PhosphorEngine::pendingCrossScreenManagedRestore over the
+    // same record fields, so a session window snapped on a snapping-mode
+    // monitor (or tiled on an autotile-mode monitor) that KWin drops on a
+    // scrolling screen at login is claimed by its OWN engine cross-screen
+    // and NOT double-claimed into the strip here. Gated on
     // !oldState: a window this engine already tracks anywhere is scroll's
     // own (in-session migration), never a session restore.
     // Membership, not the raw reverse-map key (autotile's gate term for
     // term): a refused earlier open can leave a phantom key, and gating on
     // it would skip the defer while this engine manages nothing.
     const bool trackedHere = oldState && oldState->containsWindow(windowId);
-    if (!trackedHere && m_snappingModeResolver && m_windowTracker) {
-        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-        if (!appId.isEmpty() && appId != windowId) {
-            const auto snapCrossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
-                return PhosphorEngine::pendingCrossScreenSnapRestore(
-                    p, screenId, [this](const QString& rec, int desktop, const QString& activity) {
-                        return m_snappingModeResolver(rec, desktop, activity);
-                    });
+    if (!trackedHere && m_windowTracker && (m_snappingModeResolver || m_autotileModeResolver)) {
+        // Registry-aware appId and the reclaim-grade lookup, matching what
+        // the CLAIMING side asks. Both halves are load-bearing for the N-way
+        // agreement: parsing the frozen canonical string would read a
+        // different bucket after an Electron/CEF class mutation (so this gate
+        // could miss a record the claim finds — both-claimed), and a plain
+        // peek would see a LIVE sibling's record the claim's exclusion
+        // rejects (so this gate could defer to an engine that then declines —
+        // both-skipped).
+        const QString appId = m_windowTracker->currentAppIdFor(windowId);
+        if (PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
+            const auto crossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
+                if (m_snappingModeResolver
+                    && PhosphorEngine::pendingCrossScreenSnapRestore(
+                        p, screenId, [this](const QString& rec, int desktop, const QString& activity) {
+                            return m_snappingModeResolver(rec, desktop, activity);
+                        })) {
+                    return true;
+                }
+                return m_autotileModeResolver
+                    && PhosphorEngine::pendingCrossScreenManagedRestore(
+                           p, PhosphorEngine::WindowPlacement::autotileEngineId(),
+                           PhosphorEngine::WindowPlacement::stateTiled(), screenId,
+                           [this](const QString& rec, int desktop, const QString& activity) {
+                               return m_autotileModeResolver(rec, desktop, activity);
+                           });
             };
-            if (m_windowTracker->placementStore().peek(windowId, appId, snapCrossRestorePending).has_value()) {
+            if (m_windowTracker->placementStore().peekForReclaim(windowId, appId, crossRestorePending).has_value()) {
                 qCInfo(lcScrollEngine) << "windowOpened:" << windowId << "on scrolling screen" << screenId
-                                       << "defers to snap — carries a cross-screen snap restore";
+                                       << "defers — carries a cross-screen restore for another engine";
                 // A deferred arrival is still an arrival: without the
                 // consume, this id never reaches insertOpenedWindow and its
                 // seed entry lingers on the screen forever.
                 consumePendingInitialOrder(screenId, windowId);
+                // A refused-first-open phantom key must not survive the defer
+                // (autotile's twin does the same): isWindowTracked would keep
+                // answering true for a window another engine is about to own,
+                // misrouting the daemon's float and handoff dispatch. The
+                // enclosing block is already !trackedHere, so a key here is
+                // by definition a phantom.
+                if (stateForWindow(windowId)) {
+                    m_states.removeWindow(windowId);
+                }
                 return;
             }
         }
@@ -791,6 +915,17 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     state->strip().takeWindow(windowId, params);
     state->removeFloating(windowId);
     m_states.removeWindow(windowId);
+    // The durable slot goes with the tracking: a released window is one this
+    // engine knowingly gave up, and a stale scrolling TILED slot left in the
+    // unified record is not memory but a false home — paired with a stale
+    // record-level screenId (which an engine-miss capture can leave behind),
+    // the cross-screen reclaim would later yank the window back out from
+    // under its new engine, and that engine's defer gate would read the same
+    // stale record and stand down. Ordinary close deliberately KEEPS the
+    // slot; only the handoff clears it.
+    if (m_windowTracker) {
+        m_windowTracker->releaseEngineSlot(windowId, engineId());
+    }
     // A released window's queued echo can never be answered — the stale
     // entry would eat the first genuine focus when the window comes back
     // (releaseScreenState documents the same sweep).

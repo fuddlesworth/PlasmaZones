@@ -647,6 +647,22 @@ void WindowTrackingService::clearFreeGeometry(const QString& windowId, const QSt
     }
 }
 
+void WindowTrackingService::releaseEngineSlot(const QString& windowId, const QString& engineId)
+{
+    if (windowId.isEmpty() || engineId.isEmpty()) {
+        return;
+    }
+    // Wrapper, not a direct store call from the engines, for the same reason
+    // every other store mutation has one: the store has no dirty concept, so
+    // a release that only lives in memory would leave the saved config
+    // carrying the stale managed slot — and after a daemon restart the
+    // cross-screen reclaim would act on it again, defeating the release
+    // across exactly the boundary it matters at.
+    if (m_placementStore.releaseEngineSlot(windowId, engineId)) {
+        markDirty(DirtyWindowPlacements);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Floating Window State
 // ═══════════════════════════════════════════════════════════════════════════════

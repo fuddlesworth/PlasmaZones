@@ -285,9 +285,15 @@ public:
     void updateLastUsedZone(const QString&, const QString&, const QString&, int) override
     {
     }
-    QString currentAppIdFor(const QString&) const override
+    /// Mirrors production (WindowTrackingService): no registry here, so it
+    /// falls back to parsing the composite id, exactly as the real service
+    /// does when the registry has no entry. Returning an empty string
+    /// instead silently DISABLED every caller that bails on an empty appId
+    /// — including the cross-screen reclaim — so tests passed vacuously
+    /// with nothing to show why.
+    QString currentAppIdFor(const QString& anyWindowId) const override
     {
-        return {};
+        return PhosphorIdentity::WindowId::extractAppId(anyWindowId);
     }
     std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&, bool = false) const override
     {

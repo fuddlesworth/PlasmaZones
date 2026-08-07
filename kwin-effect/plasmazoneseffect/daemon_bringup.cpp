@@ -627,7 +627,8 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 QRectF geoBefore = safeWindow->frameGeometry();
 
                 m_snapHandler->callResolveWindowRestore(
-                    safeWindow.data(), [pending, movedCount, safeWindow, geoBefore, savedStackingOrder](bool) {
+                    safeWindow.data(),
+                    [pending, movedCount, safeWindow, geoBefore, savedStackingOrder](bool) {
                         // Detect whether moveResize actually fired by comparing geometry.
                         if (safeWindow && !safeWindow->isDeleted() && safeWindow->frameGeometry() != geoBefore) {
                             ++(*movedCount);
@@ -656,7 +657,15 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                                 }
                             }
                         }
-                    });
+                    },
+                    /*releaseSuppressionOnMiss=*/true,
+                    // isOpenPath=false: this sweep re-resolves windows that
+                    // are ALREADY open and on screen, exactly like the
+                    // pending-restores sweep. It restores zone geometry and
+                    // stacking; it must not drive the cross-screen tile
+                    // reclaim and re-home the monitors of every window the
+                    // user is looking at because the daemon restarted.
+                    /*isOpenPath=*/false);
             }
         });
     }

@@ -584,6 +584,24 @@ QString ScrollEngine::screenForTrackedWindow(const QString& windowId) const
     return m_states.keyForWindow(canonicalizeForLookup(windowId)).screenId;
 }
 
+QString ScrollEngine::heldScreenForWindow(const QString& windowId) const
+{
+    // MEMBERSHIP-grade, unlike screenForTrackedWindow above (raw reverse-map
+    // key): the screen is answered only when a state genuinely holds the
+    // window, tiled or floating — a phantom key from a refused open answers
+    // empty. This is the predicate the adaptor's post-reclaim ownership
+    // check runs; see IPlacementEngine::heldScreenForWindow for why neither
+    // isWindowTracked nor isWindowManaged can serve, and why the answer is
+    // scoped to the screen's CURRENT context.
+    const QString canonical = canonicalizeForLookup(windowId);
+    PhosphorEngine::PlacementStateKey key;
+    const ScrollState* state = stateForWindow(canonical, &key);
+    if (state && state->containsWindow(canonical) && key == currentKeyForScreen(key.screenId)) {
+        return key.screenId;
+    }
+    return {};
+}
+
 QRect ScrollEngine::lastManagedRect(const QString& rawWindowId) const
 {
     return m_lastAppliedRect.value(canonicalizeForLookup(rawWindowId));
