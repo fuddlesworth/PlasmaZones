@@ -251,6 +251,24 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // re-create rule-matched decorations right after
         // clearAllDecorations below.
         m_tilingHandler->clearScrollingScreensForTeardown();
+        // The tab-indicator surface ids name objects that died with the daemon,
+        // and a retraction only ever arrives from a daemon healthy enough to
+        // send one — a crash sends nothing. Wayland reuses object ids, so a
+        // retained set is not merely stale, it is a live mismatch waiting for
+        // the next client to be handed one of those numbers. Clearing also puts
+        // isScrollTabIndicatorSurface back on its empty-set fast path. The
+        // bring-up clear stays where it is: it covers the other order, an
+        // effect reload against a daemon whose surfaces outlived it.
+        m_scrollTabSurfaceIds.clear();
+        m_scrollTabSurfaceIdsByScreen.clear();
+        // Parked columns' paint hints likewise. Their committed rect is the
+        // park, below the union of every output, so the relocation is the only
+        // thing drawing them anywhere visible; with the scrolling set cleared
+        // just above, paintWindow stops relocating them while prePaintWindow
+        // keeps marking them transformed off this map, and no re-tile can
+        // arrive to clear the entry. Dropping it here is what lets the next
+        // batch, or the next daemon, start from nothing.
+        m_scrollVisualPos.clear();
         // Same reasoning for the per-screen active-layout map: it is a pure
         // ruleQuery input owned by the dead session, and the
         // invalidateAllRuleCaches below would otherwise re-resolve every

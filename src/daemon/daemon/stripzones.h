@@ -195,15 +195,6 @@ parseTabStripPayload(const QString& stripsJson, const std::function<QString(cons
         // producer/consumer version split, and Top is the least surprising
         // reading of a rect whose orientation we cannot confirm.
         strip.insert(QLatin1String("position"), stripObj.value(QLatin1String("position")).toInt(2));
-        // How far the view slid in the batch that produced this strip. Carried
-        // through rather than re-derived: the rects above are already at their
-        // final positions, so this is the only thing that tells the overlay how
-        // far BEHIND them to start, which is what keeps an indicator with the
-        // column it labels while the strip slides. Absent for a batch that did
-        // not move the view, where zero is the right answer anyway.
-        if (stripObj.contains(QLatin1String("viewDeltaX"))) {
-            strip.insert(QLatin1String("viewDeltaX"), stripObj.value(QLatin1String("viewDeltaX")).toInt());
-        }
         // -1, not 0, purely defensive: the producer always writes the key, but
         // a missing one must read as "no active tab" rather than lighting up
         // tab 0.

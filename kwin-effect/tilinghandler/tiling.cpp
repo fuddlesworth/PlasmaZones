@@ -822,6 +822,21 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // A window can only be tile-managed by one screen at a time —
             // markWindowTiled enforces the single-owner sweep itself.
             markWindowTiled(snap.screenId, snap.windowId);
+            // Remember (or forget) where a parked column should be PAINTED.
+            //
+            // Every applied entry updates this, monocle or not and whether or
+            // not the geometry itself is re-committed. It used to sit beside
+            // the scroll animation decision further down, inside the
+            // skip-if-already-at-target branch — so a column re-parked at the
+            // rect it already held took the skip and kept the PREVIOUS batch's
+            // strip position, which the paint path then drew it at for as long
+            // as it stayed parked. The commit being unchanged says nothing
+            // about where the column now sits on the strip.
+            if (snap.hasVisualPos) {
+                m_effect->m_scrollVisualPos.insert(snap.windowId, snap.visualPos);
+            } else {
+                m_effect->m_scrollVisualPos.remove(snap.windowId);
+            }
             // Title-bar (borderless) state is driven by rules through the
             // effect's reconcileRuleHiddenTitleBar → DecorationManager path.
 
@@ -919,15 +934,6 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     QRectF originOverride;
                     QRectF visualTargetOverride;
                     bool skipScrollAnimation = false;
-                    // Remember (or forget) where a parked column should be
-                    // PAINTED. Set before the animation decision below, which
-                    // reads the same fact.
-                    if (snap.hasVisualPos) {
-                        m_effect->m_scrollVisualPos.insert(snap.windowId, snap.visualPos);
-                    } else {
-                        m_effect->m_scrollVisualPos.remove(snap.windowId);
-                    }
-
                     if (snap.hasVisualPos) {
                         // Parked, but drawn at its real strip position and
                         // carried by the view like every other column. There is

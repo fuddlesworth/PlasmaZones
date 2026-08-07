@@ -665,11 +665,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // view offset — so it travels with the rest of the strip instead of
             // vanishing the instant it leaves the viewport.
             //
-            // Horizontal parks only. A vertical stack-overflow park is layout,
-            // not strip motion: there is no view slide to stay in step with,
-            // and painting it back would put a tile the layout deliberately
-            // pushed off the bottom right back on screen.
-            if (parkedNow && rect.top() > screenRect.bottom() && stripRect.top() <= screenRect.bottom()) {
+            // Horizontal parks only, and the departure edge is what says so.
+            // Both other parks deliberately carry no edge: a vertical
+            // stack-overflow park clears it ("the park is vertical, so there is
+            // no side to animate from") because that is layout rather than
+            // strip motion, and a hidden tab of an ON-SCREEN tabbed column
+            // records none because it is parked to keep it from stealing input,
+            // not because the strip carried it away. Painting either back would
+            // put a tile on screen that nothing scrolled: the vertical one
+            // returns from below the floor the layout pushed it past, and the
+            // hidden tab shares the active tab's rect, so every inactive tab of
+            // every tabbed column would be drawn stacked on the visible one,
+            // permanently, on a strip that is not even moving.
+            if (parkedNow && !scrollEdge.isEmpty()) {
                 obj[QLatin1String("visualX")] = stripRect.x();
                 obj[QLatin1String("visualY")] = stripRect.y();
             }
@@ -744,7 +752,16 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // tally is read rather than tabIndicatorRect re-derived: re-deriving
         // from the clamped extent would disagree with the reservation the
         // relayout already spent (see the KNOWN LIMIT note below).
-        if (columnAllParked.value(column.columnIndex, false) && !columnHadSkippedTile.contains(column.columnIndex)) {
+        //
+        // A DEPARTING column is exempt, and without that exemption the
+        // visibleBefore term above could never fire: a column that scrolled out
+        // of view has every tile parked by the same work-area test that made
+        // visibleNow false, so this skip would drop it before the outgoing leg
+        // it was kept for. The orphan-bar case this guard exists for is a
+        // column that is still visible NOW, so it is untouched.
+        const bool departing = visibleBefore && !visibleNow;
+        if (!departing && columnAllParked.value(column.columnIndex, false)
+            && !columnHadSkippedTile.contains(column.columnIndex)) {
             continue;
         }
         QJsonObject strip;
