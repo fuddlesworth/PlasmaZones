@@ -38,6 +38,8 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -555,6 +557,53 @@ private Q_SLOTS:
         QVERIFY(m_adaptor->scrollTabSurfaces().isEmpty());
     }
 
+    // The scrollingScreens property's DocString promises that changes are
+    // announced on scrollingScreensChanged and NOT through
+    // org.freedesktop.DBus.Properties.PropertiesChanged. The property does
+    // carry a NOTIFY, which is what makes the claim worth pinning: if QtDBus
+    // ever relayed that NOTIFY into PropertiesChanged, the XML would be
+    // telling consumers to ignore a signal they were in fact receiving, and a
+    // consumer that believed it would poll instead of subscribing.
+    //
+    // Driven over a REAL bus, because the claim is about what reaches the wire
+    // rather than about the adaptor's own emissions.
+    void testScrollingScreensProperty_doesNotEmitPropertiesChanged()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        QVERIFY2(bus.isConnected(), "this suite runs under a private bus; see phosphor_apply_test_isolation");
+        const QString path = QStringLiteral("/PropertiesChangedProbe");
+        QVERIFY(bus.registerObject(path, m_parent, QDBusConnection::ExportAllContents));
+
+        QDBusMessage changed;
+        QVERIFY(bus.connect(bus.baseService(), path, QStringLiteral("org.freedesktop.DBus.Properties"),
+                            QStringLiteral("PropertiesChanged"), this, SLOT(onPropertiesChanged(QDBusMessage))));
+
+        m_propertiesChangedCount = 0;
+        QSignalSpy own(m_adaptor, &ScrollingAdaptor::scrollingScreensChanged);
+
+        m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        // Emitted synchronously through the engine connection, so it is
+        // already counted rather than something to wait for.
+        QVERIFY2(own.count() > 0, "the adaptor's own change signal must fire");
+        // A relayed PropertiesChanged would arrive over the bus, which is
+        // asynchronous — give it a window rather than concluding from the
+        // same turn that emitted the signal above.
+        QTest::qWait(200);
+
+        QCOMPARE(m_propertiesChangedCount, 0);
+        bus.unregisterObject(path);
+    }
+
+public Q_SLOTS:
+    void onPropertiesChanged(const QDBusMessage& msg)
+    {
+        if (msg.arguments().value(0).toString() == QLatin1String("org.plasmazones.Scrolling")) {
+            ++m_propertiesChangedCount;
+        }
+    }
+
+private Q_SLOTS:
+
 private:
     /// Append a description of every way @p obj fails to describe @p expected
     /// at 1-based visible slot @p slot. Accumulating instead of asserting
@@ -601,6 +650,7 @@ private:
 
     ScrollEngine* m_engine = nullptr;
     QObject* m_parent = nullptr;
+    int m_propertiesChangedCount = 0;
     ScrollingAdaptor* m_adaptor = nullptr;
 };
 
