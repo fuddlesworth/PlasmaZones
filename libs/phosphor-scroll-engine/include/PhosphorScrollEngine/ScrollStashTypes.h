@@ -5,6 +5,9 @@
 
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
+#include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/IPlacementEngine.h>
+
 #include <QString>
 #include <QVector>
 
@@ -105,6 +108,93 @@ struct StashedStrip
         }
         return total;
     }
+};
+
+/// What a floated/minimized window's column held, so unfloat restores the
+/// slot AND the user's width/display intent (a Proportion/Preset column must
+/// not come back as the default width). Namespace-level rather than nested in
+/// ScrollEngine for the same file-size-ceiling reason as the stash types
+/// above; lifetime and ownership are documented on the engine's
+/// m_floatRestore member.
+struct FloatRestore
+{
+    int column = -1;
+    ColumnWidth width;
+    ColumnDisplay display = ColumnDisplay::Normal;
+    /// The tile slot inside a SHARED column (-1 when the window had its
+    /// own column). A stacked tile's float round-trip re-enters its
+    /// surviving stack instead of spawning a new column at the index.
+    int tileIndex = -1;
+    /// A surviving SIBLING of the shared column, used to re-locate the
+    /// stack at restore time — the bare column index goes stale when
+    /// columns close while the window floats, and a stale index would
+    /// splice the window into a stranger's stack.
+    QString stackAnchor;
+    /// Client-reported minimum size at float time — the tile that held
+    /// it dies with takeWindow, and dropping it would strip the
+    /// relayout clamps until the compositor happens to re-report.
+    /// Kept CURRENT while the window floats: windowMinSizeUpdated has no
+    /// tile to write to then, and without the write-through the unfloat
+    /// re-applies whatever the client reported at float time.
+    int minWidth = 0;
+    int minHeight = 0;
+    /// The tile's height INTENT at float time. Same reasoning as the
+    /// width/display above: without it a float round trip (which the
+    /// effect's minimize machinery also drives) silently reset a
+    /// user-set window height to Auto, while a mode round trip — which
+    /// stashes the intent — preserved it.
+    WindowHeight height;
+};
+
+/// Live drag-insert preview state (drag_preview.cpp). See the engine's
+/// m_dragInsertPreview member for the signal-silence and both-endings
+/// announcement contract; hoisted here with FloatRestore, which it embeds.
+struct DragInsertPreview
+{
+    QString windowId;
+    QString targetScreenId;
+    /// The context the preview inserted into, captured at begin so the
+    /// prune paths can tell whether a dying context strands it.
+    PhosphorEngine::PlacementStateKey targetKey;
+    /// The most recent hit-tested drop target, stored verbatim —
+    /// nothing structural happens until commit applies it.
+    PhosphorEngine::IPlacementEngine::DragInsertTarget lastTarget;
+    /// The window's OWN begin-time width/display/height/min-size
+    /// intents. Never refreshed mid-drag: reading them from a transient
+    /// host column stamped foreign widths across columns in the abandoned
+    /// live-restructure design.
+    ///
+    /// How much of it commit applies depends on the drop. A NEW-COLUMN
+    /// drop applies all of it. A JOIN discards width and display, because
+    /// the window becomes a tile of a host column that already owns both,
+    /// and only the height and min-size intents survive. That is a
+    /// property of what a join means rather than an oversight, but the
+    /// word "applied at commit" read as though the whole struct always
+    /// made it through.
+    FloatRestore carried;
+    // ── cancel restoration ──
+    /// Set when begin's defensive block took the window out of the
+    /// TARGET strip despite it having no reverse-map entry (a stale
+    /// forward state). That take is a real structural edit made with
+    /// hadPriorState false, so cancel's "fresh adoption never touched
+    /// anything" early return would abandon the window: out of the strip
+    /// AND untracked, gone from the engine entirely. The slot it held is
+    /// in defensiveSlot.
+    bool defensivelyDetached = false;
+    FloatRestore defensiveSlot;
+    bool hadPriorState = false;
+    PhosphorEngine::PlacementStateKey priorKey;
+    /// Whole-key comparison (screen AND desktop AND activity): a
+    /// same-screen/different-desktop prior context reads false.
+    bool priorSameKey = false;
+    bool priorFloating = false;
+    /// The tiled slot at begin time (valid when !priorFloating).
+    FloatRestore priorSlot;
+    /// The m_floatRestore entry begin consumed when it silently
+    /// unfloated the window; re-inserted verbatim on cancel.
+    bool hadFloatRestoreEntry = false;
+    FloatRestore floatRestoreEntry;
+    bool wasScrollFloated = false;
 };
 
 } // namespace PhosphorScrollEngine

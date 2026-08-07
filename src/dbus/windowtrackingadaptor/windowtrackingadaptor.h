@@ -911,7 +911,15 @@ public:
     /// engine-owned redirect (no rule, snap/disabled target, or same
     /// screen) — the caller then uses the spawn screen. Snap-mode targets
     /// are handled by the snap placement directive, not here.
-    QString applyOpenRoutingForTiling(const QString& windowId, const QString& screenId);
+    /// Returns the redirect target screen (empty = insert on the spawn
+    /// screen). @p directiveMatched, when non-null, is set true whenever a
+    /// routing/placement directive MATCHED — including already-on-target and
+    /// target-not-connected, where the return stays empty — so the caller's
+    /// cross-screen-reclaim veto applies the same precedence the snap facade
+    /// does. The two answers are deliberately separate; overloading the empty
+    /// return let the two channels drift apart.
+    QString applyOpenRoutingForTiling(const QString& windowId, const QString& screenId,
+                                      bool* directiveMatched = nullptr);
 
     /// Canonical key for daemon-local per-window shadow maps, and the canonical
     /// form sibling adaptors must agree on for per-window state. Window ids

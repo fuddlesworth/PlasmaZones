@@ -154,8 +154,9 @@ public Q_SLOTS:
      *                   Forwarded to SnapEngine for protocol compatibility; the unified
      *                   placement record now carries the kind, so it no longer gates restore.
      */
-    void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind, int& snapX,
-                              int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap);
+    void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
+                              bool isOpenPath, int& snapX, int& snapY, int& snapWidth, int& snapHeight,
+                              bool& shouldSnap);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resnap / snap-all D-Bus slots

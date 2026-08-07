@@ -87,6 +87,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="windowKind" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient)."/>
             </arg>
+            <arg name="isOpenPath" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True when this resolve is driven by a window OPEN (session restore, bring-up re-announce, deferred-routing flush); false for the unminimize-orphan and pending-restores-sweep drivers. Gates the cross-screen tile reclaim, which must never move a window the user merely unminimized."/>
+            </arg>
             <arg name="snapX" type="i" direction="out"/>
             <arg name="snapY" type="i" direction="out"/>
             <arg name="snapWidth" type="i" direction="out"/>

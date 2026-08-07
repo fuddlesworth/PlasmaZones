@@ -184,8 +184,15 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       to be SEEN travelling while the view slides, so the safe commit and the
 //       paint position are now separate answers. Same signature-matched
 //       failure mode as v6 and v7.
-inline constexpr int ApiVersion = 8;
-inline constexpr int MinPeerApiVersion = 8;
+//   v9: Snap.resolveWindowRestore gained a fifth in-arg, isOpenPath. The
+//       cross-screen tile reclaim hangs off this slot, and two of its
+//       drivers are NOT opens (the unminimize of a daemon-restart orphan and
+//       the pending-restores sweep) — without the flag the daemon could not
+//       tell them apart, and unminimizing a window teleported it across
+//       monitors. Same signature-matched failure mode as v6-v8: an old
+//       effect's four-arg call no longer matches the widened slot.
+inline constexpr int ApiVersion = 9;
+inline constexpr int MinPeerApiVersion = 9;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

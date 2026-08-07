@@ -71,9 +71,12 @@ enum class WindowKind : int {
 
 /// Clamp an integer wire value to a valid WindowKind. Unknown wire values
 /// (out-of-range, future enum values from an older daemon) collapse to
-/// `Unknown` rather than producing an undefined enum — the consume gate
-/// treats `Unknown` permissively, which is the safe-by-default policy.
-/// Centralised here so the three persistence-layer call sites
+/// `Unknown` rather than producing an undefined enum. The close-capture
+/// consume gate (CloseCaptureContext::windowKind) refuses only when both
+/// sides are concrete and disagree, so `Unknown` is permissive — the
+/// safe-by-default policy. On the restore side the value is carried in the
+/// record for that gate; `SnapEngine::resolveWindowRestore` itself no longer
+/// branches on it. Centralised here so the persistence-layer call sites
 /// (`WindowTrackingAdaptor::windowClosed`, `SnapAdaptor::resolveWindowRestore`,
 /// `WindowPlacement::fromJson`) stay in lockstep when a new kind is added.
 inline WindowKind clampWindowKindFromWire(int wire)
@@ -114,6 +117,14 @@ struct SnapResult
     QString zoneId;
     QStringList zoneIds;
     QString screenId;
+    /// Set (with shouldSnap false) when snap's resolve stood down because the
+    /// record homes the window TILED on another engine's screen — the signal
+    /// for the SnapAdaptor to offer the window to the tiling engines'
+    /// claimCrossScreenReopen, and for nothing else. Distinguished from a
+    /// plain no-snap so the reclaim runs ONLY on this verdict: an exclusion
+    /// refusal, a disabled context, or an ordinary no-match must not hand
+    /// the window to a reclaim the user's rules or gates already vetoed.
+    bool deferredToTilingEngine = false;
     /// Target virtual desktop the snap should be committed in (1-based). 0 means
     /// "the window's current desktop" — the historical behaviour. Set non-zero only
     /// by a placement rule that also routes the window to a desktop (RouteToDesktop),

@@ -148,9 +148,14 @@ public:
     /// window's first-frame suppression. Pass false when something else will
     /// still reposition it on a miss (the autotile-screen path tiles it via
     /// onComplete) — there the suppression must hold through that reposition.
+    /// isOpenPath: whether this resolve is driven by a window OPEN (session
+    /// restore, bring-up re-announce, deferred-routing flush) as opposed to
+    /// the unminimize-orphan and pending-restores-sweep drivers. Threaded to
+    /// the daemon, which gates the cross-screen tile reclaim on it — an
+    /// unminimize must never teleport a window across monitors.
     void callResolveWindowRestore(KWin::EffectWindow* window,
                                   std::function<void(bool snapApplied)> onComplete = nullptr,
-                                  bool releaseSuppressionOnMiss = true);
+                                  bool releaseSuppressionOnMiss = true, bool isOpenPath = true);
     /// Store a window's pre-snap (free-float) geometry with the daemon before a
     /// snap commit, so a later float toggle restores the original position.
     void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,

@@ -104,24 +104,32 @@ public:
         windowOpened(windowId, screenId, 0, 0);
     }
 
-    /// Cross-screen session reclaim, the tiling-engine counterpart of the
-    /// snap engine's recorded-screen restore. Offered a window that opened on
-    /// @p openingScreenId — a screen this engine may not own — the engine
-    /// checks the unified placement store for ITS OWN managed slot recorded
-    /// on a DIFFERENT screen that is still in this engine's mode
+    /// OPTIONAL: cross-screen session reclaim, the tiling-engine counterpart
+    /// of the snap engine's recorded-screen restore. Offered a window that
+    /// opened on @p openingScreenId — a screen this engine may not own — the
+    /// engine checks the unified placement store for ITS OWN managed slot
+    /// recorded on a DIFFERENT screen that is still in this engine's mode
     /// (PhosphorEngine::pendingCrossScreenManagedRestore), and on a match
     /// adopts the window into that recorded home screen (its retile then
-    /// physically moves the window there). Returns true when the window was
-    /// claimed; the caller must then hand it to no other engine. KWin's
-    /// session restore opens windows on a nondeterministic output, so
-    /// without this a whole strip's windows strand floated on whatever
-    /// monitor KWin picked at login. Default false: an engine without a
-    /// cross-screen restore story (snap claims through resolveWindowRestore
-    /// instead) never claims here. Implementations must self-gate on
-    /// first observation — a window the engine already tracks is an
-    /// in-session move, never a session restore.
-    virtual bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
-                                        int minHeight)
+    /// physically moves the window there). KWin's session restore opens
+    /// windows on a nondeterministic output, so without this a whole strip's
+    /// windows strand floated on whatever monitor KWin picked at login.
+    /// Default false: an engine without a cross-screen restore story (snap
+    /// claims through resolveWindowRestore instead) never claims here.
+    ///
+    /// Contract for implementations:
+    ///  - Self-gate on first observation by MEMBERSHIP (a window the engine
+    ///    already holds in a state is an in-session move, never a session
+    ///    restore — and the raw reverse-map key is not membership).
+    ///  - Decide via WindowPlacementStore::peekForReclaim, never plain
+    ///    peek(): the live-instance exclusion is what stops a fresh second
+    ///    instance being yanked onto its open sibling's monitor.
+    ///  - Return the REAL adoption outcome, verified by membership after the
+    ///    open-path re-entry. Answering true optimistically converts every
+    ///    downstream refusal into a window no engine manages: the caller
+    ///    hands a claimed window to no other engine.
+    virtual bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth = 0,
+                                        int minHeight = 0)
     {
         Q_UNUSED(windowId)
         Q_UNUSED(openingScreenId)
@@ -130,10 +138,33 @@ public:
         return false;
     }
 
+    /// OPTIONAL: the screen this engine genuinely HOLDS the window on — a
+    /// MEMBERSHIP answer (tiled or engine-floating both count; a phantom
+    /// reverse-map key does not), empty when the engine does not hold it.
+    /// This exists for the adaptor's post-reclaim ownership check: after a
+    /// cross-screen reclaim, the effect's already-queued arrival announce
+    /// still carries the ARRIVAL screen, and dispatching it would migrate
+    /// the window straight back. isWindowTracked cannot serve — it answers
+    /// from the raw reverse-map key, which a refused adoption can leave
+    /// dangling (its ~20 callers want exactly that raw semantic, so its
+    /// meaning must not change). isWindowManaged/isWindowTiled cannot serve
+    /// either — both exclude engine-floating windows, which a reclaim can
+    /// legitimately produce.
+    virtual QString heldScreenForWindow(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return {};
+    }
+
     /// Bracket a BURST of windowOpened calls delivered together (the
     /// adaptor's three dispatch loops: windowsOpenedBatch, the deferred-open
     /// flush, and the parked-open replay — daemon bring-up re-announce and
-    /// mode flips). An engine that applies geometry
+    /// mode flips). The cross-screen reclaim's windowOpened re-entry is a
+    /// fourth caller: inside the tiling dispatch it inherits that loop's
+    /// bracket; off the snap facade it is deliberately UNBRACKETED — each
+    /// resolveWindowRestore is its own D-Bus message, so there is no batch
+    /// to bracket, matching the per-window cadence snap restores have always
+    /// had on that channel. An engine that applies geometry
     /// per arrival may defer those applies until endArrivalBurst so a
     /// restore of an unchanged session resolves one final layout instead of
     /// N visible intermediates marching across the screen. Defaults are

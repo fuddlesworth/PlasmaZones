@@ -160,7 +160,8 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
 // no remaining caller (the effect uses resolveWindowRestore).
 
 void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
-                                       int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
+                                       bool isOpenPath, int& snapX, int& snapY, int& snapWidth, int& snapHeight,
+                                       bool& shouldSnap)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
@@ -195,25 +196,34 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // with no SnapToZone) takes effect here, deliberately AFTER the snap/float
         // restore has had its chance: a SnapToZone restore or a remembered snap
         // already returned shouldSnap=true above (so the route never fights a snap),
-        // and the explicit route wins over a remembered float position (it applies
-        // the final geometry). A route WITH SnapToZone moved+snapped on the target
-        // via the placement directive and never reaches here.
-        if (m_adaptor->applyOpenScreenRouting(windowId, screenId)) {
-            return;
-        }
-        // Cross-screen tiling-engine reclaim. This slot is the ONE per-window
-        // channel the effect drives for every open regardless of screen, so a
-        // session window KWin dropped on a screen its recorded tiling engine
-        // does not own is offered back to the pipeline engines here — the
-        // engine whose TILED slot the record carries (with the recorded home
-        // still in its mode) adopts the window into that home screen and its
-        // retile moves it there. Only after the engine resolve and the route
-        // above: the snap engine's own tile-defer gate guarantees noSnap for
-        // exactly these records, and an explicit directive — a SnapToZone
-        // claim or a matched RouteToScreen — outranks ANY remembered
-        // placement, this reclaim included.
-        if (m_crossScreenTileReclaim) {
-            m_crossScreenTileReclaim(windowId, screenId);
+        // and the explicit route wins over a remembered float position AND over
+        // the cross-screen reclaim below (it applies the final geometry). A
+        // route WITH SnapToZone moved+snapped on the target via the placement
+        // directive and never reaches here.
+        const bool routed = m_adaptor->applyOpenScreenRouting(windowId, screenId);
+        // Cross-screen tiling-engine reclaim — gated on the ENGINE's explicit
+        // defer verdict, never on a bare no-snap: an exclusion refusal, a
+        // disabled context, or an ordinary no-match must not hand the window
+        // to a reclaim those gates already settled. This is the channel that
+        // covers arrivals on snap-mode screens (the tiling dispatch only
+        // hears about engine-managed screens) — the engine whose TILED slot
+        // the record carries adopts the window into its recorded home and
+        // its retile moves it there. isOpenPath keeps the two NON-open
+        // drivers of this slot (the unminimize of a daemon-restart orphan,
+        // the pending-restores sweep) from teleporting a window the user
+        // merely unminimized.
+        if (result.deferredToTilingEngine) {
+            const bool reclaimed =
+                isOpenPath && !routed && m_crossScreenTileReclaim && m_crossScreenTileReclaim(windowId, screenId);
+            if (!reclaimed) {
+                // Vetoed (route/non-open) or DECLINED (the claims ask
+                // stricter questions — live sets, context equality,
+                // tileability — than the defer): the engine's defer skipped
+                // its float terminal on the promise someone would manage the
+                // window, so restore the no-match float default rather than
+                // leaving it with no state in any engine.
+                m_engine->applyNoMatchFloatDefault(windowId, screenId);
+            }
         }
         return;
     }

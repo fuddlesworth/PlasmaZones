@@ -991,6 +991,13 @@ private Q_SLOTS:
         PhosphorZones::AssignmentEntry scrolling;
         scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
         layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), scrolling);
+        // The defer term asks the daemon-injected resolver, which answers
+        // mode AND scroll-engine liveness — a defer keyed on mode alone
+        // would stand down for a window the scroll engine then declines.
+        // Stands in for the daemon's wiring: DP-2 is scrolling AND live.
+        engine.setScrollingModeResolver([](const QString& rec, int, const QString&) {
+            return rec == QStringLiteral("DP-2");
+        });
 
         using PhosphorEngine::WindowPlacement;
         WindowPlacement rec;

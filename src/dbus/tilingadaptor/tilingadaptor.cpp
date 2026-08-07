@@ -10,6 +10,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -221,8 +222,9 @@ void TilingAdaptor::notifyEngineScreensChanged(bool isDesktopSwitch)
                 for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
                     engine->beginArrivalBurst();
                 }
-                for (const auto& entry : parked) {
-                    dispatchOpenToClaimingEngine(entry, /*allowPark=*/false);
+                for (const auto& parkedOpen : parked) {
+                    dispatchOpenToClaimingEngine(parkedOpen.entry, /*allowPark=*/false,
+                                                 parkedOpen.allowCrossScreenClaim);
                 }
                 for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
                     engine->endArrivalBurst();
@@ -342,14 +344,19 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     PhosphorProtocol::WindowOpenedEntry routedEntry = entry;
     bool ruleRouted = false;
     if (m_windowTrackingAdaptor) {
-        const QString routed = m_windowTrackingAdaptor->applyOpenRoutingForTiling(entry.windowId, entry.screenId);
+        const QString routed =
+            m_windowTrackingAdaptor->applyOpenRoutingForTiling(entry.windowId, entry.screenId, &ruleRouted);
         if (!routed.isEmpty()) {
             routedEntry.screenId = routed;
-            ruleRouted = true;
         }
     }
-    // An explicit RouteToScreen outranks the remembered-placement reclaim —
-    // same precedence the snap facade applies.
+    // An explicit routing/placement directive outranks the
+    // remembered-placement reclaim — same precedence the snap facade
+    // applies. Keyed on the directive MATCHING, not on a redirect actually
+    // happening: a rule that pins the window to the screen it already opened
+    // on (or to a disconnected one) still owns its monitor, and reading the
+    // empty redirect as "no rule" is what let the two channels apply
+    // opposite precedence.
     dispatchOpenToClaimingEngine(routedEntry, /*allowPark=*/true, /*allowCrossScreenClaim=*/!ruleRouted);
 }
 
@@ -380,6 +387,35 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
             }
         }
     }
+    // Post-reclaim ownership check. A reclaim can also come from the OTHER
+    // channel (SnapAdaptor::resolveWindowRestore, which the effect drives
+    // FIRST for a snap-restore candidate and whose reply callback then sends
+    // this very announce), and that announce still carries the ARRIVAL
+    // screen — the reclaim's retile is queued and cannot have moved the
+    // window before the reply returns. Dispatching it would hand the window
+    // to the arrival screen's engine, whose windowOpened sees it as already
+    // tracked, skips its defer gate entirely, and MIGRATES it back: the
+    // reclaim silently undone.
+    //
+    // Stated over LIVE engine state, so it is indifferent to which channel
+    // claimed and covers every interleaving. heldScreenForWindow, not
+    // isWindowTracked (raw reverse-map key, which a refused adoption can
+    // leave dangling) and not isWindowManaged/isWindowTiled (both exclude a
+    // legitimately-floated adoption). Compared by SCREEN, never by engine
+    // identity: a mode flip preserves other-desktop states and their keys on
+    // the flipped screen, and an engine-identity test would refuse those
+    // windows' re-announce and strand them — whereas their held screen
+    // EQUALS the arriving screen, so a screen comparison passes them through.
+    for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
+        const QString heldScreen = engine->heldScreenForWindow(entry.windowId);
+        if (!heldScreen.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(heldScreen, entry.screenId)) {
+            removeUnclaimedOpen(entry.windowId);
+            qCInfo(lcDbusTiling) << "dispatchOpenToClaimingEngine:" << entry.windowId << "announced on"
+                                 << entry.screenId << "but already held on" << heldScreen
+                                 << "— ignoring the stale arrival (cross-screen reclaim already placed it)";
+            return;
+        }
+    }
     // Per-screen engine dispatch: the effect reports opens for every
     // engine-managed screen through this interface, so hand the window to
     // whichever pipeline engine CLAIMS the (possibly rule-routed) screen.
@@ -404,7 +440,7 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
     // allowPark=false, so a still-unclaimed entry gets exactly one retry.
     if (allowPark && m_screensAnnouncePending) {
         removeUnclaimedOpen(entry.windowId);
-        m_unclaimedOpens.append(entry);
+        m_unclaimedOpens.append(ParkedOpen{entry, allowCrossScreenClaim});
         qCDebug(lcDbusTiling) << "dispatchOpenToClaimingEngine: no pipeline engine claims" << entry.screenId << "for"
                               << entry.windowId << "- parked until the screens announce retries it";
         return;
@@ -416,7 +452,7 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
 void TilingAdaptor::removeUnclaimedOpen(const QString& windowId)
 {
     for (int i = m_unclaimedOpens.size() - 1; i >= 0; --i) {
-        if (m_unclaimedOpens.at(i).windowId == windowId) {
+        if (m_unclaimedOpens.at(i).entry.windowId == windowId) {
             m_unclaimedOpens.removeAt(i);
         }
     }

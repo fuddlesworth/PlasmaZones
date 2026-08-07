@@ -30,7 +30,7 @@ namespace PhosphorScrollEngine {
 // ── Float management ────────────────────────────────────────────────────────
 
 bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
-                                       const QString& windowId, const QString& screenId)
+                                       const QString& windowId, const QString& screenId, bool engineDecided)
 {
     if (state->isFloating(windowId)) {
         return false;
@@ -53,7 +53,11 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
             m_floatRestore.insert(windowId, FloatRestore{});
         }
         m_scrollFloatedWindows.insert(windowId);
-        Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
+        if (engineDecided) {
+            Q_EMIT windowFloatingStateSynced(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
+        } else {
+            Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
+        }
         Q_EMIT placementChanged(key.screenId);
         return true;
     }
@@ -93,7 +97,16 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     // stale entry would anchor the arrival animation to the wrong side when
     // the window later unfloats back into partial view.
     m_parkedScrollEdge.remove(windowId);
-    Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
+    // Signal split per the daemon's two float arms: a USER float goes out as
+    // windowFloatingChanged (active arm, restores float-back geometry); an
+    // engine-decided float (the oversized re-check) is the engine's own
+    // transition and rides windowFloatingStateSynced like the open-time
+    // oversized arm, or the daemon would treat it as a user action.
+    if (engineDecided) {
+        Q_EMIT windowFloatingStateSynced(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
+    } else {
+        Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
+    }
     // Background-context guard: see windowClosed.
     if (key == currentKeyForScreen(key.screenId)) {
         applyLayout(key.screenId, false);

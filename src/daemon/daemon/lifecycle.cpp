@@ -770,6 +770,9 @@ void Daemon::stop()
         // closure null-checks the router, but clearing it here keeps the
         // teardown grep-discoverable like every other late-bound borrow.
         concreteSnap->setLiveModeResolver({});
+        // Same contract for the tile-defer liveness resolver, which captures
+        // QPointers to both tiling engines.
+        concreteSnap->setTilingEngineLiveResolver({});
     }
 
     // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
@@ -789,6 +792,7 @@ void Daemon::stop()
     // setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
+        concreteAutotile->setScrollingModeResolver({});
     }
     // Scroll twin of the clear above: its context-gap provider captures the
     // same Daemon `this` (init_engines.cpp) and honours the same

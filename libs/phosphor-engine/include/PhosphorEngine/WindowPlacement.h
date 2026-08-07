@@ -72,7 +72,16 @@ struct WindowPlacement
 
     // ── Context (the universal restore + disabled-context gate) ──
     QString screenId; ///< last managed-context screen
-    int virtualDesktop = 0; ///< 0 = all-desktops / sticky / unknown
+    /// 0 = all-desktops / sticky / unknown. The three meanings are
+    /// deliberately conflated in one sentinel: LayoutRegistry::modeForScreen
+    /// treats 0 as its supported desktop-agnostic input, which is the right
+    /// answer for a genuinely sticky window and an approximation for a
+    /// window whose desktop was simply never captured (a plain setFloating
+    /// records none). Under per-desktop mode splits the approximation can
+    /// resolve a mode the window's real desktop does not have; splitting the
+    /// sentinel into sticky-vs-unknown is a persisted-data-model change and
+    /// has not been taken.
+    int virtualDesktop = 0;
     QString activity; ///< empty = all-activities / unknown
     WindowKind kind = WindowKind::Unknown;
 
@@ -344,15 +353,65 @@ struct WindowPlacement
 /// most one engine's mode check passes for the recorded home. A new tiling
 /// engine must add both the defer gate and the claim.
 ///
-/// A FLOATING slot never matches: float restore is screen-local by doctrine
-/// (it restores a position WITHIN the monitor KWin chose, never moves the
-/// window across monitors), so only managed slots earn a cross-screen pull.
+/// Callers must pass a MANAGED token as @p managedState (stateSnapped /
+/// stateTiled) — the function itself matches whatever token it is handed.
+/// Float restore is screen-local by doctrine (it restores a position WITHIN
+/// the monitor KWin chose, never moves the window across monitors), so a
+/// FLOATING state must never be used to earn a cross-screen pull.
+///
+/// A matched slot is NOT proof of current ownership. Engine slots are only
+/// ever merged, never cleared on ordinary close (a window that closed tiled
+/// keeps its slot — that persistence IS what login restore reads), and an
+/// engine that knowingly gives a window up mid-session must clear its slot
+/// via WindowPlacementStore::clearEngineSlot, or the stale slot plus the
+/// record-level screenId will read as a home to pull the window back to.
+/// The record-level screenId is likewise only as fresh as the last owning
+/// engine's successful capture; engine-miss captures leave it stale. Both
+/// halves are why claimants must validate the verdict against LIVE state
+/// (live screen set, membership after adoption) rather than trusting the
+/// record alone.
 ///
 /// @p isEngineMode is invoked as (screenId, virtualDesktop, activity) → bool
 /// and must answer whether that context resolves to @p engineId's mode;
 /// callers wrap their layout-manager mode lookup (and any null-manager
 /// permissiveness) in it, keeping this library free of the zones-layer mode
 /// type.
+/// Whether @p windowId carries a stable, FIFO-matchable appId — the guard
+/// every cross-engine gate and claim runs before consulting the placement
+/// store. A bare id (no `appId|uuid` composite, so extractAppId returns the
+/// id itself) or an empty appId has no bucket: no record can match it, and
+/// treating it as matchable would let a degenerate id slip past the
+/// same-screen bail (empty compares unequal to every screen). Spelled once
+/// here because five call sites across three engines each carried the same
+/// two-term test inline, and a sixth engine would get it wrong by omission.
+inline bool hasStableAppIdFor(const QString& appId, const QString& windowId)
+{
+    return !appId.isEmpty() && appId != windowId;
+}
+
+/// Whether a record's own (desktop, activity) context is compatible with the
+/// live context an engine would INSERT it into — the guard a cross-screen
+/// claim needs because the reclaim VERDICT is granted on the record's context
+/// while the adoption keys the window by the home screen's CURRENT context.
+/// Without it, a window recorded on desktop 3 is reclaimed onto the strip or
+/// layout of whatever desktop that screen happens to show, displacing that
+/// desktop's windows while KWin still has the window on its own.
+///
+/// The sentinels are honoured rather than compared: `virtualDesktop == 0`
+/// means all-desktops / sticky / unknown and an empty activity means
+/// all-activities / unknown (see WindowPlacement::virtualDesktop), so those
+/// records are compatible with any live context — the same
+/// desktop-agnostic reading LayoutRegistry::modeForScreen gives them, which
+/// is what granted the verdict in the first place. Only a CONCRETE recorded
+/// context that disagrees with a concrete live one refuses.
+inline bool recordContextMatchesLive(const WindowPlacement& p, int liveDesktop, const QString& liveActivity)
+{
+    if (p.virtualDesktop != 0 && liveDesktop != 0 && p.virtualDesktop != liveDesktop) {
+        return false;
+    }
+    return p.activity.isEmpty() || liveActivity.isEmpty() || p.activity == liveActivity;
+}
+
 template<typename IsEngineMode>
 bool pendingCrossScreenManagedRestore(const WindowPlacement& p, QLatin1String engineId, QLatin1String managedState,
                                       const QString& openingScreenId, IsEngineMode&& isEngineMode)

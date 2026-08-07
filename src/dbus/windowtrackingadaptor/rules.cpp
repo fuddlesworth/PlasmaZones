@@ -760,7 +760,8 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     return true;
 }
 
-QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId, const QString& screenId)
+QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId, const QString& screenId,
+                                                         bool* directiveMatched)
 {
     if (!m_ruleStore) {
         return QString();
@@ -777,6 +778,28 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     // RouteToDesktop is engine-neutral — emit it for autotile windows too.
     emitRouteToDesktopIfMatched(resolved, windowId);
 
+    const auto markMatched = [&] {
+        if (directiveMatched) {
+            *directiveMatched = true;
+        }
+    };
+
+    // A valid SnapToZone placement directive owns the window's placement even
+    // on this channel (the snap facade acts on it) — signal the match so the
+    // caller's reclaim veto sees it, mirroring the snap twin's ordinal check.
+    // The routed-screen RETURN stays empty: placement is not a tiling
+    // redirect.
+    if (const auto placement = resolved.slot(QString(PhosphorRules::ActionSlot::Placement))) {
+        const QJsonArray ordinals = placement->params.value(QString(PhosphorRules::ActionParam::Zones)).toArray();
+        const bool anyValid = std::any_of(ordinals.cbegin(), ordinals.cend(), [](const QJsonValue& v) {
+            const int n = v.toInt(0);
+            return n >= 1 && n <= PhosphorRules::MaxZoneOrdinal;
+        });
+        if (anyValid) {
+            markMatched();
+        }
+    }
+
     // RouteToScreen: redirect the window onto a different ENGINE-OWNED monitor
     // (autotile or scrolling). The snap open path handles snap-mode targets
     // itself (the placement directive), so here we only honour a target whose
@@ -784,17 +807,30 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     // window's spawn screen (cross-engine routing is out of scope). Returning the target tells the caller to insert
     // the window into that screen's tiling state; the output-move marker stops the
     // effect from re-processing the resulting outputChanged as a fresh open.
+    //
+    // The RETURN and the MATCH signal are deliberately separate answers: the
+    // return names a redirect target (empty = "insert on the spawn screen"),
+    // while @p directiveMatched reports that a rule OWNS this window's
+    // monitor — true on every matched-route exit below, including
+    // already-on-target and target-not-connected. The snap twin
+    // (applyOpenScreenRouting) folds both into one bool; overloading THIS
+    // function's empty return the same way is what let the two channels
+    // apply opposite reclaim precedence.
     const std::optional<PhosphorRules::RuleAction> route =
         resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen));
     if (!route) {
         return QString();
     }
     const QString target = route->params.value(QString(PhosphorRules::ActionParam::TargetScreenId)).toString();
+    if (target.isEmpty()) {
+        return QString();
+    }
+    markMatched();
     // screensMatch for the same reason the snap twin uses it: a differently
     // spelled id for the SAME monitor must read as "already there". A raw
     // compare would return the target as a distinct screen and the caller would
     // key tiling state under a second name for one output.
-    if (target.isEmpty() || !m_layoutManager || PhosphorScreens::ScreenIdentity::screensMatch(target, screenId)) {
+    if (!m_layoutManager || PhosphorScreens::ScreenIdentity::screensMatch(target, screenId)) {
         return QString();
     }
     // When the same rule also pins a target desktop (RouteToDesktop), the window
