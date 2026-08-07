@@ -13,6 +13,7 @@
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusMetaType>
 #include <QTest>
 
 #include <PhosphorProtocol/AutotileMarshalling.h>
@@ -103,9 +104,14 @@ private Q_SLOTS:
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(siiiis)"));
 
-        // Verify metatype is registered (needed for QVariant D-Bus transport)
+        // Verify the type is registered with the D-BUS metatype system, which
+        // is what QVariant transport actually needs. Asserting qMetaTypeId()
+        // is not UnknownType proves nothing: that call self-registers the
+        // Q_DECLARE_METATYPE'd type on the spot and can never fail, so it
+        // passed identically whether or not registerWireTypes() had run.
+        // typeToSignature returns null until qDBusRegisterMetaType has.
         const int typeId = qMetaTypeId<PhosphorProtocol::WindowGeometryEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         // Verify aggregate construction preserves all fields
         QCOMPARE(entry.windowId, QStringLiteral("firefox|42"));
@@ -156,7 +162,7 @@ private Q_SLOTS:
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         // Verify aggregate construction preserves all fields
         QCOMPARE(entry.windowId, QStringLiteral("konsole|7"));
@@ -269,7 +275,7 @@ private Q_SLOTS:
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::SnapAllResultEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         // Verify aggregate construction preserves all fields
         QCOMPARE(entry.windowId, QStringLiteral("dolphin|3"));
@@ -362,7 +368,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(sssbsasb)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::WindowStateEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.windowId, QStringLiteral("firefox|42"));
         QCOMPARE(entry.zoneId, QStringLiteral("{zone-1}"));
@@ -392,7 +398,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(bassiiii)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::UnfloatRestoreResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.found, true);
         QCOMPARE(entry.zoneIds.size(), 2);
@@ -419,7 +425,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(iiii)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::ZoneGeometryRect>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.x, 50);
         QCOMPARE(entry.y, 100);
@@ -458,7 +464,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(siiiiiibsssdd)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::EmptyZoneEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.zoneId, QStringLiteral("{zone-abc}"));
         QCOMPARE(entry.toRect(), QRect(10, 20, 400, 300));
@@ -492,7 +498,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(ssss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::SnapAssistCandidate>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.windowId, QStringLiteral("konsole|7"));
         QCOMPARE(entry.compositorHandle, QStringLiteral("kwin-handle-42"));
@@ -513,7 +519,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(siiii)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::NamedZoneGeometry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.zoneId, QStringLiteral("{zone-left}"));
         QCOMPARE(entry.toRect(), QRect(0, 0, 960, 1080));
@@ -545,7 +551,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(sssbbbbdibsbbb)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::AlgorithmInfoEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.id, QStringLiteral("master-stack"));
         QCOMPARE(entry.name, QStringLiteral("Master-Stack"));
@@ -636,7 +642,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(sss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::BridgeRegistrationResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.apiVersion, QStringLiteral("1"));
         QCOMPARE(entry.bridgeName, QStringLiteral("kwin"));
@@ -664,7 +670,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(bssiiiiss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::MoveTargetResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
         QVERIFY(entry.reason.isEmpty());
@@ -692,7 +698,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(bsssss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::FocusTargetResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
         QCOMPARE(entry.windowIdToActivate, QStringLiteral("dolphin|3"));
@@ -715,7 +721,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(bssss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::CycleTargetResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
         QCOMPARE(entry.windowIdToActivate, QStringLiteral("kate|5"));
@@ -753,7 +759,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(bssiiiissiiiisssss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::SwapTargetResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
         QCOMPARE(entry.windowId1, QStringLiteral("firefox|1"));
@@ -787,7 +793,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(bbiiii)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::RestoreTargetResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
         QCOMPARE(entry.found, true);
@@ -812,7 +818,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(ssii)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::WindowOpenedEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
         const int listTypeId = qMetaTypeId<PhosphorProtocol::WindowOpenedList>();
         QVERIFY(listTypeId != QMetaType::UnknownType);
 
@@ -842,7 +848,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(sssb)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::SnapConfirmationEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
         const int listTypeId = qMetaTypeId<PhosphorProtocol::SnapConfirmationList>();
         QVERIFY(listTypeId != QMetaType::UnknownType);
 
