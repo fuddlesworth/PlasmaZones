@@ -209,6 +209,17 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         // of the padding lands on the window beside it, which is a worse
         // trade than a small target. The rects are already window-local here,
         // which is the coordinate space the shell's mask wants.
+        //
+        // These are the POST-SCROLL rects, and during a view leg the effect
+        // draws the surface translated by the spring's current offset. A KWin
+        // paint-time offset does not move a wl_surface's input region, so for
+        // the length of the leg the visible pill and its hit target are apart
+        // by that offset, closing to zero as the spring settles. Accepted
+        // rather than chased: re-committing the region every frame would put a
+        // Wayland round trip on the compositor's paint path to track a target
+        // the user is watching move, and the window it labels is not at its
+        // final position mid-slide either. Clicks land correctly at rest,
+        // which is when a tab is a thing you aim at.
         inputRegion +=
             QRect(x, y, strip.value(QStringLiteral("width")).toInt(), strip.value(QStringLiteral("height")).toInt());
     }
