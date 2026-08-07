@@ -37,11 +37,11 @@ void StripViewAnimator::setEnabled(bool enabled)
     }
 }
 
-void StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
+bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
                                         const PhosphorAnimation::Profile& profile)
 {
     if (!output || deltaX == 0) {
-        return;
+        return false;
     }
     const qreal delta = qBound(-kMaxViewDeltaPx, deltaX, kMaxViewDeltaPx);
 
@@ -58,7 +58,7 @@ void StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
         // reads committed MINUS the animated value, so the absolute origin is
         // arbitrary and only differences are observable.
         motion.animation.cancel();
-        return;
+        return false;
     }
 
     PhosphorAnimation::IMotionClock* clock = clockForOutput(output);
@@ -78,7 +78,7 @@ void StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
             m_repaintRequest(output);
         }
         motion.animation.cancel();
-        return;
+        return false;
     }
 
     if (motion.animation.isAnimating()) {
@@ -104,6 +104,7 @@ void StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
     if (m_repaintRequest) {
         m_repaintRequest(output);
     }
+    return true;
 }
 
 qreal StripViewAnimator::offsetFor(KWin::LogicalOutput* output) const
@@ -140,6 +141,17 @@ bool StripViewAnimator::isAnimatingOn(KWin::LogicalOutput* output) const
 void StripViewAnimator::forgetOutput(KWin::LogicalOutput* output)
 {
     m_motions.erase(output);
+}
+
+void StripViewAnimator::reset()
+{
+    // Repaint every output with a live leg BEFORE dropping it: the offset
+    // each was contributing vanishes with the erase and nothing else will
+    // repaint it away (same reasoning as the no-clock arm of
+    // applyBatchDelta). The enable flag is deliberately untouched — this is
+    // the session-teardown path, not the master toggle.
+    scheduleRepaints();
+    m_motions.clear();
 }
 
 int StripViewAnimator::reapAnimationsForClock(const PhosphorAnimation::IMotionClock* clock)

@@ -6,6 +6,7 @@
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "shadertransitionmanager.h"
 #include "plasmazoneseffect/shader_internal.h"
+#include "transitionpasshelpers.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
@@ -38,85 +39,12 @@
 // handlers in desktoptransitionteardown.cpp.
 namespace PlasmaZones {
 
-namespace {
-// A full-screen quad in the RenderViewport's DEVICE coordinate space (logical
-// pixels × scale, y-down), projected by viewport.projectionMatrix() in the
-// caller. Local copy (unique name) so the Unity build cannot ODR-collide with
-// surfacelayers.cpp's drawFullscreenQuad — this TU is also excluded from the
-// Unity blob in CMakeLists as belt-and-braces.
-//
-// Texcoords are pinned to SCREEN corners, so `uv` stays TOP-DOWN (uv.y == 0 at
-// the top of the output) whatever the output transform is. That is the space
-// desktop_transition.glsl's getFromColor/getToColor undo the capture FBO's Y-up
-// origin against (`1.0 - uv.y`), and the space iSwitchDelta's "+y is one row
-// down" is stated in — so the fragment stage and the packs need no change.
-//
-// The pairing matters: emitting clip-space directly happened to give the same
-// top-down uv only because the default target transform is FlipY. Re-deriving it
-// from screen corners is what keeps that true once the projection is applied.
-void drawDesktopBlendQuad(const KWin::RenderViewport& viewport)
-{
-    const KWin::Rect sr = viewport.scaledRenderRect();
-    const float x0 = float(sr.left());
-    const float y0 = float(sr.top());
-    const float x1 = float(sr.right());
-    const float y1 = float(sr.bottom());
-
-    const std::array<KWin::GLVertex2D, 4> verts = {{
-        {QVector2D(x0, y1), QVector2D(0.0f, 1.0f)}, // bottom-left
-        {QVector2D(x1, y1), QVector2D(1.0f, 1.0f)}, // bottom-right
-        {QVector2D(x0, y0), QVector2D(0.0f, 0.0f)}, // top-left
-        {QVector2D(x1, y0), QVector2D(1.0f, 0.0f)}, // top-right
-    }};
-    KWin::GLVertexBuffer* const vbo = KWin::GLVertexBuffer::streamingBuffer();
-    vbo->reset();
-    vbo->setVertices(verts);
-    vbo->render(GL_TRIANGLE_STRIP);
-}
-
-// Resolve p_<name> parameter values into the customParams[] / customColors[]
-// slot pools, shared by begin() and beginPeek(). translateAnimationParams fills
-// the metadata defaults when the profile carries no override — WITHOUT this the
-// shaders run at customParams == 0 (slide has no direction, dissolve no speckle
-// scale, etc.) and appear broken. Color params land as normalised rgba, exactly
-// as the per-window transition path uploads them (see shader_transitions.cpp);
-// translateAnimationParams coerces every color to a valid QColor (default →
-// Qt::transparent), so the isValid guard is defence-in-depth against a caller
-// that bypasses the registry encoder.
-void translatePackParams(
-    const PhosphorAnimationShaders::AnimationShaderEffect& eff, const QVariantMap& params,
-    std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams>& customParams,
-    std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors>& customColors)
-{
-    namespace ASC = PhosphorAnimationShaders::AnimationShaderContract;
-    const QVariantMap translated =
-        PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, params);
-    for (int slot = 0; slot < ASC::kMaxCustomParams; ++slot) {
-        auto pull = [&](char comp) -> float {
-            const auto it = translated.constFind(ASC::slotKey(slot, comp));
-            if (it == translated.constEnd()) {
-                return 0.0f;
-            }
-            bool ok = false;
-            const float v = it->toFloat(&ok);
-            return ok ? v : 0.0f;
-        };
-        customParams[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
-    }
-    for (int slot = 0; slot < ASC::kMaxCustomColors; ++slot) {
-        const auto it = translated.constFind(ASC::colorKey(slot));
-        if (it == translated.constEnd()) {
-            continue;
-        }
-        const QColor c = it->value<QColor>();
-        if (!c.isValid()) {
-            continue;
-        }
-        customColors[slot] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());
-    }
-}
-
-} // namespace
+// The quad and pack-parameter helpers this TU used to keep file-local
+// (drawDesktopBlendQuad, translatePackParams) moved to
+// transitionpasshelpers.cpp when the strip pass grew identical needs; their
+// rationale lives on their declarations there.
+using TransitionPass::drawOutputQuad;
+using TransitionPass::translatePackParams;
 
 DesktopTransitionManager::DesktopTransitionManager(PlasmaZonesEffect* effect)
     : m_effect(effect)
@@ -232,6 +160,16 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     // discipline the shader-registry reload path uses.
     ensureGlContextCurrent();
 
+    // Sample the live-peek predicate BEFORE the insert loop: insert_or_assign
+    // replaces a peek leg's entry with a Kind::Switch one, so scanning m_active
+    // after the loop can never see a peek on an output being switched — on a
+    // global (all-output) switch the post-loop scan is always false. The claim
+    // guard below wants the pre-switch truth: was a peek leg live anywhere when
+    // this switch arrived.
+    const bool peekLive = std::any_of(m_active.cbegin(), m_active.cend(), [](const auto& entry) {
+        return entry.second.kind != Kind::Switch;
+    });
+
     for (KWin::LogicalOutput* screen : outputs) {
         if (!screen) {
             continue;
@@ -275,9 +213,6 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     // already cancels show desktop before desktopChanged is emitted
     // (Workspace::updateWindowVisibilityOnDesktopChange), so this arm is
     // defence in depth against signal-order changes, at the same benign cost.
-    const bool peekLive = std::any_of(m_active.cbegin(), m_active.cend(), [](const auto& entry) {
-        return entry.second.kind != Kind::Switch;
-    });
     if (!peekLive && !PlasmaZonesEffect::isShowingDesktop() && !m_fullScreenClaimed
         && !KWin::effects->activeFullScreenEffect()) {
         KWin::effects->setActiveFullScreenEffect(m_effect);
@@ -550,7 +485,7 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     // PAINT_SCREEN_TRANSFORMED for a transitioning output and scheduleRepaints()
     // repaints its full geometry every frame. Kept in the signature to match
     // KWin's paint-chain shape. (The viewport IS used — it projects the blend
-    // quad, see drawDesktopBlendQuad.)
+    // quad, see drawOutputQuad.)
     Q_UNUSED(deviceRegion)
     if (!screen) {
         return false;
@@ -563,6 +498,12 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
 
     // Settle check first: once the switch has run its course, tear this output
     // down and let the normal scene (the now-current desktop) paint.
+    //
+    // Unpinned clock on purpose. The strip pass pins nowMs once per screen
+    // paint because it finite-differences OFFSET against time and a mid-paint
+    // clock step would corrupt the velocity estimate. This pass has no such
+    // derivative: nowMs feeds a duration-clamped progress ramp sampled once
+    // per output, where sub-millisecond drift within a paint is invisible.
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     const qint64 elapsed = nowMs - tr.startTimeMs;
     if (elapsed >= tr.durationMs) {
@@ -826,7 +767,7 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     }
     glActiveTexture(GL_TEXTURE0);
 
-    drawDesktopBlendQuad(viewport);
+    drawOutputQuad(viewport);
 
     // Unbind both capture units. ScopedGlState restores the active-unit ENUM, not
     // the BINDINGS, so without this the two capture textures stay bound for the

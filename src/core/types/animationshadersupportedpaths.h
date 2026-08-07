@@ -24,6 +24,8 @@ namespace PlasmaZones {
 /// focus legs, window_connections for move and maximize, daemon_apply for
 /// minimize); or a
 /// @c resolveShaderWithDefault(tree, ...) call, which drives the
+/// scrolling strip's view pass from the tiling batch path
+/// (@c kwin-effect/tilinghandler/tiling.cpp), the
 /// screen-level desktop legs from
 /// @c kwin-effect/plasmazoneseffect/lifecycle_wiring.cpp, the snap geometry
 /// legs through @c applyWindowGeometry in
@@ -89,8 +91,16 @@ inline QStringList shaderConsumedLeafEventPaths()
         // per-window tryBeginShaderForEvent leg. Its shaders are the two-texture
         // desktop class (appliesTo ["desktop"]).
         PP::DesktopSwitch,
-        // Show-desktop peek — same manager, resolved in the
-        // showingDesktopChanged handler (lifecycle_wiring.cpp). One node drives both
+        // Strip scroll — consumed by the kwin-effect's StripTransitionManager:
+        // the tiling batch path resolves resolveShaderWithDefault(tree,
+        // ScrollingView) beside its motion-profile resolve (tilinghandler/
+        // tiling.cpp) and arms a per-output post-process pass over the live
+        // scene capture while the view spring is in flight. Its shaders are
+        // the one-scene strip class (appliesTo ["strip"]).
+        PP::ScrollingView,
+        // Show-desktop peek — DesktopTransitionManager again (the entry two
+        // above; the strip block in between has its own manager), resolved in
+        // the showingDesktopChanged handler (lifecycle_wiring.cpp). One node drives both
         // legs: the hide leg blends the windows scene into the bare desktop,
         // and the show-back leg replays that same blend with time reversed
         // (its bare-desktop endpoint comes from the hide leg's cache).

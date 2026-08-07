@@ -94,7 +94,16 @@ public:
     /// A retarget deliberately keeps the IN-FLIGHT leg's profile: swapping
     /// curves under a moving spring would discard its velocity, and a scroll
     /// arriving mid-leg is the case that most needs the momentum kept.
-    void applyBatchDelta(KWin::LogicalOutput* output, int deltaX, const PhosphorAnimation::Profile& profile);
+    ///
+    /// Returns true when a leg actually STARTED or RETARGETED. False when
+    /// the delta was folded into the accumulator with no leg — animations
+    /// disabled, no clock for the output (hotplug race), zero delta, null
+    /// output. Callers that build state assuming a moving spring (the
+    /// residual origins, the strip shader pass, the cascade decision) must
+    /// gate on this rather than on the wire delta: with no leg the paint
+    /// path's offset is zero, so an origin placed a delta behind the target
+    /// pops backwards and slides double.
+    bool applyBatchDelta(KWin::LogicalOutput* output, int deltaX, const PhosphorAnimation::Profile& profile);
 
     /// Paint translation for a window carried by @p output's view, in logical
     /// pixels. Zero when nothing is in flight, which is the resting state and
@@ -108,6 +117,14 @@ public:
     /// and the accumulated view both stop describing anything real. The next
     /// batch for a re-connected output starts a fresh accumulation.
     void forgetOutput(KWin::LogicalOutput* output);
+
+    /// Drop every output's accumulator and leg, WITHOUT touching the enable
+    /// flag (unlike setEnabled(false), which is the master-toggle path).
+    /// For session-scoped teardown — daemon loss clears the scrolling set,
+    /// so every spring belongs to a strip that no longer exists. Schedules
+    /// repaints for the dropped legs first, since nothing else will paint
+    /// their offsets away.
+    void reset();
     int reapAnimationsForClock(const PhosphorAnimation::IMotionClock* clock);
 
     void advanceAnimations();

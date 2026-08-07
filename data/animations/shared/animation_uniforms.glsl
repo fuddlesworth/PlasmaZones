@@ -557,9 +557,10 @@ vec2 resolutionSafe() {
 //
 // Everything else keeps identity: the daemon RHI runtime (Qt colour-
 // manages the scene graph output), shadervalidate, the bake tests, and
-// the desktop-switch path (its capture FBOs inherit the output's
-// colorDescription, so its inputs already live in the blending space and
-// converting again would be wrong).
+// the two screen-level passes — desktop-switch and the scrolling strip.
+// Both capture into FBOs that inherit the output's colorDescription, so
+// their inputs already live in the blending space and converting again
+// would be wrong.
 #ifndef PZ_FINALIZE_COLOR
 #define PZ_FINALIZE_COLOR(c) (c)
 #endif
