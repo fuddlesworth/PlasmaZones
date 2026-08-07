@@ -12,7 +12,7 @@ import org.kde.kirigami as Kirigami
  * appSettings context property, so the card carries no per-page state.
  */
 SettingsCard {
-    headerText: i18n("Window Handling")
+    headerText: i18n("Window handling")
     searchAnchor: "windowHandling"
     collapsible: true
 

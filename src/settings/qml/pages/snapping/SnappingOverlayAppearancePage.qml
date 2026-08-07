@@ -322,7 +322,7 @@ SettingsFlickable {
                 id: labelsCard
 
                 anchors.fill: parent
-                headerText: i18n("Zone Labels")
+                headerText: i18n("Zone labels")
                 searchAnchor: "zoneLabels"
                 collapsible: true
 

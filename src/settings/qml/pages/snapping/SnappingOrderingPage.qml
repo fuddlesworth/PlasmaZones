@@ -10,7 +10,7 @@ OrderingPage {
         root.hasCustomOrder = settingsController.hasCustomSnappingOrder();
     }
 
-    headerText: i18n("Snapping Layout Priority")
+    headerText: i18n("Snapping layout priority")
     infoText: i18n("Set the priority order for layouts when cycling with keyboard shortcuts and in the zone selector popup. Drag rows or use the arrow buttons to reorder.")
     emptyText: i18n("No layouts available")
     emptyExplanation: i18n("Create layouts in the Layouts page first.")
