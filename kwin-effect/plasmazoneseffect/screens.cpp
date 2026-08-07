@@ -612,13 +612,19 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     if (it == m_motionClocksByOutput.end()) {
         return;
     }
-    // m_windowAnimator and m_stripViewAnimator are unique_ptrs initialized in
-    // the ctor and never reset except during ~PlasmaZonesEffect; any
-    // screenRemoved signal posted after our destruction is auto-disconnected by
-    // QObject's teardown, so a nullptr guard here would be dead code rather
-    // than defensive. Assert the invariant instead.
+    // Both animators are unique_ptrs initialized in the ctor and never reset
+    // except during ~PlasmaZonesEffect; any screenRemoved signal posted after
+    // our destruction is auto-disconnected by QObject's teardown, so this
+    // should be unreachable. Asserted so a debug build says so loudly, and
+    // guarded so a release build cannot dereference null on the reap below if
+    // the invariant is ever broken — the clock is already out of the map here,
+    // so returning early leaks nothing.
     Q_ASSERT(m_windowAnimator);
     Q_ASSERT(m_stripViewAnimator);
+    if (!m_windowAnimator || !m_stripViewAnimator) {
+        qCWarning(lcEffect) << "onScreenRemoved: animator missing during output teardown; skipping reap";
+        return;
+    }
 
     // Ordering matters: extract the unique_ptr and erase the map
     // entry BEFORE calling reap. A re-entrant `onAnimationReaped` hook
@@ -636,9 +642,10 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     m_motionClocksByOutput.erase(it);
     m_windowAnimator->reapAnimationsForClock(dyingClock.get());
     // The strip view spring binds to the same per-output clocks, so it owes the
-    // same reap. forgetOutput() above already dropped THIS output's entry; this
-    // covers a leg on another output that bound to the dying clock through the
-    // resolver's fallback before its own clock existed.
+    // same reap. forgetOutput() above already dropped this output's entry and
+    // the strip resolver has no fallback, so nothing else can be holding this
+    // clock — the reap is the belt to that braces, and it also covers a leg
+    // started re-entrantly during the erase above.
     m_stripViewAnimator->reapAnimationsForClock(dyingClock.get());
     // dyingClock destroyed at scope exit — at this point reap has
     // cleared every animation that captured the pointer, so the

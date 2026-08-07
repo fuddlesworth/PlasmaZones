@@ -160,6 +160,16 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
             }
             slot->setVisible(false);
             writeQmlProperty(slot, QStringLiteral("loaded"), false);
+            // Retract BEFORE the sync hides the surface. With shaders and
+            // animations both off the surface is not kept mapped across a
+            // hide, and the platform window is re-created on the next show —
+            // so the id we published names an object that is gone, and Wayland
+            // hands ids out again. Retracting unconditionally rather than only
+            // in that configuration costs nothing in the keep-mapped case
+            // either: the slot is invisible, so there are no indicators for
+            // the compositor to slide. The show path re-announces, and the
+            // change gate republishes because this cleared the remembered id.
+            announceScrollTabSurface(screenId, nullptr);
             syncScrollTabShellSurfaceState(screenId);
         });
         return;

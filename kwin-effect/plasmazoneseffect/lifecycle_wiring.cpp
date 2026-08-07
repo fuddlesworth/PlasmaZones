@@ -113,9 +113,20 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     // resolvable output still has to animate somewhere, but a view offset
     // belongs to an OUTPUT by definition, so an unresolvable one has nothing
     // to slide and the batch's geometry stands on its own.
+    //
+    // So this is a raw map lookup rather than clockForOutput(), which falls
+    // back for an unmapped output and would make the sentence above false.
+    // Two things depend on the miss really being a miss: applyBatchDelta's
+    // no-clock branch, which leaves the view at rest through a hotplug race
+    // and is otherwise unreachable, and onScreenRemoved's reap, which matches
+    // by clock pointer and cannot find a leg that bound to the fallback.
     m_stripViewAnimator->setOutputClockResolver(
         [this](KWin::LogicalOutput* output) -> PhosphorAnimation::IMotionClock* {
-            return clockForOutput(output);
+            if (!output) {
+                return nullptr;
+            }
+            const auto it = m_motionClocksByOutput.find(output);
+            return it == m_motionClocksByOutput.end() ? nullptr : it->second.get();
         });
     m_stripViewAnimator->setRepaintRequest([](KWin::LogicalOutput* output) {
         if (!output || !KWin::effects) {

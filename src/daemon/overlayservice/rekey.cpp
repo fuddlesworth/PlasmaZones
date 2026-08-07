@@ -27,6 +27,8 @@
 #include <QSet>
 #include <QStringList>
 
+#include <optional>
+
 namespace PlasmaZones {
 
 bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& newKey)
@@ -105,12 +107,42 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     // newKey), destroy it rather than leave the donor's surface stranded under
     // a key nothing will ever address again — the next strip update recreates
     // it, at the cost of one surface rebuild.
+    //
+    // The four per-screen tab maps are captured FIRST, because destroyShell
+    // fires the PreDestroy hook and unwireScrollTabShellSlots clears every one
+    // of them for oldKey — so the migration block below would find nothing
+    // left to move. The strip model and input region self-heal on the next
+    // engine push, but the context-rule paint overrides do not: their only
+    // writer is a rules re-resolve, so the screen would silently fall back to
+    // config colours until one happened. Carrying them across means the
+    // rebuilt shell comes up already correct.
+    const auto savedStrips = m_lastScrollTabStrips.constFind(oldKey) != m_lastScrollTabStrips.constEnd()
+        ? std::optional(m_lastScrollTabStrips.value(oldKey))
+        : std::nullopt;
+    const auto savedRegion = m_scrollTabInputRegions.constFind(oldKey) != m_scrollTabInputRegions.constEnd()
+        ? std::optional(m_scrollTabInputRegions.value(oldKey))
+        : std::nullopt;
+    const auto savedOverrides =
+        m_scrollTabIndicatorOverrides.constFind(oldKey) != m_scrollTabIndicatorOverrides.constEnd()
+        ? std::optional(m_scrollTabIndicatorOverrides.value(oldKey))
+        : std::nullopt;
     if (m_tabShellHost->stateFor(oldKey) != nullptr && !m_tabShellHost->rekey(oldKey, newKey)) {
         qCInfo(lcOverlay) << "rekeyOverlayState: tab shell rekey refused" << oldKey << "->" << newKey
                           << "; destroying it, the next strip update rebuilds it";
         m_tabShellHost->destroyShell(oldKey);
         m_tabShellHost->removeState(oldKey);
         donor->tabShell = nullptr;
+        // Put back what the PreDestroy hook just cleared, so the migration
+        // below has something to move.
+        if (savedStrips) {
+            m_lastScrollTabStrips.insert(oldKey, *savedStrips);
+        }
+        if (savedRegion) {
+            m_scrollTabInputRegions.insert(oldKey, *savedRegion);
+        }
+        if (savedOverrides) {
+            m_scrollTabIndicatorOverrides.insert(oldKey, *savedOverrides);
+        }
     }
     PerScreenOverlayState state = std::move(donor.value());
     m_screenStates.erase(donor);

@@ -182,13 +182,17 @@ void OverlayService::wireScrollTabShellSlots(const QString& screenId, PhosphorOv
     // signal, which the function-pointer form cannot resolve at compile time.
     QObject::connect(window, SIGNAL(scrollTabActivated(QString)), this, SLOT(onScrollTabActivated(QString)));
 
-    // Click-through before anything maps. Priming below shows the surface to
-    // render its first frame, and a QQuickWindow starts WITHOUT this flag, so
-    // without the assertion here a screen-sized surface would be up and taking
-    // every click on the monitor until the first strip update ran a sync.
-    window->setFlag(Qt::WindowTransparentForInput, true);
-
+    // Click-through, asserted AFTER the prime. A QQuickWindow starts without
+    // the flag, and priming shows the surface to render its first frame —
+    // Surface::show() clears WindowTransparentForInput, so setting it first
+    // and priming second left the flag off exactly when the surface was up.
+    // A screen-sized surface then took every click on the monitor until the
+    // first strip update ran a sync, and on the path where that update bails
+    // (no slot) it never ran one at all. The passive shell orders these the
+    // same way round, for the same reason.
     primeSurfaceRenderPipeline(shellState.shellSurface());
+
+    window->setFlag(Qt::WindowTransparentForInput, true);
 }
 
 void OverlayService::unwireScrollTabShellSlots(const QString& screenId)
