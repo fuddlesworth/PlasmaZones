@@ -16,6 +16,7 @@
 
 #include <QtTest>
 
+#include <limits>
 #include <memory>
 
 using namespace PlasmaZones;
@@ -83,6 +84,8 @@ private Q_SLOTS:
     void missingClockLeavesViewAtRest();
     void absurdDeltaIsClamped();
     void repaintsAreRequestedWhileInFlight();
+    void reapingAClockDropsOnlyItsOwnOutput();
+    void forgettingAnOutputDropsItsAccumulator();
 
 private:
     std::unique_ptr<FakeClock> m_clock;
@@ -254,6 +257,11 @@ void TestStripViewAnimator::absurdDeltaIsClamped()
     // strip flung somewhere it takes seconds to spring back from.
     scroll(fakeOutputA(), std::numeric_limits<int>::max());
     QCOMPARE(m_animator->offsetFor(fakeOutputA()), static_cast<qreal>(StripViewAnimator::kMaxViewDeltaPx));
+
+    // The rail is symmetric, and a scroll the other way is not an exotic
+    // input — it is half of ordinary use.
+    scroll(fakeOutputB(), std::numeric_limits<int>::min());
+    QCOMPARE(m_animator->offsetFor(fakeOutputB()), -static_cast<qreal>(StripViewAnimator::kMaxViewDeltaPx));
 }
 
 void TestStripViewAnimator::repaintsAreRequestedWhileInFlight()
@@ -269,6 +277,58 @@ void TestStripViewAnimator::repaintsAreRequestedWhileInFlight()
     tick(200);
     QVERIFY2(!m_animator->isAnimatingOn(fakeOutputA()), "the leg should have settled by now");
     QVERIFY2(m_repaints > afterStart, "the settling frame must damage its output too");
+}
+
+void TestStripViewAnimator::reapingAClockDropsOnlyItsOwnOutput()
+{
+    // The monitor-unplug path. The effect extracts the dying output's clock,
+    // erases the map entry and reaps against the raw pointer before the
+    // unique_ptr goes out of scope — an in-flight leg that kept the pointer
+    // would dereference freed memory on the next prePaintScreen. A leg on a
+    // surviving output must be untouched.
+    auto other = std::make_unique<FakeClock>();
+    m_animator->setOutputClockResolver([this, otherPtr = other.get()](KWin::LogicalOutput* output) {
+        return output == fakeOutputB() ? otherPtr : static_cast<PhosphorAnimation::IMotionClock*>(m_clock.get());
+    });
+
+    scroll(fakeOutputA(), 400);
+    scroll(fakeOutputB(), 400);
+    latch();
+    QVERIFY(m_animator->isAnimatingOn(fakeOutputA()));
+    QVERIFY(m_animator->isAnimatingOn(fakeOutputB()));
+
+    m_repaints = 0;
+    const int reaped = m_animator->reapAnimationsForClock(m_clock.get());
+
+    QCOMPARE(reaped, 1);
+    QVERIFY2(!m_animator->isAnimatingOn(fakeOutputA()), "the reaped output's leg must be gone");
+    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
+    QVERIFY2(m_repaints > 0, "reaping must damage the output whose offset it just dropped");
+    QVERIFY2(m_animator->isAnimatingOn(fakeOutputB()), "another clock's leg must keep ticking");
+}
+
+void TestStripViewAnimator::forgettingAnOutputDropsItsAccumulator()
+{
+    // The map is keyed by LogicalOutput*, so a disconnected one must not leave
+    // an entry behind: a hotplug can land a new output at the freed pointer's
+    // address, and the effect calls this before the output goes away.
+    //
+    // Asserted against an IN-FLIGHT leg on purpose. Comparing offsets after a
+    // settled one proves nothing — offsetFor reads committed minus animated,
+    // and those are equal at rest whether or not the entry survived, so a
+    // no-op forgetOutput would pass. A live leg is the state that differs.
+    scroll(fakeOutputA(), 500);
+    scroll(fakeOutputB(), 500);
+    latch();
+    tick(50);
+    QVERIFY2(m_animator->isAnimatingOn(fakeOutputA()), "precondition: A's leg is mid-flight");
+    QVERIFY(m_animator->offsetFor(fakeOutputA()) != 0.0);
+
+    m_animator->forgetOutput(fakeOutputA());
+
+    QVERIFY2(!m_animator->isAnimatingOn(fakeOutputA()), "the forgotten output must hold no leg");
+    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
+    QVERIFY2(m_animator->isAnimatingOn(fakeOutputB()), "forgetting one output must not touch another");
 }
 
 QTEST_MAIN(TestStripViewAnimator)

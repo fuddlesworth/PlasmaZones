@@ -184,6 +184,11 @@ private Q_SLOTS:
         QVERIFY(defaultEntry.scrollEdge.isEmpty());
         QCOMPARE(defaultEntry.viewDeltaX, 0);
         QCOMPARE(defaultEntry.hasVisualPos, false);
+        // Pinned alongside the flag that guards them: a reader is only allowed
+        // to look at these when hasVisualPos is set, so their default is what
+        // a reader that forgets would see.
+        QCOMPARE(defaultEntry.visualX, 0);
+        QCOMPARE(defaultEntry.visualY, 0);
     }
 
     // A real bus round-trip so operator>> is exercised too — the signature

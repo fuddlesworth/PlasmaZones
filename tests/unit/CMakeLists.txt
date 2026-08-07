@@ -1612,6 +1612,7 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 #   test_floating_cache: FloatingCache + ZoneCache + TriggerParser tests
 #   test_tiling_state: TilingStateHelpers + WindowId tests
 #   test_decoration_manager: DecorationManager ownership/veto behavioral spec
+#   test_strip_view_animator: StripViewAnimator per-output view-spring behaviour
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_wire_types compositor-common/test_wire_types.cpp)
 target_link_libraries(test_wire_types PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
