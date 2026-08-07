@@ -372,8 +372,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             if (s.viewDeltaX == 0 || s.screenId.isEmpty() || seededScreens.contains(s.screenId)) {
                 continue;
             }
-            seededScreens.insert(s.screenId);
+            // Marked seeded only once the output RESOLVES. Marking before the
+            // lookup treated an unresolvable screen as done, so a later entry
+            // for the same screen — which is the ordinary case, since every
+            // carried column repeats the delta — could not retry it.
             if (KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
+                seededScreens.insert(s.screenId);
                 m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDeltaX, viewProfile);
                 startedViewLegs = true;
             }

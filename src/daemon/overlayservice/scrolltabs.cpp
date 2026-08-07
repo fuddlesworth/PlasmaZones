@@ -236,8 +236,16 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         // the user is watching move, and the window it labels is not at its
         // final position mid-slide either. Clicks land correctly at rest,
         // which is when a tab is a thing you aim at.
-        inputRegion +=
-            QRect(x, y, strip.value(QStringLiteral("width")).toInt(), strip.value(QStringLiteral("height")).toInt());
+        const QRect stripRect(x, y, strip.value(QStringLiteral("width")).toInt(),
+                              strip.value(QStringLiteral("height")).toInt());
+        // Clamped to the surface. These coordinates come off a JSON payload,
+        // and the region becomes the surface's input mask — the partial branch
+        // of which clears WindowTransparentForInput — so an out-of-range rect
+        // would have the daemon taking every click on the monitor while
+        // painting a few pills. A degenerate rect contributes nothing (QRegion
+        // ignores an invalid QRect), so only the over-large direction needs
+        // saying.
+        inputRegion += stripRect.intersected(QRect(QPoint(0, 0), screenGeom.size()));
     }
     m_scrollTabInputRegions.insert(screenId, inputRegion);
 

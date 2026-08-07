@@ -145,7 +145,11 @@ void TestScrollEngineSmoke::screensSetLifecycle()
     engine->setActiveScreens({QStringLiteral("S1")});
     QCOMPARE(screensSpy.count(), 3);
 
+    // The emptying push itself emits — asserted rather than only sampled
+    // afterwards, or a regression that stopped emitting on this edge would
+    // pass on the equality below.
     engine->setActiveScreens({});
+    QCOMPARE(screensSpy.count(), 4);
     QVERIFY(!engine->isEnabled());
     // Empty-identical: a second empty set has nothing to catch-scan for,
     // so no re-emit.

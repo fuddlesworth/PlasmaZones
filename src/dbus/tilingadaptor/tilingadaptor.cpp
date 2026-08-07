@@ -105,7 +105,10 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // scrollEdge now driving the animation anchor, two entries naming
         // different edges would animate the window in from one side and
         // re-anchor it to the other. No producer emits duplicates today;
-        // this is boundary hardening, first-entry-wins.
+        // this is boundary hardening. First VALID entry wins: the id is
+        // recorded after the validation bail below, so a malformed first
+        // entry does not consume the window's slot and shut out a good
+        // second one.
         if (seenWindowIds.contains(entry.windowId)) {
             qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping duplicate entry for" << entry.windowId;
             continue;
