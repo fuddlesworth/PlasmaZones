@@ -1,20 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Phosphor Slipstream — the strip leg of the phosphor-flux / phosphor-bloom /
-// phosphor-stream / desktop-phosphor set. The family's motif is STRUCTURED
-// light as signal, carried by the brand gradient (cyan #22D3EE → blue
-// #3B82F6 → purple #A855F7 → rose #F43F5E): flux races pulses along circuit
-// traces, stream pours windows through discrete luminous lanes. Slipstream
-// adapts both to the scroll: a set of faint horizontal signal lanes lights
-// up across the strip and bright gradient pulses race along them, overtaking
-// the content in the direction of travel, while the content's own highlights
-// throw comet tails behind the motion and ember sparks drift in the wake.
-// Everything scales with scroll velocity and vanishes at settle.
+// Phosphor Slipstream — the strip leg of the phosphor set, built on the
+// family's defining move: the CONTENT ITSELF becomes the light. Where
+// phosphor-stream pours a window into its zone as separated luminous
+// streams, Slipstream does the same to the whole strip while it scrolls:
+// the content separates into horizontal streams of itself that lag and bow
+// behind the motion on their own per-stream clocks, energized and pinched
+// toward their centerlines, with the brand gradient (cyan #22D3EE → blue
+// #3B82F6 → purple #A855F7 → rose #F43F5E) glowing along the seams between
+// them and ember sparks shed in the wake. As the spring settles the streams
+// reunite into the crisp image — the settled strip carries no residue,
+// which is exactly the strip contract's identity requirement.
 //
 // Strip contract (strip_transition.glsl): iTime is SECONDS, not progress;
-// intensity keys off iStripMotion, which converges to zero at settle, so
-// the settle frame is the identity image.
+// every term below keys off iStripMotion, which converges to zero at
+// settle.
 #include <strip_transition.glsl>
 #include <noise.glsl>
 
@@ -33,88 +34,63 @@ vec3 fluxGradient(float t) {
     return c;
 }
 
-float lumaAt(vec2 uv) {
-    vec3 c = getStripColor(uv).rgb;
-    return dot(c, vec3(0.299, 0.587, 0.114));
-}
-
 vec4 pTransition(vec2 uv, float t) {
-    float m = stripMask(uv, 0.02);
+    float m = stripMask(uv, 0.03);
     // Signed velocity in output-widths per second; the sign is the direction
     // the drawn content is travelling (the offset decays toward zero).
     float v = iStripMotion.w;
     float speed = abs(v);
-    // Lively already on a moderate scroll, saturated on a flick. This factor
-    // is what makes the settle frame the identity image.
-    float vis = smoothstep(0.02, 0.22, speed) * m;
-    if (vis < 1.0e-3) {
-        return getStripColor(uv);
+    // The strip's ENERGY: how far it has slipped into stream form. Ramps in
+    // on a moderate scroll, saturates on a flick, and is the single factor
+    // every term below scales by — at zero the streams have reunited and
+    // the frame is the identity image.
+    float e = smoothstep(0.03, 0.35, speed) * m;
+    vec4 base = getStripColor(uv);
+    if (e < 1.0e-3) {
+        return base;
     }
     float dir = sign(v);
-    vec4 base = getStripColor(uv);
 
-    // ── Signal lanes with racing pulses ──
-    // The structural centerpiece, borrowed from phosphor-flux: discrete
-    // horizontal lanes across the strip, each a faint glowing trace, with
-    // bright gradient comets racing along them FASTER than the content so
-    // they visibly overtake the scroll. Lane phase, comet density and comet
-    // speed are all hash-seeded per lane, so the field reads as live signal
-    // traffic rather than a marching pattern.
-    vec3 lanes = vec3(0.0);
-    {
-        vec2 s = stripUv(uv);
-        float laneCount = max(p_lanes, 2.0);
-        float laneIdx = floor(s.y * laneCount);
-        float laneOff = fract(s.y * laneCount) - 0.5; // -0.5 .. 0.5 within the lane
-        vec2 lrnd = hash22(vec2(laneIdx, 7.3));
-        // Vertical glow profile of the lane: a soft core with room for the
-        // comet bloom.
-        float laneProfile = exp(-laneOff * laneOff * 14.0);
-        // The faint continuous trace, so the lanes exist as a circuit even
-        // between pulses.
-        float trace = exp(-laneOff * laneOff * 70.0) * 0.10;
-        // Comet track: drifts against the content, speed scaled well above
-        // the scroll speed so pulses overtake. Each track cell may carry one
-        // comet; density rises with speed.
-        float trackX = s.x * (2.2 + 1.6 * lrnd.x) - dir * iTime * (1.0 + 3.5 * speed + 1.5 * lrnd.y);
-        float cellIdx = floor(trackX);
-        float px = fract(trackX);
-        vec2 crnd = hash22(vec2(cellIdx, laneIdx * 13.1 + 3.7));
-        float density = clamp(0.30 + 0.55 * speed, 0.0, 0.85);
-        float present = step(1.0 - density, crnd.x);
-        // Comet shape along the track: a sharp head with a long tapered tail
-        // trailing behind the direction of travel.
-        float head = 0.2 + 0.6 * crnd.y;
-        float dxAlong = (px - head) * dir;
-        float body = dxAlong <= 0.0 ? exp(dxAlong * (4.0 + 6.0 * (1.0 - p_trailLength))) : exp(-dxAlong * 45.0);
-        vec3 cometColor = fluxGradient(fract(crnd.x * 4.7 + lrnd.y));
-        lanes = (cometColor * present * body * laneProfile * 1.6 + fluxGradient(lrnd.x) * trace) * vis * p_intensity;
-    }
+    // ── The stream field ──
+    // The strip divides into horizontal streams inside its work area. Each
+    // stream runs on its own slightly offset clock (per-stream hash), so
+    // under motion the streams visibly desynchronize instead of shearing as
+    // one block — phosphor-stream's signature.
+    vec2 s = stripUv(uv);
+    float n = max(p_streams, 3.0);
+    float band = floor(s.y * n);
+    float by = fract(s.y * n) - 0.5; // -0.5 .. 0.5 within the stream
+    vec2 br = hash22(vec2(band, 11.7));
 
-    // ── Comet trails off the content's own highlights ──
-    // Bright content (glints, highlights, hard edges) throws a gradient tail
-    // behind the motion: march toward where the content came from and let
-    // both raw highlights and luma edges deposit light, cyan at the head
-    // reddening down the tail. Gain is deliberately bold; the family is a
-    // light show, not a hint.
-    const int kTaps = 12;
-    float trailSpan = 0.08 + 0.20 * p_trailLength; // uv units at full strength
-    float stepLen = trailSpan / float(kTaps);
-    vec3 comet = vec3(0.0);
-    for (int i = 1; i <= kTaps; ++i) {
-        vec2 su = uv + vec2(dir * float(i) * stepLen, 0.0);
-        float l = lumaAt(su);
-        float highlight = max(l - 0.55, 0.0) * 2.0;
-        float edge = abs(lumaAt(su + vec2(stepLen, 0.0)) - lumaAt(su - vec2(stepLen, 0.0))) * 1.5;
-        float fall = pow(1.0 - float(i) / float(kTaps + 1), 1.4);
-        comet += fluxGradient(float(i) / float(kTaps)) * (highlight + edge) * fall;
-    }
-    comet *= vis * p_intensity * (5.5 / float(kTaps));
+    // Per-stream lag: content in a stream has not caught up with the strip's
+    // committed position, so it is sampled from behind along the travel
+    // direction. The lag bows within the stream (stronger toward its edges)
+    // so each ribbon arcs rather than shifting rigidly.
+    float lagMag = e * p_separation * 0.055 * (0.35 + 0.65 * br.x) * (1.0 + 1.2 * by * by);
 
-    // ── Ember sparks ──
-    // Bigger, brighter and slightly elongated along the motion axis compared
-    // to a plain dot, drifting against the travel direction on per-cell
-    // phases so they twinkle rather than march.
+    // Pinch toward the stream's centerline: the ribbons visibly thin apart
+    // as they separate, which is what makes the strip read as streams of
+    // content instead of a sheared image.
+    float pinch = 0.35 * e * p_separation;
+    float syPinched = (band + 0.5 + by * (1.0 - pinch)) / n;
+    float yScale = (iStripRect.w > 0.0 && iResolution.y > 0.0) ? iStripRect.w / iResolution.y : 1.0;
+
+    vec2 su = uv;
+    su.x += dir * lagMag;
+    su.y += (syPinched - s.y) * yScale;
+    vec4 c = getStripColor(su);
+
+    // ── Energize ──
+    // The displaced content brightens on its own per-stream level, the
+    // seams between streams fall into shadow, and the brand gradient glows
+    // along them — each stream carrying its own stop, drifting slowly along
+    // its length so the color reads as flow.
+    float seam = smoothstep(0.30, 0.5, abs(by));
+    vec3 seamGlow = fluxGradient(fract(br.y + s.x * 0.35 + iTime * 0.05 * dir)) * seam * e * p_glow * 1.1;
+    float seamShade = 1.0 - 0.4 * e * seam;
+    vec3 energized = c.rgb * (1.0 + 0.45 * e * p_glow * (0.4 + 0.6 * br.y)) * seamShade + seamGlow;
+
+    // ── Ember sparks shed in the wake ──
     vec3 ember = vec3(0.0);
     if (p_embers > 0.01) {
         float aspect = resolutionSafe().x / max(resolutionSafe().y, 1.0);
@@ -127,20 +103,11 @@ vec4 pTransition(vec2 uv, float t) {
             vec2 d = (g - cell - sparkPos) * vec2(0.55, 1.0); // stretched along x
             float twinkle = 0.6 + 0.4 * sin(iTime * (4.0 + 6.0 * rnd.y) + rnd.y * 6.2831);
             float spark = smoothstep(0.22, 0.0, length(d)) * twinkle;
-            ember = fluxGradient(rnd.y) * spark * vis * p_embers * 1.4;
+            ember = fluxGradient(rnd.y) * spark * e * p_embers * 1.3;
         }
     }
 
-    // ── Directional smear ──
-    // A faint 3-tap smear tying the light to the motion; the blur pack
-    // exists for the heavy version.
-    float smear = clamp(speed * 0.02, 0.0, 0.012) * vis;
-    vec3 body = base.rgb;
-    if (smear > 1.0e-5) {
-        vec3 acc = base.rgb + getStripColor(uv + vec2(dir * smear, 0.0)).rgb
-            + getStripColor(uv + vec2(dir * smear * 2.0, 0.0)).rgb;
-        body = mix(base.rgb, acc / 3.0, 0.6);
-    }
-
-    return vec4(body + lanes + comet + ember, base.a);
+    // Cross-fade the whole transformation by energy so a gentle scroll only
+    // whispers into stream form and settle is exactly the identity.
+    return vec4(mix(base.rgb, energized, clamp(e * 1.15, 0.0, 1.0)) + ember, base.a);
 }

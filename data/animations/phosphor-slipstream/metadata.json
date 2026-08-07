@@ -1,7 +1,7 @@
 {
     "id": "phosphor-slipstream",
     "name": "Phosphor Slipstream",
-    "description": "The strip leg of the official Phosphor set. While the strip scrolls, glowing signal lanes light up across it and bright gradient pulses race along them, overtaking the content in the direction of travel. Highlights in the content throw comet tails behind the motion and ember sparks drift in the wake. Everything scales with scroll speed and vanishes as the strip settles.",
+    "description": "The strip leg of the official Phosphor set. While the strip scrolls it slips into its stream form: the content separates into luminous horizontal streams that lag and bow behind the motion on their own clocks, energized between glowing seams that carry the brand gradient, with ember sparks shed in the wake. As the strip settles the streams reunite and the settled image carries no residue.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Particle",
@@ -9,37 +9,37 @@
     "fragmentShader": "effect.frag",
     "parameters": [
         {
-            "id": "intensity",
-            "name": "Trail Intensity",
+            "id": "streams",
+            "name": "Streams",
+            "type": "float",
+            "default": 12.0,
+            "min": 4.0,
+            "max": 24.0,
+            "step": 1.0,
+            "description": "How many streams the strip separates into.",
+            "group": "Streams"
+        },
+        {
+            "id": "separation",
+            "name": "Separation",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How far the streams desynchronize and pinch apart at a given scroll speed.",
+            "group": "Streams"
+        },
+        {
+            "id": "glow",
+            "name": "Glow",
             "type": "float",
             "default": 0.7,
             "min": 0.0,
             "max": 1.0,
             "step": 0.05,
-            "description": "How bright the gradient trails glow at a given scroll speed.",
-            "group": "Trails"
-        },
-        {
-            "id": "trailLength",
-            "name": "Trail Length",
-            "type": "float",
-            "default": 0.6,
-            "min": 0.1,
-            "max": 1.0,
-            "step": 0.05,
-            "description": "How far the trails stream out behind the moving columns.",
-            "group": "Trails"
-        },
-        {
-            "id": "lanes",
-            "name": "Signal Lanes",
-            "type": "float",
-            "default": 7.0,
-            "min": 2.0,
-            "max": 16.0,
-            "step": 1.0,
-            "description": "How many signal lanes cross the strip.",
-            "group": "Lanes"
+            "description": "How brightly the streams energize and the gradient seams glow.",
+            "group": "Streams"
         },
         {
             "id": "embers",
@@ -50,7 +50,7 @@
             "max": 1.0,
             "step": 0.05,
             "description": "How many ember sparks drift in the wake.",
-            "group": "Trails"
+            "group": "Streams"
         },
         { "id": "colorCyan", "name": "Gradient Cyan", "type": "color", "default": "#22D3EE" },
         { "id": "colorBlue", "name": "Gradient Blue", "type": "color", "default": "#3B82F6" },
