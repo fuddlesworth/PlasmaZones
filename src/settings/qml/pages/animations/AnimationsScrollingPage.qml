@@ -5,9 +5,9 @@ import QtQuick
 // Scrolling-strip view motion. One event, and its subject is the VIEW rather
 // than any window: a scroll moves every column on the strip by the same
 // amount, so the compositor springs the view once per monitor and every column
-// rides that one offset. The tab-indicator overlay mirrors the same profile
-// locally, because it is drawn into a layer-shell surface that the
-// compositor's paint offset never reaches.
+// rides that one offset. The tab indicators ride it too: the compositor adds
+// the same offset to their surface in the same paint pass, so this one profile
+// governs the whole thing and nothing mirrors it on the daemon side.
 //
 // Curve and duration only. The leg translates already-painted windows — no
 // capture, no surface of its own, no old-rect/new-rect pair to hand a pack —
@@ -19,7 +19,7 @@ import QtQuick
 // was its only leaf. Add one if a second leg ever lands.
 AnimationEventCardList {
     Accessible.name: i18n("Scrolling animation events")
-    headerText: i18n("Animation for the scrolling strip. The whole strip moves together, so this is one setting for every column.")
+    headerText: i18n("Animations for the scrolling strip. The whole strip moves together, so this is one setting for every column.")
     eventModel: [
         {
             "eventPath": "scrolling.view",

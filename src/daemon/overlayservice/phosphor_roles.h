@@ -166,11 +166,12 @@ inline const PhosphorLayer::Role ScrollTabs =
 /// shell is: indicators spread across the whole strip, and re-anchoring a
 /// bounding box on every relayout would be pure churn.
 ///
-/// The effect matches this scope prefix (see
-/// PlasmaZonesEffect::isScrollTabIndicatorSurface) to tell the surface
-/// apart from the daemon's other overlays, which all share its window
-/// class. Renaming the prefix here without renaming it there silently
-/// stops the indicators riding the strip.
+/// The prefix is the SurfaceAnimator's longest-prefix config lookup key and
+/// nothing else. The effect cannot read a layer-shell scope at all, so it
+/// tells this surface apart by the wl_surface object id the daemon announces
+/// over D-Bus (announceScrollTabSurface, matched in
+/// PlasmaZonesEffect::isScrollTabIndicatorSurface). The load-bearing contract
+/// is therefore the announce and retract pairing, not this string.
 inline const PhosphorLayer::Role ScrollTabShell = PhosphorShellPatterns::Hud()
                                                       .withLayer(PhosphorLayer::Layer::Top)
                                                       .withScopePrefix(QStringLiteral("plasmazones-scroll-tab-shell"));

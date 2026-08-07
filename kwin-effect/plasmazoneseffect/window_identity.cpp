@@ -431,11 +431,10 @@ void PlasmaZonesEffect::restackScrollTabSurfaces()
 
 void PlasmaZonesEffect::onScrollTabSurfaceChanged(const QString& screenId, uint surfaceId)
 {
-    // Keyed by surface id alone, not by screen: the paint path already resolves
-    // the output from the window itself, and a per-screen map would only add a
-    // second thing to keep in step. The screen id still arrives because the
-    // announcement is about a screen's surface, and it is what the retraction
-    // below names.
+    // The set is what the paint path tests, since it already resolves the
+    // output from the window itself and has no screen to look up. The
+    // per-screen map beside it exists solely so an announcement can retract the
+    // id it replaces: the announcement names a screen, not the outgoing id.
     const quint32 previous = m_scrollTabSurfaceIdsByScreen.value(screenId, 0);
     if (previous != 0) {
         m_scrollTabSurfaceIds.remove(previous);

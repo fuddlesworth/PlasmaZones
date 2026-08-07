@@ -222,7 +222,16 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         entry.screenId = req.screenId;
         entry.stacking = req.stacking;
         entry.scrollEdge = req.scrollEdge;
-        entry.viewDeltaX = req.viewDeltaX;
+        // Clamped here, at the wire boundary, because the batch has TWO
+        // consumers: the view spring and the per-window origin below. The wire
+        // deliberately does not validate this field, and clamping inside the
+        // animator alone left the origin built from the raw value — so a
+        // garbled delta would start every carried column's leg arbitrarily far
+        // off-screen, which is the same flung strip the clamp exists to
+        // prevent, just moved onto the per-window springs. One bounded value
+        // for both consumers makes the animator's own clamp idempotent.
+        entry.viewDeltaX =
+            qBound(-StripViewAnimator::kMaxViewDeltaPx, req.viewDeltaX, StripViewAnimator::kMaxViewDeltaPx);
         entry.visualPos = req.hasVisualPos ? QPoint(req.visualX, req.visualY) : QPoint();
         entry.hasVisualPos = req.hasVisualPos;
         if (candidates.size() > 1) {
