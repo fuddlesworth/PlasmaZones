@@ -1,0 +1,49 @@
+{
+    "id": "phosphor-slipstream",
+    "name": "Phosphor Slipstream",
+    "description": "The strip leg of the official Phosphor set. While the strip scrolls, luminous trails in the brand gradient shed from the edges of the moving columns and stream out behind them, with a few ember sparks drifting in the wake. Everything scales with scroll speed and vanishes as the strip settles.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Particle",
+    "appliesTo": ["strip"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "intensity",
+            "name": "Trail Intensity",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How bright the gradient trails glow at a given scroll speed.",
+            "group": "Trails"
+        },
+        {
+            "id": "trailLength",
+            "name": "Trail Length",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.1,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How far the trails stream out behind the moving columns.",
+            "group": "Trails"
+        },
+        {
+            "id": "embers",
+            "name": "Embers",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How many ember sparks drift in the wake.",
+            "group": "Trails"
+        },
+        { "id": "colorCyan", "name": "Gradient Cyan", "type": "color", "default": "#22D3EE" },
+        { "id": "colorBlue", "name": "Gradient Blue", "type": "color", "default": "#3B82F6" },
+        { "id": "colorPurple", "name": "Gradient Purple", "type": "color", "default": "#A855F7" },
+        { "id": "colorRose", "name": "Gradient Rose", "type": "color", "default": "#F43F5E" }
+    ]
+}

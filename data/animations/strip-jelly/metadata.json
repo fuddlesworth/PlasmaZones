@@ -1,0 +1,23 @@
+{
+    "id": "strip-jelly",
+    "name": "Strip Jelly",
+    "description": "The strip wobbles like a soft body while it scrolls. Rows near the top and bottom edges lag behind the middle, so the columns bow in the direction of travel and relax straight as the strip settles.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Physics",
+    "appliesTo": ["strip"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "wobble",
+            "name": "Wobble",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How far the edges bow behind the middle at a given scroll speed.",
+            "group": "Jelly"
+        }
+    ]
+}
