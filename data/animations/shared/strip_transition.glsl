@@ -109,6 +109,18 @@ float stripMask(vec2 uv, float feather) {
     return inX * inY;
 }
 
+// 1.0 well inside the output, falling to 0.0 at the LEFT and RIGHT screen
+// edges over `span` uv units. Content beyond the output edge does not exist
+// in the capture: uStrip is CLAMP_TO_EDGE, so a sample past the edge repeats
+// the last pixel column and any displaced sample there smears/stretches the
+// edge. Every pack that displaces its sample horizontally MUST scale the
+// displacement by this, with `span` at least twice its maximum displacement,
+// so the displacement dies out before its sample can cross the edge.
+float stripEdgeFade(vec2 uv, float span) {
+    float s = max(span, 1.0e-4);
+    return smoothstep(0.0, s, uv.x) * (1.0 - smoothstep(1.0 - s, 1.0, uv.x));
+}
+
 // The uv remapped into the strip work area: (0,0) at the rect's top-left,
 // (1,1) at its bottom-right. Meaningful only where stripMask() > 0; with a
 // zero-sized rect this returns uv unchanged.

@@ -16,6 +16,9 @@ vec4 pTransition(vec2 uv, float t) {
     // Signed velocity in output-widths per second, saturating at ~4% of the
     // output width of bow at full wobble.
     float lag = clamp(iStripMotion.w * 0.06 * p_wobble, -0.04, 0.04) * m;
+    // Die out before the lagged rows can sample past the screen edge, where
+    // the clamped capture would stretch the last column (see stripEdgeFade).
+    lag *= stripEdgeFade(uv, 0.08);
     if (abs(lag) < 1.0e-5) {
         return getStripColor(uv);
     }

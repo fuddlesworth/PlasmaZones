@@ -36,5 +36,13 @@ vec4 pTransition(vec2 uv, float t) {
     // Depth cue: the compressed side falls into shade, scaled with the same
     // mask and tilt so it vanishes at settle.
     float shade = 1.0 - p_shading * 0.35 * clamp(tilt * sx * 6.0, 0.0, 1.0) * m;
-    return vec4(c.rgb * shade, c.a);
+    // Off the drum: on the receding side the warp legitimately asks for
+    // content past the screen edge, which the clamped capture would answer
+    // by smearing its last pixel row/column. Fade those samples into shadow
+    // instead: the tilted plane's far edge pulls away from the screen edge
+    // and darkness shows behind it, which is the depth cue a real drum
+    // would give. Vanishes with the tilt, so settle stays the identity.
+    vec2 outside = max(-su, su - 1.0);
+    float voidAmt = smoothstep(0.0, 0.01, max(max(outside.x, outside.y), 0.0));
+    return vec4(c.rgb * shade * (1.0 - voidAmt), c.a);
 }

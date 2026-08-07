@@ -21,6 +21,9 @@ vec4 pTransition(vec2 uv, float t) {
     // strength; the clamp caps the kernel at 3.5% of the output whatever the
     // fling velocity.
     float smear = clamp(abs(iStripMotion.w) * 0.06 * p_strength, 0.0, 0.035) * mask;
+    // Die out before the taps can cross the screen edge, where the clamped
+    // capture would smear the last pixel column (see stripEdgeFade).
+    smear *= stripEdgeFade(uv, 0.07);
     if (smear < 1.0e-5) {
         // Identity at (or near) settle — REQUIRED by the strip contract.
         return getStripColor(uv);
