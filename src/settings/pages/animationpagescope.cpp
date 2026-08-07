@@ -29,6 +29,17 @@ AnimationPageScope animationPageScope(const QString& page)
         {QStringLiteral("animations-side-panels"), {{QStringLiteral("panel")}, {}}},
         {QStringLiteral("animations-widgets"), {{QStringLiteral("widget")}, {}}},
         {QStringLiteral("animations-editor"), {{QStringLiteral("editor")}, {}}},
+        // Scopes to the root even though the page shows no card for it, which
+        // is the one place in this table where the scope is wider than the
+        // rows. AnimationsScrollingPage lists only `scrolling.view`, because a
+        // cascade parent over a single child is noise (the Desktop page states
+        // the same rule and only grew its parent row when `peek` became a
+        // second leg). Scoping to the root anyway is deliberate: it is what
+        // lets this page's Reset clear an override that a motion set or preset
+        // wrote across the tree onto the bare path, which no other page would
+        // reach. Excluding the root instead would NOT work — the exclude list
+        // is subtree-matched, so it would take `scrolling.view` with it and
+        // leave the page owning nothing.
         {QStringLiteral("animations-scrolling"), {{QStringLiteral("scrolling")}, {}}},
     };
     const auto it = kEventRoots.constFind(page);
