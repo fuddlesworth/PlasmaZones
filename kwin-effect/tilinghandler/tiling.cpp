@@ -325,6 +325,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // This is what makes the strip rigid: one spring per output, read back by
     // the paint path for every column, instead of N per-window springs that
     // each start a moment apart and integrate themselves apart.
+    //
+    // Set when any output actually got a leg. The applies below must then land
+    // in ONE pass: the paint path adds the view offset to every scroll-managed
+    // window on the output with no test for whether that window's own commit
+    // has arrived, so a column still waiting on its stagger timer draws at (old
+    // rect + offset), which is a full delta away from where it belongs. With
+    // the shipped 40 ms cascade against a 150 ms leg, columns from the fourth
+    // on would sit still for the whole leg and then teleport in sequence.
+    bool startedViewLegs = false;
     {
         // Resolved once per batch, not per screen: the view's motion node is
         // not screen-dependent, and this is the same cascade every other
@@ -342,6 +351,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             seededScreens.insert(s.screenId);
             if (KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
                 m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDeltaX, viewProfile);
+                startedViewLegs = true;
             }
         }
     }
@@ -361,7 +371,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // and would sort it to an extreme unrelated to the motion the user
     // watches. A leaving column is keyed on where it currently sits instead,
     // which is the start of its exit slide.
-    const bool isScrollBatch = std::any_of(toApply.cbegin(), toApply.cend(), [](const TileSnap& s) {
+    // Skipped when this batch started view legs: those apply in one pass, so
+    // there is no cascade left to order. A scroll batch that moved no columns
+    // in or out of view (a park with no view travel) still cascades and still
+    // wants the direction sort, which is why the two predicates differ.
+    const bool isScrollBatch = !startedViewLegs && std::any_of(toApply.cbegin(), toApply.cend(), [](const TileSnap& s) {
         return !s.scrollEdge.isEmpty();
     });
     if (isScrollBatch) {
@@ -1029,7 +1043,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 m_tileTargetZones[snap.windowId] = snap.geometry;
             }
         },
-        onComplete);
+        onComplete, startedViewLegs);
 }
 
 void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)

@@ -30,6 +30,7 @@
 
 #include "tilinghandler/tilinghandler.h"
 #include "compositor/compositorclock.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
@@ -593,6 +594,14 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // never had an animation clock.
     m_desktopTransition.outputRemoved(output);
 
+    // Drop this output's strip view accumulator. The map is keyed by
+    // LogicalOutput*, so a disconnected one would leave an entry whose key can
+    // be reused by a later hotplug landing at the same address — the next
+    // scroll on the new output would then spring from the dead one's baseline.
+    // Runs before the motion-clock early-return so it fires even for an output
+    // that never had an animation clock, same as the two clears above.
+    m_stripViewAnimator->forgetOutput(output);
+
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the
     // unique_ptr. Reap only the animations bound to THIS output's clock
@@ -603,12 +612,13 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     if (it == m_motionClocksByOutput.end()) {
         return;
     }
-    // m_windowAnimator is a unique_ptr initialized in the ctor and
-    // never reset except during ~PlasmaZonesEffect; any screenRemoved
-    // signal posted after our destruction is auto-disconnected by
-    // QObject's teardown, so a nullptr guard here would be dead
-    // code rather than defensive. Assert the invariant instead.
+    // m_windowAnimator and m_stripViewAnimator are unique_ptrs initialized in
+    // the ctor and never reset except during ~PlasmaZonesEffect; any
+    // screenRemoved signal posted after our destruction is auto-disconnected by
+    // QObject's teardown, so a nullptr guard here would be dead code rather
+    // than defensive. Assert the invariant instead.
     Q_ASSERT(m_windowAnimator);
+    Q_ASSERT(m_stripViewAnimator);
 
     // Ordering matters: extract the unique_ptr and erase the map
     // entry BEFORE calling reap. A re-entrant `onAnimationReaped` hook
@@ -625,6 +635,11 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     std::unique_ptr<CompositorClock> dyingClock = std::move(it->second);
     m_motionClocksByOutput.erase(it);
     m_windowAnimator->reapAnimationsForClock(dyingClock.get());
+    // The strip view spring binds to the same per-output clocks, so it owes the
+    // same reap. forgetOutput() above already dropped THIS output's entry; this
+    // covers a leg on another output that bound to the dying clock through the
+    // resolver's fallback before its own clock existed.
+    m_stripViewAnimator->reapAnimationsForClock(dyingClock.get());
     // dyingClock destroyed at scope exit — at this point reap has
     // cleared every animation that captured the pointer, so the
     // destruction cannot strand a dangling MotionSpec::clock.

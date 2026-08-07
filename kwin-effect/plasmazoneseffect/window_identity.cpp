@@ -361,15 +361,30 @@ bool PlasmaZonesEffect::isScrollTabIndicatorSurface(KWin::EffectWindow* w) const
     // reachable from an exported API. So the daemon announces the surface's
     // protocol object id over D-Bus and this matches on that.
     //
+    // The id ALONE is not a handle. A Wayland object id is unique only among
+    // one client's live objects (PhosphorWayland/SurfaceIdentity.h states the
+    // same contract on the announcing side), and ids start low and grow, so an
+    // ordinary application's surface collides with a daemon id routinely rather
+    // than exotically. A false positive here does not merely mispaint: the
+    // window would take the strip's view offset every frame of every scroll,
+    // forfeit occlusion culling via setTransformed/setTranslucent, and be
+    // permanently lowered to the bottom of its layer by restackScrollTabSurfaces.
+    // So the id match is qualified by the owning client, which for the daemon's
+    // surfaces is exactly what isOwnPassthroughOverlayClass names.
+    //
     // The empty-set short-circuit is the whole hot path: with no scrolling tab
     // indicators anywhere (the overwhelmingly common case) this costs one
-    // container check per window per frame.
+    // container check per window per frame. The class comparison is ordered
+    // after the id lookup so only a numeric match ever pays for it.
     if (m_scrollTabSurfaceIds.isEmpty() || !w) {
         return false;
     }
     KWin::Window* window = w->window();
     KWin::SurfaceInterface* surface = window ? window->surface() : nullptr;
-    return surface && m_scrollTabSurfaceIds.contains(surface->id());
+    if (!surface || !m_scrollTabSurfaceIds.contains(surface->id())) {
+        return false;
+    }
+    return isOwnPassthroughOverlayClass(w->windowClass());
 }
 
 void PlasmaZonesEffect::restackScrollTabSurfaces()

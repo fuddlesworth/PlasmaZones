@@ -886,9 +886,18 @@ public:
      * @param applyFn     Called with index [0, count). Must capture by value
      *                    (lambda may fire asynchronously via QTimer).
      * @param onComplete  Optional callback after all items are processed.
+     * @param forceImmediate Ignore the user's sequence mode and apply every
+     *                    item in one pass. For batches whose members must land
+     *                    together because something else is already animating
+     *                    them as a unit — a scrolling strip carried by the
+     *                    per-output view spring is the case this exists for.
+     *                    Staggering those would draw a column that has not
+     *                    committed yet at its old rect PLUS the view offset,
+     *                    i.e. one full delta the wrong way, until its own timer
+     *                    fires. See slotWindowsTileRequested.
      */
     void applyStaggeredOrImmediate(int count, const std::function<void(int)>& applyFn,
-                                   const std::function<void()>& onComplete = nullptr);
+                                   const std::function<void()>& onComplete = nullptr, bool forceImmediate = false);
 
 private:
     // Friend classes for helpers
