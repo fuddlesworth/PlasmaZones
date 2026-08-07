@@ -9,10 +9,14 @@ import QtQuick
 // the same offset to their surface in the same paint pass, so this one profile
 // governs the whole thing and nothing mirrors it on the daemon side.
 //
-// Curve and duration only. The leg translates already-painted windows — no
-// capture, no surface of its own, no old-rect/new-rect pair to hand a pack —
-// so shaderEffectAppliesToEventPath dims every effect here rather than let a
-// user assign one that could only be ignored.
+// Curve, duration AND a shader leg. The shader picker offers only the strip
+// class (appliesTo ["strip"], e.g. Strip Motion Blur): the view spring
+// retargets continuously under wheel scrolling, so there is no from/to pair
+// for a crossfade pack, and shaderEffectAppliesToEventPath dims everything
+// but the packs that consume the strip contract (uStrip / iStripMotion via
+// strip_transition.glsl). The pass decorates the live scene per output while
+// the spring is in flight (StripTransitionManager); with no pack assigned
+// the strip scrolls exactly as before.
 //
 // No "All Scrolling Events" parent row: a cascade over a single child is
 // noise, the same reason the Desktop page left its parent off while `switch`
