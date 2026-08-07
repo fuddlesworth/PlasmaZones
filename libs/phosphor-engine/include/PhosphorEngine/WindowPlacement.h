@@ -223,6 +223,21 @@ struct WindowPlacement
     {
         return QLatin1String("tiled");
     }
+    /// An engine that KNOWINGLY GAVE THE WINDOW UP (a cross-mode handoff)
+    /// leaves this instead of its managed slot. It is deliberately not an
+    /// absent slot: `takeForReopen`'s exact-final gate treats "a record for
+    /// this instance carrying a slot for the ASKING engine that the reopen
+    /// predicate rejects" as a FINAL verdict with no FIFO fallback, and a
+    /// released window must keep that verdict — dropping the slot outright
+    /// made it indistinguishable from a fresh open, which then consumed a
+    /// SIBLING instance's floating record and restored at the sibling's
+    /// position. It is equally not a managed state: the cross-screen reclaim
+    /// keys on snapped/tiled, so a released slot can no longer advertise a
+    /// home the engine has given up.
+    static QLatin1String stateReleased()
+    {
+        return QLatin1String("released");
+    }
 
     QJsonObject toJson() const
     {

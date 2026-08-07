@@ -160,8 +160,8 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
 // no remaining caller (the effect uses resolveWindowRestore).
 
 void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
-                                       bool isOpenPath, int& snapX, int& snapY, int& snapWidth, int& snapHeight,
-                                       bool& shouldSnap)
+                                       bool isOpenPath, int minWidth, int minHeight, int& snapX, int& snapY,
+                                       int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
@@ -215,19 +215,24 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // the two NON-open drivers of this slot (the unminimize of a
         // daemon-restart orphan, the pending-restores sweep) from
         // teleporting a window the user merely unminimized.
-        if (result.deferredToTilingEngine) {
-            const bool reclaimed =
-                isOpenPath && !routed && m_crossScreenTileReclaim && m_crossScreenTileReclaim(windowId, screenId);
+        if (result.deferredToTilingEngine && !routed) {
+            const bool reclaimed = isOpenPath && m_crossScreenTileReclaim
+                && m_crossScreenTileReclaim(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
             if (!reclaimed) {
-                // Vetoed (route/non-open) or DECLINED (the claims ask
-                // stricter questions — live sets, context equality,
-                // tileability — than the defer): the engine's defer skipped
-                // its float terminal on the promise someone would manage the
-                // window, so restore the no-match float default rather than
-                // leaving it with no state in any engine.
+                // Non-open, or DECLINED (the claims ask stricter questions —
+                // live sets, context equality, tileability — than the
+                // defer): the engine's defer skipped its float terminal on
+                // the promise someone would manage the window, so restore
+                // the no-match float default rather than leaving it with no
+                // state in any engine.
                 m_engine->applyNoMatchFloatDefault(windowId, screenId);
             }
         }
+        // A matched route is deliberately NOT followed by the float default:
+        // the route already applied final geometry on its TARGET screen, and
+        // writing float state here would record the SPAWN screen — the one
+        // the window is leaving. The route owns the placement, which is what
+        // the defer's "someone will manage it" promise needed.
         return;
     }
 

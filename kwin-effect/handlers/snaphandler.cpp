@@ -237,10 +237,15 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
             onComplete(*snapApplied);
         };
     }
-    m_effect->tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
-                               {windowId, screenId, sticky, kindInt, isOpenPath}, safeWindow, windowId, false, onMiss,
-                               markApplied,
-                               /*skipAnimation=*/true, completeWithOutcome, releaseSuppression);
+    // Client-declared minimum, the same value the tiling channel sends: on a
+    // cross-screen reclaim the adopting engine evaluates its oversized/float
+    // verdict once from this, and 0,0 left an oversized window tiled.
+    const QSize declaredMin = TilingHandler::declaredMinSize(window);
+    m_effect->tryAsyncSnapCall(
+        PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
+        {windowId, screenId, sticky, kindInt, isOpenPath, declaredMin.width(), declaredMin.height()}, safeWindow,
+        windowId, false, onMiss, markApplied,
+        /*skipAnimation=*/true, completeWithOutcome, releaseSuppression);
 }
 
 void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,

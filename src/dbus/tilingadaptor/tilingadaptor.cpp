@@ -375,9 +375,11 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
     // arrival loop below would have reached first. Arrivals on non-managed
     // (snap-mode) screens never reach this dispatch at all — their reclaim
     // runs off SnapAdaptor::resolveWindowRestore, which every open passes
-    // through. Suppressed (allowCrossScreenClaim=false) when an explicit
-    // RouteToScreen rule already picked this entry's screen — a directive
-    // outranks any remembered placement.
+    // through. Suppressed (allowCrossScreenClaim=false) when a routing or
+    // placement DIRECTIVE MATCHED for this window — keyed on the match, not
+    // on a redirect having happened, so a rule pinning the window to the
+    // screen it already opened on still outranks the remembered placement
+    // (dispatchWindowOpened documents the same distinction).
     if (allowCrossScreenClaim) {
         for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
             if (engine->claimCrossScreenReopen(entry.windowId, entry.screenId, qMax(0, entry.minWidth),

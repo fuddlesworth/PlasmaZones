@@ -145,6 +145,10 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
             m_states.removeWindow(windowId);
         }
         m_windowMinSizes.remove(windowId);
+        // Same sweep the defer gate runs, including the float marker: the
+        // two must not drift, and a marker left for a window this engine
+        // does not hold would re-float it at the next mode transition.
+        m_autotileFloatedWindows.remove(windowId);
         purgeFromPendingOrders(windowId);
         return false;
     }
@@ -231,7 +235,7 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     const bool trackedInState = deferState && deferState->containsWindow(windowId);
     if (!screenId.isEmpty() && m_windowTracker && m_layoutManager && !trackedInState) {
         const QString appId = currentAppIdFor(windowId);
-        if (!appId.isEmpty() && appId != windowId) {
+        if (PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
             // Shared predicate with the other engines' reciprocal gates
             // (SnapEngine::resolveWindowRestore, ScrollEngine::windowOpened /
             // claimCrossScreenReopen) — every engine runs
@@ -262,7 +266,11 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
                                return m_scrollingModeResolver(rec, desktop, activity);
                            });
             };
-            if (m_windowTracker->placementStore().peek(windowId, appId, crossRestorePending).has_value()) {
+            // peekForReclaim, matching the CLAIMING side's lookup exactly: a
+            // plain peek would see a LIVE sibling's record that the claim's
+            // live-instance exclusion rejects, so this gate would defer to an
+            // engine that then declines — the both-skipped strand.
+            if (m_windowTracker->placementStore().peekForReclaim(windowId, appId, crossRestorePending).has_value()) {
                 qCInfo(PhosphorTileEngine::lcTileEngine)
                     << "windowOpened:" << windowId << "on autotile screen" << screenId
                     << "defers — carries a cross-screen restore for another engine";

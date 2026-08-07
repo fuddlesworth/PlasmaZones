@@ -369,7 +369,7 @@ void AutotileEngine::handoffRelease(const QString& windowId)
     // engine. Ordinary close deliberately KEEPS the slot; only the handoff
     // clears it.
     if (m_windowTracker) {
-        m_windowTracker->placementStore().clearEngineSlot(canonical, engineId());
+        m_windowTracker->releaseEngineSlot(canonical, engineId());
     }
     // The min-size cache leaves with the tracking: the daemon queries
     // windowMinimumSize BEFORE calling release (the HandoffContext

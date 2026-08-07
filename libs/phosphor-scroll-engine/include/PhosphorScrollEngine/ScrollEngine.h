@@ -844,12 +844,8 @@ private:
     /// Without it an engine-decided float leaves the record stale in the
     /// FIFO and forgets the remembered position autotile restores.
     void restoreFloatRecordForOpen(const QString& windowId, const QString& screenId);
-    /// @p engineDecided selects the announcement arm: false (user action)
-    /// emits windowFloatingChanged for the daemon's active float relay; true
-    /// (the engine's own verdict, e.g. the oversized re-check) emits
-    /// windowFloatingStateSynced like every other own-initiative transition.
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
-                             const QString& screenId, bool engineDecided = false);
+                             const QString& screenId);
     bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
                                bool applyAfter = true);
     // engine_navigation.cpp

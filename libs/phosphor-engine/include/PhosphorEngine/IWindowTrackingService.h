@@ -172,6 +172,19 @@ public:
     /// leaving its engine slots intact. For the drag-out / layout-change consume
     /// paths that restore the float-back once and must not re-apply it.
     virtual void clearFreeGeometry(const QString& windowId) = 0;
+
+    /// Downgrade @p engineId's slot on @p windowId's record to
+    /// WindowPlacement::stateReleased() and mark the placements dirty. Called
+    /// by an engine that KNOWINGLY gives a window up (cross-mode handoff), so
+    /// its slot stops advertising a home the cross-screen reclaim would pull
+    /// the window back to. Default no-op: an embedder without persistence has
+    /// nothing to downgrade. NOT for ordinary close — a window that closed
+    /// tiled keeps its slot, which is what login restore reads.
+    virtual void releaseEngineSlot(const QString& windowId, const QString& engineId)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(engineId)
+    }
     /// Screen-scoped consume-once variant: clears only @p screenId's
     /// remembered float-back, preserving other monitors' entries. Default
     /// falls back to the all-screens form for implementations without

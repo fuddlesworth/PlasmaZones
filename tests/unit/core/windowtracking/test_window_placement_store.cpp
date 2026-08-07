@@ -1207,7 +1207,7 @@ private Q_SLOTS:
         QVERIFY(!store.peekForReclaim(QStringLiteral("term|fresh"), QString()).has_value());
     }
 
-    void testClearEngineSlot_dropsOnlyThatEnginesSlot()
+    void testReleaseEngineSlot_downgradesOnlyThatEnginesSlot()
     {
         // The handoff-release primitive. Slots are otherwise only merged,
         // never cleared, so a slot left behind by an engine that gave the
@@ -1223,17 +1223,38 @@ private Q_SLOTS:
         rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(10, 10, 400, 300));
         QVERIFY(store.record(rec));
 
-        QVERIFY(store.clearEngineSlot(QStringLiteral("term|a"), WindowPlacement::scrollingEngineId()));
+        QVERIFY(store.releaseEngineSlot(QStringLiteral("term|a"), WindowPlacement::scrollingEngineId()));
         const auto after = store.peekExact(QStringLiteral("term|a"));
         QVERIFY(after.has_value());
-        QVERIFY2(after->slotFor(WindowPlacement::scrollingEngineId()).isEmpty(), "the named slot must be gone");
+        // DOWNGRADED, not removed: the slot must still be PRESENT so
+        // takeForReopen's exact-final gate keeps recognising this instance as
+        // one the engine has seen (removing it made a released window
+        // indistinguishable from a fresh one, which then consumed a sibling's
+        // floating record), while no longer being MANAGED so the cross-screen
+        // reclaim cannot read it as a home.
+        const PhosphorEngine::EngineSlot released = after->slotFor(WindowPlacement::scrollingEngineId());
+        QVERIFY2(!released.isEmpty(), "the slot must remain present for the exact-final gate");
+        QCOMPARE(released.state, QString(WindowPlacement::stateReleased()));
+        QVERIFY(released.zoneIds.isEmpty());
+        QCOMPARE(released.order, -1);
+        QVERIFY2(released.state != QString(WindowPlacement::stateTiled()),
+                 "a released slot must not satisfy the reclaim's managed-state key");
+        // Everything else untouched.
         QCOMPARE(after->slotFor(WindowPlacement::snapEngineId()).state, QString(WindowPlacement::stateSnapped()));
         QCOMPARE(after->freeGeometryFor(QStringLiteral("DP-1")), QRect(10, 10, 400, 300));
         QCOMPARE(after->screenId, QStringLiteral("DP-1"));
 
         // Idempotent, and a no-op for an unknown window.
-        QVERIFY(!store.clearEngineSlot(QStringLiteral("term|a"), WindowPlacement::scrollingEngineId()));
-        QVERIFY(!store.clearEngineSlot(QStringLiteral("nope|x"), WindowPlacement::snapEngineId()));
+        QVERIFY(!store.releaseEngineSlot(QStringLiteral("term|a"), WindowPlacement::scrollingEngineId()));
+        QVERIFY(!store.releaseEngineSlot(QStringLiteral("nope|x"), WindowPlacement::snapEngineId()));
+
+        // A released slot no longer earns a cross-screen pull.
+        const auto always = [](const QString&, int, const QString&) {
+            return true;
+        };
+        QVERIFY(!PhosphorEngine::pendingCrossScreenManagedRestore(*after, WindowPlacement::scrollingEngineId(),
+                                                                  WindowPlacement::stateTiled(), QStringLiteral("DP-2"),
+                                                                  always));
     }
 };
 

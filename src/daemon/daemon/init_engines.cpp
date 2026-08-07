@@ -921,22 +921,22 @@ void Daemon::initEnginesAndWiring()
     // covers arrivals on SNAP-mode screens, which the tiling dispatch below
     // never hears about — without it a session window KWin dropped on a snap
     // screen would never be offered back to the engine whose record homes
-    // it. Min sizes are not carried on this channel (the slot's signature
-    // has none), so 0,0: the clamp self-heals through the engines'
-    // windowMinSizeUpdated, which also re-runs the oversized float verdict
-    // that the missing size would otherwise have decided wrongly for the
-    // session. Cleared in stop() and in SnapAdaptor::clearEngine alongside
-    // the engines' other injected closures.
-    m_snapAdaptor->setCrossScreenTileReclaim([autotile = QPointer<PhosphorTileEngine::AutotileEngine>(autotileEngine),
-                                              scroll = QPointer<PhosphorScrollEngine::ScrollEngine>(scrollEngine)](
-                                                 const QString& windowId, const QString& screenId) {
-        // QPointer + null check, matching every sibling closure in this
-        // file: the hook is cleared in stop() and in SnapAdaptor's
-        // clearEngine, but a late D-Bus call racing teardown must not
-        // deref a dead engine.
-        return (autotile && autotile->claimCrossScreenReopen(windowId, screenId, 0, 0))
-            || (scroll && scroll->claimCrossScreenReopen(windowId, screenId, 0, 0));
-    });
+    // it. The client-declared min sizes ride the same D-Bus call (API v9):
+    // the adopting engine evaluates its oversized/float verdict ONCE from
+    // them, so a 0,0 here left an oversized window tiled for the session.
+    // Cleared in stop() and in SnapAdaptor::clearEngine alongside the
+    // engines' other injected closures.
+    m_snapAdaptor->setCrossScreenTileReclaim(
+        [autotile = QPointer<PhosphorTileEngine::AutotileEngine>(autotileEngine),
+         scroll = QPointer<PhosphorScrollEngine::ScrollEngine>(scrollEngine)](
+            const QString& windowId, const QString& screenId, int minWidth, int minHeight) {
+            // QPointer + null check, matching every sibling closure in this
+            // file: the hook is cleared in stop() and in SnapAdaptor's
+            // clearEngine, but a late D-Bus call racing teardown must not
+            // deref a dead engine.
+            return (autotile && autotile->claimCrossScreenReopen(windowId, screenId, minWidth, minHeight))
+                || (scroll && scroll->claimCrossScreenReopen(windowId, screenId, minWidth, minHeight));
+        });
     // Liveness half of the snap engine's cross-screen tile-defer gate: the
     // claiming engines check their own live screen sets, so the deferring
     // side must ask the same question or a disagreement leaves the window

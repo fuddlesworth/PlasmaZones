@@ -682,9 +682,17 @@ void SnapEngine::applyNoMatchFloatDefault(const QString& windowId, const QString
     // sets, context equality and tileability), so a defer-then-decline is
     // reachable, and without this fallback the window ended the open with
     // no state in any engine: not floated, not tiled, invisible to the
-    // float toggle and the save sweep. Mirrors the terminal above exactly;
-    // guarded so a window that meanwhile gained a definite state is left
-    // alone.
+    // float toggle and the save sweep. Guarded so a window that meanwhile
+    // gained a definite state is left alone.
+    //
+    // Deliberately NOT a full mirror of that terminal's preconditions. It
+    // skips the disabled-context predicate, on the floated-restore branch's
+    // reasoning: a floated window is not being SNAPPED into a context, so a
+    // context with snapping disabled has no say in whether it has a float
+    // state. It also does not re-check screen mode, which is sound only
+    // because a deferredToTilingEngine verdict implies a snapping-mode
+    // opening screen (the tile gate requires !deferredByMode) — a second
+    // caller would have to establish that itself.
     if (windowId.isEmpty() || screenId.isEmpty() || !isEnabled()) {
         return;
     }

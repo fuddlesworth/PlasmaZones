@@ -155,8 +155,8 @@ public Q_SLOTS:
      *                   placement record now carries the kind, so it no longer gates restore.
      */
     void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
-                              bool isOpenPath, int& snapX, int& snapY, int& snapWidth, int& snapHeight,
-                              bool& shouldSnap);
+                              bool isOpenPath, int minWidth, int minHeight, int& snapX, int& snapY, int& snapWidth,
+                              int& snapHeight, bool& shouldSnap);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resnap / snap-all D-Bus slots
@@ -330,7 +330,8 @@ public:
     /// engines' claimCrossScreenReopen; cleared in clearEngine and in
     /// Daemon::stop (same contract as the engines' injected closures).
     /// Unset → no reclaim (headless/test path).
-    void setCrossScreenTileReclaim(std::function<bool(const QString& windowId, const QString& screenId)> hook)
+    void setCrossScreenTileReclaim(
+        std::function<bool(const QString& windowId, const QString& screenId, int minWidth, int minHeight)> hook)
     {
         m_crossScreenTileReclaim = std::move(hook);
     }
@@ -369,7 +370,7 @@ private:
     /// `(modeFor → isContextDisabled)` cascade in snaprestore.cpp.
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     /// See setCrossScreenTileReclaim.
-    std::function<bool(const QString&, const QString&)> m_crossScreenTileReclaim;
+    std::function<bool(const QString&, const QString&, int, int)> m_crossScreenTileReclaim;
 
     // Stored handles for the signal relays wired in the constructor so
     // clearEngine() can disconnect exactly the connections this class

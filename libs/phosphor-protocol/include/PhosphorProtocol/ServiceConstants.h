@@ -184,13 +184,18 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       to be SEEN travelling while the view slides, so the safe commit and the
 //       paint position are now separate answers. Same signature-matched
 //       failure mode as v6 and v7.
-//   v9: Snap.resolveWindowRestore gained a fifth in-arg, isOpenPath. The
-//       cross-screen tile reclaim hangs off this slot, and two of its
-//       drivers are NOT opens (the unminimize of a daemon-restart orphan and
-//       the pending-restores sweep) — without the flag the daemon could not
-//       tell them apart, and unminimizing a window teleported it across
-//       monitors. Same signature-matched failure mode as v6-v8: an old
-//       effect's four-arg call no longer matches the widened slot.
+//   v9: Snap.resolveWindowRestore gained three in-args — isOpenPath,
+//       minWidth, minHeight. The cross-screen tile reclaim hangs off this
+//       slot, and two of its drivers are NOT opens (the unminimize of a
+//       daemon-restart orphan and the pending-restores sweep); without the
+//       flag the daemon could not tell them apart, and unminimizing a window
+//       teleported it across monitors. The min sizes exist because a reclaim
+//       ADOPTS the window into a strip/layout, and the adopting engine
+//       evaluates its oversized/float verdict exactly once from them — the
+//       tiling channel has always carried them, and passing 0,0 here left an
+//       oversized window tiled for the session. Same signature-matched
+//       failure mode as v6-v8: an old effect's four-arg call no longer
+//       matches the widened slot.
 inline constexpr int ApiVersion = 9;
 inline constexpr int MinPeerApiVersion = 9;
 

@@ -476,8 +476,16 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // it would skip the defer while this engine manages nothing.
     const bool trackedHere = oldState && oldState->containsWindow(windowId);
     if (!trackedHere && m_windowTracker && (m_snappingModeResolver || m_autotileModeResolver)) {
-        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-        if (!appId.isEmpty() && appId != windowId) {
+        // Registry-aware appId and the reclaim-grade lookup, matching what
+        // the CLAIMING side asks. Both halves are load-bearing for the N-way
+        // agreement: parsing the frozen canonical string would read a
+        // different bucket after an Electron/CEF class mutation (so this gate
+        // could miss a record the claim finds — both-claimed), and a plain
+        // peek would see a LIVE sibling's record the claim's exclusion
+        // rejects (so this gate could defer to an engine that then declines —
+        // both-skipped).
+        const QString appId = m_windowTracker->currentAppIdFor(windowId);
+        if (PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
             const auto crossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
                 if (m_snappingModeResolver
                     && PhosphorEngine::pendingCrossScreenSnapRestore(
@@ -494,7 +502,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
                                return m_autotileModeResolver(rec, desktop, activity);
                            });
             };
-            if (m_windowTracker->placementStore().peek(windowId, appId, crossRestorePending).has_value()) {
+            if (m_windowTracker->placementStore().peekForReclaim(windowId, appId, crossRestorePending).has_value()) {
                 qCInfo(lcScrollEngine) << "windowOpened:" << windowId << "on scrolling screen" << screenId
                                        << "defers — carries a cross-screen restore for another engine";
                 // A deferred arrival is still an arrival: without the
@@ -504,8 +512,10 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
                 // A refused-first-open phantom key must not survive the defer
                 // (autotile's twin does the same): isWindowTracked would keep
                 // answering true for a window another engine is about to own,
-                // misrouting the daemon's float and handoff dispatch.
-                if (stateForWindow(windowId) && !trackedHere) {
+                // misrouting the daemon's float and handoff dispatch. The
+                // enclosing block is already !trackedHere, so a key here is
+                // by definition a phantom.
+                if (stateForWindow(windowId)) {
                     m_states.removeWindow(windowId);
                 }
                 return;
@@ -806,20 +816,6 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
         && key == currentKeyForScreen(key.screenId)) {
         scheduleRetileForScreen(key.screenId);
     }
-    // Re-run the OVERSIZED float decision with the fresh clamp.
-    // insertOpenedWindow evaluates it exactly once, with whatever min size
-    // the open carried — and the snap-facade reclaim channel carries none
-    // (0,0), so an oversized window reclaimed through it was tiled and, with
-    // the decision never revisited, stayed tiled for the session. The clamp
-    // itself self-heals through the retile above; the FLOAT verdict did not.
-    // Engine-decided, so the float announces via windowFloatingStateSynced.
-    if (!state->isFloating(windowId)) {
-        const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
-        if (params.workArea.isValid()
-            && (qMax(0, minWidth) > params.workArea.width() || qMax(0, minHeight) > params.workArea.height())) {
-            floatWindowInternal(state, key, windowId, key.screenId, /*engineDecided=*/true);
-        }
-    }
 }
 
 void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldFrame, const QRect& newFrame,
@@ -928,7 +924,7 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     // stale record and stand down. Ordinary close deliberately KEEPS the
     // slot; only the handoff clears it.
     if (m_windowTracker) {
-        m_windowTracker->placementStore().clearEngineSlot(windowId, engineId());
+        m_windowTracker->releaseEngineSlot(windowId, engineId());
     }
     // A released window's queued echo can never be answered — the stale
     // entry would eat the first genuine focus when the window comes back

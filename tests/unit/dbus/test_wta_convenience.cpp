@@ -173,7 +173,8 @@ private Q_SLOTS:
         int x = 0, y = 0, wd = 0, h = 0;
         bool shouldSnap = true;
         m_snapAdaptor->resolveWindowRestore(w2, m_screenId, false, static_cast<int>(PhosphorEngine::WindowKind::Normal),
-                                            /*isOpenPath=*/true, x, y, wd, h, shouldSnap);
+                                            /*isOpenPath=*/true, /*minWidth=*/0, /*minHeight=*/0, x, y, wd, h,
+                                            shouldSnap);
 
         QCOMPARE(shouldSnap, false); // float-restore is not a snap
         QCOMPARE(spy.count(), 1);
@@ -235,7 +236,8 @@ private Q_SLOTS:
         int x = 0, y = 0, wd = 0, h = 0;
         bool shouldSnap = true;
         m_snapAdaptor->resolveWindowRestore(w, m_screenId, false, static_cast<int>(PhosphorEngine::WindowKind::Normal),
-                                            /*isOpenPath=*/true, x, y, wd, h, shouldSnap);
+                                            /*isOpenPath=*/true, /*minWidth=*/0, /*minHeight=*/0, x, y, wd, h,
+                                            shouldSnap);
 
         QCOMPARE(shouldSnap, false); // floated, NOT snapped despite the loaded assignment
         QCOMPARE(spy.count(), 1);
