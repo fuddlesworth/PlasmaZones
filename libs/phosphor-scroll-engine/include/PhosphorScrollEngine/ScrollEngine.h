@@ -130,6 +130,8 @@ public:
 
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
+    bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
+                                int minHeight) override;
     void beginArrivalBurst() override;
     void endArrivalBurst() override;
     void windowClosed(const QString& windowId) override;
@@ -587,6 +589,28 @@ public:
     void setSnappingModeResolver(SnappingModeResolver resolver)
     {
         m_snappingModeResolver = std::move(resolver);
+    }
+
+    /// Scrolling-mode resolver for claimCrossScreenReopen — must answer
+    /// whether the RECORDED context resolves to Scrolling mode, so a session
+    /// window KWin dropped on the wrong output is pulled back to its recorded
+    /// scrolling screen. Same invocation shape and clear-before-destroy
+    /// contract as the snapping resolver above. Unset → this engine never
+    /// claims cross-screen (headless/test path).
+    void setScrollingModeResolver(SnappingModeResolver resolver)
+    {
+        m_scrollingModeResolver = std::move(resolver);
+    }
+
+    /// Autotile-mode resolver for windowOpened's cross-screen tile-restore
+    /// defer gate, the scroll-side twin of the snapping resolver: a window
+    /// arriving here that carries a TILED autotile slot recorded on an
+    /// autotile-mode screen belongs to autotile's cross-screen reclaim, and
+    /// this engine must not splice it into the strip. Unset → the gate is
+    /// off and every open is claimed (headless/test path).
+    void setAutotileModeResolver(SnappingModeResolver resolver)
+    {
+        m_autotileModeResolver = std::move(resolver);
     }
 
     /// Per-context (window-rule) gap overrides, resolved daemon-side so this
@@ -1131,6 +1155,8 @@ private:
     RestorePositionPredicate m_restorePositionPredicate{};
     OpenParamsResolver m_openParamsResolver;
     SnappingModeResolver m_snappingModeResolver;
+    SnappingModeResolver m_scrollingModeResolver;
+    SnappingModeResolver m_autotileModeResolver;
     ContextGapProvider m_contextGapProvider;
 };
 

@@ -873,6 +873,145 @@ private Q_SLOTS:
         QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateTiled()));
         QCOMPARE(slot.order, 0);
     }
+
+    // =========================================================================
+    // Cross-screen session reclaim (claimCrossScreenReopen) and its scrolling
+    // reciprocal: KWin's session restore opens windows on a nondeterministic
+    // output, so a window recorded TILED on this engine's screen can arrive
+    // announced elsewhere — the engine pulls it home. A window recorded tiled
+    // on a scrolling-mode screen that arrives HERE is scrolling's to reclaim,
+    // and windowOpened must stand down.
+    // =========================================================================
+
+    void testClaimCrossScreenReopen_pullsTiledRecordHome()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
+        AutotileEngine engine(layoutManager.get(), &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+
+        const QString home = QStringLiteral("DP-1");
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        layoutManager->setAssignmentEntryDirect(home, 0, QString(), autotile);
+        engine.setAutotileScreens({home});
+
+        using PhosphorEngine::WindowPlacement;
+        WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|old");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = home;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(WindowPlacement::stateTiled());
+        slot.order = 0;
+        rec.engines.insert(engine.engineId(), slot);
+        QVERIFY(wts.placementStore().record(rec));
+
+        QVERIFY2(engine.claimCrossScreenReopen(QStringLiteral("app|new"), QStringLiteral("DP-9"), 0, 0),
+                 "a tiled record homed on an autotile-mode screen must be reclaimed cross-screen");
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(home);
+        QVERIFY(state);
+        QVERIFY2(state->containsWindow(QStringLiteral("app|new")),
+                 "the reclaimed window must re-enter the RECORDED screen's tiling state");
+    }
+
+    void testClaimCrossScreenReopen_refusalLadder()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
+        AutotileEngine engine(layoutManager.get(), &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+
+        const QString home = QStringLiteral("DP-1");
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        layoutManager->setAssignmentEntryDirect(home, 0, QString(), autotile);
+        engine.setAutotileScreens({home});
+
+        using PhosphorEngine::WindowPlacement;
+        // FLOATING record: float restore is screen-local, never a pull.
+        WindowPlacement floatRec;
+        floatRec.windowId = QStringLiteral("edit|old");
+        floatRec.appId = QStringLiteral("edit");
+        floatRec.screenId = home;
+        PhosphorEngine::EngineSlot floatSlot;
+        floatSlot.state = QString(WindowPlacement::stateFloating());
+        floatRec.engines.insert(engine.engineId(), floatSlot);
+        floatRec.freeGeometryByScreen.insert(home, QRect(20, 20, 400, 300));
+        QVERIFY(wts.placementStore().record(floatRec));
+        QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("edit|new"), QStringLiteral("DP-9"), 0, 0),
+                 "an autotile-floating record must not claim cross-screen");
+
+        // Tiled record but SAME-screen arrival: the ordinary open path owns it.
+        WindowPlacement tiled;
+        tiled.windowId = QStringLiteral("app|old");
+        tiled.appId = QStringLiteral("app");
+        tiled.screenId = home;
+        PhosphorEngine::EngineSlot tiledSlot;
+        tiledSlot.state = QString(WindowPlacement::stateTiled());
+        tiledSlot.order = 0;
+        tiled.engines.insert(engine.engineId(), tiledSlot);
+        QVERIFY(wts.placementStore().record(tiled));
+        QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("app|new"), home, 0, 0),
+                 "an arrival on the recorded screen itself is not cross-screen");
+
+        // Already-tracked window: an in-session move, never a session restore.
+        engine.windowOpened(QStringLiteral("app|new"), home);
+        QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("app|new"), QStringLiteral("DP-9"), 0, 0),
+                 "a window this engine already tracks must never be re-claimed");
+
+        // Home context NOT in autotile mode (default entry is Snapping):
+        // the mode check refuses even a perfectly-shaped tiled record.
+        WindowPlacement offMode;
+        offMode.windowId = QStringLiteral("web|old");
+        offMode.appId = QStringLiteral("web");
+        offMode.screenId = QStringLiteral("DP-5");
+        offMode.engines.insert(engine.engineId(), tiledSlot);
+        QVERIFY(wts.placementStore().record(offMode));
+        QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("web|new"), QStringLiteral("DP-9"), 0, 0),
+                 "a home screen not in autotile mode must refuse the claim");
+    }
+
+    void testWindowOpened_defersToScrollingCrossScreenRestore()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
+        AutotileEngine engine(layoutManager.get(), &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+
+        const QString here = QStringLiteral("DP-1");
+        engine.setAutotileScreens({here});
+        // DP-2 is a scrolling-mode screen (a payload-less Scrolling entry is
+        // the canonical KCM shape — the "scrolling:" sentinel needs no id).
+        PhosphorZones::AssignmentEntry scrolling;
+        scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), scrolling);
+
+        using PhosphorEngine::WindowPlacement;
+        WindowPlacement rec;
+        rec.windowId = QStringLiteral("term|old");
+        rec.appId = QStringLiteral("term");
+        rec.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(WindowPlacement::stateTiled());
+        slot.order = 1;
+        rec.engines.insert(WindowPlacement::scrollingEngineId(), slot);
+        QVERIFY(wts.placementStore().record(rec));
+
+        engine.windowOpened(QStringLiteral("term|new"), here);
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(here);
+        if (state) {
+            QVERIFY2(!state->containsWindow(QStringLiteral("term|new")),
+                     "a cross-screen scrolling restore must not be adopted by autotile");
+        }
+        // The record survives untouched for scrolling's claim.
+        QVERIFY(wts.placementStore().peekExact(QStringLiteral("term|old")).has_value());
+    }
 };
 
 QTEST_MAIN(TestAutotileEngineCore)

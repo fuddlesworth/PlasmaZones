@@ -104,6 +104,32 @@ public:
         windowOpened(windowId, screenId, 0, 0);
     }
 
+    /// Cross-screen session reclaim, the tiling-engine counterpart of the
+    /// snap engine's recorded-screen restore. Offered a window that opened on
+    /// @p openingScreenId — a screen this engine may not own — the engine
+    /// checks the unified placement store for ITS OWN managed slot recorded
+    /// on a DIFFERENT screen that is still in this engine's mode
+    /// (PhosphorEngine::pendingCrossScreenManagedRestore), and on a match
+    /// adopts the window into that recorded home screen (its retile then
+    /// physically moves the window there). Returns true when the window was
+    /// claimed; the caller must then hand it to no other engine. KWin's
+    /// session restore opens windows on a nondeterministic output, so
+    /// without this a whole strip's windows strand floated on whatever
+    /// monitor KWin picked at login. Default false: an engine without a
+    /// cross-screen restore story (snap claims through resolveWindowRestore
+    /// instead) never claims here. Implementations must self-gate on
+    /// first observation — a window the engine already tracks is an
+    /// in-session move, never a session restore.
+    virtual bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
+                                        int minHeight)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(openingScreenId)
+        Q_UNUSED(minWidth)
+        Q_UNUSED(minHeight)
+        return false;
+    }
+
     /// Bracket a BURST of windowOpened calls delivered together (the
     /// adaptor's three dispatch loops: windowsOpenedBatch, the deferred-open
     /// flush, and the parked-open replay — daemon bring-up re-announce and

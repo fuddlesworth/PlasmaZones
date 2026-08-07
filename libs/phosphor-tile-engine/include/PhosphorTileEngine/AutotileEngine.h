@@ -996,6 +996,8 @@ public:
      */
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
+    bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
+                                int minHeight) override;
 
     /**
      * @brief Update a window's minimum size at runtime

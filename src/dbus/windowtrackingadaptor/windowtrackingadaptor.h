@@ -936,7 +936,11 @@ public:
     /// screen, or not currently connected, or when the window has pushed no geometry
     /// yet. A target in autotile mode is moved (not tiled) — cross-engine tiling
     /// insertion stays with the autotile spawn path (applyOpenRoutingForTiling).
-    void applyOpenScreenRouting(const QString& windowId, const QString& screenId);
+    /// Returns true when a RouteToScreen (or placement) directive MATCHED —
+    /// whether or not a move was physically possible — so the caller knows the
+    /// rule system owns this window's monitor and must not apply a
+    /// remembered-placement fallback (the cross-screen tile reclaim).
+    bool applyOpenScreenRouting(const QString& windowId, const QString& screenId);
 
     /// Shared by the two open-routing entry points: if @p resolved carries a
     /// RouteToDesktop action, emit windowDesktopMoveRequested for @p windowId.

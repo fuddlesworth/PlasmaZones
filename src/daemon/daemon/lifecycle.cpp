@@ -796,6 +796,17 @@ void Daemon::stop()
     if (auto* concreteScroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
         concreteScroll->setContextGapProvider({});
         concreteScroll->setSnappingModeResolver({});
+        concreteScroll->setScrollingModeResolver({});
+        concreteScroll->setAutotileModeResolver({});
+    }
+
+    // Sever the snap adaptor's cross-screen reclaim hook BEFORE the engines
+    // it captures raw pointers to are destroyed — same clear-before-destroy
+    // contract as the engine closures above. (The adaptor itself is deleted
+    // in initCoreAdaptors' preamble on a re-cycle, but stop() must not leave
+    // a hook that could dangle if a late D-Bus call raced teardown.)
+    if (m_snapAdaptor) {
+        m_snapAdaptor->setCrossScreenTileReclaim({});
     }
 
     // Everything ABOVE this gate is init/ctor-origin teardown that must run on

@@ -120,6 +120,7 @@ private Q_SLOTS:
         // No placement persistence: capture answers nothing, restore refuses.
         QVERIFY(!engine.capturePlacement(QStringLiteral("win")).has_value());
         QVERIFY(!engine.restorePlacement(WindowPlacement{}, QStringLiteral("DP-1")));
+        QVERIFY(!engine.claimCrossScreenReopen(QStringLiteral("win"), QStringLiteral("DP-1"), 0, 0));
         // No drag-insert preview: nothing is live, begin refuses to start one,
         // both screen ids and the indicator rect stay empty, and hit-testing a
         // cursor position answers an invalid target (primary < 0). An embedder

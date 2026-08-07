@@ -429,7 +429,8 @@ private:
     /// entry's screenId so its side effects run once. Entries are dropped
     /// on close and on clearEngine.
     QList<PhosphorProtocol::WindowOpenedEntry> m_unclaimedOpens;
-    void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark);
+    void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
+                                      bool allowCrossScreenClaim = true);
     void removeUnclaimedOpen(const QString& windowId);
 
 public:

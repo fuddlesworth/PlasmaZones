@@ -340,17 +340,46 @@ void TilingAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedEnt
     // so a parked entry must not re-run it on retry — the routed screen is
     // baked into the parked entry instead.
     PhosphorProtocol::WindowOpenedEntry routedEntry = entry;
+    bool ruleRouted = false;
     if (m_windowTrackingAdaptor) {
         const QString routed = m_windowTrackingAdaptor->applyOpenRoutingForTiling(entry.windowId, entry.screenId);
         if (!routed.isEmpty()) {
             routedEntry.screenId = routed;
+            ruleRouted = true;
         }
     }
-    dispatchOpenToClaimingEngine(routedEntry, /*allowPark=*/true);
+    // An explicit RouteToScreen outranks the remembered-placement reclaim —
+    // same precedence the snap facade applies.
+    dispatchOpenToClaimingEngine(routedEntry, /*allowPark=*/true, /*allowCrossScreenClaim=*/!ruleRouted);
 }
 
-void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark)
+void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
+                                                 bool allowCrossScreenClaim)
 {
+    // Cross-screen session reclaim FIRST, before any arrival-screen claim:
+    // KWin's session restore opens windows on a nondeterministic output, so a
+    // window recorded TILED on engine E's screen routinely arrives announced
+    // on some other engine-managed screen. E pulls it home
+    // (claimCrossScreenReopen consults the unified placement store's recorded
+    // screen); handing it to the ARRIVAL screen's engine instead would tile
+    // it into a strip/layout it never belonged to, and the engines' own defer
+    // gates would still leave it stranded. Ordering, not just the gates,
+    // because the claim and the defer must agree no matter which engine the
+    // arrival loop below would have reached first. Arrivals on non-managed
+    // (snap-mode) screens never reach this dispatch at all — their reclaim
+    // runs off SnapAdaptor::resolveWindowRestore, which every open passes
+    // through. Suppressed (allowCrossScreenClaim=false) when an explicit
+    // RouteToScreen rule already picked this entry's screen — a directive
+    // outranks any remembered placement.
+    if (allowCrossScreenClaim) {
+        for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
+            if (engine->claimCrossScreenReopen(entry.windowId, entry.screenId, qMax(0, entry.minWidth),
+                                               qMax(0, entry.minHeight))) {
+                removeUnclaimedOpen(entry.windowId);
+                return;
+            }
+        }
+    }
     // Per-screen engine dispatch: the effect reports opens for every
     // engine-managed screen through this interface, so hand the window to
     // whichever pipeline engine CLAIMS the (possibly rule-routed) screen.

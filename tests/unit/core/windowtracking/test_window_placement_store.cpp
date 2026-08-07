@@ -1060,6 +1060,56 @@ private Q_SLOTS:
                           WindowPlacement::snapEngineId(), QStringLiteral("DP-1"));
         QVERIFY(!PhosphorEngine::pendingCrossScreenSnapRestore(floating, QStringLiteral("DP-2"), alwaysSnapping));
     }
+
+    void testPendingCrossScreenManagedRestore_perEngineSlotAndState()
+    {
+        // The generalized N-way predicate: each engine's verdict keys on ITS
+        // OWN slot in ITS OWN managed state. A scrolling-tiled record is a
+        // scrolling claim, never a snap or autotile one, and a floating slot
+        // never earns a cross-screen pull for any engine (float restore is
+        // screen-local by doctrine).
+        const auto always = [](const QString&, int, const QString&) {
+            return true;
+        };
+        WindowPlacement p =
+            makePlacement(QStringLiteral("kitty|a"), QStringLiteral("kitty"), WindowPlacement::stateTiled(),
+                          WindowPlacement::scrollingEngineId(), QStringLiteral("DP-1"));
+
+        // Scrolling-tiled on DP-1, opening on DP-2: the scrolling claim fires.
+        QVERIFY(PhosphorEngine::pendingCrossScreenManagedRestore(
+            p, WindowPlacement::scrollingEngineId(), WindowPlacement::stateTiled(), QStringLiteral("DP-2"), always));
+        // Same record read through the OTHER engines' keys: no claim.
+        QVERIFY(!PhosphorEngine::pendingCrossScreenManagedRestore(
+            p, WindowPlacement::autotileEngineId(), WindowPlacement::stateTiled(), QStringLiteral("DP-2"), always));
+        QVERIFY(!PhosphorEngine::pendingCrossScreenManagedRestore(
+            p, WindowPlacement::snapEngineId(), WindowPlacement::stateSnapped(), QStringLiteral("DP-2"), always));
+        // Same screen: never cross-screen, whatever the resolver says.
+        QVERIFY(!PhosphorEngine::pendingCrossScreenManagedRestore(
+            p, WindowPlacement::scrollingEngineId(), WindowPlacement::stateTiled(), QStringLiteral("DP-1"), always));
+        // Recorded context no longer in the engine's mode: no claim.
+        QVERIFY(!PhosphorEngine::pendingCrossScreenManagedRestore(p, WindowPlacement::scrollingEngineId(),
+                                                                  WindowPlacement::stateTiled(), QStringLiteral("DP-2"),
+                                                                  [](const QString&, int, const QString&) {
+                                                                      return false;
+                                                                  }));
+        // A scroll-FLOATING slot never claims: KWin owns the opening monitor
+        // for floats, exactly like the snap doctrine.
+        WindowPlacement floatRec =
+            makePlacement(QStringLiteral("kitty|b"), QStringLiteral("kitty"), WindowPlacement::stateFloating(),
+                          WindowPlacement::scrollingEngineId(), QStringLiteral("DP-1"));
+        QVERIFY(!PhosphorEngine::pendingCrossScreenManagedRestore(floatRec, WindowPlacement::scrollingEngineId(),
+                                                                  WindowPlacement::stateTiled(), QStringLiteral("DP-2"),
+                                                                  always));
+        // The snap specialization stays byte-compatible: it is the same
+        // predicate keyed on (snap, snapped).
+        WindowPlacement snapRec =
+            makePlacement(QStringLiteral("kitty|c"), QStringLiteral("kitty"), WindowPlacement::stateSnapped(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("DP-1"));
+        QCOMPARE(PhosphorEngine::pendingCrossScreenSnapRestore(snapRec, QStringLiteral("DP-2"), always),
+                 PhosphorEngine::pendingCrossScreenManagedRestore(snapRec, WindowPlacement::snapEngineId(),
+                                                                  WindowPlacement::stateSnapped(),
+                                                                  QStringLiteral("DP-2"), always));
+    }
 };
 
 QTEST_MAIN(TestWindowPlacementStore)

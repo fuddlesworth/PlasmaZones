@@ -13,6 +13,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include <functional>
+
 namespace PhosphorContext {
 class IContextResolver;
 } // namespace PhosphorContext
@@ -312,6 +314,21 @@ public:
     /// Resolve a resnap filter into the concrete list of snap-mode screens.
     QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
 
+    /// Cross-screen tiling-engine reclaim hook, invoked as (windowId,
+    /// openingScreenId) → claimed. resolveWindowRestore is the ONE per-window
+    /// channel the effect drives for EVERY open regardless of screen (the
+    /// tiling dispatch only ever hears about engine-managed screens), so a
+    /// session window KWin dropped on a snap-mode screen while its placement
+    /// record homes it TILED on a tiling-mode screen is offered back to the
+    /// pipeline engines from here. Wired by the daemon over both pipeline
+    /// engines' claimCrossScreenReopen; cleared before engine teardown (same
+    /// contract as the engines' injected closures). Unset → no reclaim
+    /// (headless/test path).
+    void setCrossScreenTileReclaim(std::function<bool(const QString& windowId, const QString& screenId)> hook)
+    {
+        m_crossScreenTileReclaim = std::move(hook);
+    }
+
 private:
     // ═══════════════════════════════════════════════════════════════════════════
     // Private helpers
@@ -345,6 +362,8 @@ private:
     /// Late-bound by Daemon via setContextResolver — replaces the inline
     /// `(modeFor → isContextDisabled)` cascade in snaprestore.cpp.
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
+    /// See setCrossScreenTileReclaim.
+    std::function<bool(const QString&, const QString&)> m_crossScreenTileReclaim;
 
     // Stored handles for the signal relays wired in the constructor so
     // clearEngine() can disconnect exactly the connections this class

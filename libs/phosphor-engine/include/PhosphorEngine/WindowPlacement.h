@@ -13,6 +13,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <utility>
+
 namespace PhosphorEngine {
 
 /// One engine's view of a window: which managed slot it occupies (or that it is
@@ -312,44 +314,68 @@ struct WindowPlacement
 };
 
 /// Shared cross-engine ownership predicate over a placement record: does this
-/// record carry a SNAPPED snap-slot whose RECORDED screen is a DIFFERENT
-/// screen than the opening one, itself in snapping mode, resolved in the
-/// RECORD'S OWN (desktop, activity) context? A same-screen record (or one
-/// with no screen of its own) is never "cross-screen": the window is already
-/// where its snap slot lives, so the engine owning the OPENING context claims
-/// it and the snap slot merely lies dormant. Without the same-screen bail, a
-/// record whose (desktop, activity) context differs from the opening one —
-/// a sticky window, or a per-desktop mode split on one monitor — would defer
-/// here while snap's reciprocal gate also stands down, stranding the window
-/// unmanaged at its stale zone rect on top of the tiled layout.
+/// record carry @p engineId's slot in its MANAGED state (@p managedState —
+/// snap "snapped", autotile/scrolling "tiled") with a RECORDED screen that is
+/// a DIFFERENT screen than the opening one, itself currently in that engine's
+/// mode, resolved in the RECORD'S OWN (desktop, activity) context? A
+/// same-screen record (or one with no screen of its own) is never
+/// "cross-screen": the window is already where its managed slot lives, so the
+/// engine owning the OPENING context claims it and the slot merely lies
+/// dormant. Without the same-screen bail, a record whose (desktop, activity)
+/// context differs from the opening one — a sticky window, or a per-desktop
+/// mode split on one monitor — would defer here while the owner's reciprocal
+/// gate also stands down, stranding the window unmanaged.
 ///
-/// The THREE callers are RECIPROCAL: SnapEngine (resolveWindowRestore's
-/// recorded-screen gate) claims, while AutotileEngine (windowOpened's
-/// snap-defer gate) and ScrollEngine (engine_lifecycle's twin gate) defer.
-/// When a session window snapped on monitor A (snap mode) opens on monitor B
-/// (a tiling mode), snap must claim it cross-screen and the tiling engine
-/// must stand down — and every engine must reach that verdict from the same
-/// record, or the window ends up both-claimed or both-skipped. Keying on the
-/// record's context (not each engine's live current desktop, which can differ
-/// under per-screen virtual-desktop overrides) plus running this ONE
-/// predicate on every side makes the N-way agreement hold by construction.
-/// A new tiling engine's open path must add the same defer gate.
+/// Every engine is BOTH a claimer and a deferrer through this one predicate:
+/// the engine whose (engineId, managedState) matches the record — with the
+/// recorded screen still in that engine's mode — claims the window
+/// cross-screen (snap via resolveWindowRestore's recorded-screen restore, the
+/// tiling engines via claimCrossScreenReopen), and every OTHER engine's open
+/// path stands down. KWin's session restore opens windows on a
+/// nondeterministic output, so a window whose record homes it on monitor A
+/// routinely arrives on monitor B; without the reclaim it strands there,
+/// unmanaged, on whatever engine owns B (the login-restore
+/// windows-on-the-wrong-monitor bug). Every engine must reach its verdict
+/// from the same record or the window ends up both-claimed or both-skipped.
+/// Keying on the record's context (not each engine's live current desktop,
+/// which can differ under per-screen virtual-desktop overrides) plus running
+/// this ONE predicate on every side makes the N-way agreement hold by
+/// construction: mode is exclusive per (screen, desktop, activity), so at
+/// most one engine's mode check passes for the recorded home. A new tiling
+/// engine must add both the defer gate and the claim.
 ///
-/// @p isSnappingMode is invoked as (screenId, virtualDesktop, activity) →
-/// bool; callers wrap their layout-manager mode lookup (and any null-manager
+/// A FLOATING slot never matches: float restore is screen-local by doctrine
+/// (it restores a position WITHIN the monitor KWin chose, never moves the
+/// window across monitors), so only managed slots earn a cross-screen pull.
+///
+/// @p isEngineMode is invoked as (screenId, virtualDesktop, activity) → bool
+/// and must answer whether that context resolves to @p engineId's mode;
+/// callers wrap their layout-manager mode lookup (and any null-manager
 /// permissiveness) in it, keeping this library free of the zones-layer mode
 /// type.
-template<typename IsSnappingMode>
-bool pendingCrossScreenSnapRestore(const WindowPlacement& p, const QString& openingScreenId,
-                                   IsSnappingMode&& isSnappingMode)
+template<typename IsEngineMode>
+bool pendingCrossScreenManagedRestore(const WindowPlacement& p, QLatin1String engineId, QLatin1String managedState,
+                                      const QString& openingScreenId, IsEngineMode&& isEngineMode)
 {
-    if (p.slotFor(WindowPlacement::snapEngineId()).state != WindowPlacement::stateSnapped()) {
+    if (p.slotFor(engineId).state != managedState) {
         return false;
     }
     if (p.screenId.isEmpty() || p.screenId == openingScreenId) {
         return false; // same screen (or unscreened): the opening context's engine owns it
     }
-    return isSnappingMode(p.screenId, p.virtualDesktop, p.activity);
+    return isEngineMode(p.screenId, p.virtualDesktop, p.activity);
+}
+
+/// The snap-engine specialization of pendingCrossScreenManagedRestore — the
+/// original three-way gate (SnapEngine claims, AutotileEngine and ScrollEngine
+/// defer). Kept as a named form because "snapped snap-slot on a
+/// snapping-mode home" is the verdict three call sites spell.
+template<typename IsSnappingMode>
+bool pendingCrossScreenSnapRestore(const WindowPlacement& p, const QString& openingScreenId,
+                                   IsSnappingMode&& isSnappingMode)
+{
+    return pendingCrossScreenManagedRestore(p, WindowPlacement::snapEngineId(), WindowPlacement::stateSnapped(),
+                                            openingScreenId, std::forward<IsSnappingMode>(isSnappingMode));
 }
 
 } // namespace PhosphorEngine

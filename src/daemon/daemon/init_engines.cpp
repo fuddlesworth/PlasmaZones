@@ -171,6 +171,28 @@ void Daemon::initEnginesAndWiring()
             == PhosphorZones::AssignmentEntry::Mode::Snapping;
     });
 
+    // Own-mode resolver for the scroll engine's cross-screen reclaim
+    // (claimCrossScreenReopen): answers whether the RECORDED context still
+    // resolves to Scrolling mode, so a session window KWin dropped on the
+    // wrong output is pulled back into its recorded strip. No global-toggle
+    // term (unlike the snapping resolver above): a Scrolling-mode verdict
+    // already implies a live scroll assignment for that context.
+    scrollEngine->setScrollingModeResolver([this](const QString& screenId, int desktop, const QString& activity) {
+        return m_layoutManager
+            && m_layoutManager->modeForScreen(screenId, desktop, activity)
+            == PhosphorZones::AssignmentEntry::Mode::Scrolling;
+    });
+
+    // Autotile-mode resolver for the scroll-side cross-screen defer gate,
+    // the reciprocal of autotile's scrolling defer (which reads its own
+    // layout-manager reference directly — the scroll library takes closures
+    // instead to stay free of the zones-layer mode type).
+    scrollEngine->setAutotileModeResolver([this](const QString& screenId, int desktop, const QString& activity) {
+        return m_layoutManager
+            && m_layoutManager->modeForScreen(screenId, desktop, activity)
+            == PhosphorZones::AssignmentEntry::Mode::Autotile;
+    });
+
     // Scroll "zone numbers" for the navigation OSD: a strip window's zone
     // number is its 1-based VISIBLE tile slot — the same sequential
     // strip-order number the previews label and the Snap-to-Zone digits
@@ -872,6 +894,19 @@ void Daemon::initEnginesAndWiring()
     // this function — so these members are null here on a re-cycle.
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
+    // Cross-screen tiling reclaim off the resolveWindowRestore channel — the
+    // one per-window open path the effect drives for EVERY screen (the tiling
+    // dispatch below only hears about engine-managed screens, so a session
+    // window KWin dropped on a snap-mode screen would otherwise never be
+    // offered back to the engine whose record homes it). Min sizes are not
+    // carried on this channel; 0,0 matches a pre-announce open and the
+    // engine picks up the real minimum from the next windowMinSizeUpdated.
+    // Cleared in stop() alongside the engines' other injected closures.
+    m_snapAdaptor->setCrossScreenTileReclaim(
+        [autotileEngine, scrollEngine](const QString& windowId, const QString& screenId) {
+            return autotileEngine->claimCrossScreenReopen(windowId, screenId, 0, 0)
+                || scrollEngine->claimCrossScreenReopen(windowId, screenId, 0, 0);
+        });
     // org.plasmazones.Tiling is the engine-NEUTRAL transport shared by the
     // whole tiling family (the effect keeps one engine-managed screen set
     // and one tile pipeline; the adaptor routes per screen through

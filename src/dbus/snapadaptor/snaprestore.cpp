@@ -198,7 +198,23 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // and the explicit route wins over a remembered float position (it applies
         // the final geometry). A route WITH SnapToZone moved+snapped on the target
         // via the placement directive and never reaches here.
-        m_adaptor->applyOpenScreenRouting(windowId, screenId);
+        if (m_adaptor->applyOpenScreenRouting(windowId, screenId)) {
+            return;
+        }
+        // Cross-screen tiling-engine reclaim. This slot is the ONE per-window
+        // channel the effect drives for every open regardless of screen, so a
+        // session window KWin dropped on a screen its recorded tiling engine
+        // does not own is offered back to the pipeline engines here — the
+        // engine whose TILED slot the record carries (with the recorded home
+        // still in its mode) adopts the window into that home screen and its
+        // retile moves it there. Only after the engine resolve and the route
+        // above: the snap engine's own tile-defer gate guarantees noSnap for
+        // exactly these records, and an explicit directive — a SnapToZone
+        // claim or a matched RouteToScreen — outranks ANY remembered
+        // placement, this reclaim included.
+        if (m_crossScreenTileReclaim) {
+            m_crossScreenTileReclaim(windowId, screenId);
+        }
         return;
     }
 

@@ -534,6 +534,49 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
+    void testResolveWindowRestore_crossScreenScrollingTiledRecord_defersOnSnapScreen()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // DP-2 is a scrolling-mode screen; DP-1 stays snapping (the default).
+        PhosphorZones::AssignmentEntry scrolling;
+        scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), scrolling);
+
+        // A window recorded TILED in DP-2's strip last session.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateTiled());
+        slot.order = 0;
+        rec.engines.insert(PhosphorEngine::WindowPlacement::scrollingEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        // KWin's session restore drops the fresh-uuid window on the SNAP
+        // monitor DP-1 (the login-restore wrong-output bug). Snap must defer
+        // entirely — no auto-snap, no floating default, record untouched —
+        // so the adaptor's reclaim hook can hand the window back to the
+        // scroll engine, which pulls it home to DP-2.
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+        const QString joined = lines.join(QLatin1Char('\n'));
+
+        QVERIFY2(!result.shouldSnap, "a pending cross-screen tile restore must never be snapped here");
+        QVERIFY2(joined.contains(QStringLiteral("deferring to its recorded engine")),
+                 "the tile-defer gate must fire for a scrolling-tiled record homed on a scrolling screen");
+        QVERIFY2(!joined.contains(QStringLiteral("defaulting to floated")),
+                 "the defer must run BEFORE the no-match floating default — float state written here would "
+                 "fight the scroll engine's re-tile of the same window");
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "deferring must not consume the record — the scroll engine's reclaim still needs it");
+        m_wts->setSnapState(nullptr);
+    }
+
     // =========================================================================
     // resolveWindowRestore — unsnapped-position restore gate
     // (RestorePositionPredicate)

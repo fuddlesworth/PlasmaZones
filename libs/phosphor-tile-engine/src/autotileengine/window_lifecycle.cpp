@@ -42,6 +42,63 @@
 
 namespace PhosphorTileEngine {
 
+bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QString& openingScreenId, int minWidth,
+                                            int minHeight)
+{
+    if (!warnIfEmptyWindowId(rawWindowId, "claimCrossScreenReopen")) {
+        return false;
+    }
+    const QString windowId = canonicalizeWindowId(rawWindowId);
+    if (!m_windowTracker || !m_layoutManager) {
+        return false;
+    }
+    // First observation only: a window this engine tracks anywhere is an
+    // in-session move or re-announce, never a session restore — yanking it
+    // back to the record's screen would undo the very move that re-announced
+    // it. Membership, not the raw reverse-map key, for the same phantom-key
+    // reason windowOpened's defer gate documents.
+    const auto keyIt = m_states.windowKeys().constFind(windowId);
+    const PhosphorTiles::TilingState* state =
+        keyIt != m_states.windowKeys().constEnd() ? m_states.stateForKey(keyIt.value()) : nullptr;
+    if (state && state->containsWindow(windowId)) {
+        return false;
+    }
+    const QString appId = currentAppIdFor(windowId);
+    if (appId.isEmpty() || appId == windowId) {
+        return false;
+    }
+    // Peek, not take: consumption stays with windowOpened's own restore
+    // machinery, which this claim funnels the window into by re-entering the
+    // open path with the RECORDED screen. Only a TILED slot earns the pull —
+    // an autotile-floating record is screen-local, matching snap's float
+    // doctrine.
+    const auto pending =
+        m_windowTracker->placementStore().peek(windowId, appId, [&](const PhosphorEngine::WindowPlacement& p) {
+            return PhosphorEngine::pendingCrossScreenManagedRestore(
+                p, PhosphorEngine::WindowPlacement::autotileEngineId(), PhosphorEngine::WindowPlacement::stateTiled(),
+                openingScreenId, [&](const QString& rec, int desktop, const QString& activity) {
+                    return m_layoutManager->modeForScreen(rec, desktop, activity)
+                        == PhosphorZones::AssignmentEntry::Mode::Autotile;
+                });
+        });
+    if (!pending) {
+        return false;
+    }
+    const QString homeScreen = pending->screenId;
+    // The LIVE screen set must agree with the record-context verdict:
+    // windowOpened's own isActiveOnScreen self-guard would otherwise refuse
+    // the adoption AFTER this method already answered "claimed", stranding
+    // the window untracked.
+    if (!isActiveOnScreen(homeScreen)) {
+        return false;
+    }
+    qCInfo(PhosphorTileEngine::lcTileEngine)
+        << "claimCrossScreenReopen:" << windowId << "opened on" << openingScreenId
+        << "but is recorded tiled on autotile screen" << homeScreen << "— reclaiming";
+    windowOpened(windowId, homeScreen, minWidth, minHeight);
+    return true;
+}
+
 void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& screenId, int minWidth, int minHeight)
 {
     if (!warnIfEmptyWindowId(rawWindowId, "windowOpened")) {
@@ -98,26 +155,39 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     const PhosphorTiles::TilingState* deferState =
         deferKeyIt != m_states.windowKeys().constEnd() ? m_states.stateForKey(deferKeyIt.value()) : nullptr;
     const bool trackedInState = deferState && deferState->containsWindow(windowId);
-    if (!screenId.isEmpty() && m_windowTracker && m_layoutManager && m_layoutManager->snappingPreferred()
-        && !trackedInState) {
+    if (!screenId.isEmpty() && m_windowTracker && m_layoutManager && !trackedInState) {
         const QString appId = currentAppIdFor(windowId);
         if (!appId.isEmpty() && appId != windowId) {
-            // Shared predicate with snap's reciprocal gate
-            // (SnapEngine::resolveWindowRestore) — both engines run
-            // PhosphorEngine::pendingCrossScreenSnapRestore over the same record
-            // fields, so a window is never both deferred-and-claimed or
-            // both-skipped.
-            const auto snapCrossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
-                return PhosphorEngine::pendingCrossScreenSnapRestore(
-                    p, screenId, [&](const QString& rec, int desktop, const QString& activity) {
+            // Shared predicate with the other engines' reciprocal gates
+            // (SnapEngine::resolveWindowRestore, ScrollEngine::windowOpened /
+            // claimCrossScreenReopen) — every engine runs
+            // PhosphorEngine::pendingCrossScreenManagedRestore over the same
+            // record fields, so a window is never both deferred-and-claimed or
+            // both-skipped. The snap term keeps its snappingPreferred() gate
+            // (a disabled snap engine never claims, so deferring to it would
+            // strand the window); the scrolling term carries no such toggle —
+            // a scrolling-mode home screen implies a live scroll engine.
+            const auto crossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
+                if (m_layoutManager->snappingPreferred()
+                    && PhosphorEngine::pendingCrossScreenSnapRestore(
+                        p, screenId, [&](const QString& rec, int desktop, const QString& activity) {
+                            return m_layoutManager->modeForScreen(rec, desktop, activity)
+                                == PhosphorZones::AssignmentEntry::Mode::Snapping;
+                        })) {
+                    return true;
+                }
+                return PhosphorEngine::pendingCrossScreenManagedRestore(
+                    p, PhosphorEngine::WindowPlacement::scrollingEngineId(),
+                    PhosphorEngine::WindowPlacement::stateTiled(), screenId,
+                    [&](const QString& rec, int desktop, const QString& activity) {
                         return m_layoutManager->modeForScreen(rec, desktop, activity)
-                            == PhosphorZones::AssignmentEntry::Mode::Snapping;
+                            == PhosphorZones::AssignmentEntry::Mode::Scrolling;
                     });
             };
-            if (m_windowTracker->placementStore().peek(windowId, appId, snapCrossRestorePending).has_value()) {
+            if (m_windowTracker->placementStore().peek(windowId, appId, crossRestorePending).has_value()) {
                 qCInfo(PhosphorTileEngine::lcTileEngine)
                     << "windowOpened:" << windowId << "on autotile screen" << screenId
-                    << "defers to snap — carries a cross-screen snap restore";
+                    << "defers — carries a cross-screen restore for another engine";
                 // A refused-first-open phantom key (the very case the
                 // membership gate exists for) must not survive the defer:
                 // isWindowTracked would keep answering true for a window

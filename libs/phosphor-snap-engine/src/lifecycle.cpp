@@ -212,6 +212,42 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
             << "but carries a cross-screen snap restore — not deferring";
     }
 
+    // Reciprocal tiling-engine defer, the snap side of the N-way
+    // pendingCrossScreenManagedRestore agreement: a window that opens here but
+    // is recorded TILED on another screen still in that engine's mode belongs
+    // to that engine's cross-screen reclaim (claimCrossScreenReopen, run by
+    // the SnapAdaptor when this resolve returns no-snap, and by the tiling
+    // dispatch). Snap must neither auto-snap it into a zone here nor default
+    // it to floating below — float state written for a window the tiling
+    // engine is about to re-tile on its home screen leaves the two engines
+    // disagreeing about the same window. Skipped under the cross-screen snap
+    // bypass: mode is exclusive per context, so the recorded home cannot
+    // satisfy both pending verdicts.
+    if (!deferredByMode && m_layoutManager && m_windowTracker) {
+        const QString appId = m_windowTracker->currentAppIdFor(windowId);
+        if (!appId.isEmpty() && appId != windowId) {
+            const auto tileModeIs = [&](PhosphorZones::AssignmentEntry::Mode mode) {
+                return [this, mode](const QString& rec, int desktop, const QString& activity) {
+                    return m_layoutManager->modeForScreen(rec, desktop, activity) == mode;
+                };
+            };
+            const auto tileCrossRestorePending = [&](const WindowPlacement& p) {
+                return PhosphorEngine::pendingCrossScreenManagedRestore(
+                           p, WindowPlacement::autotileEngineId(), WindowPlacement::stateTiled(), screenId,
+                           tileModeIs(PhosphorZones::AssignmentEntry::Mode::Autotile))
+                    || PhosphorEngine::pendingCrossScreenManagedRestore(
+                           p, WindowPlacement::scrollingEngineId(), WindowPlacement::stateTiled(), screenId,
+                           tileModeIs(PhosphorZones::AssignmentEntry::Mode::Scrolling));
+            };
+            if (m_windowTracker->placementStore().peek(windowId, appId, tileCrossRestorePending).has_value()) {
+                qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                    << "resolveWindowRestore:" << windowId
+                    << "carries a cross-screen tiled record — deferring to its recorded engine";
+                return SnapResult::noSnap();
+            }
+        }
+    }
+
     // Highest-priority placement: a matched SnapToZone rule. An explicit "this app
     // snaps to these zones" directive outranks ANY remembered placement — a floated
     // position or a prior snap to a different zone. Resolved up front (after the
