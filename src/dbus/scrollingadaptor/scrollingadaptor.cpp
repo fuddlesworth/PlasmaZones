@@ -191,6 +191,12 @@ void ScrollingAdaptor::clearEngine()
     // would just mean a detached adaptor whose "last broadcast" memory
     // contradicts every other slot it answers.
     m_lastBroadcastScreens.clear();
+    // The tab-surface registry goes for the same reason, and it is the more
+    // visible half: scrollTabSurfaces() stays a live D-Bus method for the
+    // window between clearEngine and the adaptor's delete, so a peer asking
+    // then would be handed surfaces from a session that no longer exists while
+    // scrollingScreens() answers empty beside it.
+    m_scrollTabSurfaces.clear();
 }
 
 } // namespace PlasmaZones

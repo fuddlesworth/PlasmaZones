@@ -885,12 +885,13 @@ void Daemon::initEnginesAndWiring()
     // slide that surface with the strip. It bypasses the engine entirely: the
     // strip's model has no notion of which wl_surface happens to be drawing its
     // indicators.
-    if (m_overlayService) {
-        connect(m_overlayService.get(), &IOverlayService::scrollTabSurfaceChanged, m_scrollingAdaptor,
-                [adaptor = m_scrollingAdaptor](const QString& screenId, quint32 surfaceId) {
-                    adaptor->setScrollTabSurface(screenId, surfaceId);
-                });
-    }
+    // Unguarded, like every other m_overlayService deref in this function: it
+    // is ctor-owned and non-null for the daemon's whole lifetime, which this
+    // file states once at the top rather than re-asserting per call site.
+    connect(m_overlayService.get(), &IOverlayService::scrollTabSurfaceChanged, m_scrollingAdaptor,
+            [adaptor = m_scrollingAdaptor](const QString& screenId, quint32 surfaceId) {
+                adaptor->setScrollTabSurface(screenId, surfaceId);
+            });
     connect(autotileEngine, &PhosphorTileEngine::AutotileEngine::windowsTiled, m_tilingAdaptor,
             &TilingAdaptor::relayTileRequestsJson);
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,
@@ -1048,11 +1049,11 @@ void Daemon::initEnginesAndWiring()
     // were established and would silently sever all three. The stop() → init()
     // duplicate this connect needs protecting from is already handled by that
     // one sweep, since it precedes every rulesChanged connect including this.
-    if (m_ruleStore) {
-        connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this]() {
-            scheduleScrollTabEnrichmentRefresh();
-        });
-    }
+    // Unguarded for the same reason as the three rulesChanged connects above:
+    // m_ruleStore is ctor-owned and non-null for the daemon's lifetime.
+    connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this]() {
+        scheduleScrollTabEnrichmentRefresh();
+    });
 
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members

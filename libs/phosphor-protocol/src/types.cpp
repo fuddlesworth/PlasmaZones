@@ -110,12 +110,16 @@ QString TileRequestEntry::validationError() const
     if (!scrollEdge.isEmpty() && scrollEdge != QLatin1String("left") && scrollEdge != QLatin1String("right")) {
         return QStringLiteral("TileRequestEntry: invalid scrollEdge '%1' (windowId=%2)").arg(scrollEdge, windowId);
     }
-    // viewDeltaX is deliberately NOT validated here, unlike its neighbours.
-    // It is a motion hint, not a placement input: the committed rect stands on
-    // its own whatever the delta says, and an absurd value costs one wild slide
-    // that rings out to the correct position on its own. Rejecting the entry
-    // would instead drop a perfectly good placement over a cosmetic field. The
-    // consumer clamps it when it starts the spring.
+    // viewDeltaX, visualX, visualY and hasVisualPos are deliberately NOT
+    // validated here, unlike their neighbours. All four are PAINT hints rather
+    // than placement inputs: the committed rect stands on its own whatever they
+    // say, so an absurd value costs one wild slide or one column drawn in the
+    // wrong place for a leg, and rejecting the entry would instead drop a
+    // perfectly good placement over a cosmetic field. Each consumer defends
+    // itself where the damage would be — the effect clamps the delta before it
+    // reaches either the spring or the per-window origin, and the JSON hop
+    // requires the visual pair to be present, numeric and paired with a tiled
+    // placement before it sets the flag.
     return {};
 }
 

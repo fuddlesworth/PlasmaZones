@@ -338,8 +338,8 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // Defensive reconnect of daemonReady. Subscriptions against a
         // WELL-KNOWN name survive daemon restarts (the bus re-resolves the
         // owner per match rule — daemon_bringup.cpp's connectNavigationSignals
-        // note is the authoritative statement, and settingsChanged plus all
-        // sixteen navigation signals rely on it without any re-wire), so
+        // note is the authoritative statement, and settingsChanged plus every
+        // navigation signal relies on it without any re-wire), so
         // this refresh is belt-and-braces, not a requirement. Keep the
         // disconnect-first pairing (Qt doesn't deduplicate match rules) and
         // do NOT propagate the pattern to other signals.

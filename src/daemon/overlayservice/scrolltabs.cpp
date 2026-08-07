@@ -186,6 +186,12 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
     auto* state = ensureScrollTabShellFor(screenId, screen);
     if (!state || !state->tabShell || !state->tabShell->shellSurface() || !state->scrollTabsSlot()) {
         qCWarning(lcOverlay) << "updateScrollTabStrips: no scroll tab shell for screen=" << screenId;
+        // The region computed above described a surface that does not exist.
+        // The cached strip model above it is deliberately kept — the enable
+        // toggle replays from it — but a region has no such reader, and
+        // leaving one behind is the sort of half-updated pair the rest of this
+        // function is careful to avoid.
+        m_scrollTabInputRegions.remove(screenId);
         return;
     }
 

@@ -1859,9 +1859,13 @@ private:
     // from `KWin::effects->screens()` and maintained via the
     // screenAdded/screenRemoved signals. A fallback unbound clock is
     // always present for the degenerate no-output / migrated-window
-    // cases. Every clock outlives `m_windowAnimator` — animator holds
-    // non-owning pointers into these via captured MotionSpecs —
-    // guaranteed by destruction order (animator declared after).
+    // cases — for `m_windowAnimator` only; `m_stripViewAnimator`'s resolver
+    // deliberately returns null on a miss, since a view offset belongs to an
+    // output and an unresolvable one has nothing to slide. Every clock
+    // outlives BOTH animators — each holds non-owning pointers into these via
+    // captured MotionSpecs — guaranteed by destruction order (both animators
+    // declared after). Anyone reordering these members has to keep that true
+    // for both.
     std::unique_ptr<CompositorClock> m_motionClockFallback;
     std::unordered_map<KWin::LogicalOutput*, std::unique_ptr<CompositorClock>> m_motionClocksByOutput;
     /// The output whose pass is currently executing, latched in prePaintScreen
@@ -1909,7 +1913,9 @@ private:
     /// make N springs that desync into a shear. The two compose additively at
     /// paint time — a window can be riding the view AND animating a residual
     /// of its own (an edge column whose width changed in the same batch).
-    /// Same clock and same profile source as the window animator.
+    /// Rides the same per-output clocks, but with NO fallback, and holds no
+    /// profile of its own — the caller resolves the scrolling.view motion node
+    /// per batch and hands it in.
     std::unique_ptr<StripViewAnimator> m_stripViewAnimator;
     /// Where a PARKED scrolling column should be drawn, by window id. Its
     /// committed rect is the park below the union of all outputs — the only

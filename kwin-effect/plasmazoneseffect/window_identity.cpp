@@ -401,9 +401,17 @@ void PlasmaZonesEffect::restackScrollTabSurfaces()
     // across them.
     //
     // A client cannot express this, but we are also the compositor, so we
-    // simply say it. Lowering is one-shot per window: nothing activates a layer
-    // surface, so nothing raises it again, and a surface that unmaps and comes
-    // back arrives through windowAdded, which calls this.
+    // simply say it.
+    //
+    // Re-asserted rather than one-shot. Nothing ACTIVATES a layer surface, but
+    // several paths snapshot the whole stacking order and replay it with
+    // raiseWindow — the tile batch's onComplete, the daemon bring-up, the
+    // output-change handler — and those snapshots are unfiltered, so one taken
+    // before this ran and replayed after would put the indicators back on top.
+    // Each of those sites calls this at the end for that reason, and a surface
+    // that unmaps and comes back arrives through windowAdded, which also does.
+    // Every call re-lowers every indicator, which is harmless: there is one per
+    // output and they never overlap.
     //
     // Bottom of the LAYER, not of the screen — the layer bucket is above every
     // ordinary window either way. The one visible consequence is that the zone
