@@ -72,6 +72,22 @@ private Q_SLOTS:
         QCOMPARE(PP::eventClassForPath(PP::WindowMaximize), PP::EventClassGeometry);
     }
 
+    // The strip classifier underpins the scrolling opt-in policy: the
+    // scrolling root and the scrolling.view leaf classify as EventClassStrip
+    // so only the one-scene strip packs surface on the Strip Scrolled row,
+    // mirroring the desktop root+leaf shape. Its parent 'global' must NOT.
+    void testEventClassForScrollingPaths()
+    {
+        QCOMPARE(PP::eventClassForPath(PP::ScrollingView), PP::EventClassStrip);
+        QCOMPARE(PP::eventClassForPath(PP::Scrolling), PP::EventClassStrip);
+        QVERIFY(PP::eventClassForPath(PP::WindowMove) != PP::EventClassStrip);
+        QVERIFY(PP::eventClassForPath(PP::DesktopSwitch) != PP::EventClassStrip);
+        QCOMPARE(PP::eventClassForPath(PP::Global), QString());
+        // The strip walk-up: scrolling.view → scrolling → global.
+        QCOMPARE(PP::parentPath(PP::ScrollingView), PP::Scrolling);
+        QCOMPARE(PP::parentPath(PP::Scrolling), PP::Global);
+    }
+
     void testAllBuiltInPathsNonEmpty()
     {
         const QStringList paths = PP::allBuiltInPaths();

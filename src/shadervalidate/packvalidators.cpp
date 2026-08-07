@@ -478,7 +478,8 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
         static const QStringList kAnimAppliesToTokens = {PP::EventClassGeometry, PP::EventClassAppearance,
-                                                         PP::EventClassDesktop, PP::EventClassMove};
+                                                         PP::EventClassDesktop, PP::EventClassMove,
+                                                         PP::EventClassStrip};
         const QJsonValue appliesToValue = doc.object().value(QLatin1String("appliesTo"));
         // A present-but-non-array appliesTo (e.g. a bare string) is ignored
         // wholesale by fromJson's .toArray() and the pack silently becomes

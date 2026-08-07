@@ -290,6 +290,12 @@ private Q_SLOTS:
         desktopOnly.fragmentShaderPath = QStringLiteral("effect.frag");
         desktopOnly.appliesTo = QStringList{QStringLiteral("desktop")};
         QCOMPARE(AnimationShaderEffect::fromJson(desktopOnly.toJson()).appliesTo, desktopOnly.appliesTo);
+
+        AnimationShaderEffect stripOnly;
+        stripOnly.id = QStringLiteral("strip-motion-blur");
+        stripOnly.fragmentShaderPath = QStringLiteral("effect.frag");
+        stripOnly.appliesTo = QStringList{QStringLiteral("strip")};
+        QCOMPARE(AnimationShaderEffect::fromJson(stripOnly.toJson()).appliesTo, stripOnly.appliesTo);
     }
 
     /// Unknown / duplicate tokens are dropped at parse time; a list that
@@ -328,6 +334,16 @@ private Q_SLOTS:
         moveArr.append(QStringLiteral("move"));
         moveObj.insert(QLatin1String("appliesTo"), moveArr);
         QCOMPARE(AnimationShaderEffect::fromJson(moveObj).appliesTo, (QStringList{QStringLiteral("move")}));
+
+        // "strip" (the scrolling strip's view pass) is part of the accepted
+        // vocabulary.
+        QJsonObject stripObj;
+        stripObj.insert(QLatin1String("id"), QStringLiteral("s"));
+        stripObj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray stripArr;
+        stripArr.append(QStringLiteral("strip"));
+        stripObj.insert(QLatin1String("appliesTo"), stripArr);
+        QCOMPARE(AnimationShaderEffect::fromJson(stripObj).appliesTo, (QStringList{QStringLiteral("strip")}));
 
         QJsonObject allBad = obj;
         QJsonArray bad;
@@ -410,6 +426,10 @@ private Q_SLOTS:
         // The move class is opt-in for the same structural reason: a universal
         // pack cannot drive the held interactive drag.
         QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::WindowMove));
+        // The strip class is opt-in too: a universal single-surface pack
+        // cannot drive the strip's one-scene post-process pass.
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::ScrollingView));
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::Scrolling));
 
         // Appearance-only effect: mirror image — incompatible on geometry legs,
         // compatible on appearance legs.
@@ -483,6 +503,31 @@ private Q_SLOTS:
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopSwitch));
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopPeek));
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::Desktop));
+        // …and on the strip paths, for the same reason.
+        QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::ScrollingView));
+
+        // Strip effect: opt-in exactly like desktop and move. Accepted only on
+        // the scrolling paths (root and leaf, mirroring desktop); refused on
+        // every single-surface leg, the desktop paths, and ambiguous rows (no
+        // screen-level pass ever consumes an ancestor row's resolution, so a
+        // strip-only pack there is provably runtime-dead).
+        AnimationShaderEffect stripOnly;
+        stripOnly.id = QStringLiteral("strip-motion-blur");
+        stripOnly.fragmentShaderPath = QStringLiteral("effect.frag");
+        stripOnly.appliesTo = QStringList{QStringLiteral("strip")};
+        QVERIFY(shaderEffectAppliesToEventPath(stripOnly, PP::ScrollingView));
+        QVERIFY(shaderEffectAppliesToEventPath(stripOnly, PP::Scrolling));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowOpen));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowSnapIn));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowMove));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::Window));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::Global));
+        // Opt-in in both directions: geometry-only, appearance-only and
+        // desktop-only packs are refused on the strip paths.
+        QVERIFY(!shaderEffectAppliesToEventPath(morph, PP::ScrollingView));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::ScrollingView));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::ScrollingView));
     }
 
     /// Compositor-only classification: a pack whose declared classes never
@@ -511,6 +556,7 @@ private Q_SLOTS:
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("desktop")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("move")})));
+        QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("strip")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry"), QStringLiteral("move")})));
         // Default-constructed (invalid) effect: empty appliesTo → not
         // compositor-only, so runLeg's unknown-id resolve stays a plain

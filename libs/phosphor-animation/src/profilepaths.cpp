@@ -15,6 +15,7 @@ const QString EventClassGeometry = QStringLiteral("geometry");
 const QString EventClassAppearance = QStringLiteral("appearance");
 const QString EventClassDesktop = QStringLiteral("desktop");
 const QString EventClassMove = QStringLiteral("move");
+const QString EventClassStrip = QStringLiteral("strip");
 
 // window.* — split into two contract sub-trees so each has a real cascade
 // parent for its "All": appearance (a surface materialising / dissolving) and
@@ -273,6 +274,16 @@ QString eventClassForPath(const QString& path)
     // which makes this class opt-in rather than universal-permissive).
     if (path == Desktop || path.startsWith(Desktop + QLatin1Char('.'))) {
         return EventClassDesktop;
+    }
+    // Scrolling family — the strip's one-scene post-process contract. The
+    // view spring retargets continuously under wheel scrolling (no discrete
+    // from/to legs), so neither the crossfade classes nor the two-texture
+    // desktop class fit: a strip pack decorates the live capture driven by
+    // offset/velocity (iStripMotion) and must opt in via
+    // `appliesTo: ["strip"]`. Root and every leaf carry the class, mirroring
+    // desktop.
+    if (path == Scrolling || path.startsWith(Scrolling + QLatin1Char('.'))) {
+        return EventClassStrip;
     }
     // `window` root (mixed: spans both classes), `global`, and the
     // editor/panel/widget/cursor/shader families have no single class — the

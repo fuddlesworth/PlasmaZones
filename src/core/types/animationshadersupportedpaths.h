@@ -89,6 +89,13 @@ inline QStringList shaderConsumedLeafEventPaths()
         // per-window tryBeginShaderForEvent leg. Its shaders are the two-texture
         // desktop class (appliesTo ["desktop"]).
         PP::DesktopSwitch,
+        // Strip scroll — consumed by the kwin-effect's StripTransitionManager:
+        // the tiling batch path resolves resolveShaderWithDefault(tree,
+        // ScrollingView) beside its motion-profile resolve (tilinghandler/
+        // tiling.cpp) and arms a per-output post-process pass over the live
+        // scene capture while the view spring is in flight. Its shaders are
+        // the one-scene strip class (appliesTo ["strip"]).
+        PP::ScrollingView,
         // Show-desktop peek — same manager, resolved in the
         // showingDesktopChanged handler (lifecycle_wiring.cpp). One node drives both
         // legs: the hide leg blends the windows scene into the bare desktop,

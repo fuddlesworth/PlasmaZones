@@ -260,6 +260,12 @@ private Q_SLOTS:
         // fresh configs.
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopSwitch).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopPeek).isEmpty());
+        // The strip pass carries no built-in default either: a full-output
+        // capture-and-repaint on every scroll stays opt-in, so a fresh config
+        // scrolls with the plain translation until the user picks a strip
+        // pack.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::ScrollingView).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::Scrolling).isEmpty());
     }
 
     void testDefaultShaderForPathOverlayEvents()

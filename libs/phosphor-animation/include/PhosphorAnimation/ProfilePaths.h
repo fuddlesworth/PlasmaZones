@@ -206,6 +206,21 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassDesktop;
 /// shader from its ancestors (see ShaderProfileTree::resolve).
 PHOSPHORANIMATION_EXPORT extern const QString EventClassMove;
 
+/// Strip transitions: the scrolling strip's view leg (`scrolling.view`). Like
+/// `move`, the motion is CONTINUOUS — wheel scrolling retargets the per-output
+/// view spring on every batch, so there are no discrete from/to legs and a
+/// crossfade pack has nothing to play. Like `desktop`, the pass is per-output
+/// and full-screen: the compositor renders the already-translated scene into
+/// one capture and the pack decorates it (motion blur, smear, edge warp)
+/// driven by offset/velocity uniforms (iStripMotion), converging to the
+/// identity image at settle. A distinct one-scene-sampler contract
+/// (strip_transition.glsl), incompatible with the single-surface and
+/// two-texture pipelines — a shader must opt in explicitly via
+/// `appliesTo: ["strip"]`, and a universal effect does NOT apply here.
+/// Inherently compositor-only: the class never reaches a daemon surface, so
+/// `shaderEffectIsCompositorOnly`'s appearance rule classifies it correctly.
+PHOSPHORANIMATION_EXPORT extern const QString EventClassStrip;
+
 /// Classify @p path into an event class, or empty string when the path has
 /// no single class (a mixed ancestor like `window`, or a path outside the
 /// classified families — editor / panel / widget / cursor / shader / global).
@@ -213,7 +228,8 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassMove;
 /// are `appearance`; the window leaves split by motion-vs-lifecycle; the
 /// `window.movement.move` leaf is `move` (held interactive drag) while the
 /// rest of the movement sub-tree is `geometry`; the `desktop` root and every
-/// `desktop.*` leaf are `desktop`; the `window` root itself is mixed → empty.
+/// `desktop.*` leaf are `desktop`; the `scrolling` root and every
+/// `scrolling.*` leaf are `strip`; the `window` root itself is mixed → empty.
 PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 
 /// Full list of built-in paths in taxonomy order.

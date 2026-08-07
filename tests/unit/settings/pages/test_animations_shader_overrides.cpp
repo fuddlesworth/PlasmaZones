@@ -666,6 +666,11 @@ private Q_SLOTS:
         const QString unsupported = QStringLiteral("editor.snapIn");
         QVERIFY(c.supportsShaderLeg(supported));
         QVERIFY(!c.supportsShaderLeg(unsupported));
+        // The strip pass made scrolling.view a consumed shader leaf (its
+        // ancestors join via the walk-up), so the Strip Scrolled card shows
+        // the picker and the pruner keeps its overrides.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("scrolling.view")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("scrolling")));
 
         QCOMPARE(c.setShaderOverrideOnPaths(QStringList{supported, unsupported}, QStringLiteral("pixelate"), {}), 1);
 
