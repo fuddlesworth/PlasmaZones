@@ -144,6 +144,15 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
+    // A tab-indicator surface arriving (first map, or a re-map after the daemon
+    // tore its shell down) has to be put back under the passive overlay shell —
+    // the compositor stacks same-layer surfaces by creation and this one is
+    // always the newer of the two. Costs a set check per opened window when no
+    // indicator surface is registered, which is the common case.
+    if (isScrollTabIndicatorSurface(w)) {
+        restackScrollTabSurfaces();
+    }
+
     // Tileable-app predicate: a normal top-level window we both handle and can
     // tile, that didn't open minimized. Drives the snap-restore candidacy and
     // the first-frame suppression decision below. It does NOT gate the open
@@ -379,9 +388,23 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // never gets a frame to run the close shader on. The grab is
     // released by `endShaderTransition` when the timer-driven teardown
     // fires.
-    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
-                           /*reverse=*/true, /*holdCloseGrab=*/true);
+    //
+    // Skipped for a PARKED scrolling column. Its committed rect sits below the
+    // union of every output, so a surface-extent pack — which is nearly all of
+    // them — would anchor against a frame that intersects no screen while its
+    // texture is the output's, putting the anchor remap outside [0,1]. What it
+    // then draws is off-viewport either way, so the transition buys nothing
+    // and costs a full-output repaint every frame for its duration. The
+    // relocation that normally draws a parked column where it really sits is
+    // dropped one line below, so nothing would move this back on screen.
+    const bool parkedOffAllOutputs = m_scrollVisualPos.contains(closingWindowId) && !w->frameGeometry().isEmpty()
+        && !KWin::effects->screenAt(w->frameGeometry().center().toPoint());
+    if (!parkedOffAllOutputs) {
+        tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
+                               /*reverse=*/true, /*holdCloseGrab=*/true);
+    }
     m_windowAnimator->removeAnimation(w);
+    m_scrollVisualPos.remove(closingWindowId);
 
     // Same value as closingWindowId above: the windowId cache isn't dropped
     // until later in this slot (m_idCaches.windowIdCache.remove near the end), so a

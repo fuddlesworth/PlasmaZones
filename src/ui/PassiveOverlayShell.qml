@@ -50,8 +50,10 @@ Window {
     // Sibling tiers below: the modalSlots container (z=2, hosting the
     // snap-assist / layout-picker / cheatsheet slots in
     // PassiveOverlayModalSlots.qml), zoneSelectorSlot (z=1),
-    // scrollDropIndicatorSlot (z=0.6), scrollTabsSlot (z=0.5),
-    // mainOverlaySlot (z=0).
+    // scrollDropIndicatorSlot (z=0.6), mainOverlaySlot (z=0).
+    // The scrolling tab indicators are NOT here: they have a surface of
+    // their own (ScrollTabShell.qml) so the compositor can slide them with
+    // the strip without dragging this shell's OSD sideways too.
     // The osdSlot's z is
     // dynamic (3 normally, 1.5 while a modal slot is visible — see the
     // binding on osdSlot). Each is a sibling Item with its own
@@ -90,12 +92,6 @@ Window {
     /// matching show/dismiss signals — the shell is kbd-None so QML
     /// Shortcuts can't fire here.
     readonly property Item cheatsheetSlotItem: modalSlots.cheatsheetSlotItem
-    /// Scroll tab-strip slot Item — per-screen tab indicators for tabbed
-    /// scrolling columns. Each tab is a click target that activates its
-    /// window; the surface is click-through everywhere OUTSIDE the indicator
-    /// rects, which is what the daemon's per-screen input region gives it.
-    /// Content updates are plain property writes (no re-instantiation).
-    readonly property alias scrollTabsSlotItem: scrollTabsSlot
     /// Scroll drag drop-indicator slot Item — outlines the slot a dragged
     /// window would land in while a scrolling drag re-insert is armed.
     /// Display-only: it declares no pointer handlers and contributes no input
@@ -113,9 +109,6 @@ Window {
     signal snapAssistWindowSelected(string windowId, string zoneId, string geometryJson)
     /// Forwarded from snap-assist's backdrop click / dismiss request.
     signal snapAssistDismissRequested
-    /// Forwarded from the scrolling tab indicator's `tabActivated` — host
-    /// wires to onScrollTabActivated and focuses that window.
-    signal scrollTabActivated(string windowId)
     /// Forwarded from picker's `layoutSelected`.
     signal layoutPickerSelected(string layoutId)
     /// Forwarded from picker's `dismissRequested` (backdrop click /
@@ -404,82 +397,6 @@ Window {
         shellRoot: root
         anchors.fill: parent
         z: 2
-    }
-
-    Item {
-        id: scrollTabsSlot
-
-        // Tab-indicator model — C++ writes a list of strip entries.
-        // Each entry: {x, y, width, height (shell-window coordinates),
-        // position (0 left, 1 right, 2 top, 3 bottom), tabs: [{windowId,
-        // title, active, urgent, colors?}]}. `position` decides the whole
-        // vertical/horizontal branch in the content item, and `windowId` is
-        // what a tab click relays back.
-        property var strips: []
-        // Content lifecycle gate, toggled by C++ on show/hide. Unlike the
-        // OSD-style slots the content is NOT re-instantiated per update —
-        // strip changes are frequent (every relayout) and flow through the
-        // `strips` binding.
-        property bool loaded: false
-        // User overlay font, pushed by C++ writeFontProperties (same
-        // pipeline as every other slot).
-        property string fontFamily: ""
-        property real fontSizeScale: 1
-        property int fontWeight: Font.Normal
-        property bool fontItalic: false
-        property bool fontUnderline: false
-        property bool fontStrikeout: false
-        // Tab-indicator PAINT settings (Scrolling.TabIndicator), pushed by C++
-        // on every strip update. They must be declared here AND forwarded
-        // below: setProperty on an undeclared name silently creates a dynamic
-        // property that no binding ever sees, so the control looks wired and
-        // does nothing (see the zoneSelectorSlot contract note).
-        property int tabStyle: 0
-        property int gapsBetweenTabs: 0
-        property int cornerRadius: -1
-        property string activeColor: ""
-        property string inactiveColor: ""
-        property string urgentColor: ""
-
-        anchors.fill: parent
-        // Indicator tier: above the main overlay, below the zone selector,
-        // the OSDs and the modals.
-        z: 0.5
-        opacity: 0
-        visible: false
-
-        Loader {
-            id: scrollTabsLoader
-
-            anchors.fill: parent
-            active: scrollTabsSlot.loaded
-            // SYNCHRONOUS by contract — see snapAssistLoader.
-            sourceComponent: scrollTabsContentComp
-            onLoaded: {
-                if (scrollTabsLoader.item)
-                    scrollTabsLoader.item.tabActivated.connect(root.scrollTabActivated);
-            }
-        }
-
-        Component {
-            id: scrollTabsContentComp
-
-            ScrollTabStripContent {
-                strips: scrollTabsSlot.strips
-                fontFamily: scrollTabsSlot.fontFamily
-                fontSizeScale: scrollTabsSlot.fontSizeScale
-                fontWeight: scrollTabsSlot.fontWeight
-                fontItalic: scrollTabsSlot.fontItalic
-                fontUnderline: scrollTabsSlot.fontUnderline
-                fontStrikeout: scrollTabsSlot.fontStrikeout
-                style: scrollTabsSlot.tabStyle
-                gapsBetweenTabs: scrollTabsSlot.gapsBetweenTabs
-                cornerRadius: scrollTabsSlot.cornerRadius
-                activeColor: scrollTabsSlot.activeColor
-                inactiveColor: scrollTabsSlot.inactiveColor
-                urgentColor: scrollTabsSlot.urgentColor
-            }
-        }
     }
 
     Item {

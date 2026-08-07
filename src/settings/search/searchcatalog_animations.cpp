@@ -66,6 +66,12 @@ void seedAnimationEventAnchors(PhosphorControl::SearchController* search)
     // rather than deep-linking to the row.
     addSetting(search, QStringLiteral("animations-desktops"), QStringLiteral("desktop.peek"),
                PhosphorI18n::tr("Peeked at Desktop"), {PhosphorI18n::tr("peek"), PhosphorI18n::tr("show desktop")});
+    // Scrolling page. Keywords like the desktop.peek row above: the label
+    // shares no token with "scrolling", which is what a user looking for this
+    // actually types, and "strip" is the mode's own vocabulary.
+    addSetting(search, QStringLiteral("animations-scrolling"), QStringLiteral("scrolling.view"),
+               PhosphorI18n::tr("Strip Scrolled"),
+               {PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("column")});
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideIn"),
                PhosphorI18n::tr("Slide In"));
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideOut"),

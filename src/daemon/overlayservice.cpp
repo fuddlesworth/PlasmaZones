@@ -66,13 +66,18 @@ namespace {
 // populated by the post-create callback, or when the QPointer in the
 // map has been cleared because the underlying QQuickItem was destroyed
 // (typically: shell torn down out from under us by a deferred signal).
-QQuickItem* slotItemOrNull(const OverlayService::PerScreenOverlayState& state, const QString& key)
+QQuickItem* slotItemOrNull(const PhosphorOverlay::ShellState* shell, const QString& key)
 {
-    if (!state.shell) {
+    if (!shell) {
         return nullptr;
     }
-    auto it = state.shell->slots.constFind(key);
-    return it == state.shell->slots.cend() ? nullptr : it.value().item.data();
+    auto it = shell->slots.constFind(key);
+    return it == shell->slots.cend() ? nullptr : it.value().item.data();
+}
+
+QQuickItem* slotItemOrNull(const OverlayService::PerScreenOverlayState& state, const QString& key)
+{
+    return slotItemOrNull(state.shell, key);
 }
 
 } // namespace
@@ -109,7 +114,9 @@ QQuickItem* OverlayService::PerScreenOverlayState::cheatsheetSlot() const
 
 QQuickItem* OverlayService::PerScreenOverlayState::scrollTabsSlot() const
 {
-    return slotItemOrNull(*this, PhosphorSlotKeys::ScrollTabs());
+    // The one slot that resolves through `tabShell` rather than `shell`: the
+    // indicators live on their own wl_surface so the compositor can slide it.
+    return slotItemOrNull(tabShell, PhosphorSlotKeys::ScrollTabs());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::scrollDropIndicatorSlot() const
@@ -151,6 +158,11 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
     // (see animation_config.cpp) so the host has its animator ready
     // by the time applyShaderProfilesToAnimator runs.
     m_shellHost = std::make_unique<PhosphorOverlay::ShellHost>(this);
+    // Twin host for the scrolling tab indicators' own per-screen surface.
+    // Same key space (effective screen id) and the same lifecycle, driven from
+    // the same call sites; only the surface it builds differs. Constructed
+    // beside m_shellHost for the same setupSurfaceAnimator ordering reason.
+    m_tabShellHost = std::make_unique<PhosphorOverlay::ShellHost>(this);
 
     // Phase-5 SurfaceAnimator. One instance drives every overlay's
     // show/hide via Profile-resolved curves; per-Role configs install
@@ -285,6 +297,31 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
         unwirePassiveShellSlots(screenId);
     });
 
+    // The tab-indicator shell's own three hooks. Deliberately NOT warmed by
+    // warmUpNotifications and not created on hot-plug: unlike the passive
+    // shell it has exactly one consumer, and updateScrollTabStrips creates it
+    // on the first strip a screen shows. A desktop with no tabbed scrolling
+    // column never pays for it at all.
+    m_tabShellHost->setSurfaceFactory([this](const QString& screenId, QScreen* physScreen) -> PhosphorLayer::Surface* {
+        const auto role = PhosphorRoles::makePerInstanceRole(PhosphorRoles::ScrollTabShell, screenId,
+                                                             m_surfaceManager->nextScopeGeneration());
+        auto* surface = createWarmedOsdSurface(role, QUrl(QStringLiteral("qrc:/ui/ScrollTabShell.qml")), physScreen,
+                                               "scroll tab shell", screenId);
+        if (!surface) {
+            qCWarning(lcOverlay) << "Failed to create scroll tab shell for screen=" << screenId
+                                 << ": suppressing further attempts until screen is replugged";
+        }
+        return surface;
+    });
+
+    m_tabShellHost->setPostCreateCallback([this](const QString& screenId, PhosphorOverlay::ShellState& shellState) {
+        wireScrollTabShellSlots(screenId, shellState);
+    });
+
+    m_tabShellHost->setPreDestroyCallback([this](const QString& screenId) {
+        unwireScrollTabShellSlots(screenId);
+    });
+
     // Connect to screen changes (with safety check for early initialization)
     if (qGuiApp) {
         connect(qGuiApp, &QGuiApplication::screenAdded, this, &OverlayService::handleScreenAdded);
@@ -364,6 +401,7 @@ OverlayService::~OverlayService()
     const QStringList screenKeysAtShutdown = m_screenStates.keys();
     for (const QString& screenId : screenKeysAtShutdown) {
         m_shellHost->destroyShell(screenId);
+        m_tabShellHost->destroyShell(screenId);
     }
 
     // Explicit lib teardown BEFORE m_screenStates.clear() so the
@@ -374,6 +412,7 @@ OverlayService::~OverlayService()
     // re-fire is a no-op in the steady state - but ordering matters if
     // a future code path leaves a live shell behind.
     m_shellHost.reset();
+    m_tabShellHost.reset();
     m_screenStates.clear();
 
     // Singleton surfaces (layout picker, shader preview) are QObject

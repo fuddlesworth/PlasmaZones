@@ -10,7 +10,7 @@ OrderingPage {
         root.hasCustomOrder = settingsController.hasCustomTilingOrder();
     }
 
-    headerText: i18n("Tiling Algorithm Priority")
+    headerText: i18n("Tiling algorithm priority")
     infoText: i18n("Set the priority order for algorithms when cycling with keyboard shortcuts and in the zone selector popup. Drag rows or use the arrow buttons to reorder.")
     emptyText: i18n("No algorithms available")
     emptyExplanation: i18n("Algorithms are registered by the daemon.")

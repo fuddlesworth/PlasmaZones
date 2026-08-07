@@ -27,6 +27,8 @@
 #include <QSet>
 #include <QStringList>
 
+#include <optional>
+
 namespace PlasmaZones {
 
 bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& newKey)
@@ -94,15 +96,62 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     // (lib only touches m_states).
     if (existing != m_screenStates.end()) {
         existing->shell = nullptr;
+        existing->tabShell = nullptr;
         m_screenStates.erase(existing);
+    }
+
+    // The tab-indicator shell follows the same key. It is best-effort on
+    // purpose: it exists only for a screen that has shown a tabbed column, so
+    // "no live shell under oldKey" is the ordinary answer, not a fault. When
+    // one IS live and the host refuses the move (a live shell already under
+    // newKey), destroy it rather than leave the donor's surface stranded under
+    // a key nothing will ever address again — the next strip update recreates
+    // it, at the cost of one surface rebuild.
+    //
+    // The four per-screen tab maps are captured FIRST, because destroyShell
+    // fires the PreDestroy hook and unwireScrollTabShellSlots clears every one
+    // of them for oldKey — so the migration block below would find nothing
+    // left to move. The strip model and input region self-heal on the next
+    // engine push, but the context-rule paint overrides do not: their only
+    // writer is a rules re-resolve, so the screen would silently fall back to
+    // config colours until one happened. Carrying them across means the
+    // rebuilt shell comes up already correct.
+    const auto savedStrips = m_lastScrollTabStrips.constFind(oldKey) != m_lastScrollTabStrips.constEnd()
+        ? std::optional(m_lastScrollTabStrips.value(oldKey))
+        : std::nullopt;
+    const auto savedRegion = m_scrollTabInputRegions.constFind(oldKey) != m_scrollTabInputRegions.constEnd()
+        ? std::optional(m_scrollTabInputRegions.value(oldKey))
+        : std::nullopt;
+    const auto savedOverrides =
+        m_scrollTabIndicatorOverrides.constFind(oldKey) != m_scrollTabIndicatorOverrides.constEnd()
+        ? std::optional(m_scrollTabIndicatorOverrides.value(oldKey))
+        : std::nullopt;
+    if (m_tabShellHost->stateFor(oldKey) != nullptr && !m_tabShellHost->rekey(oldKey, newKey)) {
+        qCInfo(lcOverlay) << "rekeyOverlayState: tab shell rekey refused" << oldKey << "->" << newKey
+                          << "; destroying it, the next strip update rebuilds it";
+        m_tabShellHost->destroyShell(oldKey);
+        m_tabShellHost->removeState(oldKey);
+        donor->tabShell = nullptr;
+        // Put back what the PreDestroy hook just cleared, so the migration
+        // below has something to move.
+        if (savedStrips) {
+            m_lastScrollTabStrips.insert(oldKey, *savedStrips);
+        }
+        if (savedRegion) {
+            m_scrollTabInputRegions.insert(oldKey, *savedRegion);
+        }
+        if (savedOverrides) {
+            m_scrollTabIndicatorOverrides.insert(oldKey, *savedOverrides);
+        }
     }
     PerScreenOverlayState state = std::move(donor.value());
     m_screenStates.erase(donor);
     auto inserted = m_screenStates.insert(newKey, std::move(state));
 
-    // SEVEN per-screen overlay maps are keyed by screen id too — five for the
-    // scroll tab strips, two for the drag drop indicator — and each needs
-    // something different from the move:
+    // Several more per-screen overlay maps are keyed by screen id, and each
+    // needs something different from the move. Deliberately not a count: the
+    // enumeration below drifted from one twice already, and what matters is
+    // that a map is named here at all.
     //  - m_lastScrollTabStrips MUST follow. It is the cached model the
     //    enable toggle replays, so left under the dead key, re-enabling the
     //    indicator would replay nothing until the next structural strip
@@ -115,7 +164,7 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     //    direction.
     //  - m_scrollTabInputRegions MUST follow. The rekey preserves the live
     //    surface, so the slot can still be visible; left under the dead key,
-    //    syncPassiveShellSurfaceState(newKey) would read an empty region and
+    //    syncScrollTabShellSurfaceState(newKey) would read an empty region and
     //    the indicator would be UNCLICKABLE until the next strip update.
     //  - m_scrollTabIndicatorOverrides MUST follow. Otherwise the screen's
     //    context-rule paint overrides silently fall back to the config values
@@ -155,6 +204,15 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         m_lastScrollDropIndicatorRect.insert(newKey, dropRectIt.value());
         m_lastScrollDropIndicatorRect.remove(oldKey);
     }
+    // The drop indicator's paint overrides follow for the same reason its tab
+    // twin does: their only writer is a context re-resolve, so an entry left
+    // under the dead key means the rekeyed screen silently falls back to config
+    // colours until one happens, and the stranded entry never goes away.
+    if (const auto dropOverrideIt = m_scrollDropIndicatorOverrides.constFind(oldKey);
+        dropOverrideIt != m_scrollDropIndicatorOverrides.constEnd()) {
+        m_scrollDropIndicatorOverrides.insert(newKey, dropOverrideIt.value());
+        m_scrollDropIndicatorOverrides.remove(oldKey);
+    }
     m_scrollTabsHidePending.remove(oldKey);
     m_scrollDropIndicatorHidePending.remove(oldKey);
 
@@ -183,23 +241,53 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         // transport handle. (isVS == wasVS by the guard, so the physical
         // branch below is the both-bare-physical case, where AnchorAll
         // already covers the whole monitor and only the margins are reset.)
-        if (rekeyed.shell && rekeyed.shell->shellSurface()) {
-            if (auto* handle = rekeyed.shell->shellSurface()->transport()) {
-                const QRect targetVsGeom = resolveScreenGeometry(m_screenManager, newKey);
-                const auto placement = layerPlacementForVs(isVS ? targetVsGeom : QRect(), physScreen->geometry());
-                handle->setAnchors(placement.anchors);
-                handle->setMargins(placement.margins);
-                if (isVS && targetVsGeom.isValid()) {
-                    rekeyed.overlayGeometry = targetVsGeom;
-                    if (auto* w = rekeyed.shell->shellWindow()) {
-                        w->setWidth(targetVsGeom.width());
-                        w->setHeight(targetVsGeom.height());
-                    }
+        const QRect targetVsGeom = resolveScreenGeometry(m_screenManager, newKey);
+        const auto placement = layerPlacementForVs(isVS ? targetVsGeom : QRect(), physScreen->geometry());
+        // Both of the screen's surfaces are re-anchored, not just the passive
+        // one: the tab shell was attached against the old key's region too, and
+        // a stranded one would keep drawing the indicators over the old VS's
+        // rectangle.
+        const auto reanchor = [&](PhosphorOverlay::ShellState* shellState) {
+            if (!shellState || !shellState->shellSurface()) {
+                return;
+            }
+            auto* handle = shellState->shellSurface()->transport();
+            if (!handle) {
+                return;
+            }
+            handle->setAnchors(placement.anchors);
+            handle->setMargins(placement.margins);
+            if (isVS && targetVsGeom.isValid()) {
+                if (auto* w = shellState->shellWindow()) {
+                    w->setWidth(targetVsGeom.width());
+                    w->setHeight(targetVsGeom.height());
                 }
             }
+        };
+        reanchor(rekeyed.shell);
+        reanchor(rekeyed.tabShell);
+        // Tracked for the passive shell only — overlayGeometry is the zone
+        // overlay's hit-testing reference, and the tab indicators have none.
+        if (isVS && targetVsGeom.isValid() && rekeyed.shell && rekeyed.shell->shellSurface()) {
+            rekeyed.overlayGeometry = targetVsGeom;
         }
 
         rekeyed.overlayGeomConnection = installOverlayGeometryWatcher(physScreen, newKey, isVS);
+    }
+
+    // Re-publish the tab surface under the new key. ShellHost::rekey moves the
+    // ShellState between keys without firing PreDestroy, so the wl_surface
+    // survives — but the compositor was told about it under oldKey, and the
+    // effect's map is keyed by screen with the announcement as its only writer.
+    // Left alone, nothing would ever name the surface under newKey, and the
+    // eventual teardown would retract newKey, leaving the effect holding an
+    // oldKey entry that points at a destroyed object. Wayland reuses ids, so
+    // that is the mismatch the announce/retract pairing exists to prevent, not
+    // merely a lost indicator. Retract first: the two keys are different, so
+    // the change gate cannot collapse the pair.
+    announceScrollTabSurface(oldKey, nullptr);
+    if (rekeyed.tabShell) {
+        announceScrollTabSurface(newKey, rekeyed.tabShell->shellWindow());
     }
 
     qCInfo(lcOverlay) << "rekeyOverlayState: migrated overlay" << oldKey << "->" << newKey
@@ -225,17 +313,28 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
         // both be null/missing). Catches desync from a failed rekey,
         // an out-of-band lib mutation, or a future code path that
         // forgets to refresh the daemon-side cache.
+        // stateFor is a peek: it is declared const-only and returns
+        // pointer-or-nullptr, and the accessor that materializes an entry on a
+        // miss is separately named getOrCreateStateFor precisely so a
+        // debug-only check like this one cannot reach it by accident.
+        //
+        // Both borrowed pointers are checked. The tab shell is a second
+        // pointer into a second host with the same desync sources — a refused
+        // rekey, or a PostCreate that tears itself down.
         if (it.value().shell) {
-            // Explicit const-pointer binding to reach the const
-            // overload of stateFor (returns pointer-or-nullptr); the
-            // non-const overload would materialize an entry on a
-            // miss, which we must not do from a debug-only check.
-            const PhosphorOverlay::ShellHost* host = m_shellHost.get();
-            const PhosphorOverlay::ShellState* libState = host->stateFor(it.key());
+            const PhosphorOverlay::ShellState* libState = m_shellHost->stateFor(it.key());
             if (libState != it.value().shell) {
                 qCWarning(lcOverlay) << "validateScreenStateInvariant: daemon/lib ShellState pointer desync for"
                                      << it.key() << "daemon=" << it.value().shell << "lib=" << libState;
                 Q_ASSERT_X(false, "OverlayService", "daemon/lib ShellState pointer desync");
+            }
+        }
+        if (it.value().tabShell) {
+            const PhosphorOverlay::ShellState* libTabState = m_tabShellHost->stateFor(it.key());
+            if (libTabState != it.value().tabShell) {
+                qCWarning(lcOverlay) << "validateScreenStateInvariant: daemon/lib tab ShellState pointer desync for"
+                                     << it.key() << "daemon=" << it.value().tabShell << "lib=" << libTabState;
+                Q_ASSERT_X(false, "OverlayService", "daemon/lib tab ShellState pointer desync");
             }
         }
         if (!it.value().overlayPhysScreen) {
@@ -281,11 +380,27 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
                 // Anchors (Top|Left) are fixed at attach and can't change.
                 const QRect vsGeom = resolveScreenGeometry(m_screenManager, sid);
                 if (vsGeom.isValid() && st.shell->shellSurface()) {
-                    if (auto* handle = st.shell->shellSurface()->transport()) {
-                        handle->setMargins(layerPlacementForVs(vsGeom, newGeom).margins);
-                    }
-                    w->setWidth(vsGeom.width());
-                    w->setHeight(vsGeom.height());
+                    // Both shells carry the VS margins, so both go stale, and
+                    // a stranded one keeps drawing over the old VS rectangle —
+                    // the same failure rekeyOverlayState re-anchors both shells
+                    // to avoid. The tab shell cannot self-heal: its size is set
+                    // on the show path, and an already-visible indicator
+                    // returns before reaching it.
+                    const auto placement = layerPlacementForVs(vsGeom, newGeom);
+                    const auto reanchor = [&](PhosphorOverlay::ShellState* shell) {
+                        if (!shell || !shell->shellSurface()) {
+                            return;
+                        }
+                        if (auto* handle = shell->shellSurface()->transport()) {
+                            handle->setMargins(placement.margins);
+                        }
+                        if (auto* sw = shell->shellWindow()) {
+                            sw->setWidth(vsGeom.width());
+                            sw->setHeight(vsGeom.height());
+                        }
+                    };
+                    reanchor(st.shell);
+                    reanchor(st.tabShell);
                     st.overlayGeometry = vsGeom;
                     updateOverlayWindow(sid, screenPtr);
                     return;

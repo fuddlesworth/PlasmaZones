@@ -217,6 +217,23 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             continue;
         }
         dismissOverlayWindow(key);
+        // The tab shell goes with it. dismissOverlayWindow only touches the
+        // MainOverlay slot, so a key arriving here after a REFUSED rekey — the
+        // flavor flip, which is the case the rekey machinery exists for and
+        // also the one it declines — would leave the indicator surface mapped
+        // under a key nothing addresses again, with its id still announced.
+        // The next strip update then builds a SECOND shell for the same
+        // monitor and the effect slides both.
+        //
+        // Only the tab shell, not destroyPassiveShell: that tears down both,
+        // and the passive one is deliberately hidden rather than destroyed
+        // here to keep its swapchain. ShellHost::destroyShell fires the
+        // PreDestroy hook, so the retraction goes out before the surface does.
+        if (const auto it = m_screenStates.find(key); it != m_screenStates.end() && it->tabShell) {
+            m_tabShellHost->destroyShell(key);
+            m_tabShellHost->removeState(key);
+            it->tabShell = nullptr;
+        }
     }
 
     // Phase 3 - CREATE & SHOW. For each target id, create a window if we

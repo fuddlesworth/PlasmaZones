@@ -52,6 +52,57 @@ public:
         return m_floating.remove(windowId);
     }
 
+    /// The strip `viewX` carried by the last geometry batch this state
+    /// actually emitted, and whether it has emitted one at all.
+    ///
+    /// The difference between this and the next batch's `viewX` is the view
+    /// DELTA: how far the whole strip slid, as opposed to how far any one
+    /// window moved. The effect springs that delta once per output and lets
+    /// every carried window ride it, instead of starting an independent
+    /// per-window spring each (see the `viewDeltaX` field on the tile-request
+    /// wire).
+    ///
+    /// TRANSIENT — deliberately not serialized. A restored or freshly created
+    /// state has nothing on screen to slide FROM, so its first batch must
+    /// carry a zero delta and place windows outright. Living on the state
+    /// rather than in a parallel per-screen hash means it dies with the
+    /// context it describes, so no pruning path has to remember it.
+    ///
+    /// Only an EMITTED batch updates it. A relayout suppressed by the
+    /// emit-on-change gate leaves the compositor showing the previous
+    /// positions, so the baseline has to keep describing those.
+    /// The baseline is only meaningful against the work area it was resolved
+    /// in. Column widths are fractions of that area, so a resolution change, a
+    /// panel appearing or a gap edit rescales every column's strip position
+    /// and therefore the view coordinate itself — by an amount proportional to
+    /// how deep the anchor sits on the strip, which on a long strip is
+    /// thousands of logical pixels. A delta measured across two different
+    /// areas describes a slide that never happened, and the effect would fly
+    /// the whole strip in from off-screen to "recover" from it, once per
+    /// emitted change while a user drags a gap slider.
+    ///
+    /// Stamped with the baseline so the next batch can tell whether the two
+    /// share a basis. Note it does NOT catch a change to column widths or
+    /// presets, which move strip positions without touching the work area.
+    bool hasLastAppliedViewX() const
+    {
+        return m_hasLastAppliedViewX;
+    }
+    int lastAppliedViewX() const
+    {
+        return m_lastAppliedViewX;
+    }
+    QRect lastAppliedWorkArea() const
+    {
+        return m_lastAppliedWorkArea;
+    }
+    void setLastAppliedViewX(int viewX, const QRect& workArea)
+    {
+        m_lastAppliedViewX = viewX;
+        m_lastAppliedWorkArea = workArea;
+        m_hasLastAppliedViewX = true;
+    }
+
     // ── IPlacementState ─────────────────────────────────────────────────────
     QString screenId() const override
     {
@@ -101,6 +152,9 @@ private:
     QString m_screenId;
     ScrollStrip m_strip;
     QSet<QString> m_floating;
+    int m_lastAppliedViewX = 0;
+    QRect m_lastAppliedWorkArea;
+    bool m_hasLastAppliedViewX = false;
 };
 
 } // namespace PhosphorScrollEngine

@@ -20,28 +20,27 @@ Q_LOGGING_CATEGORY(lcAnimationShader, "phosphoranimationshaders.effect")
 ///   * `"anchor"`     → Anchor (default; FBO == captured anchor)
 ///   * `"surface"`    → Surface (FBO == QQuickWindow contentItem)
 ///
-/// Returns `true` on success and writes through `outExtent`; returns
-/// `false` for an unknown / malformed string and emits a `qCWarning`
-/// so a typo in metadata.json surfaces on the journal rather than
-/// degrading silently. Caller keeps the struct's default value
-/// (Anchor) on failure.
-bool parseFboExtent(const QString& raw, AnimationShaderEffect::FboExtentKind& outExtent)
+/// Writes through `outExtent` on success and leaves it alone otherwise, so a
+/// caller that passes a struct field already holding the default (Anchor)
+/// needs no failure branch — which is why this reports nothing. An unknown or
+/// malformed string emits a `qCWarning` here, so a typo in metadata.json
+/// surfaces on the journal rather than degrading silently.
+void parseFboExtent(const QString& raw, AnimationShaderEffect::FboExtentKind& outExtent)
 {
     const QString s = raw.trimmed();
     if (s.isEmpty()) {
-        return false;
+        return;
     }
     if (s.compare(QLatin1String("anchor"), Qt::CaseInsensitive) == 0) {
         outExtent = AnimationShaderEffect::FboExtentKind::Anchor;
-        return true;
+        return;
     }
     if (s.compare(QLatin1String("surface"), Qt::CaseInsensitive) == 0) {
         outExtent = AnimationShaderEffect::FboExtentKind::Surface;
-        return true;
+        return;
     }
     qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: unrecognised fboExtent" << raw
                                  << "Accepted forms are \"anchor\" and \"surface\". Falling back to defaults.";
-    return false;
 }
 
 /// Emit the internal `FboExtentKind` as a `fboExtent` string. Inverse
@@ -513,6 +512,20 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     // pins full-output repaints for the whole drag.
     if (cls == PP::EventClassMove)
         return effect.appliesTo.contains(cls);
+    // The scrolling family is CURVE-ONLY: `scrolling.view` moves the strip by
+    // translating already-painted windows, with no capture, no surface of its
+    // own and no from/to rect pair to hand a pack. Every effect is dimmed
+    // there rather than left permissive, because the ambiguous-row fallback
+    // below would offer geometry and appearance packs on a row that can only
+    // ever ignore them — the silent no-op this predicate exists to prevent.
+    //
+    // The view leg is nonetheless pack-SHAPED in principle: it has real
+    // endpoints and rides an AnimatedValue exactly like a geometry morph. So
+    // this is a statement about the current wiring and not about the contract.
+    // Whoever gives it a shader contract deletes this branch and classes it
+    // instead.
+    if (path == PP::Scrolling || path.startsWith(PP::Scrolling + QLatin1Char('.')))
+        return false;
     // Universal effect (no declared constraint) runs on every single-surface path.
     if (effect.appliesTo.isEmpty())
         return true;

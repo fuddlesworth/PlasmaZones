@@ -58,6 +58,17 @@ const QString EditorSnapIn = QStringLiteral("editor.snapIn");
 const QString EditorSnapOut = QStringLiteral("editor.snapOut");
 const QString EditorSnapResize = QStringLiteral("editor.snapResize");
 
+// scrolling.* — the scrolling strip's VIEW, not any window on it. Its own
+// root rather than a window.movement.* leaf because the subject is the view:
+// one leg moves every column at once, and the compositor drives it with a
+// single per-output spring. The tab-indicator overlay does not mirror it: the
+// compositor adds the same offset to that surface in the same paint pass, so
+// one spring drives both. A second spring on the daemon side was tried and
+// cannot work, because the overlay composites a frame or more behind the pass
+// that moves the columns.
+const QString Scrolling = QStringLiteral("scrolling");
+const QString ScrollingView = QStringLiteral("scrolling.view");
+
 // osd.*
 const QString Osd = QStringLiteral("osd");
 const QString OsdShow = QStringLiteral("osd.show");
@@ -151,6 +162,8 @@ QStringList allBuiltInPaths()
         EditorSnapIn,
         EditorSnapOut,
         EditorSnapResize,
+        Scrolling,
+        ScrollingView,
         Osd,
         OsdShow,
         OsdPop,

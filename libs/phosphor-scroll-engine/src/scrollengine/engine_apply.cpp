@@ -221,6 +221,40 @@ int ScrollEngine::visibleTileNumberForWindow(const QString& screenId, const QStr
     return -1;
 }
 
+QVector<ScrollEngine::VisibleTileWithRect> ScrollEngine::visibleTilesWithRects(const QString& screenId) const
+{
+    // Same state check, params resolve, basis resolve and walk as
+    // visibleTileRectsRelative — see the comments there for why the basis is
+    // the full screen rather than the work area. The only difference is that
+    // this carries the tile across instead of throwing it away, so a caller
+    // wanting both does not resolve the strip a second time to get it back.
+    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+    if (!state || state->strip().isEmpty()) {
+        return {};
+    }
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    if (!params.workArea.isValid()) {
+        return {};
+    }
+    QRect area = m_screenManager ? m_screenManager->screenGeometry(screenId)
+                                 : (m_screenGeometryProvider ? m_screenGeometryProvider(screenId) : QRect());
+    if (!area.isValid()) {
+        area = params.workArea;
+    }
+    const QVector<VisibleTile> tiles = visibleTiles(screenId, params);
+    QVector<VisibleTileWithRect> out;
+    out.reserve(tiles.size());
+    for (const VisibleTile& tile : tiles) {
+        const QRect& r = tile.rect;
+        out.append(
+            {tile,
+             QRectF(static_cast<qreal>(r.x() - area.x()) / area.width(),
+                    static_cast<qreal>(r.y() - area.y()) / area.height(), static_cast<qreal>(r.width()) / area.width(),
+                    static_cast<qreal>(r.height()) / area.height())});
+    }
+    return out;
+}
+
 QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) const
 {
     // State check first, like visibleTiles: an unmanaged or empty screen must
@@ -391,6 +425,33 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // reset the preview before re-inserting, so no second filter source is
     // needed.) The daemon clears the mark BEFORE the drop settles, so the
     // finalizing relayout runs unfiltered.
+    // How far the VIEW slid since the last emitted batch, as opposed to how
+    // far any one window moved. Every carried window in this batch shares it,
+    // so the effect can spring it ONCE per output and let the strip ride it
+    // rigidly, instead of starting an independent per-window spring each and
+    // watching them desync into a shear.
+    //
+    // Sign: a window's x is `workArea.x - viewX + stripX`, so a view that
+    // scrolls right (viewX grows) moves windows left. The delta below is the
+    // translation that puts a window back where it was rendered last time —
+    // the effect starts its spring there and rings it out to zero.
+    //
+    // Zero on the first batch for a context: there is nothing on screen to
+    // slide from, so the windows are placed outright.
+    //
+    // Zero also when the work area MOVED since the baseline was stamped.
+    // Column widths are fractions of that area, so a resolution change, a
+    // panel appearing or a gap edit rescales every column's strip position and
+    // with it the view coordinate — proportionally to how deep the anchor sits
+    // on the strip, which on a long strip is thousands of pixels. Subtracting
+    // across two bases describes a slide nobody made, and the effect would fly
+    // the entire strip in from off-screen to ring it out, once per emitted
+    // change while a gap slider is being dragged. The batch that follows a
+    // work-area change is placing windows in a new geometry anyway, which is
+    // the same situation as the first batch for a context.
+    const bool sameBasis = state->hasLastAppliedViewX() && state->lastAppliedWorkArea() == params.workArea;
+    const int viewDelta = sameBasis ? resolved.viewX - state->lastAppliedViewX() : 0;
+
     QJsonArray arr;
     bool anyRectMoved = false;
     // Per columnIndex: did EVERY tile this loop emitted for that column end up
@@ -409,6 +470,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 continue;
             }
             QRect rect = tile.rect;
+            // Where this tile really sits on the strip, kept before any park
+            // rewrites the rect. A parked column has to be SEEN travelling
+            // while the view slides — during a fast scroll the columns whizzing
+            // past are exactly the ones that have parked, and without this the
+            // screen goes empty instead of showing the strip move.
+            const QRect stripRect = rect;
             // Which screen edge this tile's motion is anchored to, decided
             // from the STRIP, before parking touches the rect. That ordering
             // is the fix: the departure side is a fact about the strip, and
@@ -523,8 +590,21 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // straddle. Vertical stack overflow is enforced unconditionally
             // further down.
             constexpr int kMinVisiblePeekPx = 48;
+            // Set when the clamp MOVES the tile's left edge, which pins its x
+            // at the screen edge instead of leaving it where the strip put it.
+            // The right-edge clamp keeps x and only changes width, so it does
+            // not qualify — the asymmetry is QRect's: setLeft moves x1 and
+            // holds x2, setRight holds x1 and moves x2.
+            bool clampPinnedX = false;
             if (!m_cropStraddlers && !parkedNow) {
                 const bool straddleRight = rect.right() > screenRect.right() && rect.left() <= screenRect.right();
+                // Both predicates read the PRE-mutation rect, and the left one
+                // is consumed after the right branch may have called setRight.
+                // Safe only because the two are mutually exclusive: a column
+                // cannot straddle both edges, since columnWidthPx caps every
+                // column at the work area's width, which is never wider than
+                // the screen. That is a non-local invariant holding this code
+                // up, so it is stated here rather than left to be rediscovered.
                 const bool straddleLeft = rect.left() < screenRect.left() && rect.right() >= screenRect.left();
                 if (straddleRight || straddleLeft) {
                     // Under respectMinimumSize the peek floor rises to the
@@ -565,6 +645,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                     if (!parkedNow && straddleLeft) {
                         const int visible = rect.right() + 1 - screenRect.left();
                         if (visible >= peekFloorX) {
+                            clampPinnedX = rect.left() != screenRect.left();
                             rect.setLeft(screenRect.left());
                         } else {
                             scrollEdge = QStringLiteral("left");
@@ -620,6 +701,58 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             if (!scrollEdge.isEmpty()) {
                 obj[QLatin1String("scrollEdge")] = scrollEdge;
             }
+            // A PARKED tile is not carried by the view. Its committed rect is
+            // the park (below the union of all outputs), which no translation
+            // can put back on screen, so it keeps the existing edge-anchored
+            // slide-out the effect builds from scrollEdge. Zero is the honest
+            // encoding of that rather than a second flag: zero means "the view
+            // does not carry this window", which is equally true of a batch
+            // where the view genuinely did not move.
+            //
+            // An ARRIVING tile (parked until now, on screen in this batch) DOES
+            // ride it, and that is strictly better than the edge origin the
+            // effect would otherwise synthesize: translating its final rect
+            // back by the delta lands it at its real pre-scroll strip position,
+            // which is where it actually was, rather than at a made-up point
+            // just outside the screen edge.
+            //
+            // Suppressed when the left-edge clamp pinned this tile's x. The
+            // field asserts that the view carried the window by exactly this
+            // much, which the effect relies on to build a DEGENERATE per-window
+            // leg — origin = current - delta lands on the target, so no second
+            // spring runs. A pinned tile sits at the same x across consecutive
+            // batches while the delta says otherwise, so that leg would be real
+            // and would fight the view spring over the same pixels with a
+            // different profile: the peek column would visibly swing out and
+            // back instead of staying against the edge. Dropping the field
+            // costs it the ride and leaves it to its own motion, which is the
+            // honest description of a window the layout is holding still.
+            if (!parkedNow && viewDelta != 0 && !clampPinnedX) {
+                obj[QLatin1String("viewDeltaX")] = viewDelta;
+            }
+            // A parked column keeps its strip position as a PAINT hint. The
+            // commit above stays the park, which is the only rect that cannot
+            // stray onto a neighbouring monitor, while the effect translates
+            // the drawing back to where the column actually is and adds the
+            // view offset — so it travels with the rest of the strip instead of
+            // vanishing the instant it leaves the viewport.
+            //
+            // Horizontal parks only, and the departure edge is what says so.
+            // Both other parks deliberately carry no edge: a vertical
+            // stack-overflow park clears it ("the park is vertical, so there is
+            // no side to animate from") because that is layout rather than
+            // strip motion, and a hidden tab of an ON-SCREEN tabbed column
+            // records none because it is parked to keep it from stealing input,
+            // not because the strip carried it away. Painting either back would
+            // put a tile on screen that nothing scrolled: the vertical one
+            // returns from below the floor the layout pushed it past, and the
+            // hidden tab shares the active tab's rect, so every inactive tab of
+            // every tabbed column would be drawn stacked on the visible one,
+            // permanently, on a strip that is not even moving.
+            if (parkedNow && !scrollEdge.isEmpty()) {
+                obj[QLatin1String("visualX")] = stripRect.x();
+                obj[QLatin1String("visualY")] = stripRect.y();
+            }
             arr.append(obj);
             if (const auto parkedIt = columnAllParked.find(column.columnIndex); parkedIt != columnAllParked.end()) {
                 *parkedIt = *parkedIt && parkedNow;
@@ -648,6 +781,11 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // rect already applied (focus move under Never-centering, redundant
     // scheduled retile) must not re-feed the compositor's apply path.
     if (anyRectMoved) {
+        // The view baseline advances with the EMIT, not with the relayout: a
+        // batch suppressed just above leaves the compositor showing the
+        // previous positions, and a baseline that moved anyway would make the
+        // next batch's delta describe a slide that never happened.
+        state->setLastAppliedViewX(resolved.viewX, params.workArea);
         Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
     }
 
@@ -663,7 +801,20 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // single-tab skip (TabIndicatorParams::resolvesFor), so the emitter
         // never re-tests those and cannot disagree with the relayout that
         // decided how much space to reserve.
-        if (!column.tabbed || column.tabIndicatorRect.isNull() || !column.rect.intersects(params.workArea)) {
+        // Visible at the view this batch resolved, OR at the one it is sliding
+        // FROM. The second term is what lets a column scrolling out of view
+        // keep its indicator for the length of the leg: the compositor slides
+        // the indicator surface by the same offset it slides the columns, so an
+        // indicator dropped the moment its column's final rect left the work
+        // area would vanish while the column it labels is still on screen
+        // travelling. Translating by +viewDelta undoes the slide, which is
+        // where the column was before this batch moved the view.
+        //
+        // The extra entries cost nothing once at rest: they resolve outside the
+        // screen, so the per-screen surface simply clips them.
+        const bool visibleNow = column.rect.intersects(params.workArea);
+        const bool visibleBefore = viewDelta != 0 && column.rect.translated(viewDelta, 0).intersects(params.workArea);
+        if (!column.tabbed || column.tabIndicatorRect.isNull() || (!visibleNow && !visibleBefore)) {
             continue;
         }
         // Every tile of this column got parked, so nothing it labels is on
@@ -673,7 +824,16 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // tally is read rather than tabIndicatorRect re-derived: re-deriving
         // from the clamped extent would disagree with the reservation the
         // relayout already spent (see the KNOWN LIMIT note below).
-        if (columnAllParked.value(column.columnIndex, false) && !columnHadSkippedTile.contains(column.columnIndex)) {
+        //
+        // A DEPARTING column is exempt, and without that exemption the
+        // visibleBefore term above could never fire: a column that scrolled out
+        // of view has every tile parked by the same work-area test that made
+        // visibleNow false, so this skip would drop it before the outgoing leg
+        // it was kept for. The orphan-bar case this guard exists for is a
+        // column that is still visible NOW, so it is untouched.
+        const bool departing = visibleBefore && !visibleNow;
+        if (!departing && columnAllParked.value(column.columnIndex, false)
+            && !columnHadSkippedTile.contains(column.columnIndex)) {
             continue;
         }
         QJsonObject strip;
@@ -715,6 +875,11 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         }
         strip[QLatin1String("activeIndex")] = activeIndex;
         strip[QLatin1String("tabs")] = tabs;
+        // No view delta rides along, unlike the tile wire above. The indicators
+        // are drawn into a layer-shell surface of their own that the effect
+        // slides by the strip's view offset, so they need nothing but their
+        // resolved rect — the offset that moves them is the same one that moves
+        // the columns, applied in the same paint pass.
         strips.append(strip);
     }
     if (!strips.isEmpty()) {

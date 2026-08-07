@@ -6,6 +6,7 @@
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
@@ -441,6 +442,10 @@ void PlasmaZonesEffect::loadCachedSettings()
             return;
         }
         m_windowAnimator->setEnabled(v.toBool());
+        // The strip view follows the master toggle rather than carrying one of
+        // its own: with animations off, a scroll should place the strip
+        // outright, which is exactly what a disabled view animator does.
+        m_stripViewAnimator->setEnabled(v.toBool());
         // The animations master toggle is part of the suppression predicate
         // for every group: with animations off none of our packs run, so
         // KWin's own minimize / maximize / show-desktop effects must come
@@ -477,6 +482,10 @@ void PlasmaZonesEffect::loadCachedSettings()
         if (spec.isEmpty()) {
             return;
         }
+        // The strip view is NOT set here: it resolves its profile per batch
+        // through the motion cascade, whose base IS this animator's profile, so
+        // the global curve reaches it either way and a scrolling.view override
+        // can still win.
         m_windowAnimator->setCurve(m_curveRegistry.create(spec));
     });
     loadSettingAsync(QStringLiteral("animationMinDistance"), [this](const QVariant& v) {

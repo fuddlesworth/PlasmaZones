@@ -329,6 +329,26 @@ public:
     /// call, so a caller reading this beside visibleTiles gets rects and
     /// numbers for the same tiles in the same order.
     QVector<QRectF> visibleTileRectsRelative(const QString& screenId) const;
+
+    /// A tile paired with its screen-normalized rect, from ONE strip walk.
+    struct VisibleTileWithRect
+    {
+        VisibleTile tile;
+        /// Same basis and fallback as visibleTileRectsRelative.
+        QRectF relativeRect;
+    };
+
+    /// visibleTiles and visibleTileRectsRelative in a single resolve.
+    ///
+    /// Reading the two separately costs TWO layoutParamsForScreen calls and
+    /// two relayouts for one answer, and layoutParamsForScreen is not cheap —
+    /// it resolves the per-screen override map and parses both preset
+    /// vocabularies. The D-Bus strip payload is polled on a live timer while
+    /// the Monitors state view is open, so that doubling is a recurring cost
+    /// rather than a one-off. It also removes the count-mismatch guard the
+    /// paired reads needed: one walk cannot disagree with itself.
+    QVector<VisibleTileWithRect> visibleTilesWithRects(const QString& screenId) const;
+
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 

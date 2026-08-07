@@ -130,6 +130,7 @@ class ScreenChangeHandler;
 class SnapAssistHandler;
 class CompositorClock;
 class WindowAnimator;
+class StripViewAnimator;
 class DragTracker;
 
 /**
@@ -487,6 +488,33 @@ private:
      * isOwnPassthroughOverlayClass() there instead.
      */
     static bool isOwnOverlayClass(const QString& windowClass);
+
+    /**
+     * @brief Recognise the daemon's dedicated scrolling tab-indicator layer
+     *        surface, the one overlay that rides the strip's view offset.
+     *
+     * The indicators get a surface of their own so the paint path can translate
+     * them with the columns they label without dragging the OSD (which fires on
+     * the very action that scrolls) sideways with them.
+     *
+     * Matched by the wl_surface's protocol object id, which the daemon
+     * announces over D-Bus. Nothing KWin exposes per window can tell the
+     * daemon's overlays apart: they share a window class, carry no caption,
+     * role or desktop file, sit on the same layer and cover the same rect, and
+     * the layer-shell scope that WOULD name them is not reachable from an
+     * exported API. The object id is the one handle both sides can name.
+     */
+    bool isScrollTabIndicatorSurface(KWin::EffectWindow* w) const;
+
+    /**
+     * @brief Lower every known tab-indicator surface to the bottom of its layer.
+     *
+     * wlr-layer-shell cannot order two surfaces within one layer, so the
+     * lazily-created indicator surface stacks above the daemon's passive
+     * overlay shell and would paint across the modal cards that shell hosts.
+     * A client has no say in this; the compositor does, and we are it.
+     */
+    void restackScrollTabSurfaces();
 
     /**
      * @brief Recognise only the daemon's non-interactive passthrough overlay
@@ -858,9 +886,18 @@ public:
      * @param applyFn     Called with index [0, count). Must capture by value
      *                    (lambda may fire asynchronously via QTimer).
      * @param onComplete  Optional callback after all items are processed.
+     * @param forceImmediate Ignore the user's sequence mode and apply every
+     *                    item in one pass. For batches whose members must land
+     *                    together because something else is already animating
+     *                    them as a unit — a scrolling strip carried by the
+     *                    per-output view spring is the case this exists for.
+     *                    Staggering those would draw a column that has not
+     *                    committed yet at its old rect PLUS the view offset,
+     *                    i.e. one full delta the wrong way, until its own timer
+     *                    fires. See slotWindowsTileRequested.
      */
     void applyStaggeredOrImmediate(int count, const std::function<void(int)>& applyFn,
-                                   const std::function<void()>& onComplete = nullptr);
+                                   const std::function<void()>& onComplete = nullptr, bool forceImmediate = false);
 
 private:
     // Friend classes for helpers
@@ -1822,9 +1859,13 @@ private:
     // from `KWin::effects->screens()` and maintained via the
     // screenAdded/screenRemoved signals. A fallback unbound clock is
     // always present for the degenerate no-output / migrated-window
-    // cases. Every clock outlives `m_windowAnimator` — animator holds
-    // non-owning pointers into these via captured MotionSpecs —
-    // guaranteed by destruction order (animator declared after).
+    // cases — for `m_windowAnimator` only; `m_stripViewAnimator`'s resolver
+    // deliberately returns null on a miss, since a view offset belongs to an
+    // output and an unresolvable one has nothing to slide. Every clock
+    // outlives BOTH animators — each holds non-owning pointers into these via
+    // captured MotionSpecs — guaranteed by destruction order (both animators
+    // declared after). Anyone reordering these members has to keep that true
+    // for both.
     std::unique_ptr<CompositorClock> m_motionClockFallback;
     std::unordered_map<KWin::LogicalOutput*, std::unique_ptr<CompositorClock>> m_motionClocksByOutput;
     /// The output whose pass is currently executing, latched in prePaintScreen
@@ -1866,6 +1907,38 @@ private:
     /// time) outlives the animator on shutdown.
     PhosphorAnimation::CurveRegistry m_curveRegistry;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
+    /// Scrolling-strip view motion, one spring per output. Separate from
+    /// m_windowAnimator by GRANULARITY, not by kind: a scroll moves the whole
+    /// strip by one amount, and folding that into per-window targets would
+    /// make N springs that desync into a shear. The two compose additively at
+    /// paint time — a window can be riding the view AND animating a residual
+    /// of its own (an edge column whose width changed in the same batch).
+    /// Rides the same per-output clocks, but with NO fallback, and holds no
+    /// profile of its own — the caller resolves the scrolling.view motion node
+    /// per batch and hands it in.
+    std::unique_ptr<StripViewAnimator> m_stripViewAnimator;
+    /// Where a PARKED scrolling column should be drawn, by window id. Its
+    /// committed rect is the park below the union of all outputs — the only
+    /// rect that cannot stray onto a neighbouring monitor — so the paint path
+    /// translates it back here and then adds the view offset, which keeps it
+    /// travelling with the rest of the strip instead of vanishing the moment
+    /// it leaves the viewport. Absent for every window whose committed rect
+    /// already IS its paint position, which is almost all of them.
+    QHash<QString, QPoint> m_scrollVisualPos;
+    /// wl_surface object ids of the daemon's scrolling tab-indicator surfaces,
+    /// announced over D-Bus. The paint path slides these with the strip so the
+    /// indicators travel with the columns they label.
+    ///
+    /// Held as a flat set because the paint path only asks "is this window one
+    /// of them" and resolves the output from the window itself. The per-screen
+    /// map beside it exists solely so an announcement can retract the id it
+    /// replaces — the signal names a screen, not the id going away.
+    ///
+    /// Ids are dropped when the daemon retracts them and cleared wholesale at
+    /// bringup: Wayland reuses object ids, so a registration outliving its
+    /// surface would come to name an unrelated one.
+    QSet<quint32> m_scrollTabSurfaceIds;
+    QHash<QString, quint32> m_scrollTabSurfaceIdsByScreen;
 
     // Phase 6: per-window shader transitions via OffscreenEffect.
     // Shader/texture cache, LRU eviction, warm-up pipeline, profile tree,
@@ -2427,6 +2500,10 @@ private:
 private Q_SLOTS:
     /// Handle daemon signal when virtual screen definitions change
     void onVirtualScreensChanged(const QString& physicalScreenId);
+
+    /// Handle the daemon naming the wl_surface that draws @p screenId's
+    /// scrolling tab indicators. A @p surfaceId of 0 retracts the registration.
+    void onScrollTabSurfaceChanged(const QString& screenId, uint surfaceId);
 
     /// Handle daemon signal when the per-event motion-profile tree
     /// changes (a per-event animation duration was edited). Re-fetches

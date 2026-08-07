@@ -71,8 +71,8 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("animations-desktops")};
     static const QSet<QString> kAnimationsMotionChildren{
         QStringLiteral("animations-window-motion"), QStringLiteral("animations-window-dragging"),
-        QStringLiteral("animations-side-panels"), QStringLiteral("animations-widgets"),
-        QStringLiteral("animations-editor")};
+        QStringLiteral("animations-side-panels"),   QStringLiteral("animations-widgets"),
+        QStringLiteral("animations-editor"),        QStringLiteral("animations-scrolling")};
     static const QSet<QString> kAnimationsLibraryChildren{QStringLiteral("animations-presets"),
                                                           QStringLiteral("animations-motionsets"),
                                                           QStringLiteral("animations-shaders")};
@@ -633,6 +633,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("animations-editor"),
         QStringLiteral("animations-window-motion"),
         QStringLiteral("animations-window-dragging"),
+        QStringLiteral("animations-scrolling"),
         QStringLiteral("animations-side-panels"),
         QStringLiteral("animations-widgets"),
         QStringLiteral("animations-presets"),

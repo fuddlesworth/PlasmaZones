@@ -802,6 +802,19 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // path has to clean up after itself.
     m_tileTargetZones.remove(windowId);
     m_centeredWaylandZones.remove(windowId);
+    // And the parked-column paint hint, for the same reason and with a
+    // sharper failure. A floating window is never a parked column, but the
+    // float leaves the entry behind: floatWindowInternal takes the window OUT
+    // of the strip, so the batch its own relayout emits does not contain it,
+    // and the per-entry write in slotWindowsTileRequested never runs to clear
+    // it. The orphan is inert only while BOTH halves of scrollManagedOutputFor
+    // stay shut, and a later snap on another screen reopens both: the snap
+    // adds tiled membership, and scrollTrackedScreenFor falls back to
+    // m_notifiedWindowScreens — which this cleanup does not clear — so it
+    // answers with the OLD scrolling screen. The paint pass for the window's
+    // real output then skips it as belonging elsewhere, and the window is
+    // simply not drawn.
+    m_effect->m_scrollVisualPos.remove(windowId);
     // Shared placement-flip funnel (update-or-remove in the same turn) —
     // the bare removal here left the float paths WITHOUT a bulk
     // updateAllDecorations follow-up (daemon auto-float past maxWindows)

@@ -136,7 +136,7 @@ SettingsFlickable {
         // ════════════════ EASING PRESETS ════════════════
         SettingsCard {
             Layout.fillWidth: true
-            headerText: i18n("Easing Presets")
+            headerText: i18n("Easing presets")
             searchAnchor: "easingPresets"
             collapsible: true
 
@@ -266,7 +266,7 @@ SettingsFlickable {
         // ════════════════ SPRING PRESETS ════════════════
         SettingsCard {
             Layout.fillWidth: true
-            headerText: i18n("Spring Presets")
+            headerText: i18n("Spring presets")
             searchAnchor: "springPresets"
             collapsible: true
 

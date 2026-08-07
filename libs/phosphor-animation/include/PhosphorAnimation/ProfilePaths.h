@@ -78,6 +78,14 @@ PHOSPHORANIMATION_EXPORT extern const QString EditorSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapOut;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapResize;
 
+// scrolling.* — the scrolling strip's VIEW. `scrolling.view` is one leg for
+// the whole strip: the compositor springs it once per output and every column
+// rides that offset, rather than each column springing itself. It is its own
+// root rather than a window.movement.* leaf because its subject is the view
+// and not any window.
+PHOSPHORANIMATION_EXPORT extern const QString Scrolling;
+PHOSPHORANIMATION_EXPORT extern const QString ScrollingView;
+
 // osd.*
 PHOSPHORANIMATION_EXPORT extern const QString Osd;
 PHOSPHORANIMATION_EXPORT extern const QString OsdShow;

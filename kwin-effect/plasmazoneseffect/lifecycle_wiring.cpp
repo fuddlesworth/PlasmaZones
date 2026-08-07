@@ -37,6 +37,7 @@
 #include "handlers/screenchangehandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
@@ -106,6 +107,36 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     m_windowAnimator->setClock(m_motionClockFallback.get());
     m_windowAnimator->setOutputClockResolver([this](KWin::LogicalOutput* output) -> PhosphorAnimation::IMotionClock* {
         return clockForOutput(output);
+    });
+    // The strip view rides the same per-output clocks. No fallback clock, and
+    // that asymmetry with the window animator is deliberate: a window with no
+    // resolvable output still has to animate somewhere, but a view offset
+    // belongs to an OUTPUT by definition, so an unresolvable one has nothing
+    // to slide and the batch's geometry stands on its own.
+    //
+    // So this is a raw map lookup rather than clockForOutput(), which falls
+    // back for an unmapped output and would make the sentence above false.
+    // Two things depend on the miss really being a miss: applyBatchDelta's
+    // no-clock branch, which leaves the view at rest through a hotplug race
+    // and is otherwise unreachable, and onScreenRemoved's reap, which matches
+    // by clock pointer and cannot find a leg that bound to the fallback.
+    m_stripViewAnimator->setOutputClockResolver(
+        [this](KWin::LogicalOutput* output) -> PhosphorAnimation::IMotionClock* {
+            if (!output) {
+                return nullptr;
+            }
+            const auto it = m_motionClocksByOutput.find(output);
+            return it == m_motionClocksByOutput.end() ? nullptr : it->second.get();
+        });
+    m_stripViewAnimator->setRepaintRequest([](KWin::LogicalOutput* output) {
+        if (!output || !KWin::effects) {
+            return;
+        }
+        // The whole output, not a swept per-window bound: every column on the
+        // strip is moving, so there is no smaller honest region. This is the
+        // cost the plan accepted for rigid motion, and it is bounded by the
+        // leg's duration.
+        KWin::effects->addRepaint(KWin::Region(output->geometry()));
     });
     m_windowAnimator->setOnAnimationCompleteCallback([this](KWin::EffectWindow* w) {
         // Only tear down ANIMATOR-DRIVEN shader transitions

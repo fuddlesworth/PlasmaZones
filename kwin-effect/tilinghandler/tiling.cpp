@@ -7,6 +7,7 @@
 #include "tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -145,6 +146,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString screenId; ///< daemon's TARGET screen for this window (req.screenId)
         QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
         QString scrollEdge; ///< scrolling strip: screen edge to animate from ("left"/"right"), else empty
+        int viewDeltaX = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
+        QPoint visualPos; ///< scrolling strip: where a PARKED column really sits, to paint at instead of the commit
+        bool hasVisualPos = false;
     };
     QVector<Entry> entries;
 
@@ -157,8 +161,22 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // the per-window D-Bus roundtrip through the daemon's applyGeometryForFloat.
         if (req.floating) {
             const QString& screenId = req.screenId;
-            qCInfo(lcEffect) << "Autotile batch float:" << windowId << "screen:" << screenId;
-            applyFloatCleanup(windowId);
+            // Re-key to the window's LIVE id, the same way the rule-cache
+            // invalidation above and the tile path below both do. After a
+            // cross-session restore the daemon can still send the pre-restore
+            // UUID, and every operation in applyFloatCleanup is id-keyed
+            // (floating flag, tiled-state clear, target-zone and centering
+            // maps, decoration reconcile, monocle unmaximize) — with a stale id
+            // all of them miss the live entries and the exact resolve below
+            // returns null, so the pre-autotile geometry restore is skipped
+            // with nothing logged on that arm. Falls back to the daemon id when
+            // unresolved, which is correct for the ordinary same-session case.
+            QString floatWindowId = windowId;
+            if (KWin::EffectWindow* const live = m_effect->findWindowById(windowId)) {
+                floatWindowId = m_effect->getWindowId(live);
+            }
+            qCInfo(lcEffect) << "Autotile batch float:" << floatWindowId << "screen:" << screenId;
+            applyFloatCleanup(floatWindowId);
 
             // Restore pre-autotile geometry from the effect's local cache.
             // Scan all screen buckets (all-bucket reader policy — a VS
@@ -166,9 +184,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // its geometry bucket). Exact resolve, matching the tile lambda's
             // deliberate policy: a fuzzy hit would teleport a same-app
             // SIBLING onto this window's restored rect.
-            KWin::EffectWindow* floatWin = m_effect->findWindowByIdExact(windowId);
+            KWin::EffectWindow* floatWin = m_effect->findWindowByIdExact(floatWindowId);
             if (floatWin) {
-                if (const QRectF savedGeo = findPreTileGeometry(windowId); savedGeo.isValid()) {
+                if (const QRectF savedGeo = findPreTileGeometry(floatWindowId); savedGeo.isValid()) {
                     // Daemon-driven apply: the restored rect may lie in a
                     // different virtual screen than the tiled rect, and batch
                     // floats fire in the same swap/rotate window the
@@ -187,7 +205,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
                                                   PhosphorAnimation::ProfilePaths::WindowSnapOut);
-                    qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId << savedGeo.toRect();
+                    qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << floatWindowId
+                                     << savedGeo.toRect();
                 }
             }
             continue;
@@ -218,6 +237,18 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         entry.screenId = req.screenId;
         entry.stacking = req.stacking;
         entry.scrollEdge = req.scrollEdge;
+        // Clamped here, at the wire boundary, because the batch has TWO
+        // consumers: the view spring and the per-window origin below. The wire
+        // deliberately does not validate this field, and clamping inside the
+        // animator alone left the origin built from the raw value — so a
+        // garbled delta would start every carried column's leg arbitrarily far
+        // off-screen, which is the same flung strip the clamp exists to
+        // prevent, just moved onto the per-window springs. One bounded value
+        // for both consumers makes the animator's own clamp idempotent.
+        entry.viewDeltaX =
+            qBound(-StripViewAnimator::kMaxViewDeltaPx, req.viewDeltaX, StripViewAnimator::kMaxViewDeltaPx);
+        entry.visualPos = req.hasVisualPos ? QPoint(req.visualX, req.visualY) : QPoint();
+        entry.hasVisualPos = req.hasVisualPos;
         if (candidates.size() > 1) {
             entry.candidates = candidates;
         }
@@ -278,6 +309,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         bool isMonocle = false;
         QString stacking;
         QString scrollEdge;
+        int viewDeltaX = 0;
+        QPoint visualPos;
+        bool hasVisualPos = false;
     };
     QVector<TileSnap> toApply;
     for (Entry& e : entries) {
@@ -302,7 +336,52 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // and TileRequestEntry::validationError() rejects an empty screenId
         // before it ever reaches `entries`, so it is always present here.
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
-                        e.stacking, e.scrollEdge});
+                        e.stacking, e.scrollEdge, e.viewDeltaX, e.visualPos, e.hasVisualPos});
+    }
+
+    // Start this batch's view legs, ONCE per output. The delta is a property
+    // of the batch that every carried entry repeats, so folding it in per
+    // window would spring the strip N times as far. First non-zero wins per
+    // screen; a well-formed batch agrees across its entries, and disagreement
+    // would mean the engine resolved one screen twice in one pass, where the
+    // first answer is as good as any.
+    //
+    // This is what makes the strip rigid: one spring per output, read back by
+    // the paint path for every column, instead of N per-window springs that
+    // each start a moment apart and integrate themselves apart.
+    //
+    // Set when any output actually got a leg. The applies below must then land
+    // in ONE pass: the paint path adds the view offset to every scroll-managed
+    // window on the output with no test for whether that window's own commit
+    // has arrived, so a column still waiting on its stagger timer draws at (old
+    // rect + offset), which is a full delta away from where it belongs. With
+    // the shipped 40 ms cascade against a 150 ms leg, columns from the fourth
+    // on would sit still for the whole leg and then teleport in sequence.
+    bool startedViewLegs = false;
+    {
+        // Resolved once per batch, not per screen: the view's motion node is
+        // not screen-dependent, and this is the same cascade every other
+        // event's animation goes through (global animator profile → the
+        // scrolling.view motion-tree override). A windowless query skips the
+        // per-window rule tier, which is right — the view belongs to the strip,
+        // not to any window on it.
+        const PhosphorAnimation::Profile viewProfile = m_effect->resolveEventMotionProfile(
+            PhosphorAnimation::ProfilePaths::ScrollingView, PhosphorRules::WindowQuery{}, QString());
+        QSet<QString> seededScreens;
+        for (const TileSnap& s : toApply) {
+            if (s.viewDeltaX == 0 || s.screenId.isEmpty() || seededScreens.contains(s.screenId)) {
+                continue;
+            }
+            // Marked seeded only once the output RESOLVES. Marking before the
+            // lookup treated an unresolvable screen as done, so a later entry
+            // for the same screen — which is the ordinary case, since every
+            // carried column repeats the delta — could not retry it.
+            if (KWin::LogicalOutput* out = m_effect->outputForScreenId(s.screenId)) {
+                seededScreens.insert(s.screenId);
+                m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDeltaX, viewProfile);
+                startedViewLegs = true;
+            }
+        }
     }
 
     // Cascade order follows the direction of travel for a scrolling strip.
@@ -320,7 +399,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // and would sort it to an extreme unrelated to the motion the user
     // watches. A leaving column is keyed on where it currently sits instead,
     // which is the start of its exit slide.
-    const bool isScrollBatch = std::any_of(toApply.cbegin(), toApply.cend(), [](const TileSnap& s) {
+    // Skipped when this batch started view legs: those apply in one pass, so
+    // there is no cascade left to order. A scroll batch that moved no columns
+    // in or out of view (a park with no view travel) still cascades and still
+    // wants the direction sort, which is why the two predicates differ.
+    const bool isScrollBatch = !startedViewLegs && std::any_of(toApply.cbegin(), toApply.cend(), [](const TileSnap& s) {
         return !s.scrollEdge.isEmpty();
     });
     if (isScrollBatch) {
@@ -678,6 +761,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             m_pendingReactivateWindow = nullptr;
         }
 
+        // Put the tab-indicator surfaces back at the bottom of their layer.
+        // savedGlobalStack is an unfiltered snapshot of the whole stacking
+        // order, so it contains them, and the raise loop above replays it — a
+        // snapshot taken before the lower and replayed after would restore the
+        // pre-lower order and leave the indicators painting across the layout
+        // picker and the cheatsheet. A scroll batch is exactly that window,
+        // since the daemon announces the surface for the same strip change
+        // this batch is applying. Free when no indicator exists: the function
+        // returns on an empty id set.
+        m_effect->restackScrollTabSurfaces();
+
         // Wayland centering is handled reactively by slotWindowFrameGeometryChanged
         // as soon as the client commits its constrained size — no deferred timer needed.
 
@@ -767,6 +861,21 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // A window can only be tile-managed by one screen at a time —
             // markWindowTiled enforces the single-owner sweep itself.
             markWindowTiled(snap.screenId, snap.windowId);
+            // Remember (or forget) where a parked column should be PAINTED.
+            //
+            // Every applied entry updates this, monocle or not and whether or
+            // not the geometry itself is re-committed. It used to sit beside
+            // the scroll animation decision further down, inside the
+            // skip-if-already-at-target branch — so a column re-parked at the
+            // rect it already held took the skip and kept the PREVIOUS batch's
+            // strip position, which the paint path then drew it at for as long
+            // as it stayed parked. The commit being unchanged says nothing
+            // about where the column now sits on the strip.
+            if (snap.hasVisualPos) {
+                m_effect->m_scrollVisualPos.insert(snap.windowId, snap.visualPos);
+            } else {
+                m_effect->m_scrollVisualPos.remove(snap.windowId);
+            }
             // Title-bar (borderless) state is driven by rules through the
             // effect's reconcileRuleHiddenTitleBar → DecorationManager path.
 
@@ -864,7 +973,59 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     QRectF originOverride;
                     QRectF visualTargetOverride;
                     bool skipScrollAnimation = false;
-                    if (!snap.scrollEdge.isEmpty()) {
+                    if (snap.hasVisualPos) {
+                        // Parked, but drawn at its real strip position and
+                        // carried by the view like every other column. There is
+                        // no per-window motion left to describe, so the leg is
+                        // deliberately degenerate — the edge-anchored slide-out
+                        // below would fight the view offset for the same pixels.
+                        originOverride = QRectF(geo);
+                    } else if (snap.viewDeltaX != 0) {
+                        // Carried by the view: the strip's own spring moves
+                        // this window, so the per-window animation must cover
+                        // only what the view does NOT explain — the residual.
+                        //
+                        // The paint position is `animatedRect + viewOffset`,
+                        // and the offset starts at exactly viewDeltaX. So for
+                        // the first frame to land where the window is now, the
+                        // animation has to start a delta BEHIND its current
+                        // rect. Everything that then differs from the target is
+                        // the residual, and it animates on its own.
+                        //
+                        // The pure-scroll case falls out rather than being
+                        // special-cased: when the window's whole movement is
+                        // the view's, this origin IS the target, startAnimation
+                        // reports the leg degenerate, and no second spring
+                        // exists to desync from the first. An edge column whose
+                        // width changed in the same batch keeps a real leg, so
+                        // its width interpolates while its position rides the
+                        // strip — which is why the clamp needs no special
+                        // handling of its own.
+                        //
+                        // Outranks the scrollEdge branch below on purpose: an
+                        // ARRIVING column carries both, and its true pre-scroll
+                        // strip position beats a point synthesized just outside
+                        // the screen edge, because that is where it actually
+                        // was.
+                        if (!snap.scrollEdge.isEmpty()) {
+                            // ARRIVING from a park. Its live frameGeometry is
+                            // the park itself — below the union of all outputs
+                            // — which is not a visual position at all, so
+                            // differencing against it would start the leg from
+                            // somewhere off the bottom of the desktop.
+                            //
+                            // A column arriving has no per-window motion to
+                            // describe: the view alone brought it back. Making
+                            // the origin the target is what says that, because
+                            // the paint position is origin + offset, and the
+                            // offset already starts a delta out — which is
+                            // exactly where this column was before the scroll.
+                            originOverride = QRectF(geo);
+                        } else {
+                            const KWin::RectF cur = snap.window->frameGeometry();
+                            originOverride = QRectF(cur.x() - snap.viewDeltaX, cur.y(), cur.width(), cur.height());
+                        }
+                    } else if (!snap.scrollEdge.isEmpty()) {
                         const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
                         const QRect screenRect = out ? QRect(out->geometry()) : QRect();
                         if (screenRect.isValid()) {
@@ -927,7 +1088,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 m_tileTargetZones[snap.windowId] = snap.geometry;
             }
         },
-        onComplete);
+        onComplete, startedViewLegs);
 }
 
 void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)

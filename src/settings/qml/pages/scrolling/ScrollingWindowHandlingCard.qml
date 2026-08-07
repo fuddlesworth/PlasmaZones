@@ -20,7 +20,7 @@ import org.kde.kirigami as Kirigami
 SettingsCard {
     id: root
 
-    headerText: i18n("Window Handling")
+    headerText: i18n("Window handling")
     searchAnchor: "scrollingWindowHandling"
     collapsible: true
 

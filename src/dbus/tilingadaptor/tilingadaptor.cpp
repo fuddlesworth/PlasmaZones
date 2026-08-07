@@ -105,7 +105,10 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // scrollEdge now driving the animation anchor, two entries naming
         // different edges would animate the window in from one side and
         // re-anchor it to the other. No producer emits duplicates today;
-        // this is boundary hardening, first-entry-wins.
+        // this is boundary hardening. First VALID entry wins: the id is
+        // recorded after the validation bail below, so a malformed first
+        // entry does not consume the window's slot and shut out a good
+        // second one.
         if (seenWindowIds.contains(entry.windowId)) {
             qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping duplicate entry for" << entry.windowId;
             continue;
@@ -126,6 +129,31 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
+        // Absent for every non-scrolling producer, and absent within scrolling
+        // for a window the view does not carry — both mean zero, which is what
+        // the default gives.
+        entry.viewDeltaX = obj.value(QLatin1String("viewDeltaX")).toInt(0);
+        // Present only for a parked scrolling column; absent means the
+        // committed rect IS the paint position.
+        //
+        // BOTH keys, both numeric, and never on a floating entry. This is an
+        // unmarshal boundary, so it validates rather than coerces: presence of
+        // visualX alone would let visualY default to 0 and paint the column at
+        // the top of the screen, a non-numeric value would do the same while
+        // still latching the flag, and a floating entry skips the geometry
+        // parse above so its committed rect is (0,0,0,0) — the effect computes
+        // the paint translation against that rect, so a visual position paired
+        // with it is meaningless. The engine emits none of these; the point is
+        // that a garbled payload fails closed instead of mispainting.
+        const QJsonValue visualXVal = obj.value(QLatin1String("visualX"));
+        const QJsonValue visualYVal = obj.value(QLatin1String("visualY"));
+        if (!entry.floating && visualXVal.isDouble() && visualYVal.isDouble()) {
+            entry.visualX = visualXVal.toInt(0);
+            entry.visualY = visualYVal.toInt(0);
+            entry.hasVisualPos = true;
+        } else if (!visualXVal.isUndefined() || !visualYVal.isUndefined()) {
+            qCDebug(lcDbusTiling) << "relayTileRequestsJson: ignoring malformed visual position for" << entry.windowId;
+        }
         // The protocol type ships its own validator (empty windowId /
         // screenId, degenerate rect) — run it rather than re-deriving a
         // subset of its checks here.
@@ -639,9 +667,10 @@ void TilingAdaptor::clearEngine()
 {
     // Interface-only borrows, no connections to drop. Also neutralise any
     // pending coalesced announce (its lambda re-checks the empty list) and
-    // every per-session queue/dedup cache — none of it may leak into a
-    // restart (a stale dedup value could suppress the first genuine
-    // broadcast of the new session).
+    // every per-session queue/dedup cache except m_activeLayouts — none of it
+    // may leak into a restart (a stale dedup value could suppress the first
+    // genuine broadcast of the new session). m_activeLayouts is deliberately
+    // kept; setActiveLayouts documents why.
     m_lifecycleEngines.clear();
     ++m_announceGeneration;
     m_screensAnnouncePending = false;
@@ -653,10 +682,11 @@ void TilingAdaptor::clearEngine()
     // The WTA borrow is NOT cleared here — Daemon::stop's teardown block is
     // its canonical clear (setWindowTrackingAdaptor(nullptr)), and every
     // deref in this file null-checks.
-    // m_pendingOpensListenerInstalled deliberately survives: the underlying
-    // connection object does too (sender and receiver both outlive a
-    // session restart), so resetting the latch here would make the next
-    // install a DUPLICATE connection, double-flushing the pending queue.
+    // m_pendingOpensListenerInstalled is left alone, and it does not matter
+    // either way: the latch is per-instance and the daemon deletes and re-news
+    // this adaptor on every init(), so the connection it tracks dies with the
+    // object and the fresh one starts with the latch already false. There is
+    // no duplicate-connection hazard to guard against here.
 }
 
 } // namespace PlasmaZones

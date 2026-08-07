@@ -20,10 +20,11 @@ inline constexpr QLatin1String ObjectPath("/PlasmaZones");
 /// because the daemon validates the bound on the D-Bus boundary while the
 /// settings app walks it in its Quick Shortcuts reset loop, and the two live
 /// in different trees. Kept here so those two cannot drift. Note the
-/// LayoutManager backend in phosphor-zones (layoutregistry.cpp) enforces the
-/// same 1..9 bound with its own literal: it deliberately does not depend on
-/// phosphor-protocol, so that site is not covered by this constant and must be
-/// updated in step by hand if the count ever changes.
+/// phosphor-zones mirror, `LayoutRegistry::QuickSlotCount` (LayoutRegistry.h),
+/// enforces the same 1..9 bound as its own named constant: that library
+/// deliberately does not depend on phosphor-protocol, so the two are not
+/// covered by one definition and must be updated in step by hand if the count
+/// ever changes.
 inline constexpr int QuickLayoutSlotCount = 9;
 
 namespace Interface {
@@ -48,6 +49,8 @@ inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
 inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridge");
 inline constexpr QLatin1String Snap("org.plasmazones.Snap");
 inline constexpr QLatin1String Rules("org.plasmazones.Rules");
+inline constexpr QLatin1String Control("org.plasmazones.Control");
+inline constexpr QLatin1String Shader("org.plasmazones.Shader");
 }
 
 /// D-Bus error names returned via `QDBusMessage::createErrorReply`. Centralised
@@ -167,8 +170,22 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       v5 effect's slot would simply never fire on the widened payload —
 //       ALL tiling silently dead until logout — which is exactly the
 //       failure mode the handshake exists to surface up front.
-inline constexpr int ApiVersion = 6;
-inline constexpr int MinPeerApiVersion = 6;
+//   v7: TileRequestEntry gained a trailing viewDeltaX field, widening the
+//       windowsTileRequested signal from a(siiiissbbss) to a(siiiissbbssi).
+//       It carries how far a scrolling strip's VIEW slid, so the effect can
+//       spring that once per output and move the strip rigidly instead of
+//       starting an independent per-window spring for each column. Same
+//       signature-matching failure mode as v6: a v6 effect's slot would never
+//       fire on the widened payload, killing all tiling until logout, so the
+//       handshake has to reject the pairing up front.
+//   v8: TileRequestEntry gained visualX / visualY / hasVisualPos, widening
+//       windowsTileRequested from a(siiiissbbssi) to a(siiiissbbssiiib). A
+//       parked scrolling column commits below the union of all outputs but has
+//       to be SEEN travelling while the view slides, so the safe commit and the
+//       paint position are now separate answers. Same signature-matched
+//       failure mode as v6 and v7.
+inline constexpr int ApiVersion = 8;
+inline constexpr int MinPeerApiVersion = 8;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

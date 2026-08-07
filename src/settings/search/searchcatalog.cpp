@@ -176,6 +176,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("desktop"), PhosphorI18n::tr("virtual desktop"),
                              PhosphorI18n::tr("workspace"), PhosphorI18n::tr("switch"), PhosphorI18n::tr("peek"),
                              PhosphorI18n::tr("show desktop")});
+    search->setPageKeywords(QStringLiteral("animations-scrolling"),
+                            {PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("column"),
+                             PhosphorI18n::tr("animation")});
     search->setPageKeywords(QStringLiteral("animations-side-panels"),
                             {PhosphorI18n::tr("side panel"), PhosphorI18n::tr("panel"), PhosphorI18n::tr("drawer")});
     search->setPageKeywords(QStringLiteral("animations-widgets"),
@@ -339,19 +342,19 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("triggers"),
                PhosphorI18n::tr("Triggers"));
     addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("zoneSpan"),
-               PhosphorI18n::tr("Zone Span"));
+               PhosphorI18n::tr("Zone span"));
     addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("display"),
                PhosphorI18n::tr("Display"));
 
     addSection(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("snapAssist"),
                PhosphorI18n::tr("Snap Assist"));
     addSection(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("windowHandling"),
-               PhosphorI18n::tr("Window Handling"));
+               PhosphorI18n::tr("Window handling"));
     addSection(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("focus"), PhosphorI18n::tr("Focus"));
 
     addSection(search, QStringLiteral("tiling-behavior"), QStringLiteral("triggers"), PhosphorI18n::tr("Triggers"));
     addSection(search, QStringLiteral("tiling-behavior"), QStringLiteral("windowHandling"),
-               PhosphorI18n::tr("Window Handling"));
+               PhosphorI18n::tr("Window handling"));
     addSection(search, QStringLiteral("tiling-behavior"), QStringLiteral("focus"), PhosphorI18n::tr("Focus"));
 
     // ── Setting + section anchors: appearance / algorithm / behaviour rows ──
@@ -363,7 +366,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("border"),
                PhosphorI18n::tr("Border"));
     addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("zoneLabels"),
-               PhosphorI18n::tr("Zone Labels"));
+               PhosphorI18n::tr("Zone labels"));
     addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("effects"),
                PhosphorI18n::tr("Effects"));
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("systemAccentColor"),
@@ -724,7 +727,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                 PhosphorI18n::tr("rounding")});
 
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingWindowHandling"),
-               PhosphorI18n::tr("Window Handling"));
+               PhosphorI18n::tr("Window handling"));
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingNewWindowPlacement"),
                PhosphorI18n::tr("New window placement"),
                {PhosphorI18n::tr("insert"), PhosphorI18n::tr("position"), PhosphorI18n::tr("column"),
@@ -867,7 +870,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("tab"), PhosphorI18n::tr("left"), PhosphorI18n::tr("right"), PhosphorI18n::tr("top"),
                 PhosphorI18n::tr("bottom")});
     addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingWindowHandling"),
-               PhosphorI18n::tr("Window Handling"));
+               PhosphorI18n::tr("Window handling"));
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingNewWindowPlacement"),
                PhosphorI18n::tr("New window placement"),
                {PhosphorI18n::tr("insert"), PhosphorI18n::tr("position"), PhosphorI18n::tr("column")});
@@ -933,7 +936,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // active tier hides, which would otherwise make all of these unsearchable
     // in simple mode. Anchors are page-scoped, so the duplicate ids collide
     // with nothing.
-    addSection(search, QStringLiteral("snapping-simple"), QStringLiteral("zoneSpan"), PhosphorI18n::tr("Zone Span"));
+    addSection(search, QStringLiteral("snapping-simple"), QStringLiteral("zoneSpan"), PhosphorI18n::tr("Zone span"));
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("spanModifier"),
                PhosphorI18n::tr("Span modifier"), {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("multi-zone")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("zoneSpanToggleMode"),
@@ -941,7 +944,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("edgeThreshold"),
                PhosphorI18n::tr("Edge threshold"), {PhosphorI18n::tr("distance"), PhosphorI18n::tr("multi-zone")});
     addSection(search, QStringLiteral("snapping-simple"), QStringLiteral("windowHandling"),
-               PhosphorI18n::tr("Window Handling"));
+               PhosphorI18n::tr("Window handling"));
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("reSnapOnResolutionChange"),
                PhosphorI18n::tr("Re-snap on resolution change"), {PhosphorI18n::tr("resolution")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("openNewWindowsInLastUsedZone"),
@@ -965,7 +968,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("pointer")});
 
     addSection(search, QStringLiteral("tiling-simple"), QStringLiteral("windowHandling"),
-               PhosphorI18n::tr("Window Handling"));
+               PhosphorI18n::tr("Window handling"));
     addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("newWindowPlacement"),
                PhosphorI18n::tr("New window placement"), {PhosphorI18n::tr("insert"), PhosphorI18n::tr("position")});
     addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("respectMinimumSize"),
@@ -1040,12 +1043,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Zone selector popup"),
                {PhosphorI18n::tr("enable"), PhosphorI18n::tr("toggle"), PhosphorI18n::tr("picker")});
     addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("positionTrigger"),
-               PhosphorI18n::tr("Position & Trigger"));
+               PhosphorI18n::tr("Position and trigger"));
     addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("triggerDistance"),
                PhosphorI18n::tr("Trigger distance"),
                {PhosphorI18n::tr("edge"), PhosphorI18n::tr("distance"), PhosphorI18n::tr("proximity")});
     addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("layoutArrangement"),
-               PhosphorI18n::tr("Layout Arrangement"));
+               PhosphorI18n::tr("Layout arrangement"));
     addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("arrangement"),
                PhosphorI18n::tr("Arrangement"),
                {PhosphorI18n::tr("grid"), PhosphorI18n::tr("horizontal"), PhosphorI18n::tr("vertical")});
@@ -1056,13 +1059,13 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Max visible rows"),
                {PhosphorI18n::tr("rows"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("visible")});
     addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("previewSize"),
-               PhosphorI18n::tr("Preview Size"));
+               PhosphorI18n::tr("Preview size"));
 
     // Ordering (shared OrderingPage) + Quick shortcuts (shared QuickLayoutSlotsCard)
     addSection(search, QStringLiteral("snapping-ordering"), QStringLiteral("ordering"),
-               PhosphorI18n::tr("Snapping Layout Priority"));
+               PhosphorI18n::tr("Snapping layout priority"));
     addSection(search, QStringLiteral("tiling-ordering"), QStringLiteral("ordering"),
-               PhosphorI18n::tr("Tiling Algorithm Priority"));
+               PhosphorI18n::tr("Tiling algorithm priority"));
     addSection(search, QStringLiteral("snapping-shortcuts"), QStringLiteral("quickShortcuts"),
                PhosphorI18n::tr("Snapping Quick Shortcuts"));
     addSection(search, QStringLiteral("tiling-shortcuts"), QStringLiteral("quickShortcuts"),
@@ -1080,9 +1083,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSection(search, QStringLiteral("decorations-shaders"), QStringLiteral("userShaders"),
                PhosphorI18n::tr("User shaders"));
     addSection(search, QStringLiteral("animations-presets"), QStringLiteral("easingPresets"),
-               PhosphorI18n::tr("Easing Presets"));
+               PhosphorI18n::tr("Easing presets"));
     addSection(search, QStringLiteral("animations-presets"), QStringLiteral("springPresets"),
-               PhosphorI18n::tr("Spring Presets"));
+               PhosphorI18n::tr("Spring presets"));
     addSection(search, QStringLiteral("animations-motionsets"), QStringLiteral("saveMotionSet"),
                PhosphorI18n::tr("Save current state"));
     addSection(search, QStringLiteral("animations-motionsets"), QStringLiteral("importMotionSets"),

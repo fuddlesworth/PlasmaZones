@@ -126,7 +126,7 @@ ColumnLayout {
 
             anchors.fill: parent
             enabled: appSettings.zoneSelectorEnabled
-            headerText: i18n("Position & Trigger")
+            headerText: i18n("Position and trigger")
             searchAnchor: "positionTrigger"
             collapsible: true
             scopeEnabled: true
@@ -220,7 +220,7 @@ ColumnLayout {
 
             anchors.fill: parent
             enabled: appSettings.zoneSelectorEnabled
-            headerText: i18n("Layout Arrangement")
+            headerText: i18n("Layout arrangement")
             searchAnchor: "layoutArrangement"
             collapsible: true
             scopeEnabled: true
@@ -330,7 +330,7 @@ ColumnLayout {
 
             anchors.fill: parent
             enabled: appSettings.zoneSelectorEnabled
-            headerText: i18n("Preview Size")
+            headerText: i18n("Preview size")
             searchAnchor: "previewSize"
             collapsible: true
             scopeEnabled: true

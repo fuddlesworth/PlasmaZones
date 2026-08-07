@@ -481,6 +481,14 @@ public:
                         bool layoutsAreTemplates);
     void hideCheatsheet() override;
     bool isCheatsheetVisible() const override;
+
+    /// Replay source for a consumer created after the announcements it missed.
+    /// Returns m_scrollTabSurfaceIds, which is the same record the change gate
+    /// reads, so the two can never disagree about what the compositor believes.
+    QHash<QString, quint32> liveScrollTabSurfaces() const override
+    {
+        return m_scrollTabSurfaceIds;
+    }
     /// Re-push model/mode into an already-visible cheatsheet (live refilter
     /// on mode switch or rebind). No-op when hidden — the next show
     /// re-resolves everything anyway.
@@ -508,6 +516,11 @@ public:
     ///
     /// Each tab is a click target; the surface stays click-through outside the
     /// indicator rects via the per-screen input region built here.
+    ///
+    /// The rects are always the POST-scroll ones and are written plainly, with
+    /// no motion state alongside them. The indicators have a wl_surface to
+    /// themselves and the compositor slides it by the scrolling strip's view
+    /// offset, so they ride a scroll the same way the columns do.
     void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
 
     /// Drop-target indicator for a scrolling drag re-insert on @p screenId
@@ -531,7 +544,7 @@ public:
     /// values when the indicator is drawn. Keyed by the overlay SLOT's own
     /// property names (tabStyle, gapsBetweenTabs, cornerRadius, activeColor,
     /// inactiveColor, urgentColor); an absent key falls through to config.
-    /// Those names must match PassiveOverlayShell's scrollTabsSlot exactly —
+    /// Those names must match ScrollTabShell's scrollTabsSlot exactly —
     /// setProperty on an undeclared name silently creates a dead dynamic
     /// property instead of failing.
     ///
@@ -868,6 +881,13 @@ private:
     // safe even if a future change removes the explicit reset.
     QHash<QString, PerScreenOverlayState> m_screenStates;
     std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
+    /// Twin host for the scrolling tab indicators' own per-screen surface,
+    /// keyed the same way and torn down at the same call sites. They are not
+    /// slots on the passive shell because the compositor SLIDES their surface
+    /// with the strip, and a surface translates as a whole — see
+    /// PhosphorRoles::ScrollTabShell. Declared next to m_shellHost so the
+    /// destruction-order rationale above covers both.
+    std::unique_ptr<PhosphorOverlay::ShellHost> m_tabShellHost;
 
     // Scroll tab-strip bookkeeping. Below m_shellHost deliberately: these
     // are plain per-screen maps with no teardown dependency on either
@@ -897,10 +917,15 @@ private:
     /// entry, so the common case costs one empty-hash lookup.
     QHash<QString, QVariantMap> m_scrollTabIndicatorOverrides;
     /// Window-local rects of the live tab indicators per screen, handed to the
-    /// shell as its input region so clicks land on a tab but fall through
+    /// tab shell as its input region so clicks land on a tab but fall through
     /// everywhere else. Rebuilt from each strip update; cleared with the
     /// screen's strips.
     QHash<QString, QRegion> m_scrollTabInputRegions;
+    /// Last announced wl_surface object id per screen's tab-indicator surface.
+    /// The change gate for scrollTabSurfaceChanged, and the record of what the
+    /// compositor currently believes, so teardown knows whether it owes a
+    /// retraction.
+    QHash<QString, quint32> m_scrollTabSurfaceIds;
 
     /// Per-screen generation guard for the drop indicator's animated hide,
     /// same contract as m_scrollTabsHideGuard: a hide completion that lost the
@@ -1094,10 +1119,13 @@ private:
     void destroyZoneSelectorWindow(const QString& screenId);
     void updateZoneSelectorWindow(const QString& screenId);
     void showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked);
-    /// Tear down the per-screen passive overlay shell. Deletes the
-    /// shell PhosphorLayer::Surface (and its QQuickWindow + every slot
-    /// QQuickItem owned by it). Called from
-    /// `destroyAllWindowsForPhysicalScreen` on screen hot-plug cleanup.
+    /// Tear down BOTH of the screen's shells, tab shell first. Deletes each
+    /// PhosphorLayer::Surface (and its QQuickWindow + every slot QQuickItem
+    /// owned by it). Despite the name this is the tab shell's ONLY teardown
+    /// path, which is why the two are paired here rather than at each caller.
+    /// Called from `destroyAllWindowsForPhysicalScreen` on hot-plug cleanup and
+    /// from the virtual-screen reconfiguration branches of
+    /// `onVirtualScreensChanged`.
     void destroyPassiveShell(const QString& screenId);
 
     /// Lazily create the per-screen PassiveOverlayShell + return the
@@ -1124,6 +1152,43 @@ private:
     /// half-destroyed scene graph. Runs from inside ShellHost::destroyShell
     /// before the library schedules the shell surface for deletion.
     void unwirePassiveShellSlots(const QString& screenId);
+
+    /// Lazily create the per-screen ScrollTabShell + return the state entry
+    /// (or nullptr if creation failed). The twin of @ref ensurePassiveShellFor
+    /// for the tab indicators' exclusive surface; called only from the strip
+    /// update path, so a screen that never shows a tabbed column never
+    /// materialises one.
+    PerScreenOverlayState* ensureScrollTabShellFor(const QString& effectiveId, QScreen* physScreen);
+
+    /// PostCreate / PreDestroy hooks registered with @c m_tabShellHost, the
+    /// twins of @ref wirePassiveShellSlots and @ref unwirePassiveShellSlots.
+    /// The tab shell hosts exactly one slot and forwards exactly one signal,
+    /// so both are correspondingly short.
+    void wireScrollTabShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState);
+    void unwireScrollTabShellSlots(const QString& screenId);
+
+    /// Reconcile the tab shell's mapped state and input region for @p
+    /// effectiveId. Simpler than its passive-shell counterpart because the
+    /// surface hosts one display-only slot: it is mapped exactly while that
+    /// slot is visible, never grabs input wholesale, and takes clicks only on
+    /// the indicator rects.
+    void syncScrollTabShellSurfaceState(const QString& effectiveId);
+
+    /// Publish (or retract, with @p window null) the wl_surface object id of
+    /// @p screenId's tab-indicator surface. Change-gated, so the re-assert on
+    /// every SHOW costs one hash compare. Not on every strip update: an
+    /// already-visible indicator returns before reaching the announce.
+    void announceScrollTabSurface(const QString& screenId, QQuickWindow* window);
+
+    /// Drop @p screenId's now-dead ShellState entry on BOTH hosts. Destroying a
+    /// shell only zeroes its fields; the entry survives, so hot-plug cycles
+    /// would accumulate dead keys without this.
+    void removeShellStates(const QString& screenId);
+
+    /// Clear sticky creation-failure sentinels on both hosts for every screen
+    /// id rooted on @p physicalScreenId (the bare id and its `/vs:N` children),
+    /// so a replug of the same monitor can create its shells again.
+    void clearShellFailuresForPhysicalScreen(const QString& physicalScreenId);
 
     /// Slot-hide animation completion - flips the OSD slot Item's
     /// `visible` to false once the SurfaceAnimator's hide leg settles,

@@ -286,6 +286,51 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     m_daemonGate.virtualScreensReady = false;
     fetchAllVirtualScreenConfigs();
 
+    // Re-fetch the scrolling tab-indicator surfaces. Their announcement signal
+    // only fires on CHANGE, and the surfaces outlive an effect reload, so
+    // without this pull the indicators would stop riding the strip until the
+    // daemon happened to rebuild one. The stale set goes first: after a daemon
+    // restart the old ids name nothing, and Wayland reuses ids, so a retained
+    // one could come to name an unrelated surface and slide it.
+    m_scrollTabSurfaceIds.clear();
+    m_scrollTabSurfaceIdsByScreen.clear();
+    {
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scrolling,
+                                                       QStringLiteral("scrollTabSurfaces")),
+            this);
+        const quint64 surfacesGeneration = m_daemonGate.bridgeRegistrationGeneration;
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, surfacesGeneration](QDBusPendingCallWatcher* w) {
+                    w->deleteLater();
+                    // Superseded: the daemon this went to is gone and a newer one may
+                    // already have announced its own surfaces. Seeding the dead
+                    // session's ids over them would publish numbers naming destroyed
+                    // objects, and Wayland hands ids out again.
+                    if (m_daemonGate.bridgeRegistrationGeneration != surfacesGeneration) {
+                        qCInfo(lcEffect) << "scrollTabSurfaces reply from a superseded daemon cycle — ignoring";
+                        return;
+                    }
+                    QDBusPendingReply<QVariantMap> reply = *w;
+                    if (!reply.isValid()) {
+                        qCWarning(lcEffect) << "scrollTabSurfaces failed at bringup:" << reply.error().message()
+                                            << "— tab indicators will not ride the strip until one is rebuilt";
+                        return;
+                    }
+                    const QVariantMap surfaces = reply.value();
+                    for (auto it = surfaces.constBegin(); it != surfaces.constEnd(); ++it) {
+                        if (const quint32 id = it.value().toUInt(); id != 0) {
+                            m_scrollTabSurfaceIdsByScreen.insert(it.key(), id);
+                            m_scrollTabSurfaceIds.insert(id);
+                        }
+                    }
+                    // These surfaces predate this bringup, so their one-shot lower was
+                    // either never applied (fresh effect) or belongs to a stacking
+                    // order this process never saw. Re-assert it.
+                    restackScrollTabSurfaces();
+                });
+    }
+
     // Re-sync floating windows (async, no QDBusInterface needed).
     // MUST clear the local set first — after daemon restart, the daemon's float state
     // is empty (ephemeral). Without clearing, stale entries from the previous daemon

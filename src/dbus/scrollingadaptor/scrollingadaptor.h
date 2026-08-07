@@ -6,9 +6,11 @@
 #include "plasmazones_export.h"
 
 #include <QDBusAbstractAdaptor>
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 
 namespace PhosphorScrollEngine {
 class ScrollEngine;
@@ -53,6 +55,12 @@ public:
     /// Clear the engine pointer during shutdown (same late-D-Bus-call
     /// contract as the sibling adaptors' clearEngine).
     void clearEngine();
+
+    /// Record (or drop, for @p surfaceId 0) the tab-indicator surface for
+    /// @p screenId and broadcast the change. Driven by the overlay service; no
+    /// engine involvement, since the strip's model knows nothing about which
+    /// wl_surface happens to be drawing its indicators.
+    void setScrollTabSurface(const QString& screenId, quint32 surfaceId);
 
 public Q_SLOTS:
     /**
@@ -126,6 +134,17 @@ public Q_SLOTS:
      */
     QString presetVocabularyJson(const QString& screenId) const;
 
+    /**
+     * @brief Every live tab-indicator surface, as screenId → wl_surface id.
+     *
+     * The replay half of @c scrollTabSurfaceChanged, for a compositor-side
+     * consumer that starts (or restarts) after the surfaces already exist and
+     * would otherwise wait for a scroll that never re-announces them.
+     *
+     * @return Map of effective screen id to wl_surface protocol object id
+     */
+    QVariantMap scrollTabSurfaces() const;
+
 Q_SIGNALS:
     /**
      * @brief Emitted when the set of screens using the scrolling engine changes
@@ -133,11 +152,31 @@ Q_SIGNALS:
      */
     void scrollingScreensChanged(const QStringList& screenIds);
 
+    /**
+     * @brief The wl_surface drawing @p screenId's tab indicators changed.
+     *
+     * The compositor slides that surface with the scrolling strip so the
+     * indicators travel with the columns they label, and it has no other way
+     * to tell it apart from the daemon's other overlays: they share a window
+     * class, and a layer surface's scope is not exposed per window.
+     *
+     * @param screenId  Effective screen id
+     * @param surfaceId wl_surface protocol object id, or 0 when the surface is
+     *                  gone. A zero always precedes the surface's destruction,
+     *                  because Wayland reuses object ids and a stale
+     *                  registration would come to name an unrelated surface.
+     */
+    void scrollTabSurfaceChanged(const QString& screenId, quint32 surfaceId);
+
 private:
     PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;
     /// Last set broadcast on the bus (the change gate's memory; the engine
     /// re-emits identical sets on desktop switches for the tiling channel).
     QStringList m_lastBroadcastScreens;
+    /// Live tab-indicator surfaces, screenId → wl_surface id. Held here rather
+    /// than read back from the overlay service so the replay getter answers
+    /// from the same values the signal published.
+    QHash<QString, quint32> m_scrollTabSurfaces;
 };
 
 } // namespace PlasmaZones

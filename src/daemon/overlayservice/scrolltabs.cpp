@@ -7,11 +7,19 @@
 // updates by plain property writes because the model refreshes on every strip
 // relayout.
 //
+// The indicators are the one overlay with a wl_surface to themselves
+// (ScrollTabShell.qml, PhosphorRoles::ScrollTabShell), because the compositor
+// SLIDES it: the KWin effect adds the scrolling strip's view offset to that
+// surface, so the rects written here — always the post-scroll ones — are on
+// screen where their columns are on every frame of a scroll. Nothing in this
+// file tracks the motion, and that is the point. Mirroring the compositor's
+// spring daemon-side was tried and cannot work: this surface is rendered and
+// committed for KWin to composite a frame or more later, so a second spring
+// starts behind and stays behind.
+//
 // It takes input ONLY where it draws: this file builds a per-screen QRegion of
 // the indicator rects and hands it to the shell, so a click on a tab activates
 // that window while a click anywhere else falls through to the window beneath.
-// That is a middle state the shell gained for this slot — every other kbd-None
-// slot is still all-or-nothing.
 
 #include "internal.h"
 #include "daemon/overlayservice.h"
@@ -137,7 +145,7 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         // beginShow instead of early-returning on a slot that is fading out.
         const quint64 hideGeneration = ++m_scrollTabsHideGuard[screenId];
         m_scrollTabsHidePending.insert(screenId);
-        m_shellHost->hideSlot(screenId, PhosphorSlotKeys::ScrollTabs(), [this, screenId, hideGeneration]() {
+        m_tabShellHost->hideSlot(screenId, PhosphorSlotKeys::ScrollTabs(), [this, screenId, hideGeneration]() {
             if (m_scrollTabsHideGuard.value(screenId) != hideGeneration) {
                 return; // superseded by a newer non-empty update
             }
@@ -152,7 +160,17 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
             }
             slot->setVisible(false);
             writeQmlProperty(slot, QStringLiteral("loaded"), false);
-            syncPassiveShellSurfaceState(screenId);
+            // Retract BEFORE the sync hides the surface. With shaders and
+            // animations both off the surface is not kept mapped across a
+            // hide, and the platform window is re-created on the next show —
+            // so the id we published names an object that is gone, and Wayland
+            // hands ids out again. Retracting unconditionally rather than only
+            // in that configuration costs nothing in the keep-mapped case
+            // either: the slot is invisible, so there are no indicators for
+            // the compositor to slide. The show path re-announces, and the
+            // change gate republishes because this cleared the remembered id.
+            announceScrollTabSurface(screenId, nullptr);
+            syncScrollTabShellSurfaceState(screenId);
         });
         return;
     }
@@ -165,9 +183,15 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         screenGeom = screen->geometry();
     }
 
-    auto* state = ensurePassiveShellFor(screenId, screen);
-    if (!state || !state->shell || !state->shell->shellSurface() || !state->scrollTabsSlot()) {
-        qCWarning(lcOverlay) << "updateScrollTabStrips: no passive shell for screen=" << screenId;
+    auto* state = ensureScrollTabShellFor(screenId, screen);
+    if (!state || !state->tabShell || !state->tabShell->shellSurface() || !state->scrollTabsSlot()) {
+        qCWarning(lcOverlay) << "updateScrollTabStrips: no scroll tab shell for screen=" << screenId;
+        // The region computed above described a surface that does not exist.
+        // The cached strip model above it is deliberately kept — the enable
+        // toggle replays from it — but a region has no such reader, and
+        // leaving one behind is the sort of half-updated pair the rest of this
+        // function is careful to avoid.
+        m_scrollTabInputRegions.remove(screenId);
         return;
     }
 
@@ -201,15 +225,39 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         // of the padding lands on the window beside it, which is a worse
         // trade than a small target. The rects are already window-local here,
         // which is the coordinate space the shell's mask wants.
-        inputRegion +=
-            QRect(x, y, strip.value(QStringLiteral("width")).toInt(), strip.value(QStringLiteral("height")).toInt());
+        //
+        // These are the POST-SCROLL rects, and during a view leg the effect
+        // draws the surface translated by the spring's current offset. A KWin
+        // paint-time offset does not move a wl_surface's input region, so for
+        // the length of the leg the visible pill and its hit target are apart
+        // by that offset, closing to zero as the spring settles. Accepted
+        // rather than chased: re-committing the region every frame would put a
+        // Wayland round trip on the compositor's paint path to track a target
+        // the user is watching move, and the window it labels is not at its
+        // final position mid-slide either. Clicks land correctly at rest,
+        // which is when a tab is a thing you aim at.
+        const QRect stripRect(x, y, strip.value(QStringLiteral("width")).toInt(),
+                              strip.value(QStringLiteral("height")).toInt());
+        // Clamped to the surface. These coordinates come off a JSON payload,
+        // and the region becomes the surface's input mask — the partial branch
+        // of which clears WindowTransparentForInput — so an out-of-range rect
+        // would have the daemon taking every click on the monitor while
+        // painting a few pills. A degenerate rect contributes nothing (QRegion
+        // ignores an invalid QRect), so only the over-large direction needs
+        // saying.
+        inputRegion += stripRect.intersected(QRect(QPoint(0, 0), screenGeom.size()));
     }
     m_scrollTabInputRegions.insert(screenId, inputRegion);
 
     auto* slot = state->scrollTabsSlot();
-    auto* shellSurface = state->shell->shellSurface();
-    auto* shellWindow = state->shell->shellWindow();
+    auto* shellSurface = state->tabShell->shellSurface();
+    auto* shellWindow = state->tabShell->shellWindow();
 
+    // The post-scroll rects, written plainly. There is no motion state to
+    // establish first and no ordering to respect: the compositor slides this
+    // whole surface by the same view offset it applies to the columns, so a
+    // delegate born mid-leg is drawn where its column is, not where its column
+    // will end up.
     writeQmlProperty(slot, QStringLiteral("strips"), shifted);
 
     // Paint settings, pushed on EVERY update rather than only on the show path
@@ -228,7 +276,7 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
             writeQmlProperty(slot, key, overrides.value(key, configured));
         };
         // "tabStyle", not "style": these names address the SLOT's declared
-        // properties (PassiveOverlayShell's scrollTabsSlot), which forwards
+        // properties (ScrollTabShell's scrollTabsSlot), which forwards
         // them into the content item. The slot is a shared-shape Item, so the
         // tab-specific spelling keeps it unambiguous there; the content item's
         // own property is plain `style`.
@@ -240,6 +288,17 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         push("urgentColor", m_settings->scrollingTabIndicatorUrgentColor());
     }
 
+    // The user font, pushed here for the same reason the paint block above is
+    // and NOT on the show path like the five sibling slots. Those are
+    // transient: an OSD or a cheatsheet is shown, read and dismissed, so it
+    // picks up a font change the next time it appears. The tab indicator is
+    // persistent — it stays up for as long as a column is tabbed — so a
+    // show-path-only push left the pills on the old family, size and weight
+    // until something happened to hide and re-show the strip. Unchanged QML
+    // properties emit no change notification, so a plain relayout pays six
+    // compares for this.
+    writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
+
     if (slot->isVisible() && !hideWasInFlight) {
         // Re-assert the surface's input state on EVERY update, not just when
         // the slot is first shown. The rects move whenever the strip relayouts
@@ -250,20 +309,13 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         // the click switched tabs, the relayout that followed never re-applied
         // the region, and the strip stayed inert until something scrolled it
         // off screen and back, because only the re-show ran this.
-        syncPassiveShellSurfaceStateForSurface(shellSurface);
+        syncScrollTabShellSurfaceState(screenId);
         return; // live model update — no show choreography needed
     }
     // Either genuinely hidden, or mid-hide (still visible, opacity
     // animating toward 0). In BOTH cases the show choreography must run:
     // early-returning on a fading slot would leave it visible+loaded at
     // opacity 0 forever once the superseded hide completion no-ops.
-
-    // Same user-font pipeline as every other overlay slot (OSD, cheatsheet,
-    // picker): the pills must honour the overlay font family and size scale.
-    // Pushed on the show path only, like all five siblings — a strip relayout
-    // changes no font, so re-pushing six settings-derived properties on every
-    // relayout was pure churn.
-    writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     if (shellWindow) {
         assertWindowOnScreen(shellWindow, screen, screenGeom);
@@ -277,12 +329,17 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         shellSurface->show();
     }
     slot->setVisible(true);
+    // Tell the compositor which surface to slide, now that it is realised and
+    // shown. Change-gated inside, so the re-assert costs a hash compare on the
+    // ordinary path and only actually publishes when the surface is new or was
+    // rebuilt underneath us.
+    announceScrollTabSurface(screenId, shellWindow);
     m_surfaceAnimator->beginShow(shellSurface, slot, PhosphorRoles::ScrollTabs, []() { });
     // Re-derive the surface's input state after Surface::show() cleared the
-    // transparent-input flag. The sync folds this slot's tab region into the
-    // partial region it installs, so the indicator is clickable while the rest
-    // of the passive shell stays click-through.
-    syncPassiveShellSurfaceStateForSurface(shellSurface);
+    // transparent-input flag. The sync installs the tab rects as the surface's
+    // partial input region, so the indicators are clickable while the rest of
+    // the surface stays click-through.
+    syncScrollTabShellSurfaceState(screenId);
 }
 
 } // namespace PlasmaZones

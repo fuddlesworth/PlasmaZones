@@ -34,6 +34,7 @@
 #include <chrono>
 #include <type_traits>
 
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 #include "paint_internal.h"
 
@@ -115,6 +116,9 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // Cost is O(#animations) per prePaintScreen — typical paths see
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
+    // Same tick, same clocks. One spring per scrolling output rather than one
+    // per window, so the cost here is bounded by the monitor count.
+    m_stripViewAnimator->advanceAnimations();
 
     // Vertex snapping tracks the animation state (see the initRenderingAndRegistries
     // note): None while a REDIRECTED window animates so its smooth translates keep
@@ -149,7 +153,8 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // the whole transition. Narrowing that term to a per-window test without
     // also fixing this half would silently stop relaxing snapping for
     // transition-owned windows.
-    const bool animationsInFlight = m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty();
+    const bool animationsInFlight = m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
+        || m_stripViewAnimator->hasActiveAnimations();
     // The decoration probe can only return true when decorations exist — skip
     // the per-animation id derivation entirely on an undecorated desktop.
     const bool redirectedAnimating = !m_shaderManager.empty()
@@ -203,6 +208,14 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
         if (data.screen) {
             const QRectF outputGeo = QRect(data.screen->geometry());
             touchesThisOutput = m_windowAnimator->hasAnimationsIntersecting(outputGeo);
+            // The strip-wide analogue of the swept-bounds test above. A view
+            // leg has no per-window bounds to sweep — it moves every column on
+            // its output at once — so the output it belongs to IS its region,
+            // and identity answers what an intersection would have to
+            // approximate.
+            if (!touchesThisOutput && m_stripViewAnimator->isAnimatingOn(data.screen)) {
+                touchesThisOutput = true;
+            }
             if (!touchesThisOutput) {
                 for (const auto& [tw, transition] : m_shaderManager.shaderTransitions()) {
                     if (!tw) {
@@ -761,6 +774,35 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         }
     }
 
+    // A parked scrolling column is drawn far from its committed rect (the paint
+    // path relocates it to its strip position), so KWin must not decide where
+    // it goes from that rect. Occlusion culling is forfeited for it, which
+    // costs nothing: the window is off the viewport by definition — that is
+    // why it parked.
+    //
+    // Gated on the SAME predicate paintWindow relocates under, not on map
+    // membership alone. A window that floats or is dragged to another output
+    // stops being scroll-managed, so the relocation stops while its entry
+    // lingers — flagging it transformed then would surrender occlusion culling
+    // every frame of the drag for a window nothing is moving. windowId is the
+    // one derived above rather than a second getWindowId call, which is what
+    // the note at the top of this function asks for.
+    if (w && !m_scrollVisualPos.isEmpty() && scrollManagedOutputFor(w) && m_scrollVisualPos.contains(windowId)) {
+        data.setTransformed();
+    }
+
+    // The tab-indicator surface is translated off its committed rect for the
+    // whole view leg (paintWindow adds the strip's offset to it), so KWin must
+    // stop deciding where it goes from that rect. Marked translucent for the
+    // same reason the transition branch above is: a surface drawn away from its
+    // frame leaves the pixels it vacated uncomposited, and the last presented
+    // frame reads back as a ghost indicator standing still while the real one
+    // slides.
+    if (w && m_stripViewAnimator->isAnimatingOn(w->screen()) && isScrollTabIndicatorSurface(w)) {
+        data.setTransformed();
+        data.setTranslucent();
+    }
+
     OffscreenEffect::prePaintWindow(view, w, data);
 }
 
@@ -982,6 +1024,26 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 // the animator's current rect is what the draw transforms by.
                 animatedFrame = m_windowAnimator->currentValue(w, QRectF());
             }
+            // Fold in the two scroll displacements the draw applies further
+            // down, which neither term above accounts for. Without this a
+            // decorated scrolling column samples the scene slice at its
+            // COMMITTED rect while being drawn somewhere else: a view offset
+            // away for the length of every leg, and for a parked column at a
+            // rect that intersects no output at all, which is a garbage
+            // capture re-blitted every frame rather than a slightly-off one.
+            //
+            // Order matches the draw: relocate to the strip position first,
+            // then add the view offset.
+            if (KWin::LogicalOutput* scrollOut = scrollManagedOutputFor(w)) {
+                if (!animatedFrame.isValid()) {
+                    animatedFrame = w->frameGeometry();
+                }
+                if (const auto visualIt = m_scrollVisualPos.constFind(getWindowId(w));
+                    visualIt != m_scrollVisualPos.constEnd()) {
+                    animatedFrame.moveTopLeft(QPointF(*visualIt));
+                }
+                animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut), 0.0);
+            }
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, deviceRegion, animatedFrame);
         }
     }
@@ -1056,6 +1118,56 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         const bool shaderOwnsGeometry = morphSt && morphSt->cached && morphSt->cached->iFromRectLoc >= 0;
         if (!shaderOwnsGeometry) {
             m_windowAnimator->applyTransform(w, data);
+        }
+        // Scrolling-strip view offset, ADDED to whatever the window animator
+        // just applied rather than replacing it. The two describe different
+        // things and compose: the view says where the whole strip is, the
+        // per-window animation says how this one column differs from riding it
+        // (an edge column whose width changed in the same batch has both). A
+        // pure scroll has no per-window animation at all, which is the point.
+        //
+        // Applied even when a shader owns the geometry. A morph shader
+        // interpolates between two COMMITTED rects and knows nothing about the
+        // view, so the strip sliding underneath it is not something it can
+        // double-count — unlike the animator transform above, which describes
+        // the same motion the shader is already drawing.
+        if (KWin::LogicalOutput* managed = scrollManagedOutputFor(w)) {
+            // A parked column is committed below the union of all outputs, so
+            // relocate the drawing to where it really sits on the strip BEFORE
+            // the view offset goes on. The two together put it exactly where a
+            // never-parked column would be, which is what lets it be seen
+            // travelling past during a scroll rather than blinking out the
+            // moment it leaves the viewport.
+            if (!m_scrollVisualPos.isEmpty()) {
+                const auto vit = m_scrollVisualPos.constFind(getWindowId(w));
+                if (vit != m_scrollVisualPos.constEnd()) {
+                    const KWin::RectF committed = w->frameGeometry();
+                    data += QPointF(vit->x() - committed.x(), vit->y() - committed.y());
+                }
+            }
+            const qreal viewOffset = m_stripViewAnimator->offsetFor(managed);
+            if (!qFuzzyIsNull(viewOffset)) {
+                data += QPointF(viewOffset, 0.0);
+            }
+        } else if (KWin::LogicalOutput* out = w->screen();
+                   out && m_stripViewAnimator->isAnimatingOn(out) && isScrollTabIndicatorSurface(w)) {
+            // The tab indicators take the SAME offset as the columns they
+            // label, from the same spring, inside the same paint pass. That is
+            // the whole reason they were given a surface of their own: a second
+            // spring in the daemon could never catch this one, because the
+            // daemon renders and commits its surface for the compositor to
+            // composite a frame or more later.
+            //
+            // The daemon pushes each indicator at its post-scroll rect, exactly
+            // as the apply path commits each column's post-scroll geometry, so
+            // one shared offset puts both back where they were and slides them
+            // in step.
+            //
+            // The cheap map lookup is deliberately first: the indicator test
+            // behind it resolves the window's surface and compares its window
+            // class, and no surface needs an offset on an output whose strip is
+            // at rest.
+            data += QPointF(m_stripViewAnimator->offsetFor(out), 0.0);
         }
     }
 

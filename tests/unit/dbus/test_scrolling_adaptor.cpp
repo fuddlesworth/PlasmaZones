@@ -38,6 +38,8 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -497,6 +499,111 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
     }
 
+    // The tab-surface registry. This is the handle the compositor uses to tell
+    // the daemon's indicator surface apart from its other overlays — nothing
+    // KWin exposes per window distinguishes them — so publishing a wrong or
+    // stale id makes the effect slide the wrong surface. Wayland reuses object
+    // ids, which is why the retraction below is not merely tidy.
+    void testScrollTabSurface_publishRetractAndReplay()
+    {
+        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollTabSurfaceChanged);
+
+        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 42);
+        m_adaptor->setScrollTabSurface(QStringLiteral("DP-2"), 43);
+
+        QCOMPARE(spy.count(), 2);
+        const QVariantMap after = m_adaptor->scrollTabSurfaces();
+        QCOMPARE(after.size(), 2);
+        QCOMPARE(after.value(QStringLiteral("DP-1")).toUInt(), 42u);
+        QCOMPARE(after.value(QStringLiteral("DP-2")).toUInt(), 43u);
+
+        // Replacing a screen's surface must leave the OTHER screen alone: the
+        // effect keys its live set by id, so a replace that dropped a sibling
+        // would silently stop sliding that monitor's indicators.
+        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 44);
+        QCOMPARE(m_adaptor->scrollTabSurfaces().value(QStringLiteral("DP-1")).toUInt(), 44u);
+        QCOMPARE(m_adaptor->scrollTabSurfaces().value(QStringLiteral("DP-2")).toUInt(), 43u);
+
+        // Zero is the retraction, and it must REMOVE rather than store 0 —
+        // a getter answering 0 for a screen would have the effect register
+        // object id 0 as an indicator surface.
+        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 0);
+        const QVariantMap retracted = m_adaptor->scrollTabSurfaces();
+        QVERIFY(!retracted.contains(QStringLiteral("DP-1")));
+        QCOMPARE(retracted.size(), 1);
+    }
+
+    void testScrollTabSurface_rejectsEmptyScreenId()
+    {
+        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollTabSurfaceChanged);
+
+        m_adaptor->setScrollTabSurface(QString(), 42);
+
+        QVERIFY2(m_adaptor->scrollTabSurfaces().isEmpty(), "an unkeyed surface must not enter the registry");
+        QCOMPARE(spy.count(), 0);
+    }
+
+    // clearEngine is terminal — the next cycle deletes and re-news the whole
+    // adaptor set — but the object stays reachable on the bus until then, and
+    // answering with a torn-down session's surfaces is what the sibling
+    // caches are cleared to avoid.
+    void testClearedEngine_dropsScrollTabSurfaces()
+    {
+        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 42);
+        QVERIFY(!m_adaptor->scrollTabSurfaces().isEmpty());
+
+        m_adaptor->clearEngine();
+
+        QVERIFY(m_adaptor->scrollTabSurfaces().isEmpty());
+    }
+
+    // The scrollingScreens property's DocString promises that changes are
+    // announced on scrollingScreensChanged and NOT through
+    // org.freedesktop.DBus.Properties.PropertiesChanged. The property does
+    // carry a NOTIFY, which is what makes the claim worth pinning: if QtDBus
+    // ever relayed that NOTIFY into PropertiesChanged, the XML would be
+    // telling consumers to ignore a signal they were in fact receiving, and a
+    // consumer that believed it would poll instead of subscribing.
+    //
+    // Driven over a REAL bus, because the claim is about what reaches the wire
+    // rather than about the adaptor's own emissions.
+    void testScrollingScreensProperty_doesNotEmitPropertiesChanged()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        QVERIFY2(bus.isConnected(), "this suite runs under a private bus; see phosphor_apply_test_isolation");
+        const QString path = QStringLiteral("/PropertiesChangedProbe");
+        QVERIFY(bus.registerObject(path, m_parent, QDBusConnection::ExportAllContents));
+
+        QDBusMessage changed;
+        QVERIFY(bus.connect(bus.baseService(), path, QStringLiteral("org.freedesktop.DBus.Properties"),
+                            QStringLiteral("PropertiesChanged"), this, SLOT(onPropertiesChanged(QDBusMessage))));
+
+        m_propertiesChangedCount = 0;
+        QSignalSpy own(m_adaptor, &ScrollingAdaptor::scrollingScreensChanged);
+
+        m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        // Emitted synchronously through the engine connection, so it is
+        // already counted rather than something to wait for.
+        QVERIFY2(own.count() > 0, "the adaptor's own change signal must fire");
+        // A relayed PropertiesChanged would arrive over the bus, which is
+        // asynchronous — give it a window rather than concluding from the
+        // same turn that emitted the signal above.
+        QTest::qWait(200);
+
+        QCOMPARE(m_propertiesChangedCount, 0);
+        bus.unregisterObject(path);
+    }
+
+public Q_SLOTS:
+    void onPropertiesChanged(const QDBusMessage& msg)
+    {
+        if (msg.arguments().value(0).toString() == QLatin1String("org.plasmazones.Scrolling")) {
+            ++m_propertiesChangedCount;
+        }
+    }
+
+private Q_SLOTS:
+
 private:
     /// Append a description of every way @p obj fails to describe @p expected
     /// at 1-based visible slot @p slot. Accumulating instead of asserting
@@ -543,6 +650,7 @@ private:
 
     ScrollEngine* m_engine = nullptr;
     QObject* m_parent = nullptr;
+    int m_propertiesChangedCount = 0;
     ScrollingAdaptor* m_adaptor = nullptr;
 };
 

@@ -118,8 +118,8 @@ public:
     /**
      * @brief Number of windowOpened entries waiting for panel geometry
      *
-     * Observable state for tests and for support-bundle output: returns the size
-     * of the deferred windowOpened queue (see windowsOpenedBatch rationale).
+     * Observable state for tests: returns the size of the deferred
+     * windowOpened queue (see windowsOpenedBatch rationale).
      * Always zero once @c panelGeometryReady has fired.
      */
     int pendingWindowOpensCount() const;
@@ -287,8 +287,9 @@ Q_SIGNALS:
      * many windows are retiled (e.g. rotate).
      *
      * @param tileRequests Typed list of TileRequestEntry structs, wire shape
-     *        a(siiiissbbss): (windowId, x, y, width, height, zoneId, screenId,
-     *        monocle, floating, stacking, scrollEdge)
+     *        a(siiiissbbssiiib): (windowId, x, y, width, height, zoneId,
+     *        screenId, monocle, floating, stacking, scrollEdge, viewDeltaX,
+     *        visualX, visualY, hasVisualPos)
      */
     void windowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
 

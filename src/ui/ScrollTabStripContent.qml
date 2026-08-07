@@ -167,6 +167,13 @@ Item {
 
             x: slotX
             y: slotY
+
+            // No motion state to react to. The rects written here are the
+            // post-scroll ones, exactly as the compositor commits the columns'
+            // post-scroll geometry, and the compositor slides this whole
+            // surface by the strip's view offset — so an indicator drawn at its
+            // final rect is on screen where its column is, on every frame of
+            // the scroll. See ScrollTabShell.qml.
             width: slotWidth
             height: slotHeight
             // The bar's segments floor at 1px each, so a rect too short for its

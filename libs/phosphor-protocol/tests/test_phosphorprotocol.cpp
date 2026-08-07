@@ -43,8 +43,14 @@ private Q_SLOTS:
         QCOMPARE(e.height, 4);
     }
 
-    // DragPolicy and DragOutcome round-trips are covered by test_compositor_common
-    // (they require full D-Bus message transport for nested types like EmptyZoneList).
+    // DragPolicy and DragOutcome have NO wire round-trip coverage anywhere.
+    // This comment used to claim test_compositor_common covered them; it does
+    // not — tests/unit/compositor-common/test_wire_types.cpp does not include
+    // DragMarshalling.h and names neither type. The gap matters more for these
+    // two than for their neighbours, because DragPolicy's marshaller is the
+    // one that does a real transform (enum to legacy wire string) and its
+    // declared shape lives only in a code comment. Covering them needs full
+    // D-Bus message transport, for the nested types they carry.
 
     void testBypassReasonWireStringRoundTrip()
     {
@@ -175,12 +181,13 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // Bumped to 6 alongside the TileRequestEntry scrollEdge widening
-        // (a(siiiissbbs) → a(siiiissbbss)): Qt matches signal-hook
-        // signatures before demarshalling, so a v5 effect's tiling slot
-        // would silently never fire — both sides must move together.
-        QCOMPARE(Service::ApiVersion, 6);
-        QCOMPARE(Service::MinPeerApiVersion, 6);
+        // Bumped to 8 alongside the TileRequestEntry visual-position widening
+        // (a(siiiissbbssi) → a(siiiissbbssiiib)), for the same reason v6 and v7
+        // were bumped: Qt matches signal-hook signatures before demarshalling,
+        // so a v7 effect's tiling slot would silently never fire — both sides
+        // must move together.
+        QCOMPARE(Service::ApiVersion, 8);
+        QCOMPARE(Service::MinPeerApiVersion, 8);
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.

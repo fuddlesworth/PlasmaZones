@@ -152,13 +152,17 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
 }
 
 void PlasmaZonesEffect::applyStaggeredOrImmediate(int count, const std::function<void(int)>& applyFn,
-                                                  const std::function<void()>& onComplete)
+                                                  const std::function<void()>& onComplete, bool forceImmediate)
 {
     // Convert the D-Bus-sourced int to the typed enum at this boundary;
     // the library API only accepts SequenceMode. Unknown ints fall back
     // to AllAtOnce — same behaviour as Profile::fromJson.
+    //
+    // forceImmediate overrides the user's choice rather than being folded into
+    // it: the caller is not expressing a preference, it is stating that this
+    // batch cannot be split without tearing, so the setting has nothing to say.
     const PhosphorAnimation::SequenceMode mode =
-        (m_cachedAnimationSequenceMode == static_cast<int>(PhosphorAnimation::SequenceMode::Cascade))
+        (!forceImmediate && m_cachedAnimationSequenceMode == static_cast<int>(PhosphorAnimation::SequenceMode::Cascade))
         ? PhosphorAnimation::SequenceMode::Cascade
         : PhosphorAnimation::SequenceMode::AllAtOnce;
     PhosphorAnimation::applyStaggeredOrImmediate(this, count, mode, m_cachedAnimationStaggerInterval, applyFn,

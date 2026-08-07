@@ -383,12 +383,17 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // here previously caused a systemd-respawn loop in production
     // because applyShaderProfilesToAnimator's chain led straight into
     // m_shellHost->registerConfigForRole before the host was up.
-    if (!m_shellHost) {
+    if (!m_shellHost || !m_tabShellHost) {
         qFatal(
-            "OverlayService::setupSurfaceAnimator: m_shellHost must be constructed first "
-            "(applyShaderProfilesToAnimator dereferences it on every call)");
+            "OverlayService::setupSurfaceAnimator: both shell hosts must be constructed first "
+            "(applyShaderProfilesToAnimator dereferences m_shellHost on every call, and a host "
+            "without an animator cannot run hideSlot)");
     }
     m_shellHost->setSurfaceAnimator(m_surfaceAnimator.get());
+    // The tab-indicator host needs it too: hideSlot drives the slot's hide leg
+    // through the animator, and a host without one would leave the indicators
+    // visible forever the first time a screen's strips emptied.
+    m_tabShellHost->setSurfaceAnimator(m_surfaceAnimator.get());
     // Lifecycle invariant: `setupSurfaceAnimator` runs from the ctor
     // before `setSettings` is ever called, so `m_settings` is null here
     // and the animator stays at its default-enabled state until

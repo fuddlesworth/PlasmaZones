@@ -47,6 +47,19 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         qCWarning(lcEffect) << "Failed to connect to daemon settingsChanged D-Bus signal";
     }
 
+    // Which wl_surface carries each screen's scrolling tab indicators. The
+    // paint path slides that surface with the strip, and the object id is the
+    // only handle it can match on: every daemon overlay reports the same window
+    // class, and a layer surface's scope is not exposed per window.
+    const bool tabSurfaceConnected = QDBusConnection::sessionBus().connect(
+        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+        PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollTabSurfaceChanged"), this,
+        SLOT(onScrollTabSurfaceChanged(QString, uint)));
+    if (!tabSurfaceConnected) {
+        qCWarning(lcEffect) << "Failed to connect to daemon scrollTabSurfaceChanged D-Bus signal"
+                            << "— scrolling tab indicators will not ride the strip";
+    }
+
     // Connect to virtual screen changes — daemon emits this when a physical screen's
     // virtual subdivisions are added, removed, or modified.
     const bool vsChangedConnected = QDBusConnection::sessionBus().connect(
@@ -238,6 +251,24 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // re-create rule-matched decorations right after
         // clearAllDecorations below.
         m_tilingHandler->clearScrollingScreensForTeardown();
+        // The tab-indicator surface ids name objects that died with the daemon,
+        // and a retraction only ever arrives from a daemon healthy enough to
+        // send one — a crash sends nothing. Wayland reuses object ids, so a
+        // retained set is not merely stale, it is a live mismatch waiting for
+        // the next client to be handed one of those numbers. Clearing also puts
+        // isScrollTabIndicatorSurface back on its empty-set fast path. The
+        // bring-up clear stays where it is: it covers the other order, an
+        // effect reload against a daemon whose surfaces outlived it.
+        m_scrollTabSurfaceIds.clear();
+        m_scrollTabSurfaceIdsByScreen.clear();
+        // Parked columns' paint hints likewise. Their committed rect is the
+        // park, below the union of every output, so the relocation is the only
+        // thing drawing them anywhere visible; with the scrolling set cleared
+        // just above, paintWindow stops relocating them while prePaintWindow
+        // keeps marking them transformed off this map, and no re-tile can
+        // arrive to clear the entry. Dropping it here is what lets the next
+        // batch, or the next daemon, start from nothing.
+        m_scrollVisualPos.clear();
         // Same reasoning for the per-screen active-layout map: it is a pure
         // ruleQuery input owned by the dead session, and the
         // invalidateAllRuleCaches below would otherwise re-resolve every
@@ -307,8 +338,8 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // Defensive reconnect of daemonReady. Subscriptions against a
         // WELL-KNOWN name survive daemon restarts (the bus re-resolves the
         // owner per match rule — daemon_bringup.cpp's connectNavigationSignals
-        // note is the authoritative statement, and settingsChanged plus all
-        // sixteen navigation signals rely on it without any re-wire), so
+        // note is the authoritative statement, and settingsChanged plus every
+        // navigation signal relies on it without any re-wire), so
         // this refresh is belt-and-braces, not a requirement. Keep the
         // disconnect-first pairing (Qt doesn't deduplicate match rules) and
         // do NOT propagate the pattern to other signals.

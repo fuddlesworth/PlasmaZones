@@ -273,6 +273,11 @@ void Daemon::initEnginesAndWiring()
             m_settings->save();
         }
     });
+    // Wired for symmetry, not because it fires today: the only producer of
+    // settingsPersistRequested is AutotileEngine's write-back guard timer, and
+    // the scroll engine emits it nowhere. Kept so a scroll-side write-back
+    // lands with its persistence already connected rather than silently
+    // dropping, which is the failure this signal exists to prevent.
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
         if (m_settings) {
             m_settings->save();
@@ -881,6 +886,29 @@ void Daemon::initEnginesAndWiring()
     m_tilingAdaptor->setLifecycleEngines({autotileEngine, scrollEngine});
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_algorithmRegistry.get(), this);
     m_scrollingAdaptor = new ScrollingAdaptor(scrollEngine, this);
+    // The overlay's tab-indicator surface, relayed to the compositor so it can
+    // slide that surface with the strip. It bypasses the engine entirely: the
+    // strip's model has no notion of which wl_surface happens to be drawing its
+    // indicators.
+    // Unguarded, like every other m_overlayService deref in this function: it
+    // is ctor-owned and non-null for the daemon's whole lifetime, which this
+    // file states once at the top rather than re-asserting per call site.
+    connect(m_overlayService.get(), &IOverlayService::scrollTabSurfaceChanged, m_scrollingAdaptor,
+            [adaptor = m_scrollingAdaptor](const QString& screenId, quint32 surfaceId) {
+                adaptor->setScrollTabSurface(screenId, surfaceId);
+            });
+    // Seed the fresh adaptor with what was announced before it existed. This
+    // is a re-cycle path, not a first start: init_adaptors deletes and re-news
+    // the whole adaptor set on every init(), while OverlayService is
+    // ctor-owned and survives with its surfaces still mapped. The announcement
+    // is change-gated on the service side, so without this seed the new
+    // adaptor would answer an empty map forever and the effect's bring-up pull
+    // would get nothing, leaving the indicators off the strip until some
+    // screen's tab shell happened to be rebuilt.
+    const QHash<QString, quint32> liveSurfaces = m_overlayService->liveScrollTabSurfaces();
+    for (auto it = liveSurfaces.constBegin(); it != liveSurfaces.constEnd(); ++it) {
+        m_scrollingAdaptor->setScrollTabSurface(it.key(), it.value());
+    }
     connect(autotileEngine, &PhosphorTileEngine::AutotileEngine::windowsTiled, m_tilingAdaptor,
             &TilingAdaptor::relayTileRequestsJson);
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,
@@ -1038,11 +1066,11 @@ void Daemon::initEnginesAndWiring()
     // were established and would silently sever all three. The stop() → init()
     // duplicate this connect needs protecting from is already handled by that
     // one sweep, since it precedes every rulesChanged connect including this.
-    if (m_ruleStore) {
-        connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this]() {
-            scheduleScrollTabEnrichmentRefresh();
-        });
-    }
+    // Unguarded for the same reason as the three rulesChanged connects above:
+    // m_ruleStore is ctor-owned and non-null for the daemon's lifetime.
+    connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this]() {
+        scheduleScrollTabEnrichmentRefresh();
+    });
 
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members
