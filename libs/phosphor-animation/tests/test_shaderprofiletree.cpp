@@ -242,7 +242,10 @@ private Q_SLOTS:
 
     // ─── resolveShaderWithDefault: built-in per-event default ───
 
-    void testDefaultShaderForPathSnapEvents()
+    // Named for the whole predicate rather than for the snap legs alone: it
+    // grew past them long ago and now pins the three opt-in classes' absence
+    // of a default too, which is the load-bearing half.
+    void testDefaultShaderEffectIdForPath()
     {
         // Snap events default to window-morph; others to none.
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapIn), QStringLiteral("window-morph"));

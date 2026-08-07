@@ -737,9 +737,12 @@ private Q_SLOTS:
         QVERIFY(!c.supportsShaderLeg(unsupported));
         // The strip pass made scrolling.view a consumed shader leaf (its
         // ancestors join via the walk-up), so the Strip Scrolled card shows
-        // the picker and the pruner keeps its overrides.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("scrolling.view")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("scrolling")));
+        // the picker and the pruner keeps its overrides. Taxonomy constants,
+        // not literals, so a leaf rename cannot leave this quietly asserting
+        // against a path that no longer exists.
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        QVERIFY(c.supportsShaderLeg(PP::ScrollingView));
+        QVERIFY(c.supportsShaderLeg(PP::Scrolling));
 
         QCOMPARE(c.setShaderOverrideOnPaths(QStringList{supported, unsupported}, QStringLiteral("pixelate"), {}), 1);
 

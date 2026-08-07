@@ -12,6 +12,81 @@
 using PhosphorAnimationShaders::AnimationShaderEffect;
 using PhosphorAnimationShaders::AnimationShaderRegistry;
 
+namespace {
+
+/// Point @p registry at the bundled pack tree. Returns false when the source
+/// tree is not present, which is the caller's cue to QSKIP.
+///
+/// QSKIP cannot live in here: it expands to a return, so it would abandon
+/// this helper and let the slot carry on against an empty registry. Hence the
+/// bool-and-skip-at-the-callsite shape rather than a void helper.
+///
+/// addSearchPath runs a synchronous initial scan via the underlying
+/// WatchedDirectorySet, so no separate refresh() is needed.
+bool openBundledPacks(AnimationShaderRegistry& registry)
+{
+    const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+    if (!QDir(dataDir).exists()) {
+        return false;
+    }
+    registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
+    return true;
+}
+
+/// Every pack in @p registry declaring @p classToken, sorted. Pairs with the
+/// hand-maintained per-class lists below to make them self-maintaining: the
+/// list must equal this scan, so a new pack that forgets to register fails,
+/// and so does an id left behind by a deleted pack.
+QStringList packsDeclaring(const AnimationShaderRegistry& registry, const QString& classToken)
+{
+    QStringList ids;
+    for (const AnimationShaderEffect& e : registry.availableEffects()) {
+        if (e.appliesTo.contains(classToken)) {
+            ids << e.id;
+        }
+    }
+    ids.sort();
+    return ids;
+}
+
+/// Assert that every id in @p expected exists, declares EXACTLY
+/// {@p classToken}, and that no other pack declares that token.
+///
+/// Exact declaration rather than containment: an opt-in-class pack that grew
+/// an "appearance" token would stop being compositor-only, and the daemon
+/// would start warm-baking kwin classic-GL source that cannot compile on its
+/// target. Collect-then-assert rather than QVERIFY2 in the loop, so one bad
+/// pack does not hide the rest.
+void verifyClassContract(const AnimationShaderRegistry& registry, const QString& classToken,
+                         const QStringList& expected)
+{
+    QStringList missing;
+    QStringList misdeclared;
+    for (const QString& id : expected) {
+        if (!registry.hasEffect(id)) {
+            missing << id;
+            continue;
+        }
+        const AnimationShaderEffect e = registry.effect(id);
+        if (e.appliesTo != QStringList{classToken}) {
+            misdeclared << (id + QStringLiteral(" → [") + e.appliesTo.join(QLatin1String(", ")) + QStringLiteral("]"));
+        }
+    }
+    QVERIFY2(missing.isEmpty(),
+             qPrintable(QStringLiteral("Missing %1 pack(s): ").arg(classToken) + missing.join(QLatin1String(", "))));
+    QVERIFY2(misdeclared.isEmpty(),
+             qPrintable(QStringLiteral("%1 packs must declare exactly [%1] (anything else changes their "
+                                       "compositor-only classification): ")
+                            .arg(classToken)
+                        + misdeclared.join(QLatin1String("; "))));
+
+    QStringList sortedExpected = expected;
+    sortedExpected.sort();
+    QCOMPARE(packsDeclaring(registry, classToken), sortedExpected);
+}
+
+} // namespace
+
 class TestBuiltinEffects : public QObject
 {
     Q_OBJECT
@@ -24,14 +99,9 @@ private Q_SLOTS:
     // seven keep resolving by id.
     void testCoreEffectsDiscovered()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
-        if (!QDir(dataDir).exists())
-            QSKIP("data/animations not found — running outside source tree");
-
         AnimationShaderRegistry registry;
-        // addSearchPath now runs a synchronous initial scan via the
-        // underlying WatchedDirectorySet — no separate refresh() needed.
-        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
+        if (!openBundledPacks(registry))
+            QSKIP("data/animations not found — running outside source tree");
 
         const QStringList expected = {
             QStringLiteral("dissolve"),  QStringLiteral("glitch"), QStringLiteral("morph"),
@@ -47,14 +117,9 @@ private Q_SLOTS:
 
     void testEachEffectHasValidMetadata()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
-        if (!QDir(dataDir).exists())
-            QSKIP("data/animations not found — running outside source tree");
-
         AnimationShaderRegistry registry;
-        // addSearchPath now runs a synchronous initial scan via the
-        // underlying WatchedDirectorySet — no separate refresh() needed.
-        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
+        if (!openBundledPacks(registry))
+            QSKIP("data/animations not found — running outside source tree");
 
         const auto effects = registry.availableEffects();
         // Guard the loop: every assertion below lives inside it, so an empty
@@ -88,102 +153,71 @@ private Q_SLOTS:
     // is expected to add its id here.
     void testDesktopPacksDeclareDesktopContract()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
-        if (!QDir(dataDir).exists())
+        AnimationShaderRegistry registry;
+        if (!openBundledPacks(registry))
             QSKIP("data/animations not found — running outside source tree");
 
+        verifyClassContract(registry, QStringLiteral("desktop"),
+                            {
+                                QStringLiteral("peek-recede"),
+                                QStringLiteral("peek-blinds"),
+                                QStringLiteral("phosphor-peek"),
+                                QStringLiteral("desktop-fade"),
+                                QStringLiteral("desktop-slide"),
+                                QStringLiteral("desktop-slidefade"),
+                                QStringLiteral("desktop-wipe"),
+                                QStringLiteral("desktop-circle"),
+                                QStringLiteral("desktop-dissolve"),
+                                QStringLiteral("desktop-pixelate"),
+                                QStringLiteral("desktop-cube"),
+                                QStringLiteral("desktop-crosszoom"),
+                                QStringLiteral("desktop-aretha"),
+                                QStringLiteral("desktop-phosphor"),
+                            });
+    }
+
+    // Third opt-in class, same hazard: a move pack missing the "move" token
+    // is refused on `window.movement.move`, and because that leaf takes no
+    // inherited shader it then has no way to run at all. The move class
+    // predates the desktop and strip lists above and was the only one of the
+    // three left unpinned. A new drag-physics pack is expected to add its id
+    // here.
+    void testMovePacksDeclareMoveContract()
+    {
         AnimationShaderRegistry registry;
-        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
+        if (!openBundledPacks(registry))
+            QSKIP("data/animations not found — running outside source tree");
 
-        const QStringList desktopPacks = {
-            QStringLiteral("peek-recede"),      QStringLiteral("peek-blinds"),      QStringLiteral("phosphor-peek"),
-            QStringLiteral("desktop-fade"),     QStringLiteral("desktop-slide"),    QStringLiteral("desktop-slidefade"),
-            QStringLiteral("desktop-wipe"),     QStringLiteral("desktop-circle"),   QStringLiteral("desktop-dissolve"),
-            QStringLiteral("desktop-pixelate"), QStringLiteral("desktop-cube"),     QStringLiteral("desktop-crosszoom"),
-            QStringLiteral("desktop-aretha"),   QStringLiteral("desktop-phosphor"),
-        };
-
-        for (const QString& id : desktopPacks) {
-            QVERIFY2(registry.hasEffect(id), qPrintable(QStringLiteral("Missing desktop pack: ") + id));
-            const AnimationShaderEffect e = registry.effect(id);
-            QVERIFY2(e.appliesTo.contains(QStringLiteral("desktop")),
-                     qPrintable(QStringLiteral("Pack ") + id
-                                + QStringLiteral(" does not declare appliesTo \"desktop\"; it would be refused on "
-                                                 "every desktop event path")));
-        }
+        verifyClassContract(registry, QStringLiteral("move"),
+                            {
+                                QStringLiteral("wobble"),
+                                QStringLiteral("phosphor-vortex"),
+                            });
     }
 
     // Same hazard, strip class: a strip pack missing the "strip" token is
-    // refused on `scrolling.view` and becomes silently unselectable. Pinned
-    // per id for the same delete-the-token reason as the desktop list above.
-    //
-    // The list is checked for SET EQUALITY against the registry rather than
-    // membership only, so it maintains itself in both directions: a new strip
-    // pack that forgets to register here fails, and so does an id left behind
-    // by a deleted pack. The declaration is compared for EQUALITY too, not
-    // containment: a strip pack that grew an "appearance" token would stop
-    // being compositor-only and the daemon would start warm-baking kwin
-    // classic-GL source that cannot compile on its target.
+    // refused on `scrolling.view` and becomes silently unselectable.
     void testStripPacksDeclareStripContract()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
-        if (!QDir(dataDir).exists())
+        AnimationShaderRegistry registry;
+        if (!openBundledPacks(registry))
             QSKIP("data/animations not found — running outside source tree");
 
-        AnimationShaderRegistry registry;
-        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
-
-        const QStringList stripPacks = {
-            QStringLiteral("strip-motion-blur"), QStringLiteral("phosphor-gate"),  QStringLiteral("strip-chromatic"),
-            QStringLiteral("strip-jelly"),       QStringLiteral("strip-carousel"),
-        };
-
-        // Collect, then assert once: a QVERIFY2 inside the loop stops at the
-        // first bad pack and hides the rest of the picture.
-        QStringList missing;
-        QStringList misdeclared;
-        for (const QString& id : stripPacks) {
-            if (!registry.hasEffect(id)) {
-                missing << id;
-                continue;
-            }
-            const AnimationShaderEffect e = registry.effect(id);
-            if (e.appliesTo != QStringList{QStringLiteral("strip")}) {
-                misdeclared << (id + QStringLiteral(" → [") + e.appliesTo.join(QLatin1String(", "))
-                                + QStringLiteral("]"));
-            }
-        }
-        QVERIFY2(missing.isEmpty(),
-                 qPrintable(QStringLiteral("Missing strip packs: ") + missing.join(QLatin1String(", "))));
-        QVERIFY2(misdeclared.isEmpty(),
-                 qPrintable(QStringLiteral("Strip packs must declare exactly [strip] (anything else changes their "
-                                           "compositor-only classification): ")
-                            + misdeclared.join(QLatin1String("; "))));
-
-        // The inverse guard: every strip-declaring pack the registry knows
-        // about is in the list above.
-        QStringList scanned;
-        for (const AnimationShaderEffect& e : registry.availableEffects()) {
-            if (e.appliesTo.contains(QStringLiteral("strip"))) {
-                scanned << e.id;
-            }
-        }
-        scanned.sort();
-        QStringList expected = stripPacks;
-        expected.sort();
-        QCOMPARE(scanned, expected);
+        verifyClassContract(registry, QStringLiteral("strip"),
+                            {
+                                QStringLiteral("strip-motion-blur"),
+                                QStringLiteral("phosphor-gate"),
+                                QStringLiteral("strip-chromatic"),
+                                QStringLiteral("strip-jelly"),
+                                QStringLiteral("strip-carousel"),
+                            });
     }
 
     void testDissolveHasExpectedParameters()
     {
-        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
-        if (!QDir(dataDir).exists())
-            QSKIP("data/animations not found — running outside source tree");
-
         AnimationShaderRegistry registry;
-        // addSearchPath now runs a synchronous initial scan via the
-        // underlying WatchedDirectorySet — no separate refresh() needed.
-        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
+        if (!openBundledPacks(registry))
+            QSKIP("data/animations not found — running outside source tree");
 
         const AnimationShaderEffect e = registry.effect(QStringLiteral("dissolve"));
         QCOMPARE(e.parameters.size(), 2);
