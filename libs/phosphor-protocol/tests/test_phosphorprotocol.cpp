@@ -43,8 +43,14 @@ private Q_SLOTS:
         QCOMPARE(e.height, 4);
     }
 
-    // DragPolicy and DragOutcome round-trips are covered by test_compositor_common
-    // (they require full D-Bus message transport for nested types like EmptyZoneList).
+    // DragPolicy and DragOutcome have NO wire round-trip coverage anywhere.
+    // This comment used to claim test_compositor_common covered them; it does
+    // not — tests/unit/compositor-common/test_wire_types.cpp does not include
+    // DragMarshalling.h and names neither type. The gap matters more for these
+    // two than for their neighbours, because DragPolicy's marshaller is the
+    // one that does a real transform (enum to legacy wire string) and its
+    // declared shape lives only in a code comment. Covering them needs full
+    // D-Bus message transport, for the nested types they carry.
 
     void testBypassReasonWireStringRoundTrip()
     {

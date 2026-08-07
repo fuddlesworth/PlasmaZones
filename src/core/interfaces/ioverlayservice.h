@@ -188,6 +188,23 @@ public:
     virtual void hideCheatsheet() = 0;
     virtual bool isCheatsheetVisible() const = 0;
 
+    /**
+     * @brief The wl_surface object id of every screen's live tab-indicator
+     *        surface, keyed by effective screen id.
+     *
+     * A replay source, not a second announcement channel. scrollTabSurfaceChanged
+     * fires only on change, and the surfaces outlive anything that merely
+     * re-reads them — so a consumer created AFTER a surface was announced has
+     * no way to learn about it, and the change gate means it never will. The
+     * D-Bus adaptor is exactly that consumer: the daemon deletes and re-news
+     * the whole adaptor set on every init(), while this service is
+     * constructor-owned and survives, so a fresh adaptor starts empty and the
+     * gate suppresses every re-announce.
+     *
+     * @return screen id to object id; empty when no screen has one.
+     */
+    virtual QHash<QString, quint32> liveScrollTabSurfaces() const = 0;
+
 Q_SIGNALS:
     void visibilityChanged(bool visible);
     void zoneActivated(PhosphorZones::Zone* zone);

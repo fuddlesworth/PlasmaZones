@@ -897,6 +897,18 @@ void Daemon::initEnginesAndWiring()
             [adaptor = m_scrollingAdaptor](const QString& screenId, quint32 surfaceId) {
                 adaptor->setScrollTabSurface(screenId, surfaceId);
             });
+    // Seed the fresh adaptor with what was announced before it existed. This
+    // is a re-cycle path, not a first start: init_adaptors deletes and re-news
+    // the whole adaptor set on every init(), while OverlayService is
+    // ctor-owned and survives with its surfaces still mapped. The announcement
+    // is change-gated on the service side, so without this seed the new
+    // adaptor would answer an empty map forever and the effect's bring-up pull
+    // would get nothing, leaving the indicators off the strip until some
+    // screen's tab shell happened to be rebuilt.
+    const QHash<QString, quint32> liveSurfaces = m_overlayService->liveScrollTabSurfaces();
+    for (auto it = liveSurfaces.constBegin(); it != liveSurfaces.constEnd(); ++it) {
+        m_scrollingAdaptor->setScrollTabSurface(it.key(), it.value());
+    }
     connect(autotileEngine, &PhosphorTileEngine::AutotileEngine::windowsTiled, m_tilingAdaptor,
             &TilingAdaptor::relayTileRequestsJson);
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,

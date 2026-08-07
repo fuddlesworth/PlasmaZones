@@ -481,6 +481,14 @@ public:
                         bool layoutsAreTemplates);
     void hideCheatsheet() override;
     bool isCheatsheetVisible() const override;
+
+    /// Replay source for a consumer created after the announcements it missed.
+    /// Returns m_scrollTabSurfaceIds, which is the same record the change gate
+    /// reads, so the two can never disagree about what the compositor believes.
+    QHash<QString, quint32> liveScrollTabSurfaces() const override
+    {
+        return m_scrollTabSurfaceIds;
+    }
     /// Re-push model/mode into an already-visible cheatsheet (live refilter
     /// on mode switch or rebind). No-op when hidden — the next show
     /// re-resolves everything anyway.
