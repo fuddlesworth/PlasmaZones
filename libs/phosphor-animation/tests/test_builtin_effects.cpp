@@ -113,6 +113,33 @@ private Q_SLOTS:
         }
     }
 
+    // Same hazard, strip class: a strip pack missing the "strip" token is
+    // refused on `scrolling.view` and becomes silently unselectable. Pinned
+    // per id for the same delete-the-token reason as the desktop list above.
+    // A new strip pack is expected to add its id here.
+    void testStripPacksDeclareStripContract()
+    {
+        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        if (!QDir(dataDir).exists())
+            QSKIP("data/animations not found — running outside source tree");
+
+        AnimationShaderRegistry registry;
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
+
+        const QStringList stripPacks = {
+            QStringLiteral("strip-motion-blur"),
+        };
+
+        for (const QString& id : stripPacks) {
+            QVERIFY2(registry.hasEffect(id), qPrintable(QStringLiteral("Missing strip pack: ") + id));
+            const AnimationShaderEffect e = registry.effect(id);
+            QVERIFY2(e.appliesTo.contains(QStringLiteral("strip")),
+                     qPrintable(QStringLiteral("Pack ") + id
+                                + QStringLiteral(" does not declare appliesTo \"strip\"; it would be refused on "
+                                                 "the scrolling view path")));
+        }
+    }
+
     void testDissolveHasExpectedParameters()
     {
         const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
