@@ -10,6 +10,54 @@
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
 
+namespace {
+
+/// A minimal valid effect declaring @p classes. The (effect × path) predicate
+/// reads only `appliesTo`, so id and fragment path exist purely to satisfy
+/// isValid(); the id is carried anyway because it names the pack in a failure
+/// message.
+AnimationShaderEffect packWith(const QString& id, const QStringList& classes)
+{
+    AnimationShaderEffect e;
+    e.id = id;
+    e.fragmentShaderPath = QStringLiteral("effect.frag");
+    e.appliesTo = classes;
+    return e;
+}
+
+// The five single-class packs the predicate matrix is built from, named for
+// the class rather than the pack so the slots read as class-vs-class. Shared
+// across the per-class slots below, which is what makes splitting that matrix
+// free of duplication.
+AnimationShaderEffect geometryPack()
+{
+    return packWith(QStringLiteral("window-morph"), {QStringLiteral("geometry")});
+}
+AnimationShaderEffect appearancePack()
+{
+    return packWith(QStringLiteral("aretha-materialize"), {QStringLiteral("appearance")});
+}
+AnimationShaderEffect desktopPack()
+{
+    return packWith(QStringLiteral("desktop-cube"), {QStringLiteral("desktop")});
+}
+AnimationShaderEffect movePack()
+{
+    return packWith(QStringLiteral("wobble"), {QStringLiteral("move")});
+}
+AnimationShaderEffect stripPack()
+{
+    return packWith(QStringLiteral("strip-motion-blur"), {QStringLiteral("strip")});
+}
+/// Universal: an EMPTY appliesTo, which is the "applies to every
+/// single-surface class" default rather than a declared class of its own.
+AnimationShaderEffect universalPack()
+{
+    return packWith(QStringLiteral("fade"), {});
+}
+
+} // namespace
+
 class TestAnimationShaderEffect : public QObject
 {
     Q_OBJECT
@@ -290,6 +338,67 @@ private Q_SLOTS:
         desktopOnly.fragmentShaderPath = QStringLiteral("effect.frag");
         desktopOnly.appliesTo = QStringList{QStringLiteral("desktop")};
         QCOMPARE(AnimationShaderEffect::fromJson(desktopOnly.toJson()).appliesTo, desktopOnly.appliesTo);
+
+        AnimationShaderEffect stripOnly;
+        stripOnly.id = QStringLiteral("strip-motion-blur");
+        stripOnly.fragmentShaderPath = QStringLiteral("effect.frag");
+        stripOnly.appliesTo = QStringList{QStringLiteral("strip")};
+        QCOMPARE(AnimationShaderEffect::fromJson(stripOnly.toJson()).appliesTo, stripOnly.appliesTo);
+    }
+
+    /// The accepted token vocabulary, pinned as a SET. fromJson validates
+    /// against ProfilePaths::allEventClassTokens(), and this asserts what
+    /// that SSOT contains: a class added there without its downstream
+    /// consumers (the browser's type catalog, the coverage chip, the
+    /// compositor-only rule — see the checklist on the ProfilePaths block)
+    /// fails here first and points at the list to work through.
+    void testEventClassTokenVocabulary()
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        const QStringList expected{QStringLiteral("geometry"), QStringLiteral("appearance"), QStringLiteral("desktop"),
+                                   QStringLiteral("move"), QStringLiteral("strip")};
+        QCOMPARE(PP::allEventClassTokens(), expected);
+
+        // Every one of them survives a fromJson round trip. The vocabulary
+        // and the parser cannot drift apart while both read the SSOT, but a
+        // future short-circuit in the parser would show up right here.
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("all-classes"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray arr;
+        for (const QString& token : expected) {
+            arr.append(token);
+        }
+        obj.insert(QLatin1String("appliesTo"), arr);
+        QCOMPARE(AnimationShaderEffect::fromJson(obj).appliesTo, expected);
+    }
+
+    /// appliesTo compares as a SET. Every consumer asks "does it contain X",
+    /// so two packs declaring the same classes in a different order are
+    /// behaviourally identical — an order-sensitive comparison made a
+    /// metadata reorder look like a content change to every equality-gated
+    /// path.
+    void testAppliesToComparesAsASet()
+    {
+        AnimationShaderEffect a;
+        a.id = QStringLiteral("hybrid");
+        a.fragmentShaderPath = QStringLiteral("effect.frag");
+        a.appliesTo = QStringList{QStringLiteral("strip"), QStringLiteral("appearance")};
+
+        AnimationShaderEffect b = a;
+        b.appliesTo = QStringList{QStringLiteral("appearance"), QStringLiteral("strip")};
+        QVERIFY2(a == b, "the same classes in a different order must compare equal");
+
+        // A genuinely different class set still compares unequal — the sort
+        // must not flatten everything into "equal".
+        AnimationShaderEffect c = a;
+        c.appliesTo = QStringList{QStringLiteral("strip"), QStringLiteral("geometry")};
+        QVERIFY(!(a == c));
+
+        // And a subset is not the same as the full set.
+        AnimationShaderEffect d = a;
+        d.appliesTo = QStringList{QStringLiteral("strip")};
+        QVERIFY(!(a == d));
     }
 
     /// Unknown / duplicate tokens are dropped at parse time; a list that
@@ -329,6 +438,16 @@ private Q_SLOTS:
         moveObj.insert(QLatin1String("appliesTo"), moveArr);
         QCOMPARE(AnimationShaderEffect::fromJson(moveObj).appliesTo, (QStringList{QStringLiteral("move")}));
 
+        // "strip" (the scrolling strip's view pass) is part of the accepted
+        // vocabulary.
+        QJsonObject stripObj;
+        stripObj.insert(QLatin1String("id"), QStringLiteral("s"));
+        stripObj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray stripArr;
+        stripArr.append(QStringLiteral("strip"));
+        stripObj.insert(QLatin1String("appliesTo"), stripArr);
+        QCOMPARE(AnimationShaderEffect::fromJson(stripObj).appliesTo, (QStringList{QStringLiteral("strip")}));
+
         QJsonObject allBad = obj;
         QJsonArray bad;
         bad.append(QStringLiteral("nonsense"));
@@ -355,18 +474,20 @@ private Q_SLOTS:
         QCOMPARE(AnimationShaderEffect::fromJson(mixed).appliesTo, (QStringList{QStringLiteral("geometry")}));
     }
 
-    /// The (effect × path) predicate: a geometry-only effect is compatible
-    /// with geometry legs, incompatible with appearance legs, and a
-    /// universal effect is compatible everywhere. An ambiguous row (the
-    /// mixed `window` root) is never reported incompatible.
+    /// The (effect × path) predicate, geometry and universal halves.
+    ///
+    /// This matrix is split across one slot per class rather than run as one
+    /// long slot. QVERIFY aborts the slot it fails in, so a single regression
+    /// in the geometry block used to take every later class's assertions with
+    /// it — the strip block at the end never ran at all. Split, a geometry
+    /// break reports as one failure and the other four still tell you whether
+    /// they hold. The packs are built by the shared factories above so the
+    /// split costs no duplication.
     void testShaderEffectAppliesToEventPath()
     {
         using PhosphorAnimationShaders::shaderEffectAppliesToEventPath;
 
-        AnimationShaderEffect morph;
-        morph.id = QStringLiteral("window-morph");
-        morph.fragmentShaderPath = QStringLiteral("effect.frag");
-        morph.appliesTo = QStringList{QStringLiteral("geometry")};
+        const AnimationShaderEffect morph = geometryPack();
 
         namespace PP = PhosphorAnimation::ProfilePaths;
         // Every geometry leg eventClassForPath classifies must be compatible with
@@ -397,9 +518,7 @@ private Q_SLOTS:
         QVERIFY(shaderEffectAppliesToEventPath(morph, PP::EditorSnapIn));
         QVERIFY(shaderEffectAppliesToEventPath(morph, PP::PanelSlideIn));
 
-        AnimationShaderEffect fade; // universal (no appliesTo)
-        fade.id = QStringLiteral("fade");
-        fade.fragmentShaderPath = QStringLiteral("effect.frag");
+        const AnimationShaderEffect fade = universalPack();
         QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowOpen));
         QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowSnapIn));
         // The desktop class is opt-in: a universal single-surface effect must NOT
@@ -410,25 +529,30 @@ private Q_SLOTS:
         // The move class is opt-in for the same structural reason: a universal
         // pack cannot drive the held interactive drag.
         QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::WindowMove));
+        // The strip class is opt-in too: a universal single-surface pack
+        // cannot drive the strip's one-scene post-process pass.
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::ScrollingView));
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::Scrolling));
 
         // Appearance-only effect: mirror image — incompatible on geometry legs,
         // compatible on appearance legs.
-        AnimationShaderEffect appearanceOnly;
-        appearanceOnly.id = QStringLiteral("aretha-materialize");
-        appearanceOnly.fragmentShaderPath = QStringLiteral("effect.frag");
-        appearanceOnly.appliesTo = QStringList{QStringLiteral("appearance")};
+        const AnimationShaderEffect appearanceOnly = appearancePack();
         QVERIFY(shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowOpen));
         QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowSnapIn));
         // A single-surface (non-desktop) effect never runs on a desktop path.
         QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::DesktopSwitch));
         QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::DesktopPeek));
+    }
 
-        // Desktop two-texture effect: accepted ONLY on desktop paths, refused on
-        // every single-surface (window / OSD) leg.
-        AnimationShaderEffect desktop;
-        desktop.id = QStringLiteral("desktop-cube");
-        desktop.fragmentShaderPath = QStringLiteral("effect.frag");
-        desktop.appliesTo = QStringList{QStringLiteral("desktop")};
+    /// The desktop class: accepted only on desktop paths, refused on every
+    /// single-surface leg and on ambiguous rows.
+    void testShaderEffectAppliesToEventPath_desktopClass()
+    {
+        using PhosphorAnimationShaders::shaderEffectAppliesToEventPath;
+        namespace PP = PhosphorAnimation::ProfilePaths;
+
+        const AnimationShaderEffect fade = universalPack();
+        const AnimationShaderEffect desktop = desktopPack();
         QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::DesktopSwitch));
         // The show-desktop peek leaf accepts the same desktop-contract packs.
         QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::DesktopPeek));
@@ -445,16 +569,21 @@ private Q_SLOTS:
         // A universal effect stays permissive on those same ambiguous rows.
         QVERIFY(shaderEffectAppliesToEventPath(fade, PP::Window));
         QVERIFY(shaderEffectAppliesToEventPath(fade, PP::Global));
+    }
 
-        // Move (interactive drag) effect: opt-in exactly like desktop.
-        // Accepted only on the move leaf; refused on the crossfade movement
-        // legs and their cascade parent, appearance legs, desktop paths, and
-        // ambiguous rows (the move leaf takes no inherited shader, so a
-        // move-only pack on an ancestor row is provably runtime-dead).
-        AnimationShaderEffect moveOnly;
-        moveOnly.id = QStringLiteral("wobble");
-        moveOnly.fragmentShaderPath = QStringLiteral("effect.frag");
-        moveOnly.appliesTo = QStringList{QStringLiteral("move")};
+    /// The move class (the held interactive drag): opt-in exactly like
+    /// desktop. Accepted only on the move leaf; refused on the crossfade
+    /// movement legs and their cascade parent, appearance legs, desktop
+    /// paths, and ambiguous rows (the move leaf takes no inherited shader, so
+    /// a move-only pack on an ancestor row is provably runtime-dead).
+    void testShaderEffectAppliesToEventPath_moveClass()
+    {
+        using PhosphorAnimationShaders::shaderEffectAppliesToEventPath;
+        namespace PP = PhosphorAnimation::ProfilePaths;
+
+        const AnimationShaderEffect morph = geometryPack();
+        const AnimationShaderEffect appearanceOnly = appearancePack();
+        const AnimationShaderEffect moveOnly = movePack();
         QVERIFY(shaderEffectAppliesToEventPath(moveOnly, PP::WindowMove));
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowMovement));
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowSnapIn));
@@ -469,10 +598,8 @@ private Q_SLOTS:
         QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowMove));
         // A hybrid declaring geometry AND move drives both sides and stays
         // available on ambiguous rows (it can feed the geometry legs there).
-        AnimationShaderEffect hybrid;
-        hybrid.id = QStringLiteral("hybrid");
-        hybrid.fragmentShaderPath = QStringLiteral("effect.frag");
-        hybrid.appliesTo = QStringList{QStringLiteral("geometry"), QStringLiteral("move")};
+        const AnimationShaderEffect hybrid =
+            packWith(QStringLiteral("hybrid"), {QStringLiteral("geometry"), QStringLiteral("move")});
         QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::WindowMove));
         QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::WindowSnapIn));
         QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::Window));
@@ -483,6 +610,67 @@ private Q_SLOTS:
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopSwitch));
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopPeek));
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::Desktop));
+        // …and on the strip paths, for the same reason.
+        QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::ScrollingView));
+    }
+
+    /// The strip class: opt-in exactly like desktop and move. Accepted only
+    /// on the scrolling paths (root and leaf, mirroring desktop); refused on
+    /// every single-surface leg, the desktop paths, and ambiguous rows.
+    ///
+    /// The ambiguous-row refusal is picker POLICY, not a deadness proof: a
+    /// strip pack assigned at `global` would in fact be picked up by the
+    /// scrolling leaf through the cascade. It is withheld because the row
+    /// spans mostly single-surface events where the pack does nothing.
+    void testShaderEffectAppliesToEventPath_stripClass()
+    {
+        using PhosphorAnimationShaders::shaderEffectAppliesToEventPath;
+        namespace PP = PhosphorAnimation::ProfilePaths;
+
+        const AnimationShaderEffect morph = geometryPack();
+        const AnimationShaderEffect appearanceOnly = appearancePack();
+        const AnimationShaderEffect desktop = desktopPack();
+        const AnimationShaderEffect moveOnly = movePack();
+        const AnimationShaderEffect stripOnly = stripPack();
+        QVERIFY(shaderEffectAppliesToEventPath(stripOnly, PP::ScrollingView));
+        QVERIFY(shaderEffectAppliesToEventPath(stripOnly, PP::Scrolling));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowOpen));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowSnapIn));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowMove));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::Window));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::Global));
+        // Opt-in in both directions: geometry-only, appearance-only and
+        // desktop-only packs are refused on the strip paths.
+        QVERIFY(!shaderEffectAppliesToEventPath(morph, PP::ScrollingView));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::ScrollingView));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::ScrollingView));
+        // The Scrolling ROOT too, for parity with the desktop pair above: a
+        // regression that classed only the leaf would leave the root
+        // permissive and offer every single-surface pack on it.
+        QVERIFY(!shaderEffectAppliesToEventPath(morph, PP::Scrolling));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::Scrolling));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::Scrolling));
+
+        // The move class must not leak across into the strip class or back:
+        // they are the two continuous-motion opt-ins and the easiest pair to
+        // conflate.
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::ScrollingView));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::Scrolling));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripOnly, PP::WindowMaximize));
+
+        // A HYBRID that declares strip alongside a single-surface class is
+        // accepted on BOTH — the classes are independent capabilities, not a
+        // mode switch. This is what makes the ambiguous-row exclusion a
+        // policy rather than a proof: this pack is genuinely live on both
+        // sides of it.
+        const AnimationShaderEffect stripHybrid = packWith(QStringLiteral("hybrid-strip-appearance"),
+                                                           {QStringLiteral("strip"), QStringLiteral("appearance")});
+        QVERIFY(shaderEffectAppliesToEventPath(stripHybrid, PP::ScrollingView));
+        QVERIFY(shaderEffectAppliesToEventPath(stripHybrid, PP::WindowOpen));
+        // On an ambiguous row the appearance leg carries it, so unlike the
+        // strip-ONLY pack above it is NOT withheld there.
+        QVERIFY(shaderEffectAppliesToEventPath(stripHybrid, PP::Global));
     }
 
     /// Compositor-only classification: a pack whose declared classes never
@@ -511,6 +699,7 @@ private Q_SLOTS:
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("desktop")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("move")})));
+        QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("strip")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry"), QStringLiteral("move")})));
         // Default-constructed (invalid) effect: empty appliesTo → not
         // compositor-only, so runLeg's unknown-id resolve stays a plain

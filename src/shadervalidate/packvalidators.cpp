@@ -333,8 +333,9 @@ int validatePack(const QString& packDir, QTextStream& out)
 }
 
 // Which of the compositor-only shared-helper samplers the (include-expanded)
-// fragment source references. shared/old_content.glsl and
-// shared/desktop_transition.glsl declare these binding-less, which the strict
+// fragment source references. shared/old_content.glsl,
+// shared/desktop_transition.glsl and shared/strip_transition.glsl declare
+// these binding-less, which the strict
 // SPIR-V bake rejects — so when a daemon-eligible pack's compile fails with
 // the binding-less-sampler diagnostic AND its source pulls one of these in,
 // the likely root cause is a metadata bug (missing compositor-only
@@ -359,8 +360,8 @@ static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
     };
     static const auto kCompositorOnlySamplers = [] {
         QList<SamplerMatcher> matchers;
-        for (const QString& name :
-             {QStringLiteral("uOldWindow"), QStringLiteral("uFromDesktop"), QStringLiteral("uToDesktop")}) {
+        for (const QString& name : {QStringLiteral("uOldWindow"), QStringLiteral("uFromDesktop"),
+                                    QStringLiteral("uToDesktop"), QStringLiteral("uStrip")}) {
             matchers.append({name, QRegularExpression(QStringLiteral("\\b") + name + QStringLiteral("\\b"))});
         }
         return matchers;
@@ -383,8 +384,8 @@ static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
 // The kwin-effect classic-GL path (`#define PLASMAZONES_KWIN`, default-block
 // uniforms) is NOT baked here: QShaderBaker compiles Vulkan-dialect GLSL and
 // rejects default-block uniforms, so the kwin branch needs a separate
-// OpenGL-target compiler. Compositor-only packs (desktop / geometry / move
-// classes — see shaderEffectIsCompositorOnly) are authored against that kwin
+// OpenGL-target compiler. Compositor-only packs (desktop / geometry / move /
+// strip classes — see shaderEffectIsCompositorOnly) are authored against that kwin
 // dialect directly and never run on the daemon, so only their metadata is
 // linted here; their compile coverage is test_animation_shader_kwin_bake.
 // Daemon-capable packs get the full stage compile below.
@@ -477,8 +478,9 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // empty / whitespace-only tokens skipped silently.
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
-        static const QStringList kAnimAppliesToTokens = {PP::EventClassGeometry, PP::EventClassAppearance,
-                                                         PP::EventClassDesktop, PP::EventClassMove};
+        // The exported vocabulary, not a copy: the lint and fromJson's
+        // acceptance test must never disagree about what a valid token is.
+        static const QStringList kAnimAppliesToTokens = PP::allEventClassTokens();
         const QJsonValue appliesToValue = doc.object().value(QLatin1String("appliesTo"));
         // A present-but-non-array appliesTo (e.g. a bare string) is ignored
         // wholesale by fromJson's .toArray() and the pack silently becomes
@@ -486,6 +488,16 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         if (!appliesToValue.isUndefined() && !appliesToValue.isArray()) {
             lints << QStringLiteral("appliesTo must be an array of tokens (ignored at load; pack becomes universal)");
         }
+        // An explicit empty array (`"appliesTo": []`) draws NO lint, and that
+        // is deliberate rather than an oversight — do not "even it up" with
+        // the two cases below. Those two are TYPOS: the author wrote a
+        // constraint, it validated down to nothing, and the pack silently
+        // became universal, which is the opposite of what they asked for. An
+        // empty array is not a typo; it says "no constraint", which is
+        // exactly what it gets. Linting it would flag a legal spelling of
+        // the documented default, and every universal pack that spells it
+        // out would start failing the CI gate. Pinned by
+        // test_pack_validators::explicitEmptyAppliesToIsNotLinted.
         const QJsonArray declaredAppliesTo = appliesToValue.toArray();
         for (const QJsonValue& v : declaredAppliesTo) {
             const QString token = v.toString().trimmed();
@@ -502,9 +514,8 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
             if (!kAnimAppliesToTokens.contains(token)) {
                 lints << QStringLiteral(
                              "unknown appliesTo token '%1' (dropped at load; an appliesTo that "
-                             "validates down to empty makes the pack universal; valid tokens are "
-                             "geometry/appearance/desktop/move)")
-                             .arg(token);
+                             "validates down to empty makes the pack universal; valid tokens are %2)")
+                             .arg(token, kAnimAppliesToTokens.join(QLatin1Char('/')));
             }
         }
     }
@@ -543,6 +554,13 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         for (const QJsonValue& v : declaredBuffers) {
             const QString bufName = v.toString();
             if (bufName.isEmpty()) {
+                // Kept in place at load (the arrays below are positionally
+                // aligned with this one), and an empty entry fails the
+                // load-time existence check, which fail-closes multipass for
+                // the whole pack. Silent without this lint.
+                lints << QStringLiteral(
+                    "empty bufferShaders entry (kept in place for alignment; fails the load-time existence "
+                    "check, which fail-closes multipass for the whole pack)");
                 continue;
             }
             const auto confined = confinedPackPath(packDir, bufName);
@@ -575,8 +593,27 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                 }
             }
         };
-        lintTokens(animRoot.value(QLatin1String("bufferWraps")).toArray(), QStringLiteral("bufferWraps"), true);
-        lintTokens(animRoot.value(QLatin1String("bufferFilters")).toArray(), QStringLiteral("bufferFilters"), false);
+        const QJsonArray wrapsArr = animRoot.value(QLatin1String("bufferWraps")).toArray();
+        const QJsonArray filtersArr = animRoot.value(QLatin1String("bufferFilters")).toArray();
+        lintTokens(wrapsArr, QStringLiteral("bufferWraps"), true);
+        lintTokens(filtersArr, QStringLiteral("bufferFilters"), false);
+        // Both arrays are positionally aligned with bufferShaders and trimmed
+        // to its length at load, so a longer one silently loses its tail and a
+        // shorter one leaves the last buffers on the single-value default.
+        // Same length lint the surface validator applies to its own aligned
+        // arrays.
+        const auto lintLength = [&lints, &declaredBuffers](const QJsonArray& arr, const QString& field) {
+            if (!arr.isEmpty() && arr.size() != declaredBuffers.size()) {
+                lints << QStringLiteral(
+                             "%1 has %2 entries for %3 buffer shaders (aligned positionally; "
+                             "surplus dropped and missing entries fall back at load)")
+                             .arg(field)
+                             .arg(static_cast<int>(arr.size()))
+                             .arg(static_cast<int>(declaredBuffers.size()));
+            }
+        };
+        lintLength(wrapsArr, QStringLiteral("bufferWraps"));
+        lintLength(filtersArr, QStringLiteral("bufferFilters"));
         const QString singleWrap = animRoot.value(QLatin1String("bufferWrap")).toString();
         if (!singleWrap.isEmpty() && !PhosphorAnimationShaders::AnimationShaderContract::isValidWrapToken(singleWrap)) {
             lints << QStringLiteral("bufferWrap value '%1' not in vocabulary (coerced at load)").arg(singleWrap);
@@ -595,6 +632,36 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // the surface validator applies.
     if (!eff.vertexShaderPath.isEmpty() && !QFile::exists(eff.vertexShaderPath)) {
         lints << QStringLiteral("vertex shader missing: %1").arg(QFileInfo(eff.vertexShaderPath).fileName());
+    }
+    // The two screen-level passes draw ONE fixed full-screen quad through
+    // their own vertex stage, so a vertexShader or a geometryGrid declared by
+    // a desktop / strip pack is loaded, kept, and then never used. Say so
+    // rather than let the author wonder why their vertex stage does nothing.
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        const bool screenLevel =
+            eff.appliesTo.contains(PP::EventClassDesktop) || eff.appliesTo.contains(PP::EventClassStrip);
+        if (screenLevel && !eff.vertexShaderPath.isEmpty()) {
+            lints << QStringLiteral(
+                "vertexShader is ignored for desktop/strip packs (the pass draws its own "
+                "full-screen quad)");
+        }
+        if (screenLevel && eff.geometryGridSubdivisions > 0) {
+            lints << QStringLiteral(
+                "geometryGrid is ignored for desktop/strip packs (the pass draws its own "
+                "full-screen quad)");
+        }
+    }
+    // geometryGrid is qBound(0, raw, cap) at load, so a negative value
+    // silently becomes 0 — indistinguishable from not declaring it, and the
+    // vertex stage the author wanted never subdivides. The over-cap side
+    // already warns on the journal at load; this is the quiet side.
+    {
+        const QJsonValue gridVal = doc.object().value(QLatin1String("geometryGrid"));
+        if (!gridVal.isUndefined() && gridVal.toInt() < 0) {
+            lints << QStringLiteral("geometryGrid is negative (%1); it clamps to 0 at load, disabling the grid")
+                         .arg(gridVal.toInt());
+        }
     }
 
     if (lints.isEmpty()) {
@@ -650,12 +717,67 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                     if (!kwinOnly.isEmpty()) {
                         out << "    (hint: " << kwinOnly.join(QStringLiteral(", "))
                             << " is declared by the compositor-only shared/old_content.glsl / "
-                               "shared/desktop_transition.glsl helpers; packs that use them outside "
+                               "shared/desktop_transition.glsl / shared/strip_transition.glsl helpers; "
+                               "packs that use them outside "
                                "a PLASMAZONES_KWIN guard must declare a compositor-only appliesTo — "
                                "omit \"appearance\")\n";
                     }
                 }
             }
+        }
+    }
+
+    // ── multipass buffer passes ──
+    // The zone and surface validators have always baked their buffer passes;
+    // the animation validator never did, so a broken buffer shader in an
+    // animation pack passed this gate and failed only at the live daemon.
+    //
+    // Reproduce ShaderNodeRhi::bakeBufferShaders exactly: load, expand
+    // includes, compile. NO entry scaffold (there is no pTransition to wrap)
+    // and — verified against that function — NO p_<id> preamble either, so a
+    // buffer pass that wants the pack's parameters must include
+    // <animation_uniforms.glsl> itself and read customParams directly.
+    // Splicing a preamble the runtime does not splice would be worse than no
+    // coverage: the gate would pass sources that fail live and fail sources
+    // that work.
+    //
+    // Skipped for compositor-only packs for the same reason the fragment
+    // stage is: the strict SPIR-V target rejects their dialect by design.
+    if (eff.isMultipass && !PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
+        const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
+        for (const QString& declaredBuf : eff.bufferShaderPaths) {
+            // fromJson leaves these RELATIVE (unlike the fragment path, which
+            // the block at the top of this function resolves), so resolve
+            // against the pack dir the way the runtime's parseEffect does.
+            // Baking the raw string would silently find nothing and report a
+            // clean pack — which is exactly how this whole stage was missing.
+            if (declaredBuf.isEmpty()) {
+                continue; // already linted above
+            }
+            const auto confinedBuf = confinedPackPath(packDir, declaredBuf);
+            if (!confinedBuf || !QFile::exists(*confinedBuf)) {
+                continue; // escaping and absent buffers are already linted above
+            }
+            const QString buf = *confinedBuf;
+            const QString label = QFileInfo(buf).fileName();
+            QFile bufFile(buf);
+            if (!bufFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << buf << "\n";
+                ++errors;
+                continue;
+            }
+            const QString rawBuf = QString::fromUtf8(bufFile.readAll());
+            QString bufErr;
+            const QString expandedBuf =
+                ShaderCompiler::expandSource(rawBuf, QFileInfo(buf).absolutePath(), includePaths, &bufErr);
+            if (expandedBuf.isEmpty()) {
+                out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << bufErr << "\n";
+                ++errors;
+                continue;
+            }
+            const ShaderCompiler::Result bufResult =
+                ShaderCompiler::compile(expandedBuf.toUtf8(), QShader::FragmentStage);
+            errors += reportCompile(out, label, bufResult, declaredParamNames(eff.parameters));
         }
     }
 

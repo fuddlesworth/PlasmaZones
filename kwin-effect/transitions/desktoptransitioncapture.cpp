@@ -5,6 +5,7 @@
 
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "plasmazoneseffect/shader_internal.h"
+#include "transitionpasshelpers.h"
 
 #include <core/output.h>
 #include <core/rendertarget.h>
@@ -27,51 +28,13 @@
 // desktoptransitionmanager.cpp keeps the drive part (resolve, begin, blend),
 // desktoptransitionshader.cpp the assembly part (pack source → compiled
 // GLShader), and desktoptransitionteardown.cpp the teardown part (settle, reap,
-// release). The capture paths and the texture allocation/format helpers they
-// share only serve the first question, so they live here.
+// release). The capture-format and texture-allocation helpers the paths share
+// moved to transitionpasshelpers.cpp when the strip pass grew an identical
+// capture (their rationale lives on their declarations there).
 namespace PlasmaZones {
 
-namespace {
-// The internal format a desktop capture must use: whatever KWin is blending the
-// output in.
-//
-// Hardcoding GL_RGBA8 (as this did) is wrong on an HDR / wide-gamut output. KWin
-// blends there in the output's container colorimetry with 1.0 mapped onto the
-// display's peak luminance, so 8-bit sRGB values written verbatim land dim and
-// desaturated — a desktop switch flashed the wrong brightness. Inheriting the
-// target's format is the idiom KWin's own blur and screen-transform use. Every
-// format KWin maps a DRM format to carries alpha, so this never silently drops it.
-//
-// Reached through framebuffer() rather than RenderTarget::texture(): that
-// accessor dereferences the framebuffer unconditionally, and it is null on an
-// image-backed target. PlasmaZonesEffect::supported() now requires OpenGL
-// compositing so that cannot happen, but this stays honest rather than resting on
-// a guarantee made in another file.
-GLenum captureFormatFor(const KWin::RenderTarget& outputTarget)
-{
-    const KWin::GLFramebuffer* const fb = outputTarget.framebuffer();
-    const KWin::GLTexture* const targetTex = fb ? fb->colorAttachment() : nullptr;
-    return targetTex ? targetTex->internalFormat() : GL_RGBA8;
-}
-
-// Allocate a capture texture of @p deviceSize in @p internalFormat (LINEAR
-// filter, CLAMP_TO_EDGE) — the shared preamble of both desktop captures. Returns
-// null when the size is empty or GL allocation fails.
-std::unique_ptr<KWin::GLTexture> allocateOutputTexture(const QSize& deviceSize, GLenum internalFormat)
-{
-    if (deviceSize.isEmpty()) {
-        return nullptr;
-    }
-    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(internalFormat, deviceSize);
-    if (!tex) {
-        return nullptr;
-    }
-    tex->setFilter(GL_LINEAR);
-    tex->setWrapMode(GL_CLAMP_TO_EDGE);
-    return tex;
-}
-
-} // namespace
+using TransitionPass::allocateOutputTexture;
+using TransitionPass::captureFormatFor;
 
 std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::VirtualDesktop* desktop,
                                                                           KWin::LogicalOutput* screen,

@@ -68,6 +68,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_stripViewAnimator(std::make_unique<StripViewAnimator>())
     , m_shaderManager(this)
     , m_desktopTransition(this)
+    , m_stripTransition(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(*this))
     , m_decorationManager(std::make_unique<DecorationManager>(*m_compositorBridge))
@@ -112,6 +113,9 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     // KWin::effects access), so it is fine to run here even though this can be
     // reached from the destructor before the KWin::effects teardown guards.
     m_desktopTransition.reset();
+    // Same for the strip pass (no claim to release, but its capture textures
+    // and compiled shaders free under the same context discipline).
+    m_stripTransition.reset();
 
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
                                                 QStringLiteral("clearForCompositorReconnect"));
