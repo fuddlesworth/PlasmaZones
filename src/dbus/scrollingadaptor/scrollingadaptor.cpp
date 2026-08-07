@@ -132,26 +132,25 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
     // that field, so the numbering has exactly one definition; re-deriving it
     // as i + 1 here would silently fork the moment the walk stops being a
     // dense 1..N over the returned order.
-    const QVector<PhosphorScrollEngine::ScrollEngine::VisibleTile> tiles = m_engine->visibleTiles(screenId);
-    const QVector<QRectF> rects = m_engine->visibleTileRectsRelative(screenId);
-    if (tiles.size() != rects.size()) {
-        // Both reads walk the same strip in the same synchronous call, so the
-        // sizes cannot legitimately disagree. If they ever do, the pairing is
-        // meaningless and a mismatched rect/number pair is worse than no
-        // preview at all.
-        qCWarning(lcDbusScrolling) << "visibleStripJson: tile/rect count mismatch on" << screenId << tiles.size()
-                                   << "vs" << rects.size();
-        return QStringLiteral("[]");
-    }
+    //
+    // ONE walk, not two. Reading visibleTiles and visibleTileRectsRelative
+    // separately resolved the strip twice per call — two layoutParamsForScreen
+    // resolves, each parsing both preset vocabularies and the per-screen
+    // override map, and two relayouts — for a payload the settings app polls
+    // on a live timer while its Monitors state view is open. The paired reads
+    // also needed a count-mismatch guard between them, which a single walk
+    // makes structurally impossible rather than merely unlikely.
+    const QVector<PhosphorScrollEngine::ScrollEngine::VisibleTileWithRect> tiles =
+        m_engine->visibleTilesWithRects(screenId);
     QJsonArray arr;
-    for (int i = 0; i < rects.size(); ++i) {
-        const QRectF& r = rects.at(i);
+    for (const auto& entry : tiles) {
+        const QRectF& r = entry.relativeRect;
         QJsonObject obj;
         obj[PhosphorZones::ZoneJsonKeys::X] = r.x();
         obj[PhosphorZones::ZoneJsonKeys::Y] = r.y();
         obj[PhosphorZones::ZoneJsonKeys::Width] = r.width();
         obj[PhosphorZones::ZoneJsonKeys::Height] = r.height();
-        obj[PhosphorZones::ZoneJsonKeys::ZoneNumber] = tiles.at(i).zoneNumber;
+        obj[PhosphorZones::ZoneJsonKeys::ZoneNumber] = entry.tile.zoneNumber;
         arr.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));

@@ -104,8 +104,7 @@ inline QVariantList zoneMapsForTiles(const QString& screenId, const QVector<Visi
     const qreal spanX = screenGeometry.width();
     const qreal spanY = screenGeometry.height();
     zones.reserve(tiles.size());
-    for (int i = 0; i < tiles.size(); ++i) {
-        const VisibleTile& tile = tiles.at(i);
+    for (const VisibleTile& tile : tiles) {
         const QRect& r = tile.rect;
         QVariantMap relGeo;
         relGeo[QLatin1String("x")] = (r.x() - originX) / spanX;
@@ -117,8 +116,12 @@ inline QVariantList zoneMapsForTiles(const QString& screenId, const QVector<Visi
         zoneMap[QLatin1String("relativeGeometry")] = relGeo;
         // 1-based like the settings app's twin (settingscontroller_session.cpp
         // counts emitted tiles from 1), so the two synthetic id spaces really
-        // do match entry-for-entry.
-        zoneMap[QLatin1String("id")] = QStringLiteral("strip:%1:%2").arg(screenId).arg(i + 1);
+        // do match entry-for-entry. Taken off the TILE rather than re-derived
+        // as i + 1: the engine stamps zoneNumber densely over the same walk,
+        // so the two are equal today, and reading the field is what keeps them
+        // equal if that walk ever stops being dense — which is the hazard the
+        // note above this function names.
+        zoneMap[QLatin1String("id")] = QStringLiteral("strip:%1:%2").arg(screenId).arg(tile.zoneNumber);
         zoneMap[QLatin1String("name")] = QString();
         zoneMap[QLatin1String("useCustomColors")] = false;
         zones.append(zoneMap);

@@ -221,6 +221,40 @@ int ScrollEngine::visibleTileNumberForWindow(const QString& screenId, const QStr
     return -1;
 }
 
+QVector<ScrollEngine::VisibleTileWithRect> ScrollEngine::visibleTilesWithRects(const QString& screenId) const
+{
+    // Same state check, params resolve, basis resolve and walk as
+    // visibleTileRectsRelative — see the comments there for why the basis is
+    // the full screen rather than the work area. The only difference is that
+    // this carries the tile across instead of throwing it away, so a caller
+    // wanting both does not resolve the strip a second time to get it back.
+    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+    if (!state || state->strip().isEmpty()) {
+        return {};
+    }
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    if (!params.workArea.isValid()) {
+        return {};
+    }
+    QRect area = m_screenManager ? m_screenManager->screenGeometry(screenId)
+                                 : (m_screenGeometryProvider ? m_screenGeometryProvider(screenId) : QRect());
+    if (!area.isValid()) {
+        area = params.workArea;
+    }
+    const QVector<VisibleTile> tiles = visibleTiles(screenId, params);
+    QVector<VisibleTileWithRect> out;
+    out.reserve(tiles.size());
+    for (const VisibleTile& tile : tiles) {
+        const QRect& r = tile.rect;
+        out.append(
+            {tile,
+             QRectF(static_cast<qreal>(r.x() - area.x()) / area.width(),
+                    static_cast<qreal>(r.y() - area.y()) / area.height(), static_cast<qreal>(r.width()) / area.width(),
+                    static_cast<qreal>(r.height()) / area.height())});
+    }
+    return out;
+}
+
 QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) const
 {
     // State check first, like visibleTiles: an unmanaged or empty screen must
@@ -404,7 +438,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     //
     // Zero on the first batch for a context: there is nothing on screen to
     // slide from, so the windows are placed outright.
-    const int viewDelta = state->hasLastAppliedViewX() ? resolved.viewX - state->lastAppliedViewX() : 0;
+    //
+    // Zero also when the work area MOVED since the baseline was stamped.
+    // Column widths are fractions of that area, so a resolution change, a
+    // panel appearing or a gap edit rescales every column's strip position and
+    // with it the view coordinate — proportionally to how deep the anchor sits
+    // on the strip, which on a long strip is thousands of pixels. Subtracting
+    // across two bases describes a slide nobody made, and the effect would fly
+    // the entire strip in from off-screen to ring it out, once per emitted
+    // change while a gap slider is being dragged. The batch that follows a
+    // work-area change is placing windows in a new geometry anyway, which is
+    // the same situation as the first batch for a context.
+    const bool sameBasis = state->hasLastAppliedViewX() && state->lastAppliedWorkArea() == params.workArea;
+    const int viewDelta = sameBasis ? resolved.viewX - state->lastAppliedViewX() : 0;
 
     QJsonArray arr;
     bool anyRectMoved = false;
@@ -739,7 +785,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // batch suppressed just above leaves the compositor showing the
         // previous positions, and a baseline that moved anyway would make the
         // next batch's delta describe a slide that never happened.
-        state->setLastAppliedViewX(resolved.viewX);
+        state->setLastAppliedViewX(resolved.viewX, params.workArea);
         Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
     }
 

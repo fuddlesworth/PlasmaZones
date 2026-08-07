@@ -497,6 +497,64 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
     }
 
+    // The tab-surface registry. This is the handle the compositor uses to tell
+    // the daemon's indicator surface apart from its other overlays — nothing
+    // KWin exposes per window distinguishes them — so publishing a wrong or
+    // stale id makes the effect slide the wrong surface. Wayland reuses object
+    // ids, which is why the retraction below is not merely tidy.
+    void testScrollTabSurface_publishRetractAndReplay()
+    {
+        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollTabSurfaceChanged);
+
+        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 42);
+        m_adaptor->setScrollTabSurface(QStringLiteral("DP-2"), 43);
+
+        QCOMPARE(spy.count(), 2);
+        const QVariantMap after = m_adaptor->scrollTabSurfaces();
+        QCOMPARE(after.size(), 2);
+        QCOMPARE(after.value(QStringLiteral("DP-1")).toUInt(), 42u);
+        QCOMPARE(after.value(QStringLiteral("DP-2")).toUInt(), 43u);
+
+        // Replacing a screen's surface must leave the OTHER screen alone: the
+        // effect keys its live set by id, so a replace that dropped a sibling
+        // would silently stop sliding that monitor's indicators.
+        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 44);
+        QCOMPARE(m_adaptor->scrollTabSurfaces().value(QStringLiteral("DP-1")).toUInt(), 44u);
+        QCOMPARE(m_adaptor->scrollTabSurfaces().value(QStringLiteral("DP-2")).toUInt(), 43u);
+
+        // Zero is the retraction, and it must REMOVE rather than store 0 —
+        // a getter answering 0 for a screen would have the effect register
+        // object id 0 as an indicator surface.
+        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 0);
+        const QVariantMap retracted = m_adaptor->scrollTabSurfaces();
+        QVERIFY(!retracted.contains(QStringLiteral("DP-1")));
+        QCOMPARE(retracted.size(), 1);
+    }
+
+    void testScrollTabSurface_rejectsEmptyScreenId()
+    {
+        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollTabSurfaceChanged);
+
+        m_adaptor->setScrollTabSurface(QString(), 42);
+
+        QVERIFY2(m_adaptor->scrollTabSurfaces().isEmpty(), "an unkeyed surface must not enter the registry");
+        QCOMPARE(spy.count(), 0);
+    }
+
+    // clearEngine is terminal — the next cycle deletes and re-news the whole
+    // adaptor set — but the object stays reachable on the bus until then, and
+    // answering with a torn-down session's surfaces is what the sibling
+    // caches are cleared to avoid.
+    void testClearedEngine_dropsScrollTabSurfaces()
+    {
+        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 42);
+        QVERIFY(!m_adaptor->scrollTabSurfaces().isEmpty());
+
+        m_adaptor->clearEngine();
+
+        QVERIFY(m_adaptor->scrollTabSurfaces().isEmpty());
+    }
+
 private:
     /// Append a description of every way @p obj fails to describe @p expected
     /// at 1-based visible slot @p slot. Accumulating instead of asserting

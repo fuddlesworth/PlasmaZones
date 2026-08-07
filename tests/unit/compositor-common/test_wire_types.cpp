@@ -92,6 +92,46 @@ class TestWireTypes : public QObject
 private Q_SLOTS:
 
     // =================================================================
+    // D-Bus types: PhosphorProtocol::PreTileGeometryEntry roundtrip
+    // =================================================================
+
+    void testPreTileGeometryEntryRoundtrip()
+    {
+        // Registered and marshalled like its neighbours but, until this case,
+        // with no signature pinned anywhere — so a field reorder in the struct
+        // would have shipped silently. It shares its shape with
+        // WindowGeometryEntry, which makes a transposition between the two
+        // especially easy to introduce and impossible to see by eye.
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::PreTileGeometryEntry entry{
+            QStringLiteral("org.kde.konsole"), 10, 20, 640, 480, QStringLiteral("DP-2")};
+
+        const QString sig = dbusSignature(entry);
+        QCOMPARE(sig, QStringLiteral("(siiiis)"));
+
+        const int typeId = qMetaTypeId<PhosphorProtocol::PreTileGeometryEntry>();
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
+
+        QCOMPARE(entry.appId, QStringLiteral("org.kde.konsole"));
+        QCOMPARE(entry.x, 10);
+        QCOMPARE(entry.y, 20);
+        QCOMPARE(entry.width, 640);
+        QCOMPARE(entry.height, 480);
+        QCOMPARE(entry.screenId, QStringLiteral("DP-2"));
+        // The accessor the consumers actually use, so a field swap that kept
+        // the signature valid still fails here.
+        QCOMPARE(entry.toRect(), QRect(10, 20, 640, 480));
+
+        PhosphorProtocol::PreTileGeometryEntry defaultEntry;
+        QVERIFY(defaultEntry.appId.isEmpty());
+        QCOMPARE(defaultEntry.x, 0);
+        QCOMPARE(defaultEntry.y, 0);
+        QCOMPARE(defaultEntry.width, 0);
+        QCOMPARE(defaultEntry.height, 0);
+        QVERIFY(defaultEntry.screenId.isEmpty());
+    }
+
+    // =================================================================
     // D-Bus types: PhosphorProtocol::WindowGeometryEntry roundtrip
     // =================================================================
 
