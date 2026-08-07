@@ -388,10 +388,23 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // never gets a frame to run the close shader on. The grab is
     // released by `endShaderTransition` when the timer-driven teardown
     // fires.
-    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
-                           /*reverse=*/true, /*holdCloseGrab=*/true);
+    //
+    // Skipped for a PARKED scrolling column. Its committed rect sits below the
+    // union of every output, so a surface-extent pack — which is nearly all of
+    // them — would anchor against a frame that intersects no screen while its
+    // texture is the output's, putting the anchor remap outside [0,1]. What it
+    // then draws is off-viewport either way, so the transition buys nothing
+    // and costs a full-output repaint every frame for its duration. The
+    // relocation that normally draws a parked column where it really sits is
+    // dropped one line below, so nothing would move this back on screen.
+    const bool parkedOffAllOutputs = m_scrollVisualPos.contains(closingWindowId) && !w->frameGeometry().isEmpty()
+        && !KWin::effects->screenAt(w->frameGeometry().center().toPoint());
+    if (!parkedOffAllOutputs) {
+        tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
+                               /*reverse=*/true, /*holdCloseGrab=*/true);
+    }
     m_windowAnimator->removeAnimation(w);
-    m_scrollVisualPos.remove(getWindowId(w));
+    m_scrollVisualPos.remove(closingWindowId);
 
     // Same value as closingWindowId above: the windowId cache isn't dropped
     // until later in this slot (m_idCaches.windowIdCache.remove near the end), so a
