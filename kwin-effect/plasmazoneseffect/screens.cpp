@@ -594,6 +594,10 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // never had an animation clock.
     m_desktopTransition.outputRemoved(output);
 
+    // Drop any strip-pass entry for this output for the same dangling-key
+    // reason; its sibling spring state goes with the forgetOutput below.
+    m_stripTransition.outputRemoved(output);
+
     // Drop this output's strip view accumulator. The map is keyed by
     // LogicalOutput*, so a disconnected one would leave an entry whose key can
     // be reused by a later hotplug landing at the same address — the next

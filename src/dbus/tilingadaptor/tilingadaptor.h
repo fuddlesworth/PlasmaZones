@@ -428,8 +428,19 @@ private:
     /// order and master assignment. Rule routing is baked into the parked
     /// entry's screenId so its side effects run once. Entries are dropped
     /// on close and on clearEngine.
-    QList<PhosphorProtocol::WindowOpenedEntry> m_unclaimedOpens;
-    void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark);
+    /// A parked open carries its reclaim eligibility with it: routing is
+    /// baked into the parked entry's screenId and is not re-run on retry, so
+    /// without the flag a rule-routed entry took the retry path's default
+    /// and was offered to the cross-screen reclaim after all — the rule won
+    /// on the first dispatch and lost on the retry.
+    struct ParkedOpen
+    {
+        PhosphorProtocol::WindowOpenedEntry entry;
+        bool allowCrossScreenClaim = true;
+    };
+    QList<ParkedOpen> m_unclaimedOpens;
+    void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
+                                      bool allowCrossScreenClaim = true);
     void removeUnclaimedOpen(const QString& windowId);
 
 public:

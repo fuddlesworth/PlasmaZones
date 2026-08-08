@@ -770,6 +770,9 @@ void Daemon::stop()
         // closure null-checks the router, but clearing it here keeps the
         // teardown grep-discoverable like every other late-bound borrow.
         concreteSnap->setLiveModeResolver({});
+        // Same contract for the tile-defer liveness resolver, which captures
+        // QPointers to both tiling engines.
+        concreteSnap->setTilingEngineLiveResolver({});
     }
 
     // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
@@ -789,6 +792,7 @@ void Daemon::stop()
     // setContextGapProvider lives on the concrete engine.
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
+        concreteAutotile->setScrollingModeResolver({});
     }
     // Scroll twin of the clear above: its context-gap provider captures the
     // same Daemon `this` (init_engines.cpp) and honours the same
@@ -796,6 +800,17 @@ void Daemon::stop()
     if (auto* concreteScroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
         concreteScroll->setContextGapProvider({});
         concreteScroll->setSnappingModeResolver({});
+        concreteScroll->setScrollingModeResolver({});
+        concreteScroll->setAutotileModeResolver({});
+    }
+
+    // Sever the snap adaptor's cross-screen reclaim hook BEFORE the engines
+    // it captures raw pointers to are destroyed — same clear-before-destroy
+    // contract as the engine closures above. (The adaptor itself is deleted
+    // in initCoreAdaptors' preamble on a re-cycle, but stop() must not leave
+    // a hook that could dangle if a late D-Bus call raced teardown.)
+    if (m_snapAdaptor) {
+        m_snapAdaptor->setCrossScreenTileReclaim({});
     }
 
     // Everything ABOVE this gate is init/ctor-origin teardown that must run on

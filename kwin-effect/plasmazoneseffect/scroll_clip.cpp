@@ -36,9 +36,11 @@ KWin::LogicalOutput* PlasmaZonesEffect::scrollManagedOutputFor(KWin::EffectWindo
     // INPUT filter also routes through here (via scrollClipGeometryFor) but
     // runs outside any pass — a tile batch can land between passes and is
     // exactly what moves a column across the boundary — so outside a pass
-    // the predicate is always computed fresh and never cached. Pass-gating
-    // the writes also keeps the map free of dead-window keys: it is cleared
-    // at every prePaintScreen and windows do not die mid-pass.
+    // the predicate is always computed fresh and never cached. Stale keys
+    // for windows that died between passes CAN sit in the map until the
+    // next prePaintScreen's clear, but they are never read before that
+    // clear (every read is behind the same in-pass gate) and keys are only
+    // hashed by pointer value, never dereferenced.
     const bool inPass = m_currentPassOutput != nullptr;
     if (inPass) {
         if (const auto it = m_scrollManagedCache.constFind(w); it != m_scrollManagedCache.constEnd()) {

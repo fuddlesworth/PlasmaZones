@@ -160,7 +160,8 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
 // no remaining caller (the effect uses resolveWindowRestore).
 
 void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
-                                       int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
+                                       bool isOpenPath, int minWidth, int minHeight, int& snapX, int& snapY,
+                                       int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
@@ -195,10 +196,43 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // with no SnapToZone) takes effect here, deliberately AFTER the snap/float
         // restore has had its chance: a SnapToZone restore or a remembered snap
         // already returned shouldSnap=true above (so the route never fights a snap),
-        // and the explicit route wins over a remembered float position (it applies
-        // the final geometry). A route WITH SnapToZone moved+snapped on the target
-        // via the placement directive and never reaches here.
-        m_adaptor->applyOpenScreenRouting(windowId, screenId);
+        // and the explicit route wins over a remembered float position AND over
+        // the cross-screen reclaim below (it applies the final geometry). A
+        // route WITH SnapToZone moved+snapped on the target via the placement
+        // directive and never reaches here.
+        const bool routed = m_adaptor->applyOpenScreenRouting(windowId, screenId);
+        // Cross-screen tiling-engine reclaim — gated on the ENGINE's explicit
+        // defer verdict, never on a bare no-snap: an exclusion refusal, a
+        // disabled context, or an ordinary no-match must not hand the window
+        // to a reclaim those gates already settled. This is the channel that
+        // covers arrivals on SNAP-mode screens, which the tiling dispatch
+        // never hears about — the engine whose TILED slot the record carries
+        // adopts the window into its recorded home and its retile moves it
+        // there. (Managed-screen arrivals reach the reclaim through
+        // TilingAdaptor::dispatchOpenToClaimingEngine instead; windows that
+        // fail the effect's canSnapRestore gate never reach this slot at
+        // all — see setCrossScreenTileReclaim's contract.) isOpenPath keeps
+        // the two NON-open drivers of this slot (the unminimize of a
+        // daemon-restart orphan, the pending-restores sweep) from
+        // teleporting a window the user merely unminimized.
+        if (result.deferredToTilingEngine && !routed) {
+            const bool reclaimed = isOpenPath && m_crossScreenTileReclaim
+                && m_crossScreenTileReclaim(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
+            if (!reclaimed) {
+                // Non-open, or DECLINED (the claims ask stricter questions —
+                // live sets, context equality, tileability — than the
+                // defer): the engine's defer skipped its float terminal on
+                // the promise someone would manage the window, so restore
+                // the no-match float default rather than leaving it with no
+                // state in any engine.
+                m_engine->applyNoMatchFloatDefault(windowId, screenId);
+            }
+        }
+        // A matched route is deliberately NOT followed by the float default:
+        // the route already applied final geometry on its TARGET screen, and
+        // writing float state here would record the SPAWN screen — the one
+        // the window is leaving. The route owns the placement, which is what
+        // the defer's "someone will manage it" promise needed.
         return;
     }
 

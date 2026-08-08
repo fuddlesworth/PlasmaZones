@@ -414,6 +414,14 @@ public:
     void clearFreeGeometry(const QString& windowId) override;
     void clearFreeGeometry(const QString& windowId, const QString& screenId) override;
 
+    /// Downgrade @p engineId's slot to released on @p windowId's record(s) and
+    /// mark the placements dirty — the dirty-marking wrapper the tiling
+    /// engines' handoffRelease calls instead of reaching into the store, so
+    /// the release survives to disk. See
+    /// WindowPlacementStore::releaseEngineSlot for what the downgrade means
+    /// and why it is not a removal.
+    void releaseEngineSlot(const QString& windowId, const QString& engineId) override;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
     // ═══════════════════════════════════════════════════════════════════════════

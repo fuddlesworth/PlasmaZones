@@ -481,6 +481,73 @@ WindowPlacementStore::peek(const QString& windowId, const QString& appId,
     return std::nullopt;
 }
 
+std::optional<WindowPlacement>
+WindowPlacementStore::peekForReclaim(const QString& windowId, const QString& appId,
+                                     const std::function<bool(const WindowPlacement&)>& accept) const
+{
+    if (appId.isEmpty()) {
+        return std::nullopt;
+    }
+    const auto it = m_byApp.constFind(appId);
+    if (it == m_byApp.constEnd()) {
+        return std::nullopt;
+    }
+    const auto matches = [&](const WindowPlacement& p) {
+        return !accept || accept(p);
+    };
+    const WindowPlacement* best = nullptr;
+    for (const WindowPlacement& p : it.value()) {
+        if (!matches(p)) {
+            continue;
+        }
+        // The window's OWN record is its history and wins outright — the
+        // probe answering "live" for the asking window itself is not an
+        // exclusion (daemon-restart case: same uuid, window open).
+        if (sameWindowInstance(p.windowId, windowId)) {
+            return p;
+        }
+        if (m_liveInstanceProbe && m_liveInstanceProbe(p.windowId)) {
+            continue; // an open sibling's record is not evidence about THIS window
+        }
+        if (!best || p.sequence > best->sequence) {
+            best = &p;
+        }
+    }
+    if (best) {
+        return *best;
+    }
+    return std::nullopt;
+}
+
+bool WindowPlacementStore::releaseEngineSlot(const QString& windowId, const QString& engineId)
+{
+    bool changed = false;
+    // EVERY matching record, not the first: appId drift can file one
+    // instance's records in two buckets, and QHash order does not promise the
+    // one carrying the stale slot comes first — an early return there
+    // silently no-ops and leaves the false home standing.
+    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
+        for (WindowPlacement& p : it.value()) {
+            if (!sameWindowInstance(p.windowId, windowId)) {
+                continue;
+            }
+            const auto slotIt = p.engines.find(engineId);
+            if (slotIt == p.engines.end() || slotIt->state == WindowPlacement::stateReleased()) {
+                continue;
+            }
+            // Downgrade in place: the slot stays present (so takeForReopen's
+            // exact-final gate still recognises this instance as one the
+            // engine has seen) while ceasing to be managed (so the
+            // cross-screen reclaim no longer reads it as a home).
+            slotIt->state = QString(WindowPlacement::stateReleased());
+            slotIt->zoneIds.clear();
+            slotIt->order = -1;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 bool WindowPlacementStore::contains(const QString& windowId, const QString& appId) const
 {
     if (!appId.isEmpty()) {

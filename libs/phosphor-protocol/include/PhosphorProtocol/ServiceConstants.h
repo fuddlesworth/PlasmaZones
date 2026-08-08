@@ -184,14 +184,26 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       to be SEEN travelling while the view slides, so the safe commit and the
 //       paint position are now separate answers. Same signature-matched
 //       failure mode as v6 and v7.
-//   v9: TileRequestEntry gained windowedFullscreen (after floating), widening
+//   v9: Snap.resolveWindowRestore gained three in-args — isOpenPath,
+//       minWidth, minHeight. The cross-screen tile reclaim hangs off this
+//       slot, and two of its drivers are NOT opens (the unminimize of a
+//       daemon-restart orphan and the pending-restores sweep); without the
+//       flag the daemon could not tell them apart, and unminimizing a window
+//       teleported it across monitors. The min sizes exist because a reclaim
+//       ADOPTS the window into a strip/layout, and the adopting engine
+//       evaluates its oversized/float verdict exactly once from them — the
+//       tiling channel has always carried them, and passing 0,0 here left an
+//       oversized window tiled for the session. Same signature-matched
+//       failure mode as v6-v8: an old effect's four-arg call no longer
+//       matches the widened slot.
+//   v10: TileRequestEntry gained windowedFullscreen (after floating), widening
 //       windowsTileRequested from a(siiiissbbssiiib) to a(siiiissbbbssiiib).
 //       Scrolling windowed fullscreen: the effect flips KWin fullscreen state
 //       on the client while committing the column rect. Mid-struct insertion,
 //       so BOTH the signature and the field order change — same
-//       signature-matched failure mode as v6 through v8.
-inline constexpr int ApiVersion = 9;
-inline constexpr int MinPeerApiVersion = 9;
+//       signature-matched failure mode as v6 through v9.
+inline constexpr int ApiVersion = 10;
+inline constexpr int MinPeerApiVersion = 10;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

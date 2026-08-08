@@ -1,0 +1,45 @@
+{
+    "id": "strip-carousel",
+    "name": "Strip Carousel",
+    "description": "The strip tilts like a spinning drum while it scrolls. The side you are scrolling toward leans away with a gentle perspective and shade, and the strip flattens back out as it settles.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Distortion",
+    "appliesTo": ["strip"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "tilt",
+            "name": "Tilt",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How far the strip leans at a given scroll speed.",
+            "group": "Carousel"
+        },
+        {
+            "id": "shading",
+            "name": "Depth Shading",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How much the receding side darkens.",
+            "group": "Carousel"
+        },
+        {
+            "id": "edgeFeather",
+            "name": "Edge Feather",
+            "type": "float",
+            "default": 0.04,
+            "min": 0.0,
+            "max": 0.2,
+            "step": 0.01,
+            "description": "How softly the tilt fades out at the edges of the strip area.",
+            "group": "Carousel"
+        }
+    ]
+}

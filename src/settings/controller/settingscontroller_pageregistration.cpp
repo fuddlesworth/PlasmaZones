@@ -344,9 +344,10 @@ void SettingsController::buildApplicationController()
                /*collapsible=*/true);
     // Motion — movement and geometry events. Window motion (maximize / snap /
     // layout switch) carries the geometry shader contract, so its page still
-    // shows a shader picker; the held drag is its own opt-in `move` class on
-    // the Window Dragging child page; scrolling, side panels, widgets and the
-    // editor are timing/curve only.
+    // shows a shader picker. Two children carry an opt-in class of their own:
+    // the held drag is the `move` class on the Window Dragging page, and the
+    // strip's view spring is the `strip` class on the Scrolling page. Side
+    // panels, widgets and the editor are timing/curve only.
     regVirtual(QStringLiteral("animations-motion"), QStringLiteral("animations"), PhosphorI18n::tr("Motion"), QString(),
                QStringLiteral("chronometer"), /*collapsible=*/true);
     regVirtual(QStringLiteral("animations-library"), QStringLiteral("animations"), PhosphorI18n::tr("Library"),

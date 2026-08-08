@@ -135,6 +135,31 @@ public:
         return peek(windowId, QString());
     }
 
+    /// Non-consuming lookup for the cross-screen reclaim
+    /// (IPlacementEngine::claimCrossScreenReopen). Differs from peek() in the
+    /// two ways that make a reclaim verdict sound:
+    ///  - It applies the LIVE-INSTANCE exclusion takeForReopen's appId
+    ///    fallback applies: a record bound to a still-OPEN sibling describes a
+    ///    different, living window, never this window's history, so it must
+    ///    not justify a cross-screen pull. peek() deliberately lacks the
+    ///    exclusion (float-back geometry reads legitimately consult a live
+    ///    sibling's record); a reclaim through plain peek() teleported a
+    ///    fresh second instance onto its open sibling's monitor on EVERY
+    ///    open, mid-session, repeatedly.
+    ///  - It scans ONLY the @p appId bucket (the window's own record included
+    ///    — a same-instance match wins outright, live or not, since the
+    ///    window's own record IS its history). peek()'s same-instance branch
+    ///    walks every bucket in the store; on the per-open reclaim path that
+    ///    cost is paid per engine per open. The narrowing is safe because
+    ///    record() RE-BUCKETS on an appId change, so a record follows the
+    ///    window's current appId — if that ever stops holding, this scan
+    ///    starts missing records peek() would find. It fails SAFE either
+    ///    way: a miss means no reclaim, never a wrong one.
+    /// Returns nullopt when @p appId is empty — a bare id has no bucket, so a
+    /// reclaim verdict is impossible.
+    std::optional<WindowPlacement> peekForReclaim(const QString& windowId, const QString& appId,
+                                                  const std::function<bool(const WindowPlacement&)>& accept = {}) const;
+
     /// True if a record exists for the same live instance, or (if @p appId non-empty)
     /// any record in that appId bucket.
     bool contains(const QString& windowId, const QString& appId = QString()) const;
@@ -185,6 +210,40 @@ public:
     /// must not destroy the float-back remembered for other monitors.
     bool clearFreeGeometry(const QString& windowId);
     bool clearFreeGeometry(const QString& windowId, const QString& screenId);
+
+    /// DOWNGRADE one engine's slot to WindowPlacement::stateReleased() on
+    /// every record for the same live instance, leaving the other engines'
+    /// slots, the context and the shared geometry intact. Returns true if any
+    /// record changed.
+    ///
+    /// This is the release-path counterpart of record()'s merge-never-clear:
+    /// slots accumulate as cross-mode memory, and for RESTORE that is right —
+    /// but a slot on a window an engine has knowingly GIVEN UP (cross-mode
+    /// handoff) is not memory, it is a stale ownership claim. Since the
+    /// cross-screen reclaim (pendingCrossScreenManagedRestore) treats a
+    /// managed slot plus the record-level screenId as evidence of a home to
+    /// pull the window back to, a stale slot that outlives its engine's
+    /// ownership can yank a window out from under its CURRENT engine whenever
+    /// the new owner's capture misses (the record()-overwrite of screenId is
+    /// not guaranteed on every path).
+    ///
+    /// DOWNGRADE, not remove, and the difference is load-bearing on both
+    /// sides — see stateReleased()'s contract. Removing the slot would also
+    /// risk emptying the engines map, which record()'s merge reads as "no
+    /// managed context to adopt", freezing the record's screenId against
+    /// every later geometry-only write.
+    ///
+    /// Sweeps ALL records matching the instance rather than stopping at the
+    /// first: appId drift (the Electron/CEF case this codebase canonicalizes
+    /// for) can leave records for one instance in two buckets, and the one
+    /// carrying the stale slot is not necessarily the one QHash order
+    /// reaches first.
+    ///
+    /// Callers: the tiling engines' handoffRelease, through
+    /// WindowTrackingService::releaseEngineSlot (which marks the store
+    /// dirty). NOT called on ordinary close — a window that CLOSED tiled
+    /// keeps its slot; that persistence is exactly what login restore reads.
+    bool releaseEngineSlot(const QString& windowId, const QString& engineId);
 
     /// Apply an in-place mutation to every record; @p fn returns true when it changed
     /// the record. Returns the number changed. For bulk rewrites that keep the appId

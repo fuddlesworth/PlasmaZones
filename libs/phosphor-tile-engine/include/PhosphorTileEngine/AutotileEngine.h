@@ -573,6 +573,23 @@ public:
     // gap overrides so tiled windows honour context gap rules like snapping does.
     void setContextGapProvider(std::function<QVariantMap(const QString& screenId)> provider);
 
+    /// Scrolling-mode resolver for windowOpened's cross-screen tile-restore
+    /// defer term, invoked as (screenId, virtualDesktop, activity). Must
+    /// answer whether the RECORDED context resolves to Scrolling mode AND
+    /// the scroll engine is actually live on that screen: the CLAIMING side
+    /// (ScrollEngine::claimCrossScreenReopen) requires the recorded home in
+    /// its live screen set on top of the mode verdict, so a defer keyed on
+    /// mode alone would stand down for a window scroll then declines,
+    /// leaving it unmanaged. Only the daemon sees both engines, hence the
+    /// injection. Unset → this defer term is off; the snap term (which reads
+    /// this engine's own layout manager) is unaffected. Same
+    /// clear-before-destroy contract as setContextGapProvider.
+    void setScrollingModeResolver(
+        std::function<bool(const QString& screenId, int desktop, const QString& activity)> resolver)
+    {
+        m_scrollingModeResolver = std::move(resolver);
+    }
+
     // Mark the active (screen, desktop, activity) state's split ratio / master
     // count as user-tuned so propagateGlobalSplitRatio/MasterCount leaves it
     // alone — the adjustment stays local to that desktop instead of bleeding into
@@ -996,6 +1013,19 @@ public:
      */
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
+    /// Cross-screen session reclaim (see IPlacementEngine for the base
+    /// contract). This implementation: first-observation gate by TilingState
+    /// MEMBERSHIP; a shouldTileWindow precondition (autotile's open path
+    /// REFUSES untileable windows after keying, unlike scroll's, which
+    /// floats them — an optimistic claim would phantom-key the window);
+    /// decides via the store's live-instance-excluding peekForReclaim;
+    /// requires the recorded home in the LIVE autotile set AND the record's
+    /// (desktop, activity) to equal the home screen's current key; returns
+    /// the REAL adoption outcome verified by membership, sweeping the
+    /// phantom key on a refusal.
+    bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
+                                int minHeight) override;
+    QString heldScreenForWindow(const QString& windowId) const override;
 
     /**
      * @brief Update a window's minimum size at runtime
@@ -1556,6 +1586,8 @@ private:
     QSet<QString> m_autotileFloatedWindows;
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
+    /// See setScrollingModeResolver.
+    std::function<bool(const QString& screenId, int desktop, const QString& activity)> m_scrollingModeResolver;
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     /// Borrowed cross-surface resolver (neighbouring output / desktop lookup);

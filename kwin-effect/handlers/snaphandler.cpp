@@ -166,7 +166,7 @@ void SnapHandler::setFocusFollowsMouse(bool enabled)
 }
 
 void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::function<void(bool)> onComplete,
-                                           bool releaseSuppressionOnMiss)
+                                           bool releaseSuppressionOnMiss, bool isOpenPath)
 {
     if (!window) {
         if (onComplete) {
@@ -237,9 +237,15 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
             onComplete(*snapApplied);
         };
     }
-    m_effect->tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
-                               {windowId, screenId, sticky, kindInt}, safeWindow, windowId, false, onMiss, markApplied,
-                               /*skipAnimation=*/true, completeWithOutcome, releaseSuppression);
+    // Client-declared minimum, the same value the tiling channel sends: on a
+    // cross-screen reclaim the adopting engine evaluates its oversized/float
+    // verdict once from this, and 0,0 left an oversized window tiled.
+    const QSize declaredMin = TilingHandler::declaredMinSize(window);
+    m_effect->tryAsyncSnapCall(
+        PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
+        {windowId, screenId, sticky, kindInt, isOpenPath, declaredMin.width(), declaredMin.height()}, safeWindow,
+        windowId, false, onMiss, markApplied,
+        /*skipAnimation=*/true, completeWithOutcome, releaseSuppression);
 }
 
 void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
@@ -645,7 +651,11 @@ void SnapHandler::commitUnminimizeUnfloat(KWin::EffectWindow* window, const QStr
                 return;
             }
             qCInfo(lcEffect) << "Snap: unminimized window is untracked by daemon — retrying restore:" << windowId;
-            callResolveWindowRestore(safeWindow.data());
+            // isOpenPath=false: an unminimize is not an open. Without the
+            // flag, the daemon's cross-screen tile reclaim could TELEPORT
+            // the just-unminimized window to its recorded home monitor.
+            callResolveWindowRestore(safeWindow.data(), nullptr, /*releaseSuppressionOnMiss=*/true,
+                                     /*isOpenPath=*/false);
         };
         auto* snappedWatcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
@@ -1106,9 +1116,12 @@ void SnapHandler::slotPendingRestoresAvailable()
                 continue; // Already tracked
             }
 
-            // Window is not tracked - try to restore it
+            // Window is not tracked - try to restore it.
+            // isOpenPath=false: the pending-restores sweep re-resolves
+            // already-open windows; it must not drive the cross-screen tile
+            // reclaim and move windows the user is looking at.
             qCDebug(lcEffect) << "Retrying restoration for untracked window:" << windowId;
-            callResolveWindowRestore(window);
+            callResolveWindowRestore(window, nullptr, /*releaseSuppressionOnMiss=*/true, /*isOpenPath=*/false);
         }
     });
 }

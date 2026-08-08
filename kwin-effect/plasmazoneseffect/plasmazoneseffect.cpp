@@ -12,6 +12,7 @@
 
 #include "handlers/dragtracker.h"
 #include "handlers/snaphandler.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
@@ -136,8 +137,26 @@ bool PlasmaZonesEffect::isActive() const
     // DesktopTransitionManager::paintOutput never gets a frame, and the blend
     // sits unrendered until its own wall-clock reap. Also O(1) (an
     // unordered_map emptiness check).
+    // `m_stripViewAnimator->hasActiveAnimations()` is the clause the strip
+    // VIEW SPRING itself needs, and it must be here regardless of the shader
+    // pass. A pure-residual scroll batch on a default config can leave the
+    // spring as the ONLY live animation: every carried column's per-window
+    // leg is PolicyRejected (the residual origin is below the snap
+    // threshold), no shader transition installs, and with no strip pack
+    // assigned m_stripTransition holds no entry either. Without this clause
+    // that scroll drops the effect from the chain entirely — prePaintScreen
+    // never runs, so the spring neither advances nor settles and the view
+    // offset is never applied. O(monitor count).
+    //
+    // `m_stripTransition.isRunning()` covers the strip SHADER PASS, which is
+    // a strict subset of the spring clause while a leg is live but survives
+    // it during the pass's settle fade (the fade outlives the spring by
+    // design — see StripTransitionManager::paintOutput). Keep both: the
+    // spring clause is not a substitute for the fade tail, and the pass
+    // clause is not a substitute for the pack-less spring.
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
-        || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning();
+        || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
+        || m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)

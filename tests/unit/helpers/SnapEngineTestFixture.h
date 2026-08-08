@@ -7,7 +7,10 @@
 #include <QSignalSpy>
 #include <QLoggingCategory>
 
+#include "helpers/LogCapture.h"
+
 #include <memory>
+#include <optional>
 
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
@@ -98,14 +101,22 @@ protected Q_SLOTS:
     }
 
 protected:
-    static QStringList& gateLogSink()
+    /// The snap-engine category, captured through the shared helper (see
+    /// LogCapture.h for why both severities and the category filter are
+    /// load-bearing). Held as an optional so runGate/captureResolveLogs can
+    /// wrap differently-shaped calls between arm and disarm.
+    std::optional<PlasmaZones::TestHelpers::CategoryLogCapture> m_capture;
+
+    void beginLogCapture()
     {
-        static QStringList sink;
-        return sink;
+        m_capture.emplace(QLatin1String("org.phosphor.snap-engine"));
     }
-    static void gateLogHandler(QtMsgType, const QMessageLogContext&, const QString& msg)
+
+    QStringList endLogCapture()
     {
-        gateLogSink().append(msg);
+        const QStringList lines = m_capture ? m_capture->lines() : QStringList{};
+        m_capture.reset();
+        return lines;
     }
 
     /// Run calculateSnapToEmptyZone with the given gate inputs and capture
@@ -116,9 +127,7 @@ protected:
         layout->setAutoAssign(perLayoutAuto);
         m_settings->setAutoAssignAllLayouts(globalAuto);
 
-        QLoggingCategory::setFilterRules(QStringLiteral("org.phosphor.snap-engine.debug=true"));
-        gateLogSink().clear();
-        QtMessageHandler prev = qInstallMessageHandler(&SnapEngineTestFixture::gateLogHandler);
+        beginLogCapture();
 
         // Result is intentionally ignored — geometry resolution depends on a
         // wired ScreenManager, which a guiless fixture doesn't provide. The
@@ -126,9 +135,7 @@ protected:
         // contract is actually about.
         (void)engine.calculateSnapToEmptyZone(QStringLiteral("app|uuid-gate"), screenId, /*isSticky*/ false);
 
-        qInstallMessageHandler(prev);
-        QLoggingCategory::setFilterRules(QString());
-        return gateLogSink();
+        return endLogCapture();
     }
 
     /// Run resolveWindowRestore while capturing snap-engine debug logs, so a
@@ -137,17 +144,30 @@ protected:
     QStringList captureResolveLogs(SnapEngine& engine, const QString& windowId, const QString& screenId,
                                    PhosphorEngine::SnapResult* outResult)
     {
-        QLoggingCategory::setFilterRules(QStringLiteral("org.phosphor.snap-engine.debug=true"));
-        gateLogSink().clear();
-        QtMessageHandler prev = qInstallMessageHandler(&SnapEngineTestFixture::gateLogHandler);
+        beginLogCapture();
 
         const PhosphorEngine::SnapResult result = engine.resolveWindowRestore(windowId, screenId, /*sticky*/ false);
         if (outResult) {
             *outResult = result;
         }
 
-        qInstallMessageHandler(prev);
-        QLoggingCategory::setFilterRules(QString());
-        return gateLogSink();
+        return endLogCapture();
+    }
+
+    /// Positive control for absence-based assertions: every resolveWindowRestore
+    /// terminates in a logging branch, so an empty capture means the harness
+    /// is broken, not that the asserted branch stayed silent — without it a
+    /// `!contains(...)` assertion passes green against a sink that recorded
+    /// nothing at all. Returns rather than asserting so the caller can
+    /// QVERIFY it and stop the slot, the same reason captureClose returns a
+    /// bool: a QVERIFY inside a helper returns only from the helper.
+    ///
+    /// Scoped to resolveWindowRestore-based tests. runGate wraps
+    /// calculateSnapToEmptyZone, whose gate-PASS path logs nothing, so an
+    /// empty capture there is the correct outcome and this control must not
+    /// be applied to it.
+    [[nodiscard]] static bool captureIsNonEmpty(const QStringList& lines)
+    {
+        return !lines.isEmpty();
     }
 };

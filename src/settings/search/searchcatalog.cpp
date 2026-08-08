@@ -178,7 +178,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("show desktop")});
     search->setPageKeywords(QStringLiteral("animations-scrolling"),
                             {PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("column"),
-                             PhosphorI18n::tr("animation")});
+                             PhosphorI18n::tr("animation"), PhosphorI18n::tr("shader"), PhosphorI18n::tr("blur"),
+                             PhosphorI18n::tr("motion blur")});
     search->setPageKeywords(QStringLiteral("animations-side-panels"),
                             {PhosphorI18n::tr("side panel"), PhosphorI18n::tr("panel"), PhosphorI18n::tr("drawer")});
     search->setPageKeywords(QStringLiteral("animations-widgets"),

@@ -44,7 +44,7 @@ constexpr int kEdgeBandDivisor = 4;
 
 /// Capture @p windowId's current slot in FloatRestore vocabulary — the twin
 /// of floatWindowInternal's capture block, minus the container bookkeeping.
-ScrollEngine::FloatRestore ScrollEngine::captureDragSlot(const ScrollStrip& strip, const QString& windowId)
+FloatRestore ScrollEngine::captureDragSlot(const ScrollStrip& strip, const QString& windowId)
 {
     FloatRestore slot;
     const int columnIdx = strip.columnOfWindow(windowId);
