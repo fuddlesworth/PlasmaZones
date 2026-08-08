@@ -213,6 +213,12 @@ public:
     void consumeOrExpelWindow(int delta, const QString& screenId);
     void centerColumn(const QString& screenId);
     void toggleColumnTabbed(const QString& screenId);
+    /// Windowed fullscreen (niri toggle-windowed-fullscreen) on the active
+    /// window: layout-neutral per-tile flag, see Tile::windowedFullscreen.
+    void toggleWindowedFullscreen(const QString& screenId);
+    /// Compositor-driven reconciliation: the client left fullscreen on its
+    /// own, so drop the flag and re-apply that window's screen.
+    void clearWindowedFullscreen(const QString& windowId);
     /// delta -1/+1 through the preset width list.
     void cycleColumnPresetWidth(int delta, const QString& screenId);
     /// deltaPercent of the work-area width (e.g. +10 / -10).
@@ -946,6 +952,17 @@ private:
     /// The exact rect last APPLIED per window while strip-managed (float-back
     /// poison guard; see PlacementEngineBase::lastManagedRect).
     QHash<QString, QRect> m_lastAppliedRect;
+    /// Windows whose last EMITTED batch entry carried windowedFullscreen —
+    /// the flag's own leg of applyLayout's emit-on-change gate (a toggle
+    /// never moves a rect). Tracks the presentation-gated EMITTED value,
+    /// not the model flag (a parked/hidden tile emits false while the tile
+    /// keeps the flag). A QSet because only "told true" is representable.
+    /// Dropped alongside m_lastAppliedRect on the context-teardown paths
+    /// and swept by aliveness in pruneStaleWindows. Elsewhere a stale entry
+    /// is self-correcting rather than co-dropped: any path that drops the
+    /// rect memory forces an emit, and that batch carries the current
+    /// presentation-gated value.
+    QSet<QString> m_lastAppliedWindowedFs;
     /// Which screen edge each currently-parked window went out by ("left" /
     /// "right"), so that when it scrolls back INTO the viewport the batch can
     /// tell the effect which side to animate it in from.

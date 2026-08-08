@@ -236,6 +236,16 @@ public:
 
     // Cleanup: unmaximize all monocle-maximized windows (called on daemon loss / effect teardown)
     void restoreAllMonocleMaximized();
+    /// Membership half of the windowed-fullscreen release (hash removal
+    /// only, no compositor call). Split from the state half because the
+    /// demote path needs them on opposite sides of the managed-set write.
+    void forgetWindowedFullscreen(const QString& windowId);
+    /// Compositor half: drop KWin fullscreen state under the suppression
+    /// counter and an own inGeometryApply bracket. Membership-independent.
+    void releaseWindowedFullscreenState(const QString& windowId);
+    /// Bulk teardown restore (daemon loss, effect unload) — snapshot-and-
+    /// clear then release each, the restoreAllMonocleMaximized shape.
+    void restoreAllWindowedFullscreen();
 
     /// Cleanup: drop all autotile tiled-tracking bookkeeping. Physical
     /// title-bar restores are the DecorationManager's job — teardown callers
@@ -936,6 +946,14 @@ private:
     QPointer<KWin::EffectWindow> m_pendingReactivateWindow; ///< re-activate after raise loop (daemon restart)
     QSet<QString> m_monocleMaximizedWindows;
     int m_suppressMaximizeChanged = 0;
+    /// Suppresses slotWindowFullScreenChanged for the effect's OWN
+    /// setFullScreen calls (windowed fullscreen), mirroring
+    /// m_suppressMaximizeChanged. Load-bearing on the X11/XWayland path,
+    /// where the signal fires synchronously inside setFullScreen. On the
+    /// Wayland path the committed signal arrives a client round-trip later
+    /// with this counter back at 0 — there the hash-membership branches in
+    /// the slot are what protect the tiling state, not this counter.
+    int m_suppressFullScreenChanged = 0;
     // ── Focus follows mouse ──
     // Per-mode pair: m_focusFollowsMouse is the autotile flag
     // (autotileFocusFollowsMouse), m_scrollingFocusFollowsMouse the

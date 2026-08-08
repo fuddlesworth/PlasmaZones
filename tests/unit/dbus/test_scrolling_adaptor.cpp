@@ -33,7 +33,17 @@
  *  9. scrollingScreensChanged is gated on an actual change: the engine
  *     re-announces an identical set on every desktop switch, and a wire
  *     consumer comparing successive payloads must not see a phantom one.
- * 10. clearEngine leaves every slot answering safely AND stops relaying.
+ * 10. clearEngine leaves every slot answering safely AND stops relaying,
+ *     and it drops the recorded tab-indicator surfaces.
+ * 11. setScrollTabSurface publishes, retracts and replays per screen, and
+ *     rejects an empty screen id.
+ * 12. The scrollingScreens property never emits PropertiesChanged (change
+ *     traffic rides the dedicated signal only).
+ * 13. clearWindowedFullscreen refuses an empty id, an unknown window and an
+ *     unflagged tile as silent no-ops, and clears a genuinely flagged tile
+ *     exactly once (placementChanged discriminates: every refusal returns
+ *     before emitting). The null-engine arm rides item 10's clearEngine
+ *     sweep like every other slot.
  */
 
 #include <QTest>
@@ -485,6 +495,7 @@ private Q_SLOTS:
         QCOMPARE(m_adaptor->visibleStripJson(QStringLiteral("DP-1")), QStringLiteral("[]"));
         QVERIFY(m_adaptor->scrollingScreens().isEmpty());
         m_adaptor->focusColumn(QStringLiteral("DP-1"), -1); // must not crash
+        m_adaptor->clearWindowedFullscreen(QStringLiteral("app|a")); // must not crash
     }
 
     // clearEngine also DISCONNECTS: the engine outlives the adaptor's
@@ -594,6 +605,32 @@ private Q_SLOTS:
         bus.unregisterObject(path);
     }
 
+    // clearWindowedFullscreen's wire-boundary policy: every refusal (empty
+    // id, unknown window, unflagged tile) is a silent no-op, and a genuine
+    // clear reaches the strip. placementChanged discriminates — the engine
+    // returns before emitting on every refusal path, and emits on success.
+    void testClearWindowedFullscreen_gatesAndClears()
+    {
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("DP-1"));
+        m_engine->toggleWindowedFullscreen(QStringLiteral("DP-1"));
+
+        QSignalSpy placement(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+
+        m_adaptor->clearWindowedFullscreen(QString()); // empty id
+        m_adaptor->clearWindowedFullscreen(QStringLiteral("nobody|9")); // unknown window
+        m_adaptor->clearWindowedFullscreen(QStringLiteral("app|b")); // tracked but unflagged
+        QCOMPARE(placement.count(), 0);
+
+        // Positive control: the flagged tile clears, once — a second call
+        // finds the flag already down and refuses silently again.
+        m_adaptor->clearWindowedFullscreen(QStringLiteral("app|a"));
+        QCOMPARE(placement.count(), 1);
+        m_adaptor->clearWindowedFullscreen(QStringLiteral("app|a"));
+        QCOMPARE(placement.count(), 1);
+    }
+
 public Q_SLOTS:
     void onPropertiesChanged(const QDBusMessage& msg)
     {
@@ -601,8 +638,6 @@ public Q_SLOTS:
             ++m_propertiesChangedCount;
         }
     }
-
-private Q_SLOTS:
 
 private:
     /// Append a description of every way @p obj fails to describe @p expected

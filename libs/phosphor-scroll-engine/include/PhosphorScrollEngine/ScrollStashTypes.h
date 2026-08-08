@@ -33,6 +33,11 @@ struct StashedTile
     /// minimized domain stays round-trippable if the daemon ever drives
     /// it directly; see the seam note on setWindowMinimized.
     bool minimized = false;
+    /// Windowed fullscreen, carried through stash/serialize and RE-APPLIED
+    /// on claim (unlike minimized above): the flag is strip-owned state the
+    /// compositor mirrors, so a restart must hand it back or the client
+    /// stays fullscreen-configured with nothing on record saying so.
+    bool windowedFullscreen = false;
     /// True while THIS tile was staged from the persisted blob and has
     /// not been claimed. Per tile, not per entry: a key co-tenanted by a
     /// returning app and a dead one must age the dead tile out while the
@@ -144,6 +149,13 @@ struct FloatRestore
     /// user-set window height to Auto, while a mode round trip — which
     /// stashes the intent — preserved it.
     WindowHeight height;
+    /// Windowed fullscreen, captured by the DRAG paths only
+    /// (captureDragSlot): an Escape cancel is an exact restore, and the
+    /// commit re-seats the tile, so both hand the flag back. The float
+    /// capture (floatWindowInternal) deliberately leaves this false —
+    /// float and windowed fullscreen are exclusive by design, and a float
+    /// round trip is supposed to drop the flag.
+    bool windowedFullscreen = false;
 };
 
 /// Live drag-insert preview state (drag_preview.cpp). See the engine's

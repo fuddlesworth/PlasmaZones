@@ -154,6 +154,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         KWin::EffectWindow* window = nullptr;
         QVector<KWin::EffectWindow*> candidates;
         bool isMonocle = false;
+        bool isWindowedFullscreen =
+            false; ///< scrolling windowed fullscreen: hold KWin fullscreen state at the column rect
         QString screenId; ///< daemon's TARGET screen for this window (req.screenId)
         QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
         QString scrollEdge; ///< scrolling strip: screen edge to animate from ("left"/"right"), else empty
@@ -245,6 +247,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         entry.geometry = normalizedGeometry;
         entry.window = w;
         entry.isMonocle = req.monocle;
+        entry.isWindowedFullscreen = req.windowedFullscreen;
         entry.screenId = req.screenId;
         entry.stacking = req.stacking;
         entry.scrollEdge = req.scrollEdge;
@@ -318,6 +321,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString windowId;
         QString screenId;
         bool isMonocle = false;
+        bool isWindowedFullscreen = false;
         QString stacking;
         QString scrollEdge;
         int viewDeltaX = 0;
@@ -347,7 +351,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // and TileRequestEntry::validationError() rejects an empty screenId
         // before it ever reaches `entries`, so it is always present here.
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
-                        e.stacking, e.scrollEdge, e.viewDeltaX, e.visualPos, e.hasVisualPos});
+                        e.isWindowedFullscreen, e.stacking, e.scrollEdge, e.viewDeltaX, e.visualPos, e.hasVisualPos});
     }
 
     // Start this batch's view legs, ONCE per output. The delta is a property
@@ -953,6 +957,67 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
             // Title-bar (borderless) state is driven by rules through the
             // effect's reconcileRuleHiddenTitleBar → DecorationManager path.
+
+            // Windowed fullscreen: flip KWin fullscreen state to match the
+            // batch flag, under the suppression counter so our own
+            // slotWindowFullScreenChanged does not shed the tiling state the
+            // flag exists to keep. Flipped BEFORE the geometry apply below so
+            // the column rect overrides KWin's internal FullScreenArea
+            // moveResize in the same call stack, before any client
+            // round-trip. Set membership plus requested-fullscreen state is
+            // what steers the fullscreen bail inside applyWindowGeometry:
+            // setFullScreen flips the REQUESTED state synchronously (the
+            // committed isFullScreen() lags a client round-trip), so on
+            // un-flag the bail already sees requested=false and the batch
+            // rect lands over KWin's restore-rect moveResize. An entry whose
+            // window went KWin-fullscreen on its own (F11) and is NOT
+            // flagged stays untouched: it was never in the set.
+            if (KWin::Window* kwFs = snap.window->window()) {
+                const bool inSet = m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
+                if (snap.isWindowedFullscreen && !inSet) {
+                    // Adopt-on-batch: also the effect-restart path, where the
+                    // daemon still holds the flag for a window this effect
+                    // instance has never seen. The stored rect is what the
+                    // committed-ack re-assert in slotWindowFullScreenChanged
+                    // applies.
+                    m_effect->m_windowedFullscreenWindows.insert(snap.windowId, snap.geometry);
+                    if (!kwFs->isFullScreen()) {
+                        ++m_suppressFullScreenChanged;
+                        kwFs->setFullScreen(true);
+                        --m_suppressFullScreenChanged;
+                    }
+                } else if (snap.isWindowedFullscreen && inSet && !kwFs->isRequestedFullScreen()) {
+                    // Flagged, member, yet fullscreen is not even REQUESTED:
+                    // the client exited on its own while the daemon gate was
+                    // closed, and the exit slot deferred its reconcile to
+                    // exactly this moment. Deliver it now — membership
+                    // drops, the daemon clears its flag and re-applies —
+                    // rather than re-asserting fullscreen against the
+                    // user's exit. Requested state, not committed: during
+                    // our OWN enter round-trip committed lags behind while
+                    // requested is already true, and a batch landing in that
+                    // window must not read the lag as an exit.
+                    m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
+                    qCInfo(lcEffect) << "Windowed-fullscreen deferred reconcile for" << snap.windowId;
+                    if (m_effect->m_daemonGate.serviceRegistered) {
+                        PhosphorProtocol::ClientHelpers::fireAndForget(
+                            m_effect, PhosphorProtocol::Service::Interface::Scrolling,
+                            QStringLiteral("clearWindowedFullscreen"), {snap.windowId},
+                            QStringLiteral("clearWindowedFullscreen"));
+                    }
+                } else if (snap.isWindowedFullscreen && inSet) {
+                    // Keep the stored rect current — the strip may have
+                    // resized or scrolled the column since the flag went on.
+                    m_effect->m_windowedFullscreenWindows.insert(snap.windowId, snap.geometry);
+                } else if (!snap.isWindowedFullscreen && inSet) {
+                    if (kwFs->isFullScreen()) {
+                        ++m_suppressFullScreenChanged;
+                        kwFs->setFullScreen(false);
+                        --m_suppressFullScreenChanged;
+                    }
+                    m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
+                }
+            }
 
             if (snap.isMonocle) {
                 if (KWin::Window* kw = snap.window->window()) {

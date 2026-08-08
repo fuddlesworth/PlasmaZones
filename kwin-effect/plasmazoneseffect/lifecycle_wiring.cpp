@@ -904,6 +904,10 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             // stranded entry is never READ back (the paint-side probes key
             // on a LIVE window's id), so this is purely bounding the map.
             m_scrollVisualPos.remove(cachedId);
+            // Windowed-fullscreen membership keeps the same backstop pairing
+            // (slotWindowClosed removes it first in every ordering KWin
+            // provides; this bounds the map if that ever changes).
+            m_windowedFullscreenWindows.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);

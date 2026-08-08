@@ -97,7 +97,8 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
 
     PhosphorProtocol::TileRequestList requests;
     QSet<QString> seenWindowIds;
-    for (const QJsonValue& val : doc.array()) {
+    const QJsonArray batchEntries = doc.array();
+    for (const QJsonValue& val : batchEntries) {
         QJsonObject obj = val.toObject();
         PhosphorProtocol::TileRequestEntry entry;
         entry.windowId = obj.value(QLatin1String("windowId")).toString();
@@ -105,11 +106,13 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // order, so a duplicate would apply twice (last wins) and, with
         // scrollEdge now driving the animation anchor, two entries naming
         // different edges would animate the window in from one side and
-        // re-anchor it to the other. No producer emits duplicates today;
-        // this is boundary hardening. First VALID entry wins: the id is
-        // recorded after the validation bail below, so a malformed first
-        // entry does not consume the window's slot and shut out a good
-        // second one.
+        // re-anchor it to the other — and with windowedFullscreen in the
+        // struct, WHICH duplicate wins now decides KWin fullscreen state on
+        // the client, not just an animation anchor. No producer emits
+        // duplicates today; this is boundary hardening. First VALID entry
+        // wins: the id is recorded after the validation bail below, so a
+        // malformed first entry does not consume the window's slot and shut
+        // out a good second one.
         if (seenWindowIds.contains(entry.windowId)) {
             qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping duplicate entry for" << entry.windowId;
             continue;
@@ -128,6 +131,10 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         entry.zoneId = obj.value(QLatin1String("zoneId")).toString();
         entry.screenId = obj.value(QLatin1String("screenId")).toString();
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
+        // Scrolling windowed fullscreen. Only meaningful on a tiled entry;
+        // the floating pair is rejected by validationError() below like any
+        // other garbling.
+        entry.windowedFullscreen = obj.value(QLatin1String("windowedFullscreen")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
         // Absent for every non-scrolling producer, and absent within scrolling
@@ -159,13 +166,29 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // screenId, degenerate rect) — run it rather than re-deriving a
         // subset of its checks here.
         if (const QString validationError = entry.validationError(); !validationError.isEmpty()) {
-            qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping entry:" << validationError;
+            // Warning, not debug: every documented cause of a validator
+            // failure at this boundary is producer garbling, and the drop
+            // silently discards a whole placement — the event is by
+            // construction a bug report, not noise. (The duplicate and
+            // malformed-visual-position drops above stay at debug; both
+            // have documented benign shapes.)
+            qCWarning(lcDbusTiling) << "relayTileRequestsJson: dropping entry:" << validationError;
             continue;
         }
         seenWindowIds.insert(entry.windowId);
         requests.append(entry);
     }
 
+    // A fully-rejected batch must not be indistinguishable from a batch that
+    // was never produced. No partial-count aggregate on purpose: every
+    // non-benign drop already warns individually at its entry, and a count
+    // computed from the array size would fold the BENIGN drops (duplicates
+    // and the invalid-geometry bail, both deliberately debug-level) into a
+    // warning that reads as suppressed errors.
+    if (requests.isEmpty() && !batchEntries.isEmpty()) {
+        qCWarning(lcDbusTiling) << "relayTileRequestsJson: every entry of a" << batchEntries.size()
+                                << "entry batch was dropped — nothing emitted";
+    }
     if (!requests.isEmpty()) {
         qCDebug(lcDbusTiling) << "Emitting windowsTileRequested:" << requests.size() << "windows";
         Q_EMIT windowsTileRequested(requests);

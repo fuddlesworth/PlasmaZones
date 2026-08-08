@@ -15,7 +15,8 @@ namespace ShortcutIds {
 // Stable string ids are documented contract: they appear in
 // ~/.config/kglobalshortcutsrc under the "plasmazonesd" component and in
 // XDG Portal settings UIs. Changing one is an on-disk rename that users pay
-// for, so add new ones at the bottom; never rename existing.
+// for — never rename existing ids. Placement within this list carries no
+// meaning (nothing indexes it), so keep new ids beside their family.
 inline constexpr auto kIdOpenEditor = "open_editor";
 inline constexpr auto kIdOpenSettings = "open_settings";
 inline constexpr auto kIdPreviousLayout = "previous_layout";
@@ -72,6 +73,7 @@ inline constexpr auto kIdScrollConsumeOrExpelLeft = "scroll_consume_or_expel_lef
 inline constexpr auto kIdScrollConsumeOrExpelRight = "scroll_consume_or_expel_right";
 inline constexpr auto kIdScrollCenterColumn = "scroll_center_column";
 inline constexpr auto kIdScrollToggleColumnTabbed = "scroll_toggle_column_tabbed";
+inline constexpr auto kIdScrollToggleWindowedFullscreen = "scroll_toggle_windowed_fullscreen";
 inline constexpr auto kIdScrollCycleColumnWidth = "scroll_cycle_column_width";
 inline constexpr auto kIdScrollCycleColumnWidthBack = "scroll_cycle_column_width_back";
 inline constexpr auto kIdScrollIncreaseColumnWidth = "scroll_increase_column_width";

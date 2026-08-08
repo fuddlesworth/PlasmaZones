@@ -79,6 +79,14 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
     const QSet<QString> removed = m_managedScreens - newScreens;
     const QSet<QString> added = newScreens - m_managedScreens;
 
+    // Windowed-fullscreen release is SPLIT around the managed-set write
+    // below: membership is forgotten inline (so the geometry paths in this
+    // pass stop taking the apply exemption) but the setFullScreen(false)
+    // lands only after m_managedScreens holds the NEW set — on Wayland the
+    // committed exit signal arrives a round-trip later, and the generic exit
+    // branch it falls into consults m_managedScreens.
+    QStringList windowedFsToRelease;
+
     // Stagger-epoch scope. A desktop switch invalidates EVERY in-flight
     // staggered apply (geometry computed for the old desktop must never land
     // in the new one) — that is the global epoch's purpose. A plain
@@ -189,7 +197,22 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                 // border tracking. DO demote — this screen is leaving
                 // autotile, and stale tracking would make the exit-fullscreen
                 // slot re-claim the window on a no-longer-autotile screen.
-                if (w->isFullScreen()) {
+                //
+                // A windowed-fullscreen window leaving its strip on THIS
+                // (current) context: the flag's owner is gone, so windowed
+                // fullscreen ends. Forget membership NOW — with the entry
+                // gone the tracked path's geometry restore below bails on
+                // the still-requested fullscreen state instead of fighting
+                // it — and queue the state release for after the managed-set
+                // write (the split the release helpers document).
+                if (m_effect->m_windowedFullscreenWindows.contains(windowId)) {
+                    forgetWindowedFullscreen(windowId);
+                    windowedFsToRelease.append(windowId);
+                } else if (w->isFullScreen()) {
+                    // Genuinely fullscreen (user F11): KWin owns its
+                    // geometry and re-asserts the fullscreen frame, so the
+                    // restore steps below would fight it. Demote the stale
+                    // tracking and release instead.
                     if (m_notifiedWindows.remove(windowId)) {
                         m_notifiedWindowScreens.remove(windowId);
                     }
@@ -299,6 +322,16 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             m_notifiedWindows -= windowsOnRemovedScreens;
             for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
                 m_notifiedWindowScreens.remove(wid);
+                // A genuine mode toggle ends windowed fullscreen for the
+                // windows it untracks: their strip is gone and no batch will
+                // ever un-flag them. Same collection-set skips as the border
+                // restore above (sticky/off-context windows keep their state
+                // until their own context is processed) — deliberate, the
+                // per-context philosophy borders already follow.
+                if (m_effect->m_windowedFullscreenWindows.contains(wid)) {
+                    forgetWindowedFullscreen(wid);
+                    windowedFsToRelease.append(wid);
+                }
             }
 
             // Drop autotile border tracking at the toggle instant so autotile
@@ -415,6 +448,13 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
     // every `Mode == "scrolling"` rule memoised as non-matching.
     const QSet<QString> scrollingBefore = scrollingScreenIntersection();
     m_managedScreens = newScreens;
+    // The deferred half of the windowed-fullscreen release: membership was
+    // forgotten in the passes above; only now that m_managedScreens holds
+    // the new set may the compositor state drop, so the committed exit
+    // signal's arms evaluate against the world as it is.
+    for (const QString& wid : std::as_const(windowedFsToRelease)) {
+        releaseWindowedFullscreenState(wid);
+    }
     if (scrollingScreenIntersection() != scrollingBefore) {
         m_effect->invalidateAllRuleCaches();
         m_effect->scheduleBorderSweep();
@@ -580,7 +620,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                     // saveAndRecordPreTileGeometry applies internally: a
                     // floating-but-maximized window's frame is the full monitor, which
                     // must not be pushed as the free-float geometry.
-                    QRectF frame = PlasmaZonesEffect::freeGeometryForCapture(w, w->frameGeometry());
+                    QRectF frame = m_effect->freeGeometryForCapture(w, w->frameGeometry());
                     if (frame.width() <= 0 || frame.height() <= 0) {
                         // Off-screen/parked frame rejected by the capture
                         // chokepoint — nothing valid to store for THIS window.
@@ -737,7 +777,17 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
             KWin::effects->activateWindow(unfloatWin);
         }
     } else {
-        applyFloatCleanup(windowId);
+        // Re-key to the live id BEFORE the cleanup, the same re-key the
+        // batch apply performs (tiling.cpp documents why): the daemon can
+        // still name a pre-restore uuid, and applyFloatCleanup's id-keyed
+        // drops — the windowed-fullscreen release among them — silently
+        // miss on the stale spelling, leaving a floated window
+        // fullscreen-configured with a live hash entry.
+        QString cleanupId = windowId;
+        if (KWin::EffectWindow* resolved = m_effect->findWindowById(windowId)) {
+            cleanupId = m_effect->getWindowId(resolved);
+        }
+        applyFloatCleanup(cleanupId);
 
         // Raise the floated window if it's the active window (user-initiated float)
         KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
@@ -794,7 +844,74 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     if (!w || w->isDeleted()) {
         return;
     }
+    // Our own windowed-fullscreen setFullScreen call is in flight: neither
+    // branch below may run. The enter branch would shed the very
+    // tiled/decoration state the flag keeps, and the exit branch would
+    // re-drive decorations for a window whose column rect never changed.
+    if (m_suppressFullScreenChanged > 0) {
+        return;
+    }
     const QString windowId = m_effect->getWindowId(w);
+    // A windowed-fullscreen window's ENTER just committed (this signal
+    // fires on the COMMITTED state, a client round-trip after the batch
+    // flipped the requested state and applied the column rect): KWin
+    // re-asserts the FullScreenArea on that ack commit, so the column rect
+    // must be re-applied here or the window ends up covering the output.
+    // The enter-branch's tracking shed below may not run for it — the
+    // window stays a managed strip tile for ROUTING (tiled bucket,
+    // eligibility, activation reporting). Presentation is a different
+    // story, deliberately: the decoration gates undecorate it like any
+    // fullscreen window (a client in fullscreen presentation gets no
+    // PlasmaZones chrome), which also means IsFullscreen-scoped appearance
+    // rules (SetBorder/SetOpacity/tints) match but render nothing for it —
+    // while SetWindowLayer, which bypasses the decoration path, still
+    // applies. Both are the intended split, not an oversight.
+    if (w->isFullScreen() && m_effect->m_windowedFullscreenWindows.contains(windowId)) {
+        // The generic enter branch's centering-map shed applies to our
+        // transition too: a stale zone-centering target consumed against
+        // the fullscreen ack's frame change would moveResize against the
+        // fullscreen geometry (the exact hazard that cleanup documents).
+        m_tileTargetZones.remove(windowId);
+        m_centeredWaylandZones.remove(windowId);
+        // A live per-window leg means a batch committed the right rect this
+        // very tick — reaping it (the skipAnimation tail calls
+        // removeAnimation) would snap one column out of the strip's slide.
+        // KWin's FullScreenArea clobber is corrected by that leg's own
+        // moveResize, or by the next apply, so skipping here loses nothing.
+        if (!m_effect->m_windowAnimator->hasAnimation(w)) {
+            m_effect->applyWindowGeometry(w, m_effect->m_windowedFullscreenWindows.value(windowId),
+                                          /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+        }
+        return;
+    }
+    // A windowed-fullscreen window left fullscreen on its own (the client's
+    // in-app toggle — mpv's f key): the strip flag no longer matches
+    // reality. Reconcile: drop local membership and tell the daemon, whose
+    // engine clears the tile flag and re-applies. Decorations return with
+    // the daemon's next batch pass, same as the tracked-retile exit arm.
+    //
+    // Membership drops ONLY when the daemon can actually be told: with the
+    // gate closed, dropping it here desyncs the two owners in the daemon's
+    // favour, and the daemon's next batch (its flag persisted, its emit
+    // gate silent) would re-fullscreen the window the user just exited.
+    // Kept, the membership makes that state legible instead: the batch
+    // consumer's self-heal arm sees flagged+member+not-fullscreen and
+    // delivers this same reconcile when the daemon returns.
+    if (!w->isFullScreen() && m_effect->m_windowedFullscreenWindows.contains(windowId)) {
+        if (m_effect->m_daemonGate.serviceRegistered) {
+            m_effect->m_windowedFullscreenWindows.remove(windowId);
+            qCInfo(lcEffect) << "Windowed-fullscreen window left fullscreen on its own:" << windowId;
+            PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scrolling,
+                                                           QStringLiteral("clearWindowedFullscreen"), {windowId},
+                                                           QStringLiteral("clearWindowedFullscreen"));
+            m_effect->updateAllDecorations();
+        } else {
+            qCInfo(lcEffect) << "Windowed-fullscreen window left fullscreen with the daemon gone:" << windowId
+                             << "- reconcile deferred to the next batch";
+            m_effect->updateAllDecorations();
+        }
+        return;
+    }
     if (!w->isFullScreen()) {
         // EXIT fullscreen: a window the daemon still tiles (it stayed in
         // m_notifiedWindows the whole time — the daemon never untiles on

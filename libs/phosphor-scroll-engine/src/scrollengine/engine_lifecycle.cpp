@@ -522,6 +522,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
             }
         }
     }
+    bool migratedWindowedFs = false;
     if (oldState) {
         // The window moved context (screen or desktop) — migrate. The old
         // context's per-window bookkeeping goes with it: a stale
@@ -530,6 +531,10 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // answering for a context that no longer holds the window.
         const ScrollLayoutParams oldParams = layoutParamsForScreen(oldKey.screenId);
         const bool wasFloating = oldState->isFloating(windowId);
+        // Windowed fullscreen is per-tile state the fresh insert below would
+        // silently default false; read it off the old tile before takeWindow
+        // destroys it (the boundary-crossing verb carries it the same way).
+        migratedWindowedFs = oldState->strip().isWindowedFullscreen(windowId);
         oldState->strip().takeWindow(windowId, oldParams);
         oldState->removeFloating(windowId);
         m_floatRestore.remove(windowId);
@@ -600,6 +605,11 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
             m_parkedScrollEdge.insert(windowId, priorParkedEdge);
         }
         return;
+    }
+    // Hand the migrated windowed-fullscreen flag to the fresh tile (captured
+    // above, before takeWindow destroyed the old one).
+    if (migratedWindowedFs) {
+        state->strip().setWindowedFullscreen(windowId, true);
     }
 
     bool focusNew = true;

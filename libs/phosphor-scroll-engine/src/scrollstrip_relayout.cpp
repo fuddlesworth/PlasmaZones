@@ -268,6 +268,7 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 rt.windowId = col.tiles.at(ti).windowId;
                 rt.rect = full;
                 rt.hidden = (ti != activeTi);
+                rt.windowedFullscreen = col.tiles.at(ti).windowedFullscreen;
                 rc.tiles.append(rt);
             }
         } else if (!visible.isEmpty()) {
@@ -404,6 +405,7 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 ResolvedTile rt;
                 rt.windowId = col.tiles.at(visible.at(vi)).windowId;
                 rt.rect = QRect(x, y, colW, heights[vi]);
+                rt.windowedFullscreen = col.tiles.at(visible.at(vi)).windowedFullscreen;
                 rc.tiles.append(rt);
                 y += heights[vi] + gap;
             }

@@ -490,6 +490,10 @@ P_STORE_SET_STRING(setScrollingCenterColumnShortcut, shortcutsScrollingGroup, ce
 P_STORE_GET(QString, scrollingToggleColumnTabbedShortcut, shortcutsScrollingGroup, toggleColumnTabbedKey, QString)
 P_STORE_SET_STRING(setScrollingToggleColumnTabbedShortcut, shortcutsScrollingGroup, toggleColumnTabbedKey,
                    scrollingToggleColumnTabbedShortcutChanged)
+P_STORE_GET(QString, scrollingToggleWindowedFullscreenShortcut, shortcutsScrollingGroup, toggleWindowedFullscreenKey,
+            QString)
+P_STORE_SET_STRING(setScrollingToggleWindowedFullscreenShortcut, shortcutsScrollingGroup, toggleWindowedFullscreenKey,
+                   scrollingToggleWindowedFullscreenShortcutChanged)
 P_STORE_GET(QString, scrollingCycleColumnWidthShortcut, shortcutsScrollingGroup, cycleColumnWidthKey, QString)
 P_STORE_SET_STRING(setScrollingCycleColumnWidthShortcut, shortcutsScrollingGroup, cycleColumnWidthKey,
                    scrollingCycleColumnWidthShortcutChanged)

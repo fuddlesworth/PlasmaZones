@@ -271,7 +271,7 @@ StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
         // a silent no-op is the wrong failure for the one that does not.
         sc.activeWindowId = col.tiles.at(qBound(0, col.activeTileIdx, col.tiles.size() - 1)).windowId;
         for (const Tile& tile : col.tiles) {
-            sc.tiles.append({tile.windowId, tile.height, tile.minimized});
+            sc.tiles.append({tile.windowId, tile.height, tile.minimized, tile.windowedFullscreen});
         }
         out.columns.append(sc);
     }
@@ -447,6 +447,17 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     // detach there would leave `sc` dangling (the alias hazard the fuzzy-match
     // loop above documents). Every read past this point goes through stash.
     state->strip().setWindowHeightIntent(windowId, stash.at(colIdx).tiles.at(tileIdx).height);
+    // Windowed fullscreen is strip-owned state the compositor mirrors, so a
+    // claim hands it back (minimized deliberately is not re-applied — the
+    // effect re-reports live minimize state; see StashedTile). EXACT-id
+    // claims only: the fuzzy appId claim above deliberately lets a NEW
+    // same-app window take a dead sibling's slot, and its accepted cost is
+    // the slot, width and height — putting a fresh window into fullscreen
+    // presentation because a previous instance was is not part of that
+    // bargain.
+    if (claimedCandidate.isEmpty() && stash.at(colIdx).tiles.at(tileIdx).windowedFullscreen) {
+        state->strip().setWindowedFullscreen(windowId, true);
+    }
     // Re-assert the column's stashed ACTIVE tile: every insert makes the
     // arriving tile active, so a tabbed column's shown tab would otherwise
     // be whichever sibling announced last.

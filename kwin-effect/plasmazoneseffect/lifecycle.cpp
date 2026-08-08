@@ -386,6 +386,10 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         m_snapHandler->clearSnapTracking();
         m_decorationManager->restoreAll();
         m_tilingHandler->restoreAllMonocleMaximized();
+        // Same undo obligation for the effect's own setFullScreen calls:
+        // without it an unload strands every windowed-fullscreen client in
+        // KWin fullscreen state with nothing left owning the flag.
+        m_tilingHandler->restoreAllWindowedFullscreen();
         restoreAllRuleWindowLayers();
         clearAllDecorations();
     }

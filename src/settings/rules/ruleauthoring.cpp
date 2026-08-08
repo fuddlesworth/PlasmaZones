@@ -120,7 +120,8 @@ QString fieldDescription(Field f)
     case Field::IsSticky:
         return PhosphorI18n::tr("Whether the window is shown on all virtual desktops.");
     case Field::IsFullscreen:
-        return PhosphorI18n::tr("Whether the window is fullscreen.");
+        return PhosphorI18n::tr(
+            "Whether the window is fullscreen. A scrolling window in windowed fullscreen counts as fullscreen here.");
     case Field::IsMinimized:
         return PhosphorI18n::tr("Whether the window is minimized.");
     case Field::IsMaximized:

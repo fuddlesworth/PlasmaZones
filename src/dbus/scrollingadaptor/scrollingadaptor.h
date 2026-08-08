@@ -24,8 +24,10 @@ namespace PlasmaZones {
  * Provides D-Bus interface: org.plasmazones.Scrolling
  *
  * The scroll-SPECIFIC wire surface: the scrolling screen set the KWin
- * effect uses as its Mode-stamp discriminator, and the home for future
- * columnar methods. Window lifecycle and tile-request traffic for
+ * effect uses as its Mode-stamp discriminator, the strip-preview snapshot,
+ * the wheel-driven focusColumn verb, and the clearWindowedFullscreen
+ * reconciliation call (inbound, effect to daemon, when a client leaves
+ * fullscreen on its own). Window lifecycle and tile-request traffic for
  * scrolling screens deliberately stays on org.plasmazones.Tiling — the
  * effect keeps ONE engine-managed screen set and one geometry pipeline
  * for both tiling-family engines, and TilingAdaptor routes per screen.
@@ -82,6 +84,18 @@ public Q_SLOTS:
      *              other value is ignored
      */
     void focusColumn(const QString& screenId, int delta);
+
+    /**
+     * @brief Drop a window's windowed-fullscreen flag (compositor reconciliation)
+     *
+     * The KWin effect calls this when a windowed-fullscreen client leaves
+     * fullscreen on its own (the app's in-app toggle), so the strip's flag
+     * follows reality. Silent no-op for an unknown window or one whose
+     * flag is not set, same wire-boundary policy as focusColumn.
+     *
+     * @param windowId Window whose flag to clear; an empty string is ignored
+     */
+    void clearWindowedFullscreen(const QString& windowId);
 
     /**
      * @brief The strip as it currently looks on a screen, for previews

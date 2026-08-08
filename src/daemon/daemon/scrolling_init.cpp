@@ -140,6 +140,9 @@ void Daemon::connectScrollingShortcuts()
     wire(&ShortcutManager::scrollToggleColumnTabbedRequested, plainVerb([](Scroll* s, const QString& id) {
         s->toggleColumnTabbed(id);
     }));
+    wire(&ShortcutManager::scrollToggleWindowedFullscreenRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->toggleWindowedFullscreen(id);
+    }));
     wire(&ShortcutManager::scrollCycleColumnWidthRequested, intVerb([](Scroll* s, const QString& id, int delta) {
         s->cycleColumnPresetWidth(delta, id);
     }));

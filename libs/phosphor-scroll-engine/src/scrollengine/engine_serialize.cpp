@@ -64,6 +64,10 @@ inline QLatin1String kMinimized()
 {
     return QLatin1String("minimized");
 }
+inline QLatin1String kWindowedFullscreen()
+{
+    return QLatin1String("windowedFullscreen");
+}
 inline QLatin1String kKind()
 {
     return QLatin1String("kind");
@@ -225,6 +229,7 @@ QJsonObject ScrollEngine::serializeStripState() const
                 t.insert(kWindowId(), tile.windowId);
                 t.insert(kHeight(), heightToJson(tile.height));
                 t.insert(kMinimized(), tile.minimized);
+                t.insert(kWindowedFullscreen(), tile.windowedFullscreen);
                 // PER-TILE lease. A tile still flagged staged-from-persistence
                 // has not been claimed this session, so it ages by one; a
                 // claimed tile (flag cleared, count zeroed) and a fresh
@@ -435,6 +440,9 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
                 tile.windowId = tileObj.value(kWindowId()).toString();
                 tile.height = heightFromJson(tileObj.value(kHeight()).toObject(), heightVocab);
                 tile.minimized = tileObj.value(kMinimized()).toBool(false);
+                // Additive key: an older blob reads false (version-free
+                // policy above).
+                tile.windowedFullscreen = tileObj.value(kWindowedFullscreen()).toBool(false);
                 // PER-TILE lease, bounded at the system boundary like every
                 // other numeric in this file (persisted config is
                 // user-writable). Absent key reads 0, so an older blob gets a

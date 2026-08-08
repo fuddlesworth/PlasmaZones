@@ -93,6 +93,10 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     // stale entry would anchor the arrival animation to the wrong side when
     // the window later unfloats back into partial view.
     m_parkedScrollEdge.remove(windowId);
+    // Windowed fullscreen dies with the tile (FloatRestore deliberately does
+    // not carry it — float and windowed fullscreen are exclusive), so the
+    // emit-gate memory goes with it.
+    m_lastAppliedWindowedFs.remove(windowId);
     Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
     // Background-context guard: see windowClosed.
     if (key == currentKeyForScreen(key.screenId)) {

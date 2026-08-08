@@ -353,6 +353,12 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollToggleColumnTabbedRequested();
      }},
+    {kIdScrollToggleWindowedFullscreen, &ConfigDefaults::scrollingToggleWindowedFullscreenShortcut,
+     &Settings::scrollingToggleWindowedFullscreenShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Toggle Windowed Fullscreen"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollToggleWindowedFullscreenRequested();
+     }},
     {kIdScrollCycleColumnWidth, &ConfigDefaults::scrollingCycleColumnWidthShortcut,
      &Settings::scrollingCycleColumnWidthShortcut, QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width Preset"),
      [](ShortcutManager* sm) {

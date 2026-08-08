@@ -61,6 +61,7 @@ FloatRestore ScrollEngine::captureDragSlot(const ScrollStrip& strip, const QStri
     const int tileIdx = column.indexOfWindow(windowId);
     if (tileIdx >= 0) {
         slot.height = column.tiles.at(tileIdx).height;
+        slot.windowedFullscreen = column.tiles.at(tileIdx).windowedFullscreen;
     }
     if (column.tiles.size() > 1) {
         slot.tileIndex = tileIdx;
@@ -102,6 +103,11 @@ bool ScrollEngine::dragPreviewRestoreSlot(ScrollState* state, const QString& win
         }
         if (slot.column >= 0 || slot.tileIndex >= 0) {
             strip.setWindowHeightIntent(windowId, slot.height);
+            // Same tile-captured gate: an Escape must hand back windowed
+            // fullscreen exactly as it hands back the height intent.
+            if (slot.windowedFullscreen) {
+                strip.setWindowedFullscreen(windowId, true);
+            }
         }
     }
     return inserted;
@@ -306,6 +312,11 @@ void ScrollEngine::commitDragInsertPreview()
             carried.tileIndex = -1;
             carried.stackAnchor.clear();
         }
+        // The float capture's exclusivity invariant (ScrollStashTypes.h):
+        // every m_floatRestore entry carries this false, and a drag-captured
+        // true must not leak in through the degrade arm — a future unfloat
+        // that honoured the field would resurrect fullscreen on a float.
+        carried.windowedFullscreen = false;
         m_floatRestore.insert(p.windowId, carried);
         // Mode marker: this is a scroll-decided float, same as every other
         // float-producing exit (begin removed the marker on the way in).
@@ -331,6 +342,12 @@ void ScrollEngine::commitDragInsertPreview()
         // context default the insert just seeded (same gate as
         // dragPreviewRestoreSlot and unfloatWindowInternal).
         strip.setWindowHeightIntent(p.windowId, p.carried.height);
+        // The drop re-seats the tile, so windowed fullscreen survives the
+        // reorder the same way the height intent does. The float-drop arm
+        // above never reaches here, which is the exclusivity holding.
+        if (p.carried.windowedFullscreen) {
+            strip.setWindowedFullscreen(p.windowId, true);
+        }
     }
     // The dropped window is the one the user is looking at.
     strip.focusWindow(p.windowId, params);
