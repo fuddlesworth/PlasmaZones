@@ -59,7 +59,7 @@ QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap() const
     return windowMap;
 }
 
-QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback)
+QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback) const
 {
     // A maximized or fullscreen window's frameGeometry() is the full-monitor rect.
     // Capturing THAT as a window's pre-tile / pre-snap / float-back geometry makes it
@@ -72,6 +72,17 @@ QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QR
     KWin::Window* kw = w->window();
     if (!kw) {
         return fallback;
+    }
+    // A windowed-fullscreen strip column has NO free geometry to offer: its
+    // live frame is the column rect, and because the effect flipped the
+    // fullscreen state while the window sat at its previous column rect,
+    // KWin's fullscreenGeometryRestore is a column rect too — both are tile
+    // rects, the exact poison this function exists to keep out of the
+    // free-geometry store. Invalid is the honest answer; every caller
+    // already treats it as "skip the capture".
+    if (!m_windowedFullscreenWindows.isEmpty() && !w->isDeleted()
+        && m_windowedFullscreenWindows.contains(getWindowId(w))) {
+        return QRectF();
     }
     // Off-screen poison guard: the scrolling engine parks off-viewport
     // columns and hidden tabs ENTIRELY outside every screen rect, so a
@@ -341,7 +352,21 @@ bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow*
     // window. Its fullscreen state is the effect's own doing and it stays a
     // managed strip tile — dropping it here would stop activation reporting
     // and tile routing for exactly the window the strip still lays out.
-    const bool fullScreenUnmanageable = w->isFullScreen() && !m_windowedFullscreenWindows.contains(getWindowId(w));
+    // Note this also flips two focus-follows-mouse behaviours on purpose (a
+    // flagged column is hovered-to-focus like any column, and it no longer
+    // pauses FFM as the active window — both the niri behaviour), and it
+    // makes Exclude-family rules scoped `WHEN IsFullscreen` newly observable
+    // for flagged columns (previously the structural reject here fired
+    // first).
+    //
+    // The isEmpty() term keeps the no-feature session at zero cost, and the
+    // isDeleted() term preserves this predicate's documented contract of
+    // never calling getWindowId on a deleted window (shouldHandleWindow's
+    // ordering note): a cache-missing lookup would re-insert the reverse-map
+    // entry buildWindowMap deliberately skips for corpses.
+    const bool fullScreenUnmanageable = w->isFullScreen()
+        && (m_windowedFullscreenWindows.isEmpty() || w->isDeleted()
+            || !m_windowedFullscreenWindows.contains(getWindowId(w)));
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || fullScreenUnmanageable || w->isSkipSwitcher()) {
         if (rejectReason) {
             *rejectReason = QStringLiteral("special/desktop/dock/fullscreen/skipSwitcher window type");

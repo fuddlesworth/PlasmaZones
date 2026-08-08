@@ -32,9 +32,9 @@ Item {
     // One of the tokens handled by successMessage() and/or failureMessage():
     // "rotate", "move", "span", "focus", "swap", "push", "restore", "float",
     // "snap", "cycle", "focus_master", "swap_master", "master_ratio",
-    // "master_count", "retile", "resnap", "resize", "tabbed", "snap_assist",
-    // "snap_all", "swap_vs", "rotate_vs", "layout" ("layout" is failure-only
-    // by producer contract; see failureMessage).
+    // "master_count", "retile", "resnap", "resize", "tabbed", "fullscreen",
+    // "snap_assist", "snap_all", "swap_vs", "rotate_vs", "layout" ("layout"
+    // is failure-only by producer contract; see failureMessage).
     property string action: ""
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/tiled/unfloated/overflow)
     property var zones: []
@@ -311,6 +311,11 @@ Item {
                 return noWindowText;
 
             return i18n("Tabbing is unavailable");
+        } else if (action === "fullscreen") {
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus" || reason === "no_target")
+                return noWindowText;
+
+            return i18n("Windowed fullscreen is unavailable");
         } else if (action === "focus_master")
             return i18n("No windows to focus");
         else if (action === "swap_master") {
@@ -425,6 +430,15 @@ Item {
             return i18n("Resized");
         } else if (action === "tabbed") {
             return i18n("Tabbed display toggled");
+        } else if (action === "fullscreen") {
+            // The producer reads the resulting state back off the strip and
+            // sends it as the reason, so the OSD can say which way the
+            // toggle went (an empty reason would only support a generic
+            // "toggled").
+            if (reason === "off")
+                return i18n("Windowed fullscreen off");
+
+            return i18n("Windowed fullscreen on");
         } else if (action === "swap_vs") {
             const vsSwapArrow = directionArrow(reason);
             return glyphed(vsSwapArrow, i18n("Virtual screens swapped"));

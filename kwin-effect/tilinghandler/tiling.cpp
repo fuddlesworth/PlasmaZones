@@ -986,6 +986,25 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         kwFs->setFullScreen(true);
                         --m_suppressFullScreenChanged;
                     }
+                } else if (snap.isWindowedFullscreen && inSet && !kwFs->isRequestedFullScreen()) {
+                    // Flagged, member, yet fullscreen is not even REQUESTED:
+                    // the client exited on its own while the daemon gate was
+                    // closed, and the exit slot deferred its reconcile to
+                    // exactly this moment. Deliver it now — membership
+                    // drops, the daemon clears its flag and re-applies —
+                    // rather than re-asserting fullscreen against the
+                    // user's exit. Requested state, not committed: during
+                    // our OWN enter round-trip committed lags behind while
+                    // requested is already true, and a batch landing in that
+                    // window must not read the lag as an exit.
+                    m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
+                    qCInfo(lcEffect) << "Windowed-fullscreen deferred reconcile for" << snap.windowId;
+                    if (m_effect->m_daemonGate.serviceRegistered) {
+                        PhosphorProtocol::ClientHelpers::fireAndForget(
+                            m_effect, PhosphorProtocol::Service::Interface::Scrolling,
+                            QStringLiteral("clearWindowedFullscreen"), {snap.windowId},
+                            QStringLiteral("clearWindowedFullscreen"));
+                    }
                 } else if (snap.isWindowedFullscreen && inSet) {
                     // Keep the stored rect current — the strip may have
                     // resized or scrolled the column since the flag went on.

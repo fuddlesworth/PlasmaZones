@@ -40,6 +40,9 @@ private Q_SLOTS:
     void serializeKeepsAnUnclaimedStashTileBesideALiveStrip();
     void windowedFullscreenSurvivesSerializeRestore();
     void windowedFullscreenTogglesEmitAndFloatClears();
+    void windowedFullscreenHiddenTabEmitsUnflagged();
+    void windowedFullscreenMinimizeDropsModeKeeps();
+    void windowedFullscreenFuzzyClaimDoesNotTransfer();
 
 private:
     /// The state for a screen, or nullptr. QVERIFY'd at every call site: a
@@ -635,9 +638,12 @@ void TestScrollEnginePersistence::serializeKeepsAnUnclaimedStashTileBesideALiveS
 
 void TestScrollEnginePersistence::windowedFullscreenSurvivesSerializeRestore()
 {
-    // The flag is strip-owned state the compositor mirrors, so a login
-    // restore must hand it back (unlike minimized, which the effect
-    // re-reports live) — across the same appId claim as the structure.
+    // The flag is strip-owned state the compositor mirrors, so a DAEMON
+    // RESTART must hand it back (unlike minimized, which the effect
+    // re-reports live). Restart means the windows keep their uuids and the
+    // re-announce claims exact-id — that is the only claim that carries the
+    // flag. The uuid-drift (login) shape deliberately does NOT transfer it;
+    // windowedFullscreenFuzzyClaimDoesNotTransfer pins that half.
     QObject owner;
     ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
@@ -654,12 +660,12 @@ void TestScrollEnginePersistence::windowedFullscreenSurvivesSerializeRestore()
     ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
     engine2->restoreStripState(blob);
-    engine2->windowOpened(QStringLiteral("app|n1"), QStringLiteral("S1"), 0, 0);
-    engine2->windowOpened(QStringLiteral("other|n2"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("other|u2"), QStringLiteral("S1"), 0, 0);
     ScrollState* after = stateFor(engine2, QStringLiteral("S1"));
     QVERIFY(after);
-    QVERIFY(after->strip().isWindowedFullscreen(QStringLiteral("app|n1")));
-    QVERIFY(!after->strip().isWindowedFullscreen(QStringLiteral("other|n2")));
+    QVERIFY(after->strip().isWindowedFullscreen(QStringLiteral("app|u1")));
+    QVERIFY(!after->strip().isWindowedFullscreen(QStringLiteral("other|u2")));
 }
 
 void TestScrollEnginePersistence::windowedFullscreenTogglesEmitAndFloatClears()
@@ -711,6 +717,107 @@ void TestScrollEnginePersistence::windowedFullscreenTogglesEmitAndFloatClears()
     QVERIFY(state->strip().isWindowedFullscreen(QStringLiteral("app|a")));
     engine->clearWindowedFullscreen(QStringLiteral("app|a"));
     QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|a")));
+}
+
+// The boundary-crossing carry (niri keeps windowed fullscreen across
+// move-column-to-monitor) is pinned in test_scrollengine_zonenumbers.cpp's
+// crossing test, which owns the cross-surface resolver fixture the verb
+// needs.
+
+void TestScrollEnginePersistence::windowedFullscreenHiddenTabEmitsUnflagged()
+{
+    // The flag is only TOLD to the compositor while the tile is presented: a
+    // hidden tab of a tabbed column keeps the model flag but its batch entry
+    // must not carry the key (the effect would fullscreen a hidden client at
+    // its park). Switching back re-announces it through the gate leg.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1")); // b joins a's column
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    // Show the OTHER tab: a becomes the hidden tab of an on-screen tabbed
+    // column, so its entry must arrive without the flag.
+    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
+    QVERIFY(tiled.count() >= 1);
+    bool sawA = false;
+    bool aFlagged = false;
+    const QJsonArray batch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+    for (const QJsonValue& v : batch) {
+        const QJsonObject o = v.toObject();
+        if (o.value(QLatin1String("windowId")).toString() == QLatin1String("app|a")) {
+            sawA = true;
+            aFlagged = o.value(QLatin1String("windowedFullscreen")).toBool(false);
+        }
+    }
+    QVERIFY2(sawA, "the hidden tab must still be in the batch (parked), or the compare is vacuous");
+    QVERIFY(!aFlagged);
+    // The model keeps the flag through the round trip.
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(state->strip().isWindowedFullscreen(QStringLiteral("app|a")));
+}
+
+void TestScrollEnginePersistence::windowedFullscreenMinimizeDropsModeKeeps()
+{
+    // The design decision pinned: minimize (which rides the float machinery)
+    // DROPS windowed fullscreen, while a mode round trip (the stash) KEEPS
+    // it. Whichever side regresses, exactly one of these arms fails.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+
+    // Minimize arm: the effect reports minimize as a float toggle.
+    engine->setWindowFloat(QStringLiteral("app|a"), true, QStringLiteral("S1"));
+    engine->setWindowFloat(QStringLiteral("app|a"), false, QStringLiteral("S1"));
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|a")));
+
+    // Mode arm: flag again, cycle the screen out of scrolling and back.
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+    engine->setActiveScreens({});
+    engine->setActiveScreens({QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    ScrollState* after = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(after);
+    QVERIFY(after->strip().isWindowedFullscreen(QStringLiteral("app|a")));
+}
+
+void TestScrollEnginePersistence::windowedFullscreenFuzzyClaimDoesNotTransfer()
+{
+    // The cross-session appId claim hands a NEW same-app window a dead
+    // sibling's slot, width and height — but NOT its fullscreen
+    // presentation. Exact-id restores (same uuid) keep the flag; the fuzzy
+    // claim must not.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    engine1->windowFocused(QStringLiteral("app|u1"), QStringLiteral("S1"));
+    engine1->toggleWindowedFullscreen(QStringLiteral("S1"));
+    const QJsonObject blob = engine1->serializeStripState();
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    // Different uuid, same appId: the fuzzy claim fires, the slot transfers,
+    // the flag does not.
+    engine2->windowOpened(QStringLiteral("app|n1"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|n1")), 0);
+    ScrollState* state = stateFor(engine2, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|n1")));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePersistence)

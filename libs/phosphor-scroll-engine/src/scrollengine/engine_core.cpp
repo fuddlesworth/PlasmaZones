@@ -449,8 +449,13 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     state->strip().setWindowHeightIntent(windowId, stash.at(colIdx).tiles.at(tileIdx).height);
     // Windowed fullscreen is strip-owned state the compositor mirrors, so a
     // claim hands it back (minimized deliberately is not re-applied — the
-    // effect re-reports live minimize state; see StashedTile).
-    if (stash.at(colIdx).tiles.at(tileIdx).windowedFullscreen) {
+    // effect re-reports live minimize state; see StashedTile). EXACT-id
+    // claims only: the fuzzy appId claim above deliberately lets a NEW
+    // same-app window take a dead sibling's slot, and its accepted cost is
+    // the slot, width and height — putting a fresh window into fullscreen
+    // presentation because a previous instance was is not part of that
+    // bargain.
+    if (claimedCandidate.isEmpty() && stash.at(colIdx).tiles.at(tileIdx).windowedFullscreen) {
         state->strip().setWindowedFullscreen(windowId, true);
     }
     // Re-assert the column's stashed ACTIVE tile: every insert makes the

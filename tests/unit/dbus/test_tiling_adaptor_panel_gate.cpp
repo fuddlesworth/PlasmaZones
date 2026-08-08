@@ -355,15 +355,24 @@ private Q_SLOTS:
             "{\"windowId\":\"c|3\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"up\"},"
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":50,\"y\":0,\"width\":600,\"height\":800,"
-            "\"scrollEdge\":\"right\"}"
+            "\"scrollEdge\":\"right\"},"
+            "{\"windowId\":\"d|4\",\"screenId\":\"S1\",\"floating\":true,\"windowedFullscreen\":true}"
             "]");
         adaptor.relayTileRequestsJson(json);
 
         QCOMPARE(spy.count(), 1);
         const auto requests = spy.first().at(0).value<PhosphorProtocol::TileRequestList>();
         // c|3 dropped by the validator (illegal edge), the second a|1 dropped
-        // as a duplicate (first entry wins).
+        // as a duplicate (first entry wins), and d|4 dropped by the
+        // windowedFullscreen-on-floating rejection — pinning that the
+        // adaptor's parse order (floating first, geometry skipped) still
+        // reaches the validator; a reorder that set the flag before parsing
+        // floating, or an early continue on the zero geometry, would stop
+        // rejecting the pair with no failing test.
         QCOMPARE(requests.size(), 2);
+        for (const auto& req : requests) {
+            QVERIFY(req.windowId != QStringLiteral("d|4"));
+        }
         QCOMPARE(requests.at(0).windowId, QStringLiteral("a|1"));
         QCOMPARE(requests.at(0).scrollEdge, QStringLiteral("left"));
         QCOMPARE(requests.at(0).x, 0);

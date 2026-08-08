@@ -104,8 +104,11 @@ public:
      *   category (translated QString), categoryOrder (int),
      *   triggers (QStringList — the user's EFFECTIVE keys via backend
      *   read-back, falling back to the config value), assigned (bool),
-     *   mode ("all" | "snapping" | "autotile" | "scrolling" — which tiling mode the
-     *   action is meaningful in; the overlay filters on it),
+     *   mode ("all" | "snapping" | "autotile" | "scrolling" | "layouts" —
+     *   which tiling mode the action is meaningful in; the overlay filters
+     *   on it. "layouts" is a capability tag rather than a mode: it marks
+     *   the layout-selection actions shown only when the screen's engine
+     *   provides layouts — see the catalog's contract block),
      *   description (translated QString — plain-prose explanation shown as
      *   the row's tooltip; always present, empty when the action needs none).
      * Ad-hoc/transient grabs never appear. Empty before registerShortcuts()

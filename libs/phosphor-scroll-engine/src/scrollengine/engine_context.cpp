@@ -34,7 +34,7 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     // way; a stale true for a re-used id would only force one redundant emit,
     // but there is no reason to keep dead ids around.
     for (auto it = m_lastAppliedWindowedFs.begin(); it != m_lastAppliedWindowedFs.end();) {
-        if (!aliveWindowIds.contains(it.key())) {
+        if (!aliveWindowIds.contains(*it)) {
             it = m_lastAppliedWindowedFs.erase(it);
         } else {
             ++it;
@@ -368,6 +368,7 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
         // ordering contract as pruneStatesForRemovedScreen).
         for (const QString& windowId : std::as_const(displacedWindows)) {
             m_lastAppliedRect.remove(windowId);
+            m_lastAppliedWindowedFs.remove(windowId);
             m_parkedScrollEdge.remove(windowId);
             m_scrollFloatedWindows.remove(windowId);
         }
@@ -417,6 +418,7 @@ void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
     const QStringList windows = state->managedWindows();
     for (const QString& windowId : windows) {
         m_lastAppliedRect.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
@@ -624,6 +626,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     // no second collection to keep in step with it.
     for (const QString& windowId : std::as_const(releasedWindows)) {
         m_lastAppliedRect.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);

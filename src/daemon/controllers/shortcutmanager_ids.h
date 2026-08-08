@@ -15,7 +15,8 @@ namespace ShortcutIds {
 // Stable string ids are documented contract: they appear in
 // ~/.config/kglobalshortcutsrc under the "plasmazonesd" component and in
 // XDG Portal settings UIs. Changing one is an on-disk rename that users pay
-// for, so add new ones at the bottom; never rename existing.
+// for — never rename existing ids. Placement within this list carries no
+// meaning (nothing indexes it), so keep new ids beside their family.
 inline constexpr auto kIdOpenEditor = "open_editor";
 inline constexpr auto kIdOpenSettings = "open_settings";
 inline constexpr auto kIdPreviousLayout = "previous_layout";

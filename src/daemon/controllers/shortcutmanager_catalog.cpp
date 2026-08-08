@@ -274,9 +274,9 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones", "Switches the focused column between stacked windows and tabs."));
         add(kIdScrollToggleWindowedFullscreen, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Tells the focused window it is fullscreen while it keeps its place in the "
-                              "column. The window switches to its fullscreen presentation without covering "
-                              "the screen."));
+                              "Puts the focused window into its fullscreen presentation while it keeps its "
+                              "place in the column, so it does not cover the screen. Press again to leave "
+                              "it."));
         add(kIdScrollCycleColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"),
             QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the screen's width presets."));

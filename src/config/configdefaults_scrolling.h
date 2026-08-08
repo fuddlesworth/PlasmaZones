@@ -800,9 +800,13 @@ public:
     }
     static QString scrollingToggleWindowedFullscreenShortcut()
     {
-        // Sibling of Meta+Alt+F (maximize column): the F family covers the
-        // make-it-bigger verbs, and Shift+letter is the family's sibling
-        // slot (see scrollingCycleColumnWidthShortcut for the convention).
+        // Shares the F letter with Meta+Alt+F (maximize column) because both
+        // are fullscreen-adjacent presentation toggles, and Shift+F was the
+        // free spelling on that letter. NOT an opposed pair in the
+        // letter+Shift convention's sense (see
+        // scrollingCycleColumnWidthShortcut) — windowed fullscreen never
+        // resizes the window; it flips the client's fullscreen presentation
+        // while the tile keeps its column slot.
         return QStringLiteral("Meta+Alt+Shift+F");
     }
     static QString scrollingCycleColumnWidthShortcut()

@@ -327,6 +327,11 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         invalidateAllRuleCaches();
         m_decorationManager->restoreAll();
         m_tilingHandler->restoreAllMonocleMaximized();
+        // The daemon that owned the windowed-fullscreen flags is gone; its
+        // restart restores them from the strip blob and re-flags via the
+        // adopt-on-batch arm, so releasing here is safe AND mandatory — a
+        // crashed daemon must not strand clients fullscreen at column rects.
+        m_tilingHandler->restoreAllWindowedFullscreen();
         clearAllDecorations();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
         // `m_decorationExclusionRuleSet`, `m_animationExclusionRuleSet`, or

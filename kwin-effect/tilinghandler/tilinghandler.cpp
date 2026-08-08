@@ -563,6 +563,17 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QStri
     // id's first genuine report (the success-path re-arm only runs when the
     // predicate answers).
     m_scrollClipLossReported.remove(windowId);
+    // Windowed fullscreen dies with the tracking: this funnel serves the
+    // close path (where slotWindowClosed already removed the membership,
+    // making this belt) and the cross-output transfer (where nothing else
+    // does, and a window landing on a snapping screen would otherwise stay
+    // KWin-fullscreen forever — snapping emits no tile batch to un-flag
+    // it). Forget-then-release, membership first, so a synchronous
+    // re-entry from setFullScreen finds the entry already gone.
+    if (m_effect->m_windowedFullscreenWindows.contains(windowId)) {
+        forgetWindowedFullscreen(windowId);
+        releaseWindowedFullscreenState(windowId);
+    }
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreTileForDesktopMove is NOT cleared
@@ -819,6 +830,16 @@ void TilingHandler::onDaemonReady()
     // loadSettings' own batch lands — and bump per-screen stagger generations
     // that m_tileStaggerGenByScreen.clear() then discards. loadSettings owns
     // the bring-up re-announce.
+    //
+    // Release the dead session's windowed-fullscreen members FIRST: a
+    // straight old-to-new owner handover produces no serviceUnregistered
+    // edge (the layout-map comment below documents the same gap), so the
+    // daemon-loss restore never ran — and the announceFlipped=false call
+    // below cannot release either, its collection loop riding the announce
+    // enumeration this path skips. Bring-up is exactly when the effect's
+    // flags are stale; the adopt-on-batch arm re-establishes them from the
+    // new daemon's truth.
+    restoreAllWindowedFullscreen();
     setScrollingScreens({}, /*announceFlipped=*/false);
     // The per-screen active-layout map is the same shape of dead-session
     // ruleQuery input, and it needs the clear here for a reason the scrolling

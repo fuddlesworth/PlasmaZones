@@ -570,6 +570,10 @@ void TestScrollEngineZoneNumbers::crossOutputMoveKeepsHeightAndAnnouncesOnDestin
     engine->cycleWindowPresetHeight(1, QStringLiteral("S1"));
     const int height = engine->lastManagedRect(wid("b")).height();
     QVERIFY2(height > 0 && height < 800, qPrintable(QStringLiteral("expected a preset height, got %1").arg(height)));
+    // Windowed fullscreen is per-tile state the crossing must carry too
+    // (niri keeps it across move-column-to-monitor); asserted on the target
+    // beside the height-intent carry below.
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
 
     QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
     // ctx names a DIFFERENT window than the strip's focus, deliberately: the
@@ -586,6 +590,10 @@ void TestScrollEngineZoneNumbers::crossOutputMoveKeepsHeightAndAnnouncesOnDestin
     // The height intent crossed with it (insertWindowAt builds a default
     // Auto tile, so this only holds because the crossing re-applies it).
     QCOMPARE(engine->lastManagedRect(wid("b")).height(), height);
+    // And so did windowed fullscreen, for the same reason.
+    auto* targetState = static_cast<ScrollState*>(engine->stateForScreen(QStringLiteral("S2")));
+    QVERIFY(targetState);
+    QVERIFY(targetState->strip().isWindowedFullscreen(wid("b")));
 
     QCOMPARE(feedback.count(), 1);
     QVERIFY(feedback.last().at(0).toBool());

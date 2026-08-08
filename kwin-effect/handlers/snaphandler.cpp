@@ -265,7 +265,7 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
     // size floats the window back full-screen. freeGeometryForCapture substitutes the
     // pre-maximize restore rect (shared with the autotile capture path).
     QRectF geom = preCapturedGeometry.isValid() ? preCapturedGeometry : QRectF(w->frameGeometry());
-    geom = PlasmaZonesEffect::freeGeometryForCapture(w, geom);
+    geom = m_effect->freeGeometryForCapture(w, geom);
     if (geom.width() <= 0 || geom.height() <= 0) {
         return;
     }

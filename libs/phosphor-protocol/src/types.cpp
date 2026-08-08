@@ -113,9 +113,21 @@ QString TileRequestEntry::validationError() const
     // Windowed fullscreen is a strip placement by definition (the tile keeps
     // its column slot), so it cannot ride a floating entry — the effect
     // would flip KWin fullscreen state on a free window. The engine never
-    // emits the pair; reject it as garbling.
+    // emits the pair; reject it as garbling. A dropped entry here loses the
+    // whole placement on purpose: unlike the paint hints below, both flags
+    // are ACTIONS, and acting on a contradictory pair is worse than acting
+    // on neither.
     if (windowedFullscreen && floating) {
         return QStringLiteral("TileRequestEntry: windowedFullscreen on a floating entry (windowId=%1)").arg(windowId);
+    }
+    // Same shape for monocle: the two flags come from DISJOINT producers
+    // (monocle only from the autotile engine's layout_apply, the fullscreen
+    // flag only from the scroll engine's applyLayout), so the pair is
+    // impossible in-tree — and acted on it would put one window under two
+    // compositor authorities (maximize AND fullscreen) in two effect-side
+    // membership sets with independent exits.
+    if (windowedFullscreen && monocle) {
+        return QStringLiteral("TileRequestEntry: windowedFullscreen on a monocle entry (windowId=%1)").arg(windowId);
     }
     // viewDeltaX, visualX, visualY and hasVisualPos are deliberately NOT
     // validated here, unlike their neighbours. All four are PAINT hints rather

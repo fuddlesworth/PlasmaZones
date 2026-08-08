@@ -698,7 +698,15 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             obj[QLatin1String("y")] = rect.y();
             obj[QLatin1String("width")] = rect.width();
             obj[QLatin1String("height")] = rect.height();
-            if (tile.windowedFullscreen) {
+            // The flag is only TOLD to the compositor while the tile is
+            // actually presented: a parked column or a hidden tab commits an
+            // off-canvas rect, and a client holding fullscreen state at a
+            // park is strictly worse than the alternative this gate buys —
+            // scrolling a flagged column out and back (or switching tabs)
+            // cycles the client's fullscreen presentation off and on. The
+            // model keeps the flag either way; only the wire is gated.
+            const bool presentWindowedFs = tile.windowedFullscreen && !tile.hidden && !parkedNow;
+            if (presentWindowedFs) {
                 obj[QLatin1String("windowedFullscreen")] = true;
             }
             if (!scrollEdge.isEmpty()) {
@@ -770,12 +778,15 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // The windowed-fullscreen flag rides the same payload but never
             // moves a rect, so it needs its own leg of the emit-on-change
             // gate — a toggle on an otherwise motionless strip must still
-            // reach the compositor.
-            if (m_lastAppliedWindowedFs.value(tile.windowId, false) != tile.windowedFullscreen) {
+            // reach the compositor. The memory tracks the EMITTED value
+            // (presentation-gated above), not the model flag: a park that
+            // suppresses the flag is itself a change the compositor must
+            // hear, and the return from park must re-announce it.
+            if (m_lastAppliedWindowedFs.contains(tile.windowId) != presentWindowedFs) {
                 anyRectMoved = true;
             }
-            if (tile.windowedFullscreen) {
-                m_lastAppliedWindowedFs.insert(tile.windowId, true);
+            if (presentWindowedFs) {
+                m_lastAppliedWindowedFs.insert(tile.windowId);
             } else {
                 m_lastAppliedWindowedFs.remove(tile.windowId);
             }
@@ -850,6 +861,24 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         if (!departing && columnAllParked.value(column.columnIndex, false)
             && !columnHadSkippedTile.contains(column.columnIndex)) {
             continue;
+        }
+        // A tabbed column whose SHOWN tab is in windowed fullscreen presents
+        // a client covering the whole output; drawing the indicator at the
+        // column's rect would float a tab bar over that fullscreen surface,
+        // anchored to a column that is not visually there. Skip the entry —
+        // the emit-on-change gate below re-announces the strip the moment
+        // the tab switches or the flag drops.
+        {
+            bool shownTabWindowedFs = false;
+            for (const ResolvedTile& tile : column.tiles) {
+                if (!tile.hidden && tile.windowedFullscreen) {
+                    shownTabWindowedFs = true;
+                    break;
+                }
+            }
+            if (shownTabWindowedFs) {
+                continue;
+            }
         }
         QJsonObject strip;
         // The rect is the INDICATOR's, not the column's: it is what the

@@ -12,7 +12,8 @@
 
 namespace PhosphorProtocol {
 
-/// D-Bus struct for autotile tile requests: (siiiissbbbssiiib)
+/// D-Bus struct for the shared tiling-family tile requests (autotile +
+/// scrolling ride the same windowsTileRequested pipeline): (siiiissbbbssiiib)
 struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 {
     QString windowId;
@@ -20,6 +21,10 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     int y = 0;
     int width = 0;
     int height = 0;
+    /// Reserved and currently always empty on this wire: no producer writes
+    /// it and no consumer reads it (it predates the autotile-to-tiling
+    /// generalization). Kept because removing a mid-struct field is another
+    /// wire break for zero functional gain.
     QString zoneId;
     QString screenId;
     bool monocle = false;

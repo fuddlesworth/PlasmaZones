@@ -196,6 +196,14 @@ private Q_SLOTS:
                                                  120,
                                                  true};
 
+        // FIELD-ORDER PROBE, not a legal payload: monocle and
+        // windowedFullscreen both true is rejected by validationError()
+        // (disjoint producers). What this fixture pins is the STRUCT's
+        // declaration order via aggregate initialization — the per-field
+        // compares below never cross a marshaller, so wire transposition
+        // coverage lives in the bus round-trip's two payloads instead. Do
+        // not copy this fixture into a validator test.
+        //
         // Verify D-Bus signature: (siiiissbbbssiiib) = string + 4 ints + 2
         // strings + 3 bools (monocle, floating, windowedFullscreen) +
         // stacking + scrollEdge + viewDeltaX + the visual position pair and
@@ -230,6 +238,7 @@ private Q_SLOTS:
         QVERIFY(defaultEntry.windowId.isEmpty());
         QCOMPARE(defaultEntry.monocle, false);
         QCOMPARE(defaultEntry.floating, false);
+        QCOMPARE(defaultEntry.windowedFullscreen, false);
         QVERIFY(defaultEntry.stacking.isEmpty());
         QVERIFY(defaultEntry.scrollEdge.isEmpty());
         QCOMPARE(defaultEntry.viewDeltaX, 0);
@@ -256,47 +265,64 @@ private Q_SLOTS:
         const QString path = QStringLiteral("/test/wiretypes/tilerequestecho");
         QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
 
-        const PhosphorProtocol::TileRequestEntry sent{QStringLiteral("konsole|7"),
-                                                      50,
-                                                      100,
-                                                      640,
-                                                      480,
-                                                      QStringLiteral("{zone-uuid}"),
-                                                      QStringLiteral("screen-0"),
-                                                      true,
-                                                      false,
-                                                      true,
-                                                      QStringLiteral("lastOnTop"),
-                                                      QStringLiteral("left"),
-                                                      512,
-                                                      -900,
-                                                      64,
-                                                      true};
+        const auto roundTrip = [&bus, &path](const PhosphorProtocol::TileRequestEntry& sent) {
+            QDBusMessage call =
+                QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
+            call << QVariant::fromValue(sent);
+            const QDBusMessage reply = bus.call(call);
+            QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+            QCOMPARE(reply.arguments().size(), 1);
+            const auto got = qdbus_cast<PhosphorProtocol::TileRequestEntry>(reply.arguments().at(0));
+            QCOMPARE(got.windowId, sent.windowId);
+            QCOMPARE(got.x, sent.x);
+            QCOMPARE(got.y, sent.y);
+            QCOMPARE(got.width, sent.width);
+            QCOMPARE(got.height, sent.height);
+            QCOMPARE(got.zoneId, sent.zoneId);
+            QCOMPARE(got.screenId, sent.screenId);
+            QCOMPARE(got.monocle, sent.monocle);
+            QCOMPARE(got.floating, sent.floating);
+            QCOMPARE(got.windowedFullscreen, sent.windowedFullscreen);
+            QCOMPARE(got.stacking, sent.stacking);
+            QCOMPARE(got.scrollEdge, sent.scrollEdge);
+            QCOMPARE(got.viewDeltaX, sent.viewDeltaX);
+            QCOMPARE(got.visualX, sent.visualX);
+            QCOMPARE(got.visualY, sent.visualY);
+            QCOMPARE(got.hasVisualPos, sent.hasVisualPos);
+        };
 
-        QDBusMessage call =
-            QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
-        call << QVariant::fromValue(sent);
-        const QDBusMessage reply = bus.call(call);
+        // TWO legal payloads, because no single legal payload can cover the
+        // three bool slots: validationError rejects windowedFullscreen
+        // beside either monocle or floating, so wf=true forces the other
+        // two false. Payload A (wf=true) catches a floating-for-wf or
+        // monocle-for-wf transposition in either operator; payload B
+        // (monocle=true) catches the monocle-for-floating swap A cannot
+        // see. Between them all three pairwise transpositions fail loudly.
+        // (The signature probe above pins struct DECLARATION order via its
+        // aggregate init; only these bus trips pin the two marshallers
+        // agreeing.)
+        PhosphorProtocol::TileRequestEntry sent{QStringLiteral("konsole|7"),
+                                                50,
+                                                100,
+                                                640,
+                                                480,
+                                                QStringLiteral("{zone-uuid}"),
+                                                QStringLiteral("screen-0"),
+                                                false,
+                                                false,
+                                                true,
+                                                QStringLiteral("lastOnTop"),
+                                                QStringLiteral("left"),
+                                                512,
+                                                -900,
+                                                64,
+                                                true};
+        roundTrip(sent);
+        sent.monocle = true;
+        sent.windowedFullscreen = false;
+        roundTrip(sent);
+
         bus.unregisterObject(path);
-
-        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
-        QCOMPARE(reply.arguments().size(), 1);
-        const auto got = qdbus_cast<PhosphorProtocol::TileRequestEntry>(reply.arguments().at(0));
-        QCOMPARE(got.windowId, sent.windowId);
-        QCOMPARE(got.x, sent.x);
-        QCOMPARE(got.y, sent.y);
-        QCOMPARE(got.width, sent.width);
-        QCOMPARE(got.height, sent.height);
-        QCOMPARE(got.zoneId, sent.zoneId);
-        QCOMPARE(got.screenId, sent.screenId);
-        QCOMPARE(got.monocle, sent.monocle);
-        QCOMPARE(got.floating, sent.floating);
-        QCOMPARE(got.stacking, sent.stacking);
-        QCOMPARE(got.scrollEdge, sent.scrollEdge);
-        QCOMPARE(got.viewDeltaX, sent.viewDeltaX);
-        QCOMPARE(got.visualX, sent.visualX);
-        QCOMPARE(got.visualY, sent.visualY);
-        QCOMPARE(got.hasVisualPos, sent.hasVisualPos);
     }
 
     // =================================================================

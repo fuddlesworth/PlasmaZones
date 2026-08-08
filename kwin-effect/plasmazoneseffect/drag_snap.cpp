@@ -179,7 +179,11 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     if (window->isFullScreen()) {
         KWin::Window* kwFs = window->window();
         const bool requestedFullScreen = !kwFs || kwFs->isRequestedFullScreen();
-        if (requestedFullScreen && !m_windowedFullscreenWindows.contains(getWindowId(window))) {
+        // isEmpty() fast path for sessions that never use the feature, same
+        // gate style as the structural predicate's exemption.
+        const bool windowedFsMember =
+            !m_windowedFullscreenWindows.isEmpty() && m_windowedFullscreenWindows.contains(getWindowId(window));
+        if (requestedFullScreen && !windowedFsMember) {
             qCDebug(lcEffect) << "applyGeometry: window is fullscreen, skipping";
             return;
         }

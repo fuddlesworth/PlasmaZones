@@ -149,6 +149,13 @@ struct FloatRestore
     /// user-set window height to Auto, while a mode round trip — which
     /// stashes the intent — preserved it.
     WindowHeight height;
+    /// Windowed fullscreen, captured by the DRAG paths only
+    /// (captureDragSlot): an Escape cancel is an exact restore, and the
+    /// commit re-seats the tile, so both hand the flag back. The float
+    /// capture (floatWindowInternal) deliberately leaves this false —
+    /// float and windowed fullscreen are exclusive by design, and a float
+    /// round trip is supposed to drop the flag.
+    bool windowedFullscreen = false;
 };
 
 /// Live drag-insert preview state (drag_preview.cpp). See the engine's

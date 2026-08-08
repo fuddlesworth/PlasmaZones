@@ -625,7 +625,7 @@ private:
      * geometry); callers MUST check isValid() before storing. Shared by the snap and
      * autotile capture paths, which write the SAME daemon free-geometry store.
      */
-    static QRectF freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback);
+    QRectF freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback) const;
 
     /**
      * @brief Check if a window is floating (full windowId with appId fallback)
@@ -1970,9 +1970,11 @@ private:
     /// the FullScreenArea when the client's fullscreen ack COMMITS, one
     /// round-trip after the batch already applied the column rect — the
     /// committed windowFullScreenChanged signal is where the column rect is
-    /// re-asserted, and by then the batch is long gone. Maintained
-    /// exclusively by TilingHandler's batch consumer and its
-    /// windowFullScreenChanged reconciliation.
+    /// re-asserted, and by then the batch is long gone. Maintained by
+    /// TilingHandler's batch consumer and windowFullScreenChanged
+    /// reconciliation, with removals on every per-window teardown path
+    /// (close, float cleanup, the release helpers, the windowDeleted
+    /// backstop).
     QHash<QString, QRect> m_windowedFullscreenWindows;
     /// wl_surface object ids of the daemon's scrolling tab-indicator surfaces,
     /// announced over D-Bus. The paint path slides these with the strip so the
